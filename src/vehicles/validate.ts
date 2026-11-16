@@ -1,6 +1,6 @@
 import type { Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
 
-export const MIN_PAIR_CLEARANCE_MM = 500;
+const MIN_PAIR_CLEARANCE_MM = 500;
 
 function collect(node: unknown, path: string, out: [string, Param][]): void {
   if (typeof node !== 'object' || node === null) return;

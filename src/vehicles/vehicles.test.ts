@@ -141,13 +141,19 @@ describe('validation', () => {
       ...man,
       eye: { ...man.eye, leftOfCentre: { ...man.eye.leftOfCentre, value: 0 } },
     };
-    expect(validateTruck(badTruck)).not.toEqual([]);
+    expect(validateTruck(badTruck)).toEqual([
+      'man-le-18-280: eye must lie left of centre and inside the body width',
+    ]);
     const badTrailer = {
       ...krone,
       rearAxleSpacing: { value: 1310, status: 'estimate', source: 'x' } as const,
     };
-    expect(validateTrailer(badTrailer)).not.toEqual([]);
+    expect(validateTrailer(badTrailer)).toEqual([
+      'krone-azw-18: rear axle spacing must be set exactly for multi-axle groups',
+    ]);
     const tightTrailer = { ...krone, frontOverhang: { ...krone.frontOverhang, value: 2000 } };
-    expect(validatePair(man, tightTrailer)).not.toEqual([]);
+    expect(validatePair(man, tightTrailer)).toEqual([
+      'man-le-18-280 + krone-azw-18: rear clearance 350 mm is below 500 mm',
+    ]);
   });
 });
