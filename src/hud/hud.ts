@@ -250,6 +250,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (c) {
         place(cockpit, c);
         cockpit.style.setProperty('--hud-x', `${c.x}px`);
+        cockpit.toggleAttribute('data-compact', c.x < 1 && c.width <= 800);
       }
       const mirrorRects = [views.mirrorLeft, views.mirrorRight];
       mirrors.forEach((el, i) => {
