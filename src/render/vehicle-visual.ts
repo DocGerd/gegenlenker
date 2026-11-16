@@ -9,11 +9,11 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
-import { COUPLING_HEIGHT, trailerAnchors, truckAnchors } from '../vehicles/anchors';
+import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { placePose } from './coords';
 import type { VehicleVisual } from './seams';
 
-const WHEEL_RADIUS = 0.5;
+const TRUCK_WHEEL_RADIUS = 0.5;
 const WHEEL_SEGMENTS = 20;
 const TRUCK_WHEEL_WIDTH = 0.3;
 const TWIN_WHEEL_WIDTH = 0.26;
@@ -35,9 +35,17 @@ const SWAP_BODY_HEIGHT = 2.7;
 const RAMP_HEIGHT = 1.2;
 const RAMP_WIDTH = 0.9;
 const RAMP_THICKNESS = 0.1;
+const DECK_PLATE = 0.1; // low-loader deck slab
+const BOX_FRAME_DEPTH = 0.25; // rails under a swap body
+const WHEEL_CLEARANCE = 0.02;
 const DRAWBAR_SPREAD = 0.45; // arm spacing at the turntable end
 const ARM_WIDTH = 0.12;
+const ARM_HEIGHT = 0.1;
 const PLATE_RADIUS = 0.5;
+const PLATE_THICKNESS = 0.1;
+const POST_HALF_WIDTH = 0.15;
+const AXLE_HALF_THICKNESS = 0.07;
+const SWING_MARGIN = 0.1;
 
 /** Body-frame extents (x forward, y left, z up) as a Three-space box. */
 function box(
@@ -52,27 +60,29 @@ function box(
   );
 }
 
-/** A level bar of the given width and height range between two ground-plane points. */
-function bar(
-  [x0, y0]: readonly [number, number],
-  [x1, y1]: readonly [number, number],
+type Point3 = readonly [x: number, y: number, z: number];
+
+/** A square-ended bar between two body-frame points, `width` across and `height` tall. */
+function strut(
+  [x0, y0, z0]: Point3,
+  [x1, y1, z1]: Point3,
   width: number,
-  [z0, z1]: readonly [number, number],
+  height: number,
 ): BufferGeometry {
-  return new BoxGeometry(Math.hypot(x1 - x0, y1 - y0), z1 - z0, width)
+  const run = Math.hypot(x1 - x0, y1 - y0);
+  return new BoxGeometry(Math.hypot(run, z1 - z0), height, width)
+    .rotateZ(Math.atan2(z1 - z0, run))
     .rotateY(Math.atan2(y1 - y0, x1 - x0))
     .translate((x0 + x1) / 2, (z0 + z1) / 2, -(y0 + y1) / 2);
 }
 
 /** Axis along body y, built at the origin. */
-function wheelGeometry(width: number): BufferGeometry {
-  return new CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, width, WHEEL_SEGMENTS).rotateX(
-    Math.PI / 2,
-  );
+function wheelGeometry(radius: number, width: number): BufferGeometry {
+  return new CylinderGeometry(radius, radius, width, WHEEL_SEGMENTS).rotateX(Math.PI / 2);
 }
 
-function wheelAt(width: number, x: number, y: number): BufferGeometry {
-  return wheelGeometry(width).translate(x, WHEEL_RADIUS, -y);
+function wheelAt(radius: number, width: number, x: number, y: number): BufferGeometry {
+  return wheelGeometry(radius, width).translate(x, radius, -y);
 }
 
 function merge(parts: BufferGeometry[]): BufferGeometry {
@@ -148,7 +158,12 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
   for (const side of [-1, 1]) {
     for (const twin of [-1, 1]) {
       rearWheels.push(
-        wheelAt(TWIN_WHEEL_WIDTH, a.rearAxle.x, (side * rearTrack) / 2 + twin * TWIN_OFFSET),
+        wheelAt(
+          TRUCK_WHEEL_RADIUS,
+          TWIN_WHEEL_WIDTH,
+          a.rearAxle.x,
+          (side * rearTrack) / 2 + twin * TWIN_OFFSET,
+        ),
       );
     }
   }
@@ -167,16 +182,16 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
   );
 
   // each front wheel yaws about its own kingpin, so the two share one geometry
-  const frontWheel = wheelGeometry(TRUCK_WHEEL_WIDTH);
-  const pivots = [-1, 1].map((side) => {
+  const frontWheel = wheelGeometry(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH);
+  const kingpin = (side: -1 | 1): Group => {
     const pivot = new Group();
-    pivot.position.set(a.frontAxle.x, WHEEL_RADIUS + a.frontAxle.z, (-side * frontTrack) / 2);
+    pivot.position.set(a.frontAxle.x, TRUCK_WHEEL_RADIUS + a.frontAxle.z, (-side * frontTrack) / 2);
     pivot.add(res.mesh(frontWheel, wheelMaterial));
     group.add(pivot);
     return pivot;
-  });
-  const [pivotRight, pivotLeft] = pivots;
-  if (pivotRight === undefined || pivotLeft === undefined) throw new Error('unreachable');
+  };
+  const pivotLeft = kingpin(1);
+  const pivotRight = kingpin(-1);
 
   return {
     object: group,
@@ -194,62 +209,80 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
   const hw = spec.width.value / 2000;
   const track = spec.track.value / 1000;
   const deck = spec.deckHeight.value / 1000;
+  const isBox = spec.body === 'box';
   const res = resources();
-  const arm = (side: number): BufferGeometry =>
-    bar([0, side * DRAWBAR_SPREAD], [a.eye.x, 0], ARM_WIDTH, [
-      COUPLING_HEIGHT - 0.07,
-      COUPLING_HEIGHT + 0.07,
-    ]);
+
+  // Wheels, axles, plate and drawbar all stay below the deck's underside.
+  const underside = deck - (isBox ? BOX_FRAME_DEPTH : DECK_PLATE);
+  const radius = Math.min(TRUCK_WHEEL_RADIUS, (underside - WHEEL_CLEARANCE) / 2);
+  const axleZ: readonly [number, number] = [
+    radius - AXLE_HALF_THICKNESS,
+    radius + AXLE_HALF_THICKNESS,
+  ];
+  const plateTop = underside - WHEEL_CLEARANCE;
+  const plateBottom = plateTop - PLATE_THICKNESS;
+  const plateMid = (plateTop + plateBottom) / 2;
+  // clear of the deck front as the body swings over the arms
+  const kink = Math.min(
+    Math.hypot(a.frontX - a.turntable.x, hw) + SWING_MARGIN,
+    a.eye.x - SWING_MARGIN,
+  );
 
   // Dolly frame: the turntable centre is the origin; eye and front axle are read as given.
+  const arm = (side: number): BufferGeometry[] => {
+    const start: Point3 = [0, side * DRAWBAR_SPREAD, plateMid];
+    const bend: Point3 = [kink, side * DRAWBAR_SPREAD * (1 - kink / a.eye.x), plateMid];
+    return [
+      strut(start, bend, ARM_WIDTH, ARM_HEIGHT),
+      strut(bend, [a.eye.x, 0, a.eye.z], ARM_WIDTH, ARM_HEIGHT),
+    ];
+  };
   const dollyChassis = [
-    arm(-1),
-    arm(1),
-    box(
-      [a.eye.x - 0.15, a.eye.x + 0.05],
-      [-0.1, 0.1],
-      [COUPLING_HEIGHT - 0.07, COUPLING_HEIGHT + 0.07],
-    ),
-    new CylinderGeometry(PLATE_RADIUS, PLATE_RADIUS, 0.1, WHEEL_SEGMENTS).translate(
+    ...arm(-1),
+    ...arm(1),
+    box([a.eye.x - 0.15, a.eye.x + 0.05], [-0.1, 0.1], [a.eye.z - 0.07, a.eye.z + 0.07]),
+    new CylinderGeometry(PLATE_RADIUS, PLATE_RADIUS, PLATE_THICKNESS, WHEEL_SEGMENTS).translate(
       0,
-      COUPLING_HEIGHT - 0.05,
+      plateMid,
       0,
     ),
     box(
-      [a.frontAxle.x - 0.15, a.frontAxle.x + 0.15],
-      [-0.15, 0.15],
-      [WHEEL_RADIUS, COUPLING_HEIGHT - 0.1],
+      [a.frontAxle.x - POST_HALF_WIDTH, a.frontAxle.x + POST_HALF_WIDTH],
+      [-POST_HALF_WIDTH, POST_HALF_WIDTH],
+      [axleZ[1], plateBottom],
     ),
     box(
-      [a.frontAxle.x - 0.07, a.frontAxle.x + 0.07],
+      [a.frontAxle.x - AXLE_HALF_THICKNESS, a.frontAxle.x + AXLE_HALF_THICKNESS],
       [-track / 2, track / 2],
-      [WHEEL_RADIUS - 0.07, WHEEL_RADIUS + 0.07],
+      axleZ,
     ),
   ];
   const dollyWheels = [-1, 1].map((side) =>
-    wheelAt(TRAILER_WHEEL_WIDTH, a.frontAxle.x, (side * track) / 2),
+    wheelAt(radius, TRAILER_WHEEL_WIDTH, a.frontAxle.x, (side * track) / 2),
   );
 
   // Body frame: the effective rear axle is the origin.
-  const rails = [-1, 1].map((side) =>
-    box(
-      [a.rearX, a.frontX],
-      [side * RAIL_HALF_GAP - RAIL_WIDTH / 2, side * RAIL_HALF_GAP + RAIL_WIDTH / 2],
-      [deck - (spec.body === 'box' ? 0.25 : 0.3), deck - (spec.body === 'box' ? 0 : 0.1)],
-    ),
-  );
+  const rails = isBox
+    ? [-1, 1].map((side) =>
+        box(
+          [a.rearX, a.frontX],
+          [side * RAIL_HALF_GAP - RAIL_WIDTH / 2, side * RAIL_HALF_GAP + RAIL_WIDTH / 2],
+          [underside, deck],
+        ),
+      )
+    : [];
   const axleBeams = a.rearAxles.map((axle) =>
     box(
-      [axle.x - 0.07, axle.x + 0.07],
+      [axle.x - AXLE_HALF_THICKNESS, axle.x + AXLE_HALF_THICKNESS],
       [-track / 2, track / 2],
-      [WHEEL_RADIUS - 0.07, WHEEL_RADIUS + 0.07],
+      axleZ,
     ),
   );
   const bodyParts: BufferGeometry[] = [];
-  if (spec.body === 'box') {
+  if (isBox) {
     bodyParts.push(box([a.rearX, a.frontX], [-hw, hw], [deck, deck + SWAP_BODY_HEIGHT]));
   } else {
-    bodyParts.push(box([a.rearX, a.frontX], [-hw, hw], [deck - 0.1, deck]));
+    bodyParts.push(box([a.rearX, a.frontX], [-hw, hw], [underside, deck]));
     for (const side of [-1, 1]) {
       const [y0, y1] = side < 0 ? [-0.15 - RAMP_WIDTH, -0.15] : [0.15, 0.15 + RAMP_WIDTH];
       bodyParts.push(
@@ -258,7 +291,7 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
     }
   }
   const trailerWheels = a.rearAxles.flatMap((axle) =>
-    [-1, 1].map((side) => wheelAt(TRAILER_WHEEL_WIDTH, axle.x, (side * track) / 2)),
+    [-1, 1].map((side) => wheelAt(radius, TRAILER_WHEEL_WIDTH, axle.x, (side * track) / 2)),
   );
 
   const chassisMaterial = res.material(palette.chassis);

@@ -15,6 +15,7 @@ import { readScenePalette } from './palette';
 import { mountPerfOverlay } from './perf-overlay';
 import { placeholderLayout, placeholderParts } from './placeholder';
 import { createThreeSceneRenderer } from './three-renderer';
+import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 import { computeViewports } from './viewports';
 
 declare global {
@@ -103,7 +104,11 @@ export function startProbe(root: HTMLElement): void {
   canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;display:block';
   root.append(canvas);
 
-  const renderer = createThreeSceneRenderer(placeholderParts);
+  const renderer = createThreeSceneRenderer({
+    ...placeholderParts,
+    truck: proceduralTruck,
+    trailer: proceduralTrailer,
+  });
   renderer.init(canvas);
   renderer.setScene(placeholderLayout, truck, trailer, readScenePalette());
 

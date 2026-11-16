@@ -29,12 +29,14 @@ const truck = truckById(TRUCK_IDS.find((id) => id === query.get('truck')) ?? TRU
 const trailer = trailerById(
   TRAILER_IDS.find((id) => id === query.get('trailer')) ?? TRAILER_IDS[0],
 );
-const fixedTime = query.has('t') ? Number(query.get('t')) : null;
+const parsedTime = parseFloat(query.get('t') ?? '');
+const fixedTime = Number.isFinite(parsedTime) ? parsedTime : null;
 const mode: ViewMode = query.get('view') === 'replay' ? 'replay' : 'drive';
-const pinned = query
-  .get('pose')
-  ?.split(',')
-  .map((v) => Math.max(-1, Math.min(1, Number(v))));
+/** Unparsable or missing entries stay on the sweep. */
+const pinned = (query.get('pose') ?? '').split(',').map((v) => {
+  const fraction = parseFloat(v);
+  return Number.isFinite(fraction) ? Math.max(-1, Math.min(1, fraction)) : undefined;
+});
 const params = resolveCombination(truck, trailer);
 
 const sweep = (seconds: number, period: number): number =>
@@ -46,9 +48,9 @@ const step = (p: { x: number; y: number }, heading: number, distance: number) =>
 
 /** H = P₀ − c u(θ₀), P₁ = H − d u(θ₁), P₂ = P₁ − L₂ u(θ₂), θ₁ = θ₀ − coupling, θ₂ = θ₁ − turntable. */
 function snapshotAt(seconds: number, v: VehicleParams): SimSnapshot {
-  const steer = pinned?.[0] ?? sweep(seconds, STEER_PERIOD);
-  const couplingAngle = v.couplingLimit * (pinned?.[1] ?? sweep(seconds, COUPLING_PERIOD));
-  const turntableAngle = v.turntableLimit * (pinned?.[2] ?? sweep(seconds, TURNTABLE_PERIOD));
+  const steer = pinned[0] ?? sweep(seconds, STEER_PERIOD);
+  const couplingAngle = v.couplingLimit * (pinned[1] ?? sweep(seconds, COUPLING_PERIOD));
+  const turntableAngle = v.turntableLimit * (pinned[2] ?? sweep(seconds, TURNTABLE_PERIOD));
   const truckPose: Pose2 = { x: 15, y: 0, heading: Math.PI / 2 }; // inside the clear ring of the placeholder yard
   const coupling = step(truckPose, truckPose.heading, -v.couplingOffset);
   const dollyHeading = truckPose.heading - couplingAngle;
