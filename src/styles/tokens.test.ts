@@ -234,7 +234,7 @@ describe('scene tokens', () => {
     expect(root.get('--scene-accent')).toBe('#0f7c72');
   });
 
-  it('keeps bodies and halls at 1.5:1 or more against the ground they stand on', () => {
+  it('keeps bodies, halls and tracks at 1.5:1 or more against the ground they stand on', () => {
     const standing: [string, string][] = [
       ['body', 'yard'],
       ['body', 'street'],
@@ -242,6 +242,8 @@ describe('scene tokens', () => {
       ['body', 'marking'],
       ['hall', 'pavement'],
       ['hall', 'yard'],
+      ['tracks', 'yard'],
+      ['tracks', 'street'],
     ];
     for (const [thing, ground] of standing) {
       const ratio = contrast(
