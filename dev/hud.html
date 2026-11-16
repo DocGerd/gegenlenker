@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>HUD</title>
+    <style>
+      #stage {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+      }
+      .rect {
+        position: absolute;
+        box-sizing: border-box;
+      }
+      #top-down {
+        background: var(--scene-yard);
+      }
+      #cockpit {
+        background: linear-gradient(var(--scene-sky) 55%, var(--scene-street) 55%);
+      }
+      .mirror {
+        background: var(--scene-wall);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <script type="module" src="./hud.ts"></script>
+  </body>
+</html>
