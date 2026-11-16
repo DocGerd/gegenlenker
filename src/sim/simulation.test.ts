@@ -144,18 +144,18 @@ describe('simulation', () => {
   });
 
   it('coupling and turntable constraints hold forward and reverse', () => {
-    for (const { p: real } of pairs) {
-      const p = open(real);
+    for (const { p } of pairs) {
       const sim = createSimulation(p, origin, noContacts);
       const control =
-        (gear: 'D' | 'R') =>
+        (gear: 'D' | 'R', amplitude: number) =>
         (s: SimSnapshot): ControlVector =>
-          ctl({ steer: 0.6 * Math.sin(0.8 * s.time), lever: 1, gear });
-      const snaps = [
-        sim.snapshot(),
-        ...driveDistance(sim, control('D'), 15).snaps,
-        ...driveDistance(sim, control('R'), 15).snaps,
-      ];
+          ctl({ steer: amplitude * Math.sin(0.8 * s.time), lever: 1, gear });
+      const initial = sim.snapshot();
+      const forward = driveDistance(sim, control('D', 0.6), 15).snaps;
+      // Open-loop reversing folds a two-pivot trailer, so the reverse leg steers gently and stays short.
+      const reverse = driveDistance(sim, control('R', 0.15), 8).snaps;
+      expect(last(reverse).jackknifes).toBe(0);
+      const snaps = [initial, ...forward, ...reverse];
       const slip = (a: { x: number; y: number; heading: number }, b: typeof a): number => {
         const mid = n(a.heading + wrapAngle(b.heading - a.heading) / 2);
         return Math.abs(((b.x - a.x) * mid.x + (b.y - a.y) * mid.y) / DT);
@@ -221,6 +221,22 @@ describe('simulation', () => {
     expect(dist2(end.truck, at.truck)).toBeGreaterThan(0);
     expect(end.blocked).toBeNull();
     expect(end.jackknifes).toBe(1);
+  });
+
+  it('steering out of a blocked pivot frees the same direction without a new event', () => {
+    const p = { ...manKrone(), couplingLimit: deg(10) };
+    const sim = createSimulation(p, origin, noContacts);
+    const at = last(
+      driveUntil(sim, ctl({ steer: 1, lever: 1, gear: 'R' }), (s) => s.blocked !== null),
+    );
+    expect(at.blocked).toBe('coupling');
+    const freed = driveUntil(
+      sim,
+      ctl({ steer: -1, lever: 1, gear: 'R' }),
+      (s) => dist2(s.truck, at.truck) > 0.3,
+    );
+    expect(dist2(last(freed).truck, at.truck)).toBeGreaterThan(0.3);
+    for (const s of freed) expect(s.jackknifes).toBe(1);
   });
 
   it('a contact rejects the step, stops and counts one event', () => {
