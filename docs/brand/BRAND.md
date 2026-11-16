@@ -30,3 +30,15 @@ Text on `--color-accent-tint` is only `--color-text` or `--color-accent-strong`:
 | `--color-success`        | `#2e7d46` | `#5fbe7c` |
 | `--color-warning`        | `#9a6b1a` | `#d6a23e` |
 | `--color-danger`         | `#bc4438` | `#e0726a` |
+
+## Scene tokens
+
+Scene colours are theme-independent. A body or building must keep a luminance contrast of at least 1.5:1 against every ground it stands on; `tokens.test.ts` checks these pairs.
+
+| Token              | Value     | Stands on                       |
+| ------------------ | --------- | ------------------------------- |
+| `--scene-yard`     | `#c2c7cd` | ground                          |
+| `--scene-street`   | `#5e646b` | ground                          |
+| `--scene-pavement` | `#e6e9ec` | ground                          |
+| `--scene-body`     | `#969ca4` | yard, street, pavement, marking |
+| `--scene-hall`     | `#202428` | pavement, yard                  |
