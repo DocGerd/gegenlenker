@@ -43,6 +43,18 @@ describe('obbOverlap', () => {
     expect(obbOverlap(a, b(-0.05))).toBe(true);
   });
 
+  it('tests the axes of each box, not only the first', () => {
+    const aligned = box(0, 0, 0.5, 0.5);
+    // separated only along the rotated box's diagonal axis
+    const rotated = (gap: number) => {
+      const c = (0.5 * Math.SQRT2 + 0.5 + gap) / Math.SQRT2;
+      return box(c, c, 0.5, 0.5, Math.PI / 4);
+    };
+    expect(obbOverlap(aligned, rotated(0.05))).toBe(false);
+    expect(obbOverlap(rotated(0.05), aligned)).toBe(false);
+    expect(obbOverlap(aligned, rotated(-0.05))).toBe(true);
+  });
+
   it('a box inside another overlaps', () => {
     expect(obbOverlap(box(0, 0, 5, 5), box(0.5, 0.5, 1, 1, 0.7))).toBe(true);
     expect(obbOverlap(box(0.5, 0.5, 1, 1, 0.7), box(0, 0, 5, 5))).toBe(true);
