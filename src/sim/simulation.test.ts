@@ -21,6 +21,7 @@ import {
   PREDICT_STEP,
   V_MAX,
 } from './constants';
+import { bodyFootprints } from './geometry';
 import { predictTrailerRear } from './predict';
 import { createSimulation } from './simulation';
 
@@ -241,6 +242,41 @@ describe('simulation', () => {
     for (const s of freed) expect(s.jackknifes).toBe(1);
   });
 
+  const expectHeld = (snaps: readonly SimSnapshot[], at: SimSnapshot): void => {
+    for (const s of snaps) {
+      if (s.blocked !== null) expect(s.truck).toEqual(at.truck);
+      expect(s.jackknifes).toBe(1);
+    }
+  };
+
+  it('sweeping the wheel with the lever held stays in one episode until the fold eases', () => {
+    const p = { ...manKrone(), couplingLimit: deg(10) };
+    const sim = createSimulation(p, origin, noContacts);
+    const at = last(
+      driveUntil(sim, ctl({ steer: 1, lever: 1, gear: 'R' }), (s) => s.blocked !== null),
+    );
+    const sweep = driveUntil(
+      sim,
+      ctl({ steer: -1, lever: 1, gear: 'R' }),
+      (s) => dist2(s.truck, at.truck) > 0.3,
+    );
+    expect(dist2(last(sweep).truck, at.truck)).toBeGreaterThan(0.3);
+    expectHeld(sweep, at);
+  });
+
+  it('opposite lock that only slows the fold keeps the jackknife until driving forward', () => {
+    const { sim, at } = jackknifed();
+    const turning = driveUntil(sim, ctl({ steer: -1, gear: 'R' }), (s) => s.steer === -1);
+    const pushed = drive(sim, ctl({ steer: -1, lever: 1, gear: 'R' }), 600);
+    for (const s of [...turning, ...pushed]) expect(s.truck).toEqual(at.truck);
+    expectHeld(pushed, at);
+    expect(last(pushed).blocked).toBe(at.blocked);
+    const end = last(drive(sim, ctl({ steer: -1, lever: 1 }), 60));
+    expect(dist2(end.truck, at.truck)).toBeGreaterThan(0);
+    expect(end.blocked).toBeNull();
+    expect(end.jackknifes).toBe(1);
+  });
+
   it('a contact rejects the step, stops and counts one event', () => {
     const wall: ContactQuery = (bodies) => {
       const trailer = bodies.find((b) => b.body === 'trailer');
@@ -260,6 +296,25 @@ describe('simulation', () => {
     expect(end.truck.x).toBeGreaterThan(at.truck.x);
     expect(end.blocked).toBeNull();
     expect(end.contacts).toBe(1);
+  });
+
+  it('a contact in the other direction is a new event', () => {
+    let gate = Infinity;
+    const wedge: ContactQuery = (bodies) => {
+      const truck = bodies.find((b) => b.body === 'truck');
+      const trailer = bodies.find((b) => b.body === 'trailer');
+      if (trailer && trailer.obb.cx < -8) return { body: 'trailer', obstacleId: 'wall' };
+      return truck && truck.obb.cx > gate ? { body: 'truck', obstacleId: 'gate' } : null;
+    };
+    const sim = createSimulation(manKrone(), origin, wedge);
+    const at = last(driveUntil(sim, ctl({ lever: 1, gear: 'R' }), (s) => s.blocked !== null));
+    expect(at.contacts).toBe(1);
+    const [truck] = bodyFootprints(manKrone(), at);
+    gate = truck?.obb.cx ?? -Infinity;
+    const forward = drive(sim, ctl({ lever: 1 }), 60);
+    for (const s of forward) expect(s.truck).toEqual(at.truck);
+    expect(last(forward).blocked).toBe('contact');
+    expect(last(forward).contacts).toBe(2);
   });
 
   it('D to R while moving decelerates through zero and counts one direction change', () => {
