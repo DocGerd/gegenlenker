@@ -3,6 +3,7 @@ import {
   OrthographicCamera,
   PerspectiveCamera,
   Scene,
+  Vector3,
   WebGLRenderer,
   type Object3D,
 } from 'three';
@@ -14,7 +15,7 @@ import type {
   SceneRenderer,
   ScenePalette,
 } from '../contracts/render';
-import type { TruckSpec } from '../contracts/vehicle';
+import type { TruckAnchors } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { bodyToThree } from './coords';
 import { createResolutionGovernor } from './governor';
@@ -44,7 +45,7 @@ type Built = {
   readonly trailer: VehicleVisual;
   readonly environment: Environment;
   readonly aids: AidsLayer;
-  readonly truckSpec: TruckSpec;
+  readonly anchors: TruckAnchors;
   readonly palette: ScenePalette;
   readonly yardBounds: Rect2;
 };
@@ -61,9 +62,7 @@ function fitBounds(layout: ResolvedLayout): Rect2 {
 }
 
 function setAidsLayer(object: Object3D): void {
-  object.traverse((o) => {
-    if (o.layers.mask !== 1 << AIDS_LAYER) o.layers.set(AIDS_LAYER);
-  });
+  object.traverse((o) => o.layers.set(AIDS_LAYER));
 }
 
 export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
@@ -75,6 +74,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   topDownCamera.rotation.x = -Math.PI / 2;
   const mirrorLeft = createMirror();
   const mirrorRight = createMirror();
+  const mirrorPosition = new Vector3();
 
   let renderer: WebGLRenderer | null = null;
   let canvas: HTMLCanvasElement | null = null;
@@ -87,7 +87,9 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   let lastRender = 0;
   let emaMs = 0;
   let drawCalls = 0;
-  const intervals: number[] = [];
+  const intervals = new Float64Array(P95_WINDOW);
+  let intervalCount = 0;
+  let intervalNext = 0;
 
   const onLost = (event: Event): void => {
     event.preventDefault();
@@ -95,8 +97,21 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   };
   const onRestored = (): void => {
     contextLost = false;
-    appliedRatio = 0;
+    resetTiming();
   };
+  const onVisibility = (): void => {
+    if (document.visibilityState === 'visible') resetTiming();
+  };
+
+  /** A long gap between frames (restore, hidden tab, new scene) must not count as slow rendering. */
+  function resetTiming(): void {
+    lastRender = 0;
+    emaMs = 0;
+    intervalCount = 0;
+    intervalNext = 0;
+    governor.reset();
+    appliedRatio = 0;
+  }
 
   const ratio = (): number =>
     Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO) * governor.scale();
@@ -126,7 +141,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     let halfH: number;
     if (frame.topDown === 'follow') {
       const { truck, trailerRear } = frame.snapshot;
-      const frontX = truckAnchors(b.truckSpec).frontX;
+      const frontX = b.anchors.frontX;
       const bumperX = truck.x + Math.cos(truck.heading) * frontX;
       const bumperY = truck.y + Math.sin(truck.heading) * frontX;
       cx = (bumperX + trailerRear.x) / 2;
@@ -156,8 +171,9 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     if (lastRender > 0) {
       const dt = now - lastRender;
       emaMs = emaMs === 0 ? dt : emaMs + EMA_SMOOTHING * (dt - emaMs);
-      intervals.push(dt);
-      if (intervals.length > P95_WINDOW) intervals.shift();
+      intervals[intervalNext] = dt;
+      intervalNext = (intervalNext + 1) % P95_WINDOW;
+      if (intervalCount < P95_WINDOW) intervalCount++;
       governor.sample(dt);
     }
     lastRender = now;
@@ -179,11 +195,13 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       glRenderer = typeof name === 'string' && name !== '' ? name : 'unknown';
       target.addEventListener('webglcontextlost', onLost);
       target.addEventListener('webglcontextrestored', onRestored);
+      document.addEventListener('visibilitychange', onVisibility);
       applySize();
     },
 
     setScene(nextLayout, truck, trailer, palette) {
       disposeBuilt();
+      resetTiming();
       const scene = new Scene();
       scene.matrixWorldAutoUpdate = false;
       const truckVisual = parts.truck(truck, palette);
@@ -198,7 +216,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
         trailer: trailerVisual,
         environment,
         aids,
-        truckSpec: truck,
+        anchors: truckAnchors(truck),
         palette,
         yardBounds: fitBounds(nextLayout),
       };
@@ -221,30 +239,35 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       const pixelRatio = appliedRatio;
 
       const { snapshot, views } = frame;
+      const sky = b.palette.sky;
       b.truck.update(snapshot);
       b.trailer.update(snapshot);
       b.aids.update(frame);
-      setAidsLayer(b.aids.object);
       b.scene.updateMatrixWorld();
 
       gl.info.reset();
-      gl.setClearColor(b.palette.sky);
       gl.setScissorTest(false);
 
-      const anchors = truckAnchors(b.truckSpec);
+      const anchors = b.anchors;
       const heading = snapshot.truck.heading;
       const { cockpit, mirrorLeft: leftRect, mirrorRight: rightRect, topDown } = views;
 
       if (leftRect !== null) {
         mirrorLeft.place(
-          bodyToThree(snapshot.truck, anchors.mirrorLeft),
+          bodyToThree(snapshot.truck, anchors.mirrorLeft, mirrorPosition),
           heading + Math.PI - MIRROR_YAW,
         );
-        mirrorLeft.capture(gl, b.scene, leftRect.width * pixelRatio, leftRect.height * pixelRatio);
+        mirrorLeft.capture(
+          gl,
+          b.scene,
+          leftRect.width * pixelRatio,
+          leftRect.height * pixelRatio,
+          sky,
+        );
       }
       if (rightRect !== null) {
         mirrorRight.place(
-          bodyToThree(snapshot.truck, anchors.mirrorRight),
+          bodyToThree(snapshot.truck, anchors.mirrorRight, mirrorPosition),
           heading + Math.PI + MIRROR_YAW,
         );
         mirrorRight.capture(
@@ -252,15 +275,17 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
           b.scene,
           rightRect.width * pixelRatio,
           rightRect.height * pixelRatio,
+          sky,
         );
       }
 
       gl.setRenderTarget(null);
+      gl.setClearColor(sky);
       gl.clear();
       gl.setScissorTest(true);
 
       if (cockpit !== null) {
-        cockpitCamera.position.copy(bodyToThree(snapshot.truck, anchors.eye));
+        bodyToThree(snapshot.truck, anchors.eye, cockpitCamera.position);
         cockpitCamera.rotation.set(COCKPIT_PITCH, heading - Math.PI / 2, 0);
         cockpitCamera.aspect = cockpit.width / cockpit.height;
         cockpitCamera.updateProjectionMatrix();
@@ -279,7 +304,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     },
 
     stats(): RenderStats {
-      const sorted = [...intervals].sort((a, c) => a - c);
+      const sorted = intervals.slice(0, intervalCount).sort();
       const p95 = sorted.length === 0 ? 0 : (sorted[Math.ceil(0.95 * sorted.length) - 1] ?? 0);
       return {
         fps: emaMs === 0 ? 0 : 1000 / emaMs,
@@ -297,6 +322,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       mirrorRight.dispose();
       canvas?.removeEventListener('webglcontextlost', onLost);
       canvas?.removeEventListener('webglcontextrestored', onRestored);
+      document.removeEventListener('visibilitychange', onVisibility);
       renderer?.dispose();
       renderer = null;
       canvas = null;

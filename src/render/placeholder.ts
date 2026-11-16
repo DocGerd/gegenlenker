@@ -17,48 +17,7 @@ import { truckAnchors, trailerAnchors } from '../vehicles/anchors';
 import { placePose, toThree } from './coords';
 import type { AidsLayer, Environment, RendererParts, VehicleVisual } from './seams';
 
-// Stand-in vehicle data for the renderer spike; real data arrives with the vehicle task.
-const est = (value: number): Param => ({ value, status: 'estimate', source: 'placeholder' });
-
-export const placeholderTruck: TruckSpec = {
-  id: 'man-le-18-280',
-  name: 'Placeholder truck',
-  body: 'platform',
-  wheelbase: est(4500),
-  frontOverhang: est(1400),
-  rearOverhang: est(1900),
-  width: est(2500),
-  frontTrack: est(2050),
-  rearTrack: est(1800),
-  couplingOffset: est(700),
-  turningRadius: est(8000),
-  eye: { height: est(2300), behindBumper: est(800), leftOfCentre: est(400) },
-  mirror: {
-    lateral: est(1100),
-    glassOutboard: est(150),
-    behindBumper: est(300),
-    height: est(2000),
-  },
-  steering: { lockToLockTurns: est(3), maxRate: est(0.5) },
-};
-
-export const placeholderTrailer: TrailerSpec = {
-  id: 'krone-azw-18',
-  name: 'Placeholder trailer',
-  body: 'box',
-  drawbar: est(3000),
-  wheelbase: est(5500),
-  rearAxleCount: est(2),
-  rearAxleSpacing: est(1310),
-  frontOverhang: est(600),
-  rearOverhang: est(1200),
-  width: est(2550),
-  track: est(2000),
-  deckHeight: est(1100),
-  couplingLimit: est(90),
-  turntableLimit: est(90),
-};
-
+// Stand-in content for the renderer spike; the real parts replace it behind the same seams.
 export const placeholderLayout: ResolvedLayout = {
   id: 'depot',
   bounds: { minX: -60, minY: -60, maxX: 60, maxY: 60 },
@@ -123,7 +82,7 @@ function trailerVisual(spec: TrailerSpec, palette: ScenePalette): VehicleVisual 
   const a = trailerAnchors(spec);
   const hw = mm(spec.width) / 2;
   const deck = mm(spec.deckHeight);
-  const body = lambert(palette.hall);
+  const body = lambert(palette.body);
   const chassis = lambert(palette.chassis);
   const dolly = new Group();
   dolly.add(bodyBox(chassis, [0, a.eye.x], [-0.15, 0.15], [0.4, 0.8]));
@@ -238,7 +197,7 @@ function environment(layout: ResolvedLayout, palette: ScenePalette): Environment
     materials.push(material);
   });
 
-  const sun = new DirectionalLight(palette.marking, 2.4);
+  const sun = new DirectionalLight(0xffffff, 2.4);
   const elevation = (50 * Math.PI) / 180;
   const horizontal = Math.cos(elevation) * 100;
   // south-west of the scene: world (−, −) is Three (−x, +z)

@@ -3,15 +3,17 @@ import '../styles/base.css';
 import '../styles/fonts';
 import type { RenderFrame, RenderStats } from '../contracts/render';
 import type { Pose2, SimSnapshot } from '../contracts/sim';
+import {
+  TRAILER_IDS,
+  TRUCK_IDS,
+  type TrailerAnchors,
+  type TruckAnchors,
+} from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
+import { trailerById, truckById } from '../vehicles/registry';
 import { readScenePalette } from './palette';
 import { mountPerfOverlay } from './perf-overlay';
-import {
-  placeholderLayout,
-  placeholderParts,
-  placeholderTrailer,
-  placeholderTruck,
-} from './placeholder';
+import { placeholderLayout, placeholderParts } from './placeholder';
 import { createThreeSceneRenderer } from './three-renderer';
 import { computeViewports } from './viewports';
 
@@ -23,11 +25,13 @@ declare global {
 
 const RADIUS = 15;
 const SPEED = 1.4;
-const COUPLING_ANGLE = 0.0;
-const TURNTABLE_ANGLE = 0.0;
 
-const truckAnchor = truckAnchors(placeholderTruck);
-const trailerAnchor = trailerAnchors(placeholderTrailer);
+type Fold = readonly [coupling: number, turntable: number];
+const FOLDS = {
+  left: [0.25, 0.2],
+  right: [-0.25, -0.2],
+  straight: [0, 0],
+} as const satisfies Record<string, Fold>;
 
 const advance = (p: { x: number; y: number }, heading: number, d: number) => ({
   x: p.x + Math.cos(heading) * d,
@@ -35,7 +39,12 @@ const advance = (p: { x: number; y: number }, heading: number, d: number) => ({
 });
 
 /** A snapshot on a circular path with fixed pivot angles, geometrically consistent. */
-function snapshotAt(seconds: number): SimSnapshot {
+function snapshotAt(
+  seconds: number,
+  truckAnchor: TruckAnchors,
+  trailerAnchor: TrailerAnchors,
+  [couplingAngle, turntableAngle]: Fold,
+): SimSnapshot {
   const phase = (SPEED / RADIUS) * seconds;
   const truck: Pose2 = {
     x: RADIUS * Math.cos(phase),
@@ -43,12 +52,12 @@ function snapshotAt(seconds: number): SimSnapshot {
     heading: phase + Math.PI / 2,
   };
   const coupling = advance(truck, truck.heading, truckAnchor.coupling.x);
-  const dollyHeading = truck.heading - COUPLING_ANGLE;
+  const dollyHeading = truck.heading - couplingAngle;
   const dolly: Pose2 = {
     ...advance(coupling, dollyHeading, -trailerAnchor.eye.x),
     heading: dollyHeading,
   };
-  const trailerHeading = dollyHeading - TURNTABLE_ANGLE;
+  const trailerHeading = dollyHeading - turntableAngle;
   const trailer: Pose2 = {
     ...advance(dolly, trailerHeading, -trailerAnchor.turntable.x),
     heading: trailerHeading,
@@ -62,8 +71,8 @@ function snapshotAt(seconds: number): SimSnapshot {
     dolly,
     trailer,
     trailerRear: advance(trailer, trailerHeading, trailerAnchor.rearX),
-    couplingAngle: COUPLING_ANGLE,
-    turntableAngle: TURNTABLE_ANGLE,
+    couplingAngle,
+    turntableAngle,
     steer: control.steer,
     roadWheelAngle: 0.3,
     speed: SPEED,
@@ -75,14 +84,28 @@ function snapshotAt(seconds: number): SimSnapshot {
   };
 }
 
+/** `?truck=<id>&trailer=<id>&fold=left|right|straight`; unknown values fall back to the defaults. */
+function readOptions() {
+  const query = new URLSearchParams(location.search);
+  const truckId = TRUCK_IDS.find((id) => id === query.get('truck')) ?? TRUCK_IDS[0];
+  const trailerId = TRAILER_IDS.find((id) => id === query.get('trailer')) ?? TRAILER_IDS[0];
+  const key = query.get('fold');
+  const fold: Fold = key === 'right' || key === 'straight' ? FOLDS[key] : FOLDS.left;
+  return { truck: truckById(truckId), trailer: trailerById(trailerId), fold };
+}
+
 export function startProbe(root: HTMLElement): void {
+  const { truck, trailer, fold } = readOptions();
+  const truckAnchor = truckAnchors(truck);
+  const trailerAnchor = trailerAnchors(trailer);
+
   const canvas = document.createElement('canvas');
   canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;display:block';
   root.append(canvas);
 
   const renderer = createThreeSceneRenderer(placeholderParts);
   renderer.init(canvas);
-  renderer.setScene(placeholderLayout, placeholderTruck, placeholderTrailer, readScenePalette());
+  renderer.setScene(placeholderLayout, truck, trailer, readScenePalette());
 
   let width = 0;
   let height = 0;
@@ -99,7 +122,7 @@ export function startProbe(root: HTMLElement): void {
 
   const tick = (now: number): void => {
     const frame: RenderFrame = {
-      snapshot: snapshotAt(now / 1000),
+      snapshot: snapshotAt(now / 1000, truckAnchor, trailerAnchor, fold),
       views: computeViewports(width, height, 'drive'),
       topDown: 'follow',
       aids: { pivots: false, path: false, tracks: false, ghost: false },

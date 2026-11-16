@@ -12,7 +12,7 @@ import {
 } from 'three';
 import type { Rect } from '../contracts/render';
 
-const FOV = 30;
+const FOV = 46; // a 24° horizontal field on the 1:2 mirror rect
 const NEAR = 0.2;
 const FAR = 400;
 const PITCH = MathUtils.degToRad(-4);
@@ -33,13 +33,18 @@ export function createMirror() {
   let target: WebGLRenderTarget | null = null;
 
   return {
-    camera,
     /** `facing` is the world heading the mirror looks along. */
     place(position: Vector3, facing: number): void {
       camera.position.copy(position);
       camera.rotation.set(PITCH, facing - Math.PI / 2, 0);
     },
-    capture(renderer: WebGLRenderer, scene: Scene, widthPx: number, heightPx: number): void {
+    capture(
+      renderer: WebGLRenderer,
+      scene: Scene,
+      widthPx: number,
+      heightPx: number,
+      sky: number,
+    ): void {
       const w = Math.max(1, Math.round(widthPx));
       const h = Math.max(1, Math.round(heightPx));
       if (target === null) {
@@ -51,7 +56,9 @@ export function createMirror() {
       }
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      // three resolves the clear colour against the target bound when it is set
       renderer.setRenderTarget(target);
+      renderer.setClearColor(sky);
       renderer.clear();
       renderer.render(scene, camera);
       renderer.setRenderTarget(null);
@@ -71,5 +78,3 @@ export function createMirror() {
     },
   };
 }
-
-export type Mirror = ReturnType<typeof createMirror>;

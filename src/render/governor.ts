@@ -9,24 +9,28 @@ export function createResolutionGovernor(): {
   scale(): number;
 } {
   let scale = 1;
-  let frames: number[] = [];
+  let count = 0;
+  let next = 0;
+  const ring = new Float64Array(WINDOW);
+  const scratch = new Float64Array(WINDOW);
   return {
     sample(frameMs) {
-      frames.push(frameMs);
-      if (frames.length > WINDOW) frames.shift();
-      if (frames.length === WINDOW) {
-        const sorted = [...frames].sort((a, b) => a - b);
-        const p90 = sorted[Math.ceil(0.9 * WINDOW) - 1] ?? 0;
-        if (p90 > P90_LIMIT_MS) {
+      ring[next] = frameMs;
+      next = (next + 1) % WINDOW;
+      if (count < WINDOW) count++;
+      if (count === WINDOW) {
+        scratch.set(ring);
+        scratch.sort();
+        if ((scratch[Math.ceil(0.9 * WINDOW) - 1] ?? 0) > P90_LIMIT_MS) {
           scale = Math.max(FLOOR, scale - STEP);
-          frames = [];
+          count = 0;
         }
       }
       return scale;
     },
     reset() {
       scale = 1;
-      frames = [];
+      count = 0;
     },
     scale: () => scale,
   };
