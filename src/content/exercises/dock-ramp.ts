@@ -1,7 +1,7 @@
 import type { ExerciseDefinition } from '../../contracts/exercise';
+import { BAY_SPACING, RAMP } from '../layouts/logistics';
 
-const BAY_CENTRE_X = 40;
-const RAMP_FACE_Y = 49;
+const BAY_INDEX = 6;
 const RAMP_GAP = 0.15;
 
 export const dockRamp: ExerciseDefinition = {
@@ -9,7 +9,11 @@ export const dockRamp: ExerciseDefinition = {
   layout: 'logistics',
   start: { x: 58, y: 26, heading: 0 },
   target: {
-    pose: { x: BAY_CENTRE_X, y: RAMP_FACE_Y - RAMP_GAP, heading: -Math.PI / 2 },
+    pose: {
+      x: RAMP.minX + (BAY_INDEX + 0.5) * BAY_SPACING,
+      y: RAMP.minY - RAMP_GAP,
+      heading: -Math.PI / 2,
+    },
     length: 8,
     width: 3,
   },

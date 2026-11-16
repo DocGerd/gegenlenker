@@ -25,7 +25,7 @@ export const STREET: StreetSpec = {
   entrance: { fromX: 42, toX: 58 },
 };
 
-export function rectObb(rect: Rect2): Obb {
+function rectObb(rect: Rect2): Obb {
   return {
     cx: (rect.minX + rect.maxX) / 2,
     cy: (rect.minY + rect.maxY) / 2,
