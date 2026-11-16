@@ -49,6 +49,12 @@ function nextSpeed(v: number, control: ControlVector): number {
   return approach(v, vt, rate * DT);
 }
 
+function easesPivot(reason: BlockReason, next: KinematicState, q: KinematicState): boolean {
+  if (reason === 'contact') return true;
+  const angle = reason === 'coupling' ? couplingAngle : turntableAngle;
+  return Math.abs(angle(next)) < Math.abs(angle(q));
+}
+
 export function createSimulation(
   params: VehicleParams,
   start: StartState,
@@ -109,8 +115,10 @@ export function createSimulation(
       let sameEpisode = false;
       if (blocked !== null && Math.sign(targetSpeed(control)) === blockedSign) {
         // A step ramping up from standstill is small enough to creep into the margin the rejected
-        // step left and re-trigger, so the episode ends only when a full-speed step is valid.
-        held = rejection(rk4(params, q, blockedSign * V_MAX, delta, DT)) !== null;
+        // step left and re-trigger, so the episode ends only when a full-speed step is valid and,
+        // at a pivot, also eases the fold rather than merely slowing it.
+        const probe = rk4(params, q, blockedSign * V_MAX, delta, DT);
+        held = rejection(probe) !== null || !easesPivot(blocked, probe, q);
         if (!held) {
           blocked = null;
           sameEpisode = true;
@@ -121,12 +129,13 @@ export function createSimulation(
         const next = rk4(params, q, speed, delta, DT);
         const reason = rejection(next);
         if (reason !== null) {
-          if (!sameEpisode && reason !== blocked) {
+          const sign = Math.sign(speed);
+          if (!sameEpisode && (reason !== blocked || sign !== blockedSign)) {
             if (reason === 'contact') contactCount += 1;
             else jackknifes += 1;
           }
           blocked = reason;
-          blockedSign = Math.sign(speed);
+          blockedSign = sign;
           speed = 0;
         } else {
           q = next;
