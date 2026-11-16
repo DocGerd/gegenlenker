@@ -34,7 +34,7 @@ export const placeholderTruck: TruckSpec = {
   turningRadius: est(8000),
   eye: { height: est(2300), behindBumper: est(800), leftOfCentre: est(400) },
   mirror: {
-    lateral: est(1250),
+    lateral: est(1100),
     glassOutboard: est(150),
     behindBumper: est(300),
     height: est(2000),

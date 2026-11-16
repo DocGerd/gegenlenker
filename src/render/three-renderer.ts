@@ -34,7 +34,7 @@ const FOLLOW_HALF_HEIGHT = 20;
 const YARD_MARGIN = 5;
 const FAR = 400;
 const SKY_HEIGHT = 200;
-const FPS_SMOOTHING = 0.1;
+const EMA_SMOOTHING = 0.1;
 const P95_WINDOW = 120;
 const MAX_PIXEL_RATIO = 2;
 
@@ -85,7 +85,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   let contextLost = false;
   let glRenderer = 'unknown';
   let lastRender = 0;
-  let fps = 0;
+  let emaMs = 0;
   let drawCalls = 0;
   const intervals: number[] = [];
 
@@ -155,7 +155,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   function recordInterval(now: number): void {
     if (lastRender > 0) {
       const dt = now - lastRender;
-      fps = fps === 0 ? 1000 / dt : fps + FPS_SMOOTHING * (1000 / dt - fps);
+      emaMs = emaMs === 0 ? dt : emaMs + EMA_SMOOTHING * (dt - emaMs);
       intervals.push(dt);
       if (intervals.length > P95_WINDOW) intervals.shift();
       governor.sample(dt);
@@ -282,7 +282,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       const sorted = [...intervals].sort((a, c) => a - c);
       const p95 = sorted.length === 0 ? 0 : (sorted[Math.ceil(0.95 * sorted.length) - 1] ?? 0);
       return {
-        fps,
+        fps: emaMs === 0 ? 0 : 1000 / emaMs,
         frameP95Ms: p95,
         resolutionScale: governor.scale(),
         drawCalls,

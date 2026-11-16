@@ -23,8 +23,8 @@ declare global {
 
 const RADIUS = 15;
 const SPEED = 1.4;
-const COUPLING_ANGLE = 0.12;
-const TURNTABLE_ANGLE = 0.08;
+const COUPLING_ANGLE = 0.0;
+const TURNTABLE_ANGLE = 0.0;
 
 const truckAnchor = truckAnchors(placeholderTruck);
 const trailerAnchor = trailerAnchors(placeholderTrailer);
