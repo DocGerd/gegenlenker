@@ -1,3 +1,6 @@
+import type { BestResults, RunResult } from '../contracts/exercise';
+import { parseBestResults, recordBest, serializeBestResults } from '../scoring/best';
+
 export const SETTINGS_KEY = 'gegenlenker.settings.v1';
 export const BEST_KEY = 'gegenlenker.best.v1';
 export const LAST_RUN_KEY = 'gegenlenker.lastRun.v1';
@@ -34,4 +37,17 @@ export function writeText(key: string, value: string): void {
   } catch {
     // Quota or revoked access: the value lives only for this session.
   }
+}
+
+// Held in memory as well, so a finished run shows its result when storage is unavailable.
+let best: BestResults | null = null;
+
+export function bestResults(): BestResults {
+  best ??= parseBestResults(readText(BEST_KEY));
+  return best;
+}
+
+export function storeResult(result: RunResult): void {
+  best = recordBest(bestResults(), result).best;
+  writeText(BEST_KEY, serializeBestResults(best));
 }

@@ -174,12 +174,18 @@ export function startDrive(
 
   let aids: AidFlags = settings.aids;
   let topDown = settings.topDown;
+  // Set by anything visual besides a sim step; a frame with neither is not redrawn.
+  let dirty = true;
+  let pathStale = true;
   hud.onAction((action) => {
     if (action.type === 'topDown') {
       topDown = action.mode;
+      dirty = true;
       updateSettings({ topDown });
     } else if (action.type === 'aid') {
       aids = { ...aids, [action.aid]: action.on };
+      dirty = true;
+      pathStale = true;
       updateSettings({ aids });
     } else {
       exit(true);
@@ -201,6 +207,7 @@ export function startDrive(
     frame.views = computeViewports(width, height, 'drive');
     renderer.resize(width, height);
     hud.layout(frame.views);
+    dirty = true;
   };
   const observer = new ResizeObserver(relayout);
   observer.observe(stage);
@@ -234,11 +241,16 @@ export function startDrive(
         }
       }
     }
-    const gear = snapshot.control.gear;
-    frame.predicted =
-      aids.path && (gear === 'D' || gear === 'R')
-        ? predictTrailerRear(params, snapshot, gear === 'D' ? 1 : -1, PREDICT_DISTANCE)
-        : NO_PATH;
+    if (clock.steps === 0 && !dirty) return;
+    dirty = false;
+    if (clock.steps > 0 || pathStale) {
+      pathStale = false;
+      const gear = snapshot.control.gear;
+      frame.predicted =
+        aids.path && (gear === 'D' || gear === 'R')
+          ? predictTrailerRear(params, snapshot, gear === 'D' ? 1 : -1, PREDICT_DISTANCE)
+          : NO_PATH;
+    }
     frame.snapshot = snapshot;
     frame.topDown = topDown;
     frame.aids = aids;

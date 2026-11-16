@@ -4,11 +4,11 @@ import type { ExerciseId, RunResult } from '../contracts/exercise';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import { applyMessages, formatNumber, setLanguage, t, type Lang } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
-import { bestKey, parseBestResults } from '../scoring/best';
+import { bestKey } from '../scoring/best';
 import { trailers, trucks } from '../vehicles/registry';
 import type { RunConfig } from './drive';
 import { currentSettings, updateSettings, type Settings } from './settings';
-import { BEST_KEY, readText } from './storage';
+import { bestResults } from './storage';
 import { applyTheme } from './theme';
 
 const EXERCISE_TITLE: Readonly<Record<ExerciseId, MessageKey>> = {
@@ -168,7 +168,7 @@ export function showMenu(root: HTMLElement, onStart: (run: RunConfig) => void): 
     });
     query<HTMLElement>(container, 'exercises').append(...exerciseButtons.map((e) => e.button));
     const refreshBest = (): void => {
-      const best = parseBestResults(readText(BEST_KEY));
+      const best = bestResults();
       const { truckId, trailerId } = pair();
       for (const { button, exercise } of exerciseButtons) {
         button.querySelector('.menu-best')?.remove();

@@ -210,3 +210,7 @@
   background: var(--color-accent);
   color: var(--color-on-accent);
 }
+
+.app-screen:has(.drive) ~ .update-toast {
+  display: none;
+}

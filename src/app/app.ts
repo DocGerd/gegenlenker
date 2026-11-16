@@ -1,11 +1,10 @@
 import { detectLanguage, setLanguage } from '../i18n/i18n';
 import { startUpdatePrompt } from '../pwa/update-prompt';
-import { parseBestResults, recordBest, serializeBestResults } from '../scoring/best';
 import './app.css';
-import { startDrive, type DriveOutcome, type RunConfig } from './drive';
+import type { DriveOutcome, RunConfig } from './drive';
 import { showMenu } from './menu';
 import { currentSettings, initSettings, loadSettings } from './settings';
-import { BEST_KEY, readText, SETTINGS_KEY, writeText } from './storage';
+import { LAST_RUN_KEY, readText, SETTINGS_KEY, storeResult, writeText } from './storage';
 import { applyTheme } from './theme';
 
 export function startApp(root: HTMLElement): void {
@@ -20,14 +19,18 @@ export function startApp(root: HTMLElement): void {
   root.append(screen);
 
   const finished = (outcome: DriveOutcome): void => {
-    if (outcome.result !== null) {
-      const { best } = recordBest(parseBestResults(readText(BEST_KEY)), outcome.result);
-      writeText(BEST_KEY, serializeBestResults(best));
-    }
+    if (outcome.result !== null) storeResult(outcome.result);
+    if (outcome.log.steps > 0) writeText(LAST_RUN_KEY, JSON.stringify(outcome.log));
     menu();
   };
+  // Loaded on demand so the menu paints without parsing three.js.
   const drive = (run: RunConfig): void => {
-    startDrive(screen, run, currentSettings(), finished);
+    import('./drive')
+      .then((m) => m.startDrive(screen, run, currentSettings(), finished))
+      .catch((error: unknown) => {
+        console.error(error);
+        menu();
+      });
   };
   const menu = (): void => {
     const close = showMenu(screen, (run) => {
