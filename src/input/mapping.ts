@@ -16,11 +16,6 @@ export function stepLever(s: InputState, direction: 1 | -1): void {
   s.lever = clamp(Math.round((s.lever + direction * LEVER_STEP) * 1000) / 1000, 0, 1);
 }
 
-export function pressBrake(s: InputState): void {
-  s.lever = 0;
-  s.brake = true;
-}
-
 export function toControlVector(s: InputState): ControlVector {
   return {
     steer: clamp(s.steer, -1, 1),

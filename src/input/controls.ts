@@ -1,7 +1,8 @@
 import type { ControlVector, Gear } from '../contracts/sim';
 import { applyMessages } from '../i18n/i18n';
 import { createKeyboard } from './keyboard';
-import { clamp, createInputState, pressBrake, stepLever, toControlVector } from './mapping';
+import './controls.css';
+import { clamp, createInputState, stepLever, toControlVector } from './mapping';
 
 export type Controls = { control(): ControlVector; tick(dt: number): void; dispose(): void };
 
@@ -100,9 +101,23 @@ export function createControls(
   const wheelArt = query<SVGElement>(container, 'wheel-art');
   const keyboard = createKeyboard(state, opts.steerRate);
 
+  // Two brake sources, so releasing one cannot release a Stop button a finger still holds.
+  let pointerBrake = false;
+  const syncBrake = (): void => {
+    state.brake = pointerBrake || keyboard.brake;
+  };
   bindDrag(
     stop,
-    { down: () => pressBrake(state), move: () => {}, end: () => (state.brake = false) },
+    {
+      down: () => {
+        state.lever = 0;
+        pointerBrake = true;
+      },
+      move: () => {},
+      end: () => {
+        pointerBrake = false;
+      },
+    },
     signal,
   );
 
@@ -176,9 +191,13 @@ export function createControls(
   render();
 
   return {
-    control: () => toControlVector(state),
+    control() {
+      syncBrake();
+      return toControlVector(state);
+    },
     tick(dt) {
       keyboard.tick(dt);
+      syncBrake();
       render();
     },
     dispose() {

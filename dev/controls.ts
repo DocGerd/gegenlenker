@@ -1,7 +1,6 @@
 import '../src/styles/fonts';
 import '../src/styles/tokens.css';
 import '../src/styles/base.css';
-import '../src/input/controls.css';
 import { createControls } from '../src/input/controls';
 
 const stage = document.querySelector<HTMLElement>('#stage');
