@@ -1,0 +1,108 @@
+:root {
+  --color-bg: #fbfbfc;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f4f5f7;
+  --color-surface-muted: #eef0f2;
+  --color-divider: #e6e9ec;
+  --color-border: #dce0e4;
+  --color-text: #14161a;
+  --color-text-secondary: #3b4046;
+  --color-text-muted: #5e646b;
+  --color-accent: #0f7c72;
+  --color-on-accent: #ffffff;
+  --color-accent-strong: #01625a;
+  --color-accent-tint: #e8f3f1;
+  --color-success: #2e7d46;
+  --color-warning: #9a6b1a;
+  --color-danger: #bc4438;
+  --font-sans: 'Geist', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  --text-2xs: 11px;
+  --leading-2xs: 14px;
+  --text-xs: 12px;
+  --leading-xs: 16px;
+  --text-sm: 13px;
+  --leading-sm: 19px;
+  --text-md: 14px;
+  --leading-md: 22px;
+  --text-lg: 16px;
+  --leading-lg: 26px;
+  --text-xl: 20px;
+  --leading-xl: 26px;
+  --text-2xl: 24px;
+  --leading-2xl: 30px;
+  --text-3xl: 36px;
+  --leading-3xl: 40px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --tracking-tight: -0.02em;
+  --tracking-eyebrow: 0.16em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+  --radius-pill: 100px;
+  --size-target: 44px;
+  --shadow-sm: 0 1px 2px rgba(20, 22, 26, 0.06);
+  --shadow-md: 0 8px 24px rgba(20, 22, 26, 0.1), 0 2px 6px rgba(20, 22, 26, 0.06);
+  --duration-fast: 150ms;
+  --duration-theme: 350ms;
+  --ease-standard: ease;
+  --content-max: 1080px;
+  --measure: 70ch;
+}
+
+[data-theme='dark'] {
+  --color-bg: #0d0e10;
+  --color-surface: #15171a;
+  --color-surface-subtle: #141619;
+  --color-surface-muted: #1b1e22;
+  --color-divider: #202428;
+  --color-border: #2a2e33;
+  --color-text: #eceef1;
+  --color-text-secondary: #c2c7cd;
+  --color-text-muted: #969ca4;
+  --color-accent: #01afa1;
+  --color-on-accent: #0d0e10;
+  --color-accent-strong: #60c1b5;
+  --color-accent-tint: #0e2623;
+  --color-success: #5fbe7c;
+  --color-warning: #d6a23e;
+  --color-danger: #e0726a;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Scene palette: theme-independent neutral greys; the accent marks target and guidance only. */
+:root {
+  --scene-sky: #dce0e4;
+  --scene-verge: #969ca4;
+  --scene-yard: #c2c7cd;
+  --scene-pavement: #e6e9ec;
+  --scene-street: #5e646b;
+  --scene-marking: #fbfbfc;
+  --scene-kerb: #eef0f2;
+  --scene-wall: #969ca4;
+  --scene-fence: #3b4046;
+  --scene-hall: #e6e9ec;
+  --scene-ramp: #5e646b;
+  --scene-lamp: #2a2e33;
+  --scene-parked: #3b4046;
+  --scene-cone: #eef0f2;
+  --scene-cab: #eef0f2;
+  --scene-body: #c2c7cd;
+  --scene-chassis: #1b1e22;
+  --scene-wheel: #14161a;
+  --scene-tracks: #3b4046;
+  --scene-accent: #0f7c72;
+}

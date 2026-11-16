@@ -1,0 +1,18 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: var(--weight-regular) var(--text-md) / var(--leading-md) var(--font-sans);
+  overscroll-behavior: none;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings:
+    'tnum' 1,
+    'zero' 1,
+    'calt' 0,
+    'liga' 0;
+}
