@@ -12,12 +12,14 @@ import { resolveCombination } from '../vehicles/resolve';
 import { trailerById, trailers, truckById, trucks } from '../vehicles/registry';
 import { wrapAngle } from './angle';
 import { advanceClock } from './clock';
+import { createContactQuery } from './collision';
 import {
   ACCEL,
   BRAKE_DECEL,
   DECEL,
   DT,
   MAX_STEPS_PER_FRAME,
+  EVENT_CLEAR_DISTANCE,
   PREDICT_STEP,
   V_MAX,
 } from './constants';
@@ -298,7 +300,7 @@ describe('simulation', () => {
     expect(end.contacts).toBe(1);
   });
 
-  it('a contact in the other direction is a new event', () => {
+  it('wedged between two obstacles counts each once', () => {
     let gate = Infinity;
     const wedge: ContactQuery = (bodies) => {
       const truck = bodies.find((b) => b.body === 'truck');
@@ -315,6 +317,57 @@ describe('simulation', () => {
     for (const s of forward) expect(s.truck).toEqual(at.truck);
     expect(last(forward).blocked).toBe('contact');
     expect(last(forward).contacts).toBe(2);
+    for (const gear of ['R', 'D', 'R', 'D', 'R', 'D'] as const) {
+      for (const s of drive(sim, ctl({ lever: 1, gear }), 30)) {
+        // the rejected full step leaves up to one step of real gap to the wall
+        expect(dist2(s.truck, at.truck)).toBeLessThanOrEqual(V_MAX * DT);
+        expect(s.contacts).toBe(2);
+      }
+    }
+  });
+
+  it('grazing a wall counts one contact while the vehicle edges along it', () => {
+    const wall = createContactQuery([
+      {
+        id: 'wall',
+        kind: 'wall',
+        height: 2,
+        obb: { cx: 50, cy: -3.5, halfLength: 70, halfWidth: 0.5, heading: 0 },
+      },
+    ]);
+    const sim = createSimulation(manKrone(), { truck: { x: 0, y: 0, heading: deg(-6) } }, wall);
+    const at = last(driveUntil(sim, ctl({ lever: 1 }), (s) => s.blocked !== null));
+    expect(at.blocked).toBe('contact');
+    const edging = drive(sim, ctl({ steer: 0.075, lever: 1 }), 600);
+    expect(dist2(last(edging).truck, at.truck)).toBeGreaterThan(0);
+    expect(last(edging).blocked).toBe('contact');
+    for (const s of edging) expect(s.contacts).toBe(1);
+  });
+
+  it('touching the same obstacle again after driving clear counts again', () => {
+    const wall: ContactQuery = (bodies) => {
+      const trailer = bodies.find((b) => b.body === 'trailer');
+      return trailer && trailer.obb.cx < -8 ? { body: 'trailer', obstacleId: 'wall' } : null;
+    };
+    const sim = createSimulation(manKrone(), origin, wall);
+    const reverse = ctl({ lever: 1, gear: 'R' });
+    expect(last(driveUntil(sim, reverse, (s) => s.blocked !== null)).contacts).toBe(1);
+    driveDistance(sim, ctl({ lever: 1 }), EVENT_CLEAR_DISTANCE + 0.5);
+    const again = last(driveUntil(sim, reverse, (s) => s.blocked !== null));
+    expect(again.blocked).toBe('contact');
+    expect(again.contacts).toBe(2);
+  });
+
+  it('sweeping out of a pivot limit and straight back counts one jackknife', () => {
+    const p = { ...manKrone(), couplingLimit: deg(10) };
+    const sim = createSimulation(p, origin, noContacts);
+    driveUntil(sim, ctl({ steer: 1, lever: 1, gear: 'R' }), (s) => s.blocked !== null);
+    const out = driveUntil(sim, ctl({ steer: -1, lever: 1, gear: 'R' }), (s) => s.blocked === null);
+    const from = last(out);
+    const back = driveUntil(sim, ctl({ steer: 1, lever: 1, gear: 'R' }), (s) => s.blocked !== null);
+    expect(last(back).blocked).toBe('coupling');
+    expect(dist2(last(back).truck, from.truck)).toBeLessThan(EVENT_CLEAR_DISTANCE);
+    for (const s of [...out, ...back]) expect(s.jackknifes).toBe(1);
   });
 
   it('D to R while moving decelerates through zero and counts one direction change', () => {
@@ -374,6 +427,12 @@ describe('simulation', () => {
     });
     expect(advanceClock(0, DT / 2).steps).toBe(0);
     expect(advanceClock(DT / 2, DT / 2).steps).toBe(1);
+  });
+
+  it('treats a negative or non-finite frame time as zero', () => {
+    for (const frame of [-1, -DT, Number.NaN, Infinity, -Infinity]) {
+      expect(advanceClock(DT / 2, frame)).toEqual({ steps: 0, accumulator: DT / 2 });
+    }
   });
 
   it('predicted trailer path matches the driven path', () => {
