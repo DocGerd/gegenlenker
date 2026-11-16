@@ -8,8 +8,11 @@ test('loads from the subpath and drives an exercise offline', async ({
 }) => {
   const origin = new URL(baseURL ?? '').origin;
   const foreign: string[] = [];
-  page.on('request', (r) => {
-    if (!r.url().startsWith(origin) && !r.url().startsWith('data:')) foreign.push(r.url());
+  // Context level, so requests made by the service worker are seen too.
+  context.on('request', (r) => {
+    const url = r.url();
+    if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:'))
+      foreign.push(url);
   });
 
   await page.goto('./');
