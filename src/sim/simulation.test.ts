@@ -223,7 +223,7 @@ describe('simulation', () => {
     expect(end.jackknifes).toBe(1);
   });
 
-  it('steering out of a blocked pivot frees the same direction without a new event', () => {
+  it('steering out of a blocked pivot at standstill frees the same direction without a new event', () => {
     const p = { ...manKrone(), couplingLimit: deg(10) };
     const sim = createSimulation(p, origin, noContacts);
     const at = last(
