@@ -8,7 +8,7 @@ import type {
 } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
 import { wrapAngle } from './angle';
-import { ACCEL, BRAKE_DECEL, DECEL, DT, V_MAX } from './constants';
+import { ACCEL, BRAKE_DECEL, DECEL, DT, EVENT_CLEAR_DISTANCE, V_MAX } from './constants';
 import { bodyFootprints } from './geometry';
 import {
   couplingAngle,
@@ -80,9 +80,21 @@ export function createSimulation(
   let lastSign = 0;
   let step = 0;
 
-  const rejection = (next: KinematicState): BlockReason | null =>
-    pivotViolation(params, next) ??
-    (contacts(bodyFootprints(params, joints(params, next))) !== null ? 'contact' : null);
+  // Events are counted per incident: a key counts once until the vehicle travels clear.
+  const incident = new Set<string>();
+  let travelledSinceRejection = 0;
+
+  const rejection = (next: KinematicState): { reason: BlockReason; key: string } | null => {
+    const pivot = pivotViolation(params, next);
+    if (pivot !== null) {
+      const angle = pivot === 'coupling' ? couplingAngle(next) : turntableAngle(next);
+      return { reason: pivot, key: `${pivot}:${Math.sign(angle)}` };
+    }
+    const hit = contacts(bodyFootprints(params, joints(params, next)));
+    return hit === null
+      ? null
+      : { reason: 'contact', key: `contact:${hit.body}:${hit.obstacleId}` };
+  };
 
   const snapshot = (): SimSnapshot => ({
     step,
@@ -112,34 +124,33 @@ export function createSimulation(
       steer = approach(steer, control.steer, params.steerRate * DT);
       const delta = steer * params.maxRoadWheelAngle;
       let held = false;
-      let sameEpisode = false;
       if (blocked !== null && Math.sign(targetSpeed(control)) === blockedSign) {
         // A step ramping up from standstill is small enough to creep into the margin the rejected
-        // step left and re-trigger, so the episode ends only when a full-speed step is valid and,
+        // step left and re-trigger, so the block lifts only when a full-speed step is valid and,
         // at a pivot, also eases the fold rather than merely slowing it.
         const probe = rk4(params, q, blockedSign * V_MAX, delta, DT);
         held = rejection(probe) !== null || !easesPivot(blocked, probe, q);
-        if (!held) {
-          blocked = null;
-          sameEpisode = true;
-        }
+        if (!held) blocked = null;
       }
       if (!held) speed = nextSpeed(speed, control);
       if (!held && speed !== 0) {
         const next = rk4(params, q, speed, delta, DT);
-        const reason = rejection(next);
-        if (reason !== null) {
-          const sign = Math.sign(speed);
-          if (!sameEpisode && (reason !== blocked || sign !== blockedSign)) {
-            if (reason === 'contact') contactCount += 1;
+        const rejected = rejection(next);
+        if (rejected !== null) {
+          if (!incident.has(rejected.key)) {
+            incident.add(rejected.key);
+            if (rejected.reason === 'contact') contactCount += 1;
             else jackknifes += 1;
           }
-          blocked = reason;
-          blockedSign = sign;
+          travelledSinceRejection = 0;
+          blocked = rejected.reason;
+          blockedSign = Math.sign(speed);
           speed = 0;
         } else {
           q = next;
           blocked = null;
+          travelledSinceRejection += Math.abs(speed) * DT;
+          if (travelledSinceRejection >= EVENT_CLEAR_DISTANCE) incident.clear();
           const sign = Math.sign(speed);
           if (lastSign !== 0 && sign !== lastSign) directionChanges += 1;
           lastSign = sign;
