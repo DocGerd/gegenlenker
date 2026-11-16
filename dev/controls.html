@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Controls</title>
+    <style>
+      #stage {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+      }
+      #out {
+        margin: var(--space-4);
+        font: var(--text-sm) / var(--leading-sm) var(--font-mono);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><pre id="out" class="mono"></pre></div>
+    <script type="module" src="./controls.ts"></script>
+  </body>
+</html>
