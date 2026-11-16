@@ -31,10 +31,16 @@ function approach(current: number, target: number, maxDelta: number): number {
   return next === 0 ? 0 : next; // no −0 in snapshots
 }
 
-function nextSpeed(v: number, control: ControlVector): number {
-  const braking = control.brake || control.gear === 'P';
+const isBraking = (control: ControlVector): boolean => control.brake || control.gear === 'P';
+
+function targetSpeed(control: ControlVector): number {
   const direction = control.gear === 'D' ? 1 : control.gear === 'R' ? -1 : 0;
-  const vt = braking ? 0 : direction * control.lever * V_MAX;
+  return isBraking(control) ? 0 : direction * control.lever * V_MAX;
+}
+
+function nextSpeed(v: number, control: ControlVector): number {
+  const braking = isBraking(control);
+  const vt = targetSpeed(control);
   const rate = braking
     ? BRAKE_DECEL
     : Math.abs(vt) > Math.abs(v) && (v === 0 || Math.sign(v) === Math.sign(vt))
@@ -61,6 +67,7 @@ export function createSimulation(
   let steer = 0;
   let speed = 0;
   let blocked: BlockReason | null = null;
+  let blockedSign = 0;
   let contactCount = 0;
   let jackknifes = 0;
   let directionChanges = 0;
@@ -97,17 +104,30 @@ export function createSimulation(
         gear: input.gear,
       };
       steer = approach(steer, control.steer, params.steerRate * DT);
-      speed = nextSpeed(speed, control);
-      if (speed !== 0) {
-        const next = rk4(params, q, speed, steer * params.maxRoadWheelAngle, DT);
+      const delta = steer * params.maxRoadWheelAngle;
+      let held = false;
+      let sameEpisode = false;
+      if (blocked !== null && Math.sign(targetSpeed(control)) === blockedSign) {
+        // A step ramping up from standstill is small enough to creep into the margin the rejected
+        // step left and re-trigger, so the episode ends only when a full-speed step is valid.
+        held = rejection(rk4(params, q, blockedSign * V_MAX, delta, DT)) !== null;
+        if (!held) {
+          blocked = null;
+          sameEpisode = true;
+        }
+      }
+      if (!held) speed = nextSpeed(speed, control);
+      if (!held && speed !== 0) {
+        const next = rk4(params, q, speed, delta, DT);
         const reason = rejection(next);
         if (reason !== null) {
-          speed = 0;
-          if (reason !== blocked) {
+          if (!sameEpisode && reason !== blocked) {
             if (reason === 'contact') contactCount += 1;
             else jackknifes += 1;
           }
           blocked = reason;
+          blockedSign = Math.sign(speed);
+          speed = 0;
         } else {
           q = next;
           blocked = null;

@@ -230,6 +230,8 @@ describe('simulation', () => {
       driveUntil(sim, ctl({ steer: 1, lever: 1, gear: 'R' }), (s) => s.blocked !== null),
     );
     expect(at.blocked).toBe('coupling');
+    const turning = driveUntil(sim, ctl({ steer: -1, gear: 'R' }), (s) => s.steer === -1);
+    for (const s of turning) expect(s.truck).toEqual(at.truck);
     const freed = driveUntil(
       sim,
       ctl({ steer: -1, lever: 1, gear: 'R' }),
