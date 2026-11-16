@@ -370,6 +370,69 @@ describe('simulation', () => {
     for (const s of [...out, ...back]) expect(s.jackknifes).toBe(1);
   });
 
+  const pathLength = (snaps: readonly SimSnapshot[]): number =>
+    snaps.slice(1).reduce((sum, s, i) => {
+      const prev = snaps[i];
+      return prev ? sum + dist2(s.truck, prev.truck) : sum;
+    }, 0);
+
+  /** Contact when the truck box centre passes `gate.x`. */
+  const gated = (gate: { x: number }): ContactQuery => {
+    return (bodies) => {
+      const truck = bodies.find((b) => b.body === 'truck');
+      return truck && truck.obb.cx > gate.x ? { body: 'truck', obstacleId: 'gate' } : null;
+    };
+  };
+  const truckCentreX = (s: SimSnapshot): number =>
+    bodyFootprints(manKrone(), s)[0]?.obb.cx ?? Number.NaN;
+  const driveToBlock = (sim: Simulation, control: ControlVector): SimSnapshot[] => {
+    const from = sim.snapshot();
+    return [from, ...driveUntil(sim, control, (s) => s.step > from.step && s.blocked !== null)];
+  };
+
+  it('every rejection restarts the clearing distance, counted or not', () => {
+    const gate = { x: 0 };
+    const sim = createSimulation(manKrone(), origin, gated(gate));
+    gate.x = truckCentreX(sim.snapshot()) + 0.3;
+    expect(last(driveToBlock(sim, ctl({ lever: 1 }))).contacts).toBe(1);
+    let edged = 0;
+    for (let i = 0; i < 4; i++) {
+      gate.x += 0.3;
+      const run = driveToBlock(sim, ctl({ lever: 1 }));
+      expect(pathLength(run)).toBeLessThan(EVENT_CLEAR_DISTANCE);
+      edged += pathLength(run);
+      expect(last(run).blocked).toBe('contact');
+      expect(last(run).contacts).toBe(1);
+    }
+    expect(edged).toBeGreaterThan(EVENT_CLEAR_DISTANCE);
+  });
+
+  it('a jackknife on the other side of the same pivot is a new event', () => {
+    const p = { ...manKrone(), couplingLimit: deg(2) };
+    const sim = createSimulation(p, origin, noContacts);
+    const first = last(driveToBlock(sim, ctl({ steer: 1, lever: 1, gear: 'R' })));
+    expect(first.blocked).toBe('coupling');
+    expect(first.couplingAngle).toBeLessThan(0);
+    expect(first.jackknifes).toBe(1);
+    const run = driveToBlock(sim, ctl({ steer: 1, lever: 1 }));
+    const second = last(run);
+    expect(second.blocked).toBe('coupling');
+    expect(second.couplingAngle).toBeGreaterThan(0);
+    expect(pathLength(run)).toBeLessThan(EVENT_CLEAR_DISTANCE);
+    expect(second.jackknifes).toBe(2);
+  });
+
+  it('reverse travel clears the incident too', () => {
+    const gate = { x: 0 };
+    const sim = createSimulation(manKrone(), origin, gated(gate));
+    gate.x = truckCentreX(sim.snapshot()) + 0.3;
+    expect(last(driveToBlock(sim, ctl({ lever: 1 }))).contacts).toBe(1);
+    driveDistance(sim, ctl({ lever: 1, gear: 'R' }), EVENT_CLEAR_DISTANCE + 0.5);
+    const again = last(driveToBlock(sim, ctl({ lever: 1 })));
+    expect(again.blocked).toBe('contact');
+    expect(again.contacts).toBe(2);
+  });
+
   it('D to R while moving decelerates through zero and counts one direction change', () => {
     const sim = createSimulation(manKrone(), origin, noContacts);
     driveUntil(sim, ctl({ lever: 1 }), (s) => s.speed === V_MAX);
