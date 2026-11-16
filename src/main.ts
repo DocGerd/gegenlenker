@@ -1,3 +1,8 @@
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/fonts';
+import { startApp } from './app/app';
+
 if (new URLSearchParams(location.search).has('probe')) {
   import('./render/probe')
     .then((m) => m.startProbe(document.body))
@@ -9,5 +14,5 @@ if (new URLSearchParams(location.search).has('probe')) {
     });
 } else {
   const app = document.querySelector<HTMLDivElement>('#app');
-  if (app) app.textContent = 'Gegenlenker';
+  if (app) startApp(app);
 }
