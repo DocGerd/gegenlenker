@@ -130,45 +130,48 @@ describe.each(cases)('$name', ({ resolved, start, exercise }) => {
     // Kinematics are time-reversible: a forward drive out of the target that ends at the point
     // where the reverse run begins (the waypoint, else the start) with the truck heading equal to
     // the start heading is that reverse run played backwards.
-    it.each(pairs)('%s + %s can reach the start by driving out of the target', (truck, trailer) => {
-      const params = resolveCombination(truck, trailer);
-      const query = createContactQuery(resolved.obstacles);
-      const h = target.pose.heading;
-      const reach =
-        params.trailerRearOverhang +
-        params.trailerWheelbase +
-        params.drawbar +
-        params.couplingOffset;
-      const sim = createSimulation(
-        params,
-        {
-          truck: {
-            x: target.pose.x + reach * Math.cos(h),
-            y: target.pose.y + reach * Math.sin(h),
-            heading: h,
+    it.each(pairs)(
+      '%s + %s reaches the reverse-run origin by driving out of the target',
+      (truck, trailer) => {
+        const params = resolveCombination(truck, trailer);
+        const query = createContactQuery(resolved.obstacles);
+        const h = target.pose.heading;
+        const reach =
+          params.trailerRearOverhang +
+          params.trailerWheelbase +
+          params.drawbar +
+          params.couplingOffset;
+        const sim = createSimulation(
+          params,
+          {
+            truck: {
+              x: target.pose.x + reach * Math.cos(h),
+              y: target.pose.y + reach * Math.sin(h),
+              heading: h,
+            },
           },
-        },
-        query,
-      );
-      expect(query(bodyFootprints(params, sim.snapshot()))).toBeNull();
+          query,
+        );
+        expect(query(bodyFootprints(params, sim.snapshot()))).toBeNull();
 
-      const goal = exercise.waypoint ?? start;
-      const route = [...(via[exercise.id] ?? []), goal];
-      let s = sim.snapshot();
-      let arrived = false;
-      for (let i = 0; i < CAP && !arrived; i++) {
-        if (route.length > 1 && dist(s.truck, route[0] ?? goal) < 4) route.shift();
-        s = sim.step(control({ lever: 1, steer: pursuit(s, route[0] ?? goal, params) }));
-        arrived =
-          dist(s.truck, goal) <= 3 &&
-          Math.abs(wrapAngle(s.truck.heading - start.heading)) <= Math.PI / 6;
-      }
-      expect({ contacts: s.contacts, jackknifes: s.jackknifes, arrived }).toEqual({
-        contacts: 0,
-        jackknifes: 0,
-        arrived: true,
-      });
-    });
+        const goal = exercise.waypoint ?? start;
+        const route = [...(via[exercise.id] ?? []), goal];
+        let s = sim.snapshot();
+        let arrived = false;
+        for (let i = 0; i < CAP && !arrived; i++) {
+          if (route.length > 1 && dist(s.truck, route[0] ?? goal) < 4) route.shift();
+          s = sim.step(control({ lever: 1, steer: pursuit(s, route[0] ?? goal, params) }));
+          arrived =
+            dist(s.truck, goal) <= 3 &&
+            Math.abs(wrapAngle(s.truck.heading - start.heading)) <= Math.PI / 6;
+        }
+        expect({ contacts: s.contacts, jackknifes: s.jackknifes, arrived }).toEqual({
+          contacts: 0,
+          jackknifes: 0,
+          arrived: true,
+        });
+      },
+    );
   }
 });
 
