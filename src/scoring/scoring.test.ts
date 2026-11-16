@@ -1,0 +1,178 @@
+import { describe, expect, it } from 'vitest';
+import type { ExerciseDefinition, RunResult } from '../contracts/exercise';
+import type { SimSnapshot } from '../contracts/sim';
+import {
+  bestKey,
+  compareResults,
+  parseBestResults,
+  recordBest,
+  serializeBestResults,
+} from './best';
+import { WAYPOINT_RADIUS, createRunTracker, runResult, targetError } from './score';
+
+function snap(over: Partial<SimSnapshot> = {}): SimSnapshot {
+  return {
+    step: 0,
+    time: 12,
+    truck: { x: 0, y: 0, heading: 0 },
+    coupling: { x: 0, y: 0 },
+    dolly: { x: 0, y: 0, heading: 0 },
+    trailer: { x: 0, y: 0, heading: 0 },
+    trailerRear: { x: 0, y: 0 },
+    couplingAngle: 0,
+    turntableAngle: 0,
+    steer: 0,
+    roadWheelAngle: 0,
+    speed: 0,
+    control: { steer: 0, lever: 0, brake: false, gear: 'P' },
+    blocked: null,
+    contacts: 0,
+    jackknifes: 0,
+    directionChanges: 0,
+    ...over,
+  };
+}
+
+function exercise(waypoint: ExerciseDefinition['waypoint'] = null): ExerciseDefinition {
+  return {
+    id: 'reverse-bay',
+    layout: 'depot',
+    start: { x: 0, y: 0, heading: 0 },
+    target: { pose: { x: 0, y: 0, heading: -0.1 }, length: 15, width: 3.5 },
+    tolerances: { position: 0.5, angle: 10 },
+    waypoint,
+    obstacles: [],
+    markings: [],
+  };
+}
+
+function result(over: Partial<RunResult> = {}): RunResult {
+  return {
+    exerciseId: 'reverse-bay',
+    truckId: 'man-le-18-280',
+    trailerId: 'krone-azw-18',
+    reached: true,
+    positionError: 0.1,
+    angleError: 1,
+    contacts: 0,
+    jackknifes: 0,
+    directionChanges: 0,
+    time: 30,
+    ...over,
+  };
+}
+
+const KEY = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18');
+const INSIDE = { trailer: { x: 0, y: 0, heading: -0.1 } };
+
+describe('scoring', () => {
+  it('measures position at the trailer rear and angle at the trailer heading', () => {
+    const zone = { pose: { x: 0, y: 0, heading: -0.1 }, length: 15, width: 3.5 };
+    const e = targetError(
+      snap({ trailerRear: { x: 3, y: 4 }, trailer: { x: 0, y: 0, heading: 0.1 } }),
+      zone,
+    );
+    expect(e.position).toBeCloseTo(5, 9);
+    expect(e.angle).toBeCloseTo(11.459, 3);
+
+    const wrapped = targetError(snap({ trailer: { x: 0, y: 0, heading: Math.PI - 0.1 } }), {
+      ...zone,
+      pose: { x: 0, y: 0, heading: -Math.PI + 0.1 },
+    });
+    expect(wrapped.angle).toBeCloseTo(11.459, 3);
+  });
+
+  it('reaches the target only when stopped within tolerance', () => {
+    const tracker = createRunTracker(exercise());
+    expect(tracker.update(snap({ ...INSIDE, speed: 0.2 }))).toBe(false);
+    expect(tracker.update(snap({ ...INSIDE, speed: 0 }))).toBe(true);
+    expect(tracker.update(snap({ ...INSIDE, trailerRear: { x: 0.51, y: 0 } }))).toBe(false);
+  });
+
+  it('requires the waypoint before the target counts', () => {
+    const tracker = createRunTracker(exercise({ x: 90, y: 25 }));
+    expect(tracker.update(snap(INSIDE))).toBe(false);
+    tracker.update(snap({ truck: { x: 90 + WAYPOINT_RADIUS + 0.1, y: 25, heading: 0 } }));
+    expect(tracker.update(snap(INSIDE))).toBe(false);
+    tracker.update(snap({ truck: { x: 90 + WAYPOINT_RADIUS, y: 25, heading: 0 } }));
+    expect(tracker.update(snap(INSIDE))).toBe(true);
+  });
+
+  it('fills a result from the final snapshot', () => {
+    const s = snap({
+      contacts: 2,
+      jackknifes: 1,
+      directionChanges: 4,
+      time: 42.5,
+      trailerRear: { x: 3, y: 4 },
+      trailer: { x: 0, y: 0, heading: 0.1 },
+    });
+    const r = runResult(s, exercise(), 'arocs-1835-ak', 'hueffermann-hpa-24-81-l');
+    expect(r).toMatchObject({
+      exerciseId: 'reverse-bay',
+      truckId: 'arocs-1835-ak',
+      trailerId: 'hueffermann-hpa-24-81-l',
+      reached: false,
+      contacts: 2,
+      jackknifes: 1,
+      directionChanges: 4,
+      time: 42.5,
+    });
+    expect(r.positionError).toBeCloseTo(5, 9);
+    expect(r.angleError).toBeCloseTo(11.459, 3);
+
+    expect(runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18').reached).toBe(true);
+  });
+});
+
+describe('best results', () => {
+  it('orders results: reached, then fewer events, then fewer direction changes, then less time', () => {
+    const base = result();
+    expect(compareResults(base, result({ reached: false }))).toBeLessThan(0);
+    expect(compareResults(result({ reached: false }), result({ contacts: 5 }))).toBeGreaterThan(0);
+    expect(compareResults(base, result({ contacts: 1 }))).toBeLessThan(0);
+    expect(compareResults(base, result({ jackknifes: 1, directionChanges: 0 }))).toBeLessThan(0);
+    expect(
+      compareResults(result({ contacts: 2 }), result({ jackknifes: 1, directionChanges: 9 })),
+    ).toBeGreaterThan(0);
+    expect(
+      compareResults(result({ contacts: 1 }), result({ jackknifes: 1, directionChanges: 9 })),
+    ).toBeLessThan(0);
+    expect(compareResults(base, result({ directionChanges: 1, time: 1 }))).toBeLessThan(0);
+    expect(compareResults(base, result({ time: 31 }))).toBeLessThan(0);
+    expect(compareResults(result({ time: 31 }), base)).toBeGreaterThan(0);
+    expect(compareResults(base, result())).toBe(0);
+  });
+
+  it('keeps only better results', () => {
+    const first = recordBest({}, result({ time: 30 }));
+    expect(first.isNewBest).toBe(true);
+    expect(first.best[KEY]).toEqual(result({ time: 30 }));
+
+    const worse = recordBest(first.best, result({ time: 40 }));
+    expect(worse.isNewBest).toBe(false);
+    expect(worse.best).toBe(first.best);
+
+    const better = recordBest(first.best, result({ time: 20 }));
+    expect(better.isNewBest).toBe(true);
+    expect(better.best[KEY]?.time).toBe(20);
+  });
+
+  it('reads stored results defensively', () => {
+    expect(parseBestResults(null)).toEqual({});
+    expect(parseBestResults('{')).toEqual({});
+    expect(parseBestResults(JSON.stringify({ version: 2, results: {} }))).toEqual({});
+
+    const valid = result();
+    expect(parseBestResults(serializeBestResults({ [KEY]: valid }))).toEqual({ [KEY]: valid });
+
+    const noTime: Record<string, unknown> = result({ trailerId: 'hueffermann-hpa-24-81-l' });
+    delete noTime.time;
+    const otherKey = bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l');
+    const raw = JSON.stringify({
+      version: 1,
+      results: { [KEY]: valid, [otherKey]: noTime, 'slalom/man-le-18-280/krone-azw-18': valid },
+    });
+    expect(parseBestResults(raw)).toEqual({ [KEY]: valid });
+  });
+});
