@@ -238,6 +238,8 @@ describe('scene tokens', () => {
     const standing: [string, string][] = [
       ['body', 'yard'],
       ['body', 'street'],
+      ['body', 'pavement'],
+      ['body', 'marking'],
       ['hall', 'pavement'],
       ['hall', 'yard'],
     ];

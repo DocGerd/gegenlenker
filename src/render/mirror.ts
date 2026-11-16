@@ -12,7 +12,7 @@ import {
 } from 'three';
 import type { Rect } from '../contracts/render';
 
-const FOV = 46; // a 24° horizontal field on the 1:2 mirror rect
+const FOV = 46;
 const NEAR = 0.2;
 const FAR = 400;
 const PITCH = MathUtils.degToRad(-4);
