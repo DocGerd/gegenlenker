@@ -127,10 +127,13 @@ function splitLine(
 function addObstacle(o: Obstacle, palette: ScenePalette, chunks: Chunks, color: Color): void {
   const { obb, height, kind } = o;
   color.set(palette[kind]);
-  const length = obb.halfLength * 2;
-  const width = obb.halfWidth * 2;
-  splitLine(obb.cx, obb.cy, length, obb.heading, (px, py, piece) =>
-    chunks.add(px, py, tint(boxGeometry(px, py, piece, width, obb.heading, 0, height), color)),
+  // cut along the longer side so no piece spans several chunks
+  const crosswise = obb.halfWidth > obb.halfLength;
+  const along = (crosswise ? obb.halfWidth : obb.halfLength) * 2;
+  const across = (crosswise ? obb.halfLength : obb.halfWidth) * 2;
+  const heading = crosswise ? obb.heading + Math.PI / 2 : obb.heading;
+  splitLine(obb.cx, obb.cy, along, heading, (px, py, piece) =>
+    chunks.add(px, py, tint(boxGeometry(px, py, piece, across, heading, 0, height), color)),
   );
   if (kind === 'lamp') {
     const hx = obb.cx + Math.cos(obb.heading) * LAMP_HEAD.offset;

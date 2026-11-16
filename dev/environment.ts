@@ -27,13 +27,21 @@ const PREDICT_CURVATURE = 1 / 25;
 const stage = document.querySelector<HTMLElement>('#stage');
 if (!stage) throw new Error('harness markup missing');
 
-/** `?layout=depot|logistics&exercise=<id>&topdown=follow|yard&aids=pivots,path,…|none&drive=1&fold=left|right|straight` */
+/** `?layout=depot|logistics&exercise=<id>&topdown=follow|yard&aids=pivots,path,…|none&drive=1&fold=left|right|straight&pose=x,y,headingDeg` */
 const query = new URLSearchParams(location.search);
 const exercise = exercises.find((e) => e.id === query.get('exercise')) ?? null;
 const layoutId = exercise?.layout ?? LAYOUT_IDS.find((id) => id === query.get('layout')) ?? 'depot';
 const layoutDef = layouts[layoutId];
 const resolved = resolveLayout(layoutDef, exercise);
-const start: Pose2 = exercise?.start ?? layoutDef.start;
+const poseParam = query.get('pose')?.split(',').map(Number);
+const start: Pose2 =
+  poseParam?.length === 3 && poseParam.every(Number.isFinite)
+    ? {
+        x: poseParam[0] ?? 0,
+        y: poseParam[1] ?? 0,
+        heading: ((poseParam[2] ?? 0) * Math.PI) / 180,
+      }
+    : (exercise?.start ?? layoutDef.start);
 const foldKey = query.get('fold');
 const [couplingAngle, turntableAngle] =
   foldKey === 'right' || foldKey === 'straight' ? FOLDS[foldKey] : FOLDS.left;
