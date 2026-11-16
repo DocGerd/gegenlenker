@@ -165,6 +165,22 @@ describe('best results', () => {
     expect(compareResults(base, result())).toBe(0);
   });
 
+  it('orders unreached results by closeness to the target before events and time', () => {
+    const quit = result({ reached: false, positionError: 40, angleError: 90, time: 0 });
+    const tried = result({
+      reached: false,
+      positionError: 2,
+      angleError: 90,
+      contacts: 3,
+      time: 90,
+    });
+    expect(compareResults(tried, quit)).toBeLessThan(0);
+    expect(recordBest({ [KEY]: quit }, tried).isNewBest).toBe(true);
+    const straighter = result({ reached: false, positionError: 2, angleError: 5, contacts: 3 });
+    expect(compareResults(straighter, tried)).toBeLessThan(0);
+    expect(compareResults(tried, result({ ...tried, contacts: 0 }))).toBeGreaterThan(0);
+  });
+
   it('keeps only better results', () => {
     const first = recordBest({}, result({ time: 30 }));
     expect(first.isNewBest).toBe(true);

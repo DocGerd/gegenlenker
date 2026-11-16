@@ -13,6 +13,13 @@
   font-size: var(--text-sm);
 }
 
+/* A shorter lever keeps the Stop button below the left mirror. */
+@media (orientation: portrait) {
+  .ctl {
+    --ctl-lever-height: clamp(160px, 28vmin, 240px);
+  }
+}
+
 .ctl button,
 .ctl-lever,
 .ctl-wheel {
@@ -27,7 +34,11 @@
   line-height: var(--leading-2xs);
   letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
-  color: var(--color-text-secondary);
+  /* Labels sit over arbitrary scene greys, so they carry their own backing. */
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 
 .ctl-pedals,
@@ -82,14 +93,14 @@
   color: var(--color-on-accent);
 }
 
-.ctl-stop {
+.ctl .ctl-stop {
   width: calc(var(--size-target) * 1.5);
   padding: 0 var(--space-1);
   min-height: calc(var(--size-target) * 1.25);
   border-color: var(--color-danger);
   color: var(--color-danger);
   font-family: var(--font-sans);
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
 }
 
 .ctl-stop[data-active] {
