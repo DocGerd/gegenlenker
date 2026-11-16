@@ -190,7 +190,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   // Last written values; update() compares these before touching the DOM.
   let shownTenths = -1;
-  let shownGear: Gear | null = null;
+  let shownGear: Gear | null = 'P';
+  gearEl.textContent = 'P';
+  gearEl.dataset['gear'] = 'P';
   let shownBlocked: BlockReason | null = null;
   let shownContacts = -1;
   let shownJackknifes = -1;

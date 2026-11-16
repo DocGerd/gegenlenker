@@ -3,6 +3,7 @@
   --ctl-lever-height: clamp(160px, 38vmin, 280px);
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;

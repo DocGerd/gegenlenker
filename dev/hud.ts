@@ -31,7 +31,7 @@ const mirrorEls = [rect('mirror-left', 'mirror'), rect('mirror-right', 'mirror')
 const COUPLING_LIMIT = (80 * Math.PI) / 180;
 const TURNTABLE_LIMIT = (85 * Math.PI) / 180;
 
-// The HUD mounts before the controls so the dashboard band paints beneath them.
+const controls = createControls(stage, { lockToLockTurns: 5, steerRate: 0.6 });
 const hud = createHud(stage, {
   couplingLimit: COUPLING_LIMIT,
   turntableLimit: TURNTABLE_LIMIT,
@@ -39,7 +39,6 @@ const hud = createHud(stage, {
   aids: { pivots: true, path: true, tracks: false, ghost: false },
   topDown: 'follow',
 });
-const controls = createControls(stage, { lockToLockTurns: 5, steerRate: 0.6 });
 hud.onAction((a) => console.info('hud action', JSON.stringify(a)));
 
 const place = (el: HTMLElement, r: { x: number; y: number; width: number; height: number }) => {
