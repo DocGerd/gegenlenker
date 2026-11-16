@@ -25,6 +25,8 @@ pnpm build
 
 ## Estimated parameters
 
+The dimensions below are estimates, not manufacturer data, and the vehicle behaviour follows them.
+
 <!-- prettier-ignore-start -->
 <!-- estimates:start -->
 | Vehicle | Parameter | Value | Basis |
