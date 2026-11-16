@@ -107,7 +107,7 @@ describe('scoring', () => {
       trailerRear: { x: 3, y: 4 },
       trailer: { x: 0, y: 0, heading: 0.1 },
     });
-    const r = runResult(s, exercise(), 'arocs-1835-ak', 'hueffermann-hpa-24-81-l');
+    const r = runResult(s, exercise(), 'arocs-1835-ak', 'hueffermann-hpa-24-81-l', false);
     expect(r).toMatchObject({
       exerciseId: 'reverse-bay',
       truckId: 'arocs-1835-ak',
@@ -121,7 +121,28 @@ describe('scoring', () => {
     expect(r.positionError).toBeCloseTo(5, 9);
     expect(r.angleError).toBeCloseTo(11.459, 3);
 
-    expect(runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18').reached).toBe(true);
+    expect(runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18', true).reached).toBe(
+      true,
+    );
+  });
+
+  it('does not mark a slalom run reached without the waypoint', () => {
+    const slalom = exercise({ x: 90, y: 25 });
+    const s = snap(INSIDE);
+    const reached = createRunTracker(slalom).update(s);
+    expect(runResult(s, slalom, 'man-le-18-280', 'krone-azw-18', reached).reached).toBe(false);
+  });
+
+  it('rejects an angle outside tolerance even with the position inside', () => {
+    const s = snap({ trailer: { x: 0, y: 0, heading: -0.1 + 0.2 } }); // 11.459° > 10°
+    expect(targetError(s, exercise().target).position).toBe(0);
+    expect(createRunTracker(exercise()).update(s)).toBe(false);
+  });
+
+  it('counts a slow reverse roll inside the stop threshold as stopped', () => {
+    const tracker = createRunTracker(exercise());
+    expect(tracker.update(snap({ ...INSIDE, speed: -0.01 }))).toBe(true);
+    expect(tracker.update(snap({ ...INSIDE, speed: -0.2 }))).toBe(false);
   });
 });
 

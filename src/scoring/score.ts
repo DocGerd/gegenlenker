@@ -42,13 +42,13 @@ export function createRunTracker(exercise: ExerciseDefinition): {
   };
 }
 
-/** `reached` defaults to the snapshot alone; pass the tracker's verdict when the exercise has a waypoint. */
+/** `reached` is the last `RunTracker.update` result: the snapshot alone cannot know the waypoint. */
 export function runResult(
   s: SimSnapshot,
   exercise: ExerciseDefinition,
   truckId: TruckId,
   trailerId: TrailerId,
-  reached: boolean = stoppedInTarget(s, exercise),
+  reached: boolean,
 ): RunResult {
   const e = targetError(s, exercise.target);
   return {
