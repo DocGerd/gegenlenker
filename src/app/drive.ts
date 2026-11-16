@@ -148,6 +148,12 @@ export function startDrive(
     return dispose;
   }
   const { canvas, renderer } = gl;
+  const reload = (): void => location.reload();
+  // The shared context may have been lost while the menu was showing.
+  if (renderer.stats().contextLost) {
+    showNotice(stage, 'contextLost', 'reload', reload);
+    return dispose;
+  }
   stage.append(canvas);
   cleanups.push(() => canvas.remove());
   renderer.setScene(layout, truck, trailer, readScenePalette());
@@ -264,7 +270,7 @@ export function startDrive(
     if (!renderer.stats().contextLost) return;
     lost = true;
     pause();
-    showNotice(stage, 'contextLost', 'reload', () => location.reload());
+    showNotice(stage, 'contextLost', 'reload', reload);
   };
   canvas.addEventListener('webglcontextlost', onLost);
   cleanups.push(() => canvas.removeEventListener('webglcontextlost', onLost));
