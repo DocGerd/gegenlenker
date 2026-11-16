@@ -8,13 +8,16 @@ import { createContactQuery, obbOverlap } from '../sim/collision';
 import { wrapAngle } from '../sim/angle';
 import { bodyFootprints } from '../sim/geometry';
 import { createSimulation } from '../sim/simulation';
-import { targetError } from '../scoring/score';
+import { targetError, WAYPOINT_RADIUS } from '../scoring/score';
+import type { VehicleParams } from '../contracts/vehicle';
 import { resolveCombination } from '../vehicles/resolve';
 import { trailers, trucks } from '../vehicles/registry';
 import { exercises, layouts } from './registry';
 import { resolveLayout } from './resolve-layout';
 
-const pairs = trucks.flatMap((truck) => trailers.map((trailer) => [truck, trailer] as const));
+const pairs = trucks.flatMap((truck) =>
+  trailers.map((trailer) => [truck.id, trailer.id, truck, trailer] as const),
+);
 
 const cases = [
   ...Object.values(layouts).map((l) => ({
@@ -31,7 +34,9 @@ const cases = [
   })),
 ];
 
-// Test-local steering waypoints for the forward drive out of each target.
+// Test-local steering waypoints for the forward drive out of each target: bay swings out of the
+// bay column and west to the start; corner holds the outer lane through the bend; slalom passes
+// each barrier on its open side.
 const via: Partial<Record<ExerciseId, Vec2[]>> = {
   'reverse-bay': [
     { x: 72, y: 32 },
@@ -74,18 +79,21 @@ describe.each(cases)('$name', ({ resolved, start, exercise }) => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it.each(pairs)('%s + %s starts clear and drives forward and backward', (truck, trailer) => {
-    const params = resolveCombination(truck, trailer);
-    const query = createContactQuery(resolved.obstacles);
-    for (const gear of ['D', 'R'] as const) {
-      const sim = createSimulation(params, { truck: start }, query);
-      expect(query(bodyFootprints(params, sim.snapshot()))).toBeNull();
-      const end = driveBy(sim, gear);
-      expect(dist(end.truck, start)).toBeGreaterThanOrEqual(MOVE);
-      expect(end.contacts).toBe(0);
-      expect(end.jackknifes).toBe(0);
-    }
-  });
+  it.each(pairs)(
+    '%s + %s starts clear and drives forward and backward',
+    (_t, _tr, truck, trailer) => {
+      const params = resolveCombination(truck, trailer);
+      const query = createContactQuery(resolved.obstacles);
+      for (const gear of ['D', 'R'] as const) {
+        const sim = createSimulation(params, { truck: start }, query);
+        expect(query(bodyFootprints(params, sim.snapshot()))).toBeNull();
+        const end = driveBy(sim, gear);
+        expect(dist(end.truck, start)).toBeGreaterThanOrEqual(MOVE);
+        expect(end.contacts).toBe(0);
+        expect(end.jackknifes).toBe(0);
+      }
+    },
+  );
 
   if (exercise) {
     const { target } = exercise;
@@ -118,21 +126,26 @@ describe.each(cases)('$name', ({ resolved, start, exercise }) => {
       expect(hit).toEqual([]);
     });
 
-    it.each(pairs)('%s + %s does not start inside the target tolerance', (truck, trailer) => {
-      const params = resolveCombination(truck, trailer);
-      const sim = createSimulation(params, { truck: start }, createContactQuery([]));
-      const e = targetError(sim.snapshot(), target);
-      expect(
-        e.position <= exercise.tolerances.position && e.angle <= exercise.tolerances.angle,
-      ).toBe(false);
-    });
+    it.each(pairs)(
+      '%s + %s does not start inside the target tolerance',
+      (_t, _tr, truck, trailer) => {
+        const params = resolveCombination(truck, trailer);
+        const sim = createSimulation(params, { truck: start }, createContactQuery([]));
+        const e = targetError(sim.snapshot(), target);
+        expect({
+          positionInside: e.position <= exercise.tolerances.position,
+          angleInside: e.angle <= exercise.tolerances.angle,
+          ...e,
+        }).not.toMatchObject({ positionInside: true, angleInside: true });
+      },
+    );
 
-    // Kinematics are time-reversible: a forward drive out of the target that ends at the point
-    // where the reverse run begins (the waypoint, else the start) with the truck heading equal to
-    // the start heading is that reverse run played backwards.
+    // The model is time-reversible, so a forward drive out of the target that ends near the reverse
+    // run's origin shows a reverse run from there into the target exists. It starts from the
+    // straight pose on the target, not from the exact start pose.
     it.each(pairs)(
       '%s + %s reaches the reverse-run origin by driving out of the target',
-      (truck, trailer) => {
+      (_t, _tr, truck, trailer) => {
         const params = resolveCombination(truck, trailer);
         const query = createContactQuery(resolved.obstacles);
         const h = target.pose.heading;
@@ -155,25 +168,53 @@ describe.each(cases)('$name', ({ resolved, start, exercise }) => {
         expect(query(bodyFootprints(params, sim.snapshot()))).toBeNull();
 
         const goal = exercise.waypoint ?? start;
-        const route = [...(via[exercise.id] ?? []), goal];
-        let s = sim.snapshot();
-        let arrived = false;
-        for (let i = 0; i < CAP && !arrived; i++) {
-          if (route.length > 1 && dist(s.truck, route[0] ?? goal) < 4) route.shift();
-          s = sim.step(control({ lever: 1, steer: pursuit(s, route[0] ?? goal, params) }));
-          arrived =
-            dist(s.truck, goal) <= 3 &&
-            Math.abs(wrapAngle(s.truck.heading - start.heading)) <= Math.PI / 6;
-        }
-        expect({ contacts: s.contacts, jackknifes: s.jackknifes, arrived }).toEqual({
-          contacts: 0,
-          jackknifes: 0,
-          arrived: true,
-        });
+        const r = follow(sim, params, [...(via[exercise.id] ?? []), goal], 3, start.heading);
+        expect(r).toEqual({ contacts: 0, jackknifes: 0, arrived: true });
       },
     );
+
+    if (exercise.waypoint) {
+      const { waypoint } = exercise;
+      it.each(pairs)(
+        '%s + %s drives forward from the start to the waypoint',
+        (_t, _tr, truck, trailer) => {
+          const params = resolveCombination(truck, trailer);
+          const sim = createSimulation(
+            params,
+            { truck: start },
+            createContactQuery(resolved.obstacles),
+          );
+          const route = [...(via[exercise.id] ?? []), waypoint];
+          const r = follow(sim, params, route, WAYPOINT_RADIUS, null);
+          expect(r).toEqual({ contacts: 0, jackknifes: 0, arrived: true });
+        },
+      );
+    }
   }
 });
+
+/** Drives forward along `route`; arrival is within `radius` of its end, and of `heading` if given. */
+function follow(
+  sim: Simulation,
+  params: VehicleParams,
+  waypoints: readonly Vec2[],
+  radius: number,
+  heading: number | null,
+): { contacts: number; jackknifes: number; arrived: boolean } {
+  const route = [...waypoints];
+  const goal = route[route.length - 1];
+  if (!goal) throw new Error('empty route');
+  let s = sim.snapshot();
+  let arrived = false;
+  for (let i = 0; i < CAP && !arrived; i++) {
+    if (route.length > 1 && dist(s.truck, route[0] ?? goal) < 4) route.shift();
+    s = sim.step(control({ lever: 1, steer: pursuit(s, route[0] ?? goal, params) }));
+    arrived =
+      dist(s.truck, goal) <= radius &&
+      (heading === null || Math.abs(wrapAngle(s.truck.heading - heading)) <= Math.PI / 6);
+  }
+  return { contacts: s.contacts, jackknifes: s.jackknifes, arrived };
+}
 
 /** Pure pursuit of the truck rear axle toward `goal`, as a normalised steer value. */
 function pursuit(
