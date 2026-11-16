@@ -2,6 +2,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   DoubleSide,
+  DynamicDrawUsage,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -39,24 +40,89 @@ function onAidsLayer<T extends Object3D>(object: T): T {
   return object;
 }
 
-/** A ring of independent segment quads in preallocated buffers; the oldest segment is overwritten when full. */
+/** Samples one wheel into a ring of segments; the oldest segment is overwritten when full. */
+export class WheelTrack {
+  readonly capacity: number;
+  readonly spacing: number;
+  readonly jump: number;
+  count = 0;
+  next = 0;
+  /** Valid after `sample` returned true: the ring slot and start point of the new segment. */
+  slot = 0;
+  fromX = 0;
+  fromY = 0;
+  private lastX = 0;
+  private lastY = 0;
+  private has = false;
+
+  constructor(capacity: number, spacing: number, jump: number) {
+    this.capacity = capacity;
+    this.spacing = spacing;
+    this.jump = jump;
+  }
+
+  clear(): void {
+    this.count = 0;
+    this.next = 0;
+    this.has = false;
+  }
+
+  /** Returns whether a segment from the previous sample to (x, y) was added. */
+  sample(x: number, y: number): boolean {
+    if (!this.has) {
+      this.remember(x, y);
+      return false;
+    }
+    const d = Math.hypot(x - this.lastX, y - this.lastY);
+    if (d < this.spacing) return false;
+    this.fromX = this.lastX;
+    this.fromY = this.lastY;
+    this.remember(x, y);
+    if (d > this.jump) return false; // a gap starts a new line
+    this.slot = this.next;
+    this.next = (this.next + 1) % this.capacity;
+    if (this.count < this.capacity) this.count++;
+    return true;
+  }
+
+  private remember(x: number, y: number): void {
+    this.lastX = x;
+    this.lastY = y;
+    this.has = true;
+  }
+}
+
+/** The wheels' tracks; the history restarts when the simulation step goes backwards. */
+export class TrackHistory {
+  readonly wheels: readonly WheelTrack[];
+  private lastStep = 0;
+
+  constructor(wheelCount: number, capacity: number, spacing: number, jump: number) {
+    this.wheels = Array.from({ length: wheelCount }, () => new WheelTrack(capacity, spacing, jump));
+  }
+
+  observe(step: number): void {
+    if (step < this.lastStep) this.wheels.forEach((w) => w.clear());
+    this.lastStep = step;
+  }
+}
+
+/** Segment quads in preallocated buffers; only the written slots are uploaded. */
 class SegmentRibbon {
   readonly mesh: Mesh;
   private readonly geometry = new BufferGeometry();
   private readonly positions: Float32Array;
   private readonly attribute: BufferAttribute;
-  private readonly capacity: number;
   private readonly half: number;
   private readonly up: number;
-  private count = 0;
-  private next = 0;
+  private dirtyMin = Infinity;
+  private dirtyMax = -1;
 
   constructor(capacity: number, width: number, up: number, material: Material) {
-    this.capacity = capacity;
     this.half = width / 2;
     this.up = up;
     this.positions = new Float32Array(capacity * 12);
-    this.attribute = new BufferAttribute(this.positions, 3);
+    this.attribute = new BufferAttribute(this.positions, 3).setUsage(DynamicDrawUsage);
     const index = new Uint16Array(capacity * 6);
     for (let i = 0; i < capacity; i++) {
       const v = i * 4;
@@ -69,20 +135,13 @@ class SegmentRibbon {
     this.mesh.frustumCulled = false; // the bounds of the empty first state would cull it
   }
 
-  clear(): void {
-    this.count = 0;
-    this.next = 0;
-    this.geometry.setDrawRange(0, 0);
-  }
-
-  /** World ground coordinates; call `commit` after a batch. */
-  add(ax: number, ay: number, bx: number, by: number): void {
+  /** World ground coordinates of one segment in `slot`; uploaded by the next `flush`. */
+  set(slot: number, ax: number, ay: number, bx: number, by: number): void {
     const length = Math.hypot(bx - ax, by - ay);
-    if (length < 1e-6) return;
-    const nx = (-(by - ay) / length) * this.half;
-    const ny = ((bx - ax) / length) * this.half;
+    const nx = length < 1e-6 ? 0 : (-(by - ay) / length) * this.half;
+    const ny = length < 1e-6 ? 0 : ((bx - ax) / length) * this.half;
     const p = this.positions;
-    const o = this.next * 12;
+    const o = slot * 12;
     const up = this.up;
     p[o] = ax + nx;
     p[o + 1] = up;
@@ -96,13 +155,20 @@ class SegmentRibbon {
     p[o + 9] = bx - nx;
     p[o + 10] = up;
     p[o + 11] = -(by - ny);
-    this.next = (this.next + 1) % this.capacity;
-    if (this.count < this.capacity) this.count++;
+    if (slot < this.dirtyMin) this.dirtyMin = slot;
+    if (slot > this.dirtyMax) this.dirtyMax = slot;
   }
 
-  commit(): void {
-    this.attribute.needsUpdate = true;
-    this.geometry.setDrawRange(0, this.count * 6);
+  /** Draws the first `count` slots and uploads the range written since the last flush. */
+  flush(count: number): void {
+    if (this.dirtyMax >= this.dirtyMin) {
+      this.attribute.clearUpdateRanges();
+      this.attribute.addUpdateRange(this.dirtyMin * 12, (this.dirtyMax - this.dirtyMin + 1) * 12);
+      this.attribute.needsUpdate = true;
+      this.dirtyMin = Infinity;
+      this.dirtyMax = -1;
+    }
+    this.geometry.setDrawRange(0, count * 6);
   }
 
   dispose(): void {
@@ -164,82 +230,64 @@ export function proceduralAids(
 
   const truckHalf = mm(truck.rearTrack.value) / 2;
   const trailerHalf = mm(trailer.track.value) / 2;
-  const lastX = new Float64Array(4);
-  const lastY = new Float64Array(4);
-  const has = [false, false, false, false];
-  let lastStep = 0;
+  const history = new TrackHistory(4, TRACK_CAPACITY, TRACK_SPACING, TRACK_JUMP);
+  let pivotSlot = 0;
 
-  function resetTracks(): void {
-    for (let i = 0; i < 4; i++) {
-      has[i] = false;
-      tracks[i]?.clear();
-    }
-  }
-
-  /** Samples one wheel; returns whether a segment was added. */
-  function sample(i: number, pose: Pose2, offset: number): boolean {
+  function sampleWheel(i: number, pose: Pose2, offset: number): void {
+    const wheel = history.wheels[i];
+    if (wheel === undefined) return;
     const x = pose.x - Math.sin(pose.heading) * offset;
     const y = pose.y + Math.cos(pose.heading) * offset;
-    const px = lastX[i] ?? 0;
-    const py = lastY[i] ?? 0;
-    const d = Math.hypot(x - px, y - py);
-    if (has[i] === true && d < TRACK_SPACING) return false;
-    const connected = has[i] === true && d <= TRACK_JUMP;
-    if (connected) tracks[i]?.add(px, py, x, y);
-    lastX[i] = x;
-    lastY[i] = y;
-    has[i] = true;
-    return connected;
+    if (wheel.sample(x, y)) tracks[i]?.set(wheel.slot, wheel.fromX, wheel.fromY, x, y);
   }
 
   function ray(x: number, y: number, heading: number): void {
     const back = heading + Math.PI;
-    pivots.add(x, y, x + Math.cos(back) * PIVOT_LENGTH, y + Math.sin(back) * PIVOT_LENGTH);
+    pivots.set(
+      pivotSlot++,
+      x,
+      y,
+      x + Math.cos(back) * PIVOT_LENGTH,
+      y + Math.sin(back) * PIVOT_LENGTH,
+    );
   }
 
   return {
     object: group,
     update(frame: RenderFrame): void {
       const { snapshot: s, aids, predicted } = frame;
-      if (s.step < lastStep) resetTracks();
-      lastStep = s.step;
-
-      const added0 = sample(0, s.truck, truckHalf);
-      const added1 = sample(1, s.truck, -truckHalf);
-      const added2 = sample(2, s.trailer, trailerHalf);
-      const added3 = sample(3, s.trailer, -trailerHalf);
-      if (added0) tracks[0]?.commit();
-      if (added1) tracks[1]?.commit();
-      if (added2) tracks[2]?.commit();
-      if (added3) tracks[3]?.commit();
+      history.observe(s.step);
+      sampleWheel(0, s.truck, truckHalf);
+      sampleWheel(1, s.truck, -truckHalf);
+      sampleWheel(2, s.trailer, trailerHalf);
+      sampleWheel(3, s.trailer, -trailerHalf);
       for (let i = 0; i < tracks.length; i++) {
         const t = tracks[i];
-        if (t !== undefined) t.mesh.visible = aids.tracks;
+        if (t === undefined) continue;
+        t.mesh.visible = aids.tracks;
+        if (aids.tracks) t.flush(history.wheels[i]?.count ?? 0);
       }
 
       path.mesh.visible = aids.path && predicted.length > 1;
       if (path.mesh.visible) {
-        path.clear();
         const n = Math.min(predicted.length, PATH_CAPACITY + 1);
         for (let i = 1; i < n; i++) {
           const a = predicted[i - 1];
           const b = predicted[i];
-          if (a !== undefined && b !== undefined) path.add(a.x, a.y, b.x, b.y);
+          if (a !== undefined && b !== undefined) path.set(i - 1, a.x, a.y, b.x, b.y);
         }
-        path.commit();
+        path.flush(n - 1);
       }
 
       pivots.mesh.visible = aids.pivots;
       if (aids.pivots) {
-        pivots.clear();
         // rearward centre lines of the two bodies at each pivot; the angle between them is the pivot angle
-        const hitch = s.coupling;
-        const turntable = s.dolly;
-        ray(hitch.x, hitch.y, s.truck.heading);
-        ray(hitch.x, hitch.y, s.dolly.heading);
-        ray(turntable.x, turntable.y, s.dolly.heading);
-        ray(turntable.x, turntable.y, s.trailer.heading);
-        pivots.commit();
+        pivotSlot = 0;
+        ray(s.coupling.x, s.coupling.y, s.truck.heading);
+        ray(s.coupling.x, s.coupling.y, s.dolly.heading);
+        ray(s.dolly.x, s.dolly.y, s.dolly.heading);
+        ray(s.dolly.x, s.dolly.y, s.trailer.heading);
+        pivots.flush(4);
       }
 
       if (ghost !== null) ghost.visible = aids.ghost;

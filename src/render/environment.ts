@@ -26,7 +26,8 @@ const GAP = 6;
 const TARGET_STRIP = 0.15;
 const CHUNK = 60; // spatial chunk edge: frustum culling works per chunk
 const SPLIT = 30; // long boxes and lines are cut so a chunk's bounds stay local
-const LAMP_HEAD = { length: 1, width: 0.35, height: 0.25, offset: 0.35 };
+const LAMP_HEAD_HEIGHT = 0.4; // the head fills the obstacle footprint, the pole is slimmer
+const LAMP_POLE_RATIO = 0.5;
 const SUN_ELEVATION = (50 * Math.PI) / 180;
 const SUN_DISTANCE = 100;
 
@@ -127,6 +128,23 @@ function splitLine(
 function addObstacle(o: Obstacle, palette: ScenePalette, chunks: Chunks, color: Color): void {
   const { obb, height, kind } = o;
   color.set(palette[kind]);
+  if (kind === 'lamp') {
+    const { cx, cy, heading } = obb;
+    const [length, width] = [obb.halfLength * 2, obb.halfWidth * 2];
+    const top = height - LAMP_HEAD_HEIGHT;
+    const pole = boxGeometry(
+      cx,
+      cy,
+      length * LAMP_POLE_RATIO,
+      width * LAMP_POLE_RATIO,
+      heading,
+      0,
+      top,
+    );
+    chunks.add(cx, cy, tint(pole, color));
+    chunks.add(cx, cy, tint(boxGeometry(cx, cy, length, width, heading, top, height), color));
+    return;
+  }
   // cut along the longer side so no piece spans several chunks
   const crosswise = obb.halfWidth > obb.halfLength;
   const along = (crosswise ? obb.halfWidth : obb.halfLength) * 2;
@@ -135,26 +153,6 @@ function addObstacle(o: Obstacle, palette: ScenePalette, chunks: Chunks, color: 
   splitLine(obb.cx, obb.cy, along, heading, (px, py, piece) =>
     chunks.add(px, py, tint(boxGeometry(px, py, piece, across, heading, 0, height), color)),
   );
-  if (kind === 'lamp') {
-    const hx = obb.cx + Math.cos(obb.heading) * LAMP_HEAD.offset;
-    const hy = obb.cy + Math.sin(obb.heading) * LAMP_HEAD.offset;
-    chunks.add(
-      hx,
-      hy,
-      tint(
-        boxGeometry(
-          hx,
-          hy,
-          LAMP_HEAD.length,
-          LAMP_HEAD.width,
-          obb.heading,
-          height,
-          height + LAMP_HEAD.height,
-        ),
-        color,
-      ),
-    );
-  }
 }
 
 function addMarking(m: Marking, chunks: Chunks, color: Color): void {
