@@ -1,0 +1,314 @@
+.hud {
+  --hud-action-w: 96px;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+.hud [hidden] {
+  display: none !important;
+}
+
+.hud-cockpit,
+.hud-topdown,
+.hud-mirror,
+.hud-toast-wrap {
+  position: absolute;
+}
+
+/* Cockpit corners the interactive controls (controls.css) overlay: the lever when the cockpit starts at the screen's left edge. */
+.hud-cockpit {
+  --hud-x: 0px;
+  container: hud / inline-size;
+  --hud-inset: calc(
+    var(--space-4) + max(0px, var(--space-4) + 1.5 * var(--size-target) - var(--hud-x))
+  );
+}
+
+.hud-band {
+  position: absolute;
+  inset: auto 0 0;
+  height: 18%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-left: var(--hud-inset);
+  background: var(--color-surface-muted);
+  border-top: 1px solid var(--color-border);
+}
+
+.hud-gear {
+  min-width: 1ch;
+  font-size: var(--text-3xl);
+  line-height: var(--leading-3xl);
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent);
+}
+
+.hud-gear[data-gear='P'] {
+  color: var(--color-text-secondary);
+}
+
+.hud-speed {
+  font-size: var(--text-2xl);
+  line-height: var(--leading-2xl);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.hud-mirror {
+  box-sizing: border-box;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.hud-label {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.hud-legend {
+  position: absolute;
+  left: var(--hud-inset);
+  bottom: calc(18% + var(--space-3));
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.hud-legend dl {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0 var(--space-3);
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.hud-legend dt {
+  color: var(--color-text);
+}
+
+.hud-legend dd {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+/* Narrow cockpits leave less than a two-column legend needs between the lever and the gear selector. */
+@container hud (max-width: 800px) {
+  .hud-legend dl {
+    grid-template-columns: auto;
+  }
+
+  .hud-legend .hud-label {
+    display: none;
+  }
+
+  .hud-legend dl {
+    margin-top: 0;
+  }
+
+  .hud-legend dd {
+    margin-bottom: var(--space-1);
+  }
+
+  .hud-legend dd:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.hud-toast-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-4);
+  box-sizing: border-box;
+}
+
+.hud-toast {
+  box-sizing: border-box;
+  max-width: calc(100% - 2 * (var(--hud-action-w) + 2 * var(--space-4)));
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  font-weight: var(--weight-medium);
+  text-align: center;
+}
+
+.hud-topdown {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  overflow: hidden;
+}
+
+.hud-topdown[data-reserve] {
+  padding-right: calc(var(--hud-action-w) + 2 * var(--space-4));
+}
+
+.hud-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.hud-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.hud-toggle,
+.hud-action {
+  pointer-events: auto;
+  box-sizing: border-box;
+  min-height: var(--size-target);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: var(--weight-medium) var(--text-xs) / var(--leading-xs) var(--font-sans);
+  box-shadow: var(--shadow-sm);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hud-toggle[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+  color: var(--color-accent-strong);
+}
+
+.hud-action {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: var(--hud-action-w);
+  font-size: var(--text-md);
+}
+
+.hud-info {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.hud-gauges {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.hud-gauge {
+  --level: var(--color-success);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  width: 100px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.hud-gauge[data-level='warn'] {
+  --level: var(--color-warning);
+}
+
+.hud-gauge[data-level='danger'] {
+  --level: var(--color-danger);
+}
+
+.hud-gauge .hud-label {
+  letter-spacing: 0.08em;
+}
+
+.hud-gauge svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.hud-arc,
+.hud-needle path,
+.hud-tick {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.hud-arc {
+  stroke: var(--level);
+  stroke-width: 6;
+  stroke-linecap: butt;
+}
+
+.hud-tick {
+  stroke: var(--color-surface);
+  stroke-width: 1.5;
+  stroke-linecap: butt;
+}
+
+.hud-needle {
+  transform-origin: 0 0;
+}
+
+.hud-needle path {
+  stroke: var(--level);
+  stroke-width: 3;
+}
+
+.hud-pin {
+  fill: var(--level);
+}
+
+.hud-value {
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.hud-counters {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0 var(--space-3);
+  box-sizing: border-box;
+  margin: 0 0 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+}
+
+.hud-counters dt {
+  color: var(--color-text-secondary);
+}
+
+.hud-counters dd {
+  margin: 0;
+  text-align: right;
+  color: var(--color-text);
+}
