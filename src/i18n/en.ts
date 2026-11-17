@@ -38,6 +38,8 @@ export const en = {
   blockedContact: 'Contact – drive the other way',
   blockedCoupling: 'Coupling limit – drive the other way',
   blockedTurntable: 'Turntable limit – drive the other way',
+  labelCockpit: 'Cockpit',
+  labelTopDown: 'Top view',
   viewFollow: 'Follow',
   viewYard: 'Whole yard',
   aidPivots: 'Pivot angles',

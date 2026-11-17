@@ -57,6 +57,7 @@ const button = (attr: string, value: string, key: MessageKey): string =>
 const MARKUP = (mode: HudOptions['mode']): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
+    <span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>
     <div class="hud-legend" data-hud="legend" hidden>
       <span class="hud-label" data-i18n="keys"></span>
       <dl>
@@ -77,7 +78,8 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-toolbar">
-      <div class="hud-group" data-hud="views">${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}</div>
+      <div class="hud-group" data-hud="views">
+        <span class="hud-label hud-view-label" data-i18n="labelTopDown"></span>${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}</div>
       <div class="hud-group" data-hud="aids">${AIDS.map(([a, k]) => button('data-aid', a, k)).join('')}</div>
     </div>
     <div class="hud-info">

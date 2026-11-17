@@ -40,6 +40,8 @@ export const de: Record<MessageKey, string> = {
   blockedContact: 'Berührung – in Gegenrichtung fahren',
   blockedCoupling: 'Kupplung am Anschlag – in Gegenrichtung fahren',
   blockedTurntable: 'Drehschemel am Anschlag – in Gegenrichtung fahren',
+  labelCockpit: 'Cockpit',
+  labelTopDown: 'Draufsicht',
   viewFollow: 'Folgen',
   viewYard: 'Ganzer Hof',
   aidPivots: 'Knickwinkel',
