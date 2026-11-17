@@ -48,6 +48,7 @@ export const en = {
   directionChanges: 'Direction changes',
   time: 'Time',
   contactAhead: 'Contact ahead – steer away or stop',
+  selectGear: 'Select R or D to drive',
   blockedContactTruck: 'Contact: truck – drive the other way',
   blockedContactDrawbar: 'Contact: drawbar – drive the other way',
   blockedContactTrailer: 'Contact: trailer – drive the other way',
