@@ -33,6 +33,7 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
       start_url: base,
       scope: base,
       display: 'standalone',
+      display_override: ['fullscreen', 'standalone'],
       theme_color: colors.themeColor,
       background_color: colors.backgroundColor,
       icons,

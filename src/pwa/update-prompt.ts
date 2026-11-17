@@ -3,11 +3,13 @@ import { t } from '../i18n/i18n';
 import './update-prompt.css';
 
 const OFFLINE_READY_MS = 4000;
+const UPDATE_CHECK_MS = 60 * 60 * 1000;
 
 export function startUpdatePrompt(root: HTMLElement): void {
   const toast = document.createElement('div');
   toast.className = 'update-toast';
   toast.hidden = true;
+  toast.setAttribute('role', 'status');
   root.append(toast);
 
   let hideTimer: number | undefined;
@@ -37,6 +39,18 @@ export function startUpdatePrompt(root: HTMLElement): void {
         button(t('reload'), () => void updateSW()),
         button(t('later'), hide),
       );
+    },
+    onRegisteredSW(_url, registration) {
+      if (registration) {
+        window.setInterval(
+          () => void registration.update().catch(() => undefined),
+          UPDATE_CHECK_MS,
+        );
+      }
+    },
+    onRegisterError(error) {
+      console.error('SW registration failed', error);
+      show(t('offlineSetupFailed'), button(t('dismiss'), hide));
     },
     onOfflineReady() {
       show(t('offlineReady'));
