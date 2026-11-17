@@ -123,7 +123,7 @@ const bundle: Record<string, [light: string, dark?: string | false]> = {
   '--color-surface-subtle': ['f4f5f7', '141619'],
   '--color-surface-muted': ['eef0f2', '1b1e22'],
   '--color-divider': ['e6e9ec', '202428'],
-  '--color-border': ['8b9199', '656b72'],
+  '--color-border': ['80878f', '656b72'],
   '--color-text': ['14161a', 'eceef1'],
   '--color-text-secondary': ['3b4046', 'c2c7cd'],
   '--color-text-muted': ['5e646b', '969ca4'],
@@ -230,13 +230,16 @@ describe('WCAG AA contrast', () => {
 });
 
 describe('non-text UI contrast', () => {
-  // WCAG 1.4.11: borders and the lever rail are drawn in --color-border on the control surfaces.
+  // WCAG 1.4.11: borders (and the lever rail outline) sit on every surface, the lever fill on its rail.
+  const surfaces = [...grounds, '--color-surface-muted'];
+  const nonText: [indicator: string, ground: string][] = [
+    ...surfaces.map((ground): [string, string] => ['--color-border', ground]),
+    ['--color-accent', '--color-surface-muted'],
+  ];
   for (const theme of ['light', 'dark'] as const) {
-    for (const ground of grounds) {
-      it(`${theme}: --color-border on ${ground} is 3:1 or more`, () => {
-        expect(
-          contrast(value('--color-border', theme), value(ground, theme)),
-        ).toBeGreaterThanOrEqual(3);
+    for (const [indicator, ground] of nonText) {
+      it(`${theme}: ${indicator} on ${ground} is 3:1 or more`, () => {
+        expect(contrast(value(indicator, theme), value(ground, theme))).toBeGreaterThanOrEqual(3);
       });
     }
   }
