@@ -45,20 +45,26 @@ describe('frame timer', () => {
     expect(timer.scale()).toBe(0.5);
   });
 
+  it('steps down on sustained stalls longer than the gap limit', () => {
+    const timer = createFrameTimer();
+    run(timer, 1000 / 600, 200);
+    expect(timer.scale()).toBeLessThan(1);
+  });
+
   it('does not count a pause as slow once timing is reset', () => {
     const timer = createFrameTimer();
     const { end } = run(timer, 90, 200);
     timer.resetTiming();
-    run(timer, 90, 30, end + 5000);
+    run(timer, 90, 30, end + 300);
     expect(timer.scale()).toBe(1);
     expect(timer.fps()).toBeCloseTo(90, 0);
     expect(timer.p95Ms()).toBeCloseTo(1000 / 90, 1);
   });
 
-  it('does not count a long gap as slow even without a reset', () => {
+  it('ignores a single gap just over the limit between healthy frames', () => {
     const timer = createFrameTimer();
     const { end } = run(timer, 90, 200);
-    run(timer, 90, 30, end + 5000);
+    run(timer, 90, 30, end + 500);
     expect(timer.scale()).toBe(1);
     expect(timer.fps()).toBeCloseTo(90, 0);
     expect(timer.p95Ms()).toBeCloseTo(1000 / 90, 1);
