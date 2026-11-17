@@ -344,7 +344,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let shownContacts = -1;
   let shownJackknifes = -1;
   let shownDirection = -1;
-  let shownTime = -1;
+  let shownTime = '';
 
   const writeSpeed = (tenths: number): void => {
     shownTenths = tenths;
@@ -392,10 +392,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       }
     },
     setRunTime(runSeconds) {
-      const tenths = Math.floor(runSeconds * 10);
-      if (timeEl && tenths !== shownTime) {
-        shownTime = tenths;
-        timeEl.textContent = formatSeconds(tenths / 10);
+      const text = formatSeconds(runSeconds);
+      if (timeEl && text !== shownTime) {
+        shownTime = text;
+        timeEl.textContent = text;
       }
     },
     layout(views) {

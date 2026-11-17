@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
 
 const sizes = [
@@ -39,7 +40,7 @@ async function afterSteps(page: Page, steps: number): Promise<Box> {
   return box;
 }
 
-async function expectClear(page: Page, box: Box): Promise<void> {
+async function chromeHits(page: Page, box: Box): Promise<string[]> {
   const chrome = await page.locator(CHROME).evaluateAll((els) =>
     els
       .map((el) => el.getBoundingClientRect())
@@ -47,11 +48,16 @@ async function expectClear(page: Page, box: Box): Promise<void> {
       .map((r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom })),
   );
   expect(chrome.length).toBeGreaterThan(0);
-  for (const c of chrome) {
-    const hit =
-      box.left < c.right && c.left < box.right && box.top < c.bottom && c.top < box.bottom;
-    expect(hit, `vehicle ${JSON.stringify(box)} overlaps chrome ${JSON.stringify(c)}`).toBe(false);
-  }
+  return chrome
+    .filter(
+      (c) => box.left < c.right && c.left < box.right && box.top < c.bottom && c.top < box.bottom,
+    )
+    .map((c) => JSON.stringify(c));
+}
+
+async function expectClear(page: Page, box: Box): Promise<void> {
+  const hits = await chromeHits(page, box);
+  expect(hits, `vehicle ${JSON.stringify(box)} overlaps chrome`).toEqual([]);
   const pane = await page.locator('[data-hud="topDown"]').boundingBox();
   expect(pane).not.toBeNull();
   expect(box.left).toBeGreaterThanOrEqual(pane?.x ?? 0);
@@ -87,6 +93,48 @@ for (const size of sizes) {
         }
         await page.keyboard.press('1');
       }
+    });
+  }
+}
+
+const yardSizes = [
+  { width: 1280, height: 649 },
+  { width: 1280, height: 720 },
+];
+const locales = [
+  { locale: 'en-US', messages: en },
+  { locale: 'de-DE', messages: de },
+];
+
+for (const { locale, messages } of locales) {
+  for (const size of yardSizes) {
+    test(`whole-yard framing keeps the start and the target clear of the chrome at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      const page = await context.newPage();
+      const labels = [
+        messages.exerciseStraightReverse,
+        messages.exerciseReverseBay,
+        messages.exerciseReverseCorner,
+        messages.exerciseDockRamp,
+        messages.exerciseSlalom,
+      ];
+      for (const label of labels) {
+        await page.goto('./?framing=1');
+        await page.getByRole('button', { name: label }).click();
+        await page.getByRole('button', { name: messages.viewYard, exact: true }).click();
+        // The box still shows the last follow frame until a frame drawn after the click.
+        await afterSteps(page, 1);
+        await expect
+          .poll(async () => (await chromeHits(page, await vehicleBox(page))).length, {
+            message: label,
+          })
+          .toBe(0);
+        // The arrow shows only for a target outside the clear rect.
+        await expect(page.locator('[data-hud="targetArrow"]'), label).toBeHidden();
+      }
+      await context.close();
     });
   }
 }
