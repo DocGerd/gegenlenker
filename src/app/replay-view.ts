@@ -83,7 +83,10 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     showNotice(stage, 'contextLost', 'reload', () => location.reload());
     return dispose;
   }
-  stage.append(canvas);
+  const map = document.createElement('div');
+  map.className = 'replay-map';
+  map.append(canvas);
+  stage.append(map);
   cleanups.push(() => canvas.remove());
   renderer.setScene(layout, truck, trailer, readScenePalette());
 
@@ -135,16 +138,15 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   };
 
   const relayout = (): void => {
-    const width = stage.clientWidth;
-    const height = stage.clientHeight;
+    const width = map.clientWidth;
+    const height = map.clientHeight;
     if (width === 0 || height === 0) return;
-    // The bar sits below the map, not over it.
-    frame.views = computeViewports(width, Math.max(1, height - bar.offsetHeight), 'replay');
+    frame.views = computeViewports(width, height, 'replay');
     renderer.resize(width, height);
     dirty = true;
   };
   const observer = new ResizeObserver(relayout);
-  observer.observe(stage);
+  observer.observe(map);
   window.addEventListener('orientationchange', relayout);
   cleanups.push(() => {
     observer.disconnect();
@@ -154,6 +156,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
 
   let raf = 0;
   let last = -1;
+  let lost = false;
   const tick = (now: number): void => {
     raf = requestAnimationFrame(tick);
     const dt = last < 0 ? 0 : Math.min((now - last) / 1000, MAX_FRAME_SECONDS);
@@ -176,7 +179,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   };
 
   const resume = (): void => {
-    if (raf !== 0 || disposed) return;
+    if (raf !== 0 || disposed || lost) return;
     last = -1;
     raf = requestAnimationFrame(tick);
   };
@@ -197,6 +200,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   // The renderer's own listener runs first (registered in init), so stats() already reports the loss.
   const onLost = (): void => {
     if (!renderer.stats().contextLost) return;
+    lost = true;
     pause();
     showNotice(stage, 'contextLost', 'reload', () => location.reload());
   };
