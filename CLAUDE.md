@@ -20,10 +20,11 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 - Only `src/render` imports `three`; `.ts` files are checked by `no-restricted-imports` in `eslint.config.js`, `dev/` harnesses are exempt.
 - `src/{contracts,vehicles,sim,scoring,content}` also import none of `render/app/hud/input/pwa/i18n` and use none of `window`, `document`, `navigator`, `localStorage`, `performance`, `requestAnimationFrame` (same config).
 - Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome) go on `SKY_LAYER` (`src/render/seams.ts`).
-- Vertex colours must be linear: set a `Color` from the palette (`color.set` converts) and pass it to `tint()` (`src/render/environment.ts`); raw palette bytes render too light.
+- Vertex colours must be linear: set a `Color` from the palette (`color.set` converts) and pass it to `tint()` (`src/render/environment.ts`); raw palette bytes render too light. `tint()` drops UVs, so textured surfaces need their own geometry and material.
 - ESLint is type-aware (`strictTypeChecked`): fix findings in source, no `eslint-disable`.
 - The `query(root, name, Type)` DOM helpers (menu, hud, controls) throw unless the element is `instanceof Type`: pass the real class (`SVGElement` for `<svg>`/`<g>`, `HTMLSelectElement` for `<select>`).
 - Changing `--scene-*` tokens: keep the T1-T4 contrast targets in `docs/brand/BRAND.md`; `src/styles/tokens.test.ts` enforces them.
+- `tokens.test.ts` checks token hex values, not rendered pixels: fog, tone mapping, ground detail or shadows can break top-down contrast unnoticed. Keep top faces on tokens, put realism on perspective-only layers, and check with a top-down screenshot.
 - Mirror rects avoid the controls via `controlsHeight()` in `src/render/viewports.ts`, which copies control geometry from `src/input/controls.css` and `src/styles/tokens.css`: change both together; `e2e/layout.spec.ts` pins no overlap.
 
 ## Units and signs
@@ -40,7 +41,7 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 - Every numeric vehicle dimension is a `Param` (`id`, `name`, `body` are not) with `status` `'sourced'` (`source` is an https URL from `src/vehicles/sources.ts`) or `'estimate'` (`source` is the basis).
 - Use `sourced()` or `estimate()`; never present an estimate as sourced.
 - Adding, changing, sourcing or removing an estimate means running `pnpm estimates` (rewrites the README table between the `estimates:` markers); `src/vehicles/estimates.test.ts` fails otherwise.
-- Bump `SIM_REVISION` in `src/sim/fingerprint.ts` only for sim, collision or scoring logic changes; `dataFingerprint` already hashes vehicle params, obstacles, start, exercise, sim constants and scoring thresholds.
+- Bump `SIM_REVISION` in `src/sim/fingerprint.ts` only for sim, collision or scoring logic changes; `dataFingerprint` already hashes vehicle params, obstacle ids and OBBs, start, exercise, sim constants and scoring thresholds: visual-only prop changes keep stored runs; adding or moving a collision prop invalidates them for that layout.
 
 ## Tests
 
