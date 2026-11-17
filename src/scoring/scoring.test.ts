@@ -9,6 +9,7 @@ import {
   serializeBestResults,
 } from './best';
 import { criteria, deltasToBest, endedMoving } from './debrief';
+import { createEventScanner } from './replay-events';
 import { WAYPOINT_RADIUS, createRunTracker, runResult, targetError } from './score';
 
 function snap(over: Partial<SimSnapshot> = {}): SimSnapshot {
@@ -316,5 +317,26 @@ describe('debrief', () => {
     const d = deltasToBest(result({ time: 25, contacts: 1 }), result({ time: 30 }));
     expect(d.time).toBe(-5);
     expect(d.contacts).toBe(1);
+  });
+});
+
+describe('replay events', () => {
+  it('marks contacts, stops, the waypoint and the finish once each', () => {
+    const scanner = createEventScanner(exercise({ x: 90, y: 25 }));
+    const frames: Partial<SimSnapshot>[] = [
+      { step: 1, speed: 1 },
+      { step: 2, speed: 1, contacts: 1 },
+      { step: 3, speed: 0, contacts: 1 },
+      { step: 4, speed: 1, contacts: 1, truck: { x: 90, y: 25, heading: 0 } },
+      { step: 5, speed: 0, contacts: 1, ...INSIDE },
+      { step: 6, speed: 0, contacts: 1, ...INSIDE },
+    ];
+    for (const f of frames) scanner.update(snap(f));
+    expect(scanner.events()).toEqual([
+      { kind: 'contact', step: 2 },
+      { kind: 'stop', step: 3 },
+      { kind: 'waypoint', step: 4 },
+      { kind: 'reached', step: 5 },
+    ]);
   });
 });
