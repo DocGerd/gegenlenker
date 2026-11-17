@@ -1,26 +1,16 @@
 import type { RunResult, Tolerances } from '../contracts/exercise';
+import { withinTolerance } from './score';
 
 export type Criterion = {
   readonly id: 'position' | 'angle';
-  readonly value: number;
-  readonly limit: number;
   readonly passed: boolean;
 };
 
 export function criteria(r: RunResult, tolerances: Tolerances): readonly Criterion[] {
+  const ok = withinTolerance({ position: r.positionError, angle: r.angleError }, tolerances);
   return [
-    {
-      id: 'position',
-      value: r.positionError,
-      limit: tolerances.position,
-      passed: r.positionError <= tolerances.position,
-    },
-    {
-      id: 'angle',
-      value: r.angleError,
-      limit: tolerances.angle,
-      passed: r.angleError <= tolerances.angle,
-    },
+    { id: 'position', passed: ok.position },
+    { id: 'angle', passed: ok.angle },
   ];
 }
 

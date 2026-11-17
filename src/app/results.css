@@ -191,14 +191,14 @@
 
 .replay-markers {
   position: relative;
-  height: 28px;
+  height: var(--size-target);
 }
 
 .replay-marker {
   position: absolute;
   top: 0;
-  width: 28px;
-  height: 28px;
+  width: var(--size-target);
+  height: var(--size-target);
   padding: 0;
   border: 0;
   background: transparent;
@@ -209,7 +209,7 @@
 .replay-marker::before {
   content: '';
   position: absolute;
-  inset: 8px;
+  inset: calc((var(--size-target) - 12px) / 2);
   border-radius: 50%;
   background: var(--color-text-muted);
 }

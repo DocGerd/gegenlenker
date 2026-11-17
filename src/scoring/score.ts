@@ -1,4 +1,4 @@
-import type { ExerciseDefinition, RunResult, TargetZone } from '../contracts/exercise';
+import type { ExerciseDefinition, RunResult, TargetZone, Tolerances } from '../contracts/exercise';
 import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { wrapAngle } from '../sim/angle';
@@ -14,13 +14,20 @@ export function targetError(s: SimSnapshot, zone: TargetZone): { position: numbe
   };
 }
 
+/** The pass rule per criterion, shared by the live tracker and the debrief. */
+export function withinTolerance(
+  error: { position: number; angle: number },
+  tolerances: Tolerances,
+): { position: boolean; angle: boolean } {
+  return {
+    position: error.position <= tolerances.position,
+    angle: error.angle <= tolerances.angle,
+  };
+}
+
 function stoppedInTarget(s: SimSnapshot, exercise: ExerciseDefinition): boolean {
-  const e = targetError(s, exercise.target);
-  return (
-    Math.abs(s.speed) < STOPPED_SPEED &&
-    e.position <= exercise.tolerances.position &&
-    e.angle <= exercise.tolerances.angle
-  );
+  const ok = withinTolerance(targetError(s, exercise.target), exercise.tolerances);
+  return Math.abs(s.speed) < STOPPED_SPEED && ok.position && ok.angle;
 }
 
 export type RunTracker = {

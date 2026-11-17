@@ -13,7 +13,7 @@ import { createRunTracker, type RunTracker } from '../scoring/score';
 import { createContactQuery } from '../sim/collision';
 import { DT } from '../sim/constants';
 import { NO_PREDICTION } from '../sim/predict';
-import { createReplayCursor } from '../sim/replay';
+import { createReplayCursor, type ReplayCursor } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
@@ -38,6 +38,9 @@ const EVENT_LABEL: Readonly<Record<ReplayEventKind, MessageKey>> = {
   reached: 'targetReached',
 };
 const KMH = 3.6;
+// Replaying work per frame is capped so a long log never blocks input or painting.
+const WORK_BUDGET_MS = 6;
+const WORK_CHUNK_STEPS = 256;
 
 type Frame = { -readonly [K in keyof RenderFrame]: RenderFrame[K] };
 
@@ -62,6 +65,17 @@ function readoutText(s: SimSnapshot): string {
   return parts.join(' · ');
 }
 
+/** Moves the cursor toward `goal` until the budget is spent; true once it arrived. */
+function advance(cursor: ReplayCursor, goal: number, budgetMs: number): boolean {
+  const end = performance.now() + budgetMs;
+  if (goal < cursor.step()) cursor.seek(0);
+  while (cursor.step() < goal) {
+    cursor.seek(Math.min(goal, cursor.step() + WORK_CHUNK_STEPS));
+    if (performance.now() >= end) break;
+  }
+  return cursor.step() >= goal;
+}
+
 /** Returns the exit action, which leaves exactly as the back button does. */
 export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void): () => void {
   if (!isReplayable(log)) {
@@ -80,16 +94,19 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
       createContactQuery(layout.obstacles),
     );
 
-  // Scrubbing back rebuilds the run from step 0; the sim is deterministic, so it lands on the played state.
+  // Scrubbing back rebuilds the run from step 0 across frames; the sim is deterministic, so it lands on the played state.
   let tracker: RunTracker | null = null;
   const cursor = createReplayCursor(log, makeSim, () => {
     tracker = exercise === null ? null : createRunTracker(exercise);
     return (snapshot) => tracker?.update(snapshot);
   });
-  // One eager pass finds the marked moments; markers then jump by seeking.
+  // One pass over the log finds the marked moments; it runs across frames after the first paint.
   const scanner = createEventScanner(exercise);
-  createReplayCursor(log, makeSim, () => (snapshot) => scanner.update(snapshot)).seek(log.steps);
-  const events = scanner.events();
+  let scan: ReplayCursor | null = createReplayCursor(
+    log,
+    makeSim,
+    () => (snapshot) => scanner.update(snapshot),
+  );
   const total = `${formatNumber(log.steps * DT, 1)} s`;
 
   const stage = document.createElement('div');
@@ -177,18 +194,20 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     position = Number(scrubber.value);
     dirty = true;
   });
-  for (const event of events) {
-    const label = `${t(EVENT_LABEL[event.kind])} · ${formatNumber(event.step * DT, 1)} s`;
-    const marker = button(`replay-marker replay-marker-${event.kind}`, '', () => {
-      position = event.step;
-      playing = false;
-      sync();
-    });
-    marker.style.left = `${(event.step / log.steps) * 100}%`;
-    marker.title = label;
-    marker.setAttribute('aria-label', label);
-    markers.append(marker);
-  }
+  const addMarkers = (): void => {
+    for (const event of scanner.events()) {
+      const label = `${t(EVENT_LABEL[event.kind])} · ${formatNumber(event.step * DT, 1)} s`;
+      const marker = button(`replay-marker replay-marker-${event.kind}`, '', () => {
+        position = event.step;
+        playing = false;
+        sync();
+      });
+      marker.style.left = `${(event.step / log.steps) * 100}%`;
+      marker.title = label;
+      marker.setAttribute('aria-label', label);
+      markers.append(marker);
+    }
+  };
   timeline.append(markers, scrubber);
   const readout = document.createElement('div');
   readout.className = 'replay-readout mono';
@@ -253,20 +272,26 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
         }
       }
       const before = cursor.step();
-      const snapshot = cursor.seek(position);
+      advance(cursor, Math.min(log.steps, Math.floor(position)), WORK_BUDGET_MS);
+      const snapshot = cursor.snapshot();
       if (cursor.step() === before && !dirty) {
         // Paused frames report nothing: the idle gap must not count as slow.
         if (playing) renderer.skipFrame();
-        return;
+      } else {
+        dirty = false;
+        frame.snapshot = snapshot;
+        frame.topDown = topDown;
+        frame.waypointVisited = tracker?.waypointVisited() ?? false;
+        renderer.render(frame);
+        // Follows the target, not the cursor, so a catching-up rebuild does not drag the thumb.
+        scrubber.value = String(Math.min(log.steps, Math.floor(position)));
+        timeLabel.textContent = `${formatNumber(snapshot.time, 1)} / ${total}`;
+        readout.textContent = readoutText(snapshot);
       }
-      dirty = false;
-      frame.snapshot = snapshot;
-      frame.topDown = topDown;
-      frame.waypointVisited = tracker?.waypointVisited() ?? false;
-      renderer.render(frame);
-      scrubber.value = String(cursor.step());
-      timeLabel.textContent = `${formatNumber(snapshot.time, 1)} / ${total}`;
-      readout.textContent = readoutText(snapshot);
+      if (scan !== null && advance(scan, log.steps, WORK_BUDGET_MS)) {
+        scan = null;
+        addMarkers();
+      }
     },
   });
 

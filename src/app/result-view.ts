@@ -64,7 +64,8 @@ function row(label: MessageKey, value: string, note: RowNote = {}): HTMLDivEleme
   }
   if (note.delta !== undefined) {
     const { value: d, digits, unit } = note.delta;
-    const tone = d < 0 ? 'result-better' : d > 0 ? 'result-worse' : '';
+    const shown = Math.round(d * 10 ** digits);
+    const tone = shown < 0 ? 'result-better' : shown > 0 ? 'result-worse' : '';
     figure.append(
       element('span', `result-delta ${tone}`.trim(), `${t('vsBest')} ${signed(d, digits)}${unit}`),
     );
