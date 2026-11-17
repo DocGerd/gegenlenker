@@ -4,7 +4,7 @@ Truck + turntable drawbar trailer maneuvering trainer. TypeScript, Vite, three.j
 
 ## Verify
 
-Dev server: `pnpm dev`. `pnpm verify` runs the CI chain below locally (its `test:e2e` builds with `BASE_PATH`); run it before every PR.
+Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test:e2e` builds with `BASE_PATH` itself); run it before every PR.
 
 - Install: `pnpm install --frozen-lockfile`
 - Lint: `pnpm lint`; format: `pnpm format:check` (fix with `pnpm format`)
