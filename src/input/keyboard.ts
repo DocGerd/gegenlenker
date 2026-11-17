@@ -98,6 +98,8 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
       return brake;
     },
     tick(dt) {
+      // A brake from any source cancels the ramp, as Space does.
+      if (state.brake) leverHeld.clear();
       for (const [code, heldFor] of leverHeld) {
         rampLever(state, FASTER.includes(code) ? 1 : -1, rampTime(heldFor, dt));
         leverHeld.set(code, heldFor + dt);

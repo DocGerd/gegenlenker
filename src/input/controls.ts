@@ -299,9 +299,9 @@ export function createControls(
       return toControlVector(state);
     },
     tick(dt, actualSteer) {
+      syncBrake();
       keyboard.tick(dt);
       stepReset(state, opts.steerRate, dt);
-      syncBrake();
       render(actualSteer);
     },
     dispose() {
