@@ -221,6 +221,20 @@ describe('WCAG AA contrast', () => {
   }
 });
 
+describe('HUD view frame', () => {
+  // The frame is a surface ring inside a text ring: one pair that contrasts with any scene colour.
+  const frame = /--hud-frame:([^;]+);/.exec(read('../hud/hud.css'))?.[1] ?? '';
+  const tokens = [
+    ...new Set([...frame.matchAll(/var\((--color-[a-z-]+)\)/g)].map((m) => m[1] ?? '')),
+  ];
+
+  it.each(['light', 'dark'] as const)('%s: its two colours contrast 9:1 or more', (theme) => {
+    expect(tokens).toHaveLength(2);
+    const [a = '', b = ''] = tokens.map((token) => value(token, theme));
+    expect(contrast(a, b)).toBeGreaterThanOrEqual(9);
+  });
+});
+
 describe('scene tokens', () => {
   const keys = Object.keys(KEYS);
   const scene = (key: string) => value(`--scene-${key}`, 'light');

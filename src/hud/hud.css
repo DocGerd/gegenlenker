@@ -1,5 +1,9 @@
 .hud {
   --hud-action-w: 96px;
+  --hud-stroke: 3px;
+  --hud-frame:
+    0 0 0 var(--hud-stroke) var(--color-surface),
+    0 0 0 calc(2 * var(--hud-stroke)) var(--color-text);
   position: absolute;
   inset: 0;
   pointer-events: none;
@@ -22,6 +26,7 @@
 
 /* The cockpit always starts at the screen's left edge, where controls.css puts the wheel and gears; the readout and legend start to their right. */
 .hud-cockpit {
+  box-shadow: var(--hud-frame); /* outside the rect: only the seam to the top-down view shows */
   --hud-inset: calc(var(--space-4) * 3 + var(--ctl-wheel) + var(--ctl-gears-w));
 }
 
@@ -60,8 +65,8 @@
 
 .hud-mirror {
   box-sizing: border-box;
-  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  box-shadow: var(--hud-frame);
 }
 
 .hud-label {
@@ -70,6 +75,19 @@
   letter-spacing: var(--tracking-eyebrow);
   text-transform: uppercase;
   color: var(--color-text-secondary);
+}
+
+.hud-view-label {
+  align-self: center;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.hud-cockpit > .hud-view-label {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
 }
 
 .hud-legend {
