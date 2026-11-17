@@ -309,7 +309,7 @@ export function proceduralAids(
     2,
     MARKER_WIDTH,
     MARKER_Y,
-    material(palette.cone, true),
+    material(palette.marking, true),
     material(palette.wheel, true, 1, -3),
     OVERLAY_ORDER + 2,
   );

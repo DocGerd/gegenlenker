@@ -52,6 +52,7 @@ export const en = {
   blockedContactTruck: 'Contact: truck – drive the other way',
   blockedContactDrawbar: 'Contact: drawbar – drive the other way',
   blockedContactTrailer: 'Contact: trailer – drive the other way',
+  blockedContactSelf: 'Contact: truck and trailer – drive the other way',
   blockedCoupling: 'Coupling limit – drive the other way',
   blockedTurntable: 'Turntable limit – drive the other way',
   labelCockpit: 'Cockpit',

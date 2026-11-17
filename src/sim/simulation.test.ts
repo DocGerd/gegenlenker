@@ -26,7 +26,7 @@ import {
   V_MAX,
 } from './constants';
 import { bodyFootprints } from './geometry';
-import { NO_PREDICTION, predictCombination } from './predict';
+import { contactAhead, NO_PREDICTION, predictCombination } from './predict';
 import { createSimulation } from './simulation';
 
 const CAP = 100_000;
@@ -690,6 +690,7 @@ describe('simulation', () => {
         const predicted = predictCombination(p, sim.step({ ...reverse, lever: 0 }), noContacts);
         const at = last(driveUntil(sim, reverse, (s) => s.blocked !== null));
         expect(predicted.blocked).toBe(at.blocked);
+        expect(contactAhead(predicted)).toBe(false);
         expect(dist2(last(predicted.trailer), at.trailerRear)).toBeLessThan(0.1);
         expect(predicted.end).not.toBeNull();
         expect(predicted.end?.truck).toBeCloseTo(at.truck.heading, 1);
@@ -716,6 +717,31 @@ describe('simulation', () => {
         expect(predicted.blocked).toBe('contact');
         expect(dist2(last(predicted.trailer), at.trailerRear)).toBeLessThan(0.1);
       }
+    });
+
+    it('flags a contact ahead only inside the warning distance', () => {
+      const p = manKrone();
+      const sim = createSimulation(p, origin, noContacts);
+      const stand = sim.step(ctl({ gear: 'D' }));
+      const front = bodyFootprints(p, stand)[0]?.obb.cx ?? Number.NaN;
+      const wallAhead =
+        (gap: number): ContactQuery =>
+        (bodies) => {
+          const hit = bodies.find((b) => b.obb.cx > front + gap);
+          return hit ? { body: hit.body, obstacleId: 'wall', point: { x: 0, y: 0 } } : null;
+        };
+
+      const clear = predictCombination(p, stand, noContacts);
+      expect(clear.blockedAt).toBeNull();
+      expect(contactAhead(clear)).toBe(false);
+
+      const near = predictCombination(p, stand, wallAhead(2));
+      expect(near.blockedAt).toBeCloseTo(2, 1);
+      expect(contactAhead(near)).toBe(true);
+
+      const far = predictCombination(p, stand, wallAhead(10));
+      expect(far.blockedAt).toBeCloseTo(10, 1);
+      expect(contactAhead(far)).toBe(false);
     });
 
     it('stops the truck lines once its heading has swept a half turn, the trailer line goes on', () => {

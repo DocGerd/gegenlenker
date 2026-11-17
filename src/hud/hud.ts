@@ -46,6 +46,11 @@ const CONTACT_KEY: Record<BodyId, MessageKey> = {
   trailer: 'blockedContactTrailer',
 };
 
+function contactKey(contact: SimSnapshot['contact']): MessageKey {
+  if (contact === null) return 'blockedContactTruck';
+  return contact.self ? 'blockedContactSelf' : CONTACT_KEY[contact.body];
+}
+
 const BLOCKED_KEY: Record<Exclude<BlockReason, 'contact'>, MessageKey> = {
   coupling: 'blockedCoupling',
   turntable: 'blockedTurntable',
@@ -60,7 +65,7 @@ function toastFor(
 ): { key: MessageKey; level: ToastLevel } | null {
   if (s.blocked === 'contact') {
     return {
-      key: s.contact ? CONTACT_KEY[s.contact.body] : 'blockedContactTruck',
+      key: contactKey(s.contact),
       level: 'danger',
     };
   }

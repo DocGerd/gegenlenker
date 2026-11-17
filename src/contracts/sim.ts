@@ -45,8 +45,12 @@ export type SimSnapshot = {
   readonly speed: number;
   readonly control: ControlVector;
   readonly blocked: BlockReason | null;
-  /** The touching body and contact point while `blocked` is 'contact'. */
-  readonly contact: { readonly body: BodyId; readonly point: Vec2 } | null;
+  /** The touching body and contact point while `blocked` is 'contact'; `self`: truck against trailer. */
+  readonly contact: {
+    readonly body: BodyId;
+    readonly point: Vec2;
+    readonly self: boolean;
+  } | null;
   readonly contacts: number;
   readonly jackknifes: number;
   readonly directionChanges: number;

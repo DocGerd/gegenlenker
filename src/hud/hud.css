@@ -168,6 +168,7 @@
 
 .hud-toast[data-level='warn'] {
   border-color: var(--color-warning);
+  border-left-width: var(--space-2);
 }
 
 .hud-goal-cue {

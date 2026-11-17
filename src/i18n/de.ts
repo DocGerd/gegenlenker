@@ -56,6 +56,7 @@ export const de: Record<MessageKey, string> = {
   blockedContactTruck: 'Berührung: Zugmaschine – in Gegenrichtung fahren',
   blockedContactDrawbar: 'Berührung: Deichsel – in Gegenrichtung fahren',
   blockedContactTrailer: 'Berührung: Anhänger – in Gegenrichtung fahren',
+  blockedContactSelf: 'Berührung: Zugmaschine und Anhänger – in Gegenrichtung fahren',
   blockedCoupling: 'Kupplung am Anschlag – in Gegenrichtung fahren',
   blockedTurntable: 'Drehschemel am Anschlag – in Gegenrichtung fahren',
   labelCockpit: 'Cockpit',

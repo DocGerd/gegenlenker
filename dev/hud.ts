@@ -104,7 +104,7 @@ const snapshot = (time: number): SimSnapshot => {
     speed: walking * control.lever * 1.5,
     control,
     blocked,
-    contact: blocked === 'contact' ? { body: 'drawbar', point: pose } : null,
+    contact: blocked === 'contact' ? { body: 'drawbar', point: pose, self: false } : null,
     contacts: Math.floor(time / 7),
     jackknifes: Math.floor(time / 11),
     directionChanges: Math.floor(time / 5),

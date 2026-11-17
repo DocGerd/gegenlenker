@@ -101,6 +101,9 @@ export const contactPoint = (a: Obb, b: Obb): Vec2 => {
 const hit = (a: Obb, b: Obb): boolean =>
   Math.hypot(b.cx - a.cx, b.cy - a.cy) <= radius(a) + radius(b) && obbOverlap(a, b);
 
+/** `obstacleId` of a truck-against-trailer contact. */
+export const SELF_OBSTACLE_ID = 'self';
+
 export const createContactQuery =
   (obstacles: readonly Obstacle[]): ContactQuery =>
   (bodies: readonly BodyFootprint[]) => {
@@ -114,7 +117,11 @@ export const createContactQuery =
     const truck = bodies.find((b) => b.body === 'truck');
     const trailer = bodies.find((b) => b.body === 'trailer');
     if (truck && trailer && hit(truck.obb, trailer.obb)) {
-      return { body: 'trailer', obstacleId: 'self', point: contactPoint(truck.obb, trailer.obb) };
+      return {
+        body: 'trailer',
+        obstacleId: SELF_OBSTACLE_ID,
+        point: contactPoint(truck.obb, trailer.obb),
+      };
     }
     return null;
   };

@@ -10,6 +10,7 @@ import type {
 import type { VehicleParams } from '../contracts/vehicle';
 import { wrapAngle } from './angle';
 import { ACCEL, BRAKE_DECEL, DECEL, DT, EVENT_CLEAR_DISTANCE, V_MAX } from './constants';
+import { SELF_OBSTACLE_ID } from './collision';
 import { bodyFootprints } from './geometry';
 import {
   couplingAngle,
@@ -113,7 +114,11 @@ export function createSimulation(
     blocked,
     contact:
       blocked === 'contact' && blockedContact !== null
-        ? { body: blockedContact.body, point: blockedContact.point }
+        ? {
+            body: blockedContact.body,
+            point: blockedContact.point,
+            self: blockedContact.obstacleId === SELF_OBSTACLE_ID,
+          }
         : null,
     contacts: contactCount,
     jackknifes,
