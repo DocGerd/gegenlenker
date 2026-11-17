@@ -10,3 +10,6 @@ minimumReleaseAgeExclude:
   - '@typescript-eslint/utils@8.73.0'
   - '@typescript-eslint/visitor-keys@8.73.0'
   - typescript-eslint@8.73.0
+overrides:
+  # minimatch 10.x has no patch (GHSA-g3hv-75wg-m249) and minimatch 11 breaks glob 11; glob 14 uses 11.
+  'glob@>=9.0.0 <14.0.2': ^14.0.2
