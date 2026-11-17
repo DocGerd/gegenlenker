@@ -64,6 +64,5 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Commit as `13460098+DocGerd@users.noreply.github.com` (repo-local `user.email`), never the owner's real address.
 - `main` ruleset (no bypass) requires up-to-date PRs and resolved review threads: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next one and wait for CI.
 - Pin actions to a full commit SHA with a `# vX.Y.Z` comment (repo enforces `sha_pinning_required`); Dependabot keeps them current.
-- `@types/node` stays on the Node 24 major; Dependabot ignores its major bumps.
 - A merge to `main` that passes CI deploys via `.github/workflows/deploy.yml` (`workflow_run`); `workflow_dispatch` is the fallback.
 - Merge reviewed PRs with green CI without asking, until the project moves to gitflow and a first release.
