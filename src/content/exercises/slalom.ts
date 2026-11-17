@@ -6,8 +6,9 @@ const KERB = 0.15;
 const KERB_HEIGHT = 0.15;
 const CONE = 0.4;
 const CONE_HEIGHT = 0.8;
-const CONES_PER_BARRIER = 5;
-const BARRIER_SPAN = 3.5;
+const CONES_PER_BARRIER = 7;
+const BARRIER_SPAN = 6.4;
+// Each barrier reaches past the lane centre, so alternating barriers overlap in y and force a weave.
 const BARRIER_X = [28, 48, 68, 88];
 
 function obstacles(): ExerciseDefinition['obstacles'] {
