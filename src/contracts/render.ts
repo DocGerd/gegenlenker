@@ -28,6 +28,11 @@ export type AidFlags = {
   readonly tracks: boolean;
   readonly ghost: boolean;
 };
+/** Which top-down HUD panels the player has folded away. */
+export type CollapsedPanels = {
+  readonly aids: boolean;
+  readonly gauges: boolean;
+};
 export type ScenePaletteKey =
   | 'sky'
   | 'backdrop'
@@ -59,6 +64,8 @@ export type RenderFrame = {
   readonly topDown: TopDownMode;
   /** Absent means the default framing. */
   readonly topDownView?: TopDownView;
+  /** Follow framing keeps the vehicle inside this screen rect (CSS px, as `views`); absent means the whole top-down pane. */
+  readonly topDownClear?: Rect;
   readonly aids: AidFlags;
   readonly predicted: Prediction;
 };
@@ -75,6 +82,8 @@ export interface SceneRenderer {
   setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec): void;
   resize(cssWidth: number, cssHeight: number): void;
   render(frame: RenderFrame): void;
+  /** Sim-plane point to screen CSS px as of the last render; null before the first. */
+  project(x: number, y: number): { readonly x: number; readonly y: number } | null;
   /** Reports an animation frame on which the caller chose not to render, so frame timing still sees it. */
   skipFrame(): void;
   stats(): RenderStats;

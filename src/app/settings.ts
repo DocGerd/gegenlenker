@@ -1,4 +1,4 @@
-import type { AidFlags, TopDownMode } from '../contracts/render';
+import type { AidFlags, CollapsedPanels, TopDownMode } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
 import { SETTINGS_KEY, writeText } from './storage';
@@ -11,9 +11,11 @@ export type Settings = {
   readonly trailerId: TrailerId;
   readonly aids: AidFlags;
   readonly topDown: TopDownMode;
+  readonly collapsed: CollapsedPanels;
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
+const DEFAULT_COLLAPSED: CollapsedPanels = { aids: false, gauges: false };
 const LANGS: readonly Lang[] = ['de', 'en'];
 const THEMES: readonly Settings['theme'][] = ['system', 'light', 'dark'];
 const TOP_DOWN: readonly TopDownMode[] = ['follow', 'yard'];
@@ -36,6 +38,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
   }
   const s = isRecord(data) && data['version'] === 1 ? data : {};
   const aids = isRecord(s['aids']) ? s['aids'] : {};
+  const collapsed = isRecord(s['collapsed']) ? s['collapsed'] : {};
   return {
     version: 1,
     language: pick(LANGS, s['language'], detected),
@@ -49,6 +52,10 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
       ghost: flag(aids['ghost'], DEFAULT_AIDS.ghost),
     },
     topDown: pick(TOP_DOWN, s['topDown'], 'follow'),
+    collapsed: {
+      aids: flag(collapsed['aids'], DEFAULT_COLLAPSED.aids),
+      gauges: flag(collapsed['gauges'], DEFAULT_COLLAPSED.gauges),
+    },
   };
 }
 
