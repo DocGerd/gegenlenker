@@ -1,13 +1,13 @@
 import type { LayoutId, Marking, Obstacle } from './layout';
 import type { InputChange, Pose2, Vec2 } from './sim';
 import type { TrailerId, TruckId } from './vehicle';
-/** Ordered by strictness, loosest first: position tolerance, then angle tolerance (`content.test.ts` pins it). */
+/** Curriculum order, easiest first; the menu lists them in this order (`content.test.ts` pins it). */
 export const EXERCISE_IDS = [
-  'slalom',
-  'reverse-corner',
-  'reverse-bay',
   'straight-reverse',
+  'reverse-bay',
+  'reverse-corner',
   'dock-ramp',
+  'slalom',
 ] as const;
 export type ExerciseId = (typeof EXERCISE_IDS)[number];
 /** pose: trailer rear-end centre and trailer heading at the goal; the drawn zone extends `length` along pose.heading. */

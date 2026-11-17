@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ExerciseDefinition, RunResult } from '../contracts/exercise';
+import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
 import type { SimSnapshot } from '../contracts/sim';
 import {
   bestKey,
@@ -10,8 +10,16 @@ import {
   serializeBestResults,
 } from './best';
 import { criteria, deltasToBest, endedMoving } from './debrief';
-import { createEventScanner } from './replay-events';
-import { WAYPOINT_RADIUS, createRunTracker, isDrivingInput, runResult, targetError } from './score';
+import { DT } from '../sim/constants';
+import { createEventScanner, runStartStep } from './replay-events';
+import {
+  WAYPOINT_RADIUS,
+  createRunTracker,
+  isDrivingInput,
+  runResult,
+  runSeconds,
+  targetError,
+} from './score';
 
 function snap(over: Partial<SimSnapshot> = {}): SimSnapshot {
   return {
@@ -399,5 +407,56 @@ describe('replay events', () => {
       { kind: 'waypoint', step: 4 },
       { kind: 'reached', step: 5 },
     ]);
+  });
+});
+
+describe('runStartStep', () => {
+  const control = (gear: 'P' | 'D', lever: number) => ({ steer: 0, lever, brake: false, gear });
+  const log = (changes: InputLog['changes']): InputLog => ({
+    version: 1,
+    layoutId: 'depot',
+    exerciseId: null,
+    truckId: 'man-le-18-280',
+    trailerId: 'krone-azw-18',
+    steps: 500,
+    changes,
+  });
+
+  it('skips idle changes and returns the first driving input', () => {
+    const changes = [
+      { step: 0, control: control('P', 0) },
+      { step: 40, control: { ...control('P', 0), steer: 0.5 } },
+      { step: 120, control: control('D', 0) },
+    ];
+    expect(runStartStep(log(changes))).toBe(120);
+  });
+
+  it('is the log end when the vehicle never got a driving input', () => {
+    expect(runStartStep(log([{ step: 0, control: control('P', 0) }]))).toBe(500);
+  });
+});
+
+describe('runSeconds', () => {
+  it('matches the scored run time to the printed tenth for every start/end pair', () => {
+    const tenth = (n: number): string => n.toFixed(1);
+    for (let start = 0; start < 60; start++) {
+      for (let end = start; end < 200; end++) {
+        const scored = runResult(
+          snap({ time: end * DT }),
+          exercise(),
+          'man-le-18-280',
+          'krone-azw-18',
+          true,
+          true,
+          false,
+          start * DT,
+        ).time;
+        expect(tenth(runSeconds(end, start))).toBe(tenth(scored));
+      }
+    }
+  });
+
+  it('is zero before the run starts', () => {
+    expect(runSeconds(10, 40)).toBe(0);
   });
 });
