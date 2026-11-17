@@ -184,9 +184,20 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   );
 
   const keyboardLike = matchMedia('(hover: hover) and (pointer: fine)');
-  const syncLegend = (): void => setHidden(legend, !keyboardLike.matches);
+  let typed = false;
+  const syncLegend = (): void => setHidden(legend, !keyboardLike.matches && !typed);
   syncLegend();
   keyboardLike.addEventListener('change', syncLegend, { signal });
+  // Registered after the controls' keyboard listener, so defaultPrevented marks a key it handled.
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (typed || !e.defaultPrevented) return;
+      typed = true;
+      syncLegend();
+    },
+    { signal },
+  );
 
   // Last written values; update() compares these before touching the DOM.
   let shownTenths = -1;
