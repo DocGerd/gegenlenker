@@ -5,6 +5,7 @@ import type { LayoutId } from '../contracts/layout';
 import type { AidFlags, RenderFrame } from '../contracts/render';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
+import { t } from '../i18n/i18n';
 import { createControls } from '../input/controls';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
@@ -22,6 +23,7 @@ import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
 import { measureChrome } from './chrome';
+import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { showPauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { updateSettings, type Settings } from './settings';
@@ -41,6 +43,8 @@ export type DriveOutcome = {
 /** Margin between the target arrow and the edge of the clear rect, in px. */
 const ARROW_MARGIN = 24;
 const EXPOSE_FRAMING = new URLSearchParams(location.search).get('framing') === '1';
+
+const anyAid = (a: AidFlags): boolean => a.pivots || a.path || a.tracks || a.ghost;
 
 type Frame = { -readonly [K in keyof RenderFrame]: RenderFrame[K] };
 
@@ -72,6 +76,8 @@ export function startDrive(
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
   let reached = false;
+  // Sticky over aid toggles; paused time does not count, only sim steps taken with an aid on.
+  let assisted = false;
 
   const stage = document.createElement('div');
   stage.className = 'drive';
@@ -106,6 +112,7 @@ export function startDrive(
             run.trailerId,
             reached,
             tracker?.waypointVisited() ?? true,
+            assisted,
           )
         : null;
     dispose();
@@ -139,6 +146,13 @@ export function startDrive(
   const view = mountRenderStage(stage, stage, () => exit(false));
   if (view === null) return () => exit(false);
   cleanups.push(() => view.dispose());
+  const onEscape = (e: KeyboardEvent): void => {
+    if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
+    e.preventDefault();
+    togglePause();
+  };
+  window.addEventListener('keydown', onEscape);
+  cleanups.push(() => window.removeEventListener('keydown', onEscape));
   const { renderer } = view;
   renderer.setScene(layout, truck, trailer);
 
@@ -176,6 +190,10 @@ export function startDrive(
     couplingLimit: params.couplingLimit,
     turntableLimit: params.turntableLimit,
     mode: exercise === null ? 'yard' : 'exercise',
+    exercise:
+      exercise === null
+        ? null
+        : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
     aids: settings.aids,
     topDown: settings.topDown,
     collapsed,
@@ -264,6 +282,7 @@ export function startDrive(
       const clock =
         closeSheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
+      if (clock.steps > 0 && anyAid(aids)) assisted = true;
       for (let i = 0; i < clock.steps; i++) {
         controls.tick(DT, snapshot.steer);
         const control = controls.control();
@@ -294,6 +313,7 @@ export function startDrive(
       frame.aids = aids;
       renderer.render(frame);
       hud.update(snapshot);
+      if (tracker !== null) hud.setGoal(tracker.goal(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
       hud.setTargetArrow(
         at && frame.topDownClear ? targetArrow(at, frame.topDownClear, ARROW_MARGIN) : null,

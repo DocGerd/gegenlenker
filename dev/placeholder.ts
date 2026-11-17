@@ -32,6 +32,7 @@ export const placeholderLayout: ResolvedLayout = {
   obstacles: [],
   markings: [],
   target: null,
+  tolerances: null,
   waypoint: null,
 };
 
