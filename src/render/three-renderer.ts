@@ -20,7 +20,7 @@ import type { TrailerSpec, TruckAnchors, TruckSpec } from '../contracts/vehicle'
 import { truckAnchors } from '../vehicles/anchors';
 import { resolveCombination } from '../vehicles/resolve';
 import { bodyToThree } from './coords';
-import { followFraming, leadTarget } from './follow-framing';
+import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createMirror } from './mirror';
 import { readScenePalette } from './palette';
@@ -182,10 +182,14 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       cy = framing.centre.y;
       halfH = framing.half;
     } else {
-      const bounds = b.yardBounds;
-      cx = (bounds.minX + bounds.maxX) / 2;
-      cy = (bounds.minY + bounds.maxY) / 2;
-      halfH = Math.max((bounds.maxY - bounds.minY) / 2, (bounds.maxX - bounds.minX) / 2 / aspect);
+      const framing = yardFraming({
+        bounds: b.yardBounds,
+        pane: rect,
+        clear: frame.topDownClear ?? rect,
+      });
+      cx = framing.centre.x;
+      cy = framing.centre.y;
+      halfH = framing.half;
     }
     placeTopDownCamera(
       topDownCamera,

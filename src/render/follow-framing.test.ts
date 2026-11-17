@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Rect } from '../contracts/render';
-import { clearRect, followFraming, leadTarget, targetArrow } from './follow-framing';
+import { clearRect, followFraming, leadTarget, targetArrow, yardFraming } from './follow-framing';
 
 const pane: Rect = { x: 614, y: 0, width: 410, height: 600 };
 const toolbar: Rect = { x: 630, y: 16, width: 256, height: 414 };
@@ -137,5 +137,31 @@ describe('targetArrow', () => {
     expect(arrow).not.toBeNull();
     expect(arrow?.x).toBeCloseTo(clear.x + 20, 6);
     expect(Math.abs(arrow?.angle ?? 0)).toBeGreaterThan(Math.PI / 2);
+  });
+});
+
+describe('yardFraming', () => {
+  const bounds = { minX: -50, minY: -20, maxX: 50, maxY: 20 };
+  const clear: Rect = { x: 614, y: 200, width: 326, height: 400 };
+
+  it('fits the bounds into the clear rect, centred there', () => {
+    const { centre, half } = yardFraming({ bounds, pane, clear });
+    const scale = pane.height / (2 * half);
+    const screen = (x: number, y: number) => ({
+      x: pane.x + pane.width / 2 + (x - centre.x) * scale,
+      y: pane.y + pane.height / 2 - (y - centre.y) * scale,
+    });
+    const corner = screen(bounds.minX, bounds.maxY);
+    const opposite = screen(bounds.maxX, bounds.minY);
+    expect(inside(corner, clear)).toBe(true);
+    expect(inside(opposite, clear)).toBe(true);
+    expect((corner.x + opposite.x) / 2).toBeCloseTo(clear.x + clear.width / 2, 6);
+    expect((corner.y + opposite.y) / 2).toBeCloseTo(clear.y + clear.height / 2, 6);
+  });
+
+  it('matches the plain pane fit when nothing is in the way', () => {
+    const { centre, half } = yardFraming({ bounds, pane, clear: pane });
+    expect(centre).toEqual({ x: 0, y: 0 });
+    expect(half).toBeCloseTo(pane.height / (2 * (pane.width / 100)), 6);
   });
 });

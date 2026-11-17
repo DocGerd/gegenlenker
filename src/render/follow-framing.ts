@@ -104,6 +104,30 @@ export function followFraming(i: FollowInput): { centre: Vec2; half: number } {
   return { centre: { x: i.vehicle.x - dx / scale, y: i.vehicle.y + dy / scale }, half };
 }
 
+export type YardInput = {
+  readonly bounds: { minX: number; minY: number; maxX: number; maxY: number };
+  readonly pane: Rect;
+  /** Inside `pane`, same space. */
+  readonly clear: Rect;
+};
+
+/** Camera centre and half-height that fit `bounds` entirely into `clear`, centred there. */
+export function yardFraming(i: YardInput): { centre: Vec2; half: number } {
+  const { bounds, pane, clear } = i;
+  const width = bounds.maxX - bounds.minX;
+  const height = bounds.maxY - bounds.minY;
+  const scale = Math.min(clear.width / width, clear.height / height);
+  const dx = clear.x + clear.width / 2 - pane.x - pane.width / 2;
+  const dy = clear.y + clear.height / 2 - pane.y - pane.height / 2;
+  return {
+    centre: {
+      x: (bounds.minX + bounds.maxX) / 2 - dx / scale,
+      y: (bounds.minY + bounds.maxY) / 2 + dy / scale,
+    },
+    half: pane.height / (2 * scale),
+  };
+}
+
 /** Where the arrow towards a hidden `target` sits and which way it points; null while `target` is inside `clear`. */
 export function targetArrow(
   target: Vec2,
