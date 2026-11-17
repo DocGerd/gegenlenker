@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISE_IDS } from '../contracts/exercise';
-import type { ExerciseDefinition, ExerciseId } from '../contracts/exercise';
+import type { ExerciseId } from '../contracts/exercise';
 import { LAYOUT_IDS } from '../contracts/layout';
 import type { Obstacle } from '../contracts/layout';
 import type { ControlVector, Pose2, Simulation, SimSnapshot, Vec2 } from '../contracts/sim';
@@ -30,7 +30,7 @@ const cases = [
     name: e.id,
     resolved: resolveLayout(layouts[e.layout], e),
     start: e.start,
-    exercise: e as ExerciseDefinition | null,
+    exercise: e,
   })),
 ];
 

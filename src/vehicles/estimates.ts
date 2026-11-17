@@ -17,7 +17,7 @@ function* estimates(node: object, path: string[]): Generator<[string[], Param]> 
     if (node.status === 'estimate') yield [path, node];
     return;
   }
-  for (const [key, child] of Object.entries(node)) {
+  for (const [key, child] of Object.entries(node as Record<string, unknown>)) {
     if (typeof child === 'object' && child !== null) yield* estimates(child, [...path, key]);
   }
 }

@@ -191,7 +191,7 @@ function environment(layout: ResolvedLayout, palette: ScenePalette): Environment
     }
   }
   buckets.forEach((bucket, i) => {
-    const merged = mergeGeometries(bucket);
+    const merged = mergeGeometries(bucket) as BufferGeometry | null;
     const key = BLOCK_KEYS[i];
     if (merged === null || key === undefined) return;
     bucket.forEach((g) => g.dispose());

@@ -99,9 +99,13 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   <button type="button" class="hud-action" data-hud="action" data-i18n="${mode === 'exercise' ? 'finish' : 'menu'}"></button>
 </div>`;
 
-const query = <T extends Element>(root: ParentNode, name: string): T => {
-  const el = root.querySelector<T>(`[data-hud="${name}"]`);
-  if (!el) throw new Error(`hud markup lacks ${name}`);
+const query = <T extends Element>(
+  root: ParentNode,
+  name: string,
+  type: abstract new () => T,
+): T => {
+  const el = root.querySelector(`[data-hud="${name}"]`);
+  if (!(el instanceof type)) throw new Error(`hud markup lacks ${name}`);
   return el;
 };
 
@@ -125,18 +129,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   };
 
   root.insertAdjacentHTML('beforeend', MARKUP(opts.mode));
-  const hud = query<HTMLElement>(root, 'root');
+  const hud = query(root, 'root', HTMLElement);
   applyMessages(hud);
 
-  const cockpit = query<HTMLElement>(hud, 'cockpit');
-  const legend = query<HTMLElement>(hud, 'legend');
-  const mirrors = [query<HTMLElement>(hud, 'mirrorLeft'), query<HTMLElement>(hud, 'mirrorRight')];
-  const toastWrap = query<HTMLElement>(hud, 'toastWrap');
-  const toast = query<HTMLElement>(hud, 'toast');
-  const topDown = query<HTMLElement>(hud, 'topDown');
-  const gaugeBox = query<HTMLElement>(hud, 'gauges');
-  const speed = query<HTMLElement>(hud, 'speed');
-  const gearEl = query<HTMLElement>(hud, 'gear');
+  const cockpit = query(hud, 'cockpit', HTMLElement);
+  const legend = query(hud, 'legend', HTMLElement);
+  const mirrors = [query(hud, 'mirrorLeft', HTMLElement), query(hud, 'mirrorRight', HTMLElement)];
+  const toastWrap = query(hud, 'toastWrap', HTMLElement);
+  const toast = query(hud, 'toast', HTMLElement);
+  const topDown = query(hud, 'topDown', HTMLElement);
+  const gaugeBox = query(hud, 'gauges', HTMLElement);
+  const speed = query(hud, 'speed', HTMLElement);
+  const gearEl = query(hud, 'gear', HTMLElement);
 
   const coupling: Gauge = createGauge(t('couplingAngle'), opts.couplingLimit);
   const turntable: Gauge = createGauge(t('turntableAngle'), opts.turntableLimit);
@@ -186,7 +190,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       { signal },
     );
   }
-  query<HTMLElement>(hud, 'action').addEventListener(
+  query(hud, 'action', HTMLElement).addEventListener(
     'click',
     () => emit({ type: opts.mode === 'exercise' ? 'finish' : 'menu' }),
     { signal },

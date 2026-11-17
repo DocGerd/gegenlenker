@@ -9,8 +9,8 @@ const MAX_GAP_MS = 500;
 
 export function createResolutionGovernor(): {
   sample(frameMs: number): number;
-  reset(): void;
-  scale(): number;
+  reset: () => void;
+  scale: () => number;
 } {
   let scale = 1;
   let count = 0;
@@ -48,7 +48,7 @@ export function createFrameTimer(): {
   frame(now: number): void;
   resetTiming(): void;
   resetScale(): void;
-  scale(): number;
+  scale: () => number;
   fps(): number;
   p95Ms(): number;
 } {

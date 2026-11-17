@@ -87,7 +87,8 @@ function wheelAt(radius: number, width: number, x: number, y: number): BufferGeo
 }
 
 function merge(parts: BufferGeometry[]): BufferGeometry {
-  const merged = mergeGeometries(parts);
+  // The typings omit the null returned for mismatched attributes.
+  const merged = mergeGeometries(parts) as BufferGeometry | null;
   if (merged === null) throw new Error('Vehicle parts have mismatched attributes');
   parts.forEach((p) => p.dispose());
   return merged;

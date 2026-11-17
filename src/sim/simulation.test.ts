@@ -486,10 +486,9 @@ describe('simulation', () => {
   });
 
   it('clamps long frame gaps', () => {
-    expect(advanceClock(0, 5)).toEqual({
-      steps: MAX_STEPS_PER_FRAME,
-      accumulator: expect.closeTo(0, 9),
-    });
+    const clamped = advanceClock(0, 5);
+    expect(clamped.steps).toBe(MAX_STEPS_PER_FRAME);
+    expect(clamped.accumulator).toBeCloseTo(0, 9);
     expect(advanceClock(0, DT / 2).steps).toBe(0);
     expect(advanceClock(DT / 2, DT / 2).steps).toBe(1);
   });

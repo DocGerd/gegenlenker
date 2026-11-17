@@ -5,10 +5,10 @@ import { EXERCISE_TITLE } from './menu';
 import './results.css';
 
 export type ResultActions = {
-  retry(): void;
+  retry: () => void;
   /** Null when the run cannot be replayed. */
   replay: (() => void) | null;
-  menu(): void;
+  menu: () => void;
 };
 
 function element<K extends keyof HTMLElementTagNameMap>(
