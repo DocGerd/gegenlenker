@@ -3,7 +3,10 @@ dist/
 test-results/
 playwright-report/
 .remember/
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+*/**/.claude/
 .superpowers/
 .env*
 !.env.example
