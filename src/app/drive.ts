@@ -16,8 +16,8 @@ import { createRunTracker, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
 import { createContactQuery } from '../sim/collision';
 import { bodyFootprints } from '../sim/geometry';
-import { DT } from '../sim/constants';
-import { NO_PREDICTION, predictCombination } from '../sim/predict';
+import { CONTACT_WARN_DISTANCE, DT } from '../sim/constants';
+import { contactAhead, NO_PREDICTION, predictCombination } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
@@ -162,6 +162,7 @@ export function startDrive(
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
   let pathStale = true;
+  let warnContact = false;
   const frame: Frame = {
     snapshot,
     views: computeViewports(1, 1, 'drive'),
@@ -306,13 +307,18 @@ export function startDrive(
         frame.predicted = aids.path
           ? predictCombination(params, snapshot, contacts)
           : NO_PREDICTION;
+        // the warning does not depend on the path aid, so a short look-ahead stands in when it is off
+        const ahead = aids.path
+          ? frame.predicted
+          : predictCombination(params, snapshot, contacts, CONTACT_WARN_DISTANCE);
+        warnContact = snapshot.speed !== 0 && contactAhead(ahead);
       }
       frame.snapshot = snapshot;
       frame.waypointVisited = tracker?.waypointVisited() ?? false;
       frame.topDown = topDown;
       frame.aids = aids;
       renderer.render(frame);
-      hud.update(snapshot);
+      hud.update(snapshot, warnContact);
       if (tracker !== null) hud.setGoal(tracker.goal(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
       hud.setTargetArrow(
