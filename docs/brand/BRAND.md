@@ -35,11 +35,11 @@ Text on `--color-accent-tint` is only `--color-text` or `--color-accent-strong`:
 
 Scene colours are theme-independent neutral greys, except the red obstacle cone. Red marks obstacles only; the accent marks target and guidance only. `tokens.test.ts` checks these targets on the hex values (light-theme `:root`), where contrast is `(L1 + 0.05) / (L2 + 0.05)` on relative luminance:
 
-- **T1, single-tone collision object:** darker than the ground it stands on, contrast 3.1:1 or more (about 3.0:1 lit on the top face). Pairs: cone, yard kerb (`--scene-band`), wall, fence, ramp, parked trailer, hall and lamp on yard; lamp on pavement. The cone is T1 in red; its white bands are decoration, not T2.
-- **T2, two-tone object:** the two tones differ by 9:1 or more, and the dark tone is T1 against its ground. Pairs: hall against cladding, lamp against its white plinth band.
-- **T3, adjacent grounds:** 1.5:1 or more. Pairs: yard, pavement, street and verge against each other, verge and street against sky.
-- **Exceptions:** street kerb against pavement, white bay lines on yard, pavement against sky, and the cab (`#eef0f2`) against yard or cladding (1.49:1, unchanged).
-- **Vehicle parts:** body, and tracks, keep 1.5:1 or more against the ground they stand on, and the body against marking and hall cladding.
+- **T1, single-tone collision object:** darker than the ground it stands on, contrast 3.1:1 or more. Pairs: cone, yard kerb (`--scene-band`), wall, fence, ramp, parked trailer, hall and lamp on yard; lamp on pavement. The cone is T1 in red; its white bands are decoration, not T2.
+- **T2, two-tone object:** the dark tone is T1 against its ground and the two tones differ by 9:1 or more (lamp against its white plinth band) or, for the hall, 6:1 or more (hall against cladding). The hall cannot reach 9:1: cladding must stay 1.5:1 or more against sky, which caps its lightness.
+- **T3, adjacent grounds:** 1.5:1 or more. Pairs: yard, pavement, street and verge against each other, verge, street and hall cladding against sky. Cladding also stays 3:1 or more against the hall and the fence behind it.
+- **Exceptions:** street kerb against pavement, white bay lines on yard, pavement against sky, the cab against yard, the body against hall cladding (the body sits between cladding and sky in lightness), and the body on verge (unreachable: kerbs bound the yard and street).
+- **Vehicle parts:** body and tracks keep 1.5:1 or more against the ground they stand on, and the body against marking, except as listed above.
 
 | Token              | Value     | Role                                      |
 | ------------------ | --------- | ----------------------------------------- |
@@ -51,6 +51,6 @@ Scene colours are theme-independent neutral greys, except the red obstacle cone.
 | `--scene-band`     | `#202428` | T1 on yard: yard kerbs, cone base plate   |
 | `--scene-wall`     | `#5e646b` | T1 on yard                                |
 | `--scene-hall`     | `#202428` | T2 with cladding; T1 on yard; roof        |
-| `--scene-cladding` | `#c2c7cd` | hall above 2.4 m                          |
+| `--scene-cladding` | `#aeb2b7` | hall above 2.4 m                          |
 | `--scene-body`     | `#969ca4` | yard, street, pavement, marking, cladding |
 | `--scene-tracks`   | `#3b4046` | yard, street                              |

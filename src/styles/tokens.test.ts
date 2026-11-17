@@ -1,5 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { LAYOUT_IDS } from '../contracts/layout';
+import { exercises, layouts } from '../content/registry';
+import { resolveLayout } from '../content/resolve-layout';
+import { isOnYard, obstaclePaletteKey } from '../render/environment';
+import { KEYS } from '../render/palette';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -217,10 +222,7 @@ describe('WCAG AA contrast', () => {
 });
 
 describe('scene tokens', () => {
-  const keys =
-    'sky verge yard pavement street marking kerb wall fence hall ramp lamp parked cone cab body chassis wheel tracks accent band cladding'.split(
-      ' ',
-    );
+  const keys = Object.keys(KEYS);
   const scene = (key: string) => value(`--scene-${key}`, 'light');
 
   it('defines --scene-<key> for every scene palette key, as 6-digit hex, in :root only', () => {
@@ -232,7 +234,7 @@ describe('scene tokens', () => {
   });
 
   // T1: a single-tone collision object is darker than the ground it stands on, at 3.1:1 or more.
-  // The street kerb (light on street, 1.05:1 on pavement) and the white bay lines are exempt.
+  // The street kerb and the white bay lines are exempt.
   const t1: [object: string, ground: string][] = [
     ['cone', 'yard'],
     ['band', 'yard'],
@@ -249,14 +251,24 @@ describe('scene tokens', () => {
     expect(contrast(scene(object), scene(ground))).toBeGreaterThanOrEqual(3.1);
   });
 
-  // T2: the two tones of a two-tone object differ by 9:1 or more, the dark tone is T1 against its ground.
-  const t2: [dark: string, light: string][] = [
-    ['hall', 'cladding'],
-    ['lamp', 'marking'],
+  // T2: the dark tone of a two-tone object is T1 against its ground. The hall cannot reach 9:1
+  // because its cladding has to stay 1.5:1 against the sky.
+  const t2: [dark: string, light: string, min: number][] = [
+    ['hall', 'cladding', 6],
+    ['lamp', 'marking', 9],
   ];
-  it.each(t2)('T2: %s against %s is 9:1 or more', (dark, light) => {
+  it.each(t2)('T2: %s against %s is %d:1 or more', (dark, light, min) => {
     expect(luminance(scene(dark)), 'darker').toBeLessThan(luminance(scene(light)));
-    expect(contrast(scene(dark), scene(light))).toBeGreaterThanOrEqual(9);
+    expect(contrast(scene(dark), scene(light))).toBeGreaterThanOrEqual(min);
+  });
+
+  // The hall cladding is read against the sky above it and the dark hall and fence behind it.
+  it.each([
+    ['cladding', 'hall'],
+    ['cladding', 'fence'],
+  ])('%s against %s is 3:1 or more', (a, b) => {
+    expect(luminance(scene(a))).toBeGreaterThan(luminance(scene(b)));
+    expect(contrast(scene(a), scene(b))).toBeGreaterThanOrEqual(3);
   });
 
   // T3: adjacent grounds; pavement against sky is exempt.
@@ -269,6 +281,7 @@ describe('scene tokens', () => {
     ['street', 'verge'],
     ['verge', 'sky'],
     ['street', 'sky'],
+    ['cladding', 'sky'],
   ];
   it.each(t3)('T3: %s against %s is 1.5:1 or more', (a, b) => {
     expect(contrast(scene(a), scene(b))).toBeGreaterThanOrEqual(1.5);
@@ -280,11 +293,41 @@ describe('scene tokens', () => {
     ['body', 'street'],
     ['body', 'pavement'],
     ['body', 'marking'],
-    ['body', 'cladding'],
     ['tracks', 'yard'],
     ['tracks', 'street'],
   ];
   it.each(standing)('%s against %s is 1.5:1 or more', (thing, ground) => {
     expect(contrast(scene(thing), scene(ground))).toBeGreaterThanOrEqual(1.5);
+  });
+
+  // Routing: a single-tone obstacle on the yard resolves to a key that satisfies T1 there.
+  describe('obstacle palette keys over the resolved layouts', () => {
+    const resolved = LAYOUT_IDS.flatMap((id) => [
+      resolveLayout(layouts[id], null),
+      ...exercises.filter((e) => e.layout === id).map((e) => resolveLayout(layouts[id], e)),
+    ]);
+    const keyed = resolved.flatMap((layout) =>
+      layout.obstacles.map((o) => ({
+        o,
+        onYard: isOnYard(layout.yard, o.obb.cx, o.obb.cy),
+        key: obstaclePaletteKey(o.kind, isOnYard(layout.yard, o.obb.cx, o.obb.cy)),
+      })),
+    );
+
+    it('every non-cone obstacle on the yard is darker than the yard, 3.1:1 or more', () => {
+      const onYard = keyed.filter(({ o, onYard }) => onYard && o.kind !== 'cone');
+      expect(onYard.length).toBeGreaterThan(0);
+      for (const { o, key } of onYard) {
+        expect(luminance(scene(key)), `${o.id} darker`).toBeLessThan(luminance(scene('yard')));
+        expect(contrast(scene(key), scene('yard')), o.id).toBeGreaterThanOrEqual(3.1);
+      }
+    });
+
+    it('street kerbs keep the kerb key and yard kerbs the band key', () => {
+      const kerbs = keyed.filter(({ o }) => o.kind === 'kerb');
+      expect(kerbs.some(({ onYard }) => !onYard)).toBe(true);
+      expect(kerbs.some(({ onYard }) => onYard)).toBe(true);
+      for (const { onYard, key } of kerbs) expect(key).toBe(onYard ? 'band' : 'kerb');
+    });
   });
 });
