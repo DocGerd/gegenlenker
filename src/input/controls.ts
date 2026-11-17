@@ -10,6 +10,7 @@ import {
   steerDisplay,
   stepLever,
   stepReset,
+  stepSteer,
   toControlVector,
   turnTicks,
 } from './mapping';
@@ -234,6 +235,14 @@ export function createControls(
       },
     },
     signal,
+  );
+  wheel.addEventListener(
+    'wheel',
+    (e) => {
+      e.preventDefault();
+      if (e.deltaY !== 0 && !wheelActive) stepSteer(state, e.deltaY < 0 ? 1 : -1);
+    },
+    { signal, passive: false },
   );
   reset.addEventListener(
     'click',

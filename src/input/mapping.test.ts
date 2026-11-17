@@ -6,6 +6,7 @@ import {
   rimRotationDeg,
   steerDisplay,
   stepReset,
+  stepSteer,
   turnTicks,
 } from './mapping';
 
@@ -106,6 +107,27 @@ describe('stepReset', () => {
     s.steer = 0.25;
     stepReset(s, 0.5, 0.25);
     expect(s.steer).toBe(0.25);
+    expect(s.resetting).toBe(false);
+  });
+});
+
+describe('stepSteer', () => {
+  it('steps left for 1 and right for -1, within full lock', () => {
+    const s = createInputState();
+    stepSteer(s, 1);
+    expect(s.steer).toBeCloseTo(0.1);
+    stepSteer(s, -1);
+    stepSteer(s, -1);
+    expect(s.steer).toBeCloseTo(-0.1);
+    s.steer = 0.95;
+    stepSteer(s, 1);
+    expect(s.steer).toBe(1);
+  });
+
+  it('cancels a pending centring', () => {
+    const s = createInputState();
+    s.resetting = true;
+    stepSteer(s, 1);
     expect(s.resetting).toBe(false);
   });
 });

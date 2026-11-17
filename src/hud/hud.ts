@@ -1,7 +1,9 @@
 import type { AidFlags, CollapsedPanels, Rect, TopDownMode, ViewRects } from '../contracts/render';
 import type { BlockReason, Gear, SimSnapshot } from '../contracts/sim';
+import type { GoalState } from '../scoring/score';
 import { applyMessages, formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
+import { isFormField } from '../input/keyboard';
 import { createGauge, type Gauge } from './gauges';
 import './hud.css';
 
@@ -20,6 +22,8 @@ export type Hud = {
   setViewChanged(changed: boolean): void;
   /** Points the arrow at a target beyond the top-down view; null hides it. Positions are stage CSS px. */
   setTargetArrow(arrow: { x: number; y: number; angle: number } | null): void;
+  /** The live tolerance cue; a no-op in the free yard. */
+  setGoal(goal: GoalState): void;
   onAction(cb: (a: HudAction) => void): void;
   dispose(): void;
 };
@@ -28,6 +32,8 @@ export type HudOptions = {
   couplingLimit: number;
   turntableLimit: number;
   mode: 'exercise' | 'yard';
+  /** Title and brief shown for an exercise run. */
+  exercise: { title: string; brief: string } | null;
   aids: AidFlags;
   topDown: TopDownMode;
   collapsed: CollapsedPanels;
@@ -53,6 +59,7 @@ const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
   ['aids', 'panelAids'],
   ['gauges', 'panelGauges'],
 ];
+const VIEW_KEYS: Record<string, TopDownMode> = { f: 'follow', y: 'yard' };
 const GEAR_NAMES: readonly Gear[] = ['P', 'R', 'N', 'D'];
 const MS_TO_KMH = 3.6;
 /**
@@ -80,7 +87,13 @@ const MARKUP = (mode: HudOptions['mode']): string => `
         <dt class="mono">W / S · ↑ / ↓</dt><dd data-i18n="speed"></dd>
         <dt class="mono" data-i18n="keySpace"></dt><dd data-i18n="brake"></dd>
         <dt class="mono">1–4 = ${GEAR_NAMES.join(' / ')}</dt><dd data-i18n="gear"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyEsc"></dt><dd class="hud-legend-view" data-i18n="pause"></dd>
+        <dt class="mono hud-legend-view">F / Y</dt><dd class="hud-legend-view" data-i18n="viewSwitch"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyWheel"></dt><dd class="hud-legend-view" data-i18n="steer"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyLever"></dt><dd class="hud-legend-view" data-i18n="speed"></dd>
         <dt class="mono hud-legend-view">+ / −</dt><dd class="hud-legend-view" data-i18n="zoom"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyScroll"></dt><dd class="hud-legend-view" data-i18n="zoom"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyDrag"></dt><dd class="hud-legend-view" data-i18n="panView"></dd>
         <dt class="mono hud-legend-view">0</dt><dd class="hud-legend-view" data-i18n="resetView"></dd>
       </dl>
     </div>
@@ -91,8 +104,9 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   </div>
   <div class="hud-mirror" data-hud="mirrorLeft" hidden></div>
   <div class="hud-mirror" data-hud="mirrorRight" hidden></div>
-  <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div></div>
+  <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
+    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <span class="hud-label hud-view-label" data-i18n="labelTopDown"></span>${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
@@ -159,6 +173,12 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const speed = query(hud, 'speed', HTMLElement);
   const gearEl = query(hud, 'gear', HTMLElement);
   const arrow = query(hud, 'targetArrow', HTMLElement);
+  const goalCue = query(hud, 'goalCue', HTMLElement);
+  if (opts.exercise !== null) {
+    query(hud, 'goalTitle', HTMLElement).textContent = opts.exercise.title;
+    query(hud, 'goalBrief', HTMLElement).textContent = opts.exercise.brief;
+    setHidden(query(hud, 'goal', HTMLElement), false);
+  }
 
   const coupling: Gauge = createGauge(t('couplingAngle'), opts.couplingLimit);
   const turntable: Gauge = createGauge(t('turntableAngle'), opts.turntableLimit);
@@ -194,16 +214,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   };
   syncToggles();
 
+  const selectView = (mode: TopDownMode): void => {
+    view = mode;
+    syncToggles();
+    emit({ type: 'topDown', mode });
+  };
   for (const b of viewButtons) {
-    b.addEventListener(
-      'click',
-      () => {
-        view = b.dataset['view'] as TopDownMode;
-        syncToggles();
-        emit({ type: 'topDown', mode: view });
-      },
-      { signal },
-    );
+    b.addEventListener('click', () => selectView(b.dataset['view'] as TopDownMode), { signal });
   }
   for (const b of aidButtons) {
     b.addEventListener(
@@ -248,6 +265,19 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   window.addEventListener(
     'keydown',
     (e) => {
+      const mode = VIEW_KEYS[e.key.toLowerCase()];
+      if (
+        mode !== undefined &&
+        !e.defaultPrevented &&
+        !e.repeat &&
+        !isFormField(e.target) &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        selectView(mode);
+        e.preventDefault();
+      }
       if (typed || !e.defaultPrevented) return;
       typed = true;
       syncLegend();
@@ -261,6 +291,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   gearEl.textContent = 'P';
   gearEl.dataset['gear'] = 'P';
   let shownBlocked: BlockReason | null = null;
+  let shownGoal: GoalState = 'away';
   let shownContacts = -1;
   let shownJackknifes = -1;
   let shownDirection = -1;
@@ -349,6 +380,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       const y = Math.round(next.y);
       const deg = Math.round((next.angle * 180) / Math.PI);
       arrow.style.transform = `translate(${x}px, ${y}px) rotate(${deg}deg)`;
+    },
+    setGoal(goal) {
+      if (goal === shownGoal) return;
+      shownGoal = goal;
+      goalCue.dataset['goal'] = goal;
+      if (goal !== 'away')
+        goalCue.textContent = t(goal === 'inside' ? 'goalInside' : 'goalOutside');
+      setHidden(goalCue, goal === 'away');
     },
     onAction(cb) {
       listeners.push(cb);

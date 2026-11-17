@@ -10,6 +10,7 @@ export type InputState = {
 };
 
 export const LEVER_STEP = 0.1;
+export const STEER_STEP = 0.1;
 /** Half-sweep of the fixed arc: pointer angle is steer times this, so full lock reaches the end stops. */
 export const POINTER_SWEEP_DEG = 75;
 /** Wheel rotation within which the wheel reads as straight; it stays so until the larger bound. */
@@ -26,6 +27,12 @@ export function clamp(value: number, min: number, max: number): number {
 
 export function stepLever(s: InputState, direction: 1 | -1): void {
   s.lever = clamp(Math.round((s.lever + direction * LEVER_STEP) * 1000) / 1000, 0, 1);
+}
+
+/** One mouse-wheel notch on the steering wheel; positive is left. Cancels a pending centring. */
+export function stepSteer(s: InputState, direction: 1 | -1): void {
+  s.resetting = false;
+  s.steer = clamp(Math.round((s.steer + direction * STEER_STEP) * 1000) / 1000, -1, 1);
 }
 
 /** Moves the steer target toward 0 by `rate` per second while a reset is pending. */

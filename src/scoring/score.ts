@@ -25,13 +25,21 @@ export function withinTolerance(
   };
 }
 
-function stoppedInTarget(s: SimSnapshot, exercise: ExerciseDefinition): boolean {
+function inTolerance(s: SimSnapshot, exercise: ExerciseDefinition): boolean {
   const ok = withinTolerance(targetError(s, exercise.target), exercise.tolerances);
-  return Math.abs(s.speed) < STOPPED_SPEED && ok.position && ok.angle;
+  return ok.position && ok.angle;
 }
+
+function stoppedInTarget(s: SimSnapshot, exercise: ExerciseDefinition): boolean {
+  return Math.abs(s.speed) < STOPPED_SPEED && inTolerance(s, exercise);
+}
+
+/** `away`: no cue (turn point pending or far from the target); `outside`: near the target but beyond a tolerance; `inside`: stopping now ends the run. */
+export type GoalState = 'away' | 'outside' | 'inside';
 
 export type RunTracker = {
   update(s: SimSnapshot): boolean;
+  goal(s: SimSnapshot): GoalState;
   waypointVisited(): boolean;
 };
 
@@ -48,6 +56,13 @@ export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
         waypointVisited = true;
       }
       return waypointVisited && stoppedInTarget(s, exercise);
+    },
+    goal(s) {
+      if (!waypointVisited) return 'away';
+      if (inTolerance(s, exercise)) return 'inside';
+      return targetError(s, exercise.target).position <= exercise.target.length
+        ? 'outside'
+        : 'away';
     },
     waypointVisited: () => waypointVisited,
   };

@@ -111,6 +111,7 @@
 
 .hud-legend dt {
   color: var(--color-text);
+  white-space: nowrap;
 }
 
 .hud-legend dd {
@@ -123,7 +124,7 @@
   display: none;
 }
 
-/* The single column is too tall for the zoom rows: they would reach the mirror. */
+/* The single column is too tall for the view and mouse rows: they would reach the mirror. */
 .hud-cockpit[data-compact] .hud-legend-view {
   display: none;
 }
@@ -143,7 +144,9 @@
 
 .hud-toast-wrap {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
   padding-top: var(--space-4);
   box-sizing: border-box;
 }
@@ -163,8 +166,53 @@
   text-align: center;
 }
 
-.hud-toast-wrap[data-reserve] .hud-toast {
+.hud-goal-cue {
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  font-weight: var(--weight-medium);
+  text-align: center;
+}
+
+.hud-goal-cue[data-goal='inside'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+  color: var(--color-accent-strong);
+}
+
+.hud-toast-wrap[data-reserve] .hud-toast,
+.hud-toast-wrap[data-reserve] .hud-goal-cue {
   max-width: calc(100% - 2 * (var(--hud-action-w) + 2 * var(--space-4)));
+}
+
+.hud-goal {
+  box-sizing: border-box;
+  align-self: flex-start;
+  max-width: 28rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.hud-goal-title {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.hud-goal-brief {
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-secondary);
 }
 
 .hud-topdown {
@@ -217,6 +265,12 @@
 
 .hud-toggle:disabled {
   opacity: 0.4;
+}
+
+.hud-toggle:focus-visible,
+.hud-action:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .hud-icon {
