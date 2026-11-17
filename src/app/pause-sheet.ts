@@ -47,6 +47,10 @@ export function showPauseSheet(
   );
 
   sheet.append(title, buttons, hint);
+  // Focus must stay here: outside the dialog the driving keys would reach the paused run.
+  box.addEventListener('focusout', (e) => {
+    if (!(e.relatedTarget instanceof Node && sheet.contains(e.relatedTarget))) resume.focus();
+  });
   box.append(sheet);
   parent.append(box);
   resume.focus();
