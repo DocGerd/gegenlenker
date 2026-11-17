@@ -307,6 +307,10 @@ export function startDrive(
       dirty = true;
     },
     frame(seconds) {
+      if (reached) {
+        finish();
+        return;
+      }
       const clock =
         closeSheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
@@ -319,11 +323,8 @@ export function startDrive(
         snapshot = sim.step(control);
         if (tracker !== null) {
           reached = tracker.update(snapshot);
-          if (reached) {
-            hud.setRunTime(snapshot.time - (startTime ?? snapshot.time));
-            finish();
-            return;
-          }
+          // render this final snapshot first; the next frame exits, so the HUD's last time is the result time
+          if (reached) break;
         }
       }
       if (clock.steps === 0 && !dirty) {
