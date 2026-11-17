@@ -16,7 +16,7 @@ import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
-import { SKY_LAYER, type VehicleVisual } from './seams';
+import { CAB_LAYER, SKY_LAYER, type VehicleVisual } from './seams';
 import {
   dollyDetail,
   frontWheelDetail,
@@ -138,6 +138,12 @@ function resources() {
       detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
       const mesh = this.mesh(geometry, detailMaterial);
       mesh.layers.set(SKY_LAYER);
+      return mesh;
+    },
+    /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
+    cabFront(geometry: BufferGeometry): Mesh {
+      const mesh = this.detail(geometry);
+      mesh.layers.set(CAB_LAYER);
       return mesh;
     },
     /** Perspective-only contact shadow; the geometry's vertex alpha carries the softness. */
@@ -286,6 +292,7 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
     res.mesh(merge(body), bodyMaterial),
     res.mesh(merge(rearWheels), wheelMaterial),
     res.detail(detail.geometry),
+    res.cabFront(detail.cabFront),
     res.plate(detail.plate),
   );
 

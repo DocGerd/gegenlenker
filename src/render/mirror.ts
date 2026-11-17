@@ -11,7 +11,7 @@ import {
   type WebGLRenderer,
 } from 'three';
 import type { Rect } from '../contracts/render';
-import { SKY_LAYER } from './seams';
+import { enableLayers, MIRROR_LAYERS } from './seams';
 
 const FOV = 46;
 const NEAR = 0.2;
@@ -23,7 +23,7 @@ const MSAA_SAMPLES = 4;
 export function createMirror() {
   const camera = new PerspectiveCamera(FOV, 1, NEAR, FAR);
   camera.rotation.order = 'YXZ';
-  camera.layers.enable(SKY_LAYER);
+  enableLayers(camera.layers, MIRROR_LAYERS);
 
   const geometry = new PlaneGeometry(2, 2);
   const uv = geometry.getAttribute('uv');
@@ -36,6 +36,7 @@ export function createMirror() {
   let target: WebGLRenderTarget | null = null;
 
   return {
+    camera,
     /** `facing` is the world heading the mirror looks along. */
     place(position: Vector3, facing: number): void {
       camera.position.copy(position);
