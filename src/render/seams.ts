@@ -12,6 +12,7 @@ export interface VehicleVisual {
 }
 export interface Environment {
   readonly object: Object3D; // ground, markings, obstacles, lights
+  update(frame: RenderFrame): void;
   dispose(): void;
 }
 export interface AidsLayer {

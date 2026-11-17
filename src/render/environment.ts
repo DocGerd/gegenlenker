@@ -11,11 +11,12 @@ import {
   MeshBasicMaterial,
   MeshLambertMaterial,
   PlaneGeometry,
+  RingGeometry,
   type Material,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
-import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
+import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
 import type { Environment } from './seams';
 import { createSky, neutralSky } from './sky';
 
@@ -26,6 +27,8 @@ const TARGET_Y = 0.012;
 const DASH = 3;
 const GAP = 6;
 const TARGET_STRIP = 0.15;
+const GATE_STRIP = 0.3;
+const GATE_SEGMENTS = 64;
 const CHUNK = 60; // spatial chunk edge: frustum culling works per chunk
 const SPLIT = 30; // long boxes and lines are cut so a chunk's bounds stay local
 const LAMP_HEAD_HEIGHT = 0.4; // the head fills the obstacle footprint, the pole is slimmer
@@ -359,6 +362,24 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     group.add(new Mesh(outline, flat));
   }
 
+  const { waypoint } = layout;
+  let gate: { material: MeshBasicMaterial; pending: Color; passed: Color } | null = null;
+  if (waypoint !== null) {
+    const half = GATE_STRIP / 2;
+    const ring = new RingGeometry(waypoint.radius - half, waypoint.radius + half, GATE_SEGMENTS)
+      .rotateX(-Math.PI / 2)
+      .translate(waypoint.x, TARGET_Y, -waypoint.y);
+    const material = new MeshBasicMaterial({
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    geometries.push(ring);
+    group.add(new Mesh(ring, material));
+    gate = { material, pending: new Color(palette.accent), passed: new Color(palette.marking) };
+    material.color.copy(gate.pending);
+  }
+
   const sun = new DirectionalLight(0xffffff, SUN_INTENSITY);
   const horizontal = Math.cos(SUN_ELEVATION) * SUN_DISTANCE;
   // south-west: world (−, −) is Three (−x, +z)
@@ -379,8 +400,14 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
 
   return {
     object: group,
+    update(frame: RenderFrame): void {
+      if (gate !== null) {
+        gate.material.color.copy(frame.waypointVisited === true ? gate.passed : gate.pending);
+      }
+    },
     dispose: () => {
       geometries.forEach((g) => g.dispose());
+      gate?.material.dispose();
       solid.dispose();
       flat.dispose();
       sky.dispose();

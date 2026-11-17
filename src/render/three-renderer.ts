@@ -16,9 +16,11 @@ import {
   type SceneRenderer,
   type ScenePalette,
 } from '../contracts/render';
-import type { TruckAnchors } from '../contracts/vehicle';
+import type { TrailerSpec, TruckAnchors, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
+import { resolveCombination } from '../vehicles/resolve';
 import { bodyToThree } from './coords';
+import { followFraming, leadTarget } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createMirror } from './mirror';
 import { readScenePalette } from './palette';
@@ -36,6 +38,11 @@ const COCKPIT_FOV = 55;
 const COCKPIT_PITCH = MathUtils.degToRad(-6);
 const MIRROR_YAW = MathUtils.degToRad(7);
 const FOLLOW_HALF_HEIGHT = 20;
+/** Metres added to the vehicle's bounding radius. */
+const FOLLOW_RADIUS_MARGIN = 1;
+/** Time constant of the look-ahead shift, so a gear change glides instead of jumping. */
+const LEAD_SECONDS = 0.5;
+const MAX_LEAD_STEP_SECONDS = 0.25;
 const YARD_MARGIN = 5;
 const FAR = 400;
 const SKY_HEIGHT = 200;
@@ -50,6 +57,8 @@ type Built = {
   readonly anchors: TruckAnchors;
   readonly palette: ScenePalette;
   readonly yardBounds: Rect2;
+  /** Metres from the follow centre that bound the whole combination. */
+  readonly radius: number;
 };
 
 function fitBounds(layout: ResolvedLayout): Rect2 {
@@ -61,6 +70,13 @@ function fitBounds(layout: ResolvedLayout): Rect2 {
     maxX: Math.max(...rects.map((r) => r.maxX)) + YARD_MARGIN,
     maxY: Math.max(...rects.map((r) => r.maxY)) + YARD_MARGIN,
   };
+}
+
+function followRadius(truck: TruckSpec, trailer: TrailerSpec): number {
+  const p = resolveCombination(truck, trailer);
+  const length =
+    p.truckFront + p.couplingOffset + p.drawbar + p.trailerWheelbase + p.trailerRearOverhang;
+  return length / 2 + Math.max(p.truckWidth, p.trailerWidth) / 2 + FOLLOW_RADIUS_MARGIN;
 }
 
 function setAidsLayer(object: Object3D): void {
@@ -79,6 +95,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   const mirrorLeft = createMirror();
   const mirrorRight = createMirror();
   const mirrorPosition = new Vector3();
+  const projected = new Vector3();
 
   let renderer: WebGLRenderer | null = null;
   let canvas: HTMLCanvasElement | null = null;
@@ -89,6 +106,9 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   let contextLost = false;
   let glRenderer = 'unknown';
   let drawCalls = 0;
+  let topDownRect: Rect | null = null;
+  const lead = { x: 0, y: 0 };
+  let leadAt = -1;
 
   const onLost = (event: Event): void => {
     event.preventDefault();
@@ -135,13 +155,30 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     let cy: number;
     let halfH: number;
     if (frame.topDown === 'follow') {
-      const { truck, trailerRear } = frame.snapshot;
+      const { truck, trailerRear, speed, control } = frame.snapshot;
       const frontX = b.anchors.frontX;
       const bumperX = truck.x + Math.cos(truck.heading) * frontX;
       const bumperY = truck.y + Math.sin(truck.heading) * frontX;
-      cx = (bumperX + trailerRear.x) / 2;
-      cy = (bumperY + trailerRear.y) / 2;
-      halfH = FOLLOW_HALF_HEIGHT;
+      const target = leadTarget(truck.heading, speed, control.gear);
+      const now = performance.now();
+      const k =
+        leadAt < 0
+          ? 1
+          : 1 - Math.exp(-Math.min((now - leadAt) / 1000, MAX_LEAD_STEP_SECONDS) / LEAD_SECONDS);
+      leadAt = now;
+      lead.x += (target.x - lead.x) * k;
+      lead.y += (target.y - lead.y) * k;
+      const framing = followFraming({
+        vehicle: { x: (bumperX + trailerRear.x) / 2, y: (bumperY + trailerRear.y) / 2 },
+        lead,
+        radius: b.radius,
+        pane: rect,
+        clear: frame.topDownClear ?? rect,
+        baseHalf: FOLLOW_HALF_HEIGHT,
+      });
+      cx = framing.centre.x;
+      cy = framing.centre.y;
+      halfH = framing.half;
     } else {
       const bounds = b.yardBounds;
       cx = (bounds.minX + bounds.maxX) / 2;
@@ -155,6 +192,8 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       aspect,
       frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW,
     );
+    topDownCamera.updateMatrixWorld();
+    topDownRect = rect;
   }
 
   function viewRect(gl: WebGLRenderer, rect: Rect): void {
@@ -186,6 +225,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     setScene(nextLayout, truck, trailer) {
       disposeBuilt();
       resetTiming();
+      leadAt = -1;
       const palette = readScenePalette();
       const scene = new Scene();
       scene.matrixWorldAutoUpdate = false;
@@ -204,6 +244,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
         anchors: truckAnchors(truck),
         palette,
         yardBounds: fitBounds(nextLayout),
+        radius: followRadius(truck, trailer),
       };
     },
 
@@ -227,6 +268,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       const sky = b.palette.sky;
       b.truck.update(snapshot);
       b.trailer.update(snapshot);
+      b.environment.update(frame);
       b.aids.update(frame);
       b.scene.updateMatrixWorld();
 
@@ -288,6 +330,15 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       if (rightRect !== null) mirrorRight.composite(gl, rightRect, cssHeight);
       gl.setScissorTest(false);
       drawCalls = gl.info.render.calls;
+    },
+
+    project(x, y) {
+      if (topDownRect === null) return null;
+      const p = projected.set(x, 0, -y).project(topDownCamera);
+      return {
+        x: topDownRect.x + ((p.x + 1) / 2) * topDownRect.width,
+        y: topDownRect.y + ((1 - p.y) / 2) * topDownRect.height,
+      };
     },
 
     skipFrame() {
