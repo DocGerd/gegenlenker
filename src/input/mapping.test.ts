@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LEVER_HOLD_DELAY,
+  LEVER_RAMP_RATE,
   POINTER_SWEEP_DEG,
   createInputState,
   pointerAngleDeg,
+  rampLever,
+  rampTime,
   rimRotationDeg,
   steerDisplay,
   stepReset,
@@ -129,5 +133,36 @@ describe('stepSteer', () => {
     s.resetting = true;
     stepSteer(s, 1);
     expect(s.resetting).toBe(false);
+  });
+});
+
+describe('lever ramp', () => {
+  it('counts nothing before the hold delay and only the excess in the crossing frame', () => {
+    expect(rampTime(0, LEVER_HOLD_DELAY / 2)).toBe(0);
+    expect(rampTime(LEVER_HOLD_DELAY - 0.01, 0.05)).toBeCloseTo(0.04);
+    expect(rampTime(LEVER_HOLD_DELAY, 0.05)).toBeCloseTo(0.05);
+  });
+
+  it('travels the same distance at any frame rate', () => {
+    const run = (dt: number): number => {
+      const s = createInputState();
+      let held = 0;
+      for (let i = 0; i < Math.round(1 / dt); i++) {
+        rampLever(s, 1, rampTime(held, dt));
+        held += dt;
+      }
+      return s.lever;
+    };
+    const expected = LEVER_RAMP_RATE * (1 - LEVER_HOLD_DELAY);
+    expect(run(1 / 60)).toBeCloseTo(expected, 2);
+    expect(run(1 / 30)).toBeCloseTo(expected, 2);
+  });
+
+  it('stays within 0 to 1', () => {
+    const s = createInputState();
+    rampLever(s, 1, 10);
+    expect(s.lever).toBe(1);
+    rampLever(s, -1, 10);
+    expect(s.lever).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import type { Gear } from '../contracts/sim';
-import { type InputState, clamp, stepLever } from './mapping';
+import { type InputState, clamp, rampLever, rampTime, stepLever } from './mapping';
 
 export type Keyboard = { readonly brake: boolean; tick(dt: number): void; dispose(): void };
 
@@ -25,15 +25,21 @@ export const isFormField = (target: EventTarget | null): boolean =>
   (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) ||
     target.closest('[role="dialog"]') !== null);
 
-/** Steering keys act in `tick`, at `steerRate` per second; every other key acts on keydown. */
+/**
+ * Steering keys act in `tick`, at `steerRate` per second; lever keys step on keydown and ramp
+ * in `tick` while held. Every other key acts on keydown.
+ */
 export function createKeyboard(state: InputState, steerRate: number): Keyboard {
   const held = new Set<string>();
+  /** Lever keys down, with seconds held. */
+  const leverHeld = new Map<string, number>();
   let brake = false;
   const abort = new AbortController();
   const { signal } = abort;
 
   const releaseAll = (): void => {
     held.clear();
+    leverHeld.clear();
     brake = false;
   };
 
@@ -50,11 +56,13 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
         e.repeat &&
         (FASTER.includes(code) || SLOWER.includes(code) || code === 'Space' || GEARS[code])
       ) {
-        // OS key-repeat must not step the lever again.
-      } else if (FASTER.includes(code)) stepLever(state, 1);
-      else if (SLOWER.includes(code)) stepLever(state, -1);
-      else if (code === 'Space') {
+        // OS key-repeat must not step the lever again; the ramp runs in `tick`.
+      } else if (FASTER.includes(code) || SLOWER.includes(code)) {
+        stepLever(state, FASTER.includes(code) ? 1 : -1);
+        leverHeld.set(code, 0);
+      } else if (code === 'Space') {
         state.lever = 0;
+        leverHeld.clear();
         brake = true;
       } else if (GEARS[code]) state.gear = GEARS[code];
       else return;
@@ -67,7 +75,7 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
   window.addEventListener(
     'keyup',
     (e) => {
-      if (held.delete(e.code)) e.preventDefault();
+      if (held.delete(e.code) || leverHeld.delete(e.code)) e.preventDefault();
       else if (e.code === 'Space' && brake) {
         brake = false;
         e.preventDefault();
@@ -90,6 +98,12 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
       return brake;
     },
     tick(dt) {
+      // A brake from any source cancels the ramp, as Space does.
+      if (state.brake) leverHeld.clear();
+      for (const [code, heldFor] of leverHeld) {
+        rampLever(state, FASTER.includes(code) ? 1 : -1, rampTime(heldFor, dt));
+        leverHeld.set(code, heldFor + dt);
+      }
       const left = LEFT.some((k) => held.has(k));
       const right = RIGHT.some((k) => held.has(k));
       if (left !== right) {

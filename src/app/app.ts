@@ -63,13 +63,19 @@ export function startApp(root: HTMLElement): void {
     ownBack = true;
     history.back();
   };
-  const loadFailed = (error: unknown, back: () => void): void => {
+  const loadFailed = (error: unknown, retry: () => void): void => {
     console.error(error);
     leave();
-    const notice = showNotice(screen, 'loadFailed', 'back', () => {
+    const dismiss = (next: () => void) => () => {
       notice.remove();
-      back();
-    });
+      next();
+    };
+    const notice = showNotice(
+      screen,
+      'loadFailed',
+      { label: 'retry', run: dismiss(retry) },
+      { label: 'back', run: dismiss(menu) },
+    );
   };
 
   // Loaded on demand so the menu paints without parsing three.js.
@@ -88,7 +94,7 @@ export function startApp(root: HTMLElement): void {
           onRestart: () => drive(run),
         });
       })
-      .catch((error: unknown) => loadFailed(error, menu));
+      .catch((error: unknown) => loadFailed(error, () => drive(run)));
   };
   const replay = (log: InputLog, onExit: () => void): void => {
     import('./replay-view')
@@ -97,7 +103,7 @@ export function startApp(root: HTMLElement): void {
         enter(() => exit?.());
         exit = m.startReplay(screen, log, onExit);
       })
-      .catch((error: unknown) => loadFailed(error, menu));
+      .catch((error: unknown) => loadFailed(error, () => replay(log, onExit)));
   };
   const finished = (run: RunConfig, outcome: DriveOutcome): void => {
     const stored = outcome.result === null ? null : storeResult(outcome.result);
