@@ -64,6 +64,7 @@ export const de: Record<MessageKey, string> = {
   offlineReady: 'Offline bereit',
   noWebgl: 'Dieses Gerät kann keine WebGL-2-Grafik anzeigen.',
   contextLost: 'Die Grafik wurde zurückgesetzt. Zum Fortfahren neu laden.',
+  loadFailed: 'Laden fehlgeschlagen. Verbindung prüfen und erneut versuchen.',
   langDe: 'Deutsch',
   langEn: 'English',
   keySpace: 'Leertaste',
