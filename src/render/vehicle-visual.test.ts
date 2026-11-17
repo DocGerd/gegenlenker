@@ -1,11 +1,11 @@
-import { Box3, Camera, Mesh, MeshBasicMaterial, type Material, type Object3D } from 'three';
+import { Box3, Camera, Mesh, type Material, type Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type Param } from '../contracts/vehicle';
 import { trailerById, truckById } from '../vehicles/registry';
 import { KEYS } from './palette';
 import { AIDS_LAYER, SKY_LAYER } from './seams';
-import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
+import { proceduralTrailer, proceduralTruck, SHADOW_NAME } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
 
@@ -17,7 +17,7 @@ function meshes(root: Object3D): Mesh[] {
   return out;
 }
 
-const isSchematic = (m: Mesh): boolean => m.material instanceof MeshBasicMaterial;
+const isSchematic = (m: Mesh): boolean => m.layers.mask === 1 << AIDS_LAYER;
 
 const schematicOf = (root: Object3D): Mesh[] => meshes(root).filter(isSchematic);
 
@@ -50,7 +50,9 @@ describe.each([
 });
 
 const detailOf = (root: Object3D): Mesh[] =>
-  meshes(root).filter((m) => m.layers.mask === 1 << SKY_LAYER);
+  meshes(root).filter((m) => m.layers.mask === 1 << SKY_LAYER && m.name !== SHADOW_NAME);
+
+const shadowsOf = (root: Object3D): Mesh[] => meshes(root).filter((m) => m.name === SHADOW_NAME);
 
 /** Half-width of the perspective detail in body y (Three z). */
 function detailHalfWidth(root: Object3D): number {
@@ -85,5 +87,39 @@ describe('perspective detail', () => {
 
   it.each(TRAILER_IDS)('stays off the top-down camera and follows the width Param (%s)', (id) => {
     expectDetailFollowsWidth(trailerById(id), (s) => proceduralTrailer(s, palette).object);
+  });
+});
+
+describe('blob shadows', () => {
+  const visuals = [
+    ...TRUCK_IDS.map(
+      (id) => ['truck', id, proceduralTruck(truckById(id), palette).object] as const,
+    ),
+    ...TRAILER_IDS.map(
+      (id) => ['trailer', id, proceduralTrailer(trailerById(id), palette).object] as const,
+    ),
+  ];
+
+  it.each(visuals)(
+    '%s %s: perspective only, blended over the ground without writing depth',
+    (_k, _id, object) => {
+      const topDown = new Camera();
+      topDown.layers.enable(AIDS_LAYER);
+      const cockpit = new Camera();
+      cockpit.layers.enable(SKY_LAYER);
+      expect(shadowsOf(object).length).toBeGreaterThan(0);
+      for (const m of shadowsOf(object)) {
+        const material = m.material as Material;
+        expect(m.layers.test(topDown.layers)).toBe(false);
+        expect(m.layers.test(cockpit.layers)).toBe(true);
+        expect(material.transparent).toBe(true);
+        expect(material.depthWrite).toBe(false);
+      }
+    },
+  );
+
+  it.each(TRAILER_IDS)('follows the dolly and the trailer body separately (%s)', (id) => {
+    const object = proceduralTrailer(trailerById(id), palette).object;
+    expect(object.children.map((part) => shadowsOf(part).length)).toEqual([1, 1]);
   });
 });
