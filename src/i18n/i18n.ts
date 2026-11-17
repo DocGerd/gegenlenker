@@ -35,6 +35,11 @@ export function formatNumber(value: number, fractionDigits: number): string {
   return format.format(value);
 }
 
+/** Run times everywhere: seconds with one decimal. */
+export function formatSeconds(seconds: number): string {
+  return `${formatNumber(seconds, 1)} ${t('unitSeconds')}`;
+}
+
 export function applyMessages(root: ParentNode): void {
   for (const el of root.querySelectorAll<HTMLElement>('[data-i18n]')) {
     el.textContent = t(el.dataset['i18n'] as MessageKey);

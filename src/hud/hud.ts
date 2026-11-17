@@ -8,7 +8,7 @@ import type {
 } from '../contracts/render';
 import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
 import type { GoalState } from '../scoring/score';
-import { applyMessages, formatNumber, t } from '../i18n/i18n';
+import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
 import { createGauge, type Gauge } from './gauges';
@@ -344,7 +344,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let shownContacts = -1;
   let shownJackknifes = -1;
   let shownDirection = -1;
-  let shownSeconds = -1;
+  let shownTime = -1;
 
   const writeSpeed = (tenths: number): void => {
     shownTenths = tenths;
@@ -392,12 +392,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       }
     },
     setRunTime(runSeconds) {
-      const seconds = Math.floor(runSeconds);
-      if (timeEl && seconds !== shownSeconds) {
-        shownSeconds = seconds;
-        const m = Math.floor(seconds / 60);
-        const ss = seconds % 60;
-        timeEl.textContent = `${m}:${ss < 10 ? '0' : ''}${ss}`;
+      const tenths = Math.floor(runSeconds * 10);
+      if (timeEl && tenths !== shownTime) {
+        shownTime = tenths;
+        timeEl.textContent = formatSeconds(tenths / 10);
       }
     },
     layout(views) {

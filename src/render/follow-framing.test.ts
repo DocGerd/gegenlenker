@@ -72,6 +72,27 @@ describe('followFraming', () => {
     expect(north.y).toBeGreaterThan(pane.height / 2);
   });
 
+  it('leaves room ahead of the leading end even when the clear rect is tight', () => {
+    const tight: Rect = { x: 614, y: 200, width: 326, height: 400 };
+    const h = 0;
+    const ahead = { x: Math.cos(h), y: Math.sin(h) };
+    for (const dir of [-1, 1]) {
+      const lead = { x: dir * ahead.x, y: dir * ahead.y };
+      const f = followFraming({ ...input, baseHalf: 10, clear: tight, lead });
+      const scale = pane.height / (2 * f.half);
+      const end = {
+        x: vehicle.x + dir * radius * ahead.x,
+        y: vehicle.y + dir * radius * ahead.y,
+      };
+      const p = toScreen(end, f);
+      const room = Math.min(
+        dir * ahead.x > 0 ? tight.x + tight.width - p.x : p.x - tight.x,
+        dir * ahead.y > 0 ? p.y - tight.y : tight.y + tight.height - p.y,
+      );
+      expect(room / scale).toBeGreaterThan(2);
+    }
+  });
+
   it('keeps the default scale where the vehicle already fits', () => {
     expect(followFraming({ ...input, clear: pane, lead: { x: 0, y: 0 } }).half).toBe(20);
   });
@@ -79,11 +100,21 @@ describe('followFraming', () => {
 
 describe('leadTarget', () => {
   it('follows the signed speed, and the gear at standstill', () => {
-    expect(leadTarget(0, 2, 'D')).toEqual({ x: 1, y: 0 });
-    expect(leadTarget(0, -2, 'R').x).toBe(-1);
-    expect(leadTarget(0, 0, 'R').x).toBe(-1);
-    expect(leadTarget(0, 0, 'D').x).toBe(1);
-    expect(leadTarget(0, 0, 'P')).toEqual({ x: 0, y: 0 });
+    expect(leadTarget(0, 0, 2, 'D')).toEqual({ x: 1, y: 0 });
+    expect(leadTarget(0, 0, -2, 'R').x).toBe(-1);
+    expect(leadTarget(0, 0, 0, 'R').x).toBe(-1);
+    expect(leadTarget(0, 0, 0, 'D').x).toBe(1);
+    expect(leadTarget(0, 0, 0, 'P')).toEqual({ x: 0, y: 0 });
+  });
+
+  it('leads with the truck forward and with the trailer in reverse', () => {
+    const quarter = Math.PI / 2;
+    const forward = leadTarget(0, quarter, 2, 'D');
+    expect(forward.x).toBeCloseTo(1, 9);
+    expect(forward.y).toBeCloseTo(0, 9);
+    const reverse = leadTarget(0, quarter, -2, 'R');
+    expect(reverse.x).toBeCloseTo(0, 9);
+    expect(reverse.y).toBeCloseTo(-1, 9);
   });
 });
 

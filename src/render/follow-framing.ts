@@ -5,6 +5,8 @@ import type { Gear, Vec2 } from '../contracts/sim';
 const CHROME_GAP = 8;
 /** Zooming out to fit a small clear rect stops at this multiple of the base half-height. */
 const MAX_ZOOM_OUT = 3;
+/** Metres of way ahead of the leading end the framing makes room for. */
+const LOOK_AHEAD = 4;
 /** Below this speed the gear decides the travel direction. */
 const STANDSTILL = 0.05;
 
@@ -51,12 +53,21 @@ export function clearRect(pane: Rect, chrome: readonly Rect[]): Rect {
   return best ?? pane;
 }
 
-/** Unit vector (or zero) the vehicle travels along: signed speed first, then the selected gear. */
-export function leadTarget(heading: number, speed: number, gear: Gear): Vec2 {
+/**
+ * Unit vector (or zero) the leading end travels along: signed speed first, then the selected gear.
+ * Forward the truck leads; reversing the trailer rear does, along the trailer's heading.
+ */
+export function leadTarget(
+  truckHeading: number,
+  trailerHeading: number,
+  speed: number,
+  gear: Gear,
+): Vec2 {
   let dir = 0;
   if (Math.abs(speed) > STANDSTILL) dir = Math.sign(speed);
   else if (gear === 'R') dir = -1;
   else if (gear === 'D') dir = 1;
+  const heading = dir < 0 ? trailerHeading : truckHeading;
   return { x: dir * Math.cos(heading), y: dir * Math.sin(heading) };
 }
 
@@ -76,12 +87,13 @@ export type FollowInput = {
 
 /**
  * Camera centre and half-height that keep the vehicle's bounding circle inside `clear`, shifted
- * away from the travel direction by the slack so that more of the way ahead shows.
+ * away from the travel direction by the slack so that more of the way ahead shows. The zoom
+ * reserves `LOOK_AHEAD` of that slack, so a tight clear rect still shows the way ahead.
  */
 export function followFraming(i: FollowInput): { centre: Vec2; half: number } {
   const { pane, clear, radius } = i;
   const wanted = pane.height / (2 * i.baseHalf);
-  const fit = Math.min(clear.width, clear.height) / (2 * radius);
+  const fit = Math.min(clear.width, clear.height) / (2 * (radius + LOOK_AHEAD));
   const half = Math.min(i.baseHalf * MAX_ZOOM_OUT, pane.height / (2 * Math.min(wanted, fit)));
   const scale = pane.height / (2 * half);
   const slackX = Math.max(0, clear.width / 2 - radius * scale);
