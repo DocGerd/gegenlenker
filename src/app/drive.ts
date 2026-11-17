@@ -141,6 +141,13 @@ export function startDrive(
   const view = mountRenderStage(stage, stage, () => exit(false));
   if (view === null) return () => exit(false);
   cleanups.push(() => view.dispose());
+  const onEscape = (e: KeyboardEvent): void => {
+    if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
+    e.preventDefault();
+    togglePause();
+  };
+  window.addEventListener('keydown', onEscape);
+  cleanups.push(() => window.removeEventListener('keydown', onEscape));
   const { renderer } = view;
   renderer.setScene(layout, truck, trailer);
 

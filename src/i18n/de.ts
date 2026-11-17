@@ -97,4 +97,11 @@ export const de: Record<MessageKey, string> = {
   langDe: 'Deutsch',
   langEn: 'English',
   keySpace: 'Leertaste',
+  keyEsc: 'Esc',
+  keyDrag: 'Ziehen',
+  keyScroll: 'Scrollen',
+  keyWheel: 'Rad: ziehen/scrollen',
+  keyLever: 'Hebel: ziehen/scrollen',
+  viewSwitch: 'Folgen / ganzer Hof',
+  panView: 'Ansicht verschieben',
 };

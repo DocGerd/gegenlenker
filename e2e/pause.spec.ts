@@ -40,6 +40,19 @@ test('back pauses the drive and back again continues', async ({ page }) => {
   await expect(clock(page)).not.toHaveText(pausedAt ?? '');
 });
 
+test('Escape pauses the drive and Escape again continues', async ({ page }) => {
+  await startAndRoll(page);
+  await page.keyboard.press('Escape');
+  await expect(sheet(page)).toBeVisible();
+  const pausedAt = await clock(page).textContent();
+  await page.waitForTimeout(600);
+  await expect(clock(page)).toHaveText(pausedAt ?? '');
+
+  await page.keyboard.press('Escape');
+  await expect(sheet(page)).toBeHidden();
+  await expect(clock(page)).not.toHaveText(pausedAt ?? '');
+});
+
 test('the sheet takes the keyboard: Space continues instead of braking', async ({ page }) => {
   await startAndRoll(page);
   await page.goBack();

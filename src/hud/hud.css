@@ -111,6 +111,7 @@
 
 .hud-legend dt {
   color: var(--color-text);
+  white-space: nowrap;
 }
 
 .hud-legend dd {
@@ -123,7 +124,7 @@
   display: none;
 }
 
-/* The single column is too tall for the zoom rows: they would reach the mirror. */
+/* The single column is too tall for the view and mouse rows: they would reach the mirror. */
 .hud-cockpit[data-compact] .hud-legend-view {
   display: none;
 }
@@ -264,6 +265,12 @@
 
 .hud-toggle:disabled {
   opacity: 0.4;
+}
+
+.hud-toggle:focus-visible,
+.hud-action:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .hud-icon {

@@ -92,6 +92,13 @@ export const en = {
   langDe: 'Deutsch',
   langEn: 'English',
   keySpace: 'Space',
+  keyEsc: 'Esc',
+  keyDrag: 'Drag',
+  keyScroll: 'Scroll',
+  keyWheel: 'Wheel: drag/scroll',
+  keyLever: 'Lever: drag/scroll',
+  viewSwitch: 'Follow / whole yard',
+  panView: 'Pan view',
 } as const;
 
 export type MessageKey = keyof typeof en;
