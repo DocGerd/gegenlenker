@@ -105,16 +105,19 @@ describe('pinch', () => {
   const a0 = { x: 200, y: 200 };
   const b0 = { x: 300, y: 200 };
 
-  it.each(contexts)('keeps both fingers on their world points ($mode)', (ctx) => {
-    const start = view(1.5, 0.02, 0.01);
-    const a1 = { x: 180, y: 150 };
-    const b1 = { x: 380, y: 170 };
-    const next = pinch(start, [a0, b0], [a1, b1], ctx);
-    const mid0 = { x: 250, y: 200 };
-    const mid1 = { x: 280, y: 160 };
-    expectPoint(worldUnder(next, ctx, mid1), worldUnder(start, ctx, mid0));
-    expect(next.zoom).toBeCloseTo(start.zoom * (Math.hypot(200, 20) / 100), 9);
-  });
+  it.each(contexts)(
+    'keeps the midpoint fixed and scales zoom by the finger distance ($mode)',
+    (ctx) => {
+      const start = view(1.5, 0.02, 0.01);
+      const a1 = { x: 180, y: 150 };
+      const b1 = { x: 380, y: 170 };
+      const next = pinch(start, [a0, b0], [a1, b1], ctx);
+      const mid0 = { x: 250, y: 200 };
+      const mid1 = { x: 280, y: 160 };
+      expectPoint(worldUnder(next, ctx, mid1), worldUnder(start, ctx, mid0));
+      expect(next.zoom).toBeCloseTo(start.zoom * (Math.hypot(200, 20) / 100), 9);
+    },
+  );
 
   it('two fingers moving together equal a pan', () => {
     const start = view(3);

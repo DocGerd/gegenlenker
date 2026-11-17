@@ -137,7 +137,7 @@
   margin-bottom: var(--space-1);
 }
 
-.hud-cockpit[data-compact] .hud-legend dd:last-child {
+.hud-cockpit[data-compact] .hud-legend dd:has(+ .hud-legend-view) {
   margin-bottom: 0;
 }
 

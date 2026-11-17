@@ -126,7 +126,7 @@ export function createTopDownInput(
   window.addEventListener(
     'keydown',
     (e) => {
-      if (isFormField(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.defaultPrevented || isFormField(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
       const ctx = context();
       if (e.key === '+' || e.key === '=') commit(zoomAt(view, KEY_ZOOM, centre(ctx), ctx));
       else if (e.key === '-') commit(zoomAt(view, 1 / KEY_ZOOM, centre(ctx), ctx));
