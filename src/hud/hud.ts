@@ -17,6 +17,8 @@ export type HudAction =
 
 export type Hud = {
   update(s: SimSnapshot): void;
+  /** Elapsed run time in seconds; the clock starts with the first driving input, not when the drive opens. */
+  setRunTime(seconds: number): void;
   layout(views: ViewRects): void;
   /** The reset-view button is enabled while the top-down view differs from its default framing. */
   setViewChanged(changed: boolean): void;
@@ -336,7 +338,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         shownDirection = s.directionChanges;
         directionEl.textContent = formatNumber(s.directionChanges, 0);
       }
-      const seconds = Math.floor(s.time);
+    },
+    setRunTime(runSeconds) {
+      const seconds = Math.floor(runSeconds);
       if (timeEl && seconds !== shownSeconds) {
         shownSeconds = seconds;
         const m = Math.floor(seconds / 60);

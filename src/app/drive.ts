@@ -316,6 +316,7 @@ export function startDrive(
       frame.aids = aids;
       renderer.render(frame);
       hud.update(snapshot);
+      hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goal(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
       hud.setTargetArrow(
