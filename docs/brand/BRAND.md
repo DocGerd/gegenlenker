@@ -63,7 +63,7 @@ Scene colours are theme-independent neutral greys, except the red obstacle cone 
 
 ## Perspective-only realism hues
 
-Vehicle detail, yard props (fence grid, hall cladding and roofs, containers, masts, gatehouse) and the sky dome (haze, sun halo, skyline) may use these hues in the cockpit and mirror views only. They are not scene tokens: yard props draw their detail on `SKY_LAYER` while the top-down view draws a plain token copy of the same footprint, so it keeps strict tokens. None of them may be a `--color-*` or `--scene-*` value, a `ScenePalette` key or a top-down top face. T1-T4 are unchanged. `src/render/realism-hues.ts` holds them as sRGB; `tokens.test.ts` checks that the table and the module agree. RAL values are sRGB approximations.
+Vehicle detail, yard props (fence grid, hall cladding and roofs, containers, masts, gatehouse), the skyline buildings (textured facades, `skyline-atlas.ts`) and the sky dome (haze, sun halo) may use these hues in the cockpit and mirror views only. They are not scene tokens: yard props draw their detail on `SKY_LAYER` while the top-down view draws a plain token copy of the same footprint, so it keeps strict tokens. None of them may be a `--color-*` or `--scene-*` value, a `ScenePalette` key or a top-down top face. T1-T4 are unchanged. `src/render/realism-hues.ts` holds them as sRGB; `tokens.test.ts` checks that the table and the module agree. RAL values are sRGB approximations.
 
 | Key               | Value     | Use                                                       |
 | ----------------- | --------- | --------------------------------------------------------- |
@@ -83,6 +83,6 @@ Vehicle detail, yard props (fence grid, hall cladding and roofs, containers, mas
 | `containerRed`    | `#9a2d22` | shipping container                                        |
 | `containerGreen`  | `#2f6b4a` | shipping container                                        |
 | `containerOrange` | `#c9661c` | shipping container                                        |
-| `skylineDark`     | `#5c6875` | near silhouettes of the skyline ring on the sky dome      |
-| `skyHaze`         | `#dcebf2` | horizon haze of the sky dome; skyline fades towards it    |
+| `skylineDark`     | `#5c6875` | glass and mid cladding of the skyline buildings           |
+| `skyHaze`         | `#dcebf2` | horizon haze of the sky dome; buildings fade to it        |
 | `sunHalo`         | `#fff1d0` | glow around the sun on the sky dome                       |

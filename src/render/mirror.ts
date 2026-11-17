@@ -11,17 +11,16 @@ import {
   type WebGLRenderer,
 } from 'three';
 import type { Rect } from '../contracts/render';
-import { enableLayers, MIRROR_LAYERS } from './seams';
+import { CAMERA_FAR, enableLayers, MIRROR_LAYERS } from './seams';
 
 const FOV = 46;
 const NEAR = 0.2;
-const FAR = 400;
 const PITCH = MathUtils.degToRad(-4);
 const MSAA_SAMPLES = 4;
 
 /** One mirror: the scene is rendered unflipped into a target, then drawn with u → 1 − u. */
 export function createMirror() {
-  const camera = new PerspectiveCamera(FOV, 1, NEAR, FAR);
+  const camera = new PerspectiveCamera(FOV, 1, NEAR, CAMERA_FAR);
   camera.rotation.order = 'YXZ';
   enableLayers(camera.layers, MIRROR_LAYERS);
 
