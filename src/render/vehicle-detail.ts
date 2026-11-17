@@ -16,6 +16,7 @@ import { box, merge, wheelGeometry } from './vehicle-geometry';
  * Perspective-only detail, built from the dimensions the visuals already derive from vehicle Params.
  * Everything stands a few centimetres proud of the face it sits on, so no two coplanar faces compete
  * in the depth buffer. The meshes go on SKY_LAYER: the top-down view never sees them.
+ * The cab front (glass, grille, lamps, bumper) is built apart: its back faces would block the cockpit eye.
  */
 
 const RELIEF = 0.03; // marks and lamps on a body face
@@ -154,8 +155,13 @@ export type TruckDetailParams = {
   readonly wheelRadius: number;
 };
 
-export function truckDetail(p: TruckDetailParams): { geometry: BufferGeometry; plate: PlateSpot } {
+export function truckDetail(p: TruckDetailParams): {
+  geometry: BufferGeometry;
+  cabFront: BufferGeometry;
+  plate: PlateSpot;
+} {
   const c = collector();
+  const cabFront = collector();
   const { cab, tailLamp } = p.spec;
   const hw = p.halfWidth;
   const front: Range = [p.frontX, p.frontX + RELIEF];
@@ -167,8 +173,8 @@ export function truckDetail(p: TruckDetailParams): { geometry: BufferGeometry; p
   const lamps = above(cab.lampSill, cab.lampHeight);
   const windscreen = hw - m(cab.windscreenInset);
 
-  c.box(front, [-windscreen, windscreen], glass, HUE.anthracite);
-  c.box(
+  cabFront.box(front, [-windscreen, windscreen], glass, HUE.anthracite);
+  cabFront.box(
     front,
     [-m(cab.grilleWidth) / 2, m(cab.grilleWidth) / 2],
     above(cab.grilleSill, cab.grilleHeight),
@@ -176,7 +182,7 @@ export function truckDetail(p: TruckDetailParams): { geometry: BufferGeometry; p
   );
   const headlampOuter = hw - m(cab.headlampInset);
   for (const side of [-1, 1]) {
-    c.box(
+    cabFront.box(
       [
         p.frontX - m(cab.sideGlassSetback) - m(cab.sideGlassLength),
         p.frontX - m(cab.sideGlassSetback),
@@ -185,7 +191,7 @@ export function truckDetail(p: TruckDetailParams): { geometry: BufferGeometry; p
       glass,
       HUE.anthracite,
     );
-    c.box(
+    cabFront.box(
       front,
       lateral(side, headlampOuter - m(cab.headlampWidth), headlampOuter),
       lamps,
@@ -194,7 +200,7 @@ export function truckDetail(p: TruckDetailParams): { geometry: BufferGeometry; p
   }
   const bumper: Range = [p.railBottom, p.frameTop];
   const bumperHalf = hw - m(p.spec.bumperInset);
-  c.box(front, [-bumperHalf, bumperHalf], bumper, HUE.anthracite);
+  cabFront.box(front, [-bumperHalf, bumperHalf], bumper, HUE.anthracite);
 
   const floor = p.floorTop - p.frameTop;
   sideMarking(
@@ -232,6 +238,7 @@ export function truckDetail(p: TruckDetailParams): { geometry: BufferGeometry; p
 
   return {
     geometry: c.build(),
+    cabFront: cabFront.build(),
     plate: { x: p.frontX + PLATE_RELIEF, y: 0, z: (bumper[0] + bumper[1]) / 2, facing: 1 },
   };
 }

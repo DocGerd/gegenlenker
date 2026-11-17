@@ -29,6 +29,7 @@ function snap(over: Partial<SimSnapshot> = {}): SimSnapshot {
     speed: 0,
     control: { steer: 0, lever: 0, brake: false, gear: 'P' },
     blocked: null,
+    contact: null,
     contacts: 0,
     jackknifes: 0,
     directionChanges: 0,

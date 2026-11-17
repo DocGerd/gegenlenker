@@ -8,7 +8,7 @@ import type {
 } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
 import { wrapAngle } from './angle';
-import { PREDICT_DISTANCE, PREDICT_STEP, PREDICT_SWEEP } from './constants';
+import { CONTACT_WARN_DISTANCE, PREDICT_DISTANCE, PREDICT_STEP, PREDICT_SWEEP } from './constants';
 import { bodyFootprints } from './geometry';
 import { joints, pivotViolation, rk4, type KinematicState } from './kinematics';
 
@@ -17,6 +17,7 @@ export const NO_PREDICTION: Prediction = {
   truckOuter: [],
   truckInner: [],
   blocked: null,
+  blockedAt: null,
   end: null,
 };
 
@@ -86,6 +87,7 @@ export function predictCombination(
   let sweep = 0;
   let truckLive = true;
   let blocked: BlockReason | null = null;
+  let blockedAt: number | null = null;
   record(q, true);
 
   while (travelled < distance - 1e-9) {
@@ -106,6 +108,7 @@ export function predictCombination(
         if (rejection(rk4(params, q, direction, through, mid)) === null) lo = mid;
         else hi = mid;
       }
+      blockedAt = travelled + lo;
       if (lo >= MIN_PARTIAL) {
         q = rk4(params, q, direction, through, lo);
         record(q, truckLive);
@@ -125,6 +128,11 @@ export function predictCombination(
     truckOuter,
     truckInner,
     blocked,
+    blockedAt,
     end: blocked === null ? null : { truck: truckLive ? q.th0 : null, trailer: q.th2 },
   };
 }
+
+/** First warning stage: the held steer leads into a contact within `CONTACT_WARN_DISTANCE`. */
+export const contactAhead = (p: Prediction): boolean =>
+  p.blocked === 'contact' && p.blockedAt !== null && p.blockedAt < CONTACT_WARN_DISTANCE;
