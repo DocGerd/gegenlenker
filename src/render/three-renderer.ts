@@ -227,6 +227,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       const sky = b.palette.sky;
       b.truck.update(snapshot);
       b.trailer.update(snapshot);
+      b.environment.update(frame);
       b.aids.update(frame);
       b.scene.updateMatrixWorld();
 

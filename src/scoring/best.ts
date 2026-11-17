@@ -79,6 +79,7 @@ function toResult(v: unknown): RunResult | null {
     truckId: truckId as TruckId,
     trailerId: trailerId as TrailerId,
     reached: r.reached,
+    waypointMissed: r.waypointMissed === true,
     positionError: r.positionError,
     angleError: r.angleError,
     contacts: r.contacts,

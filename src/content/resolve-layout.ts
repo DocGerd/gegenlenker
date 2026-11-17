@@ -1,5 +1,6 @@
 import type { ExerciseDefinition } from '../contracts/exercise';
 import type { Layout, ResolvedLayout } from '../contracts/layout';
+import { WAYPOINT_RADIUS } from '../scoring/score';
 import { streetFeatures } from './street';
 
 export function resolveLayout(layout: Layout, exercise: ExerciseDefinition | null): ResolvedLayout {
@@ -12,5 +13,6 @@ export function resolveLayout(layout: Layout, exercise: ExerciseDefinition | nul
     obstacles: [...street.obstacles, ...layout.obstacles, ...(exercise?.obstacles ?? [])],
     markings: [...street.markings, ...layout.markings, ...(exercise?.markings ?? [])],
     target: exercise?.target ?? null,
+    waypoint: exercise?.waypoint ? { ...exercise.waypoint, radius: WAYPOINT_RADIUS } : null,
   };
 }
