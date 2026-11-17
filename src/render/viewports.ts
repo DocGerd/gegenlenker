@@ -11,8 +11,8 @@ export function computeViewports(cssWidth: number, cssHeight: number, mode: View
   let cockpit: Rect;
   if (cssWidth >= cssHeight) {
     const w = Math.round(0.4 * cssWidth);
-    topDown = { x: 0, y: 0, width: w, height: cssHeight };
-    cockpit = { x: w, y: 0, width: cssWidth - w, height: cssHeight };
+    topDown = { x: cssWidth - w, y: 0, width: w, height: cssHeight };
+    cockpit = { x: 0, y: 0, width: cssWidth - w, height: cssHeight };
   } else {
     const h = cssHeight - Math.round(0.55 * cssHeight);
     topDown = { x: 0, y: 0, width: cssWidth, height: h };

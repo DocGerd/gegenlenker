@@ -44,6 +44,12 @@ const AIDS: readonly [keyof AidFlags, MessageKey][] = [
 ];
 const GEAR_NAMES: readonly Gear[] = ['P', 'R', 'N', 'D'];
 const MS_TO_KMH = 3.6;
+/**
+ * Cockpit widths below which the legend drops to one column: it must fit right of the wheel and
+ * gears, and where the cockpit reaches the screen's right edge, left of the lever as well.
+ */
+const COMPACT_WIDTH = 720;
+const COMPACT_WIDTH_WITH_LEVER = 840;
 
 const button = (attr: string, value: string, key: MessageKey): string =>
   `<button type="button" class="hud-toggle" ${attr}="${value}" data-i18n="${key}"></button>`;
@@ -260,11 +266,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     layout(views) {
       const { cockpit: c } = views;
+      const spansRight = (r: Rect): boolean => r.x + r.width >= root.clientWidth - 1;
       setHidden(cockpit, c === null);
       if (c) {
         place(cockpit, c);
-        cockpit.style.setProperty('--hud-x', `${c.x}px`);
-        cockpit.toggleAttribute('data-compact', c.x < 1 && c.width <= 800);
+        cockpit.toggleAttribute(
+          'data-compact',
+          c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH),
+        );
       }
       const mirrorRects = [views.mirrorLeft, views.mirrorRight];
       mirrors.forEach((el, i) => {
@@ -278,8 +287,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       toastWrap.style.width = `${base.width}px`;
       place(topDown, views.topDown);
       // The finish/menu button sits at the screen's top-right corner.
-      const spansRight = views.topDown.x + views.topDown.width >= root.clientWidth - 1;
-      topDown.toggleAttribute('data-reserve', spansRight);
+      toastWrap.toggleAttribute('data-reserve', base.y < 1 && spansRight(base));
+      topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
     },
     onAction(cb) {
       listeners.push(cb);

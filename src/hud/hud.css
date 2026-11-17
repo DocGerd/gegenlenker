@@ -20,12 +20,9 @@
   position: absolute;
 }
 
-/* Cockpit corners the interactive controls (controls.css) overlay: the lever when the cockpit starts at the screen's left edge. */
+/* The cockpit always starts at the screen's left edge, where controls.css puts the wheel and gears; the readout and legend start to their right. */
 .hud-cockpit {
-  --hud-x: 0px;
-  --hud-inset: calc(
-    var(--space-4) + max(0px, var(--space-4) + 1.5 * var(--size-target) - var(--hud-x))
-  );
+  --hud-inset: calc(var(--space-4) * 3 + var(--ctl-wheel, 160px) + var(--ctl-gears-w, 92px));
 }
 
 .hud-band {
@@ -103,7 +100,7 @@
   color: var(--color-text-secondary);
 }
 
-/* Where the lever shares the dashboard band, the gear selector leaves too little width for two columns. */
+/* A narrow cockpit leaves too little width beside the wheel and gears for two columns. */
 .hud-cockpit[data-compact] .hud-legend .hud-label {
   display: none;
 }
@@ -130,7 +127,7 @@
 
 .hud-toast {
   box-sizing: border-box;
-  max-width: calc(100% - 2 * (var(--hud-action-w) + 2 * var(--space-4)));
+  max-width: calc(100% - 2 * var(--space-4));
   padding: var(--space-2) var(--space-4);
   border: 1px solid var(--color-danger);
   border-radius: var(--radius-lg);
@@ -141,6 +138,10 @@
   line-height: var(--leading-md);
   font-weight: var(--weight-medium);
   text-align: center;
+}
+
+.hud-toast-wrap[data-reserve] .hud-toast {
+  max-width: calc(100% - 2 * (var(--hud-action-w) + 2 * var(--space-4)));
 }
 
 .hud-topdown {
