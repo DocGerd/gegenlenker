@@ -1,4 +1,5 @@
 import type { Layout } from '../../contracts/layout';
+import { solidLine } from '../markings';
 import { addLamps, addYardEdge, BOUNDS, ObstacleBuilder, STREET, YARD } from '../street';
 
 const FENCE_THICKNESS = 0.1;
@@ -9,6 +10,8 @@ const HALL_WALL = 0.4;
 const GATE_WIDTH = 4.5;
 const GATE_CENTRES = [70, 86];
 const PARKED = { x: 1.75, width: 2.5, length: 10, height: 3.5, firstY: 36 };
+const PARKED_BAYS = 3;
+const PARKING_LINE_WIDTH = 0.12;
 
 function build(): Layout['obstacles'] {
   const b = new ObstacleBuilder('');
@@ -27,13 +30,25 @@ function build(): Layout['obstacles'] {
   }
   wall({ minX: from, minY, maxX: maxX - HALL_WALL, maxY: minY + HALL_WALL });
 
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < PARKED_BAYS; i++) {
     const cy = PARKED.firstY + PARKED.length * (i + 0.5);
     b.addBox('parked', PARKED.x, cy, PARKED.width, PARKED.length, 0, PARKED.height);
   }
 
   addLamps(b, STREET);
   return b.obstacles;
+}
+
+/** Bay ends and the open side line of the parked-trailer row. */
+function parkingLines(): Layout['markings'] {
+  const sideX = PARKED.x + PARKED.width / 2 + PARKING_LINE_WIDTH;
+  const endY = (i: number): number => PARKED.firstY + PARKED.length * i;
+  return [
+    ...Array.from({ length: PARKED_BAYS + 1 }, (_, i) =>
+      solidLine('bay', FENCE_THICKNESS, endY(i), sideX, endY(i), PARKING_LINE_WIDTH),
+    ),
+    solidLine('bay', sideX, endY(0), sideX, endY(PARKED_BAYS), PARKING_LINE_WIDTH),
+  ];
 }
 
 export const depot: Layout = {
@@ -43,5 +58,5 @@ export const depot: Layout = {
   street: STREET,
   start: { x: 30, y: 15, heading: 0 },
   obstacles: build(),
-  markings: [],
+  markings: parkingLines(),
 };

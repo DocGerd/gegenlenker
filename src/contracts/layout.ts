@@ -13,7 +13,7 @@ export type Obstacle = {
   readonly obb: Obb;
   readonly height: number;
 };
-export type MarkingKind = 'lane-centre' | 'lane-edge' | 'bay' | 'stop';
+export type MarkingKind = 'lane-centre' | 'lane-edge' | 'bay' | 'stop' | 'arrow' | 'dock-number';
 export type Marking = {
   readonly kind: MarkingKind;
   readonly from: Vec2;
