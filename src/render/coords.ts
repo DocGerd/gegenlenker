@@ -2,11 +2,6 @@ import { Vector3, type Object3D } from 'three';
 import type { Pose2 } from '../contracts/sim';
 import type { Vec3 } from '../contracts/vehicle';
 
-/** World (x east, y north, up) to Three (x, up, −y). */
-export function toThree(x: number, y: number, up = 0): Vector3 {
-  return new Vector3(x, up, -y);
-}
-
 /** Sets the ground position and heading; the object's own height is kept. */
 export function placePose(object: Object3D, pose: Pose2): void {
   object.position.x = pose.x;

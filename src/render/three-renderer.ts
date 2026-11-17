@@ -20,6 +20,7 @@ import { truckAnchors } from '../vehicles/anchors';
 import { bodyToThree } from './coords';
 import { createFrameTimer } from './governor';
 import { createMirror } from './mirror';
+import { readScenePalette } from './palette';
 import {
   AIDS_LAYER,
   type AidsLayer,
@@ -176,9 +177,10 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       applySize();
     },
 
-    setScene(nextLayout, truck, trailer, palette) {
+    setScene(nextLayout, truck, trailer) {
       disposeBuilt();
       resetTiming();
+      const palette = readScenePalette();
       const scene = new Scene();
       scene.matrixWorldAutoUpdate = false;
       const truckVisual = parts.truck(truck, palette);
