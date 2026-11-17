@@ -1,9 +1,3 @@
-.ctl,
-.hud {
-  --ctl-wheel: clamp(160px, 38vmin, 300px);
-  --ctl-gears-w: calc(var(--size-target) * 2.1);
-}
-
 .ctl {
   --ctl-lever-height: clamp(160px, 38vmin, 280px);
   position: absolute;
@@ -18,7 +12,7 @@
   font-size: var(--text-sm);
 }
 
-/* A shorter lever keeps the Stop button below the right mirror. */
+/* A shorter lever reduces the overlap with the right mirror. */
 @media (orientation: portrait) {
   .ctl {
     --ctl-lever-height: clamp(160px, 24vmin, 240px);
