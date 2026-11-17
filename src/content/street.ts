@@ -7,12 +7,15 @@ import type {
   Surface,
 } from '../contracts/layout';
 import type { Obb } from '../contracts/sim';
+import { arrow, solidLine } from './markings';
 
 const KERB_WIDTH = 0.15;
 const KERB_HEIGHT = 0.15;
 const CENTRE_LINE_WIDTH = 0.12;
-const EDGE_LINE_WIDTH = 0.15;
-const EDGE_LINE_INSET = 0.3;
+const STOP_LINE_WIDTH = 0.5;
+const STOP_LINE_SETBACK = 0.5; // from the pavement, on the yard side
+const EXIT_ARROW_LENGTH = 5;
+const EXIT_ARROW_OFFSET = 3; // tail distance behind the stop line
 
 export const BOUNDS: Rect2 = { minX: -40, minY: -40, maxX: 140, maxY: 100 };
 export const YARD: Rect2 = { minX: 0, minY: 0, maxX: 100, maxY: 70 };
@@ -130,6 +133,20 @@ export function addLamps(b: ObstacleBuilder, street: StreetSpec): void {
   }
 }
 
+/** Stop line across the yard exit with an arrow pointing out. A kerbed street carries no edge lines. */
+function exitMarkings({ kerbY, pavement, entrance }: StreetSpec): Marking[] {
+  const stopY = kerbY + pavement + STOP_LINE_SETBACK;
+  return [
+    solidLine('stop', entrance.fromX, stopY, entrance.toX, stopY, STOP_LINE_WIDTH),
+    ...arrow(
+      (entrance.fromX + entrance.toX) / 2,
+      stopY + STOP_LINE_WIDTH / 2 + EXIT_ARROW_OFFSET + EXIT_ARROW_LENGTH,
+      -Math.PI / 2,
+      EXIT_ARROW_LENGTH,
+    ),
+  ];
+}
+
 export function streetFeatures(street: StreetSpec): {
   surfaces: Surface[];
   obstacles: Obstacle[];
@@ -162,8 +179,7 @@ export function streetFeatures(street: StreetSpec): {
   });
   const markings: Marking[] = [
     line('lane-centre', kerbY - width / 2, CENTRE_LINE_WIDTH, true),
-    line('lane-edge', kerbY - EDGE_LINE_INSET, EDGE_LINE_WIDTH, false),
-    line('lane-edge', farY + EDGE_LINE_INSET, EDGE_LINE_WIDTH, false),
+    ...exitMarkings(street),
   ];
 
   return { surfaces, obstacles: [...kerbs.obstacles], markings };
