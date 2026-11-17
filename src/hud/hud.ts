@@ -54,7 +54,7 @@ const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
   ['aids', 'panelAids'],
   ['gauges', 'panelGauges'],
 ];
-const VIEW_KEYS: Record<string, TopDownMode> = { KeyF: 'follow', KeyY: 'yard' };
+const VIEW_KEYS: Record<string, TopDownMode> = { f: 'follow', y: 'yard' };
 const GEAR_NAMES: readonly Gear[] = ['P', 'R', 'N', 'D'];
 const MS_TO_KMH = 3.6;
 /**
@@ -253,7 +253,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   window.addEventListener(
     'keydown',
     (e) => {
-      const mode = VIEW_KEYS[e.code];
+      const mode = VIEW_KEYS[e.key.toLowerCase()];
       if (
         mode !== undefined &&
         !e.defaultPrevented &&
