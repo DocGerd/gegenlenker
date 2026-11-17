@@ -9,6 +9,7 @@ export function startUpdatePrompt(root: HTMLElement): void {
   const toast = document.createElement('div');
   toast.className = 'update-toast';
   toast.hidden = true;
+  toast.setAttribute('role', 'status');
   root.append(toast);
 
   let hideTimer: number | undefined;
@@ -40,9 +41,15 @@ export function startUpdatePrompt(root: HTMLElement): void {
       );
     },
     onRegisteredSW(_url, registration) {
-      if (registration) window.setInterval(() => void registration.update(), UPDATE_CHECK_MS);
+      if (registration) {
+        window.setInterval(
+          () => void registration.update().catch(() => undefined),
+          UPDATE_CHECK_MS,
+        );
+      }
     },
-    onRegisterError() {
+    onRegisterError(error) {
+      console.error('SW registration failed', error);
       show(t('offlineSetupFailed'), button(t('dismiss'), hide));
     },
     onOfflineReady() {
