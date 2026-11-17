@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-imports -- dev-only stand-in, never built; the rule guards shipped code */
 import {
   BoxGeometry,
   BufferGeometry,
