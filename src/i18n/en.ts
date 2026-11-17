@@ -61,7 +61,7 @@ export const en = {
   later: 'Later',
   offlineReady: 'Ready offline',
   noWebgl: 'This device cannot show WebGL 2 graphics.',
-  contextLost: 'Graphics were reset. Reload to continue.',
+  contextLost: 'Graphics interrupted. The run continues when they return, or reload.',
   loadFailed: 'Could not load. Check the connection and try again.',
   langDe: 'Deutsch',
   langEn: 'English',
