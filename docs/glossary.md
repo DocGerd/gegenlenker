@@ -14,5 +14,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Best stored result                              | best            | Bestwert               |
 | Driving area                                    | yard            | Hof                    |
 | Aids on / off                                   | aids            | Hilfen                 |
-
-Status: German terms are not yet reviewed by a driving instructor.
+| Toggle for both angle readouts                  | angle display   | Winkelanzeige          |
+| Goal of an exercise                             | target          | Ziel                   |
+| One attempt at an exercise                      | run             | Fahrt                  |
+| Point to drive through before the target        | turn point      | Wendepunkt             |

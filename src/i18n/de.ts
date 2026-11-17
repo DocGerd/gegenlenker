@@ -66,7 +66,7 @@ export const de: Record<MessageKey, string> = {
   viewYard: 'Ganzer Hof',
   resetView: 'Ansicht zurücksetzen',
   zoom: 'Zoom',
-  aidPivots: 'Knickwinkel',
+  aidPivots: 'Winkelanzeige',
   aidPath: 'Vorausschau',
   aidTracks: 'Radspuren',
   aidGhost: 'Zielbild',
