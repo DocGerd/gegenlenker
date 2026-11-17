@@ -1,5 +1,5 @@
 import type { ExerciseDefinition, RunResult, TargetZone, Tolerances } from '../contracts/exercise';
-import type { SimSnapshot } from '../contracts/sim';
+import type { ControlVector, SimSnapshot } from '../contracts/sim';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { wrapAngle } from '../sim/angle';
 
@@ -68,7 +68,10 @@ export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
   };
 }
 
-/** `reached` and `waypointVisited` come from the `RunTracker`: the snapshot alone cannot know the waypoint. */
+/** The run clock and the assisted flag start with the first input that can move the vehicle. */
+export const isDrivingInput = (c: ControlVector): boolean => c.gear !== 'P' || c.lever > 0;
+
+/** `reached` and `waypointVisited` come from the `RunTracker`: the snapshot alone cannot know the waypoint; `startTime` is the sim time of the first driving input. */
 export function runResult(
   s: SimSnapshot,
   exercise: ExerciseDefinition,
@@ -77,6 +80,7 @@ export function runResult(
   reached: boolean,
   waypointVisited: boolean,
   assisted: boolean,
+  startTime: number,
 ): RunResult {
   const e = targetError(s, exercise.target);
   return {
@@ -91,6 +95,6 @@ export function runResult(
     contacts: s.contacts,
     jackknifes: s.jackknifes,
     directionChanges: s.directionChanges,
-    time: s.time,
+    time: s.time - startTime,
   };
 }

@@ -14,7 +14,7 @@ import {
 } from './constants';
 
 // Bump when simulation, collision or scoring behaviour changes.
-export const SIM_REVISION = 1;
+export const SIM_REVISION = 2;
 
 // A literal, as namespace key order differs between bundle and test runner.
 const constants = {

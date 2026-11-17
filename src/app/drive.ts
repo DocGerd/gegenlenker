@@ -12,7 +12,7 @@ import { isDefaultView } from '../input/top-down-view';
 import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay } from '../render/perf-overlay';
 import { computeViewports } from '../render/viewports';
-import { createRunTracker, runResult } from '../scoring/score';
+import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
 import { createContactQuery } from '../sim/collision';
 import { bodyFootprints } from '../sim/geometry';
@@ -76,8 +76,9 @@ export function startDrive(
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
   let reached = false;
-  // Sticky over aid toggles; paused time does not count, only sim steps taken with an aid on.
+  // Sticky over aid toggles; only sim steps after the first driving input with an aid on count.
   let assisted = false;
+  let startTime: number | null = null;
 
   const stage = document.createElement('div');
   stage.className = 'drive';
@@ -113,6 +114,7 @@ export function startDrive(
             reached,
             tracker?.waypointVisited() ?? true,
             assisted,
+            startTime ?? snapshot.time,
           )
         : null;
     dispose();
@@ -282,11 +284,12 @@ export function startDrive(
       const clock =
         closeSheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
-      if (clock.steps > 0 && anyAid(aids)) assisted = true;
       for (let i = 0; i < clock.steps; i++) {
         controls.tick(DT, snapshot.steer);
         const control = controls.control();
         recorder.record(snapshot.step, control);
+        if (startTime === null && isDrivingInput(control)) startTime = snapshot.time;
+        if (startTime !== null && anyAid(aids)) assisted = true;
         snapshot = sim.step(control);
         if (tracker !== null) {
           reached = tracker.update(snapshot);
