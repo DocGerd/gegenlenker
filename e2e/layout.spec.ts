@@ -134,6 +134,7 @@ for (const start of starts) {
     const rows = new Set((await boxes(buttons)).map((b) => Math.round(b.top)));
     expect(rows.size).toBeLessThanOrEqual(2);
 
+    await expect(page.locator('.hud-info')).toBeVisible();
     const [info] = await boxes(page.locator('.hud-info'));
     expect(info?.bottom).toBeLessThan(768 / 2);
   });
@@ -148,7 +149,11 @@ test('the two gauges stay equally wide in German', async ({ browser }) => {
   await page.goto('./');
   await page.getByRole('button', { name: de.exerciseStraightReverse }).click();
 
-  const widths = (await boxes(page.locator('.hud-gauge'))).map((b) => b.right - b.left);
+  const gauges = page.locator('.hud-gauge');
+  await expect(gauges).toHaveCount(2);
+  await expect(gauges.first()).toBeVisible();
+  await expect(gauges.last()).toBeVisible();
+  const widths = (await boxes(gauges)).map((b) => b.right - b.left);
   expect(widths).toHaveLength(2);
   expect(widths[0]).toBeCloseTo(widths[1] ?? 0, 0);
   await context.close();
