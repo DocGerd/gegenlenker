@@ -28,19 +28,6 @@ const RESET_ICON =
 
 const markup = (lockToLockTurns: number): string => `
 <div class="ctl" data-ctl="root">
-  <div class="ctl-pedals">
-    <button type="button" class="ctl-stop" data-ctl="stop" data-i18n="stop"></button>
-    <span class="ctl-label" data-i18n="speed"></span>
-    <div class="ctl-lever" data-ctl="lever">
-      <div class="ctl-rail"><div class="ctl-fill"></div><div class="ctl-thumb"></div></div>
-    </div>
-  </div>
-  <div class="ctl-gears">
-    <span class="ctl-label" data-i18n="gear"></span>
-    <div data-ctl="gears">
-      ${GEARS.map((g) => `<button type="button" class="ctl-gear" data-gear="${g}">${g}</button>`).join('')}
-    </div>
-  </div>
   <div class="ctl-steer">
     <span class="ctl-label" data-i18n="steer"></span>
     <div class="ctl-wheel-box">
@@ -68,6 +55,19 @@ const markup = (lockToLockTurns: number): string => `
         </svg>
       </div>
       <button type="button" class="ctl-reset" data-ctl="reset">${RESET_ICON}</button>
+    </div>
+  </div>
+  <div class="ctl-gears">
+    <span class="ctl-label" data-i18n="gear"></span>
+    <div data-ctl="gears">
+      ${GEARS.map((g) => `<button type="button" class="ctl-gear" data-gear="${g}">${g}</button>`).join('')}
+    </div>
+  </div>
+  <div class="ctl-pedals">
+    <button type="button" class="ctl-stop" data-ctl="stop" data-i18n="stop"></button>
+    <span class="ctl-label" data-i18n="speed"></span>
+    <div class="ctl-lever" data-ctl="lever">
+      <div class="ctl-rail"><div class="ctl-fill"></div><div class="ctl-thumb"></div></div>
     </div>
   </div>
 </div>`;
