@@ -125,6 +125,8 @@
   text-align: left;
   box-shadow: var(--shadow-sm);
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
@@ -219,6 +221,8 @@
   font: inherit;
   font-weight: var(--weight-medium);
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .app-button-primary {
