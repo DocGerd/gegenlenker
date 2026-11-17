@@ -15,7 +15,7 @@ export type Settings = {
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
-const DEFAULT_COLLAPSED: CollapsedPanels = { aids: false, gauges: false };
+const DEFAULT_COLLAPSED: CollapsedPanels = { aids: false, gauges: false, keys: false };
 const LANGS: readonly Lang[] = ['de', 'en'];
 const THEMES: readonly Settings['theme'][] = ['system', 'light', 'dark'];
 const TOP_DOWN: readonly TopDownMode[] = ['follow', 'yard'];
@@ -55,6 +55,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
     collapsed: {
       aids: flag(collapsed['aids'], DEFAULT_COLLAPSED.aids),
       gauges: flag(collapsed['gauges'], DEFAULT_COLLAPSED.gauges),
+      keys: flag(collapsed['keys'], DEFAULT_COLLAPSED.keys),
     },
   };
 }

@@ -99,6 +99,8 @@ const MS_TO_KMH = 3.6;
 const COMPACT_WIDTH = 720;
 const COMPACT_WIDTH_WITH_LEVER = 840;
 
+const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
+
 const RESET_VIEW_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>';
 
@@ -110,7 +112,7 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   <div class="hud-cockpit" data-hud="cockpit" hidden>
     <span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>
     <div class="hud-legend" data-hud="legend" hidden>
-      <span class="hud-label" data-i18n="keys"></span>
+      <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl>
         <dt class="mono">A / D · ← / →</dt><dd data-i18n="steer"></dd>
         <dt class="mono">C</dt><dd data-i18n="resetSteer"></dd>
@@ -230,6 +232,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const panelButtons = [...hud.querySelectorAll<HTMLElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
   const aidsBox = query(hud, 'aids', HTMLElement);
+  const keysToggle = query(hud, 'keysToggle', HTMLButtonElement);
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
     for (const b of aidButtons)
@@ -239,6 +242,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         'aria-pressed',
         String(!collapsed[b.dataset['panel'] as keyof CollapsedPanels]),
       );
+    keysToggle.setAttribute('aria-expanded', String(!collapsed.keys));
+    legend.toggleAttribute('data-collapsed', collapsed.keys);
     setHidden(aidsBox, collapsed.aids);
     setHidden(gaugeBox, !aids.pivots || collapsed.gauges);
   };
@@ -264,18 +269,17 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       { signal },
     );
   }
+  const togglePanel = (panel: keyof CollapsedPanels): void => {
+    collapsed[panel] = !collapsed[panel];
+    syncToggles();
+    emit({ type: 'collapse', panel, collapsed: collapsed[panel] });
+  };
   for (const b of panelButtons) {
-    b.addEventListener(
-      'click',
-      () => {
-        const panel = b.dataset['panel'] as keyof CollapsedPanels;
-        collapsed[panel] = !collapsed[panel];
-        syncToggles();
-        emit({ type: 'collapse', panel, collapsed: collapsed[panel] });
-      },
-      { signal },
-    );
+    b.addEventListener('click', () => togglePanel(b.dataset['panel'] as keyof CollapsedPanels), {
+      signal,
+    });
   }
+  keysToggle.addEventListener('click', () => togglePanel('keys'), { signal });
   const resetView = query(hud, 'resetView', HTMLButtonElement);
   resetView.title = t('resetView');
   resetView.setAttribute('aria-label', t('resetView'));

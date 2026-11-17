@@ -6,6 +6,7 @@ const sizes = [
   { width: 800, height: 820 },
   { width: 1024, height: 600 },
   { width: 1280, height: 800 },
+  { width: 1366, height: 768 },
 ];
 
 const boxes = (loc: Locator) =>
@@ -47,3 +48,29 @@ for (const size of sizes) {
     }
   });
 }
+
+test('the top view toolbar fits two rows at 1366x768', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+
+  const buttons = page.locator('.hud-toolbar button');
+  await expect(buttons).toHaveCount(9);
+  const rows = new Set((await boxes(buttons)).map((b) => Math.round(b.top)));
+  expect(rows.size).toBeLessThanOrEqual(2);
+});
+
+test('the key legend folds away and stays folded in the next run', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  const toggle = page.locator('[data-hud="keysToggle"]');
+  await expect(page.locator('.hud-legend dl')).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.hud-legend dl')).toBeHidden();
+
+  await page.reload();
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(page.locator('.hud-legend dl')).toBeHidden();
+  await expect(toggle).toBeVisible();
+});
