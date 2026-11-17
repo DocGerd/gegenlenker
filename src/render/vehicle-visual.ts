@@ -245,13 +245,13 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
   );
 
   // Dolly frame: the turntable centre is the origin; eye and front axle are read as given.
-  const armPath = (side: number): Point3[] => [
+  const armPath = (side: number): [Point3, Point3, Point3] => [
     [0, side * DRAWBAR_SPREAD, plateMid],
     [kink, side * DRAWBAR_SPREAD * (1 - kink / a.eye.x), plateMid],
     [a.eye.x, 0, a.eye.z],
   ];
   const arm = (side: number): BufferGeometry[] => {
-    const [start, bend, end] = armPath(side) as [Point3, Point3, Point3];
+    const [start, bend, end] = armPath(side);
     return [strut(start, bend, ARM_WIDTH, ARM_HEIGHT), strut(bend, end, ARM_WIDTH, ARM_HEIGHT)];
   };
   const dollyChassis = [
@@ -320,6 +320,7 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
     track,
     wheelRadius: radius,
     wheelWidth: TRAILER_WHEEL_WIDTH,
+    ringRadius: PLATE_RADIUS,
     arms: [-1, 1].map((side) => armPath(side).map(([x, y]) => [x, y] as const)),
   });
   const trailerPlan = trailerSchematic(palette, {
@@ -328,6 +329,8 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
     wheelRadius: radius,
     wheelWidth: TRAILER_WHEEL_WIDTH,
     turntableX: a.turntable.x,
+    ringRadius: PLATE_RADIUS,
+    frontX: a.frontX,
   });
 
   const dolly = new Group();

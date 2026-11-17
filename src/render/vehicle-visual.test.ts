@@ -19,28 +19,32 @@ function meshes(root: Object3D): Mesh[] {
 
 const isSchematic = (m: Mesh): boolean => m.material instanceof MeshBasicMaterial;
 
-describe.each(TRUCK_IDS.flatMap((t) => TRAILER_IDS.map((r) => [t, r] as const)))(
-  'top-down schematic of %s with %s',
-  (truckId, trailerId) => {
-    const truck = meshes(proceduralTruck(truckById(truckId), palette).object);
-    const trailer = meshes(proceduralTrailer(trailerById(trailerId), palette).object);
+const schematicOf = (root: Object3D): Mesh[] => meshes(root).filter(isSchematic);
 
-    it('exists on the truck and on the dolly and trailer', () => {
-      expect(truck.some(isSchematic)).toBe(true);
-      expect(trailer.some(isSchematic)).toBe(true);
-    });
-
-    it('is seen by the top-down camera only', () => {
-      for (const m of [...truck, ...trailer].filter(isSchematic)) {
+describe.each([
+  ['truck', TRUCK_IDS.map((id) => proceduralTruck(truckById(id), palette).object), 3],
+  ['trailer', TRAILER_IDS.map((id) => proceduralTrailer(trailerById(id), palette).object), 2],
+] as const)('top-down schematic of the %s', (_kind, objects, count) => {
+  it.each(objects.map((o, i) => [i, o] as const))(
+    'has exactly the expected meshes, drawn over the body and seen by the top-down camera only (#%i)',
+    (_i, object) => {
+      const plan = schematicOf(object);
+      expect(plan).toHaveLength(count);
+      for (const m of plan) {
+        expect((m.material as Material).depthTest).toBe(false);
+        expect(m.renderOrder).toBeGreaterThan(0);
         expect(m.layers.mask).toBe(1 << AIDS_LAYER);
       }
-    });
+    },
+  );
 
-    it('leaves every mesh the cockpit and mirrors see depth tested', () => {
+  it.each(objects.map((o, i) => [i, o] as const))(
+    'leaves every mesh the cockpit and mirrors see depth tested (#%i)',
+    (_i, object) => {
       const cockpit = new Camera();
-      for (const m of [...truck, ...trailer]) {
+      for (const m of meshes(object)) {
         if (m.layers.test(cockpit.layers)) expect((m.material as Material).depthTest).toBe(true);
       }
-    });
-  },
-);
+    },
+  );
+});

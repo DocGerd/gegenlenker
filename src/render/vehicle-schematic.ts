@@ -24,14 +24,12 @@ const COUPLING_DOT_RADIUS = 0.25;
 const NEEDLE_LENGTH = 3;
 const NEEDLE_WIDTH = 0.12;
 const DRAWBAR_WIDTH = 0.2;
-const RING_RADIUS = 0.5;
 const RING_WIDTH = 0.12;
-const INDEX_LENGTH = 1.6;
 const INDEX_WIDTH = 0.16;
 
-/** Dolly sits under the trailer, both under the aids overlay (order 10). */
-export const DOLLY_ORDER = 5;
-export const VEHICLE_ORDER = 6;
+/** Both draw below the aids overlay. */
+const DOLLY_ORDER = 5;
+const VEHICLE_ORDER = 6;
 
 /** Draws the shape grown by `grow` metres on every side. */
 type Shape = (grow: number) => BufferGeometry;
@@ -143,6 +141,7 @@ export type DollySchematicParams = {
   readonly track: number;
   readonly wheelRadius: number;
   readonly wheelWidth: number;
+  readonly ringRadius: number;
   /** Each arm of the A-frame as points from the turntable out to the eye. */
   readonly arms: readonly (readonly Point[])[];
 };
@@ -154,7 +153,7 @@ export function dollySchematic(palette: ScenePalette, p: DollySchematicParams) {
   const mesh = s.mesh(DOLLY_ORDER, [
     ...[-1, 1].map((side) => wheel(p.frontAxleX, side * half, p.wheelRadius, p.wheelWidth)),
     bar([p.frontAxleX, -half], [p.frontAxleX, half], AXLE_WIDTH),
-    ring(0, 0, RING_RADIUS, RING_WIDTH),
+    ring(0, 0, p.ringRadius, RING_WIDTH),
     ...p.arms.flatMap((arm) => polyline(arm, DRAWBAR_WIDTH)),
   ]);
   return { mesh: mesh(), dispose: s.dispose };
@@ -166,18 +165,28 @@ export type TrailerSchematicParams = {
   readonly wheelRadius: number;
   readonly wheelWidth: number;
   readonly turntableX: number;
+  /** Radius of the dolly's turntable ring, which the index tick starts outside of. */
+  readonly ringRadius: number;
+  readonly frontX: number;
 };
 
 /** Trailer frame: the effective rear axle is the origin. */
 export function trailerSchematic(palette: ScenePalette, p: TrailerSchematicParams) {
   const s = createSchematic(palette);
   const half = p.track / 2;
+  const indexStart = p.turntableX + p.ringRadius + RING_WIDTH / 2;
+  const indexEnd = p.frontX - HALO;
+  // a front edge too close to the ring leaves no room for a tick (the bar needs its own width)
+  const index =
+    indexEnd - indexStart >= INDEX_WIDTH
+      ? [bar([indexStart + INDEX_WIDTH / 2, 0], [indexEnd - INDEX_WIDTH / 2, 0], INDEX_WIDTH)]
+      : [];
   const mesh = s.mesh(VEHICLE_ORDER, [
     ...p.rearAxleXs.flatMap((x) =>
       [-1, 1].map((side) => wheel(x, side * half, p.wheelRadius, p.wheelWidth)),
     ),
-    // forward only: the pivot rays run 4 m backward from the turntable
-    bar([p.turntableX + INDEX_WIDTH / 2 + HALO, 0], [p.turntableX + INDEX_LENGTH, 0], INDEX_WIDTH),
+    // forward only (the pivot rays run backward), ring to front edge, so it cannot read as a drawbar arm
+    ...index,
   ]);
   return { mesh: mesh(), dispose: s.dispose };
 }
