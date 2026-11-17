@@ -4,14 +4,13 @@ import '../src/styles/base.css';
 import type { RenderFrame, ViewMode } from '../src/contracts/render';
 import type { Pose2, SimSnapshot } from '../src/contracts/sim';
 import { TRAILER_IDS, TRUCK_IDS, type VehicleParams } from '../src/contracts/vehicle';
-import { readScenePalette } from '../src/render/palette';
 import { mountPerfOverlay } from '../src/render/perf-overlay';
-import { placeholderLayout, placeholderParts } from '../src/render/placeholder';
 import { createThreeSceneRenderer } from '../src/render/three-renderer';
 import { proceduralTrailer, proceduralTruck } from '../src/render/vehicle-visual';
 import { computeViewports } from '../src/render/viewports';
 import { trailerById, truckById } from '../src/vehicles/registry';
 import { resolveCombination } from '../src/vehicles/resolve';
+import { placeholderLayout, placeholderParts } from './placeholder';
 
 const STEER_PERIOD = 11;
 const COUPLING_PERIOD = 17;
@@ -92,7 +91,7 @@ const renderer = createThreeSceneRenderer({
   trailer: proceduralTrailer,
 });
 renderer.init(canvas);
-renderer.setScene(placeholderLayout, truck, trailer, readScenePalette());
+renderer.setScene(placeholderLayout, truck, trailer);
 
 let width = 0;
 let height = 0;

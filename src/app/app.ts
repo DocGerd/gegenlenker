@@ -4,6 +4,7 @@ import { startUpdatePrompt } from '../pwa/update-prompt';
 import './app.css';
 import type { DriveOutcome, RunConfig } from './drive';
 import { showMenu } from './menu';
+import { showNotice } from './notice';
 import { showResult } from './result-view';
 import { currentSettings, initSettings, loadSettings } from './settings';
 import {
@@ -27,24 +28,66 @@ export function startApp(root: HTMLElement): void {
   screen.className = 'app-screen';
   root.append(screen);
 
+  // Drive and replay each own a history entry, so Android back ends that screen instead of leaving the app.
+  let onBack: (() => void) | null = null;
+  let ownBack = false;
+  window.addEventListener('popstate', () => {
+    if (ownBack) {
+      ownBack = false;
+      return;
+    }
+    const exit = onBack;
+    onBack = null;
+    exit?.();
+  });
+  // A reload during a drive or replay lands on that screen's entry; drop it so back from the menu leaves.
+  if ((history.state as { screen?: boolean } | null)?.screen === true) {
+    ownBack = true;
+    history.back();
+  }
+  const enter = (exit: () => void): void => {
+    history.pushState({ screen: true }, '');
+    onBack = exit;
+  };
+  const leave = (): void => {
+    if (onBack === null) return;
+    onBack = null;
+    ownBack = true;
+    history.back();
+  };
+  const loadFailed = (error: unknown, back: () => void): void => {
+    console.error(error);
+    leave();
+    const notice = showNotice(screen, 'loadFailed', 'back', () => {
+      notice.remove();
+      back();
+    });
+  };
+
   // Loaded on demand so the menu paints without parsing three.js.
   const drive = (run: RunConfig): void => {
     import('./drive')
-      .then((m) =>
-        m.startDrive(screen, run, currentSettings(), (outcome) => finished(run, outcome)),
-      )
-      .catch((error: unknown) => {
-        console.error(error);
-        menu();
-      });
+      .then((m) => {
+        let finish: (() => void) | null = null;
+        enter(() => finish?.());
+        finish = m.startDrive(screen, run, currentSettings(), (outcome) => {
+          leave();
+          finished(run, outcome);
+        });
+      })
+      .catch((error: unknown) => loadFailed(error, menu));
   };
   const replay = (log: InputLog, onExit: () => void): void => {
     import('./replay-view')
-      .then((m) => m.startReplay(screen, log, onExit))
-      .catch((error: unknown) => {
-        console.error(error);
-        onExit();
-      });
+      .then((m) => {
+        let exit: (() => void) | null = null;
+        enter(() => exit?.());
+        exit = m.startReplay(screen, log, () => {
+          leave();
+          onExit();
+        });
+      })
+      .catch((error: unknown) => loadFailed(error, onExit));
   };
   const finished = (run: RunConfig, outcome: DriveOutcome): void => {
     const isNewBest = outcome.result !== null && storeResult(outcome.result);

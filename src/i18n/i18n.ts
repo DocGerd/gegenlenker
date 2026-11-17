@@ -16,19 +16,23 @@ export function setLanguage(lang: Lang): void {
   document.documentElement.lang = lang;
 }
 
-export function language(): Lang {
-  return current;
-}
-
 export function t(key: MessageKey): string {
   return catalogs[current][key];
 }
 
+const formats = new Map<string, Intl.NumberFormat>();
+
 export function formatNumber(value: number, fractionDigits: number): string {
-  return new Intl.NumberFormat(current, {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  }).format(value);
+  const key = `${current}/${fractionDigits}`;
+  let format = formats.get(key);
+  if (format === undefined) {
+    format = new Intl.NumberFormat(current, {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    });
+    formats.set(key, format);
+  }
+  return format.format(value);
 }
 
 export function applyMessages(root: ParentNode): void {

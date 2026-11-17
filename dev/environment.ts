@@ -6,12 +6,8 @@ import { resolveLayout } from '../src/content/resolve-layout';
 import { LAYOUT_IDS } from '../src/contracts/layout';
 import type { AidFlags, RenderFrame, TopDownMode } from '../src/contracts/render';
 import type { Pose2, SimSnapshot, Vec2 } from '../src/contracts/sim';
-import { proceduralAids } from '../src/render/aids';
-import { proceduralEnvironment } from '../src/render/environment';
-import { readScenePalette } from '../src/render/palette';
+import { createSceneRenderer } from '../src/render';
 import { mountPerfOverlay } from '../src/render/perf-overlay';
-import { placeholderParts } from '../src/render/placeholder';
-import { createThreeSceneRenderer } from '../src/render/three-renderer';
 import { computeViewports } from '../src/render/viewports';
 import { trailerAnchors, truckAnchors } from '../src/vehicles/anchors';
 import { trailerById, truckById } from '../src/vehicles/registry';
@@ -129,13 +125,9 @@ const canvas = document.createElement('canvas');
 canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;display:block';
 stage.append(canvas);
 
-const renderer = createThreeSceneRenderer({
-  ...placeholderParts,
-  environment: proceduralEnvironment,
-  aids: proceduralAids,
-});
+const renderer = createSceneRenderer();
 renderer.init(canvas);
-renderer.setScene(resolved, truck, trailer, readScenePalette());
+renderer.setScene(resolved, truck, trailer);
 
 let width = 0;
 let height = 0;

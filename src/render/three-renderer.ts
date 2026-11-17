@@ -18,8 +18,9 @@ import type {
 import type { TruckAnchors } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { bodyToThree } from './coords';
-import { createResolutionGovernor } from './governor';
+import { createFrameTimer } from './governor';
 import { createMirror } from './mirror';
+import { readScenePalette } from './palette';
 import {
   AIDS_LAYER,
   type AidsLayer,
@@ -35,8 +36,6 @@ const FOLLOW_HALF_HEIGHT = 20;
 const YARD_MARGIN = 5;
 const FAR = 400;
 const SKY_HEIGHT = 200;
-const EMA_SMOOTHING = 0.1;
-const P95_WINDOW = 120;
 const MAX_PIXEL_RATIO = 2;
 
 type Built = {
@@ -66,7 +65,7 @@ function setAidsLayer(object: Object3D): void {
 }
 
 export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
-  const governor = createResolutionGovernor();
+  const timer = createFrameTimer();
   const cockpitCamera = new PerspectiveCamera(COCKPIT_FOV, 1, 0.1, FAR);
   cockpitCamera.rotation.order = 'YXZ';
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
@@ -84,12 +83,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   let appliedRatio = 0;
   let contextLost = false;
   let glRenderer = 'unknown';
-  let lastRender = 0;
-  let emaMs = 0;
   let drawCalls = 0;
-  const intervals = new Float64Array(P95_WINDOW);
-  let intervalCount = 0;
-  let intervalNext = 0;
 
   const onLost = (event: Event): void => {
     event.preventDefault();
@@ -105,16 +99,12 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
 
   /** A long gap between frames (restore, hidden tab, new scene) must not count as slow rendering. */
   function resetTiming(): void {
-    lastRender = 0;
-    emaMs = 0;
-    intervalCount = 0;
-    intervalNext = 0;
-    governor.reset();
+    timer.resetTiming();
     appliedRatio = 0;
   }
 
   const ratio = (): number =>
-    Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO) * governor.scale();
+    Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO) * timer.scale();
 
   function applySize(): void {
     if (renderer === null || cssWidth === 0) return;
@@ -167,18 +157,6 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     gl.setScissor(rect.x, y, rect.width, rect.height);
   }
 
-  function recordInterval(now: number): void {
-    if (lastRender > 0) {
-      const dt = now - lastRender;
-      emaMs = emaMs === 0 ? dt : emaMs + EMA_SMOOTHING * (dt - emaMs);
-      intervals[intervalNext] = dt;
-      intervalNext = (intervalNext + 1) % P95_WINDOW;
-      if (intervalCount < P95_WINDOW) intervalCount++;
-      governor.sample(dt);
-    }
-    lastRender = now;
-  }
-
   return {
     init(target) {
       canvas = target;
@@ -199,9 +177,10 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       applySize();
     },
 
-    setScene(nextLayout, truck, trailer, palette) {
+    setScene(nextLayout, truck, trailer) {
       disposeBuilt();
       resetTiming();
+      const palette = readScenePalette();
       const scene = new Scene();
       scene.matrixWorldAutoUpdate = false;
       const truckVisual = parts.truck(truck, palette);
@@ -225,7 +204,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     resize(width, height) {
       cssWidth = width;
       cssHeight = height;
-      governor.reset();
+      timer.resetScale();
       applySize();
     },
 
@@ -234,7 +213,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       if (cssWidth === 0) return;
       const gl = renderer;
       const b = built;
-      recordInterval(performance.now());
+      timer.frame(performance.now());
       if (ratio() !== appliedRatio) applySize();
       const pixelRatio = appliedRatio;
 
@@ -303,13 +282,16 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       drawCalls = gl.info.render.calls;
     },
 
+    skipFrame() {
+      if (renderer === null || contextLost) return;
+      timer.frame(performance.now());
+    },
+
     stats(): RenderStats {
-      const sorted = intervals.slice(0, intervalCount).sort();
-      const p95 = sorted.length === 0 ? 0 : (sorted[Math.ceil(0.95 * sorted.length) - 1] ?? 0);
       return {
-        fps: emaMs === 0 ? 0 : 1000 / emaMs,
-        frameP95Ms: p95,
-        resolutionScale: governor.scale(),
+        fps: timer.fps(),
+        frameP95Ms: timer.p95Ms(),
+        resolutionScale: timer.scale(),
         drawCalls,
         glRenderer,
         contextLost,
