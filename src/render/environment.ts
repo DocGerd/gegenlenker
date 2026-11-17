@@ -19,7 +19,9 @@ import type { Tolerances } from '../contracts/exercise';
 import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
 import { AIDS_LAYER, type Environment } from './seams';
+import { REALISM_HUES } from './realism-hues';
 import { createSky, neutralSky } from './sky';
+import { createSkyline } from './skyline';
 
 const VERGE_Y = 0;
 const SURFACE_Y = 0.005;
@@ -466,8 +468,16 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
   // Radiance of an upward-facing Lambert surface, so the dome below the horizon matches the ground.
   const lit =
     (HEMISPHERE_INTENSITY * ambient.r + SUN_INTENSITY * Math.sin(SUN_ELEVATION)) / Math.PI;
-  const sky = createSky(horizon, new Color(palette.verge).multiplyScalar(Math.min(1, lit)));
-  group.add(sky.mesh);
+  const haze = new Color(REALISM_HUES.skyHaze);
+  const sky = createSky(
+    horizon,
+    new Color(palette.verge).multiplyScalar(Math.min(1, lit)),
+    haze,
+    new Color(REALISM_HUES.sunHalo),
+    sun.position,
+  );
+  const skyline = createSkyline(new Color(REALISM_HUES.skylineDark), haze);
+  group.add(sky.mesh, skyline.mesh);
 
   return {
     object: group,
@@ -483,6 +493,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
       solid.dispose();
       flat.dispose();
       sky.dispose();
+      skyline.dispose();
     },
   };
 }
