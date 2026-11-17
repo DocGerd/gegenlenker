@@ -5,7 +5,7 @@ import type { AidFlags, RenderFrame, TopDownMode } from '../contracts/render';
 import type { Simulation, SimSnapshot } from '../contracts/sim';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
-import { formatNumber, t } from '../i18n/i18n';
+import { formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { computeViewports } from '../render/viewports';
 import { createEventScanner, runStartStep, type ReplayEventKind } from '../scoring/replay-events';
@@ -109,8 +109,8 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   );
   // Times count from the first driving input, like the result screen.
   const startStep = Math.min(runStartStep(log), log.steps);
-  const runLabel = (step: number): string => formatNumber(runSeconds(step, startStep), 1);
-  const total = `${runLabel(log.steps)} s`;
+  const runLabel = (step: number): string => formatSeconds(runSeconds(step, startStep));
+  const total = runLabel(log.steps);
 
   const stage = document.createElement('div');
   stage.className = 'replay';

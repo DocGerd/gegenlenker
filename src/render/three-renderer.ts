@@ -157,11 +157,11 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     let cy: number;
     let halfH: number;
     if (frame.topDown === 'follow') {
-      const { truck, trailerRear, speed, control } = frame.snapshot;
+      const { truck, trailer, trailerRear, speed, control } = frame.snapshot;
       const frontX = b.anchors.frontX;
       const bumperX = truck.x + Math.cos(truck.heading) * frontX;
       const bumperY = truck.y + Math.sin(truck.heading) * frontX;
-      const target = leadTarget(truck.heading, speed, control.gear);
+      const target = leadTarget(truck.heading, trailer.heading, speed, control.gear);
       const now = performance.now();
       const k =
         leadAt < 0

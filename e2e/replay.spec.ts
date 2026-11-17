@@ -28,8 +28,7 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
 
   await scrubber.fill(last ?? '0');
   const total = (await time.textContent())?.split(' / ')[1] ?? '';
-  const seconds = total.replace(' s', '');
-  await expect(time).toHaveText(`${seconds} / ${total}`);
+  await expect(time).toHaveText(`${total} / ${total}`);
   await scrubber.fill('0');
-  await expect(time).toHaveText(`0.0 / ${total}`);
+  await expect(time).toHaveText(`0.0 s / ${total}`);
 });

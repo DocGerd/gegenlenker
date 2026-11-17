@@ -2,7 +2,14 @@ import { exercises } from '../content/registry';
 import { LAYOUT_IDS, type LayoutId } from '../contracts/layout';
 import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
-import { applyMessages, formatNumber, setLanguage, t, type Lang } from '../i18n/i18n';
+import {
+  applyMessages,
+  formatNumber,
+  formatSeconds,
+  setLanguage,
+  t,
+  type Lang,
+} from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { bestKey, exerciseDone } from '../scoring/best';
 import { trailers, trucks } from '../vehicles/registry';
@@ -95,7 +102,7 @@ function bestLine(result: RunResult): HTMLElement {
       'menu-stat',
       `${t('best')} · ${t(result.assisted ? 'withAids' : 'noAids')}: ${t(result.reached ? 'targetReached' : 'targetMissed')}`,
     ),
-    stat('time', `${formatNumber(result.time, 1)} s`),
+    stat('time', formatSeconds(result.time)),
     stat('contacts', formatNumber(result.contacts, 0)),
     stat('jackknifes', formatNumber(result.jackknifes, 0)),
     stat('directionChanges', formatNumber(result.directionChanges, 0)),

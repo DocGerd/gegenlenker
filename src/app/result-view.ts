@@ -1,6 +1,6 @@
 import { exerciseById } from '../content/registry';
 import type { RunResult } from '../contracts/exercise';
-import { formatNumber, t } from '../i18n/i18n';
+import { formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { criteria, deltasToBest, endedMoving, type Deltas } from '../scoring/debrief';
 import { EXERCISE_TITLE } from './exercise-text';
@@ -149,8 +149,8 @@ export function showResult(
     row('directionChanges', formatNumber(result.directionChanges, 0), {
       delta: delta('directionChanges', 0, ''),
     }),
-    row('time', `${formatNumber(result.time, 1)} s`, {
-      delta: delta('time', 1, ' s'),
+    row('time', formatSeconds(result.time), {
+      delta: delta('time', 1, ` ${t('unitSeconds')}`),
     }),
   );
 

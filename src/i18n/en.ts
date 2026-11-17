@@ -89,6 +89,7 @@ export const en = {
   eventContact: 'Contact',
   eventJackknife: 'Limit stop',
   timeline: 'Timeline',
+  unitSeconds: 's',
   newBest: 'New best',
   retry: 'Retry',
   replay: 'Replay',

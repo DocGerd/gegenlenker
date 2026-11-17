@@ -94,6 +94,7 @@ export const de: Record<MessageKey, string> = {
     'Position und Winkel lagen in der Toleranz, aber das Fahrzeug rollte noch. Halte es im Ziel an.',
   eventContact: 'Berührung',
   eventJackknife: 'Anschlag',
+  unitSeconds: 's',
   timeline: 'Zeitleiste',
   newBest: 'Neuer Bestwert',
   retry: 'Erneut versuchen',
