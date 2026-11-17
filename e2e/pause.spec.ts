@@ -176,6 +176,22 @@ test('Escape leaves a replay for the result, and again for the menu', async ({ p
   expect(await historyState(page)).toBeNull();
 });
 
+test('a Space held through the finish does not activate the focused result button', async ({
+  page,
+}) => {
+  await startAndRoll(page);
+  await page.keyboard.down('Space');
+  await finishRun(page);
+  await expect(page.getByRole('button', { name: en.retry })).toBeFocused();
+  await page.keyboard.down('Space'); // auto-repeat
+  await page.keyboard.up('Space');
+  await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
+
+  // Once released, a fresh press works again.
+  await page.keyboard.press('Space');
+  await expect(speed(page)).toHaveText('0.0 km/h');
+});
+
 test('leaving without scoring stores no result and no replay', async ({ page }) => {
   await startAndRoll(page);
   await page.keyboard.press('Escape');

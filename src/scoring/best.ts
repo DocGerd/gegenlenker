@@ -20,12 +20,8 @@ export const resultKey = (r: RunResult): string =>
 
 /** Negative when `a` is better. */
 export function compareResults(a: RunResult, b: RunResult): number {
+  // Only reached runs are recorded; this orders a stored miss from before that rule below any hit.
   if (a.reached !== b.reached) return a.reached ? -1 : 1;
-  // Unreached runs rank by closeness first, so quitting at once never becomes an unbeatable best.
-  if (!a.reached) {
-    const closer = a.positionError - b.positionError || a.angleError - b.angleError;
-    if (closer !== 0) return closer;
-  }
   return (
     a.contacts + a.jackknifes - (b.contacts + b.jackknifes) ||
     a.directionChanges - b.directionChanges ||

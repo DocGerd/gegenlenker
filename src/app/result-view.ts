@@ -171,9 +171,24 @@ export function showResult(
     e.preventDefault();
     actions.menu();
   };
+  // A run ends while Space (the brake) may still be held; its repeats and release must not click the focused button.
+  let spaceFree = false;
+  const guardSpace = (e: KeyboardEvent): void => {
+    if (e.code !== 'Space' || spaceFree) return;
+    if (e.type === 'keydown' && !e.repeat) {
+      spaceFree = true;
+      return;
+    }
+    if (e.type === 'keyup') spaceFree = true;
+    e.preventDefault();
+  };
   window.addEventListener('keydown', onEscape);
+  window.addEventListener('keydown', guardSpace, true);
+  window.addEventListener('keyup', guardSpace, true);
   return () => {
     window.removeEventListener('keydown', onEscape);
+    window.removeEventListener('keydown', guardSpace, true);
+    window.removeEventListener('keyup', guardSpace, true);
     container.remove();
   };
 }
