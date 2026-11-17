@@ -329,6 +329,15 @@ describe('scene tokens', () => {
     expect(contrast(scene(thing), scene(ground))).toBeGreaterThanOrEqual(1.5);
   });
 
+  // Aid strokes: the accent sits on a --scene-wheel casing; the casing edge reads against the ground.
+  it.each(['yard', 'street'])('aid casing against %s is 3:1 or more', (ground) => {
+    expect(contrast(scene('wheel'), scene(ground))).toBeGreaterThanOrEqual(3);
+  });
+
+  it('aid accent against its casing is 3:1 or more', () => {
+    expect(contrast(scene('accent'), scene('wheel'))).toBeGreaterThanOrEqual(3);
+  });
+
   // Routing: a single-tone obstacle on the yard resolves to a key that satisfies T1 there.
   describe('obstacle palette keys over the resolved layouts', () => {
     const resolved = LAYOUT_IDS.flatMap((id) => [
