@@ -1,4 +1,4 @@
-import type { Rect, ViewMode, ViewRects } from '../contracts/render';
+import type { LegendBox, Rect, ViewMode, ViewRects } from '../contracts/render';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -20,7 +20,13 @@ export function controlsHeight(cssWidth: number, cssHeight: number): number {
   return Math.max(steer, INSET + STOP_BLOCK + STOP_GAP + LABEL_BLOCK + lever);
 }
 
-export function computeViewports(cssWidth: number, cssHeight: number, mode: ViewMode): ViewRects {
+/** `legend` is the measured key legend: the mirrors stay above it where it reaches under them. */
+export function computeViewports(
+  cssWidth: number,
+  cssHeight: number,
+  mode: ViewMode,
+  legend: LegendBox | null = null,
+): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
     return { cockpit: null, mirrorLeft: null, mirrorRight: null, topDown: full };
@@ -39,7 +45,11 @@ export function computeViewports(cssWidth: number, cssHeight: number, mode: View
   const fullWidth = clamp(Math.round(0.15 * cockpit.width), 72, 200);
   const wanted = Math.min(2 * fullWidth, Math.round(0.5 * cockpit.height));
   const floor = cockpit.y + COCKPIT_LABEL;
-  const ceiling = cssHeight - controlsHeight(cssWidth, cssHeight) - MIRROR_GAP;
+  // The mirror only shrinks and moves inward from its full width, so that width is the worst case.
+  const rightMirrorLeft = cockpit.x + cockpit.width - INSET - fullWidth;
+  const legendClear = legend !== null && legend.right > rightMirrorLeft ? legend.height : 0;
+  const clear = Math.max(controlsHeight(cssWidth, cssHeight), legendClear);
+  const ceiling = cssHeight - clear - MIRROR_GAP;
   const preferred = cockpit.y + Math.round(0.16 * cockpit.height);
   const y = Math.min(preferred, Math.max(floor, ceiling - wanted));
   const mh = clamp(ceiling - y, MIN_MIRROR_HEIGHT, wanted);
