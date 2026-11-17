@@ -11,7 +11,7 @@ import { currentSettings, updateSettings, type Settings } from './settings';
 import { bestResults } from './storage';
 import { applyTheme } from './theme';
 
-const EXERCISE_TITLE: Readonly<Record<ExerciseId, MessageKey>> = {
+export const EXERCISE_TITLE: Readonly<Record<ExerciseId, MessageKey>> = {
   'straight-reverse': 'exerciseStraightReverse',
   'reverse-bay': 'exerciseReverseBay',
   'reverse-corner': 'exerciseReverseCorner',
@@ -49,6 +49,9 @@ const MARKUP = `
   <section class="menu-section">
     <h2 class="menu-heading" data-i18n="exercises"></h2>
     <div class="menu-grid" data-menu="exercises"></div>
+  </section>
+  <section class="menu-section" data-menu="replaySection">
+    <button type="button" class="menu-start" data-menu="replay"><span class="menu-start-title" data-i18n="replayLastRun"></span></button>
   </section>
   <section class="menu-card">
     <h2 class="menu-heading" data-i18n="settings"></h2>
@@ -112,7 +115,12 @@ function startButton(title: string, onClick: () => void): HTMLButtonElement {
   return button;
 }
 
-export function showMenu(root: HTMLElement, onStart: (run: RunConfig) => void): () => void {
+export function showMenu(
+  root: HTMLElement,
+  onStart: (run: RunConfig) => void,
+  /** Null when there is no run to replay. */
+  onReplay: (() => void) | null,
+): () => void {
   const container = document.createElement('div');
   container.className = 'menu-scroll';
   root.append(container);
@@ -159,6 +167,12 @@ export function showMenu(root: HTMLElement, onStart: (run: RunConfig) => void): 
         ),
       ),
     );
+
+    const replaySection = query<HTMLElement>(container, 'replaySection');
+    if (onReplay === null) replaySection.remove();
+    else {
+      query<HTMLElement>(container, 'replay').addEventListener('click', onReplay);
+    }
 
     const exerciseButtons = exercises.map((exercise) => {
       const button = startButton(t(EXERCISE_TITLE[exercise.id]), () =>

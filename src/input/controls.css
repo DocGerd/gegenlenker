@@ -83,7 +83,7 @@
   box-shadow: var(--shadow-sm);
 }
 
-.ctl-gear {
+.ctl .ctl-gear {
   min-height: calc(var(--size-target) * 1.25);
 }
 

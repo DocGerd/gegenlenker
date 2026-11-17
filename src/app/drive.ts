@@ -48,7 +48,7 @@ type Frame = { -readonly [K in keyof RenderFrame]: RenderFrame[K] };
 // One renderer and canvas for the whole session: a fresh WebGL context per run would hit the browser's context limit.
 let shared: { readonly canvas: HTMLCanvasElement; readonly renderer: SceneRenderer } | null = null;
 
-function acquireRenderer(): NonNullable<typeof shared> {
+export function acquireRenderer(): NonNullable<typeof shared> {
   if (shared !== null) return shared;
   const canvas = document.createElement('canvas');
   canvas.className = 'drive-canvas';
@@ -68,7 +68,7 @@ function acquireRenderer(): NonNullable<typeof shared> {
   return shared;
 }
 
-function showNotice(
+export function showNotice(
   stage: HTMLElement,
   message: MessageKey,
   action: MessageKey,
