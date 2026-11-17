@@ -73,6 +73,9 @@ export const de: Record<MessageKey, string> = {
   runNoAids: 'Ohne Hilfen gefahren',
   endedMoving:
     'Position und Winkel lagen in der Toleranz, aber das Fahrzeug rollte noch. Halte es im Ziel an.',
+  eventContact: 'Kontakt',
+  eventJackknife: 'Knickstopp',
+  timeline: 'Zeitleiste',
   newBest: 'Neuer Bestwert',
   retry: 'Erneut versuchen',
   replay: 'Fahrt ansehen',

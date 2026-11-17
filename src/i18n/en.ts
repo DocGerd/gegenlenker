@@ -71,6 +71,9 @@ export const en = {
   runNoAids: 'Driven without aids',
   endedMoving:
     'Position and angle were within tolerance, but the vehicle was still moving. Stop it inside the target.',
+  eventContact: 'Contact',
+  eventJackknife: 'Jackknife stop',
+  timeline: 'Timeline',
   newBest: 'New best',
   retry: 'Retry',
   replay: 'Replay',
