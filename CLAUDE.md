@@ -4,7 +4,7 @@ Truck + turntable drawbar trailer maneuvering trainer. TypeScript, Vite, three.j
 
 ## Verify
 
-Dev server: `pnpm dev`. CI runs the rest in order (`.github/workflows/ci.yml`); run them before every PR.
+Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test:e2e` builds with `BASE_PATH` itself); run it before every PR.
 
 - Install: `pnpm install --frozen-lockfile`
 - Lint: `pnpm lint`; format: `pnpm format:check` (fix with `pnpm format`)
@@ -31,13 +31,13 @@ Dev server: `pnpm dev`. CI runs the rest in order (`.github/workflows/ci.yml`); 
 - Three space (`src/render/coords.ts`): x = x, z = -y, y up, `rotation.y` = heading.
 - `ControlVector.steer` is the target, -1 (full right) to 1 (full left), rate-limited in the snapshot; `lever` is 0 to 1 of the speed cap; direction comes from `gear` (`R` gives negative speed).
 - `couplingAngle` = truck heading - drawbar heading; `turntableAngle` = drawbar heading - trailer heading.
-- Reversing with left steer, the trailer rear first goes LEFT (double inversion); re-check after changing vehicle data.
+- Reversing with left steer, the trailer rear first goes LEFT (double inversion); `src/sim/simulation.test.ts` pins it for every vehicle pair.
 
 ## Vehicle data
 
 - Every numeric vehicle dimension is a `Param` (`id`, `name`, `body` are not) with `status` `'sourced'` (`source` is an https URL from `src/vehicles/sources.ts`) or `'estimate'` (`source` is the basis).
 - Use `sourced()` or `estimate()`; never present an estimate as sourced.
-- Adding, changing, sourcing or removing an estimate means updating the README table between the `estimates:` markers to match `estimatesTable()`; `src/vehicles/estimates.test.ts` fails otherwise.
+- Adding, changing, sourcing or removing an estimate means running `pnpm estimates` (rewrites the README table between the `estimates:` markers); `src/vehicles/estimates.test.ts` fails otherwise.
 - Bump `SIM_REVISION` in `src/sim/fingerprint.ts` only for sim, collision or scoring logic changes; `dataFingerprint` already hashes vehicle params, obstacles, start, exercise, sim constants and scoring thresholds.
 
 ## Tests
@@ -53,11 +53,12 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 
 ## Visual check
 
-- Headless Chromium screenshots of the real app work for visual checks; UI language defaults to the browser locale (`navigator.languages`) unless a saved setting overrides it; there is no URL parameter.
+- Headless Chromium screenshots of the real app work for visual checks (`pnpm exec playwright screenshot --lang de-DE <url> <png>`; scripts reuse the `@playwright/test` devDep); UI language defaults to the browser locale (`navigator.languages`) unless a saved setting overrides it; there is no URL parameter.
 
 ## Workflow
 
 - Changes go through PRs; never push to `main`.
+- `.claude/settings.json` is committed: a PostToolUse hook (`.claude/hooks/format.sh`) runs Prettier on each Edit/Write, and editing `pnpm-lock.yaml` is denied (change it through pnpm). Review `.claude/**` changes like code.
 - Commit and PR titles use conventional prefixes: `feat`, `fix`, `docs`, `ci`, `chore`, `refactor`, `perf`, `test`.
 - UI text goes through `t()`; keys live in `src/i18n/en.ts`, and `de.ts` is typed against them, so both must define every key.
 - Choose the merge method per PR: merge commit when the commits are meaningful; no squash by default.
