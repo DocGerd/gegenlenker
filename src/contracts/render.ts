@@ -60,12 +60,7 @@ export type RenderStats = {
 };
 export interface SceneRenderer {
   init(canvas: HTMLCanvasElement): void; // throws when WebGL 2 is unavailable
-  setScene(
-    layout: ResolvedLayout,
-    truck: TruckSpec,
-    trailer: TrailerSpec,
-    palette: ScenePalette,
-  ): void;
+  setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec): void;
   resize(cssWidth: number, cssHeight: number): void;
   render(frame: RenderFrame): void;
   /** Reports an animation frame on which the caller chose not to render, so frame timing still sees it. */

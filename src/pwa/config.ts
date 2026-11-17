@@ -38,7 +38,7 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
       icons,
     },
     workbox: {
-      globPatterns: ['**/*.{html,js,css,svg,png,woff2,webmanifest}'],
+      globPatterns: ['**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}'],
       navigateFallback: 'index.html',
       cleanupOutdatedCaches: true,
       clientsClaim: true,

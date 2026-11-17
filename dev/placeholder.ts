@@ -1,3 +1,4 @@
+/* eslint-disable no-restricted-imports -- dev-only stand-in, never built; the rule guards shipped code */
 import {
   BoxGeometry,
   BufferGeometry,
@@ -7,17 +8,18 @@ import {
   Mesh,
   MeshLambertMaterial,
   PlaneGeometry,
+  Vector3,
   type Material,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { ResolvedLayout } from '../contracts/layout';
-import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
-import type { Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
-import { truckAnchors, trailerAnchors } from '../vehicles/anchors';
-import { placePose, toThree } from './coords';
-import type { AidsLayer, Environment, RendererParts, VehicleVisual } from './seams';
+import type { ResolvedLayout } from '../src/contracts/layout';
+import type { ScenePalette, ScenePaletteKey } from '../src/contracts/render';
+import type { Param, TrailerSpec, TruckSpec } from '../src/contracts/vehicle';
+import { placePose } from '../src/render/coords';
+import type { AidsLayer, Environment, RendererParts, VehicleVisual } from '../src/render/seams';
+import { truckAnchors, trailerAnchors } from '../src/vehicles/anchors';
 
-// Stand-in content for the renderer spike; the real parts replace it behind the same seams.
+// Stand-in content for the dev harnesses; the shipped parts sit behind the same seams.
 export const placeholderLayout: ResolvedLayout = {
   id: 'depot',
   bounds: { minX: -60, minY: -60, maxX: 60, maxY: 60 },
@@ -33,6 +35,9 @@ export const placeholderLayout: ResolvedLayout = {
 };
 
 const mm = (p: Param): number => p.value / 1000;
+
+/** World (x east, y north, up) to Three (x, up, −y). */
+const toThree = (x: number, y: number, up = 0): Vector3 => new Vector3(x, up, -y);
 
 /** A box given by body-frame extents (x forward, y left, z up). */
 function bodyBox(
