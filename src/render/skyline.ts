@@ -1,4 +1,5 @@
 import { SKY_LAYER } from './seams';
+import { DOME_PROJECTION } from './sky';
 import {
   BufferGeometry,
   Color,
@@ -16,9 +17,7 @@ attribute vec3 tone;
 varying vec3 vTone;
 void main() {
   vTone = tone;
-  vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
-  gl_Position = clip.xyww;
-  gl_Position.z *= 0.9999;
+  ${DOME_PROJECTION}
 }
 `;
 

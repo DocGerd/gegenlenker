@@ -3,13 +3,18 @@ import { BackSide, Color, Mesh, ShaderMaterial, SphereGeometry, type Vector3 } f
 
 // Anchored to the camera (view rotation only, depth at the far plane), so it needs no per-frame
 // update and serves the cockpit and both mirrors. It is on SKY_LAYER, which the top-down camera skips.
+/** Shared with the skyline so both sit on the same depth plane. */
+export const DOME_PROJECTION = /* glsl */ `
+  vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
+  gl_Position = clip.xyww;
+  gl_Position.z *= 0.9999;
+`;
+
 const VERTEX = /* glsl */ `
 varying vec3 vDirection;
 void main() {
   vDirection = position;
-  vec4 clip = projectionMatrix * vec4(mat3(viewMatrix) * position, 1.0);
-  gl_Position = clip.xyww;
-  gl_Position.z *= 0.9999;
+  ${DOME_PROJECTION}
 }
 `;
 
