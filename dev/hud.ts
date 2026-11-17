@@ -38,6 +38,7 @@ const hud = createHud(stage, {
   mode: params.get('mode') === 'yard' ? 'yard' : 'exercise',
   aids: { pivots: true, path: true, tracks: false, ghost: false },
   topDown: 'follow',
+  collapsed: { aids: false, gauges: false },
 });
 hud.onAction((a) => console.info('hud action', JSON.stringify(a)));
 

@@ -1,4 +1,4 @@
-import type { AidFlags, Rect, TopDownMode, ViewRects } from '../contracts/render';
+import type { AidFlags, CollapsedPanels, Rect, TopDownMode, ViewRects } from '../contracts/render';
 import type { BlockReason, Gear, SimSnapshot } from '../contracts/sim';
 import { applyMessages, formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
@@ -9,6 +9,7 @@ export type HudAction =
   | { type: 'topDown'; mode: TopDownMode }
   | { type: 'resetView' }
   | { type: 'aid'; aid: keyof AidFlags; on: boolean }
+  | { type: 'collapse'; panel: keyof CollapsedPanels; collapsed: boolean }
   | { type: 'finish' }
   | { type: 'menu' };
 
@@ -17,6 +18,8 @@ export type Hud = {
   layout(views: ViewRects): void;
   /** The reset-view button is enabled while the top-down view differs from its default framing. */
   setViewChanged(changed: boolean): void;
+  /** Points the arrow at a target beyond the top-down view; null hides it. Positions are stage CSS px. */
+  setTargetArrow(arrow: { x: number; y: number; angle: number } | null): void;
   onAction(cb: (a: HudAction) => void): void;
   dispose(): void;
 };
@@ -27,6 +30,7 @@ export type HudOptions = {
   mode: 'exercise' | 'yard';
   aids: AidFlags;
   topDown: TopDownMode;
+  collapsed: CollapsedPanels;
 };
 
 const BLOCKED_KEY: Record<BlockReason, MessageKey> = {
@@ -44,6 +48,10 @@ const AIDS: readonly [keyof AidFlags, MessageKey][] = [
   ['path', 'aidPath'],
   ['tracks', 'aidTracks'],
   ['ghost', 'aidGhost'],
+];
+const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
+  ['aids', 'panelAids'],
+  ['gauges', 'panelGauges'],
 ];
 const GEAR_NAMES: readonly Gear[] = ['P', 'R', 'N', 'D'];
 const MS_TO_KMH = 3.6;
@@ -86,15 +94,15 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-toolbar">
-      <div class="hud-group" data-hud="views">
-        <span class="hud-label hud-view-label" data-i18n="labelTopDown"></span>${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button></div>
-      <div class="hud-group" data-hud="aids">${AIDS.map(([a, k]) => button('data-aid', a, k)).join('')}</div>
+      <div class="hud-group" data-hud="views" data-chrome>
+        <span class="hud-label hud-view-label" data-i18n="labelTopDown"></span>${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
+      <div class="hud-group" data-hud="aids" data-chrome>${AIDS.map(([a, k]) => button('data-aid', a, k)).join('')}</div>
     </div>
     <div class="hud-info">
-      <div class="hud-gauges" data-hud="gauges"></div>
+      <div class="hud-gauges" data-hud="gauges" data-chrome></div>
       ${
         mode === 'exercise'
-          ? `<dl class="hud-counters" data-hud="counters">
+          ? `<dl class="hud-counters" data-hud="counters" data-chrome>
         <dt data-i18n="contacts"></dt><dd class="mono" data-hud="contacts"></dd>
         <dt data-i18n="jackknifes"></dt><dd class="mono" data-hud="jackknifes"></dd>
         <dt data-i18n="directionChanges"></dt><dd class="mono" data-hud="directionChanges"></dd>
@@ -104,7 +112,8 @@ const MARKUP = (mode: HudOptions['mode']): string => `
       }
     </div>
   </div>
-  <button type="button" class="hud-action" data-hud="action" data-i18n="${mode === 'exercise' ? 'finish' : 'menu'}"></button>
+  <div class="hud-arrow" data-hud="targetArrow" role="img" aria-label="${t('targetDirection')}" hidden><svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="M-9 -8L10 0L-9 8L-4 0Z" /></svg></div>
+  <button type="button" class="hud-action" data-chrome data-hud="action" data-i18n="${mode === 'exercise' ? 'finish' : 'menu'}"></button>
 </div>`;
 
 const query = <T extends Element>(
@@ -149,6 +158,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const gaugeBox = query(hud, 'gauges', HTMLElement);
   const speed = query(hud, 'speed', HTMLElement);
   const gearEl = query(hud, 'gear', HTMLElement);
+  const arrow = query(hud, 'targetArrow', HTMLElement);
 
   const coupling: Gauge = createGauge(t('couplingAngle'), opts.couplingLimit);
   const turntable: Gauge = createGauge(t('turntableAngle'), opts.turntableLimit);
@@ -167,11 +177,20 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const aids = { ...opts.aids };
   const viewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
   const aidButtons = [...hud.querySelectorAll<HTMLElement>('[data-aid]')];
+  const panelButtons = [...hud.querySelectorAll<HTMLElement>('[data-panel]')];
+  const collapsed = { ...opts.collapsed };
+  const aidsBox = query(hud, 'aids', HTMLElement);
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
     for (const b of aidButtons)
       b.setAttribute('aria-pressed', String(aids[b.dataset['aid'] as keyof AidFlags]));
-    setHidden(gaugeBox, !aids.pivots);
+    for (const b of panelButtons)
+      b.setAttribute(
+        'aria-pressed',
+        String(!collapsed[b.dataset['panel'] as keyof CollapsedPanels]),
+      );
+    setHidden(aidsBox, collapsed.aids);
+    setHidden(gaugeBox, !aids.pivots || collapsed.gauges);
   };
   syncToggles();
 
@@ -194,6 +213,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         aids[aid] = !aids[aid];
         syncToggles();
         emit({ type: 'aid', aid, on: aids[aid] });
+      },
+      { signal },
+    );
+  }
+  for (const b of panelButtons) {
+    b.addEventListener(
+      'click',
+      () => {
+        const panel = b.dataset['panel'] as keyof CollapsedPanels;
+        collapsed[panel] = !collapsed[panel];
+        syncToggles();
+        emit({ type: 'collapse', panel, collapsed: collapsed[panel] });
       },
       { signal },
     );
@@ -310,6 +341,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     setViewChanged(changed) {
       if (resetView.disabled === changed) resetView.disabled = !changed;
+    },
+    setTargetArrow(next) {
+      setHidden(arrow, next === null);
+      if (next === null) return;
+      const x = Math.round(next.x);
+      const y = Math.round(next.y);
+      const deg = Math.round((next.angle * 180) / Math.PI);
+      arrow.style.transform = `translate(${x}px, ${y}px) rotate(${deg}deg)`;
     },
     onAction(cb) {
       listeners.push(cb);

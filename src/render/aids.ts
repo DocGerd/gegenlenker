@@ -32,12 +32,13 @@ const TRACK_JUMP = 5; // a larger gap between samples starts a new line
 const PIVOT_WIDTH = 0.12;
 const PIVOT_LENGTH = 4;
 const GHOST_STRIP = 0.1;
-const GHOST_OPACITY = 0.5;
 const TRACK_Y = 0.02;
 const PATH_Y = 0.03;
 const GHOST_Y = 0.04;
 const PIVOT_Y = 0.05;
 const OVERLAY_ORDER = 10;
+const CASING = 0.06; // dark edge on each side of an accent stroke
+const CASING_DROP = 0.005;
 const mm = (v: number): number => v / 1000;
 
 function onAidsLayer<T extends Object3D>(object: T): T {
@@ -210,6 +211,43 @@ class SegmentRibbon {
   }
 }
 
+/** An accent ribbon on a wider dark one, so the stroke keeps its contrast on any ground. */
+class CasedRibbon {
+  readonly object = onAidsLayer(new Group());
+  private readonly core: SegmentRibbon;
+  private readonly casing: SegmentRibbon;
+
+  constructor(
+    capacity: number,
+    width: number,
+    up: number,
+    core: Material,
+    casing: Material,
+    order = 0,
+  ) {
+    this.casing = new SegmentRibbon(capacity, width + 2 * CASING, up - CASING_DROP, casing);
+    this.core = new SegmentRibbon(capacity, width, up, core);
+    this.casing.mesh.renderOrder = order - 1;
+    this.core.mesh.renderOrder = order;
+    this.object.add(this.casing.mesh, this.core.mesh);
+  }
+
+  set(slot: number, ax: number, ay: number, bx: number, by: number): void {
+    this.casing.set(slot, ax, ay, bx, by);
+    this.core.set(slot, ax, ay, bx, by);
+  }
+
+  flush(count: number): void {
+    this.casing.flush(count);
+    this.core.flush(count);
+  }
+
+  dispose(): void {
+    this.casing.dispose();
+    this.core.dispose();
+  }
+}
+
 export function proceduralAids(
   truck: TruckSpec,
   trailer: TrailerSpec,
@@ -218,13 +256,18 @@ export function proceduralAids(
 ): AidsLayer {
   const group = onAidsLayer(new Group());
   const materials: Material[] = [];
-  const material = (color: number, overlay: boolean, opacity = 1): MeshBasicMaterial => {
+  const material = (
+    color: number,
+    overlay: boolean,
+    opacity = 1,
+    offset = -4,
+  ): MeshBasicMaterial => {
     const m = new MeshBasicMaterial({
       color,
       side: DoubleSide,
       polygonOffset: true,
-      polygonOffsetFactor: -4,
-      polygonOffsetUnits: -4,
+      polygonOffsetFactor: offset,
+      polygonOffsetUnits: offset,
       depthTest: !overlay,
       transparent: opacity < 1,
       opacity,
@@ -235,34 +278,49 @@ export function proceduralAids(
   };
 
   const accent = material(palette.accent, false);
-  const path = new SegmentRibbon(PATH_CAPACITY, PATH_WIDTH, PATH_Y, accent);
+  const casing = material(palette.wheel, false, 1, -3);
+  const path = new CasedRibbon(PATH_CAPACITY, PATH_WIDTH, PATH_Y, accent, casing);
   const corridor = [0, 1].map(
-    () => new SegmentRibbon(PATH_CAPACITY, CORRIDOR_WIDTH, PATH_Y, accent),
+    () => new CasedRibbon(PATH_CAPACITY, CORRIDOR_WIDTH, PATH_Y, accent, casing),
   );
-  const ticks = new SegmentRibbon(3, TICK_WIDTH, PATH_Y, accent);
+  const ticks = new CasedRibbon(3, TICK_WIDTH, PATH_Y, accent, casing);
   const trackMaterial = material(palette.tracks, false);
   const tracks = [0, 1, 2, 3].map(
     () => new SegmentRibbon(TRACK_CAPACITY, TRACK_WIDTH, TRACK_Y, trackMaterial),
   );
-  const pivots = new SegmentRibbon(4, PIVOT_WIDTH, PIVOT_Y, material(palette.accent, true));
-  pivots.mesh.renderOrder = OVERLAY_ORDER;
+  const pivots = new CasedRibbon(
+    4,
+    PIVOT_WIDTH,
+    PIVOT_Y,
+    material(palette.accent, true),
+    material(palette.wheel, true, 1, -3),
+    OVERLAY_ORDER,
+  );
   group.add(
-    path.mesh,
-    ...corridor.map((c) => c.mesh),
-    ticks.mesh,
-    pivots.mesh,
+    path.object,
+    ...corridor.map((c) => c.object),
+    ticks.object,
+    pivots.object,
     ...tracks.map((t) => t.mesh),
   );
 
   const geometries: BufferGeometry[] = [];
-  let ghost: Mesh | null = null;
+  let ghost: Group | null = null;
   const { target } = layout;
   if (target !== null) {
     const a = trailerAnchors(trailer);
-    const geometry = outlineGeometry(a.frontX - a.rearX, mm(trailer.width.value), GHOST_STRIP);
-    geometries.push(geometry);
-    ghost = onAidsLayer(new Mesh(geometry, material(palette.accent, true, GHOST_OPACITY)));
-    ghost.renderOrder = OVERLAY_ORDER;
+    const length = a.frontX - a.rearX;
+    const width = mm(trailer.width.value);
+    const geometry = outlineGeometry(length, width, GHOST_STRIP);
+    const casingGeometry = outlineGeometry(length, width, GHOST_STRIP + 2 * CASING);
+    geometries.push(geometry, casingGeometry);
+    ghost = onAidsLayer(new Group());
+    const edge = onAidsLayer(new Mesh(casingGeometry, material(palette.wheel, true, 1, -3)));
+    edge.renderOrder = OVERLAY_ORDER - 1;
+    edge.position.y = -CASING_DROP;
+    const fill = onAidsLayer(new Mesh(geometry, material(palette.accent, true)));
+    fill.renderOrder = OVERLAY_ORDER;
+    ghost.add(edge, fill);
     ghost.position.y = GHOST_Y;
     placePose(ghost, target.pose);
     group.add(ghost);
@@ -309,8 +367,8 @@ export function proceduralAids(
       }
 
       const { trailer: trailerLine, end } = predicted;
-      path.mesh.visible = aids.path && trailerLine.length > 1;
-      if (path.mesh.visible) {
+      path.object.visible = aids.path && trailerLine.length > 1;
+      if (path.object.visible) {
         const n = Math.min(trailerLine.length, PATH_CAPACITY + 1);
         for (let i = 1; i < n; i++) {
           const a = trailerLine[i - 1];
@@ -323,8 +381,8 @@ export function proceduralAids(
       const lines = [predicted.truckOuter, predicted.truckInner];
       corridor.forEach((ribbon, i) => {
         const line = lines[i] ?? [];
-        ribbon.mesh.visible = aids.path && line.length > 1;
-        if (!ribbon.mesh.visible) return;
+        ribbon.object.visible = aids.path && line.length > 1;
+        if (!ribbon.object.visible) return;
         let count = 0;
         dashSegments(line, DASH_ON, DASH_OFF, (ax, ay, bx, by) => {
           if (count < PATH_CAPACITY) ribbon.set(count++, ax, ay, bx, by);
@@ -332,7 +390,7 @@ export function proceduralAids(
         ribbon.flush(count);
       });
 
-      ticks.mesh.visible = aids.path && end !== null;
+      ticks.object.visible = aids.path && end !== null;
       if (end !== null && aids.path) {
         let count = 0;
         const tick = (at: Vec2 | undefined, heading: number | null): void => {
@@ -347,7 +405,7 @@ export function proceduralAids(
         ticks.flush(count);
       }
 
-      pivots.mesh.visible = aids.pivots;
+      pivots.object.visible = aids.pivots;
       if (aids.pivots) {
         // rearward centre lines of the two bodies at each pivot; the angle between them is the pivot angle
         pivotSlot = 0;

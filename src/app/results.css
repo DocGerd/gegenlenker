@@ -50,6 +50,13 @@
   letter-spacing: var(--tracking-tight);
 }
 
+.result-reason {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--color-text-secondary);
+}
+
 .result-badge {
   margin: 0;
   padding: var(--space-1) var(--space-3);

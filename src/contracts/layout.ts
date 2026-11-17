@@ -43,6 +43,8 @@ export type Layout = {
   readonly obstacles: readonly Obstacle[];
   readonly markings: readonly Marking[];
 };
+/** Turn point the truck must come within `radius` of before the target counts. */
+export type WaypointGate = Vec2 & { readonly radius: number };
 export type ResolvedLayout = {
   readonly id: LayoutId;
   readonly bounds: Rect2;
@@ -51,4 +53,5 @@ export type ResolvedLayout = {
   readonly obstacles: readonly Obstacle[];
   readonly markings: readonly Marking[];
   readonly target: TargetZone | null;
+  readonly waypoint: WaypointGate | null;
 };

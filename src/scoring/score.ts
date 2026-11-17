@@ -23,9 +23,12 @@ function stoppedInTarget(s: SimSnapshot, exercise: ExerciseDefinition): boolean 
   );
 }
 
-export function createRunTracker(exercise: ExerciseDefinition): {
+export type RunTracker = {
   update(s: SimSnapshot): boolean;
-} {
+  waypointVisited(): boolean;
+};
+
+export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
   const waypoint = exercise.waypoint;
   let waypointVisited = waypoint === null;
   return {
@@ -39,16 +42,18 @@ export function createRunTracker(exercise: ExerciseDefinition): {
       }
       return waypointVisited && stoppedInTarget(s, exercise);
     },
+    waypointVisited: () => waypointVisited,
   };
 }
 
-/** `reached` is the last `RunTracker.update` result: the snapshot alone cannot know the waypoint. */
+/** `reached` and `waypointVisited` come from the `RunTracker`: the snapshot alone cannot know the waypoint. */
 export function runResult(
   s: SimSnapshot,
   exercise: ExerciseDefinition,
   truckId: TruckId,
   trailerId: TrailerId,
   reached: boolean,
+  waypointVisited: boolean,
 ): RunResult {
   const e = targetError(s, exercise.target);
   return {
@@ -56,6 +61,7 @@ export function runResult(
     truckId,
     trailerId,
     reached,
+    waypointMissed: exercise.waypoint !== null && !waypointVisited,
     positionError: e.position,
     angleError: e.angle,
     contacts: s.contacts,

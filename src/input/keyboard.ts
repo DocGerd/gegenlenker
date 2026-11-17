@@ -10,8 +10,11 @@ const FASTER = ['KeyW', 'ArrowUp'];
 const SLOWER = ['KeyS', 'ArrowDown'];
 const RESET_STEER = 'KeyC';
 
+/** Keys typed into a form field or the pause dialog are not driving input. */
 export const isFormField = (target: EventTarget | null): boolean =>
-  target instanceof Element && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
+  target instanceof Element &&
+  (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) ||
+    target.closest('[role="dialog"]') !== null);
 
 /** Steering keys act in `tick`, at `steerRate` per second; every other key acts on keydown. */
 export function createKeyboard(state: InputState, steerRate: number): Keyboard {
