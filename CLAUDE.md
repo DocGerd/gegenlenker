@@ -11,18 +11,20 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 - Typecheck: `pnpm typecheck`
 - Unit tests: `pnpm test`; single test: `pnpm exec vitest run <file> -t '<name>'`
 - Build: `BASE_PATH=/gegenlenker/ pnpm build`
-- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`)
+- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); it runs only specs matching the `offline` project's `testMatch` in `playwright.config.ts`, so register new specs there.
+- Parallel worktrees: e2e previews on `--strictPort` 4399, so serialize with `flock /tmp/gegenlenker-e2e.lock pnpm test:e2e`; ad-hoc preview servers need another port and `BASE_PATH=/gegenlenker/`.
 - Local-only ignores go in `.git/info/exclude` as unanchored patterns (`dir/`, not `/dir/`); the format scripts pass it to Prettier.
 
 ## Layering
 
 - Only `src/render` imports `three`; `.ts` files are checked by `no-restricted-imports` in `eslint.config.js`, `dev/` harnesses are exempt.
 - `src/{contracts,vehicles,sim,scoring,content}` also import none of `render/app/hud/input/pwa/i18n` and use none of `window`, `document`, `navigator`, `localStorage`, `performance`, `requestAnimationFrame` (same config).
-- Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it, so cockpit and mirrors never see them.
+- Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome) go on `SKY_LAYER` (`src/render/seams.ts`).
 - Vertex colours must be linear: set a `Color` from the palette (`color.set` converts) and pass it to `tint()` (`src/render/environment.ts`); raw palette bytes render too light.
 - ESLint is type-aware (`strictTypeChecked`): fix findings in source, no `eslint-disable`.
 - The `query(root, name, Type)` DOM helpers (menu, hud, controls) throw unless the element is `instanceof Type`: pass the real class (`SVGElement` for `<svg>`/`<g>`, `HTMLSelectElement` for `<select>`).
-- Changing `--scene-*` tokens: keep the T1-T3 contrast targets in `docs/brand/BRAND.md`; `src/styles/tokens.test.ts` enforces them.
+- Changing `--scene-*` tokens: keep the T1-T4 contrast targets in `docs/brand/BRAND.md`; `src/styles/tokens.test.ts` enforces them.
+- Mirror rects avoid the controls via `controlsHeight()` in `src/render/viewports.ts`, which copies control geometry from `src/input/controls.css` and `src/styles/tokens.css`: change both together; `e2e/layout.spec.ts` pins no overlap.
 
 ## Units and signs
 
