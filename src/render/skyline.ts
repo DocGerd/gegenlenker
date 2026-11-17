@@ -120,24 +120,26 @@ function parts(kind: Kind, distance: number, next: () => number): readonly Part[
       ];
     }
     case 'crane': {
-      // portal crane: two legs, a girder and a raised boom to one side
+      // quay crane: two legs, a girder and a boom raised to one side. The boom is a slim slab
+      // rising outwards: a triangle above the girder reads as a gabled roof on posts.
       const span = ang(pick(22, 30)) / 2;
-      const leg = ang(1.6) / 2;
+      const leg = ang(2.4) / 2;
       const deck = ang(pick(28, 38));
       const girder = ang(2.5);
       const reach = ang(pick(30, 45));
       const lift = ang(pick(14, 22));
+      const top = deck + girder;
       return [
         rect(-span - leg, 0, -span + leg, deck),
         rect(span - leg, 0, span + leg, deck),
-        rect(-span - leg, deck, span + leg + reach, deck + girder),
+        rect(-span - leg, deck, span + leg, top),
         [
-          [span, deck + girder],
-          [span + reach, deck + girder],
-          [span + reach * 0.4, deck + girder + lift],
-          [span, deck + girder + lift * 0.3],
+          [span, deck],
+          [span + reach * 1.6, deck + lift],
+          [span + reach * 1.6, deck + lift + girder],
+          [span, top],
         ],
-        rect(-span * 0.6, deck + girder, -span * 0.2, deck + girder + ang(8)),
+        rect(-span * 0.6, top, -span * 0.2, top + ang(8)),
       ];
     }
     case 'poplar': {
