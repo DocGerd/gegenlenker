@@ -13,6 +13,8 @@ export const en = {
   truck: 'Truck',
   trailer: 'Trailer',
   best: 'Best',
+  withAids: 'with aids',
+  noAids: 'no aids',
   noResult: 'No result yet',
   replayLastRun: 'Replay last run',
   estimateNote: 'Some dimensions are estimates.',

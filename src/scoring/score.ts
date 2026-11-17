@@ -54,6 +54,7 @@ export function runResult(
   trailerId: TrailerId,
   reached: boolean,
   waypointVisited: boolean,
+  assisted: boolean,
 ): RunResult {
   const e = targetError(s, exercise.target);
   return {
@@ -61,6 +62,7 @@ export function runResult(
     truckId,
     trailerId,
     reached,
+    assisted,
     waypointMissed: exercise.waypoint !== null && !waypointVisited,
     positionError: e.position,
     angleError: e.angle,

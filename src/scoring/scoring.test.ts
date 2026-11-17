@@ -52,6 +52,7 @@ function result(over: Partial<RunResult> = {}): RunResult {
     truckId: 'man-le-18-280',
     trailerId: 'krone-azw-18',
     reached: true,
+    assisted: false,
     waypointMissed: false,
     positionError: 0.1,
     angleError: 1,
@@ -63,7 +64,7 @@ function result(over: Partial<RunResult> = {}): RunResult {
   };
 }
 
-const KEY = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18');
+const KEY = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false);
 const INSIDE = { trailer: { x: 0, y: 0, heading: -0.1 } };
 
 describe('scoring', () => {
@@ -108,7 +109,15 @@ describe('scoring', () => {
       trailerRear: { x: 3, y: 4 },
       trailer: { x: 0, y: 0, heading: 0.1 },
     });
-    const r = runResult(s, exercise(), 'arocs-1835-ak', 'hueffermann-hpa-24-81-l', false, true);
+    const r = runResult(
+      s,
+      exercise(),
+      'arocs-1835-ak',
+      'hueffermann-hpa-24-81-l',
+      false,
+      true,
+      false,
+    );
     expect(r).toMatchObject({
       exerciseId: 'reverse-bay',
       truckId: 'arocs-1835-ak',
@@ -123,7 +132,8 @@ describe('scoring', () => {
     expect(r.angleError).toBeCloseTo(11.459, 3);
 
     expect(
-      runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18', true, true).reached,
+      runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18', true, true, false)
+        .reached,
     ).toBe(true);
   });
 
@@ -139,6 +149,7 @@ describe('scoring', () => {
       'krone-azw-18',
       reached,
       tracker.waypointVisited(),
+      false,
     );
     expect(result.reached).toBe(false);
     expect(result.waypointMissed).toBe(true);
@@ -147,10 +158,10 @@ describe('scoring', () => {
   it('does not flag a waypoint missed when the exercise has none or it was visited', () => {
     const s = snap(INSIDE);
     expect(
-      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false).waypointMissed,
+      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false, false).waypointMissed,
     ).toBe(false);
     expect(
-      runResult(s, exercise({ x: 90, y: 25 }), 'man-le-18-280', 'krone-azw-18', false, true)
+      runResult(s, exercise({ x: 90, y: 25 }), 'man-le-18-280', 'krone-azw-18', false, true, false)
         .waypointMissed,
     ).toBe(false);
   });
@@ -222,7 +233,7 @@ describe('best results', () => {
     const parse = (raw: string | null) => parseBestResults(raw, fingerprint);
     expect(parse(null)).toEqual({});
     expect(parse('{')).toEqual({});
-    expect(parse(JSON.stringify({ version: 2, results: {} }))).toEqual({});
+    expect(parse(JSON.stringify({ version: 1, results: {} }))).toEqual({});
 
     const valid = result();
     expect(parse(serializeBestResults({ [KEY]: valid }, fingerprint))).toEqual({ [KEY]: valid });
@@ -233,21 +244,41 @@ describe('best results', () => {
       fingerprint: 'data-a',
     };
     delete noTime.time;
-    const otherKey = bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l');
+    const otherKey = bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l', false);
     const raw = JSON.stringify({
-      version: 1,
+      version: 2,
       results: { [KEY]: stored, [otherKey]: noTime, 'slalom/man-le-18-280/krone-azw-18': stored },
     });
     expect(parse(raw)).toEqual({ [KEY]: valid });
   });
 
+  it('ranks assisted and unaided runs apart', () => {
+    const unaided = recordBest({}, result({ time: 30 })).best;
+    const assisted = recordBest(unaided, result({ assisted: true, time: 10 }));
+    expect(assisted.isNewBest).toBe(true);
+    expect(assisted.previous).toBeNull();
+    expect(assisted.best[KEY]).toEqual(result({ time: 30 }));
+    expect(assisted.best[bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', true)]?.time).toBe(
+      10,
+    );
+    expect(recordBest(assisted.best, result({ time: 40 })).previous?.time).toBe(30);
+  });
+
+  it('wipes bests stored before aids were recorded', () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      results: { 'reverse-bay/man-le-18-280/krone-azw-18': { ...result(), fingerprint: 'f' } },
+    });
+    expect(parseBestResults(legacy, () => 'f')).toEqual({});
+  });
+
   it('keeps a stored result only for the data that produced it', () => {
     const other = result({ trailerId: 'hueffermann-hpa-24-81-l' });
-    const otherKey = bestKey(other.exerciseId, other.truckId, other.trailerId);
+    const otherKey = bestKey(other.exerciseId, other.truckId, other.trailerId, false);
     const fingerprint = (r: Pick<RunResult, 'exerciseId' | 'truckId' | 'trailerId'>): string =>
       r.trailerId === 'krone-azw-18' ? 'data-a' : 'data-b';
     const raw = (results: Record<string, unknown>): string =>
-      JSON.stringify({ version: 1, results });
+      JSON.stringify({ version: 2, results });
     expect(
       parseBestResults(
         raw({

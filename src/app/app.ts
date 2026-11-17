@@ -99,7 +99,7 @@ export function startApp(root: HTMLElement): void {
       .catch((error: unknown) => loadFailed(error, menu));
   };
   const finished = (run: RunConfig, outcome: DriveOutcome): void => {
-    const isNewBest = outcome.result !== null && storeResult(outcome.result);
+    const isNewBest = outcome.result !== null && storeResult(outcome.result).isNewBest;
     storeLastRun(outcome.log);
     if (outcome.result === null) {
       leave();

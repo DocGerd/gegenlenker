@@ -94,14 +94,13 @@ function stat(label: MessageKey, value: string): HTMLSpanElement {
   return el;
 }
 
-function bestLine(result: RunResult | undefined): HTMLElement {
+function bestLine(result: RunResult): HTMLElement {
   const line = span('menu-best', '');
-  if (result === undefined) {
-    line.textContent = t('noResult');
-    return line;
-  }
   line.append(
-    span('menu-stat', `${t('best')}: ${t(result.reached ? 'targetReached' : 'targetMissed')}`),
+    span(
+      'menu-stat',
+      `${t('best')} · ${t(result.assisted ? 'withAids' : 'noAids')}: ${t(result.reached ? 'targetReached' : 'targetMissed')}`,
+    ),
     stat('time', `${formatNumber(result.time, 1)} s`),
     stat('contacts', formatNumber(result.contacts, 0)),
     stat('jackknifes', formatNumber(result.jackknifes, 0)),
@@ -198,8 +197,12 @@ export function showMenu(
       const best = bestResults();
       const { truckId, trailerId } = pair();
       for (const { button, exercise } of exerciseButtons) {
-        button.querySelector('.menu-best')?.remove();
-        button.append(bestLine(best[bestKey(exercise.id, truckId, trailerId)]));
+        button.querySelectorAll('.menu-best').forEach((line) => line.remove());
+        const lines = [false, true]
+          .map((assisted) => best[bestKey(exercise.id, truckId, trailerId, assisted)])
+          .filter((r) => r !== undefined)
+          .map(bestLine);
+        button.append(...(lines.length > 0 ? lines : [span('menu-best', t('noResult'))]));
       }
     };
     refreshBest();

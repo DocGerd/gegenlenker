@@ -15,6 +15,8 @@ export const de: Record<MessageKey, string> = {
   truck: 'Lkw',
   trailer: 'Anhänger',
   best: 'Bestwert',
+  withAids: 'mit Hilfen',
+  noAids: 'ohne Hilfen',
   noResult: 'Noch kein Ergebnis',
   replayLastRun: 'Letzte Fahrt ansehen',
   estimateNote: 'Einige Maße sind geschätzt.',
