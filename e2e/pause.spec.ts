@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { en } from '../src/i18n/en';
 
 const speed = (page: Page) => page.locator('[data-hud="speed"]');
+const clock = (page: Page) => page.locator('[data-hud="time"]');
 const sheet = (page: Page) => page.getByRole('dialog', { name: en.paused });
 const menuHeading = (page: Page) => page.getByRole('heading', { name: en.appName });
 // The menu sits on the base entry; a stale drive or result entry would show up in its state.
@@ -28,12 +29,15 @@ test('back pauses the drive and back again continues', async ({ page }) => {
   await expect(sheet(page)).toBeVisible();
 
   const paused = await speed(page).textContent();
-  await page.waitForTimeout(500);
+  const pausedAt = await clock(page).textContent();
+  await page.waitForTimeout(1200);
   await expect(speed(page)).toHaveText(paused ?? '');
+  await expect(clock(page)).toHaveText(pausedAt ?? '');
 
   await page.goBack();
   await expect(sheet(page)).toBeHidden();
-  await expect(speed(page)).not.toHaveText(paused ?? '');
+  // Speed may already sit at its plateau, so the run clock proves the sim resumed.
+  await expect(clock(page)).not.toHaveText(pausedAt ?? '');
 });
 
 test('the sheet takes the keyboard: Space continues instead of braking', async ({ page }) => {
