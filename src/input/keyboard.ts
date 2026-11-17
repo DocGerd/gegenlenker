@@ -3,7 +3,16 @@ import { type InputState, clamp, stepLever } from './mapping';
 
 export type Keyboard = { readonly brake: boolean; tick(dt: number): void; dispose(): void };
 
-const GEARS: Record<string, Gear> = { Digit1: 'P', Digit2: 'R', Digit3: 'N', Digit4: 'D' };
+const GEARS: Record<string, Gear> = {
+  Digit1: 'P',
+  Digit2: 'R',
+  Digit3: 'N',
+  Digit4: 'D',
+  Numpad1: 'P',
+  Numpad2: 'R',
+  Numpad3: 'N',
+  Numpad4: 'D',
+};
 const LEFT = ['KeyA', 'ArrowLeft'];
 const RIGHT = ['KeyD', 'ArrowRight'];
 const FASTER = ['KeyW', 'ArrowUp'];

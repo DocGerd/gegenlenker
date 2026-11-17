@@ -2,6 +2,7 @@ import type { AidFlags, CollapsedPanels, Rect, TopDownMode, ViewRects } from '..
 import type { BlockReason, Gear, SimSnapshot } from '../contracts/sim';
 import { applyMessages, formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
+import { isFormField } from '../input/keyboard';
 import { createGauge, type Gauge } from './gauges';
 import './hud.css';
 
@@ -53,6 +54,7 @@ const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
   ['aids', 'panelAids'],
   ['gauges', 'panelGauges'],
 ];
+const VIEW_KEYS: Record<string, TopDownMode> = { f: 'follow', y: 'yard' };
 const GEAR_NAMES: readonly Gear[] = ['P', 'R', 'N', 'D'];
 const MS_TO_KMH = 3.6;
 /**
@@ -80,7 +82,13 @@ const MARKUP = (mode: HudOptions['mode']): string => `
         <dt class="mono">W / S · ↑ / ↓</dt><dd data-i18n="speed"></dd>
         <dt class="mono" data-i18n="keySpace"></dt><dd data-i18n="brake"></dd>
         <dt class="mono">1–4 = ${GEAR_NAMES.join(' / ')}</dt><dd data-i18n="gear"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyEsc"></dt><dd class="hud-legend-view" data-i18n="pause"></dd>
+        <dt class="mono hud-legend-view">F / Y</dt><dd class="hud-legend-view" data-i18n="viewSwitch"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyWheel"></dt><dd class="hud-legend-view" data-i18n="steer"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyLever"></dt><dd class="hud-legend-view" data-i18n="speed"></dd>
         <dt class="mono hud-legend-view">+ / −</dt><dd class="hud-legend-view" data-i18n="zoom"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyScroll"></dt><dd class="hud-legend-view" data-i18n="zoom"></dd>
+        <dt class="mono hud-legend-view" data-i18n="keyDrag"></dt><dd class="hud-legend-view" data-i18n="panView"></dd>
         <dt class="mono hud-legend-view">0</dt><dd class="hud-legend-view" data-i18n="resetView"></dd>
       </dl>
     </div>
@@ -194,16 +202,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   };
   syncToggles();
 
+  const selectView = (mode: TopDownMode): void => {
+    view = mode;
+    syncToggles();
+    emit({ type: 'topDown', mode });
+  };
   for (const b of viewButtons) {
-    b.addEventListener(
-      'click',
-      () => {
-        view = b.dataset['view'] as TopDownMode;
-        syncToggles();
-        emit({ type: 'topDown', mode: view });
-      },
-      { signal },
-    );
+    b.addEventListener('click', () => selectView(b.dataset['view'] as TopDownMode), { signal });
   }
   for (const b of aidButtons) {
     b.addEventListener(
@@ -248,6 +253,19 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   window.addEventListener(
     'keydown',
     (e) => {
+      const mode = VIEW_KEYS[e.key.toLowerCase()];
+      if (
+        mode !== undefined &&
+        !e.defaultPrevented &&
+        !e.repeat &&
+        !isFormField(e.target) &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        selectView(mode);
+        e.preventDefault();
+      }
       if (typed || !e.defaultPrevented) return;
       typed = true;
       syncLegend();
