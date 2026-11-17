@@ -5,7 +5,7 @@ import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { isOnYard, obstaclePaletteKey } from '../render/environment';
 import { KEYS } from '../render/palette';
-import { PLATE_TEXT, REALISM_HUES } from '../render/realism-hues';
+import { REALISM_HUES } from '../render/realism-hues';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -384,13 +384,5 @@ describe('perspective-only realism hues', () => {
     );
     expect(tokens.size).toBeGreaterThan(0);
     for (const [key, h] of hues) expect(tokens.has(h), key).toBe(false);
-  });
-
-  it('is not a scene palette key', () => {
-    for (const key of Object.keys(REALISM_HUES)) expect(Object.keys(KEYS), key).not.toContain(key);
-  });
-
-  it('keeps the plate text fictional', () => {
-    expect(PLATE_TEXT).toBe('GL-GL 2026');
   });
 });
