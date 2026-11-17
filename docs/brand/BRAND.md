@@ -62,21 +62,21 @@ Scene colours are theme-independent neutral greys, except the red obstacle cone 
 
 Vehicle detail and yard props may use these hues in the cockpit and mirror views only. They are not scene tokens: the top-down view keeps strict tokens, so none of them may be a `--color-*` or `--scene-*` value, a `ScenePalette` key or a top-down top face. T1-T4 are unchanged. `src/render/realism-hues.ts` holds them as sRGB; `tokens.test.ts` checks that the table and the module agree. RAL values are sRGB approximations.
 
-| Key               | Value     | Use                                               |
-| ----------------- | --------- | ------------------------------------------------- |
-| `signalYellow`    | `#f9a800` | impact guard and underrun bars, RAL 1003          |
-| `chevronBlack`    | `#101214` | chevrons on the impact guard                      |
-| `contourSide`     | `#f2c200` | contour marking at the sides (ECE R48/R104 style) |
-| `contourRear`     | `#d0201c` | contour marking at the rear                       |
-| `tailLamp`        | `#c8102e` | tail lamps                                        |
-| `sideMarker`      | `#ffb000` | amber side markers                                |
-| `plateWhite`      | `#f4f4ee` | EU number plate ground                            |
-| `plateInk`        | `#0a0a0a` | plate text, fictional only (`GL-GL 2026`)         |
-| `plateEuBlue`     | `#003399` | plate EU band                                     |
-| `plateEuStar`     | `#ffcc00` | plate EU stars                                    |
-| `anthracite`      | `#293133` | yard and industrial family, RAL 7016              |
-| `whiteAluminium`  | `#a5a5a5` | yard and industrial family, RAL 9006              |
-| `containerBlue`   | `#1e4a8a` | shipping container                                |
-| `containerRed`    | `#9a2d22` | shipping container                                |
-| `containerGreen`  | `#2f6b4a` | shipping container                                |
-| `containerOrange` | `#c9661c` | shipping container                                |
+| Key               | Value     | Use                                                       |
+| ----------------- | --------- | --------------------------------------------------------- |
+| `signalYellow`    | `#f9a800` | impact guard and underrun bars, RAL 1003                  |
+| `chevronBlack`    | `#101214` | chevrons on the impact guard, grille, mudflaps            |
+| `contourSide`     | `#f2c200` | contour marking at the sides (ECE R48/R104 style)         |
+| `contourRear`     | `#d0201c` | contour marking at the rear                               |
+| `tailLamp`        | `#c8102e` | tail lamps                                                |
+| `sideMarker`      | `#ffb000` | amber side markers                                        |
+| `plateWhite`      | `#f4f4ee` | EU number plate ground, headlamps                         |
+| `plateInk`        | `#0a0a0a` | plate text, fictional only (`GL-GL 2026`)                 |
+| `plateEuBlue`     | `#003399` | plate EU band                                             |
+| `plateEuStar`     | `#ffcc00` | plate EU stars                                            |
+| `anthracite`      | `#293133` | glass, bumper, hubs; yard and industrial family, RAL 7016 |
+| `whiteAluminium`  | `#a5a5a5` | rims; yard and industrial family, RAL 9006                |
+| `containerBlue`   | `#1e4a8a` | shipping container                                        |
+| `containerRed`    | `#9a2d22` | shipping container                                        |
+| `containerGreen`  | `#2f6b4a` | shipping container                                        |
+| `containerOrange` | `#c9661c` | shipping container                                        |

@@ -1,10 +1,10 @@
-import { Camera, Mesh, MeshBasicMaterial, type Material, type Object3D } from 'three';
+import { Box3, Camera, Mesh, MeshBasicMaterial, type Material, type Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
-import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
+import { TRAILER_IDS, TRUCK_IDS, type Param } from '../contracts/vehicle';
 import { trailerById, truckById } from '../vehicles/registry';
 import { KEYS } from './palette';
-import { AIDS_LAYER } from './seams';
+import { AIDS_LAYER, SKY_LAYER } from './seams';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -47,4 +47,43 @@ describe.each([
       }
     },
   );
+});
+
+const detailOf = (root: Object3D): Mesh[] =>
+  meshes(root).filter((m) => m.layers.mask === 1 << SKY_LAYER);
+
+/** Half-width of the perspective detail in body y (Three z). */
+function detailHalfWidth(root: Object3D): number {
+  root.updateMatrixWorld(true);
+  const bounds = new Box3();
+  for (const m of detailOf(root)) bounds.expandByObject(m);
+  return Math.max(Math.abs(bounds.min.z), Math.abs(bounds.max.z));
+}
+
+function expectDetailFollowsWidth<T extends { width: Param }>(
+  spec: T,
+  make: (spec: T) => Object3D,
+): void {
+  const topDown = new Camera();
+  topDown.layers.enable(AIDS_LAYER);
+  const object = make(spec);
+  expect(detailOf(object).length).toBeGreaterThan(0);
+  for (const m of detailOf(object)) expect(m.layers.test(topDown.layers)).toBe(false);
+
+  const half = spec.width.value / 2000;
+  const narrow = detailHalfWidth(object);
+  expect(narrow).toBeGreaterThanOrEqual(half);
+  expect(narrow).toBeLessThan(half + 0.1);
+  const wide = make({ ...spec, width: { ...spec.width, value: spec.width.value + 400 } });
+  expect(detailHalfWidth(wide)).toBeCloseTo(narrow + 0.2, 5);
+}
+
+describe('perspective detail', () => {
+  it.each(TRUCK_IDS)('stays off the top-down camera and follows the width Param (%s)', (id) => {
+    expectDetailFollowsWidth(truckById(id), (s) => proceduralTruck(s, palette).object);
+  });
+
+  it.each(TRAILER_IDS)('stays off the top-down camera and follows the width Param (%s)', (id) => {
+    expectDetailFollowsWidth(trailerById(id), (s) => proceduralTrailer(s, palette).object);
+  });
 });
