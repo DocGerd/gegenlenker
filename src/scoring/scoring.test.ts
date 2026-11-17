@@ -4,6 +4,7 @@ import type { SimSnapshot } from '../contracts/sim';
 import {
   bestKey,
   compareResults,
+  exerciseDone,
   parseBestResults,
   recordBest,
   serializeBestResults,
@@ -63,6 +64,23 @@ function result(over: Partial<RunResult> = {}): RunResult {
   };
 }
 
+describe('exerciseDone', () => {
+  it('counts a reached result with any pair, ignoring other exercises and misses', () => {
+    const other = result({ trailerId: 'hueffermann-hpa-24-81-l' });
+    const best = {
+      [bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18')]: result({ reached: false }),
+      [bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l')]: other,
+      [bestKey('slalom', 'man-le-18-280', 'krone-azw-18')]: result({
+        exerciseId: 'slalom',
+        reached: false,
+      }),
+    };
+    expect(exerciseDone(best, 'reverse-bay')).toBe(true);
+    expect(exerciseDone(best, 'slalom')).toBe(false);
+    expect(exerciseDone({}, 'reverse-bay')).toBe(false);
+  });
+});
+
 const KEY = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18');
 const INSIDE = { trailer: { x: 0, y: 0, heading: -0.1 } };
 
@@ -88,6 +106,15 @@ describe('scoring', () => {
     expect(tracker.update(snap({ ...INSIDE, speed: 0.2 }))).toBe(false);
     expect(tracker.update(snap({ ...INSIDE, speed: 0 }))).toBe(true);
     expect(tracker.update(snap({ ...INSIDE, trailerRear: { x: 0.51, y: 0 } }))).toBe(false);
+  });
+
+  it('cues only near the target once the turn point is passed', () => {
+    const tracker = createRunTracker(exercise({ x: 90, y: 25 }));
+    expect(tracker.goal(snap(INSIDE))).toBe('away');
+    tracker.update(snap({ truck: { x: 90, y: 25, heading: 0 } }));
+    expect(tracker.goal(snap(INSIDE))).toBe('inside');
+    expect(tracker.goal(snap({ ...INSIDE, trailerRear: { x: 0.51, y: 0 } }))).toBe('outside');
+    expect(tracker.goal(snap({ ...INSIDE, trailerRear: { x: 16, y: 0 } }))).toBe('away');
   });
 
   it('requires the waypoint before the target counts', () => {

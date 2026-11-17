@@ -1,7 +1,7 @@
 import type { RunResult } from '../contracts/exercise';
 import { formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
-import { EXERCISE_TITLE } from './menu';
+import { EXERCISE_TITLE } from './exercise-text';
 import './results.css';
 
 export type ResultActions = {

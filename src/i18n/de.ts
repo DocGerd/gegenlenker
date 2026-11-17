@@ -12,6 +12,19 @@ export const de: Record<MessageKey, string> = {
   exerciseReverseCorner: 'Rückwärts um die Ecke',
   exerciseDockRamp: 'An die Rampe setzen',
   exerciseSlalom: 'Slalom vor und zurück',
+  briefStraightReverse:
+    'Den Anhänger geradeaus rückwärts in das markierte Feld setzen und anhalten.',
+  briefReverseBay:
+    'Den Anhänger rückwärts in die Lücke zwischen den parkenden Fahrzeugen setzen und im markierten Feld anhalten.',
+  briefReverseCorner:
+    'Rückwärts um die Ecke in die Seitenstraße fahren und im markierten Feld anhalten.',
+  briefDockRamp: 'Den Anhänger rechtwinklig an die Rampe setzen und im markierten Feld anhalten.',
+  briefSlalom:
+    'Den Slalom vorwärts bis zum markierten Kreis fahren, dann zurücksetzen und im markierten Feld anhalten.',
+  tolerance: 'Toleranz',
+  exerciseDone: 'Geschafft',
+  goalInside: 'In der Toleranz – jetzt anhalten',
+  goalOutside: 'Außerhalb der Toleranz',
   truck: 'Lkw',
   trailer: 'Anhänger',
   best: 'Bestwert',

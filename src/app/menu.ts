@@ -1,23 +1,17 @@
 import { exercises } from '../content/registry';
 import { LAYOUT_IDS, type LayoutId } from '../contracts/layout';
-import type { ExerciseId, InputLog, RunResult } from '../contracts/exercise';
+import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import { applyMessages, formatNumber, setLanguage, t, type Lang } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
-import { bestKey } from '../scoring/best';
+import { bestKey, exerciseDone } from '../scoring/best';
 import { trailers, trucks } from '../vehicles/registry';
 import type { RunConfig } from './drive';
+import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { currentSettings, updateSettings, type Settings } from './settings';
 import { bestResults } from './storage';
 import { applyTheme } from './theme';
 
-export const EXERCISE_TITLE: Readonly<Record<ExerciseId, MessageKey>> = {
-  'straight-reverse': 'exerciseStraightReverse',
-  'reverse-bay': 'exerciseReverseBay',
-  'reverse-corner': 'exerciseReverseCorner',
-  'dock-ramp': 'exerciseDockRamp',
-  slalom: 'exerciseSlalom',
-};
 const LAYOUT_NAME: Readonly<Record<LayoutId, MessageKey>> = {
   depot: 'layoutDepot',
   logistics: 'layoutLogistics',
@@ -126,6 +120,13 @@ function startButton(title: string, onClick: () => void): HTMLButtonElement {
   return button;
 }
 
+function toleranceLine({ tolerances }: ExerciseDefinition): HTMLElement {
+  const line = span('menu-meta', '');
+  const { position, angle } = tolerances;
+  line.append(stat('tolerance', `± ${formatNumber(position, 1)} m · ± ${formatNumber(angle, 0)}°`));
+  return line;
+}
+
 export function showMenu(
   root: HTMLElement,
   onStart: (run: RunConfig) => void,
@@ -191,6 +192,12 @@ export function showMenu(
       const button = startButton(t(EXERCISE_TITLE[exercise.id]), () =>
         onStart({ layoutId: exercise.layout, exercise, ...pair() }),
       );
+      if (exerciseDone(bestResults(), exercise.id)) {
+        button
+          .querySelector('.menu-start-title')
+          ?.append(span('menu-done', `✓ ${t('exerciseDone')}`));
+      }
+      button.append(span('menu-brief', t(EXERCISE_BRIEF[exercise.id])), toleranceLine(exercise));
       return { button, exercise };
     });
     query(container, 'exercises', HTMLElement).append(...exerciseButtons.map((e) => e.button));

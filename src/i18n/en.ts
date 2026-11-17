@@ -10,6 +10,17 @@ export const en = {
   exerciseReverseCorner: 'Reverse around a corner',
   exerciseDockRamp: 'Dock at a ramp',
   exerciseSlalom: 'Slalom forward and back',
+  briefStraightReverse: 'Reverse the trailer straight back into the marked box and stop.',
+  briefReverseBay:
+    'Reverse the trailer into the bay between the parked vehicles and stop in the marked box.',
+  briefReverseCorner: 'Reverse around the corner into the side street and stop in the marked box.',
+  briefDockRamp: 'Reverse the trailer square up to the ramp and stop in the marked box.',
+  briefSlalom:
+    'Drive the slalom forward to the marked circle, then reverse back and stop in the marked box.',
+  tolerance: 'Tolerance',
+  exerciseDone: 'Done',
+  goalInside: 'In tolerance – stop now',
+  goalOutside: 'Outside tolerance',
   truck: 'Truck',
   trailer: 'Trailer',
   best: 'Best',

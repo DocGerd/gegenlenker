@@ -24,6 +24,11 @@ export function compareResults(a: RunResult, b: RunResult): number {
   );
 }
 
+/** Reached with any vehicle pair. */
+export function exerciseDone(best: BestResults, exerciseId: ExerciseId): boolean {
+  return Object.values(best).some((r) => r.exerciseId === exerciseId && r.reached);
+}
+
 export function recordBest(
   best: BestResults,
   r: RunResult,

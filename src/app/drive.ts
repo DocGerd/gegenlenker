@@ -5,6 +5,7 @@ import type { LayoutId } from '../contracts/layout';
 import type { AidFlags, RenderFrame } from '../contracts/render';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
+import { t } from '../i18n/i18n';
 import { createControls } from '../input/controls';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
@@ -22,6 +23,7 @@ import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
 import { measureChrome } from './chrome';
+import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { showPauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { updateSettings, type Settings } from './settings';
@@ -183,6 +185,10 @@ export function startDrive(
     couplingLimit: params.couplingLimit,
     turntableLimit: params.turntableLimit,
     mode: exercise === null ? 'yard' : 'exercise',
+    exercise:
+      exercise === null
+        ? null
+        : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
     aids: settings.aids,
     topDown: settings.topDown,
     collapsed,
@@ -301,6 +307,7 @@ export function startDrive(
       frame.aids = aids;
       renderer.render(frame);
       hud.update(snapshot);
+      if (tracker !== null) hud.setGoal(tracker.goal(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
       hud.setTargetArrow(
         at && frame.topDownClear ? targetArrow(at, frame.topDownClear, ARROW_MARGIN) : null,

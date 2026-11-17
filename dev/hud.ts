@@ -36,6 +36,10 @@ const hud = createHud(stage, {
   couplingLimit: COUPLING_LIMIT,
   turntableLimit: TURNTABLE_LIMIT,
   mode: params.get('mode') === 'yard' ? 'yard' : 'exercise',
+  exercise:
+    params.get('mode') === 'yard'
+      ? null
+      : { title: 'Reverse into a bay', brief: 'Reverse the trailer into the bay and stop.' },
   aids: { pivots: true, path: true, tracks: false, ghost: false },
   topDown: 'follow',
   collapsed: { aids: false, gauges: false },
