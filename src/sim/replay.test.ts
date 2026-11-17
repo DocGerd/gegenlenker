@@ -18,7 +18,9 @@ const params = resolveCombination(
 );
 const start: StartState = { truck: { x: 3, y: -2, heading: 0.4 }, couplingAngle: 0.05 };
 const contacts: ContactQuery = (bodies) =>
-  bodies.some((b) => b.obb.cy > 12) ? { body: 'truck', obstacleId: 'fence' } : null;
+  bodies.some((b) => b.obb.cy > 12)
+    ? { body: 'truck', obstacleId: 'fence', point: { x: 0, y: 0 } }
+    : null;
 const meta = {
   layoutId: 'depot',
   exerciseId: 'reverse-bay',

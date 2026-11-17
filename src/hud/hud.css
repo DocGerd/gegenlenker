@@ -166,6 +166,11 @@
   text-align: center;
 }
 
+.hud-toast[data-level='warn'] {
+  border-color: var(--color-warning);
+  border-left-width: var(--space-2);
+}
+
 .hud-goal-cue {
   box-sizing: border-box;
   padding: var(--space-2) var(--space-4);
