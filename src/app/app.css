@@ -277,3 +277,10 @@
   line-height: var(--leading-sm);
   color: var(--color-text-muted);
 }
+
+.app-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
