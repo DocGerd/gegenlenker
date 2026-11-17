@@ -292,7 +292,7 @@ describe('scene tokens', () => {
     expect(contrast(scene(a), scene(b))).toBeGreaterThanOrEqual(3);
   });
 
-  // T3: adjacent grounds; pavement against sky is exempt.
+  // T3: adjacent grounds and the sky against the darker ones; yard and pavement against sky are T4.
   const t3: [string, string][] = [
     ['yard', 'pavement'],
     ['pavement', 'street'],
@@ -309,14 +309,11 @@ describe('scene tokens', () => {
   });
 
   // T4: the sky is chromatic; lightness alone cannot separate it from yard and pavement.
-  it.each(['yard', 'pavement', 'street', 'verge'])(
-    'T4: sky is 0.08 or more from %s in OKLab',
-    (ground) => {
-      const [l1, a1, b1] = oklab(scene('sky'));
-      const [l2, a2, b2] = oklab(scene(ground));
-      expect(Math.hypot(l1 - l2, a1 - a2, b1 - b2)).toBeGreaterThanOrEqual(0.08);
-    },
-  );
+  it.each(['yard', 'pavement'])('T4: sky is 0.08 or more from %s in OKLab', (ground) => {
+    const [l1, a1, b1] = oklab(scene('sky'));
+    const [l2, a2, b2] = oklab(scene(ground));
+    expect(Math.hypot(l1 - l2, a1 - a2, b1 - b2)).toBeGreaterThanOrEqual(0.08);
+  });
 
   // Own vehicle parts keep 1.5:1 against what they stand on or are seen against.
   const standing: [string, string][] = [

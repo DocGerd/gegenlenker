@@ -17,7 +17,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
 import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
 import type { Environment } from './seams';
-import { createSky } from './sky';
+import { createSky, neutralSky } from './sky';
 
 const VERGE_Y = 0;
 const SURFACE_Y = 0.005;
@@ -367,11 +367,8 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     Math.sin(SUN_ELEVATION) * SUN_DISTANCE,
     horizontal / Math.SQRT2,
   );
-  // The ambient light is a grey of the sky's luminance: lighting stays neutral under the blue sky.
   const horizon = new Color(palette.sky);
-  const ambient = new Color().setScalar(
-    0.2126 * horizon.r + 0.7152 * horizon.g + 0.0722 * horizon.b,
-  );
+  const ambient = neutralSky(palette.sky);
   group.add(sun, new HemisphereLight(ambient, palette.verge, HEMISPHERE_INTENSITY));
 
   // Radiance of an upward-facing Lambert surface, so the dome below the horizon matches the ground.

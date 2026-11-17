@@ -11,6 +11,7 @@ import {
   type WebGLRenderer,
 } from 'three';
 import type { Rect } from '../contracts/render';
+import { SKY_LAYER } from './seams';
 
 const FOV = 46;
 const NEAR = 0.2;
@@ -21,6 +22,7 @@ const PITCH = MathUtils.degToRad(-4);
 export function createMirror() {
   const camera = new PerspectiveCamera(FOV, 1, NEAR, FAR);
   camera.rotation.order = 'YXZ';
+  camera.layers.enable(SKY_LAYER);
 
   const geometry = new PlaneGeometry(2, 2);
   const uv = geometry.getAttribute('uv');

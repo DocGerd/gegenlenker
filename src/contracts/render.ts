@@ -23,6 +23,7 @@ export type AidFlags = {
 };
 export type ScenePaletteKey =
   | 'sky'
+  | 'backdrop'
   | 'verge'
   | 'yard'
   | 'pavement'
