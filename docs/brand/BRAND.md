@@ -33,16 +33,19 @@ Text on `--color-accent-tint` is only `--color-text` or `--color-accent-strong`:
 
 ## Scene tokens
 
-Scene colours are theme-independent neutral greys, except the red obstacle cone. Red marks obstacles only; the accent marks target and guidance only. `tokens.test.ts` checks these targets on the hex values (light-theme `:root`), where contrast is `(L1 + 0.05) / (L2 + 0.05)` on relative luminance:
+Scene colours are theme-independent neutral greys, except the red obstacle cone and the blue sky. Red marks obstacles only; the accent marks target and guidance only. `tokens.test.ts` checks these targets on the hex values (light-theme `:root`), where contrast is `(L1 + 0.05) / (L2 + 0.05)` on relative luminance:
 
 - **T1, single-tone collision object:** darker than the ground it stands on, contrast 3.1:1 or more. Pairs: cone, yard kerb (`--scene-band`), wall, fence, ramp, parked trailer, hall and lamp on yard; lamp on pavement. The cone is T1 in red; its white bands are decoration, not T2.
 - **T2, two-tone object:** the dark tone is T1 against its ground and the two tones differ by 9:1 or more (lamp against its white plinth band) or, for the hall, 6:1 or more (hall against cladding). The hall cannot reach 9:1: cladding must stay 1.5:1 or more against sky, which caps its lightness.
 - **T3, adjacent grounds:** 1.5:1 or more. Pairs: yard, pavement, street and verge against each other, verge, street and hall cladding against sky. Cladding also stays 3:1 or more against the hall and the fence behind it.
-- **Exceptions:** street kerb against pavement, white bay lines on yard, pavement against sky, the cab against yard, the body against hall cladding (the body sits between cladding and sky in lightness), and the body on verge (unreachable: kerbs bound the yard and street).
+- **T4, sky:** `--scene-sky` is the horizon colour of the sky dome (`src/render/sky.ts`); the zenith is derived from it, deeper and bluer. It is chromatic so it separates from the grey grounds: OKLab distance 0.08 or more against yard and pavement, where lightness alone cannot (they bracket it); verge and street are T3.
+- **Exceptions:** street kerb against pavement, white bay lines on yard, the cab against yard, the body against hall cladding (the body sits between cladding and sky in lightness), and the body on verge (unreachable: kerbs bound the yard and street).
 - **Vehicle parts:** body and tracks keep 1.5:1 or more against the ground they stand on, and the body against marking, except as listed above.
 
 | Token              | Value     | Role                                      |
 | ------------------ | --------- | ----------------------------------------- |
+| `--scene-sky`      | `#b4e6ff` | horizon of the sky dome; T3, T4           |
+| `--scene-backdrop` | `#dce0e4` | top-down clear colour outside the ground  |
 | `--scene-yard`     | `#c2c7cd` | ground                                    |
 | `--scene-street`   | `#5e646b` | ground                                    |
 | `--scene-pavement` | `#f4f5f7` | ground                                    |
