@@ -155,13 +155,25 @@ export function showResult(
   );
 
   const buttons = element('div', 'result-actions');
-  if (actions.next !== null) buttons.append(action('nextExercise', actions.next, true));
-  buttons.append(action('retry', actions.retry, actions.next === null));
+  const next = actions.next === null ? null : action('nextExercise', actions.next, true);
+  const retry = action('retry', actions.retry, next === null);
+  if (next !== null) buttons.append(next);
+  buttons.append(retry);
   if (actions.replay !== null) buttons.append(action('replay', actions.replay, false));
   buttons.append(action('menu', actions.menu, false));
 
   card.append(header, values, buttons);
   container.append(card);
   root.append(container);
-  return () => container.remove();
+  (next ?? retry).focus();
+  const onEscape = (e: KeyboardEvent): void => {
+    if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
+    e.preventDefault();
+    actions.menu();
+  };
+  window.addEventListener('keydown', onEscape);
+  return () => {
+    window.removeEventListener('keydown', onEscape);
+    container.remove();
+  };
 }

@@ -44,7 +44,8 @@ export function recordBest(
 ): { best: BestResults; isNewBest: boolean; previous: RunResult | null } {
   const key = resultKey(r);
   const current = best[key] ?? null;
-  if (current !== null && compareResults(r, current) >= 0) {
+  // A miss never becomes or replaces a best; stored misses from before this rule still lose to any hit.
+  if (!r.reached || (current !== null && compareResults(r, current) >= 0)) {
     return { best, isNewBest: false, previous: current };
   }
   return { best: { ...best, [key]: r }, isNewBest: true, previous: current };

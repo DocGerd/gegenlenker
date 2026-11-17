@@ -237,10 +237,21 @@ describe('best results', () => {
       time: 90,
     });
     expect(compareResults(tried, quit)).toBeLessThan(0);
-    expect(recordBest({ [KEY]: quit }, tried).isNewBest).toBe(true);
+    expect(recordBest({ [KEY]: quit }, tried).isNewBest).toBe(false);
     const straighter = result({ reached: false, positionError: 2, angleError: 5, contacts: 3 });
     expect(compareResults(straighter, tried)).toBeLessThan(0);
     expect(compareResults(tried, result({ ...tried, contacts: 0 }))).toBeGreaterThan(0);
+  });
+
+  it('never records a miss as a best', () => {
+    const miss = result({ reached: false });
+    expect(recordBest({}, miss)).toEqual({ best: {}, isNewBest: false, previous: null });
+    const hit = recordBest({}, result()).best;
+    const after = recordBest(hit, miss);
+    expect(after.best).toBe(hit);
+    expect(after.isNewBest).toBe(false);
+    expect(after.previous).toEqual(result());
+    expect(recordBest({ [KEY]: miss }, result({ time: 99 })).isNewBest).toBe(true);
   });
 
   it('keeps only better results', () => {
@@ -342,8 +353,13 @@ describe('debrief', () => {
 
   it('reports a faster run as a negative time delta', () => {
     const d = deltasToBest(result({ time: 25, contacts: 1 }), result({ time: 30 }));
-    expect(d.time).toBe(-5);
-    expect(d.contacts).toBe(1);
+    expect(d?.time).toBe(-5);
+    expect(d?.contacts).toBe(1);
+  });
+
+  it('compares only like with like', () => {
+    expect(deltasToBest(result({ reached: false }), result())).toBeNull();
+    expect(deltasToBest(result(), result({ reached: false }))).toBeNull();
   });
 });
 

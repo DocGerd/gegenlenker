@@ -5,6 +5,8 @@ export type PauseActions = {
   continue: () => void;
   restart: () => void;
   finish: () => void;
+  /** Drops the run without a result or replay; null where finishing already does that. */
+  leave: (() => void) | null;
 };
 
 function action(label: MessageKey, onClick: () => void, primary: boolean): HTMLButtonElement {
@@ -45,6 +47,7 @@ export function showPauseSheet(
     action('restart', actions.restart, false),
     action(finishLabel, actions.finish, false),
   );
+  if (actions.leave !== null) buttons.append(action('leaveUnscored', actions.leave, false));
 
   sheet.append(title, buttons, hint);
   // Focus must stay here: outside the dialog the driving keys would reach the paused run.

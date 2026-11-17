@@ -65,6 +65,7 @@ export const en = {
   panelGauges: 'Angles',
   targetDirection: 'Direction to the target',
   finish: 'Finish',
+  leaveUnscored: 'Leave without scoring',
   menu: 'Menu',
   result: 'Result',
   targetReached: 'Target reached',

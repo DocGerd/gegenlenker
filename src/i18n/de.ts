@@ -69,6 +69,7 @@ export const de: Record<MessageKey, string> = {
   panelGauges: 'Winkel',
   targetDirection: 'Richtung zum Ziel',
   finish: 'Beenden',
+  leaveUnscored: 'Ohne Wertung verlassen',
   menu: 'Menü',
   result: 'Ergebnis',
   targetReached: 'Ziel erreicht',

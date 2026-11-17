@@ -143,3 +143,49 @@ test('back from a replay returns to the result, and back again to the menu', asy
   await expect(menuHeading(page)).toBeVisible();
   expect(await historyState(page)).toBeNull();
 });
+
+test('the result focuses its primary action: Enter retries', async ({ page }) => {
+  await startAndRoll(page);
+  await finishRun(page);
+  await expect(page.getByRole('button', { name: en.retry })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  await expect(sheet(page)).toBeHidden();
+});
+
+test('Escape leaves the result for the menu, and a miss is no best', async ({ page }) => {
+  await startAndRoll(page);
+  await finishRun(page);
+  await page.keyboard.press('Escape');
+  await expect(menuHeading(page)).toBeVisible();
+  expect(await historyState(page)).toBeNull();
+  await expect(page.getByText(en.targetMissed)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: en.replayLastRun })).toBeVisible();
+});
+
+test('Escape leaves a replay for the result, and again for the menu', async ({ page }) => {
+  await startAndRoll(page);
+  await finishRun(page);
+  await page.getByRole('button', { name: en.replay }).click();
+  await expect(page.getByRole('button', { name: en.back })).toBeVisible();
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menuHeading(page)).toBeVisible();
+  expect(await historyState(page)).toBeNull();
+});
+
+test('leaving without scoring stores no result and no replay', async ({ page }) => {
+  await startAndRoll(page);
+  await page.keyboard.press('Escape');
+  await sheet(page).getByRole('button', { name: en.leaveUnscored }).click();
+  await expect(menuHeading(page)).toBeVisible();
+  expect(await historyState(page)).toBeNull();
+  await expect(page.getByText(en.targetMissed)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: en.replayLastRun })).toHaveCount(0);
+
+  await page.reload();
+  await expect(menuHeading(page)).toBeVisible();
+  await expect(page.getByRole('button', { name: en.replayLastRun })).toHaveCount(0);
+});

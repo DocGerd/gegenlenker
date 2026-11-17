@@ -86,6 +86,10 @@ export function startApp(root: HTMLElement): void {
         back = m.startDrive(screen, run, currentSettings(), {
           onExit: (outcome) => finished(run, outcome),
           onRestart: () => drive(run),
+          onLeave: () => {
+            leave();
+            menu();
+          },
         });
       })
       .catch((error: unknown) => loadFailed(error, menu));
