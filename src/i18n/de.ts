@@ -55,6 +55,7 @@ export const de: Record<MessageKey, string> = {
   result: 'Ergebnis',
   targetReached: 'Ziel erreicht',
   targetMissed: 'Ziel nicht erreicht',
+  waypointMissed: 'Wendepunkt verfehlt: zuerst durch den markierten Kreis fahren.',
   positionError: 'Positionsabweichung',
   angleError: 'Winkelabweichung',
   newBest: 'Neuer Bestwert',

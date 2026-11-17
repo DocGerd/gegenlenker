@@ -52,6 +52,7 @@ function result(over: Partial<RunResult> = {}): RunResult {
     truckId: 'man-le-18-280',
     trailerId: 'krone-azw-18',
     reached: true,
+    waypointMissed: false,
     positionError: 0.1,
     angleError: 1,
     contacts: 0,
@@ -107,7 +108,7 @@ describe('scoring', () => {
       trailerRear: { x: 3, y: 4 },
       trailer: { x: 0, y: 0, heading: 0.1 },
     });
-    const r = runResult(s, exercise(), 'arocs-1835-ak', 'hueffermann-hpa-24-81-l', false);
+    const r = runResult(s, exercise(), 'arocs-1835-ak', 'hueffermann-hpa-24-81-l', false, true);
     expect(r).toMatchObject({
       exerciseId: 'reverse-bay',
       truckId: 'arocs-1835-ak',
@@ -121,16 +122,37 @@ describe('scoring', () => {
     expect(r.positionError).toBeCloseTo(5, 9);
     expect(r.angleError).toBeCloseTo(11.459, 3);
 
-    expect(runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18', true).reached).toBe(
-      true,
-    );
+    expect(
+      runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18', true, true).reached,
+    ).toBe(true);
   });
 
-  it('does not mark a slalom run reached without the waypoint', () => {
+  it('names the missed waypoint in the result', () => {
     const slalom = exercise({ x: 90, y: 25 });
     const s = snap(INSIDE);
-    const reached = createRunTracker(slalom).update(s);
-    expect(runResult(s, slalom, 'man-le-18-280', 'krone-azw-18', reached).reached).toBe(false);
+    const tracker = createRunTracker(slalom);
+    const reached = tracker.update(s);
+    const result = runResult(
+      s,
+      slalom,
+      'man-le-18-280',
+      'krone-azw-18',
+      reached,
+      tracker.waypointVisited(),
+    );
+    expect(result.reached).toBe(false);
+    expect(result.waypointMissed).toBe(true);
+  });
+
+  it('does not flag a waypoint missed when the exercise has none or it was visited', () => {
+    const s = snap(INSIDE);
+    expect(
+      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false).waypointMissed,
+    ).toBe(false);
+    expect(
+      runResult(s, exercise({ x: 90, y: 25 }), 'man-le-18-280', 'krone-azw-18', false, true)
+        .waypointMissed,
+    ).toBe(false);
   });
 
   it('rejects an angle outside tolerance even with the position inside', () => {

@@ -8,6 +8,7 @@ import { isDefaultView } from '../input/top-down-view';
 import { formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { computeViewports } from '../render/viewports';
+import { createRunTracker, type RunTracker } from '../scoring/score';
 import { createContactQuery } from '../sim/collision';
 import { DT } from '../sim/constants';
 import { NO_PREDICTION } from '../sim/predict';
@@ -53,7 +54,10 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     );
 
   // Playback only moves forward, so the run is stepped lazily and one snapshot is held.
+  const makeTracker = (): RunTracker | null =>
+    exercise === null ? null : createRunTracker(exercise);
   let sim = makeSim();
+  let tracker = makeTracker();
   let snapshot = sim.snapshot();
   let stepped = 0;
   let nextChange = 0;
@@ -65,11 +69,13 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
         change = log.changes[++nextChange];
       }
       snapshot = sim.step(control);
+      tracker?.update(snapshot);
       stepped++;
     }
   };
   const restart = (): void => {
     sim = makeSim();
+    tracker = makeTracker();
     snapshot = sim.snapshot();
     stepped = 0;
     nextChange = 0;
@@ -191,6 +197,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
       }
       dirty = false;
       frame.snapshot = snapshot;
+      frame.waypointVisited = tracker?.waypointVisited() ?? false;
       renderer.render(frame);
       timeLabel.textContent = `${formatNumber(snapshot.time, 1)} / ${total}`;
     },

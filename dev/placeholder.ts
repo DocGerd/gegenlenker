@@ -32,6 +32,7 @@ export const placeholderLayout: ResolvedLayout = {
   obstacles: [],
   markings: [],
   target: null,
+  waypoint: null,
 };
 
 const mm = (p: Param): number => p.value / 1000;
@@ -211,6 +212,7 @@ function environment(layout: ResolvedLayout, palette: ScenePalette): Environment
 
   return {
     object: group,
+    update: () => undefined,
     dispose: () => {
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());

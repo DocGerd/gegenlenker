@@ -53,6 +53,7 @@ export const en = {
   result: 'Result',
   targetReached: 'Target reached',
   targetMissed: 'Target not reached',
+  waypointMissed: 'Turn point missed: drive through the marked circle first.',
   positionError: 'Position error',
   angleError: 'Angle error',
   newBest: 'New best',

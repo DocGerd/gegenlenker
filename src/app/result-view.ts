@@ -53,6 +53,7 @@ export function showResult(
     element('p', 'result-eyebrow', `${t('result')} · ${t(EXERCISE_TITLE[result.exerciseId])}`),
     element('h1', 'result-title', t(result.reached ? 'targetReached' : 'targetMissed')),
   );
+  if (result.waypointMissed) header.append(element('p', 'result-reason', t('waypointMissed')));
   if (isNewBest && result.reached) header.append(element('p', 'result-badge', t('newBest')));
 
   const values = element('dl', 'result-values');

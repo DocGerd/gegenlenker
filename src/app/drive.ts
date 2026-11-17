@@ -92,7 +92,14 @@ export function startDrive(
     );
     const result =
       scored && exercise !== null
-        ? runResult(snapshot, exercise, run.truckId, run.trailerId, reached)
+        ? runResult(
+            snapshot,
+            exercise,
+            run.truckId,
+            run.trailerId,
+            reached,
+            tracker?.waypointVisited() ?? true,
+          )
         : null;
     dispose();
     onExit({ log, result });
@@ -224,6 +231,7 @@ export function startDrive(
           : NO_PREDICTION;
       }
       frame.snapshot = snapshot;
+      frame.waypointVisited = tracker?.waypointVisited() ?? false;
       frame.topDown = topDown;
       frame.aids = aids;
       renderer.render(frame);
