@@ -192,6 +192,43 @@ test('a Space held through the finish does not activate the focused result butto
   await expect(speed(page)).toHaveText('0.0 km/h');
 });
 
+const gear = (page: Page) => page.locator('[data-hud="gear"]');
+const toast = (page: Page) => page.locator('[data-hud="toast"]');
+
+test('driving keys reach the run after Escape closes the sheet', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  await page.keyboard.press('Escape');
+  await expect(sheet(page)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(sheet(page)).toBeHidden();
+  await page.keyboard.press('2');
+  await expect(gear(page)).toHaveText('R');
+});
+
+test('driving keys reach the run after Restart', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  await page.keyboard.press('Escape');
+  await sheet(page).getByRole('button', { name: en.restart }).click();
+  await expect(sheet(page)).toBeHidden();
+  await expect(gear(page)).toHaveText('P'); // the restarted drive has mounted
+  await page.keyboard.press('2');
+  await expect(gear(page)).toHaveText('R');
+});
+
+test('raising the lever in P hints to select R or D', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  await page.keyboard.press('w');
+  await expect(toast(page)).toHaveText(en.selectGear);
+  await page.keyboard.press('2');
+  await expect(toast(page)).toBeHidden();
+});
+
 test('leaving without scoring stores no result and no replay', async ({ page }) => {
   await startAndRoll(page);
   await page.keyboard.press('Escape');

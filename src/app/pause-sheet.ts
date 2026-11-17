@@ -51,11 +51,20 @@ export function showPauseSheet(
 
   sheet.append(title, buttons, hint);
   // Focus must stay here: outside the dialog the driving keys would reach the paused run.
-  box.addEventListener('focusout', (e) => {
-    if (!(e.relatedTarget instanceof Node && sheet.contains(e.relatedTarget))) resume.focus();
-  });
+  const abort = new AbortController();
+  box.addEventListener(
+    'focusout',
+    (e) => {
+      if (!(e.relatedTarget instanceof Node && sheet.contains(e.relatedTarget))) resume.focus();
+    },
+    { signal: abort.signal },
+  );
   box.append(sheet);
   parent.append(box);
   resume.focus();
-  return () => box.remove();
+  // Dropped first: removing the focused button would otherwise refocus it while detached.
+  return () => {
+    abort.abort();
+    box.remove();
+  };
 }

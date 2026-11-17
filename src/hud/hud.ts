@@ -72,7 +72,11 @@ function toastFor(
     };
   }
   if (s.blocked !== null) return { key: BLOCKED_KEY[s.blocked], level: 'danger' };
-  return contactAhead ? { key: 'contactAhead', level: 'warn' } : null;
+  if (contactAhead) return { key: 'contactAhead', level: 'warn' };
+  // The lever acts only in a gear, so a raised lever in P would move the truck off on shifting.
+  return s.control.gear === 'P' && s.control.lever > 0
+    ? { key: 'selectGear', level: 'warn' }
+    : null;
 }
 
 const VIEWS: readonly [TopDownMode, MessageKey][] = [

@@ -140,6 +140,7 @@ export function startDrive(
     closeSheet?.();
     closeSheet = null;
   };
+  cleanups.push(resume);
   const togglePause = (): void => {
     if (closeSheet !== null) {
       resume();
