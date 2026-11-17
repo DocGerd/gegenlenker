@@ -1,11 +1,12 @@
-import { Box3, Camera, Mesh, type Material, type Object3D } from 'three';
+import { Box3, Camera, Mesh, Vector3, type Material, type Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type Param } from '../contracts/vehicle';
+import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { KEYS } from './palette';
 import { AIDS_LAYER, SKY_LAYER } from './seams';
-import { proceduralTrailer, proceduralTruck, SHADOW_NAME } from './vehicle-visual';
+import { proceduralTrailer, proceduralTruck, SHADOW_HEIGHT, SHADOW_NAME } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
 
@@ -121,5 +122,79 @@ describe('blob shadows', () => {
   it.each(TRAILER_IDS)('follows the dolly and the trailer body separately (%s)', (id) => {
     const object = proceduralTrailer(trailerById(id), palette).object;
     expect(object.children.map((part) => shadowsOf(part).length)).toEqual([1, 1]);
+  });
+
+  /** World-space vertices of the shadow meshes under `root`, as body-frame (x, y) plus height. */
+  function footprint(root: Object3D): { x: number; y: number; h: number }[] {
+    root.updateMatrixWorld(true);
+    const out: { x: number; y: number; h: number }[] = [];
+    for (const m of shadowsOf(root)) {
+      const position = m.geometry.getAttribute('position');
+      for (let i = 0; i < position.count; i++) {
+        const v = new Vector3().fromBufferAttribute(position, i).applyMatrix4(m.matrixWorld);
+        out.push({ x: v.x, y: -v.z, h: v.y });
+      }
+    }
+    return out;
+  }
+
+  /** A blob centre is its fan's first vertex, so it must sit exactly on the wheel contact point. */
+  function expectCentresAt(root: Object3D, centres: readonly (readonly [number, number])[]): void {
+    const points = footprint(root);
+    expect(points.length).toBeGreaterThan(0);
+    for (const p of points) expect(p.h).toBeCloseTo(SHADOW_HEIGHT, 5);
+    for (const [x, y] of centres) {
+      expect(points.some((p) => Math.abs(p.x - x) < 1e-5 && Math.abs(p.y - y) < 1e-5)).toBe(true);
+    }
+  }
+
+  function expectCovers(root: Object3D, x0: number, x1: number, halfWidth: number): void {
+    const points = footprint(root);
+    expect(Math.min(...points.map((p) => p.x))).toBeLessThanOrEqual(x0);
+    expect(Math.max(...points.map((p) => p.x))).toBeGreaterThanOrEqual(x1);
+    expect(Math.max(...points.map((p) => p.y))).toBeGreaterThanOrEqual(halfWidth);
+    expect(Math.min(...points.map((p) => p.y))).toBeLessThanOrEqual(-halfWidth);
+  }
+
+  it.each(TRUCK_IDS)('truck %s: sits under the wheels and body of the spec', (id) => {
+    const base = truckById(id);
+    const widened = {
+      ...base,
+      rearTrack: { ...base.rearTrack, value: base.rearTrack.value + 400 },
+      frontTrack: { ...base.frontTrack, value: base.frontTrack.value + 400 },
+    };
+    for (const spec of [base, widened]) {
+      const a = truckAnchors(spec);
+      const rear = spec.rearTrack.value / 2000;
+      const front = spec.frontTrack.value / 2000;
+      const object = proceduralTruck(spec, palette).object;
+      expectCentresAt(object, [
+        [a.rearAxle.x, rear],
+        [a.rearAxle.x, -rear],
+        [a.frontAxle.x, front],
+        [a.frontAxle.x, -front],
+      ]);
+      expectCovers(object, a.rearX, a.frontX, spec.width.value / 2000);
+    }
+  });
+
+  it.each(TRAILER_IDS)('trailer %s: sits under the wheels and body of the spec', (id) => {
+    const base = trailerById(id);
+    const widened = { ...base, track: { ...base.track, value: base.track.value + 400 } };
+    for (const spec of [base, widened]) {
+      const a = trailerAnchors(spec);
+      const half = spec.track.value / 2000;
+      const [dolly, trailer] = proceduralTrailer(spec, palette).object.children;
+      if (dolly === undefined || trailer === undefined) throw new Error('missing trailer parts');
+      expectCentresAt(dolly, [
+        [a.frontAxle.x, half],
+        [a.frontAxle.x, -half],
+      ]);
+      expectCentresAt(
+        trailer,
+        a.rearAxles.flatMap((axle) => [[axle.x, half] as const, [axle.x, -half] as const]),
+      );
+      expectCovers(trailer, a.rearX, a.frontX, spec.width.value / 2000);
+    }
   });
 });

@@ -64,10 +64,10 @@ const AXLE_HALF_THICKNESS = 0.07;
 const SWING_MARGIN = 0.1;
 
 export const SHADOW_NAME = 'blob-shadow';
-const SHADOW_HEIGHT = 0.02; // above the markings
-const BODY_SHADOW = { alpha: 0.4, squareness: 4, grow: 1.1 } as const;
+export const SHADOW_HEIGHT = 0.02; // above the markings
+const BODY_SHADOW = { alpha: 0.5, squareness: 4, margin: 0.7 } as const;
 const WHEEL_SHADOW = { alpha: 0.6, squareness: 2, growX: 1.3, growY: 1.4 } as const;
-const DRAWBAR_SHADOW_HALF_WIDTH = 0.6;
+const DRAWBAR_SHADOW_HALF_WIDTH = 0.3;
 const DRAWBAR_SHADOW_ALPHA = 0.25;
 
 type Point3 = readonly [x: number, y: number, z: number];
@@ -91,8 +91,8 @@ function bodyBlob(x0: number, x1: number, y0: number, y1: number, alpha: number)
   return {
     x: (x0 + x1) / 2,
     y: (y0 + y1) / 2,
-    rx: ((x1 - x0) / 2) * BODY_SHADOW.grow,
-    ry: ((y1 - y0) / 2) * BODY_SHADOW.grow,
+    rx: (x1 - x0) / 2 + BODY_SHADOW.margin,
+    ry: (y1 - y0) / 2 + BODY_SHADOW.margin,
     alpha,
     squareness: BODY_SHADOW.squareness,
   };
@@ -272,6 +272,9 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
     ...[-1, 1].map((side) =>
       wheelBlob(TRUCK_WHEEL_RADIUS, wheelSpan, a.rearAxle.x, (side * rearTrack) / 2),
     ),
+    ...[-1, 1].map((side) =>
+      wheelBlob(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH, a.frontAxle.x, (side * frontTrack) / 2),
+    ),
   ];
 
   const group = new Group();
@@ -289,20 +292,10 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
   // each front wheel yaws about its own kingpin, so the two share one geometry
   const frontWheel = wheelGeometry(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH);
   const frontDetail = frontWheelDetail(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH);
-  const pivotY = TRUCK_WHEEL_RADIUS + a.frontAxle.z;
-  const frontShadow = blobShadow(
-    [wheelBlob(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH, 0, 0)],
-    SHADOW_HEIGHT - pivotY,
-  );
   const kingpin = (side: -1 | 1): Group => {
     const pivot = new Group();
-    pivot.position.set(a.frontAxle.x, pivotY, (-side * frontTrack) / 2);
-    pivot.add(
-      res.mesh(frontWheel, wheelMaterial),
-      res.detail(frontDetail),
-      res.shadow(frontShadow),
-      schematic.front(),
-    );
+    pivot.position.set(a.frontAxle.x, TRUCK_WHEEL_RADIUS + a.frontAxle.z, (-side * frontTrack) / 2);
+    pivot.add(res.mesh(frontWheel, wheelMaterial), res.detail(frontDetail), schematic.front());
     group.add(pivot);
     return pivot;
   };
