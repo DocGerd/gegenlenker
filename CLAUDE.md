@@ -9,7 +9,7 @@ Dev server: `pnpm dev`. CI runs the rest in order (`.github/workflows/ci.yml`); 
 - Install: `pnpm install --frozen-lockfile`
 - Lint: `pnpm lint`; format: `pnpm format:check` (fix with `pnpm format`)
 - Typecheck: `pnpm typecheck`
-- Unit tests: `pnpm test`
+- Unit tests: `pnpm test`; single test: `pnpm exec vitest run <file> -t '<name>'`
 - Build: `BASE_PATH=/gegenlenker/ pnpm build`
 - Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`)
 
@@ -28,7 +28,7 @@ Dev server: `pnpm dev`. CI runs the rest in order (`.github/workflows/ci.yml`); 
 - Three space (`src/render/coords.ts`): x = x, z = -y, y up, `rotation.y` = heading.
 - `ControlVector.steer` is the target, -1 (full right) to 1 (full left), rate-limited in the snapshot; `lever` is 0 to 1 of the speed cap; direction comes from `gear` (`R` gives negative speed).
 - `couplingAngle` = truck heading - drawbar heading; `turntableAngle` = drawbar heading - trailer heading.
-- Reversing with left steer, the trailer rear first goes LEFT (double inversion); no test pins this, so re-check it after changing vehicle data.
+- Reversing with left steer, the trailer rear first goes LEFT (double inversion); re-check after changing vehicle data.
 
 ## Vehicle data
 
@@ -44,9 +44,13 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 ## Tablet perf check (manual, reference device: Android tablet, Chrome)
 
 - Open https://docgerd.github.io/gegenlenker/?perf=1 and start a drive (`src/app/drive.ts` mounts the overlay only there); it shows fps, p95 frame ms, resolution scale, draw calls, GL renderer.
-- Pass: at least 58 fps at resolution scale 1.00. `pnpm test:perf` (`e2e/perf/four-views.perf.ts`; headed, local only, not CI) owns the automated thresholds; it skips on software GL (SwiftShader, llvmpipe), so only a real GPU measures fps.
-- Headless Chromium screenshots of the real app work for visual checks; UI language defaults to the browser locale (`navigator.languages`) unless a saved setting overrides it; there is no URL parameter.
+- Pass: at least 58 fps at resolution scale 1.00.
+- `?probe` mounts `src/render/probe.ts`, which `pnpm test:perf` (`e2e/perf/four-views.perf.ts`; headed, local only, not CI) uses; that spec owns the automated thresholds and skips on software GL (SwiftShader, llvmpipe), so only a real GPU measures fps.
 - Also check: two-thumb touch (wheel and lever at once), Android back gesture (history handling in `src/app/app.ts`), offline install, mirror sides.
+
+## Visual check
+
+- Headless Chromium screenshots of the real app work for visual checks; UI language defaults to the browser locale (`navigator.languages`) unless a saved setting overrides it; there is no URL parameter.
 
 ## Workflow
 
@@ -56,4 +60,5 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Choose the merge method per PR: merge commit when the commits are meaningful; no squash by default.
 - Commit as `13460098+DocGerd@users.noreply.github.com` (repo-local `user.email`), never the owner's real address.
 - `main` requires PRs to be up to date: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next one and wait for CI.
+- A merge to `main` that passes CI deploys via `.github/workflows/deploy.yml` (`workflow_run`); `workflow_dispatch` is the fallback.
 - Merge reviewed PRs with green CI without asking, until the project moves to gitflow and a first release.
