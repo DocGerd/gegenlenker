@@ -18,7 +18,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Tolerances } from '../contracts/exercise';
 import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
-import type { Environment } from './seams';
+import { AIDS_LAYER, type Environment } from './seams';
 import { createSky, neutralSky } from './sky';
 
 const VERGE_Y = 0;
@@ -32,7 +32,10 @@ const BAND_STRIP = 0.08;
 const BAND_CASING = 0.05; // dark edge on each side, so the accent reads on light grounds
 const BAND_Y = 0.016;
 const BAND_CASING_DROP = 0.005;
+const BAND_LIFT = 0.004;
+const BAND_RING_SHARE = 0.5;
 const BAND_SEGMENTS = 48;
+const BAND_YARD_DIVISOR = 150; // the whole-yard view shows the band this many strokes across the yard
 const GATE_STRIP = 0.3;
 const GATE_SEGMENTS = 64;
 const CHUNK = 60; // spatial chunk edge: frustum culling works per chunk
@@ -377,6 +380,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
   for (const m of layout.markings) addMarking(m, markings, color);
   group.add(...markings.meshes(flat, geometries));
 
+  let yardBand: Group | null = null;
   const { target } = layout;
   if (target !== null) {
     color.set(palette.accent);
@@ -393,19 +397,39 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     if (tolerances !== null) {
       const place = (g: BufferGeometry, y: number): BufferGeometry =>
         g.rotateY(target.pose.heading).translate(target.pose.x, y, -target.pose.y);
-      const casing = place(
-        toleranceGeometry(tolerances, target.length, BAND_STRIP + 2 * BAND_CASING),
-        BAND_Y - BAND_CASING_DROP,
+      const addBand = (strip: number, lift: number): Mesh[] => {
+        const casing = place(
+          toleranceGeometry(
+            tolerances,
+            target.length,
+            strip + 2 * BAND_CASING * (strip / BAND_STRIP),
+          ),
+          BAND_Y + lift - BAND_CASING_DROP,
+        );
+        color.set(palette.wheel);
+        tint(casing, color);
+        color.set(palette.accent);
+        const band = tint(
+          place(toleranceGeometry(tolerances, target.length, strip), BAND_Y + lift),
+          color,
+        );
+        geometries.push(casing, band);
+        return [new Mesh(casing, flat), new Mesh(band, flat)];
+      };
+      group.add(...addBand(BAND_STRIP, 0));
+
+      // World-metre strokes shrink to under a pixel in the whole-yard view, so it gets a wider copy.
+      const { yard } = layout;
+      const yardStrip = Math.min(
+        Math.max(yard.maxX - yard.minX, yard.maxY - yard.minY) / BAND_YARD_DIVISOR,
+        tolerances.position * BAND_RING_SHARE, // a stroke wider than the tolerance would blur the ring
       );
-      color.set(palette.wheel);
-      tint(casing, color);
-      color.set(palette.accent);
-      const band = tint(
-        place(toleranceGeometry(tolerances, target.length, BAND_STRIP), BAND_Y),
-        color,
-      );
-      geometries.push(casing, band);
-      group.add(new Mesh(casing, flat), new Mesh(band, flat));
+      if (yardStrip > BAND_STRIP) {
+        yardBand = new Group();
+        for (const m of addBand(yardStrip, BAND_LIFT)) yardBand.add(m);
+        yardBand.traverse((o) => o.layers.set(AIDS_LAYER));
+        group.add(yardBand);
+      }
     }
   }
 
@@ -448,6 +472,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
   return {
     object: group,
     update(frame: RenderFrame): void {
+      if (yardBand !== null) yardBand.visible = frame.topDown === 'yard';
       if (gate !== null) {
         gate.material.color.copy(frame.waypointVisited === true ? gate.passed : gate.pending);
       }

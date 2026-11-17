@@ -96,7 +96,7 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   </div>
   <div class="hud-mirror" data-hud="mirrorLeft" hidden></div>
   <div class="hud-mirror" data-hud="mirrorRight" hidden></div>
-  <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" role="status" hidden></div></div>
+  <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
