@@ -24,7 +24,7 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 - ESLint is type-aware (`strictTypeChecked`): fix findings in source, no `eslint-disable`.
 - The `query(root, name, Type)` DOM helpers (menu, hud, controls) throw unless the element is `instanceof Type`: pass the real class (`SVGElement` for `<svg>`/`<g>`, `HTMLSelectElement` for `<select>`).
 - Changing `--scene-*` tokens: keep the T1-T4 contrast targets in `docs/brand/BRAND.md`; `src/styles/tokens.test.ts` enforces them.
-- Mirror rects avoid the controls via `controlsHeight()` in `src/render/viewports.ts`, which copies control geometry from `controls.css`/tokens: change both together; `e2e/layout.spec.ts` pins no overlap.
+- Mirror rects avoid the controls via `controlsHeight()` in `src/render/viewports.ts`, which copies control geometry from `src/input/controls.css` and `src/styles/tokens.css`: change both together; `e2e/layout.spec.ts` pins no overlap.
 
 ## Units and signs
 
