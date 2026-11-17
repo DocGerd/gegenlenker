@@ -4,6 +4,7 @@ import '../src/styles/base.css';
 import type { RenderFrame, ViewMode } from '../src/contracts/render';
 import type { Pose2, SimSnapshot } from '../src/contracts/sim';
 import { TRAILER_IDS, TRUCK_IDS, type VehicleParams } from '../src/contracts/vehicle';
+import { NO_PREDICTION } from '../src/sim/predict';
 import { mountPerfOverlay } from '../src/render/perf-overlay';
 import { createThreeSceneRenderer } from '../src/render/three-renderer';
 import { proceduralTrailer, proceduralTruck } from '../src/render/vehicle-visual';
@@ -110,7 +111,7 @@ const frame = (now: number): void => {
     views: computeViewports(width, height, mode),
     topDown: 'follow',
     aids: { pivots: false, path: false, tracks: false, ghost: false },
-    predicted: [],
+    predicted: NO_PREDICTION,
   };
   renderer.render(renderFrame);
   requestAnimationFrame(frame);

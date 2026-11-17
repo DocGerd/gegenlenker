@@ -7,6 +7,7 @@ import { LAYOUT_IDS } from '../src/contracts/layout';
 import type { AidFlags, RenderFrame, TopDownMode } from '../src/contracts/render';
 import type { Pose2, SimSnapshot, Vec2 } from '../src/contracts/sim';
 import { createSceneRenderer } from '../src/render';
+import { NO_PREDICTION } from '../src/sim/predict';
 import { mountPerfOverlay } from '../src/render/perf-overlay';
 import { computeViewports } from '../src/render/viewports';
 import { trailerAnchors, truckAnchors } from '../src/vehicles/anchors';
@@ -187,7 +188,7 @@ const tick = (now: number): void => {
     views: computeViewports(width, height, 'drive'),
     topDown,
     aids,
-    predicted: predictedArc(snapshot),
+    predicted: { ...NO_PREDICTION, trailer: predictedArc(snapshot) },
   };
   renderer.render(frame);
   requestAnimationFrame(tick);

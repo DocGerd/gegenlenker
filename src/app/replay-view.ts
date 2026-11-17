@@ -2,12 +2,13 @@ import { exerciseById, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { InputLog } from '../contracts/exercise';
 import type { AidFlags, RenderFrame } from '../contracts/render';
-import type { Simulation, Vec2 } from '../contracts/sim';
+import type { Simulation } from '../contracts/sim';
 import { formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { computeViewports } from '../render/viewports';
 import { createContactQuery } from '../sim/collision';
 import { DT } from '../sim/constants';
+import { NO_PREDICTION } from '../sim/predict';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
@@ -16,7 +17,6 @@ import './results.css';
 import { isReplayable } from './storage';
 
 const AIDS: AidFlags = { tracks: true, ghost: true, path: false, pivots: false };
-const NO_PATH: readonly Vec2[] = [];
 // A long frame gap (slow device, backgrounded tab) must not skip a stretch of the run.
 const MAX_FRAME_SECONDS = 0.1;
 const SPEEDS: readonly number[] = [1, 4];
@@ -146,7 +146,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     views: computeViewports(1, 1, 'replay'),
     topDown: 'yard',
     aids: AIDS,
-    predicted: NO_PATH,
+    predicted: NO_PREDICTION,
   };
 
   view.start({

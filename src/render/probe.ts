@@ -4,15 +4,14 @@ import '../styles/fonts';
 import { exerciseById, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { RenderFrame, RenderStats } from '../contracts/render';
-import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
+import type { ContactQuery, Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import {
   TRAILER_IDS,
   TRUCK_IDS,
   type TrailerAnchors,
   type TruckAnchors,
 } from '../contracts/vehicle';
-import { PREDICT_DISTANCE } from '../sim/constants';
-import { predictTrailerRear } from '../sim/predict';
+import { predictCombination } from '../sim/predict';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
@@ -26,6 +25,7 @@ declare global {
   }
 }
 
+const noContacts: ContactQuery = () => null;
 const RADIUS = 15;
 const SPEED = 1.4;
 
@@ -138,7 +138,7 @@ export function startProbe(root: HTMLElement): void {
       views: computeViewports(width, height, 'drive'),
       topDown: 'follow',
       aids: { pivots: true, path: true, tracks: true, ghost: true },
-      predicted: predictTrailerRear(params, snapshot, 1, PREDICT_DISTANCE),
+      predicted: predictCombination(params, snapshot, noContacts),
     };
     renderer.render(frame);
     requestAnimationFrame(tick);

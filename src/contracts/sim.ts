@@ -49,3 +49,15 @@ export type Simulation = {
   snapshot(): SimSnapshot;
 };
 export type InputChange = { readonly step: number; readonly control: ControlVector };
+
+/** Predicted ground paths at constant target steer; every line stops where the simulation would block. */
+export type Prediction = {
+  readonly trailer: readonly Vec2[];
+  /** Outer front corner of the truck, the side away from the turn. */
+  readonly truckOuter: readonly Vec2[];
+  /** Truck side at the rear axle, the side toward the turn. */
+  readonly truckInner: readonly Vec2[];
+  readonly blocked: BlockReason | null;
+  /** Body headings at the line ends when blocked; `truck` is null once the truck lines stopped earlier. */
+  readonly end: { readonly truck: number | null; readonly trailer: number } | null;
+};
