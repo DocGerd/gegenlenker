@@ -68,6 +68,8 @@ export type RenderFrame = {
   readonly topDownClear?: Rect;
   readonly aids: AidFlags;
   readonly predicted: Prediction;
+  /** Absent means not yet passed. */
+  readonly waypointVisited?: boolean;
 };
 export type RenderStats = {
   readonly fps: number;

@@ -22,6 +22,7 @@ import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
 import { measureChrome } from './chrome';
+import { showPauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { updateSettings, type Settings } from './settings';
 
@@ -43,12 +44,18 @@ const EXPOSE_FRAMING = new URLSearchParams(location.search).get('framing') === '
 
 type Frame = { -readonly [K in keyof RenderFrame]: RenderFrame[K] };
 
-/** Returns the finish action, which ends the run exactly as the HUD's finish button does. */
+export type DriveHandlers = {
+  readonly onExit: (outcome: DriveOutcome) => void;
+  /** The run was dropped unscored and unrecorded. */
+  readonly onRestart: () => void;
+};
+
+/** Returns the back action: opens the pause sheet, closes it when open, or leaves when no stage could mount. */
 export function startDrive(
   root: HTMLElement,
   run: RunConfig,
   settings: Settings,
-  onExit: (outcome: DriveOutcome) => void,
+  { onExit, onRestart }: DriveHandlers,
 ): () => void {
   const truck = truckById(run.truckId);
   const trailer = trailerById(run.trailerId);
@@ -92,12 +99,42 @@ export function startDrive(
     );
     const result =
       scored && exercise !== null
-        ? runResult(snapshot, exercise, run.truckId, run.trailerId, reached)
+        ? runResult(
+            snapshot,
+            exercise,
+            run.truckId,
+            run.trailerId,
+            reached,
+            tracker?.waypointVisited() ?? true,
+          )
         : null;
     dispose();
     onExit({ log, result });
   };
   const finish = (): void => exit(true);
+  const restart = (): void => {
+    if (disposed) return;
+    dispose();
+    onRestart();
+  };
+
+  // The sim stands still while the sheet is open; rendering carries on for resizes.
+  let closeSheet: (() => void) | null = null;
+  const resume = (): void => {
+    closeSheet?.();
+    closeSheet = null;
+  };
+  const togglePause = (): void => {
+    if (closeSheet !== null) {
+      resume();
+      return;
+    }
+    closeSheet = showPauseSheet(stage, exercise === null ? 'menu' : 'finish', {
+      continue: resume,
+      restart,
+      finish,
+    });
+  };
 
   const view = mountRenderStage(stage, stage, () => exit(false));
   if (view === null) return () => exit(false);
@@ -207,8 +244,8 @@ export function startDrive(
       pathStale = true;
       updateSettings({ aids });
       remeasure();
-    } else {
-      finish();
+    } else if (closeSheet === null) {
+      togglePause();
     }
   });
 
@@ -224,7 +261,8 @@ export function startDrive(
       dirty = true;
     },
     frame(seconds) {
-      const clock = advanceClock(accumulator, seconds);
+      const clock =
+        closeSheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
       for (let i = 0; i < clock.steps; i++) {
         controls.tick(DT, snapshot.steer);
@@ -251,6 +289,7 @@ export function startDrive(
           : NO_PREDICTION;
       }
       frame.snapshot = snapshot;
+      frame.waypointVisited = tracker?.waypointVisited() ?? false;
       frame.topDown = topDown;
       frame.aids = aids;
       renderer.render(frame);
@@ -267,5 +306,5 @@ export function startDrive(
     cleanups.push(mountPerfOverlay(stage, () => renderer.stats()));
   }
 
-  return finish;
+  return togglePause;
 }
