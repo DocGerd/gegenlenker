@@ -12,6 +12,7 @@ import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { placePose } from './coords';
 import type { VehicleVisual } from './seams';
+import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
 const TRUCK_WHEEL_RADIUS = 0.5;
 const WHEEL_SEGMENTS = 20;
@@ -173,8 +174,20 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
   const bodyMaterial = res.material(palette.body);
   const wheelMaterial = res.material(palette.wheel);
 
+  const schematic = truckSchematic(palette, {
+    rearAxleX: a.rearAxle.x,
+    rearTrack,
+    twinOffset: TWIN_OFFSET,
+    twinWidth: TWIN_WHEEL_WIDTH,
+    frontWheelWidth: TRUCK_WHEEL_WIDTH,
+    wheelRadius: TRUCK_WHEEL_RADIUS,
+    couplingX: a.coupling.x,
+    frontOverhang: a.frontX - a.frontAxle.x,
+  });
+
   const group = new Group();
   group.add(
+    schematic.rear,
     res.mesh(merge(cab), cabMaterial),
     res.mesh(merge(chassis), chassisMaterial),
     res.mesh(merge(body), bodyMaterial),
@@ -186,7 +199,7 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
   const kingpin = (side: -1 | 1): Group => {
     const pivot = new Group();
     pivot.position.set(a.frontAxle.x, TRUCK_WHEEL_RADIUS + a.frontAxle.z, (-side * frontTrack) / 2);
-    pivot.add(res.mesh(frontWheel, wheelMaterial));
+    pivot.add(res.mesh(frontWheel, wheelMaterial), schematic.front());
     group.add(pivot);
     return pivot;
   };
@@ -200,7 +213,10 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
       pivotRight.rotation.y = snapshot.roadWheelAngle;
       pivotLeft.rotation.y = snapshot.roadWheelAngle;
     },
-    dispose: res.dispose,
+    dispose() {
+      res.dispose();
+      schematic.dispose();
+    },
   };
 }
 
@@ -229,13 +245,14 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
   );
 
   // Dolly frame: the turntable centre is the origin; eye and front axle are read as given.
+  const armPath = (side: number): Point3[] => [
+    [0, side * DRAWBAR_SPREAD, plateMid],
+    [kink, side * DRAWBAR_SPREAD * (1 - kink / a.eye.x), plateMid],
+    [a.eye.x, 0, a.eye.z],
+  ];
   const arm = (side: number): BufferGeometry[] => {
-    const start: Point3 = [0, side * DRAWBAR_SPREAD, plateMid];
-    const bend: Point3 = [kink, side * DRAWBAR_SPREAD * (1 - kink / a.eye.x), plateMid];
-    return [
-      strut(start, bend, ARM_WIDTH, ARM_HEIGHT),
-      strut(bend, [a.eye.x, 0, a.eye.z], ARM_WIDTH, ARM_HEIGHT),
-    ];
+    const [start, bend, end] = armPath(side) as [Point3, Point3, Point3];
+    return [strut(start, bend, ARM_WIDTH, ARM_HEIGHT), strut(bend, end, ARM_WIDTH, ARM_HEIGHT)];
   };
   const dollyChassis = [
     ...arm(-1),
@@ -298,13 +315,30 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
   const bodyMaterial = res.material(palette.body);
   const wheelMaterial = res.material(palette.wheel);
 
+  const dollyPlan = dollySchematic(palette, {
+    frontAxleX: a.frontAxle.x,
+    track,
+    wheelRadius: radius,
+    wheelWidth: TRAILER_WHEEL_WIDTH,
+    arms: [-1, 1].map((side) => armPath(side).map(([x, y]) => [x, y] as const)),
+  });
+  const trailerPlan = trailerSchematic(palette, {
+    rearAxleXs: a.rearAxles.map((axle) => axle.x),
+    track,
+    wheelRadius: radius,
+    wheelWidth: TRAILER_WHEEL_WIDTH,
+    turntableX: a.turntable.x,
+  });
+
   const dolly = new Group();
   dolly.add(
     res.mesh(merge(dollyChassis), chassisMaterial),
     res.mesh(merge(dollyWheels), wheelMaterial),
+    dollyPlan.mesh,
   );
   const trailer = new Group();
   trailer.add(
+    trailerPlan.mesh,
     res.mesh(merge(bodyParts), bodyMaterial),
     res.mesh(merge([...rails, ...axleBeams]), chassisMaterial),
     res.mesh(merge(trailerWheels), wheelMaterial),
@@ -318,6 +352,10 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
     },
-    dispose: res.dispose,
+    dispose() {
+      res.dispose();
+      dollyPlan.dispose();
+      trailerPlan.dispose();
+    },
   };
 }
