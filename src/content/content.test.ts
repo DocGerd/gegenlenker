@@ -12,6 +12,7 @@ import { targetError, WAYPOINT_RADIUS } from '../scoring/score';
 import type { VehicleParams } from '../contracts/vehicle';
 import { resolveCombination } from '../vehicles/resolve';
 import { trailers, trucks } from '../vehicles/registry';
+import { BARRIER_X, LANE } from './exercises/slalom';
 import { exercises, layouts } from './registry';
 import { resolveLayout } from './resolve-layout';
 
@@ -34,9 +35,12 @@ const cases = [
   })),
 ];
 
+const laneCentre = (LANE.minY + LANE.maxY) / 2;
+const barrierSpacing = BARRIER_X[1] - BARRIER_X[0];
+
 // Test-local steering waypoints for the forward drive out of each target: bay swings out of the
-// bay column and west to the start; corner holds the outer lane through the bend; slalom passes
-// each barrier on its open side.
+// bay column and west to the start; corner holds the outer lane through the bend; slalom swings
+// to the open side of each barrier.
 const via: Partial<Record<ExerciseId, Vec2[]>> = {
   'reverse-bay': [
     { x: 72, y: 32 },
@@ -46,12 +50,10 @@ const via: Partial<Record<ExerciseId, Vec2[]>> = {
     { x: 16.5, y: 21 },
     { x: 28, y: 18.5 },
   ],
-  slalom: [
-    { x: 28, y: 22 },
-    { x: 48, y: 18 },
-    { x: 68, y: 22 },
-    { x: 88, y: 18 },
-  ],
+  slalom: Array.from({ length: 24 }, (_, i) => {
+    const x = 20 + 3 * i;
+    return { x, y: laneCentre + 3 * Math.cos((Math.PI * (x - BARRIER_X[0])) / barrierSpacing) };
+  }),
 };
 const dist = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);
 const MOVE = 0.5;
@@ -228,6 +230,29 @@ function pursuit(
   const delta = Math.atan((2 * params.wheelbase * Math.sin(alpha)) / Math.hypot(dx, dy));
   return delta / params.maxRoadWheelAngle;
 }
+
+it('slalom cannot be driven in a straight line', () => {
+  const slalom = exercises.find((e) => e.id === 'slalom');
+  const { waypoint, start } = slalom ?? {};
+  if (!slalom || !waypoint || !start) throw new Error('slalom needs a waypoint');
+  const { obstacles } = resolveLayout(layouts[slalom.layout], slalom);
+  const lane = [14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26];
+  const length = waypoint.x - start.x;
+  const free: string[] = [];
+  for (const y0 of lane) {
+    for (const y1 of lane) {
+      const corridor = {
+        cx: (start.x + waypoint.x) / 2,
+        cy: (y0 + y1) / 2,
+        halfLength: Math.hypot(length, y1 - y0) / 2,
+        halfWidth: 0.5,
+        heading: Math.atan2(y1 - y0, length),
+      };
+      if (!obstacles.some((o) => obbOverlap(corridor, o.obb))) free.push(`${y0}->${y1}`);
+    }
+  }
+  expect(free).toEqual([]);
+});
 
 it('registers exactly the contract ids', () => {
   expect(Object.keys(layouts).sort()).toEqual([...LAYOUT_IDS].sort());
