@@ -151,3 +151,34 @@
   line-height: var(--leading-lg);
   color: var(--color-text-secondary);
 }
+
+.result-limit {
+  display: block;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-muted);
+}
+
+.result-value {
+  text-align: right;
+}
+
+.result-status,
+.result-delta {
+  display: block;
+  font-family: inherit;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-muted);
+}
+
+.result-pass,
+.result-better {
+  color: var(--color-success);
+}
+
+.result-fail,
+.result-worse,
+.result-bad {
+  color: var(--color-danger);
+}

@@ -8,6 +8,7 @@ import {
   recordBest,
   serializeBestResults,
 } from './best';
+import { criteria, deltasToBest, endedMoving } from './debrief';
 import { WAYPOINT_RADIUS, createRunTracker, runResult, targetError } from './score';
 
 function snap(over: Partial<SimSnapshot> = {}): SimSnapshot {
@@ -289,5 +290,31 @@ describe('best results', () => {
       ),
     ).toEqual({ [KEY]: result() });
     expect(parseBestResults(raw({ [KEY]: result() }), fingerprint)).toEqual({});
+  });
+});
+
+describe('debrief', () => {
+  const tolerances = { position: 0.5, angle: 10 };
+
+  it('judges position and angle against their tolerance, inclusive', () => {
+    const [position, angle] = criteria(
+      result({ positionError: 0.5, angleError: 10.1 }),
+      tolerances,
+    );
+    expect(position?.passed).toBe(true);
+    expect(angle?.passed).toBe(false);
+  });
+
+  it('tells a run that ended while moving from one that missed the target', () => {
+    expect(endedMoving(result({ reached: false }), tolerances)).toBe(true);
+    expect(endedMoving(result({ reached: false, positionError: 2 }), tolerances)).toBe(false);
+    expect(endedMoving(result({ reached: false, waypointMissed: true }), tolerances)).toBe(false);
+    expect(endedMoving(result(), tolerances)).toBe(false);
+  });
+
+  it('reports a faster run as a negative time delta', () => {
+    const d = deltasToBest(result({ time: 25, contacts: 1 }), result({ time: 30 }));
+    expect(d.time).toBe(-5);
+    expect(d.contacts).toBe(1);
   });
 });
