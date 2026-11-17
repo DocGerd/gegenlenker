@@ -1,6 +1,7 @@
 {
   "name": "gegenlenker",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "engines": {
     "node": ">=24"
