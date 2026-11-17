@@ -158,7 +158,7 @@ export function startDrive(
           x: target.pose.x + (Math.cos(target.pose.heading) * target.length) / 2,
           y: target.pose.y + (Math.sin(target.pose.heading) * target.length) / 2,
         };
-  /** Test observable (`?framing=1`): the screen box of the drawn vehicle. */
+  /** Test observable (`?framing=1`): the screen box of the drawn vehicle and the sim step it shows. */
   const exposeVehicleBox = (): void => {
     const xs: number[] = [];
     const ys: number[] = [];
@@ -184,6 +184,7 @@ export function startDrive(
       top: Math.min(...ys),
       right: Math.max(...xs),
       bottom: Math.max(...ys),
+      step: snapshot.step,
     };
     stage.dataset['vehicleBox'] = JSON.stringify(box);
   };
@@ -256,9 +257,7 @@ export function startDrive(
       hud.update(snapshot);
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
       hud.setTargetArrow(
-        at && frame.topDownClear
-          ? targetArrow(at, frame.views.topDown, frame.topDownClear, ARROW_MARGIN)
-          : null,
+        at && frame.topDownClear ? targetArrow(at, frame.topDownClear, ARROW_MARGIN) : null,
       );
       if (EXPOSE_FRAMING) exposeVehicleBox();
     },

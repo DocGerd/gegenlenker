@@ -92,18 +92,17 @@ export function followFraming(i: FollowInput): { centre: Vec2; half: number } {
   return { centre: { x: i.vehicle.x - dx / scale, y: i.vehicle.y + dy / scale }, half };
 }
 
-/** Where the arrow towards an off-screen `target` sits and which way it points; null while `target` is inside `pane`. */
+/** Where the arrow towards a hidden `target` sits and which way it points; null while `target` is inside `clear`. */
 export function targetArrow(
   target: Vec2,
-  pane: Rect,
   clear: Rect,
   margin: number,
 ): { x: number; y: number; angle: number } | null {
   const inside =
-    target.x >= pane.x &&
-    target.x <= pane.x + pane.width &&
-    target.y >= pane.y &&
-    target.y <= pane.y + pane.height;
+    target.x >= clear.x &&
+    target.x <= clear.x + clear.width &&
+    target.y >= clear.y &&
+    target.y <= clear.y + clear.height;
   if (inside) return null;
   const cx = clear.x + clear.width / 2;
   const cy = clear.y + clear.height / 2;

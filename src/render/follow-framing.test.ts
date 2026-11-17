@@ -90,12 +90,19 @@ describe('leadTarget', () => {
 describe('targetArrow', () => {
   const clear: Rect = { x: 614, y: 200, width: 326, height: 400 };
 
-  it('is absent while the target is inside the pane', () => {
-    expect(targetArrow({ x: 700, y: 300 }, pane, clear, 20)).toBeNull();
+  it('is absent while the target is inside the clear rect', () => {
+    expect(targetArrow({ x: 700, y: 300 }, clear, 20)).toBeNull();
+  });
+
+  it('shows for a target inside the pane but behind chrome', () => {
+    const arrow = targetArrow({ x: 700, y: 100 }, clear, 20);
+    expect(arrow).not.toBeNull();
+    expect(arrow?.y).toBeCloseTo(clear.y + 20, 6);
+    expect(arrow?.angle).toBeLessThan(0);
   });
 
   it('sits on the clear rect edge, pointing at the target', () => {
-    const arrow = targetArrow({ x: 100, y: 400 }, pane, clear, 20);
+    const arrow = targetArrow({ x: 100, y: 400 }, clear, 20);
     expect(arrow).not.toBeNull();
     expect(arrow?.x).toBeCloseTo(clear.x + 20, 6);
     expect(Math.abs(arrow?.angle ?? 0)).toBeGreaterThan(Math.PI / 2);

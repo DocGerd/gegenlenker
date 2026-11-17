@@ -5,9 +5,11 @@ const sizes = [
   { width: 1024, height: 600 },
   { width: 1280, height: 800 },
 ];
+/** Sim steps to let the camera follow a manoeuvre before checking the framing. */
+const STEPS = 90;
 const CHROME = '[data-chrome], .ctl-steer, .ctl-gears, .ctl-pedals';
 
-type Box = { left: number; top: number; right: number; bottom: number };
+type Box = { left: number; top: number; right: number; bottom: number; step: number };
 
 async function start(page: Page, size: (typeof sizes)[number]): Promise<void> {
   await page.setViewportSize(size);
@@ -21,8 +23,20 @@ async function vehicleBox(page: Page): Promise<Box> {
   return JSON.parse((await stage.getAttribute('data-vehicle-box')) ?? 'null') as Box;
 }
 
-async function expectClear(page: Page): Promise<void> {
-  const box = await vehicleBox(page);
+/** Waits until the sim has run `steps` more steps, then returns the box of that frame. */
+async function afterSteps(page: Page, steps: number): Promise<Box> {
+  const from = (await vehicleBox(page)).step;
+  let box = await vehicleBox(page);
+  await expect
+    .poll(async () => {
+      box = await vehicleBox(page);
+      return box.step - from;
+    })
+    .toBeGreaterThanOrEqual(steps);
+  return box;
+}
+
+async function expectClear(page: Page, box: Box): Promise<void> {
   const chrome = await page.locator(CHROME).evaluateAll((els) =>
     els
       .map((el) => el.getBoundingClientRect())
@@ -53,28 +67,28 @@ for (const size of sizes) {
         await page.getByRole('button', { name: en.panelAids, exact: true }).click();
         await page.getByRole('button', { name: en.panelGauges, exact: true }).click();
       }
-      await expectClear(page);
+      await expectClear(page, await vehicleBox(page));
 
       for (const gear of ['2', '4']) {
         await page.keyboard.press(gear);
         for (let i = 0; i < 6; i++) await page.keyboard.press('w');
-        await page.waitForTimeout(1500);
-        await expectClear(page);
+        await expectClear(page, await afterSteps(page, STEPS));
+        // Steering while moving bends the combination, the widest pose for the bounding circle.
+        for (const steer of ['a', 'd']) {
+          await page.keyboard.down(steer);
+          await expectClear(page, await afterSteps(page, STEPS));
+          await page.keyboard.up(steer);
+          await expectClear(page, await afterSteps(page, STEPS));
+        }
         await page.keyboard.press('1');
-        await page.waitForTimeout(300);
       }
     });
   }
 }
 
-test('the arrow points at an off-screen target and goes once the whole yard shows it', async ({
-  page,
-}) => {
+test('the arrow points at a target that is off-screen at the start', async ({ page }) => {
   await start(page, sizes[0] as (typeof sizes)[number]);
-  const arrow = page.locator('[data-hud="targetArrow"] svg');
-  await expect(arrow).toBeVisible();
-  await page.getByRole('button', { name: en.viewYard }).click();
-  await expect(arrow).toBeHidden();
+  await expect(page.locator('[data-hud="targetArrow"] svg')).toBeVisible();
 });
 
 test('collapsed panels stay collapsed in the next run', async ({ page }) => {
