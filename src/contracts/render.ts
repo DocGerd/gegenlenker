@@ -28,10 +28,11 @@ export type AidFlags = {
   readonly tracks: boolean;
   readonly ghost: boolean;
 };
-/** Which top-down HUD panels the player has folded away. */
+/** Which HUD panels the player has folded away: the two top-down panels and the cockpit key legend. */
 export type CollapsedPanels = {
   readonly aids: boolean;
   readonly gauges: boolean;
+  readonly keys: boolean;
 };
 export type ScenePaletteKey =
   | 'sky'
