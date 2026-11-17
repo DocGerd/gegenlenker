@@ -338,6 +338,31 @@ describe('scene tokens', () => {
     expect(contrast(scene('accent'), scene('wheel'))).toBeGreaterThanOrEqual(3);
   });
 
+  // Contact marker: a marking-coloured core on the wheel casing, drawn over what is touched.
+  // The core carries the dark surfaces, the casing the light ones.
+  const darkContactSurfaces = [
+    'cone',
+    'wall',
+    'ramp',
+    'fence',
+    'parked',
+    'hall',
+    'band',
+    'lamp',
+    'street',
+    'tracks',
+  ];
+  it.each(darkContactSurfaces)('contact marker core against %s is 3:1 or more', (surface) => {
+    expect(contrast(scene('marking'), scene(surface))).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(['yard', 'body', 'cab', 'kerb'])(
+    'contact marker casing against %s is 3:1 or more',
+    (surface) => {
+      expect(contrast(scene('wheel'), scene(surface))).toBeGreaterThanOrEqual(3);
+    },
+  );
+
   // Routing: a single-tone obstacle on the yard resolves to a key that satisfies T1 there.
   describe('obstacle palette keys over the resolved layouts', () => {
     const resolved = LAYOUT_IDS.flatMap((id) => [
