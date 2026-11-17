@@ -24,13 +24,9 @@
   position: absolute;
 }
 
-/* The ring lies outside the cockpit rect. The three sides on the screen's edges fall outside .drive (overflow hidden), leaving only the seam to the top-down view, in landscape and portrait alike. */
-.hud-cockpit {
-  box-shadow: var(--hud-frame);
-}
-
 /* The cockpit always starts at the screen's left edge, where controls.css puts the wheel and gears; the readout and legend start to their right. */
 .hud-cockpit {
+  box-shadow: var(--hud-frame); /* outside the rect: only the seam to the top-down view shows */
   --hud-inset: calc(var(--space-4) * 3 + var(--ctl-wheel) + var(--ctl-gears-w));
 }
 
@@ -82,15 +78,10 @@
 }
 
 .hud-view-label {
-  align-self: flex-start;
+  align-self: center;
   padding: 0 var(--space-1);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
-  font-size: var(--text-2xs);
-  line-height: var(--leading-2xs);
-  letter-spacing: var(--tracking-eyebrow);
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
 }
 
 .hud-cockpit > .hud-view-label {
