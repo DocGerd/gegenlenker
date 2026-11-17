@@ -94,18 +94,25 @@ function contrast(a: string, b: string): number {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-/** Hex to OKLCH: lightness 0..1, chroma, hue in degrees. */
-function oklch(hex: string): [l: number, c: number, h: number] {
+/** Hex to OKLab: lightness 0..1, then the green-red and blue-yellow axes. */
+function oklab(hex: string): [l: number, a: number, b: number] {
   const [r = 0, g = 0, b = 0] = [1, 3, 5]
     .map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
     .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  const lightness = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
-  const a = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s;
-  const bb = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
-  return [lightness, Math.hypot(a, bb), ((Math.atan2(bb, a) * 180) / Math.PI + 360) % 360];
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+
+/** Hex to OKLCH: lightness 0..1, chroma, hue in degrees. */
+function oklch(hex: string): [l: number, c: number, h: number] {
+  const [lightness, a, b] = oklab(hex);
+  return [lightness, Math.hypot(a, b), ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360];
 }
 
 // Bare hex: the colour-literal lint rule is for UI code, and this is the reference data.
@@ -300,6 +307,16 @@ describe('scene tokens', () => {
   it.each(t3)('T3: %s against %s is 1.5:1 or more', (a, b) => {
     expect(contrast(scene(a), scene(b))).toBeGreaterThanOrEqual(1.5);
   });
+
+  // T4: the sky is chromatic; lightness alone cannot separate it from yard and pavement.
+  it.each(['yard', 'pavement', 'street', 'verge'])(
+    'T4: sky is 0.08 or more from %s in OKLab',
+    (ground) => {
+      const [l1, a1, b1] = oklab(scene('sky'));
+      const [l2, a2, b2] = oklab(scene(ground));
+      expect(Math.hypot(l1 - l2, a1 - a2, b1 - b2)).toBeGreaterThanOrEqual(0.08);
+    },
+  );
 
   // Own vehicle parts keep 1.5:1 against what they stand on or are seen against.
   const standing: [string, string][] = [

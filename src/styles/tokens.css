@@ -87,7 +87,7 @@
 
 /* Scene palette: theme-independent neutral greys, except the red obstacle cone; the accent marks target and guidance only. */
 :root {
-  --scene-sky: #dce0e4;
+  --scene-sky: #b4e6ff;
   --scene-verge: #7f858d;
   --scene-yard: #c2c7cd;
   --scene-pavement: #f4f5f7;
