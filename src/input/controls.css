@@ -1,5 +1,4 @@
 .ctl {
-  --ctl-wheel: clamp(160px, 38vmin, 300px);
   --ctl-lever-height: clamp(160px, 38vmin, 280px);
   position: absolute;
   inset: 0;
@@ -13,10 +12,10 @@
   font-size: var(--text-sm);
 }
 
-/* A shorter lever keeps the Stop button below the left mirror. */
+/* A shorter lever reduces the overlap with the right mirror. */
 @media (orientation: portrait) {
   .ctl {
-    --ctl-lever-height: clamp(160px, 28vmin, 240px);
+    --ctl-lever-height: clamp(160px, 24vmin, 240px);
   }
 }
 
@@ -52,17 +51,18 @@
   gap: var(--space-2);
 }
 
-.ctl-pedals {
+.ctl-steer {
   left: var(--space-4);
 }
 
-.ctl-steer {
-  right: var(--space-4);
+.ctl-gears {
+  left: calc(var(--space-4) * 2 + var(--ctl-wheel));
+  width: var(--ctl-gears-w);
+  align-items: stretch;
 }
 
-.ctl-gears {
-  right: calc(var(--space-4) * 2 + var(--ctl-wheel));
-  align-items: stretch;
+.ctl-pedals {
+  right: var(--space-4);
 }
 
 .ctl-gears > div {
@@ -154,13 +154,25 @@
   box-shadow: var(--shadow-md);
 }
 
+.ctl-wheel-box {
+  position: relative;
+}
+
 .ctl-wheel {
+  position: relative;
   width: var(--ctl-wheel);
   height: var(--ctl-wheel);
   border-radius: 50%;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   box-shadow: var(--shadow-md);
+}
+
+.ctl-wheel[data-centred] {
+  border-color: var(--color-accent);
+  box-shadow:
+    0 0 0 4px var(--color-accent),
+    var(--shadow-md);
 }
 
 .ctl-wheel svg {
@@ -170,21 +182,28 @@
   pointer-events: none;
 }
 
+.ctl-wheel .ctl-dial {
+  position: absolute;
+  inset: 0;
+}
+
 .ctl-rim,
 .ctl-spokes,
-.ctl-mark {
+.ctl-mark,
+.ctl-arc,
+.ctl-tick {
   fill: none;
   stroke-linecap: round;
 }
 
 .ctl-rim {
   stroke: var(--color-text-secondary);
-  stroke-width: 7;
+  stroke-width: 6;
 }
 
 .ctl-spokes {
   stroke: var(--color-text-secondary);
-  stroke-width: 6;
+  stroke-width: 5;
 }
 
 .ctl-hub {
@@ -194,4 +213,74 @@
 .ctl-mark {
   stroke: var(--color-accent);
   stroke-width: 5;
+}
+
+.ctl-arc,
+.ctl-tick {
+  stroke: var(--color-text-secondary);
+}
+
+.ctl-arc {
+  stroke-width: 2.5;
+}
+
+.ctl-tick {
+  stroke-width: 2;
+  stroke-linecap: butt;
+}
+
+.ctl-index {
+  fill: var(--color-text);
+}
+
+.ctl-pointer {
+  transform-origin: 0 0;
+}
+
+.ctl-pointer circle {
+  fill: var(--color-accent);
+  stroke: var(--color-surface);
+  stroke-width: 1.5;
+}
+
+/* Centred: ring, wedge and hub change, so the state does not rest on colour alone. */
+.ctl-cue {
+  display: none;
+  fill: var(--color-accent);
+}
+
+.ctl-cue circle {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 3;
+}
+
+.ctl-wheel[data-centred] .ctl-cue {
+  display: inline;
+}
+
+.ctl-wheel[data-centred] .ctl-hub {
+  fill: var(--color-accent);
+  r: 11px;
+}
+
+/* Sits in the corner the circular wheel leaves free, tangent to the wheel's edge. */
+.ctl .ctl-reset {
+  position: absolute;
+  left: calc(var(--ctl-wheel) * 0.1464 - var(--size-target) * 0.8536);
+  top: calc(var(--ctl-wheel) * 0.1464 - var(--size-target) * 0.8536);
+  width: var(--size-target);
+  height: var(--size-target);
+  padding: 0;
+  border-radius: 50%;
+}
+
+.ctl-reset svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
 }
