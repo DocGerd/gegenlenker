@@ -320,6 +320,7 @@ export function startDrive(
         if (tracker !== null) {
           reached = tracker.update(snapshot);
           if (reached) {
+            hud.setRunTime(snapshot.time - (startTime ?? snapshot.time));
             finish();
             return;
           }
