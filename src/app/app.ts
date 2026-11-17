@@ -40,8 +40,13 @@ export function startApp(root: HTMLElement): void {
     onBack = null;
     exit?.();
   });
+  // A reload during a drive or replay lands on that screen's entry; drop it so back from the menu leaves.
+  if ((history.state as { screen?: boolean } | null)?.screen === true) {
+    ownBack = true;
+    history.back();
+  }
   const enter = (exit: () => void): void => {
-    history.pushState(null, '');
+    history.pushState({ screen: true }, '');
     onBack = exit;
   };
   const leave = (): void => {
