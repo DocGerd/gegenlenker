@@ -55,6 +55,7 @@ const MARKUP = (mode: HudOptions['mode']): string => `
       <span class="hud-label" data-i18n="keys"></span>
       <dl>
         <dt class="mono">A / D · ← / →</dt><dd data-i18n="steer"></dd>
+        <dt class="mono">C</dt><dd data-i18n="resetSteer"></dd>
         <dt class="mono">W / S · ↑ / ↓</dt><dd data-i18n="speed"></dd>
         <dt class="mono" data-i18n="keySpace"></dt><dd data-i18n="brake"></dd>
         <dt class="mono">1–4 = ${GEAR_NAMES.join(' / ')}</dt><dd data-i18n="gear"></dd>

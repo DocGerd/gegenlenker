@@ -154,7 +154,7 @@ export function startDrive(
       const clock = advanceClock(accumulator, seconds);
       accumulator = clock.accumulator;
       for (let i = 0; i < clock.steps; i++) {
-        controls.tick(DT);
+        controls.tick(DT, snapshot.steer);
         const control = controls.control();
         recorder.record(snapshot.step, control);
         snapshot = sim.step(control);

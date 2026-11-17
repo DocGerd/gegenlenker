@@ -26,6 +26,7 @@ export const en = {
   stop: 'Stop',
   gear: 'Gear',
   steer: 'Steer',
+  resetSteer: 'Centre steering',
   brake: 'Brake',
   keys: 'Keys',
   couplingAngle: 'Coupling',
