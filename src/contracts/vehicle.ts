@@ -9,6 +9,18 @@ export const TRUCK_IDS = ['man-le-18-280', 'arocs-1835-ak'] as const;
 export const TRAILER_IDS = ['krone-azw-18', 'hueffermann-hpa-24-81-l'] as const;
 export type TruckId = (typeof TRUCK_IDS)[number];
 export type TrailerId = (typeof TRAILER_IDS)[number];
+/** Perspective-only detail, millimetres. */
+export type MudflapSpec = {
+  readonly gap: Param; // behind the tyre
+  readonly clearance: Param; // lower edge above the road
+  readonly height: Param;
+};
+export type TailLampSpec = {
+  readonly inset: Param; // outer edge to body side
+  readonly width: Param;
+  readonly sill: Param; // lower edge above the reference face
+  readonly height: Param;
+};
 export type TruckBody = 'platform' | 'tipper';
 export type TrailerBody = 'box' | 'low-loader';
 export type TruckSpec = {
@@ -36,6 +48,23 @@ export type TruckSpec = {
     readonly height: Param;
   };
   readonly steering: { readonly lockToLockTurns: Param; readonly maxRate: Param };
+  readonly cab: {
+    readonly windscreenInset: Param; // glass edge to cab side
+    readonly glassSill: Param; // above the frame top
+    readonly glassHeight: Param;
+    readonly sideGlassSetback: Param; // from the cab front
+    readonly sideGlassLength: Param;
+    readonly grilleWidth: Param;
+    readonly grilleSill: Param;
+    readonly grilleHeight: Param;
+    readonly headlampInset: Param; // outer edge to cab side
+    readonly headlampWidth: Param;
+    readonly lampSill: Param;
+    readonly lampHeight: Param;
+  };
+  readonly bumperInset: Param; // bumper end to cab side
+  readonly tailLamp: TailLampSpec; // sill above the frame top
+  readonly mudflap: MudflapSpec;
 };
 export type TrailerSpec = {
   readonly id: TrailerId;
@@ -53,6 +82,16 @@ export type TrailerSpec = {
   readonly deckHeight: Param;
   readonly couplingLimit: Param;
   readonly turntableLimit: Param;
+  readonly underrunGuard: {
+    readonly depth: Param;
+    readonly inset: Param; // bar end to body side
+    readonly lowerEdge: Param; // above the road
+    readonly height: Param;
+    readonly strutOffset: Param; // centreline to inner strut edge
+    readonly strutWidth: Param;
+  };
+  readonly tailLamp: TailLampSpec; // sill above the deck
+  readonly mudflap: MudflapSpec;
 };
 /** Metres and radians; distances positive; steerRate in steer units (−1…1) per second. */
 export type VehicleParams = {

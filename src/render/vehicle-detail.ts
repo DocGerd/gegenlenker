@@ -7,6 +7,7 @@ import {
   PlaneGeometry,
   SRGBColorSpace,
 } from 'three';
+import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { tint } from './environment';
 import { PLATE_TEXT, REALISM_HUES as HUE } from './realism-hues';
 import { box, merge, wheelGeometry } from './vehicle-geometry';
@@ -31,12 +32,9 @@ const MARKER_SPACING = 3; // ECE R48 maximum between side marker lamps
 const PLATE_WIDTH = 0.52; // EU standard plate
 const PLATE_HEIGHT = 0.11;
 const FLAP_THICKNESS = 0.02;
-const FLAP_GAP = 0.1; // behind the tyre
 const FLAP_MARGIN = 0.04;
-const GUARD_DEPTH = 0.05;
-const GUARD_INSET = 0.1;
-const GUARD_RATIO = [0.6, 1.1] as const; // lower and upper edge, of the wheel radius
-const FLAP_RATIO = [0.25, 1.9] as const;
+
+const m = (param: Param): number => param.value / 1000;
 
 export type PlateSpot = {
   readonly x: number;
@@ -95,17 +93,18 @@ export function frontWheelDetail(radius: number, width: number): BufferGeometry 
 
 function mudflap(
   c: Collector,
+  spec: MudflapSpec,
   axleX: number,
   y: number,
   halfWidth: number,
   radius: number,
   rearLimit: number,
 ): void {
-  const front = axleX - radius - FLAP_GAP;
+  const front = axleX - radius - m(spec.gap);
   c.box(
     [Math.max(front - FLAP_THICKNESS, rearLimit), front],
     [y - halfWidth, y + halfWidth],
-    [radius * FLAP_RATIO[0], radius * FLAP_RATIO[1]],
+    [m(spec.clearance), m(spec.clearance) + m(spec.height)],
     HUE.chevronBlack,
   );
 }
@@ -140,12 +139,11 @@ function sideMarking(
 }
 
 export type TruckDetailParams = {
+  readonly spec: Pick<TruckSpec, 'cab' | 'bumperInset' | 'tailLamp' | 'mudflap'>;
   readonly halfWidth: number;
   readonly frontX: number;
   readonly rearX: number;
-  readonly cabRear: number;
   readonly bodyFront: number;
-  readonly cabTop: number;
   readonly frameTop: number;
   readonly floorTop: number;
   readonly railBottom: number;
@@ -158,31 +156,45 @@ export type TruckDetailParams = {
 
 export function truckDetail(p: TruckDetailParams): { geometry: BufferGeometry; plate: PlateSpot } {
   const c = collector();
+  const { cab, tailLamp } = p.spec;
   const hw = p.halfWidth;
-  const span = p.cabTop - p.frameTop;
-  const cabLength = p.frontX - p.cabRear;
   const front: Range = [p.frontX, p.frontX + RELIEF];
-  const glass: Range = [p.frameTop + 0.5 * span, p.frameTop + 0.92 * span];
-  const lamps: Range = [p.frameTop + 0.1 * span, p.frameTop + 0.32 * span];
+  const above = (sill: Param, height: Param): Range => [
+    p.frameTop + m(sill),
+    p.frameTop + m(sill) + m(height),
+  ];
+  const glass = above(cab.glassSill, cab.glassHeight);
+  const lamps = above(cab.lampSill, cab.lampHeight);
+  const windscreen = hw - m(cab.windscreenInset);
 
-  c.box(front, [-0.88 * hw, 0.88 * hw], glass, HUE.anthracite);
+  c.box(front, [-windscreen, windscreen], glass, HUE.anthracite);
   c.box(
     front,
-    [-0.5 * hw, 0.5 * hw],
-    [p.frameTop + 0.08 * span, p.frameTop + 0.38 * span],
+    [-m(cab.grilleWidth) / 2, m(cab.grilleWidth) / 2],
+    above(cab.grilleSill, cab.grilleHeight),
     HUE.chevronBlack,
   );
+  const headlampOuter = hw - m(cab.headlampInset);
   for (const side of [-1, 1]) {
     c.box(
-      [p.frontX - 0.45 * cabLength, p.frontX - 0.08 * cabLength],
+      [
+        p.frontX - m(cab.sideGlassSetback) - m(cab.sideGlassLength),
+        p.frontX - m(cab.sideGlassSetback),
+      ],
       lateral(side, hw, hw + RELIEF),
       glass,
       HUE.anthracite,
     );
-    c.box(front, lateral(side, 0.58 * hw, 0.9 * hw), lamps, HUE.plateWhite);
+    c.box(
+      front,
+      lateral(side, headlampOuter - m(cab.headlampWidth), headlampOuter),
+      lamps,
+      HUE.plateWhite,
+    );
   }
   const bumper: Range = [p.railBottom, p.frameTop];
-  c.box(front, [-(hw - GUARD_INSET), hw - GUARD_INSET], bumper, HUE.anthracite);
+  const bumperHalf = hw - m(p.spec.bumperInset);
+  c.box(front, [-bumperHalf, bumperHalf], bumper, HUE.anthracite);
 
   const floor = p.floorTop - p.frameTop;
   sideMarking(
@@ -195,12 +207,20 @@ export function truckDetail(p: TruckDetailParams): { geometry: BufferGeometry; p
   for (const side of [-1, 1]) {
     c.box(
       [p.rearX - RELIEF, p.rearX],
-      lateral(side, 0.7 * hw, 0.92 * hw),
-      [p.frameTop + 0.1 * floor, p.frameTop + 0.9 * floor],
+      lateral(side, hw - m(tailLamp.inset) - m(tailLamp.width), hw - m(tailLamp.inset)),
+      above(tailLamp.sill, tailLamp.height),
       HUE.tailLamp,
     );
     const half = p.twinOffset + p.twinWidth / 2 + FLAP_MARGIN;
-    mudflap(c, p.rearAxleX, (side * p.rearTrack) / 2, half, p.wheelRadius, p.rearX + RELIEF);
+    mudflap(
+      c,
+      p.spec.mudflap,
+      p.rearAxleX,
+      (side * p.rearTrack) / 2,
+      half,
+      p.wheelRadius,
+      p.rearX + RELIEF,
+    );
     for (const twin of [-1, 1]) {
       wheelFaces(c, p.wheelRadius, p.twinWidth, [
         p.rearAxleX,
@@ -234,6 +254,7 @@ function chevrons(c: Collector, x: Range, halfLength: number, zc: number, height
 }
 
 export type TrailerDetailParams = {
+  readonly spec: Pick<TrailerSpec, 'underrunGuard' | 'tailLamp' | 'mudflap'>;
   readonly halfWidth: number;
   readonly rearX: number;
   readonly frontX: number;
@@ -245,9 +266,6 @@ export type TrailerDetailParams = {
   readonly track: number;
   readonly wheelWidth: number;
   readonly rearAxleXs: readonly number[];
-  /** Lateral range (outward from the centreline) and height of each tail lamp. */
-  readonly tailLampY: Range;
-  readonly tailLampZ: Range;
 };
 
 export function trailerDetail(p: TrailerDetailParams): {
@@ -260,13 +278,22 @@ export function trailerDetail(p: TrailerDetailParams): {
   const slab = p.deck - p.underside;
   const lowerZ = p.isBox ? p.deck + STRIP : (p.deck + p.underside) / 2;
 
-  const guard: Range = [p.radius * GUARD_RATIO[0], p.radius * GUARD_RATIO[1]];
-  const guardHalf = hw - GUARD_INSET;
-  c.box([p.rearX, p.rearX + GUARD_DEPTH], [-guardHalf, guardHalf], guard, HUE.signalYellow);
+  const { underrunGuard, tailLamp } = p.spec;
+  const guard: Range = [
+    m(underrunGuard.lowerEdge),
+    m(underrunGuard.lowerEdge) + m(underrunGuard.height),
+  ];
+  const guardHalf = hw - m(underrunGuard.inset);
+  const guardDepth: Range = [p.rearX, p.rearX + m(underrunGuard.depth)];
+  c.box(guardDepth, [-guardHalf, guardHalf], guard, HUE.signalYellow);
   for (const side of [-1, 1]) {
     c.box(
-      [p.rearX, p.rearX + GUARD_DEPTH],
-      lateral(side, 0.5 * hw, 0.5 * hw + 2 * GUARD_DEPTH),
+      guardDepth,
+      lateral(
+        side,
+        m(underrunGuard.strutOffset),
+        m(underrunGuard.strutOffset) + m(underrunGuard.strutWidth),
+      ),
       [guard[1], p.underside],
       HUE.anthracite,
     );
@@ -309,13 +336,21 @@ export function trailerDetail(p: TrailerDetailParams): {
   for (const side of [-1, 1]) {
     c.box(
       [p.rearX - RELIEF_OVER, p.rearX],
-      lateral(side, ...p.tailLampY),
-      p.tailLampZ,
+      lateral(side, hw - m(tailLamp.inset) - m(tailLamp.width), hw - m(tailLamp.inset)),
+      [p.deck + m(tailLamp.sill), p.deck + m(tailLamp.sill) + m(tailLamp.height)],
       HUE.tailLamp,
     );
     for (const axleX of p.rearAxleXs) {
       const y = (side * p.track) / 2;
-      mudflap(c, axleX, y, p.wheelWidth / 2 + FLAP_MARGIN, p.radius, p.rearX + RELIEF);
+      mudflap(
+        c,
+        p.spec.mudflap,
+        axleX,
+        y,
+        p.wheelWidth / 2 + FLAP_MARGIN,
+        p.radius,
+        p.rearX + RELIEF,
+      );
       wheelFaces(c, p.radius, p.wheelWidth, [axleX, y, p.radius]);
     }
   }

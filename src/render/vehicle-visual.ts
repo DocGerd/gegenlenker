@@ -47,7 +47,6 @@ const RAMP_HEIGHT = 1.2;
 const RAMP_WIDTH = 0.9;
 const RAMP_GAP = 0.15; // from the centreline to the inner ramp edge
 const RAMP_THICKNESS = 0.1;
-const TAIL_LAMP_RISE = [0.1, 0.3] as const; // above the deck
 const DECK_PLATE = 0.1; // low-loader deck slab
 const BOX_FRAME_DEPTH = 0.25; // rails under a swap body
 const WHEEL_CLEARANCE = 0.02;
@@ -197,12 +196,11 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
   });
 
   const detail = truckDetail({
+    spec,
     halfWidth: hw,
     frontX: a.frontX,
     rearX: a.rearX,
-    cabRear,
     bodyFront,
-    cabTop: CAB_HEIGHT,
     frameTop: FRAME_TOP,
     floorTop,
     railBottom: RAIL_BOTTOM,
@@ -366,8 +364,8 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
   });
 
   const dollyRims = dollyDetail(radius, TRAILER_WHEEL_WIDTH, a.frontAxle.x, track);
-  const rampMid = RAMP_GAP + RAMP_WIDTH / 2;
   const trailerRig = trailerDetail({
+    spec,
     halfWidth: hw,
     rearX: a.rearX,
     frontX: a.frontX,
@@ -379,11 +377,6 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
     track,
     wheelWidth: TRAILER_WHEEL_WIDTH,
     rearAxleXs: a.rearAxles.map((axle) => axle.x),
-    // low-loader lamps sit on the ramps, swap-body lamps near the corners
-    tailLampY: isBox
-      ? [0.6 * hw, 0.88 * hw]
-      : [rampMid - 0.3 * RAMP_WIDTH, rampMid + 0.3 * RAMP_WIDTH],
-    tailLampZ: [deck + TAIL_LAMP_RISE[0], deck + TAIL_LAMP_RISE[1]],
   });
 
   const dolly = new Group();
