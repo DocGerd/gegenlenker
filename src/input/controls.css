@@ -145,7 +145,7 @@
   position: absolute;
   inset: 0 calc(50% - var(--space-1));
   border-radius: var(--radius-pill);
-  background: var(--color-surface-muted);
+  background: var(--color-border);
 }
 
 .ctl-fill {
