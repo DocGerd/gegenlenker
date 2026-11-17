@@ -1,6 +1,15 @@
 import type { Layout, Marking } from '../../contracts/layout';
 import { numberMarkings, solidLine } from '../markings';
-import { addLamps, addYardEdge, BOUNDS, ObstacleBuilder, STREET, YARD } from '../street';
+import {
+  addBollard,
+  addGate,
+  addLamps,
+  addYardEdge,
+  BOUNDS,
+  ObstacleBuilder,
+  STREET,
+  YARD,
+} from '../street';
 
 const WALL_THICKNESS = 0.3;
 const WALL_HEIGHT = 2.5;
@@ -8,6 +17,7 @@ const HALL = { minX: 10, minY: 52, maxX: 74, maxY: 68 };
 const HALL_HEIGHT = 8;
 export const RAMP = { minX: 14, minY: 49, maxX: 70, maxY: 52 };
 const RAMP_HEIGHT = 1.2;
+const RAMP_BOLLARD_OFFSET = 1; // beyond each ramp end
 export const BAY_SPACING = 4;
 const BAY_LINE_LENGTH = 18;
 const BAY_LINE_WIDTH = 0.12;
@@ -29,6 +39,10 @@ function build(): Layout['obstacles'] {
     b.addBox('parked', x, TRAILER_Y, TRAILER.width, TRAILER.length, 0, TRAILER.height);
   }
   addLamps(b, STREET);
+  addGate(b, STREET);
+  for (const x of [RAMP.minX - RAMP_BOLLARD_OFFSET, RAMP.maxX + RAMP_BOLLARD_OFFSET]) {
+    addBollard(b, x, RAMP.minY + RAMP_BOLLARD_OFFSET / 2);
+  }
   return b.obstacles;
 }
 
