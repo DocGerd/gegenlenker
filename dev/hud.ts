@@ -117,6 +117,7 @@ const frame = (now: number): void => {
   controls.tick((now - last) / 1000, controls.control().steer);
   last = now;
   hud.update(snapshot((now - start) / 1000));
+  hud.setRunTime((now - start) / 1000);
   requestAnimationFrame(frame);
 };
 requestAnimationFrame(frame);

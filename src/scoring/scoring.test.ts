@@ -11,7 +11,7 @@ import {
 } from './best';
 import { criteria, deltasToBest, endedMoving } from './debrief';
 import { createEventScanner } from './replay-events';
-import { WAYPOINT_RADIUS, createRunTracker, runResult, targetError } from './score';
+import { WAYPOINT_RADIUS, createRunTracker, isDrivingInput, runResult, targetError } from './score';
 
 function snap(over: Partial<SimSnapshot> = {}): SimSnapshot {
   return {
@@ -147,6 +147,7 @@ describe('scoring', () => {
       false,
       true,
       false,
+      0,
     );
     expect(r).toMatchObject({
       exerciseId: 'reverse-bay',
@@ -162,9 +163,31 @@ describe('scoring', () => {
     expect(r.angleError).toBeCloseTo(11.459, 3);
 
     expect(
-      runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18', true, true, false)
+      runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18', true, true, false, 0)
         .reached,
     ).toBe(true);
+  });
+
+  it('measures the run time from the first driving input', () => {
+    const r = runResult(
+      snap({ time: 42.5 }),
+      exercise(),
+      'man-le-18-280',
+      'krone-azw-18',
+      false,
+      true,
+      false,
+      10,
+    );
+    expect(r.time).toBe(32.5);
+  });
+
+  it('starts the run on leaving P or a nonzero lever, not on steering or braking alone', () => {
+    const idle = { steer: 0, lever: 0, brake: false, gear: 'P' } as const;
+    expect(isDrivingInput(idle)).toBe(false);
+    expect(isDrivingInput({ ...idle, steer: 1, brake: true })).toBe(false);
+    expect(isDrivingInput({ ...idle, gear: 'D' })).toBe(true);
+    expect(isDrivingInput({ ...idle, lever: 0.1 })).toBe(true);
   });
 
   it('names the missed waypoint in the result', () => {
@@ -180,6 +203,7 @@ describe('scoring', () => {
       reached,
       tracker.waypointVisited(),
       false,
+      0,
     );
     expect(result.reached).toBe(false);
     expect(result.waypointMissed).toBe(true);
@@ -188,11 +212,20 @@ describe('scoring', () => {
   it('does not flag a waypoint missed when the exercise has none or it was visited', () => {
     const s = snap(INSIDE);
     expect(
-      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false, false).waypointMissed,
+      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false, false, 0)
+        .waypointMissed,
     ).toBe(false);
     expect(
-      runResult(s, exercise({ x: 90, y: 25 }), 'man-le-18-280', 'krone-azw-18', false, true, false)
-        .waypointMissed,
+      runResult(
+        s,
+        exercise({ x: 90, y: 25 }),
+        'man-le-18-280',
+        'krone-azw-18',
+        false,
+        true,
+        false,
+        0,
+      ).waypointMissed,
     ).toBe(false);
   });
 
