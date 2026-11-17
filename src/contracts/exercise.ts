@@ -35,6 +35,8 @@ export type RunResult = {
   readonly truckId: TruckId;
   readonly trailerId: TrailerId;
   readonly reached: boolean;
+  /** Any aid was on while the run drove. */
+  readonly assisted: boolean;
   /** The exercise has a waypoint the run never came within range of. */
   readonly waypointMissed: boolean;
   readonly positionError: number;

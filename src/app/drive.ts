@@ -44,6 +44,8 @@ export type DriveOutcome = {
 const ARROW_MARGIN = 24;
 const EXPOSE_FRAMING = new URLSearchParams(location.search).get('framing') === '1';
 
+const anyAid = (a: AidFlags): boolean => a.pivots || a.path || a.tracks || a.ghost;
+
 type Frame = { -readonly [K in keyof RenderFrame]: RenderFrame[K] };
 
 export type DriveHandlers = {
@@ -74,6 +76,8 @@ export function startDrive(
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
   let reached = false;
+  // Sticky over aid toggles; paused time does not count, only sim steps taken with an aid on.
+  let assisted = false;
 
   const stage = document.createElement('div');
   stage.className = 'drive';
@@ -108,6 +112,7 @@ export function startDrive(
             run.trailerId,
             reached,
             tracker?.waypointVisited() ?? true,
+            assisted,
           )
         : null;
     dispose();
@@ -277,6 +282,7 @@ export function startDrive(
       const clock =
         closeSheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
+      if (clock.steps > 0 && anyAid(aids)) assisted = true;
       for (let i = 0; i < clock.steps; i++) {
         controls.tick(DT, snapshot.steer);
         const control = controls.control();

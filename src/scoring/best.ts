@@ -3,11 +3,20 @@ import type { BestResults, ExerciseId, RunResult } from '../contracts/exercise';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
 
-export function bestKey(exerciseId: ExerciseId, truckId: TruckId, trailerId: TrailerId): string {
-  return `${exerciseId}/${truckId}/${trailerId}`;
+/** Assisted and unaided runs rank apart: an aid must not beat an unaided best. */
+export function bestKey(
+  exerciseId: ExerciseId,
+  truckId: TruckId,
+  trailerId: TrailerId,
+  assisted: boolean,
+): string {
+  return `${exerciseId}/${truckId}/${trailerId}/${assisted ? 'assisted' : 'unaided'}`;
 }
+
+export const resultKey = (r: RunResult): string =>
+  bestKey(r.exerciseId, r.truckId, r.trailerId, r.assisted);
 
 /** Negative when `a` is better. */
 export function compareResults(a: RunResult, b: RunResult): number {
@@ -32,13 +41,13 @@ export function exerciseDone(best: BestResults, exerciseId: ExerciseId): boolean
 export function recordBest(
   best: BestResults,
   r: RunResult,
-): { best: BestResults; isNewBest: boolean } {
-  const key = bestKey(r.exerciseId, r.truckId, r.trailerId);
-  const current = best[key];
-  if (current !== undefined && compareResults(r, current) >= 0) {
-    return { best, isNewBest: false };
+): { best: BestResults; isNewBest: boolean; previous: RunResult | null } {
+  const key = resultKey(r);
+  const current = best[key] ?? null;
+  if (current !== null && compareResults(r, current) >= 0) {
+    return { best, isNewBest: false, previous: current };
   }
-  return { best: { ...best, [key]: r }, isNewBest: true };
+  return { best: { ...best, [key]: r }, isNewBest: true, previous: current };
 }
 
 export type ResultIds = Pick<RunResult, 'exerciseId' | 'truckId' | 'trailerId'>;
@@ -70,6 +79,7 @@ function toResult(v: unknown): RunResult | null {
     !TRUCK_IDS.some((id) => id === truckId) ||
     !TRAILER_IDS.some((id) => id === trailerId) ||
     typeof r.reached !== 'boolean' ||
+    typeof r.assisted !== 'boolean' ||
     !isMeasure(r.positionError) ||
     !isMeasure(r.angleError) ||
     !isCount(r.contacts) ||
@@ -84,6 +94,7 @@ function toResult(v: unknown): RunResult | null {
     truckId: truckId as TruckId,
     trailerId: trailerId as TrailerId,
     reached: r.reached,
+    assisted: r.assisted,
     waypointMissed: r.waypointMissed === true,
     positionError: r.positionError,
     angleError: r.angleError,
@@ -112,7 +123,7 @@ export function parseBestResults(
   const out: Record<string, RunResult> = {};
   for (const [key, value] of Object.entries(results)) {
     const r = toResult(value);
-    if (r === null || bestKey(r.exerciseId, r.truckId, r.trailerId) !== key) continue;
+    if (r === null || resultKey(r) !== key) continue;
     if ((value as Record<string, unknown>).fingerprint === fingerprint(r)) out[key] = r;
   }
   return out;
