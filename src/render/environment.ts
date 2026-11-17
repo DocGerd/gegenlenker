@@ -15,6 +15,7 @@ import {
   type Material,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { Tolerances } from '../contracts/exercise';
 import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
 import type { Environment } from './seams';
@@ -27,6 +28,11 @@ const TARGET_Y = 0.012;
 const DASH = 3;
 const GAP = 6;
 const TARGET_STRIP = 0.15;
+const BAND_STRIP = 0.08;
+const BAND_CASING = 0.05; // dark edge on each side, so the accent reads on light grounds
+const BAND_Y = 0.016;
+const BAND_CASING_DROP = 0.005;
+const BAND_SEGMENTS = 48;
 const GATE_STRIP = 0.3;
 const GATE_SEGMENTS = 64;
 const CHUNK = 60; // spatial chunk edge: frustum culling works per chunk
@@ -71,6 +77,28 @@ export function outlineGeometry(length: number, width: number, strip: number): B
     rectGeometry(-t, t, -hw + t, hw - t),
     rectGeometry(length - t, length + t, -hw + t, hw - t),
   ]);
+}
+
+/**
+ * Tolerance band in a frame whose origin is the target's rear-end centre, x along its heading: a ring
+ * of the position tolerance and two rays at the angle tolerance, the poses the scoring accepts.
+ */
+export function toleranceGeometry(
+  tolerances: Tolerances,
+  length: number,
+  strip: number,
+): BufferGeometry {
+  const half = strip / 2;
+  const { position, angle } = tolerances;
+  const tilt = (angle * Math.PI) / 180;
+  const ring = new RingGeometry(
+    Math.max(0, position - half),
+    position + half,
+    BAND_SEGMENTS,
+  ).rotateX(-Math.PI / 2);
+  const ray = (sign: number): BufferGeometry =>
+    rectGeometry(0, length, -half, half).rotateY(sign * tilt);
+  return mergeGeometries([ring, ray(1), ray(-1)]);
 }
 
 /** Drops uv and adds a linear vertex colour so one material serves every colour. */
@@ -360,6 +388,25 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     );
     geometries.push(outline);
     group.add(new Mesh(outline, flat));
+
+    const { tolerances } = layout;
+    if (tolerances !== null) {
+      const place = (g: BufferGeometry, y: number): BufferGeometry =>
+        g.rotateY(target.pose.heading).translate(target.pose.x, y, -target.pose.y);
+      const casing = place(
+        toleranceGeometry(tolerances, target.length, BAND_STRIP + 2 * BAND_CASING),
+        BAND_Y - BAND_CASING_DROP,
+      );
+      color.set(palette.wheel);
+      tint(casing, color);
+      color.set(palette.accent);
+      const band = tint(
+        place(toleranceGeometry(tolerances, target.length, BAND_STRIP), BAND_Y),
+        color,
+      );
+      geometries.push(casing, band);
+      group.add(new Mesh(casing, flat), new Mesh(band, flat));
+    }
   }
 
   const { waypoint } = layout;

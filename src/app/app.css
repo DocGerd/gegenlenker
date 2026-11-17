@@ -139,7 +139,22 @@
   font-weight: var(--weight-medium);
 }
 
-.menu-best {
+.menu-done {
+  margin-left: var(--space-2);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-accent-strong);
+}
+
+.menu-brief {
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--color-text-secondary);
+}
+
+.menu-best,
+.menu-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0 var(--space-3);

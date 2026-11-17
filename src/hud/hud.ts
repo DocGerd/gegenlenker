@@ -1,5 +1,6 @@
 import type { AidFlags, CollapsedPanels, Rect, TopDownMode, ViewRects } from '../contracts/render';
 import type { BlockReason, Gear, SimSnapshot } from '../contracts/sim';
+import type { GoalState } from '../scoring/score';
 import { applyMessages, formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { createGauge, type Gauge } from './gauges';
@@ -20,6 +21,8 @@ export type Hud = {
   setViewChanged(changed: boolean): void;
   /** Points the arrow at a target beyond the top-down view; null hides it. Positions are stage CSS px. */
   setTargetArrow(arrow: { x: number; y: number; angle: number } | null): void;
+  /** The live tolerance cue; a no-op in the free yard. */
+  setGoal(goal: GoalState): void;
   onAction(cb: (a: HudAction) => void): void;
   dispose(): void;
 };
@@ -28,6 +31,8 @@ export type HudOptions = {
   couplingLimit: number;
   turntableLimit: number;
   mode: 'exercise' | 'yard';
+  /** Title and brief shown for an exercise run. */
+  exercise: { title: string; brief: string } | null;
   aids: AidFlags;
   topDown: TopDownMode;
   collapsed: CollapsedPanels;
@@ -91,8 +96,9 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   </div>
   <div class="hud-mirror" data-hud="mirrorLeft" hidden></div>
   <div class="hud-mirror" data-hud="mirrorRight" hidden></div>
-  <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div></div>
+  <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" role="status" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
+    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <span class="hud-label hud-view-label" data-i18n="labelTopDown"></span>${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
@@ -159,6 +165,12 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const speed = query(hud, 'speed', HTMLElement);
   const gearEl = query(hud, 'gear', HTMLElement);
   const arrow = query(hud, 'targetArrow', HTMLElement);
+  const goalCue = query(hud, 'goalCue', HTMLElement);
+  if (opts.exercise !== null) {
+    query(hud, 'goalTitle', HTMLElement).textContent = opts.exercise.title;
+    query(hud, 'goalBrief', HTMLElement).textContent = opts.exercise.brief;
+    setHidden(query(hud, 'goal', HTMLElement), false);
+  }
 
   const coupling: Gauge = createGauge(t('couplingAngle'), opts.couplingLimit);
   const turntable: Gauge = createGauge(t('turntableAngle'), opts.turntableLimit);
@@ -261,6 +273,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   gearEl.textContent = 'P';
   gearEl.dataset['gear'] = 'P';
   let shownBlocked: BlockReason | null = null;
+  let shownGoal: GoalState = 'away';
   let shownContacts = -1;
   let shownJackknifes = -1;
   let shownDirection = -1;
@@ -349,6 +362,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       const y = Math.round(next.y);
       const deg = Math.round((next.angle * 180) / Math.PI);
       arrow.style.transform = `translate(${x}px, ${y}px) rotate(${deg}deg)`;
+    },
+    setGoal(goal) {
+      if (goal === shownGoal) return;
+      shownGoal = goal;
+      goalCue.dataset['goal'] = goal;
+      if (goal !== 'away')
+        goalCue.textContent = t(goal === 'inside' ? 'goalInside' : 'goalOutside');
+      setHidden(goalCue, goal === 'away');
     },
     onAction(cb) {
       listeners.push(cb);

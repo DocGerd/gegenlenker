@@ -1,4 +1,4 @@
-import type { TargetZone } from './exercise';
+import type { TargetZone, Tolerances } from './exercise';
 import type { Obb, Pose2, Vec2 } from './sim';
 export type Rect2 = {
   readonly minX: number;
@@ -53,5 +53,7 @@ export type ResolvedLayout = {
   readonly obstacles: readonly Obstacle[];
   readonly markings: readonly Marking[];
   readonly target: TargetZone | null;
+  /** Present exactly when `target` is. */
+  readonly tolerances: Tolerances | null;
   readonly waypoint: WaypointGate | null;
 };

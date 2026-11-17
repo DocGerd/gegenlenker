@@ -13,6 +13,7 @@ export function resolveLayout(layout: Layout, exercise: ExerciseDefinition | nul
     obstacles: [...street.obstacles, ...layout.obstacles, ...(exercise?.obstacles ?? [])],
     markings: [...street.markings, ...layout.markings, ...(exercise?.markings ?? [])],
     target: exercise?.target ?? null,
+    tolerances: exercise?.tolerances ?? null,
     waypoint: exercise?.waypoint ? { ...exercise.waypoint, radius: WAYPOINT_RADIUS } : null,
   };
 }

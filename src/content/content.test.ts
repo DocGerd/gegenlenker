@@ -234,6 +234,12 @@ it('registers exactly the contract ids', () => {
   expect(exercises.map((e) => e.id)).toEqual([...EXERCISE_IDS]);
 });
 
+it('orders exercises by strictness, loosest first: position, then angle', () => {
+  const tolerances = exercises.map((e) => e.tolerances);
+  const sorted = [...tolerances].sort((a, b) => b.position - a.position || b.angle - a.angle);
+  expect(tolerances).toEqual(sorted);
+});
+
 it('reversing into a real wall raises one contact and recovers forward', () => {
   const [truck] = trucks;
   const [trailer] = trailers;
