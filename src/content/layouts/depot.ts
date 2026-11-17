@@ -1,6 +1,15 @@
 import type { Layout } from '../../contracts/layout';
 import { solidLine } from '../markings';
-import { addLamps, addYardEdge, BOUNDS, ObstacleBuilder, STREET, YARD } from '../street';
+import {
+  addBollard,
+  addGate,
+  addLamps,
+  addYardEdge,
+  BOUNDS,
+  ObstacleBuilder,
+  STREET,
+  YARD,
+} from '../street';
 
 const FENCE_THICKNESS = 0.1;
 const FENCE_HEIGHT = 2;
@@ -9,6 +18,7 @@ const HALL_HEIGHT = 8;
 const HALL_WALL = 0.4;
 const GATE_WIDTH = 4.5;
 const GATE_CENTRES = [70, 86];
+const GATE_BOLLARD_OFFSET = GATE_WIDTH / 2 + 0.7; // outside each jamb
 const PARKED = { x: 1.75, width: 2.5, length: 10, height: 3.5, firstY: 36 };
 const PARKED_BAYS = 3;
 const PARKING_LINE_WIDTH = 0.12;
@@ -36,6 +46,10 @@ function build(): Layout['obstacles'] {
   }
 
   addLamps(b, STREET);
+  addGate(b, STREET);
+  for (const c of GATE_CENTRES) {
+    for (const side of [-1, 1]) addBollard(b, c + side * GATE_BOLLARD_OFFSET, minY - 0.8);
+  }
   return b.obstacles;
 }
 

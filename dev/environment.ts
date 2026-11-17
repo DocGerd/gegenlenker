@@ -103,6 +103,7 @@ function snapshotAt(seconds: number): SimSnapshot {
     speed: drive ? DRIVE_SPEED : 0,
     control,
     blocked: null,
+    contact: null,
     contacts: 0,
     jackknifes: 0,
     directionChanges: 0,
