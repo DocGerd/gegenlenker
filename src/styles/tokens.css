@@ -53,6 +53,8 @@
   --radius-xl: 16px;
   --radius-pill: 100px;
   --size-target: 44px;
+  --ctl-wheel: clamp(160px, 38vmin, 300px);
+  --ctl-gears-w: calc(var(--size-target) * 2.1);
   --shadow-sm: 0 1px 2px rgba(20, 22, 26, 0.06);
   --shadow-md: 0 8px 24px rgba(20, 22, 26, 0.1), 0 2px 6px rgba(20, 22, 26, 0.06);
   --duration-fast: 150ms;

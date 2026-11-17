@@ -28,6 +28,7 @@ export const de: Record<MessageKey, string> = {
   stop: 'Stopp',
   gear: 'Fahrstufe',
   steer: 'Lenken',
+  resetSteer: 'Lenkung zentrieren',
   brake: 'Bremse',
   keys: 'Tasten',
   couplingAngle: 'Kupplung',
