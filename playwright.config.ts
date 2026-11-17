@@ -7,7 +7,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   forbidOnly: !!process.env.CI,
-  use: { baseURL: url },
+  use: { baseURL: url, trace: 'retain-on-failure' },
   projects: [
     {
       name: 'offline',
@@ -34,7 +34,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm build && pnpm preview --host 127.0.0.1 --port 4399 --strictPort',
+    // CI builds with BASE_PATH before this runs; locally the build happens here.
+    command: `${process.env['CI'] ? '' : 'pnpm build && '}pnpm preview --host 127.0.0.1 --port 4399 --strictPort`,
     env: { BASE_PATH: '/gegenlenker/' },
     url,
   },
