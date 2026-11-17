@@ -256,6 +256,24 @@ export function startDrive(
     stage.dataset['vehicleBox'] = JSON.stringify(box);
   };
 
+  let size: { width: number; height: number } | null = null;
+  /** The legend's size depends on the cockpit rect, so it is measured after a first layout and the mirrors then clear it. */
+  const arrange = (): void => {
+    if (size === null) return;
+    const { width, height } = size;
+    let views = computeViewports(width, height, 'drive');
+    hud.layout(views);
+    const legend = hud.legendBox();
+    if (legend !== null) {
+      views = computeViewports(width, height, 'drive', legend);
+      hud.layout(views);
+    }
+    frame.views = views;
+    viewInput.relayout();
+    remeasure();
+  };
+  hud.onLegendResize(arrange);
+
   hud.onAction((action) => {
     if (action.type === 'topDown') {
       topDown = action.mode;
@@ -282,10 +300,8 @@ export function startDrive(
   let accumulator = 0;
   view.start({
     resized(width, height) {
-      frame.views = computeViewports(width, height, 'drive');
-      hud.layout(frame.views);
-      viewInput.relayout();
-      remeasure();
+      size = { width, height };
+      arrange();
     },
     restored() {
       dirty = true;

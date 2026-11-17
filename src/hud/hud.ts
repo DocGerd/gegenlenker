@@ -1,4 +1,11 @@
-import type { AidFlags, CollapsedPanels, Rect, TopDownMode, ViewRects } from '../contracts/render';
+import type {
+  AidFlags,
+  CollapsedPanels,
+  LegendBox,
+  Rect,
+  TopDownMode,
+  ViewRects,
+} from '../contracts/render';
 import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
 import type { GoalState } from '../scoring/score';
 import { applyMessages, formatNumber, t } from '../i18n/i18n';
@@ -21,6 +28,10 @@ export type Hud = {
   /** Elapsed run time in seconds; the clock starts with the first driving input, not when the drive opens. */
   setRunTime(seconds: number): void;
   layout(views: ViewRects): void;
+  /** The key legend as laid out by the last `layout`; null while hidden. */
+  legendBox(): LegendBox | null;
+  /** Fires when the legend changes size: folding, showing, hiding, other wrapping. */
+  onLegendResize(cb: () => void): void;
   /** The reset-view button is enabled while the top-down view differs from its default framing. */
   setViewChanged(changed: boolean): void;
   /** Points the arrow at a target beyond the top-down view; null hides it. Positions are stage CSS px. */
@@ -414,6 +425,17 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', base.y < 1 && spansRight(base));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
+    },
+    legendBox() {
+      const r = legend.getBoundingClientRect();
+      if (r.width === 0) return null;
+      const stage = root.getBoundingClientRect();
+      return { right: r.right - stage.left, height: stage.bottom - r.top };
+    },
+    onLegendResize(cb) {
+      const observer = new ResizeObserver(cb);
+      observer.observe(legend);
+      abort.signal.addEventListener('abort', () => observer.disconnect());
     },
     setViewChanged(changed) {
       if (resetView.disabled === changed) resetView.disabled = !changed;

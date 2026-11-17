@@ -13,6 +13,11 @@ export type ViewRects = {
   readonly mirrorRight: Rect | null;
   readonly topDown: Rect;
 };
+/** The key legend as it is laid out: its right edge from the stage's left, and how far it reaches above the stage's bottom. */
+export type LegendBox = {
+  readonly right: number;
+  readonly height: number;
+};
 export type ViewMode = 'drive' | 'replay';
 export type TopDownMode = 'follow' | 'yard';
 /** Relative to the mode's default framing; pan is in units of its base half-height, sim-plane axes (y up). */
