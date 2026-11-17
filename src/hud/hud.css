@@ -349,3 +349,24 @@
   text-align: right;
   color: var(--color-text);
 }
+
+.hud-arrow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+}
+
+.hud-arrow svg {
+  position: absolute;
+  left: -14px;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  overflow: visible;
+  fill: var(--color-accent);
+  stroke: var(--color-surface);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}

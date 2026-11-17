@@ -9,6 +9,7 @@ const defaults: Settings = {
   trailerId: 'krone-azw-18',
   aids: { pivots: true, path: true, tracks: false, ghost: true },
   topDown: 'follow',
+  collapsed: { aids: false, gauges: false },
 };
 
 const stored: Settings = {
@@ -19,6 +20,7 @@ const stored: Settings = {
   trailerId: 'hueffermann-hpa-24-81-l',
   aids: { pivots: false, path: false, tracks: true, ghost: false },
   topDown: 'yard',
+  collapsed: { aids: true, gauges: true },
 };
 
 describe('loadSettings', () => {
@@ -41,12 +43,14 @@ describe('loadSettings', () => {
       trailerId: 'hueffermann-hpa-24-81-l',
       aids: { pivots: 'no', tracks: true },
       topDown: null,
+      collapsed: { aids: true, gauges: 'no' },
     });
     expect(loadSettings(raw, 'en')).toEqual({
       ...defaults,
       theme: 'dark',
       trailerId: 'hueffermann-hpa-24-81-l',
       aids: { ...defaults.aids, tracks: true },
+      collapsed: { aids: true, gauges: false },
     });
     expect(loadSettings(JSON.stringify({ version: 1, aids: [true] }), 'en').aids).toEqual(
       defaults.aids,

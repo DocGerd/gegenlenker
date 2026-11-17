@@ -8,17 +8,20 @@ import { createHud } from '../hud/hud';
 import { createControls } from '../input/controls';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
+import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay } from '../render/perf-overlay';
 import { computeViewports } from '../render/viewports';
 import { createRunTracker, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
 import { createContactQuery } from '../sim/collision';
+import { bodyFootprints } from '../sim/geometry';
 import { DT } from '../sim/constants';
 import { NO_PREDICTION, predictCombination } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
+import { measureChrome } from './chrome';
 import { showPauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { updateSettings, type Settings } from './settings';
@@ -34,6 +37,10 @@ export type DriveOutcome = {
   readonly log: InputLog;
   readonly result: RunResult | null;
 };
+
+/** Margin between the target arrow and the edge of the clear rect, in px. */
+const ARROW_MARGIN = 24;
+const EXPOSE_FRAMING = new URLSearchParams(location.search).get('framing') === '1';
 
 type Frame = { -readonly [K in keyof RenderFrame]: RenderFrame[K] };
 
@@ -136,6 +143,7 @@ export function startDrive(
   renderer.setScene(layout, truck, trailer);
 
   let aids: AidFlags = settings.aids;
+  let collapsed = settings.collapsed;
   let topDown = settings.topDown;
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
@@ -170,8 +178,53 @@ export function startDrive(
     mode: exercise === null ? 'yard' : 'exercise',
     aids: settings.aids,
     topDown: settings.topDown,
+    collapsed,
   });
   cleanups.push(() => hud.dispose());
+
+  /** Chrome moves with the layout and with collapsing panels; the vehicle is framed in what it leaves free. */
+  const remeasure = (): void => {
+    frame.topDownClear = clearRect(frame.views.topDown, measureChrome(stage));
+    dirty = true;
+  };
+  const target = layout.target;
+  const targetCentre =
+    target === null
+      ? null
+      : {
+          x: target.pose.x + (Math.cos(target.pose.heading) * target.length) / 2,
+          y: target.pose.y + (Math.sin(target.pose.heading) * target.length) / 2,
+        };
+  /** Test observable (`?framing=1`): the screen box of the drawn vehicle and the sim step it shows. */
+  const exposeVehicleBox = (): void => {
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const { obb } of bodyFootprints(params, snapshot)) {
+      const c = Math.cos(obb.heading);
+      const sn = Math.sin(obb.heading);
+      for (const [a, b] of [
+        [1, 1],
+        [1, -1],
+        [-1, 1],
+        [-1, -1],
+      ] as const) {
+        const ox = a * obb.halfLength;
+        const oy = b * obb.halfWidth;
+        const p = renderer.project(obb.cx + ox * c - oy * sn, obb.cy + ox * sn + oy * c);
+        if (p === null) continue;
+        xs.push(p.x);
+        ys.push(p.y);
+      }
+    }
+    const box = {
+      left: Math.min(...xs),
+      top: Math.min(...ys),
+      right: Math.max(...xs),
+      bottom: Math.max(...ys),
+      step: snapshot.step,
+    };
+    stage.dataset['vehicleBox'] = JSON.stringify(box);
+  };
 
   hud.onAction((action) => {
     if (action.type === 'topDown') {
@@ -181,11 +234,16 @@ export function startDrive(
       updateSettings({ topDown });
     } else if (action.type === 'resetView') {
       viewInput.reset();
+    } else if (action.type === 'collapse') {
+      collapsed = { ...collapsed, [action.panel]: action.collapsed };
+      updateSettings({ collapsed });
+      remeasure();
     } else if (action.type === 'aid') {
       aids = { ...aids, [action.aid]: action.on };
       dirty = true;
       pathStale = true;
       updateSettings({ aids });
+      remeasure();
     } else if (closeSheet === null) {
       togglePause();
     }
@@ -197,7 +255,7 @@ export function startDrive(
       frame.views = computeViewports(width, height, 'drive');
       hud.layout(frame.views);
       viewInput.relayout();
-      dirty = true;
+      remeasure();
     },
     restored() {
       dirty = true;
@@ -236,6 +294,11 @@ export function startDrive(
       frame.aids = aids;
       renderer.render(frame);
       hud.update(snapshot);
+      const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
+      hud.setTargetArrow(
+        at && frame.topDownClear ? targetArrow(at, frame.topDownClear, ARROW_MARGIN) : null,
+      );
+      if (EXPOSE_FRAMING) exposeVehicleBox();
     },
   });
 
