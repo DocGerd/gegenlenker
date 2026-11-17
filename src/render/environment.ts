@@ -43,7 +43,13 @@ const SUN_ELEVATION = (50 * Math.PI) / 180;
 const SUN_DISTANCE = 100;
 
 /** Flat rectangle in the ground plane; x forward, y left (Three z = −y). */
-function rectGeometry(x0: number, x1: number, y0: number, y1: number, up = 0): BufferGeometry {
+export function rectGeometry(
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+  up = 0,
+): BufferGeometry {
   return new PlaneGeometry(x1 - x0, y1 - y0)
     .rotateX(-Math.PI / 2)
     .translate((x0 + x1) / 2, up, -(y0 + y1) / 2);
@@ -62,7 +68,7 @@ export function outlineGeometry(length: number, width: number, strip: number): B
 }
 
 /** Drops uv and adds a linear vertex colour so one material serves every colour. */
-function tint(geometry: BufferGeometry, color: Color): BufferGeometry {
+export function tint(geometry: BufferGeometry, color: Color): BufferGeometry {
   geometry.deleteAttribute('uv');
   const n = geometry.getAttribute('position').count;
   const colors = new Float32Array(n * 3);
