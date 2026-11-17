@@ -17,6 +17,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
 import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
 import type { Environment } from './seams';
+import { createSky, neutralSky } from './sky';
 
 const VERGE_Y = 0;
 const SURFACE_Y = 0.005;
@@ -41,6 +42,8 @@ const BOX_TOP_FACE_FIRST_VERTEX = 8; // BoxGeometry orders +x, -x, +y, ...: four
 const BOX_FACE_VERTICES = 4;
 const SUN_ELEVATION = (50 * Math.PI) / 180;
 const SUN_DISTANCE = 100;
+const SUN_INTENSITY = 2.4;
+const HEMISPHERE_INTENSITY = 1.4;
 
 /** Flat rectangle in the ground plane; x forward, y left (Three z = −y). */
 export function rectGeometry(
@@ -356,7 +359,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     group.add(new Mesh(outline, flat));
   }
 
-  const sun = new DirectionalLight(0xffffff, 2.4);
+  const sun = new DirectionalLight(0xffffff, SUN_INTENSITY);
   const horizontal = Math.cos(SUN_ELEVATION) * SUN_DISTANCE;
   // south-west: world (−, −) is Three (−x, +z)
   sun.position.set(
@@ -364,7 +367,15 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     Math.sin(SUN_ELEVATION) * SUN_DISTANCE,
     horizontal / Math.SQRT2,
   );
-  group.add(sun, new HemisphereLight(palette.sky, palette.verge, 1.4));
+  const horizon = new Color(palette.sky);
+  const ambient = neutralSky(palette.sky);
+  group.add(sun, new HemisphereLight(ambient, palette.verge, HEMISPHERE_INTENSITY));
+
+  // Radiance of an upward-facing Lambert surface, so the dome below the horizon matches the ground.
+  const lit =
+    (HEMISPHERE_INTENSITY * ambient.r + SUN_INTENSITY * Math.sin(SUN_ELEVATION)) / Math.PI;
+  const sky = createSky(horizon, new Color(palette.verge).multiplyScalar(Math.min(1, lit)));
+  group.add(sky.mesh);
 
   return {
     object: group,
@@ -372,6 +383,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
       geometries.forEach((g) => g.dispose());
       solid.dispose();
       flat.dispose();
+      sky.dispose();
     },
   };
 }

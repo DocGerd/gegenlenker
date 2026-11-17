@@ -2,6 +2,7 @@ import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
 
 export const KEYS: Record<ScenePaletteKey, true> = {
   sky: true,
+  backdrop: true,
   verge: true,
   yard: true,
   pavement: true,

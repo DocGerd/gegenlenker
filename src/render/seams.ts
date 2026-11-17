@@ -4,6 +4,7 @@ import type { RenderFrame, ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 export const AIDS_LAYER = 1; // seen by the top-down camera only
+export const SKY_LAYER = 2; // seen by the perspective cameras only
 export interface VehicleVisual {
   readonly object: Object3D;
   update(snapshot: SimSnapshot): void;
