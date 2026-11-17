@@ -123,6 +123,11 @@
   display: none;
 }
 
+/* The single column is too tall for the zoom rows: they would reach the mirror. */
+.hud-cockpit[data-compact] .hud-legend-view {
+  display: none;
+}
+
 .hud-cockpit[data-compact] .hud-legend dl {
   grid-template-columns: auto;
   margin-top: 0;

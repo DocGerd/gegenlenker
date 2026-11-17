@@ -72,8 +72,8 @@ const MARKUP = (mode: HudOptions['mode']): string => `
         <dt class="mono">W / S · ↑ / ↓</dt><dd data-i18n="speed"></dd>
         <dt class="mono" data-i18n="keySpace"></dt><dd data-i18n="brake"></dd>
         <dt class="mono">1–4 = ${GEAR_NAMES.join(' / ')}</dt><dd data-i18n="gear"></dd>
-        <dt class="mono">+ / −</dt><dd data-i18n="zoom"></dd>
-        <dt class="mono">0</dt><dd data-i18n="resetView"></dd>
+        <dt class="mono hud-legend-view">+ / −</dt><dd class="hud-legend-view" data-i18n="zoom"></dd>
+        <dt class="mono hud-legend-view">0</dt><dd class="hud-legend-view" data-i18n="resetView"></dd>
       </dl>
     </div>
     <div class="hud-band">
