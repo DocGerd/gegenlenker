@@ -3,7 +3,6 @@ import { resolveLayout } from '../content/resolve-layout';
 import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
 import type { LayoutId } from '../contracts/layout';
 import type { AidFlags, RenderFrame } from '../contracts/render';
-import type { Vec2 } from '../contracts/sim';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
 import { createControls } from '../input/controls';
@@ -12,8 +11,8 @@ import { computeViewports } from '../render/viewports';
 import { createRunTracker, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
 import { createContactQuery } from '../sim/collision';
-import { DT, PREDICT_DISTANCE } from '../sim/constants';
-import { predictTrailerRear } from '../sim/predict';
+import { DT } from '../sim/constants';
+import { NO_PREDICTION, predictCombination } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
@@ -33,8 +32,6 @@ export type DriveOutcome = {
   readonly result: RunResult | null;
 };
 
-const NO_PATH: readonly Vec2[] = [];
-
 type Frame = { -readonly [K in keyof RenderFrame]: RenderFrame[K] };
 
 /** Returns the finish action, which ends the run exactly as the HUD's finish button does. */
@@ -49,10 +46,11 @@ export function startDrive(
   const params = resolveCombination(truck, trailer);
   const layout = resolveLayout(layouts[run.layoutId], run.exercise);
   const exercise = run.exercise;
+  const contacts = createContactQuery(layout.obstacles);
   const sim = createSimulation(
     params,
     { truck: exercise?.start ?? layouts[run.layoutId].start },
-    createContactQuery(layout.obstacles),
+    contacts,
   );
   const recorder = createInputRecorder();
   const tracker = exercise === null ? null : createRunTracker(exercise);
@@ -137,7 +135,7 @@ export function startDrive(
     views: computeViewports(1, 1, 'drive'),
     topDown,
     aids,
-    predicted: NO_PATH,
+    predicted: NO_PREDICTION,
   };
 
   let accumulator = 0;
@@ -173,11 +171,9 @@ export function startDrive(
       dirty = false;
       if (clock.steps > 0 || pathStale) {
         pathStale = false;
-        const gear = snapshot.control.gear;
-        frame.predicted =
-          aids.path && (gear === 'D' || gear === 'R')
-            ? predictTrailerRear(params, snapshot, gear === 'D' ? 1 : -1, PREDICT_DISTANCE)
-            : NO_PATH;
+        frame.predicted = aids.path
+          ? predictCombination(params, snapshot, contacts)
+          : NO_PREDICTION;
       }
       frame.snapshot = snapshot;
       frame.topDown = topDown;

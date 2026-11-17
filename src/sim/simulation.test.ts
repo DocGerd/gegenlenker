@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   ContactQuery,
   ControlVector,
+  Prediction,
   Simulation,
   SimSnapshot,
   StartState,
@@ -20,11 +21,12 @@ import {
   DT,
   MAX_STEPS_PER_FRAME,
   EVENT_CLEAR_DISTANCE,
+  PREDICT_DISTANCE,
   PREDICT_STEP,
   V_MAX,
 } from './constants';
 import { bodyFootprints } from './geometry';
-import { predictTrailerRear } from './predict';
+import { NO_PREDICTION, predictCombination } from './predict';
 import { createSimulation } from './simulation';
 
 const CAP = 100_000;
@@ -498,29 +500,217 @@ describe('simulation', () => {
     }
   });
 
-  it('predicted trailer path matches the driven path', () => {
-    for (const gear of ['D', 'R'] as const) {
-      const p = open(manKrone());
-      const sim = createSimulation(p, origin, noContacts);
-      settleSteer(sim, 0.4);
-      const from = sim.snapshot();
-      const predicted = predictTrailerRear(p, from, gear === 'D' ? 1 : -1, 10);
-      expect(predicted).toHaveLength(10 / PREDICT_STEP + 1);
-      const { snaps, dist } = driveDistance(sim, ctl({ steer: 0.4, lever: 1, gear }), 10);
-      const rears = [from.trailerRear, ...snaps.map((s) => s.trailerRear)];
+  describe('prediction', () => {
+    const horizon = 10;
+
+    /** Compares each predicted point with the driven path, matched by arc length. */
+    const worstGap = (
+      predicted: readonly Vec2[],
+      start: Vec2,
+      snaps: readonly Vec2[],
+      dist: readonly number[],
+    ): number => {
+      expect(predicted).toHaveLength(horizon / PREDICT_STEP + 1);
+      const points = [start, ...snaps];
       const arc = [0, ...dist];
+      let worst = 0;
       predicted.forEach((point, k) => {
         const target = k * PREDICT_STEP;
         const j = Math.max(
           1,
           arc.findIndex((d) => d >= target),
         );
-        const [a, b, da, db] = [rears[j - 1], rears[j], arc[j - 1], arc[j]];
+        const [a, b, da, db] = [points[j - 1], points[j], arc[j - 1], arc[j]];
         if (!a || !b || da === undefined || db === undefined) throw new Error('no bracket');
         const t = db === da ? 0 : (target - da) / (db - da);
-        const driven = { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
-        expect(dist2(point, driven)).toBeLessThan(0.02);
+        worst = Math.max(
+          worst,
+          dist2(point, { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) }),
+        );
       });
-    }
+      return worst;
+    };
+
+    /** Drives from a snapshot taken before the wheels settle and compares each point by arc length. */
+    const compare = (
+      p: VehicleParams,
+      gear: 'D' | 'R',
+      steer: number,
+      pick: (s: SimSnapshot) => Vec2,
+      line: (predicted: Prediction) => readonly Vec2[],
+    ): number => {
+      const sim = createSimulation(p, origin, noContacts);
+      const from = sim.step(ctl({ steer, gear }));
+      expect(from.steer).not.toBe(steer);
+      const predicted = line(predictCombination(p, from, noContacts, horizon));
+      settleSteer(sim, steer);
+      const start = sim.snapshot();
+      const { snaps, dist } = driveDistance(sim, ctl({ steer, lever: 1, gear }), horizon);
+      return worstGap(predicted, pick(start), snaps.map(pick), dist);
+    };
+
+    it('trailer path from an unsettled standstill equals the path driven once the wheels settle', () => {
+      for (const gear of ['D', 'R'] as const) {
+        const worst = compare(
+          open(manKrone()),
+          gear,
+          0.4,
+          (s) => s.trailerRear,
+          (r) => r.trailer,
+        );
+        expect(worst).toBeLessThan(0.02);
+      }
+    });
+
+    it('trailer path from a moving start follows the wheels still ramping to the target', () => {
+      for (const gear of ['D', 'R'] as const) {
+        const p = open(manKrone());
+        const sim = createSimulation(p, origin, noContacts);
+        const cruise = ctl({ lever: 1, gear });
+        driveUntil(sim, cruise, (s) => Math.abs(s.speed) === V_MAX);
+        const turn = ctl({ steer: 0.6, lever: 1, gear });
+        const from = last(drive(sim, turn, 10));
+        expect(Math.abs(from.speed)).toBe(V_MAX);
+        expect(from.steer).toBeGreaterThan(0);
+        expect(from.steer).toBeLessThan(1);
+        const predicted = predictCombination(p, from, noContacts, horizon).trailer;
+        const { snaps, dist } = driveDistance(sim, turn, horizon);
+        const worst = worstGap(
+          predicted,
+          from.trailerRear,
+          snaps.map((s) => s.trailerRear),
+          dist,
+        );
+        expect(worst).toBeLessThan(0.02);
+      }
+    });
+
+    it('truck lines are the outer front corner and the inner rear-axle side, swapping with the steer sign', () => {
+      const p = open(manKrone());
+      const front = (s: SimSnapshot, side: 1 | -1): Vec2 => {
+        const obb = bodyFootprints(p, s)[0]?.obb;
+        if (obb === undefined) throw new Error('no truck footprint');
+        return {
+          x:
+            obb.cx +
+            obb.halfLength * Math.cos(obb.heading) -
+            side * obb.halfWidth * Math.sin(obb.heading),
+          y:
+            obb.cy +
+            obb.halfLength * Math.sin(obb.heading) +
+            side * obb.halfWidth * Math.cos(obb.heading),
+        };
+      };
+      const rear = (s: SimSnapshot, side: 1 | -1): Vec2 => ({
+        x: s.truck.x - (side * p.truckWidth * Math.sin(s.truck.heading)) / 2,
+        y: s.truck.y + (side * p.truckWidth * Math.cos(s.truck.heading)) / 2,
+      });
+      for (const gear of ['D', 'R'] as const) {
+        // left (positive) steer turns toward the left: the left side is inner, the right front corner outer
+        for (const [steer, inner, outer] of [
+          [0.5, 1, -1],
+          [-0.5, -1, 1],
+        ] as const) {
+          expect(
+            compare(
+              p,
+              gear,
+              steer,
+              (s) => front(s, outer),
+              (r) => r.truckOuter,
+            ),
+          ).toBeLessThan(0.02);
+          expect(
+            compare(
+              p,
+              gear,
+              steer,
+              (s) => rear(s, inner),
+              (r) => r.truckInner,
+            ),
+          ).toBeLessThan(0.02);
+        }
+      }
+    });
+
+    it('reversing with held steer ends where the combination blocks', () => {
+      const p = manKrone();
+      for (const steer of [0.1, 0.4, 1]) {
+        const sim = createSimulation(p, origin, noContacts);
+        settleSteer(sim, steer);
+        const reverse = ctl({ steer, lever: 1, gear: 'R' });
+        const predicted = predictCombination(p, sim.step({ ...reverse, lever: 0 }), noContacts);
+        const at = last(driveUntil(sim, reverse, (s) => s.blocked !== null));
+        expect(predicted.blocked).toBe(at.blocked);
+        expect(dist2(last(predicted.trailer), at.trailerRear)).toBeLessThan(0.1);
+        expect(predicted.end).not.toBeNull();
+        expect(predicted.end?.truck).toBeCloseTo(at.truck.heading, 1);
+        expect(predicted.end?.trailer).toBeCloseTo(at.trailer.heading, 1);
+        expect(predicted.truckOuter).toHaveLength(predicted.trailer.length);
+      }
+    });
+
+    it('stops at a contact like the simulation, whichever body touches', () => {
+      const p = manKrone();
+      const cases = [
+        { gear: 'R', reached: (x: number) => x < -8 },
+        { gear: 'D', reached: (x: number) => x > 8 },
+      ] as const;
+      for (const { gear, reached } of cases) {
+        const wall: ContactQuery = (bodies) => {
+          const hit = bodies.find((b) => reached(b.obb.cx));
+          return hit ? { body: hit.body, obstacleId: 'wall' } : null;
+        };
+        const sim = createSimulation(p, origin, wall);
+        const drive = ctl({ lever: 1, gear });
+        const predicted = predictCombination(p, sim.step({ ...drive, lever: 0 }), wall);
+        const at = last(driveUntil(sim, drive, (s) => s.blocked !== null));
+        expect(predicted.blocked).toBe('contact');
+        expect(dist2(last(predicted.trailer), at.trailerRear)).toBeLessThan(0.1);
+      }
+    });
+
+    it('stops the truck lines once its heading has swept a half turn, the trailer line goes on', () => {
+      const p = open(manKrone());
+      const sim = createSimulation(p, origin, noContacts);
+      settleSteer(sim, 1);
+      const circle = predictCombination(p, sim.snapshot(), noContacts);
+      expect(circle.trailer).toHaveLength(PREDICT_DISTANCE / PREDICT_STEP + 1);
+      expect(circle.truckOuter.length).toBeLessThan(circle.trailer.length);
+      expect(circle.truckInner).toHaveLength(circle.truckOuter.length);
+      expect(circle.end).toBeNull();
+
+      const wall: ContactQuery = (bodies) =>
+        bodies.some((b) => b.body === 'trailer' && b.obb.cy > 8)
+          ? { body: 'trailer', obstacleId: 'wall' }
+          : null;
+      const blocked = predictCombination(p, sim.snapshot(), wall);
+      expect(blocked.blocked).toBe('contact');
+      expect(blocked.truckOuter.length).toBeLessThan(blocked.trailer.length);
+      expect(blocked.end?.truck).toBeNull();
+      expect(blocked.end?.trailer).toBeTypeOf('number');
+    });
+
+    it('a blocked standstill still yields the block and its end headings', () => {
+      const p = manKrone();
+      const sim = createSimulation(p, origin, noContacts);
+      settleSteer(sim, 1);
+      const reverse = ctl({ steer: 1, lever: 1, gear: 'R' });
+      const at = last(driveUntil(sim, reverse, (s) => s.blocked !== null));
+      const predicted = predictCombination(p, at, noContacts);
+      expect(predicted.blocked).toBe(at.blocked);
+      // the sim stops short of the block by less than MIN_PARTIAL, so no partial piece is added
+      expect(predicted.trailer).toHaveLength(1);
+      expect(predicted.truckOuter).toHaveLength(1);
+      expect(predicted.end).toEqual({ truck: at.truck.heading, trailer: at.trailer.heading });
+    });
+
+    it('predicts nothing outside D and R', () => {
+      const p = manKrone();
+      const sim = createSimulation(p, origin, noContacts);
+      for (const gear of ['P', 'N'] as const) {
+        expect(predictCombination(p, sim.step(ctl({ gear })), noContacts)).toEqual(NO_PREDICTION);
+      }
+    });
   });
 });

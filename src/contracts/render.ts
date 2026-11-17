@@ -1,5 +1,5 @@
 import type { ResolvedLayout } from './layout';
-import type { SimSnapshot, Vec2 } from './sim';
+import type { Prediction, SimSnapshot } from './sim';
 import type { TrailerSpec, TruckSpec } from './vehicle';
 export type Rect = {
   readonly x: number;
@@ -50,7 +50,7 @@ export type RenderFrame = {
   readonly views: ViewRects;
   readonly topDown: TopDownMode;
   readonly aids: AidFlags;
-  readonly predicted: readonly Vec2[];
+  readonly predicted: Prediction;
 };
 export type RenderStats = {
   readonly fps: number;
