@@ -362,7 +362,7 @@
     --hud-target: 32px;
   }
 
-  .hud-toggle {
+  .hud-toggle:not(.hud-icon) {
     padding: 0 var(--space-2);
   }
 }
@@ -408,8 +408,14 @@
   overflow: visible;
 }
 
-/* On a short screen the dial shrinks so the gauges cover less of the top view. */
-@media (max-height: 800px) {
+/* With a mouse on a short screen the dial shrinks so the gauges cover less of the top view. */
+@media (hover: hover) and (pointer: fine) and (max-height: 800px) {
+  .hud-gauges {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+  }
+
   .hud-gauge {
     min-width: 0;
   }
