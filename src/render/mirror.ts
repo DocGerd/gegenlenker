@@ -17,6 +17,7 @@ const FOV = 46;
 const NEAR = 0.2;
 const FAR = 400;
 const PITCH = MathUtils.degToRad(-4);
+const MSAA_SAMPLES = 4;
 
 /** One mirror: the scene is rendered unflipped into a target, then drawn with u → 1 − u. */
 export function createMirror() {
@@ -50,7 +51,9 @@ export function createMirror() {
       const w = Math.max(1, Math.round(widthPx));
       const h = Math.max(1, Math.round(heightPx));
       if (target === null) {
-        target = new WebGLRenderTarget(w, h);
+        // samples are capped by the context (gl.MAX_SAMPLES); 0 disables MSAA
+        const samples = Math.min(MSAA_SAMPLES, renderer.capabilities.maxSamples);
+        target = new WebGLRenderTarget(w, h, { samples });
         material.map = target.texture;
         material.needsUpdate = true;
       } else if (target.width !== w || target.height !== h) {
