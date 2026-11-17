@@ -5,3 +5,8 @@ playwright-report/
 .remember/
 .claude/
 .superpowers/
+.env*
+!.env.example
+coverage/
+*.tsbuildinfo
+dev-dist/
