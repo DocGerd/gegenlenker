@@ -87,6 +87,7 @@ const snapshot = (time: number): SimSnapshot => {
   const turntable =
     frozen !== null ? Number(frozen) * TURNTABLE_LIMIT : sweep(13, 0) * TURNTABLE_LIMIT;
   const pose = { x: 0, y: 0, heading: 0 };
+  const blocked = frozenBlock ?? BLOCKS[Math.floor(time / 3) % BLOCKS.length] ?? null;
   const walking = control.gear === 'D' ? 1 : control.gear === 'R' ? -1 : 0;
   return {
     step: 0,
@@ -102,7 +103,8 @@ const snapshot = (time: number): SimSnapshot => {
     roadWheelAngle: 0,
     speed: walking * control.lever * 1.5,
     control,
-    blocked: frozenBlock ?? BLOCKS[Math.floor(time / 3) % BLOCKS.length] ?? null,
+    blocked,
+    contact: blocked === 'contact' ? { body: 'drawbar', point: pose } : null,
     contacts: Math.floor(time / 7),
     jackknifes: Math.floor(time / 11),
     directionChanges: Math.floor(time / 5),

@@ -36,6 +36,11 @@ const TRACK_Y = 0.02;
 const PATH_Y = 0.03;
 const GHOST_Y = 0.04;
 const PIVOT_Y = 0.05;
+const MARKER_WIDTH = 0.3;
+const MARKER_RADIUS = 0.9;
+const MARKER_PULSE = 0.3; // fraction of the radius the pulse adds
+const MARKER_HZ = 1.5;
+const MARKER_Y = 0.06;
 const OVERLAY_ORDER = 10;
 const CASING = 0.06; // dark edge on each side of an accent stroke
 const CASING_DROP = 0.005;
@@ -45,6 +50,10 @@ function onAidsLayer<T extends Object3D>(object: T): T {
   object.layers.set(AIDS_LAYER);
   return object;
 }
+
+/** Arm half-length of the contact cross at sim time `time`. */
+const markerRadius = (time: number): number =>
+  MARKER_RADIUS * (1 + MARKER_PULSE * Math.sin(2 * Math.PI * MARKER_HZ * time));
 
 /** Samples one wheel into a ring of segments; the oldest segment is overwritten when full. */
 export class WheelTrack {
@@ -296,11 +305,20 @@ export function proceduralAids(
     material(palette.wheel, true, 1, -3),
     OVERLAY_ORDER,
   );
+  const marker = new CasedRibbon(
+    2,
+    MARKER_WIDTH,
+    MARKER_Y,
+    material(palette.cone, true),
+    material(palette.wheel, true, 1, -3),
+    OVERLAY_ORDER + 2,
+  );
   group.add(
     path.object,
     ...corridor.map((c) => c.object),
     ticks.object,
     pivots.object,
+    marker.object,
     ...tracks.map((t) => t.mesh),
   );
 
@@ -416,6 +434,16 @@ export function proceduralAids(
         pivots.flush(4);
       }
 
+      // a cross, so the contact reads without colour; shown whatever the aid toggles say
+      marker.object.visible = s.contact !== null;
+      if (s.contact !== null) {
+        const { x, y } = s.contact.point;
+        const r = markerRadius(s.time);
+        marker.set(0, x - r, y - r, x + r, y + r);
+        marker.set(1, x - r, y + r, x + r, y - r);
+        marker.flush(2);
+      }
+
       if (ghost !== null) ghost.visible = aids.ghost;
     },
     dispose(): void {
@@ -423,6 +451,7 @@ export function proceduralAids(
       corridor.forEach((c) => c.dispose());
       ticks.dispose();
       pivots.dispose();
+      marker.dispose();
       tracks.forEach((t) => t.dispose());
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());

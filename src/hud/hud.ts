@@ -1,5 +1,5 @@
 import type { AidFlags, CollapsedPanels, Rect, TopDownMode, ViewRects } from '../contracts/render';
-import type { BlockReason, Gear, SimSnapshot } from '../contracts/sim';
+import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
 import type { GoalState } from '../scoring/score';
 import { applyMessages, formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
@@ -16,7 +16,8 @@ export type HudAction =
   | { type: 'menu' };
 
 export type Hud = {
-  update(s: SimSnapshot): void;
+  /** `contactAhead` is the first warning stage: the held steer leads into a contact soon. */
+  update(s: SimSnapshot, contactAhead?: boolean): void;
   layout(views: ViewRects): void;
   /** The reset-view button is enabled while the top-down view differs from its default framing. */
   setViewChanged(changed: boolean): void;
@@ -39,11 +40,33 @@ export type HudOptions = {
   collapsed: CollapsedPanels;
 };
 
-const BLOCKED_KEY: Record<BlockReason, MessageKey> = {
-  contact: 'blockedContact',
+const CONTACT_KEY: Record<BodyId, MessageKey> = {
+  truck: 'blockedContactTruck',
+  drawbar: 'blockedContactDrawbar',
+  trailer: 'blockedContactTrailer',
+};
+
+const BLOCKED_KEY: Record<Exclude<BlockReason, 'contact'>, MessageKey> = {
   coupling: 'blockedCoupling',
   turntable: 'blockedTurntable',
 };
+
+type ToastLevel = 'warn' | 'danger';
+
+/** Two stages: a predicted contact warns, a blocked vehicle states what stopped it. */
+function toastFor(
+  s: SimSnapshot,
+  contactAhead: boolean,
+): { key: MessageKey; level: ToastLevel } | null {
+  if (s.blocked === 'contact') {
+    return {
+      key: s.contact ? CONTACT_KEY[s.contact.body] : 'blockedContactTruck',
+      level: 'danger',
+    };
+  }
+  if (s.blocked !== null) return { key: BLOCKED_KEY[s.blocked], level: 'danger' };
+  return contactAhead ? { key: 'contactAhead', level: 'warn' } : null;
+}
 
 const VIEWS: readonly [TopDownMode, MessageKey][] = [
   ['follow', 'viewFollow'],
@@ -290,7 +313,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let shownGear: Gear | null = 'P';
   gearEl.textContent = 'P';
   gearEl.dataset['gear'] = 'P';
-  let shownBlocked: BlockReason | null = null;
+  let shownToast: MessageKey | null = null;
   let shownGoal: GoalState = 'away';
   let shownContacts = -1;
   let shownJackknifes = -1;
@@ -304,7 +327,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   writeSpeed(0);
 
   return {
-    update(s) {
+    update(s, contactAhead = false) {
       const tenths = Math.round(Math.abs(s.speed) * MS_TO_KMH * 10);
       if (tenths !== shownTenths) writeSpeed(tenths);
 
@@ -318,10 +341,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       coupling.set(s.couplingAngle);
       turntable.set(s.turntableAngle);
 
-      if (s.blocked !== shownBlocked) {
-        shownBlocked = s.blocked;
-        if (s.blocked) toast.textContent = t(BLOCKED_KEY[s.blocked]);
-        setHidden(toast, s.blocked === null);
+      const warning = toastFor(s, contactAhead);
+      const key = warning?.key ?? null;
+      if (key !== shownToast) {
+        shownToast = key;
+        if (warning) {
+          toast.textContent = t(warning.key);
+          toast.dataset['level'] = warning.level;
+        }
+        setHidden(toast, warning === null);
       }
 
       if (contactsEl && s.contacts !== shownContacts) {

@@ -18,7 +18,12 @@ export type Obb = {
   readonly heading: number;
 };
 export type BodyFootprint = { readonly body: BodyId; readonly obb: Obb };
-export type SimContact = { readonly body: BodyId; readonly obstacleId: string }; // 'self': truck against trailer body
+/** `obstacleId` 'self': truck against trailer body. `point` is where the boxes overlap, on the ground. */
+export type SimContact = {
+  readonly body: BodyId;
+  readonly obstacleId: string;
+  readonly point: Vec2;
+};
 export type ContactQuery = (bodies: readonly BodyFootprint[]) => SimContact | null;
 export type StartState = {
   readonly truck: Pose2;
@@ -40,6 +45,8 @@ export type SimSnapshot = {
   readonly speed: number;
   readonly control: ControlVector;
   readonly blocked: BlockReason | null;
+  /** The touching body and contact point while `blocked` is 'contact'. */
+  readonly contact: { readonly body: BodyId; readonly point: Vec2 } | null;
   readonly contacts: number;
   readonly jackknifes: number;
   readonly directionChanges: number;
@@ -58,6 +65,8 @@ export type Prediction = {
   /** Truck side at the rear axle, the side toward the turn. */
   readonly truckInner: readonly Vec2[];
   readonly blocked: BlockReason | null;
+  /** Path length (m) travelled before the block; null when not blocked. */
+  readonly blockedAt: number | null;
   /** Body headings at the line ends when blocked; `truck` is null once the truck lines stopped earlier. */
   readonly end: { readonly truck: number | null; readonly trailer: number } | null;
 };

@@ -305,7 +305,9 @@ describe('simulation', () => {
   it('a contact rejects the step, stops and counts one event', () => {
     const wall: ContactQuery = (bodies) => {
       const trailer = bodies.find((b) => b.body === 'trailer');
-      return trailer && trailer.obb.cx < -8 ? { body: 'trailer', obstacleId: 'wall' } : null;
+      return trailer && trailer.obb.cx < -8
+        ? { body: 'trailer', obstacleId: 'wall', point: { x: 0, y: 0 } }
+        : null;
     };
     const sim = createSimulation(manKrone(), origin, wall);
     const reverse = ctl({ lever: 1, gear: 'R' });
@@ -328,8 +330,11 @@ describe('simulation', () => {
     const wedge: ContactQuery = (bodies) => {
       const truck = bodies.find((b) => b.body === 'truck');
       const trailer = bodies.find((b) => b.body === 'trailer');
-      if (trailer && trailer.obb.cx < -8) return { body: 'trailer', obstacleId: 'wall' };
-      return truck && truck.obb.cx > gate ? { body: 'truck', obstacleId: 'gate' } : null;
+      if (trailer && trailer.obb.cx < -8)
+        return { body: 'trailer', obstacleId: 'wall', point: { x: 0, y: 0 } };
+      return truck && truck.obb.cx > gate
+        ? { body: 'truck', obstacleId: 'gate', point: { x: 0, y: 0 } }
+        : null;
     };
     const sim = createSimulation(manKrone(), origin, wedge);
     const at = last(driveUntil(sim, ctl({ lever: 1, gear: 'R' }), (s) => s.blocked !== null));
@@ -347,6 +352,25 @@ describe('simulation', () => {
         expect(s.contacts).toBe(2);
       }
     }
+  });
+
+  it('the snapshot carries the touching body and point only while blocked by contact', () => {
+    const wall = createContactQuery([
+      {
+        id: 'wall',
+        kind: 'wall',
+        height: 2,
+        obb: { cx: 20, cy: 0, halfLength: 0.5, halfWidth: 10, heading: 0 },
+      },
+    ]);
+    const sim = createSimulation(manKrone(), origin, wall);
+    expect(sim.snapshot().contact).toBeNull();
+    const at = last(driveUntil(sim, ctl({ lever: 1 }), (s) => s.blocked !== null));
+    expect(at.contact?.body).toBe('truck');
+    expect(at.contact?.point.x).toBeCloseTo(19.5, 1);
+    expect(Math.abs(at.contact?.point.y ?? NaN)).toBeLessThan(2);
+    expect(last(drive(sim, ctl({ lever: 1 }), 30)).contact).toEqual(at.contact);
+    expect(last(drive(sim, ctl({ lever: 1, gear: 'R' }), 60)).contact).toBeNull();
   });
 
   it('grazing a wall counts one contact while the vehicle edges along it', () => {
@@ -370,7 +394,9 @@ describe('simulation', () => {
   it('touching the same obstacle again after driving clear counts again', () => {
     const wall: ContactQuery = (bodies) => {
       const trailer = bodies.find((b) => b.body === 'trailer');
-      return trailer && trailer.obb.cx < -8 ? { body: 'trailer', obstacleId: 'wall' } : null;
+      return trailer && trailer.obb.cx < -8
+        ? { body: 'trailer', obstacleId: 'wall', point: { x: 0, y: 0 } }
+        : null;
     };
     const sim = createSimulation(manKrone(), origin, wall);
     const reverse = ctl({ lever: 1, gear: 'R' });
@@ -403,7 +429,9 @@ describe('simulation', () => {
   const gated = (gate: { x: number }): ContactQuery => {
     return (bodies) => {
       const truck = bodies.find((b) => b.body === 'truck');
-      return truck && truck.obb.cx > gate.x ? { body: 'truck', obstacleId: 'gate' } : null;
+      return truck && truck.obb.cx > gate.x
+        ? { body: 'truck', obstacleId: 'gate', point: { x: 0, y: 0 } }
+        : null;
     };
   };
   const truckCentreX = (s: SimSnapshot): number =>
@@ -679,7 +707,7 @@ describe('simulation', () => {
       for (const { gear, reached } of cases) {
         const wall: ContactQuery = (bodies) => {
           const hit = bodies.find((b) => reached(b.obb.cx));
-          return hit ? { body: hit.body, obstacleId: 'wall' } : null;
+          return hit ? { body: hit.body, obstacleId: 'wall', point: { x: 0, y: 0 } } : null;
         };
         const sim = createSimulation(p, origin, wall);
         const drive = ctl({ lever: 1, gear });
@@ -702,7 +730,7 @@ describe('simulation', () => {
 
       const wall: ContactQuery = (bodies) =>
         bodies.some((b) => b.body === 'trailer' && b.obb.cy > 8)
-          ? { body: 'trailer', obstacleId: 'wall' }
+          ? { body: 'trailer', obstacleId: 'wall', point: { x: 0, y: 0 } }
           : null;
       const blocked = predictCombination(p, sim.snapshot(), wall);
       expect(blocked.blocked).toBe('contact');
