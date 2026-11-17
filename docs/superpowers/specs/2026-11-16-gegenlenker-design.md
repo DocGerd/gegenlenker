@@ -119,7 +119,7 @@ Only where they catch real defects: simulation core, collision, scoring, vehicle
 - Name (call): **Gegenlenker**; repo `DocGerd/gegenlenker`. No collision found.
 - Accent (call): teal `#0F7C72`, unused by other products. The brand defines no dark, strong or tint value for teal and `#0F7C72` fails AA on dark surfaces, so the builder derives them at the brand's lightness and chroma, verifies AA and records them in `docs/brand/`.
 - Character (call): an instrument, calm and exact. The views are the content; chrome sits at the edges with hairlines. Signature element: two pivot-angle gauges moving through the brand status colours as a limit approaches.
-- Scene in neutral greys; accent only for target and guidance.
+- Scene in neutral greys except red obstacle cones; red is for obstacles only, the accent only for target and guidance.
 
 ## Vehicle data
 

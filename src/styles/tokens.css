@@ -85,26 +85,28 @@
   --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.4);
 }
 
-/* Scene palette: theme-independent neutral greys; the accent marks target and guidance only. */
+/* Scene palette: theme-independent neutral greys, except the red obstacle cone; the accent marks target and guidance only. */
 :root {
   --scene-sky: #dce0e4;
-  --scene-verge: #969ca4;
+  --scene-verge: #7f858d;
   --scene-yard: #c2c7cd;
-  --scene-pavement: #e6e9ec;
+  --scene-pavement: #f4f5f7;
   --scene-street: #5e646b;
   --scene-marking: #fbfbfc;
   --scene-kerb: #eef0f2;
-  --scene-wall: #969ca4;
+  --scene-wall: #5e646b;
   --scene-fence: #3b4046;
   --scene-hall: #202428;
   --scene-ramp: #5e646b;
   --scene-lamp: #2a2e33;
   --scene-parked: #3b4046;
-  --scene-cone: #eef0f2;
+  --scene-cone: #b5392e;
   --scene-cab: #eef0f2;
   --scene-body: #969ca4;
   --scene-chassis: #1b1e22;
   --scene-wheel: #14161a;
   --scene-tracks: #3b4046;
   --scene-accent: #0f7c72;
+  --scene-band: #202428;
+  --scene-cladding: #aeb2b7;
 }
