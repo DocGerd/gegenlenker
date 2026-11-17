@@ -5,14 +5,13 @@ import type { AidFlags, RenderFrame } from '../contracts/render';
 import type { Simulation, Vec2 } from '../contracts/sim';
 import { formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
-import { readScenePalette } from '../render/palette';
 import { computeViewports } from '../render/viewports';
 import { createContactQuery } from '../sim/collision';
 import { DT } from '../sim/constants';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
-import { acquireRenderer, showNotice } from './drive';
+import { mountRenderStage } from './render-stage';
 import './results.css';
 import { isReplayable } from './storage';
 
@@ -33,6 +32,7 @@ function button(className: string, text: string, onClick: () => void): HTMLButto
   return el;
 }
 
+/** Returns the exit action, which leaves exactly as the back button does. */
 export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void): () => void {
   if (!isReplayable(log)) {
     onExit();
@@ -94,24 +94,14 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     onExit();
   };
 
-  let gl: ReturnType<typeof acquireRenderer>;
-  try {
-    gl = acquireRenderer();
-  } catch {
-    showNotice(stage, 'noWebgl', 'back', exit);
-    return dispose;
-  }
-  const { canvas, renderer } = gl;
-  if (renderer.stats().contextLost) {
-    showNotice(stage, 'contextLost', 'reload', () => location.reload());
-    return dispose;
-  }
   const map = document.createElement('div');
   map.className = 'replay-map';
-  map.append(canvas);
   stage.append(map);
-  cleanups.push(() => canvas.remove());
-  renderer.setScene(layout, truck, trailer, readScenePalette());
+  const view = mountRenderStage(stage, map, exit);
+  if (view === null) return exit;
+  cleanups.push(() => view.dispose());
+  const { renderer } = view;
+  renderer.setScene(layout, truck, trailer);
 
   let playing = true;
   let speed = SPEEDS[0] ?? 1;
@@ -159,76 +149,36 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     predicted: NO_PATH,
   };
 
-  const relayout = (): void => {
-    const width = map.clientWidth;
-    const height = map.clientHeight;
-    if (width === 0 || height === 0) return;
-    frame.views = computeViewports(width, height, 'replay');
-    renderer.resize(width, height);
-    dirty = true;
-  };
-  const observer = new ResizeObserver(relayout);
-  observer.observe(map);
-  window.addEventListener('orientationchange', relayout);
-  cleanups.push(() => {
-    observer.disconnect();
-    window.removeEventListener('orientationchange', relayout);
-  });
-  relayout();
-
-  let raf = 0;
-  let last = -1;
-  let lost = false;
-  const tick = (now: number): void => {
-    raf = requestAnimationFrame(tick);
-    const dt = last < 0 ? 0 : Math.min((now - last) / 1000, MAX_FRAME_SECONDS);
-    last = now;
-    const wasPlaying = playing;
-    if (playing) {
-      position = Math.min(log.steps, position + (1 / DT) * speed * dt);
-      if (position >= log.steps) {
-        playing = false;
-        sync();
+  view.start({
+    resized(width, height) {
+      frame.views = computeViewports(width, height, 'replay');
+      dirty = true;
+    },
+    restored() {
+      dirty = true;
+    },
+    frame(seconds) {
+      const dt = Math.min(seconds, MAX_FRAME_SECONDS);
+      if (playing) {
+        position = Math.min(log.steps, position + (1 / DT) * speed * dt);
+        if (position >= log.steps) {
+          playing = false;
+          sync();
+        }
       }
-    }
-    advanceTo(Math.floor(position));
-    // A steady cadence while playing: the resolution governor reads uneven frame intervals as overload.
-    if (!wasPlaying && !dirty) return;
-    dirty = false;
-    frame.snapshot = snapshot;
-    renderer.render(frame);
-    timeLabel.textContent = `${formatNumber(snapshot.time, 1)} / ${total}`;
-  };
-
-  const resume = (): void => {
-    if (raf !== 0 || disposed || lost) return;
-    last = -1;
-    raf = requestAnimationFrame(tick);
-  };
-  const pause = (): void => {
-    cancelAnimationFrame(raf);
-    raf = 0;
-  };
-  const onVisibility = (): void => {
-    if (document.visibilityState === 'hidden') pause();
-    else resume();
-  };
-  document.addEventListener('visibilitychange', onVisibility);
-  cleanups.push(() => {
-    document.removeEventListener('visibilitychange', onVisibility);
-    pause();
+      const before = stepped;
+      advanceTo(Math.floor(position));
+      if (stepped === before && !dirty) {
+        // Paused frames report nothing: the idle gap must not count as slow.
+        if (playing) renderer.skipFrame();
+        return;
+      }
+      dirty = false;
+      frame.snapshot = snapshot;
+      renderer.render(frame);
+      timeLabel.textContent = `${formatNumber(snapshot.time, 1)} / ${total}`;
+    },
   });
 
-  // The renderer's own listener runs first (registered in init), so stats() already reports the loss.
-  const onLost = (): void => {
-    if (!renderer.stats().contextLost) return;
-    lost = true;
-    pause();
-    showNotice(stage, 'contextLost', 'reload', () => location.reload());
-  };
-  canvas.addEventListener('webglcontextlost', onLost);
-  cleanups.push(() => canvas.removeEventListener('webglcontextlost', onLost));
-
-  if (document.visibilityState !== 'hidden') resume();
-  return dispose;
+  return exit;
 }

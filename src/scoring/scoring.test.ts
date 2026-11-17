@@ -196,20 +196,45 @@ describe('best results', () => {
   });
 
   it('reads stored results defensively', () => {
-    expect(parseBestResults(null)).toEqual({});
-    expect(parseBestResults('{')).toEqual({});
-    expect(parseBestResults(JSON.stringify({ version: 2, results: {} }))).toEqual({});
+    const fingerprint = (): string => 'data-a';
+    const parse = (raw: string | null) => parseBestResults(raw, fingerprint);
+    expect(parse(null)).toEqual({});
+    expect(parse('{')).toEqual({});
+    expect(parse(JSON.stringify({ version: 2, results: {} }))).toEqual({});
 
     const valid = result();
-    expect(parseBestResults(serializeBestResults({ [KEY]: valid }))).toEqual({ [KEY]: valid });
+    expect(parse(serializeBestResults({ [KEY]: valid }, fingerprint))).toEqual({ [KEY]: valid });
 
-    const noTime: Record<string, unknown> = result({ trailerId: 'hueffermann-hpa-24-81-l' });
+    const stored = { ...valid, fingerprint: 'data-a' };
+    const noTime: Record<string, unknown> = {
+      ...result({ trailerId: 'hueffermann-hpa-24-81-l' }),
+      fingerprint: 'data-a',
+    };
     delete noTime.time;
     const otherKey = bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l');
     const raw = JSON.stringify({
       version: 1,
-      results: { [KEY]: valid, [otherKey]: noTime, 'slalom/man-le-18-280/krone-azw-18': valid },
+      results: { [KEY]: stored, [otherKey]: noTime, 'slalom/man-le-18-280/krone-azw-18': stored },
     });
-    expect(parseBestResults(raw)).toEqual({ [KEY]: valid });
+    expect(parse(raw)).toEqual({ [KEY]: valid });
+  });
+
+  it('keeps a stored result only for the data that produced it', () => {
+    const other = result({ trailerId: 'hueffermann-hpa-24-81-l' });
+    const otherKey = bestKey(other.exerciseId, other.truckId, other.trailerId);
+    const fingerprint = (r: Pick<RunResult, 'exerciseId' | 'truckId' | 'trailerId'>): string =>
+      r.trailerId === 'krone-azw-18' ? 'data-a' : 'data-b';
+    const raw = (results: Record<string, unknown>): string =>
+      JSON.stringify({ version: 1, results });
+    expect(
+      parseBestResults(
+        raw({
+          [KEY]: { ...result(), fingerprint: 'data-a' },
+          [otherKey]: { ...other, fingerprint: 'data-a' },
+        }),
+        fingerprint,
+      ),
+    ).toEqual({ [KEY]: result() });
+    expect(parseBestResults(raw({ [KEY]: result() }), fingerprint)).toEqual({});
   });
 });

@@ -36,8 +36,16 @@ export function recordBest(
   return { best: { ...best, [key]: r }, isNewBest: true };
 }
 
-export function serializeBestResults(best: BestResults): string {
-  return JSON.stringify({ version: STORAGE_VERSION, results: best });
+export type ResultIds = Pick<RunResult, 'exerciseId' | 'truckId' | 'trailerId'>;
+
+export function serializeBestResults(
+  best: BestResults,
+  fingerprint: (ids: ResultIds) => string,
+): string {
+  const results = Object.fromEntries(
+    Object.entries(best).map(([key, r]) => [key, { ...r, fingerprint: fingerprint(r) }]),
+  );
+  return JSON.stringify({ version: STORAGE_VERSION, results });
 }
 
 function isCount(v: unknown): v is number {
@@ -80,7 +88,11 @@ function toResult(v: unknown): RunResult | null {
   };
 }
 
-export function parseBestResults(raw: string | null): BestResults {
+/** Drops each entry not stored for the data `fingerprint` now reports for its ids. */
+export function parseBestResults(
+  raw: string | null,
+  fingerprint: (ids: ResultIds) => string,
+): BestResults {
   if (raw === null) return {};
   let data: unknown;
   try {
@@ -94,7 +106,8 @@ export function parseBestResults(raw: string | null): BestResults {
   const out: Record<string, RunResult> = {};
   for (const [key, value] of Object.entries(results)) {
     const r = toResult(value);
-    if (r !== null && bestKey(r.exerciseId, r.truckId, r.trailerId) === key) out[key] = r;
+    if (r === null || bestKey(r.exerciseId, r.truckId, r.trailerId) !== key) continue;
+    if ((value as Record<string, unknown>).fingerprint === fingerprint(r)) out[key] = r;
   }
   return out;
 }

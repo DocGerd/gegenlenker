@@ -16,7 +16,7 @@
 - Vite `base` = `process.env.BASE_PATH ?? '/'`; deploy, CI build checks and e2e use `BASE_PATH=/gegenlenker/`. No absolute `/` asset URLs in code; use `import.meta.env.BASE_URL`.
 - Single package, no workspace, no UI framework. Only Task 1 edits `package.json` / `pnpm-lock.yaml`; a task that needs another dependency stops and reports.
 - Lint-enforced layering: only `src/render/**` imports `three`; `src/{contracts,vehicles,sim,scoring,content}/**` use no DOM globals and import nothing from `render`, `app`, `hud`, `input`, `pwa`, `i18n`.
-- Units: vehicle data files in mm and degrees (steering rate in turns/s); everything after `resolveCombination` (sim, content, scoring, render) in m, s, rad.
+- Units: vehicle data files in mm and degrees (steering rate in turns/s); everything after `resolveCombination` (sim, content, scoring, render) in m, s, rad. Exception: `Tolerances.angle`, `targetError().angle` and `RunResult.angleError` are in degrees.
 - World frame: x east, y north, heading CCW from +x. Body frame: origin at the body's reference point, x forward, y left, z up.
 - Reference points: truck = rear-axle centre; dolly = turntable centre (over the dolly axle); trailer body = effective rear-axle centre (tandem centre).
 - Signs: `steer` and `roadWheelAngle` > 0 = left; `speed` > 0 = forward; `couplingAngle` = truck heading − dolly heading; `turntableAngle` = dolly heading − trailer heading; all angles wrapped to (−π, π].
@@ -29,7 +29,7 @@
 - No runtime request leaves the origin; all assets precached; an exercise runs offline after one visit.
 - Performance: four views per frame at 60 fps on the reference tablet (Android, Chrome); degrade resolution (floor 0.5) before frame rate.
 - Estimates are flagged `status: 'estimate'` in data, listed in the README, and the menu says some dimensions are estimates.
-- Tests only for simulation core, collision, scoring, vehicle-data validation, token values, and one Playwright offline check. Visuals, styling and glue get the stated manual or scripted verification instead. Unit tests sit next to the code (`*.test.ts`, Vitest node environment).
+- Tests only for simulation core, collision, scoring, vehicle-data validation (including README estimates sync), token values, content drivability (Task 18), one Playwright offline check, and the scripted local perf check (Task 6). Visuals, styling and glue get the stated manual or scripted verification instead. Unit tests sit next to the code (`*.test.ts`, Vitest node environment).
 - Prose and comments minimal everywhere (code, commits, PR bodies, docs, README): a comment only for a non-obvious why; never restate code; no decaying facts (counts, timings, dates, measured figures) unless a requirement.
 - Delivery: one branch per task `task/<n>-<slug>` → PR to `main` (`Closes #<n>` when an issue exists). Only Task 1 pushes to `main` directly. Never `--no-verify`, never force-push. Before every push: `pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm build`.
 - `dev/*.html` pages are manual-verification harnesses: served by `pnpm dev`, never built (the build input is `index.html` only).
@@ -70,7 +70,7 @@
 | 15 | Environment and top-down aids | 6, 10 | 13, 14, 16–18 |
 | 16 | HUD | 2, 4, 5, 6 | 13–15, 17, 18 |
 | 17 | README with estimated parameters | 7 | 13–16, 18 |
-| 18 | Every pair drives in every layout and exercise | 7, 8, 10, 13 | 14–17 |
+| 18 | Every pair drives in every layout and exercise | 7, 8, 9, 10, 13 | 14–17 |
 | 19 | App shell: menu, settings, drive loop | 6–16, 18 | — |
 | 20 | Results and replay | 19 | 21 |
 | 21 | Offline browser check | 11, 19 | 20 |
@@ -144,10 +144,10 @@ Create a ruleset on `main` requiring a pull request (0 approvals) and the status
 **Depends on:** 1 · **Parallel with:** 3, 4, 5
 
 **Files:**
-- Create: `src/contracts/vehicle.ts`, `src/contracts/sim.ts`, `src/contracts/layout.ts`, `src/contracts/exercise.ts`, `src/contracts/render.ts`, `src/render/seams.ts`, `src/vehicles/anchors.ts`
+- Create: `src/contracts/vehicle.ts`, `src/contracts/sim.ts`, `src/contracts/layout.ts`, `src/contracts/exercise.ts`, `src/contracts/render.ts`, `src/render/seams.ts`, `src/vehicles/anchors.ts`, `src/sim/angle.ts`
 
 **Interfaces:**
-- Produces: every type below, plus `truckAnchors`, `trailerAnchors`, `COUPLING_HEIGHT`, `AIDS_LAYER`. Every later task imports these by these paths and names.
+- Produces: every type below; the id lists `TRUCK_IDS`, `TRAILER_IDS`, `LAYOUT_IDS`, `EXERCISE_IDS`; `truckAnchors`, `trailerAnchors`, `COUPLING_HEIGHT`, `AIDS_LAYER`; `wrapAngle(a: number): number` (`src/sim/angle.ts`, result in (−π, π]). Every later task imports these by these paths and names.
 
 - [ ] **Step 1: Write the contract files exactly**
 
@@ -157,8 +157,10 @@ Every object-type property below is `readonly` in the code (omitted here for bre
 // src/contracts/vehicle.ts — data in mm, degrees, turns per second
 export type ParamStatus = 'sourced' | 'estimate';
 export type Param = { value: number; status: ParamStatus; source: string }; // source: URL if sourced, basis if estimated
-export type TruckId = 'man-le-18-280' | 'arocs-1835-ak';
-export type TrailerId = 'krone-azw-18' | 'hueffermann-hpa-24-81-l';
+export const TRUCK_IDS = ['man-le-18-280', 'arocs-1835-ak'] as const;
+export const TRAILER_IDS = ['krone-azw-18', 'hueffermann-hpa-24-81-l'] as const;
+export type TruckId = (typeof TRUCK_IDS)[number];
+export type TrailerId = (typeof TRAILER_IDS)[number];
 export type TruckBody = 'platform' | 'tipper';
 export type TrailerBody = 'box' | 'low-loader';
 export type TruckSpec = {
@@ -237,7 +239,8 @@ export type StreetSpec = {
   kerbY: number; width: number; pavement: number; fromX: number; toX: number;
   entrance: { fromX: number; toX: number };
 };
-export type LayoutId = 'depot' | 'logistics';
+export const LAYOUT_IDS = ['depot', 'logistics'] as const;
+export type LayoutId = (typeof LAYOUT_IDS)[number];
 export type Layout = {
   id: LayoutId; bounds: Rect2; yard: Rect2; street: StreetSpec; start: Pose2;
   obstacles: Obstacle[]; markings: Marking[];
@@ -253,7 +256,8 @@ export type ResolvedLayout = {
 import type { LayoutId, Marking, Obstacle } from './layout';
 import type { InputChange, Pose2, Vec2 } from './sim';
 import type { TrailerId, TruckId } from './vehicle';
-export type ExerciseId = 'straight-reverse' | 'reverse-bay' | 'reverse-corner' | 'dock-ramp' | 'slalom';
+export const EXERCISE_IDS = ['straight-reverse', 'reverse-bay', 'reverse-corner', 'dock-ramp', 'slalom'] as const;
+export type ExerciseId = (typeof EXERCISE_IDS)[number];
 /** pose: trailer rear-end centre and trailer heading at the goal; the drawn zone extends `length` along pose.heading. */
 export type TargetZone = { pose: Pose2; length: number; width: number };
 export type Tolerances = { position: number /* m */; angle: number /* degrees */ };
@@ -304,6 +308,10 @@ export interface SceneRenderer {
 ```ts
 // src/render/seams.ts
 import type { Object3D } from 'three';
+import type { ResolvedLayout } from '../contracts/layout';
+import type { RenderFrame, ScenePalette } from '../contracts/render';
+import type { SimSnapshot } from '../contracts/sim';
+import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 export const AIDS_LAYER = 1; // seen by the top-down camera only
 export interface VehicleVisual { readonly object: Object3D; update(snapshot: SimSnapshot): void; dispose(): void }
 export interface Environment { readonly object: Object3D; dispose(): void } // ground, markings, obstacles, lights
@@ -320,14 +328,16 @@ export type RendererParts = {
 
 `export const COUPLING_HEIGHT = 0.9;` `truckAnchors(spec: TruckSpec): TruckAnchors` and `trailerAnchors(spec: TrailerSpec): TrailerAnchors`, all mm → m. With `L` = wheelbase and `F` = L + frontOverhang:
 - Truck: `rearAxle (0,0,0)`, `frontAxle (L,0,0)`, `coupling (−couplingOffset, 0, COUPLING_HEIGHT)`, `frontX = F`, `rearX = −rearOverhang`, `eye (F − eye.behindBumper, +eye.leftOfCentre, eye.height)`, `mirrorLeft/Right (F − mirror.behindBumper, ±(mirror.lateral + mirror.glassOutboard), mirror.height)`.
-- Trailer: `eye (drawbar, 0, COUPLING_HEIGHT)` and `frontAxle (0,0,0)` in the dolly frame; `turntable (wheelbase, 0, 0)`, `rearAxles` at x = 0 (one axle) or ±spacing/2 (two), `frontX = wheelbase + frontOverhang`, `rearX = −rearOverhang` in the body frame.
+- Trailer: `eye (drawbar, 0, COUPLING_HEIGHT)` and `frontAxle (0,0,0)` in the dolly frame; `turntable (wheelbase, 0, 0)`, `rearAxles` front axle first: `[0]` (one axle) or `[+spacing/2, −spacing/2]` (two), `frontX = wheelbase + frontOverhang`, `rearX = −rearOverhang` in the body frame.
 
-- [ ] **Step 3: Verify**
+- [ ] **Step 3: Implement `wrapAngle` in `src/sim/angle.ts`** — maps any angle to (−π, π]; `wrapAngle(π) === π`, `wrapAngle(−π) === π`.
+
+- [ ] **Step 4: Verify**
 
 Run: `pnpm typecheck && pnpm lint`
 Expected: exit 0. (Task 7 tests the anchors against vehicle data.)
 
-- [ ] **Step 4: Deliver** — PR `feat: shared contracts` from `task/2-contracts`.
+- [ ] **Step 5: Deliver** — PR `feat: shared contracts` from `task/2-contracts`.
 
 ---
 
@@ -436,7 +446,7 @@ Expected: PASS.
 - [ ] **Step 5: Mark, icons, font licence**
 
 - `public/favicon.svg`: the brand mark paths (`M50 17.09 L69.87 51.5 L30.13 51.5 Z`, `M26.96 57 L73.04 57 L88 82.91 L12 82.91 Z`, viewBox `0 0 100 100`), fill `#0F7C72`, and `#01AFA1` under `@media (prefers-color-scheme: dark)`.
-- `scripts/icons.mjs`: renders with Playwright's `chromium` (no new dependency). 192 and 512 px: mark `#01AFA1` at 62 % on a `#0D0E10` rounded square, radius 22 %. Maskable 512 px: full-bleed `#0D0E10` with the mark at 50 %. Writes the three PNGs to `public/`.
+- `scripts/icons.mjs`: renders with Playwright's `chromium` (no new dependency). 192 and 512 px: mark `#01AFA1` at 62 % on a `#0D0E10` rounded square, radius 22 %. Maskable 512 px: full-bleed `#0D0E10` with the mark at 50 %. Writes the three PNGs to `public/`. The ESLint config gives `.mjs` no Node globals, so the script imports `process` from `node:process` and `fileURLToPath` from `node:url`; output paths come from `fileURLToPath(import.meta.resolve('../public/<name>'))`. It uses no `console` and no global `URL`; errors stay uncaught, so the exit code is non-zero.
 - `public/licenses/geist-OFL.txt`: copy of `node_modules/@fontsource/geist/LICENSE`.
 
 Run: `pnpm icons && file public/pwa-*.png`
@@ -523,6 +533,9 @@ Expected: three PNGs of 192×192, 512×512, 512×512.
 | offlineReady | Ready offline | Offline bereit |
 | noWebgl | This device cannot show WebGL 2 graphics. | Dieses Gerät kann keine WebGL-2-Grafik anzeigen. |
 | contextLost | Graphics were reset. Reload to continue. | Die Grafik wurde zurückgesetzt. Zum Fortfahren neu laden. |
+| langDe | Deutsch | Deutsch |
+| langEn | English | English |
+| keySpace | Space | Leertaste |
 
 - [ ] **Step 2: Implement `src/i18n/i18n.ts`** with the signatures above; the current language is module state, defaulting to `'de'`.
 
@@ -562,7 +575,7 @@ Proves the riskiest part first. Nothing else in presentation starts before this 
 `computeViewports`:
 - `replay`: `topDown` is the full canvas and the other views are `null`.
 - Landscape (w ≥ h): `topDown = {0, 0, round(0.4w), h}`; `cockpit` is the remaining right part.
-- Portrait: `topDown = {0, 0, w, h − round(0.55h)}`; `cockpit` is the bottom `round(0.55h)`. In both orientations the screen's bottom corners, where the wheel and the lever sit, are inside the cockpit, so the steering wheel shows in the cockpit view.
+- Portrait: `topDown = {0, 0, w, h − round(0.55h)}`; `cockpit` is the bottom `round(0.55h)`. In both orientations the screen's bottom-right corner, where the wheel sits, is inside the cockpit view, so the steering wheel shows there. The lever sits bottom-left: inside the cockpit in portrait, over the top-down view's bottom-left corner in landscape.
 - Mirrors inside the cockpit: `mw = clamp(round(0.15 · cockpit.width), 72, 200)`, `mh = min(2·mw, round(0.5 · cockpit.height))`, `y = cockpit.y + round(0.16 · cockpit.height)`. Left mirror `x = cockpit.x + 16`; right mirror `x = cockpit.x + cockpit.width − 16 − mw`.
 
 Governor: keeps the last 60 frame intervals. When the window is full and the 90th percentile exceeds 18.5 ms, it sets `scale = max(0.5, scale − 0.15)` and clears the window. It never raises the scale; `reset()` returns to 1.
@@ -655,7 +668,7 @@ Expected:
 - Test: `src/vehicles/vehicles.test.ts`
 
 **Interfaces:**
-- Consumes: `TruckSpec`, `TrailerSpec`, `Param`, `VehicleParams` (`src/contracts/vehicle.ts`); `truckAnchors`, `trailerAnchors` (`src/vehicles/anchors.ts`).
+- Consumes: `TruckSpec`, `TrailerSpec`, `Param`, `VehicleParams`, `TRUCK_IDS`, `TRAILER_IDS` (`src/contracts/vehicle.ts`); `truckAnchors`, `trailerAnchors` (`src/vehicles/anchors.ts`).
 - Produces:
   - `src/vehicles/sources.ts`: `SOURCES = { A, B, D, K, H }` (URLs from the spec), `sourced(value, src)`, `estimate(value, basis)`, both returning `Param`.
   - `src/vehicles/registry.ts`: `trucks: readonly TruckSpec[]`, `trailers: readonly TrailerSpec[]`, `truckById(id: TruckId): TruckSpec`, `trailerById(id: TrailerId): TrailerSpec`.
@@ -730,7 +743,8 @@ it('validates the registry', () => {
   for (const t of trucks) expect(validateTruck(t)).toEqual([]);
   for (const r of trailers) expect(validateTrailer(r)).toEqual([]);
   for (const t of trucks) for (const r of trailers) expect(validatePair(t, r)).toEqual([]);
-  // ids unique; 2 trucks, 2 trailers
+  expect(trucks.map((t) => t.id)).toEqual([...TRUCK_IDS]);
+  expect(trailers.map((r) => r.id)).toEqual([...TRAILER_IDS]);
 });
 ```
 
@@ -813,7 +827,7 @@ Expected: PASS.
 - Test: `src/scoring/scoring.test.ts`
 
 **Interfaces:**
-- Consumes: `SimSnapshot`, `Vec2` (`src/contracts/sim.ts`); `ExerciseDefinition`, `TargetZone`, `RunResult`, `BestResults` (`src/contracts/exercise.ts`); `TruckId`, `TrailerId`.
+- Consumes: `SimSnapshot`, `Vec2` (`src/contracts/sim.ts`); `ExerciseDefinition`, `TargetZone`, `RunResult`, `BestResults`, `EXERCISE_IDS` (`src/contracts/exercise.ts`); `TruckId`, `TrailerId`, `TRUCK_IDS`, `TRAILER_IDS`; `wrapAngle` (`src/sim/angle.ts`).
 - Produces:
   - `src/scoring/score.ts`: `WAYPOINT_RADIUS = 3`; `targetError(s: SimSnapshot, zone: TargetZone): { position: number; angle: number }` (m and degrees); `createRunTracker(exercise: ExerciseDefinition): { update(s: SimSnapshot): boolean }` (true once reached); `runResult(s: SimSnapshot, exercise: ExerciseDefinition, truckId: TruckId, trailerId: TrailerId): RunResult`.
   - `src/scoring/best.ts`: `bestKey(exerciseId, truckId, trailerId): string` (`${exerciseId}/${truckId}/${trailerId}`); `compareResults(a: RunResult, b: RunResult): number` (< 0 when a is better); `recordBest(best: BestResults, r: RunResult): { best: BestResults; isNewBest: boolean }`; `serializeBestResults(best: BestResults): string`; `parseBestResults(raw: string | null): BestResults`.
@@ -876,7 +890,7 @@ Expected: PASS.
 - Produces:
   - `src/content/street.ts`: `streetFeatures(street: StreetSpec): { surfaces: Surface[]; obstacles: Obstacle[]; markings: Marking[] }`.
   - `src/content/resolve-layout.ts`: `resolveLayout(layout: Layout, exercise: ExerciseDefinition | null): ResolvedLayout` (yard surface + street features + layout obstacles and markings + exercise obstacles and markings; `target` from the exercise).
-  - `src/content/registry.ts`: `layouts: Readonly<Record<LayoutId, Layout>>`, `exercises: readonly ExerciseDefinition[]` (spec order), `exerciseById(id: ExerciseId): ExerciseDefinition`.
+  - `src/content/registry.ts`: `layouts: Readonly<Record<LayoutId, Layout>>` (exactly `LAYOUT_IDS`), `exercises: readonly ExerciseDefinition[]` (exactly `EXERCISE_IDS`, in that order), `exerciseById(id: ExerciseId): ExerciseDefinition`.
 
 Street (both layouts): `kerbY −2.5`, `width 7.0`, `pavement 2.5`, `fromX/toX` = bounds, entrance x ∈ [42, 58]. `streetFeatures` emits:
 - Surfaces: the street and both pavements.
@@ -889,7 +903,7 @@ Common frame: yard `[0,100] × [0,70]`, bounds `[−40,140] × [−40,100]`. The
 
 | Layout | Yard edge | Landmarks | Free-drive `start` |
 |---|---|---|---|
-| depot | fence 0.1 × 2.0 m | hall `[60,96] × [42,64]`, 8 m high, built from wall boxes with two 4.5 m gates on its south side; three parked-vehicle blocks 2.5 × 10 × 3.5 m along the west fence; lamp posts 0.3 × 0.3 × 6 m in the yard corners and every 25 m on the far pavement | truck rear axle (30, 15), heading 0 |
+| depot | fence 0.1 × 2.0 m | hall `[60,96] × [42,64]`, 8 m high, built from wall boxes with two 4.5 m gates on its south side; three parked-vehicle blocks 2.5 × 10 × 3.5 m along the west fence within y ∈ [36, 66]; lamp posts 0.3 × 0.3 × 6 m in the yard corners and every 25 m on the far pavement | truck rear axle (30, 15), heading 0 |
 | logistics | wall 0.3 × 2.5 m | hall `[10,74] × [52,68]`; ramp block `[14,70] × [49,52]`, 1.2 m high (face at y = 49), with bay lines every 4 m reaching 18 m into the yard; four parked trailers 2.5 × 13.6 × 4 m on the east side; lamp posts as in depot | truck rear axle (30, 20), heading 0 |
 
 | Exercise | Layout | Setup | Target | Tolerances | Waypoint |
@@ -897,14 +911,19 @@ Common frame: yard `[0,100] × [0,70]`, bounds `[−40,140] × [−40,100]`. The
 | straight-reverse | depot | cone corridor, 3.6 m clear, x ∈ [8, 48] at y = 30, cones (0.4 × 0.4 × 0.8 m) every 5 m; start truck rear axle (70, 30), heading 0 | trailer rear (10, 30), heading 0 | 0.5 m, 3° | — |
 | reverse-bay | logistics | bay 4.0 m wide and 16 m deep between two parked blocks, closed by a wall; start perpendicular to the bay, so the maneuver is a 90° reverse | trailer rear 1.0 m off the wall, pointing out of the bay | 0.5 m, 4° | — |
 | reverse-corner | depot | lane 9 m wide bounded by kerbs, with a 90° corner to the driver's (left) side and a 6 m corner kerb radius | trailer rear 15 m into the second leg, along it | 0.7 m, 5° | — |
-| dock-ramp | logistics | a 3.5 m dock bay between bay lines at the ramp | trailer rear 0.15 m off the ramp face, square to it | 0.3 m, 2° | — |
-| slalom | depot | lane 12 m wide; four cone barriers 3.5 m long, alternating sides, 30 m apart | trailer rear back at a fixed point behind the start | 1.0 m, 6° | the lane's far end |
+| dock-ramp | logistics | one 4 m bay between two bay lines at the ramp | trailer rear 0.15 m off the ramp face, square to it | 0.3 m, 2° | — |
+| slalom | depot | lane y ∈ [14, 26] bounded by kerbs from x = 2 to 98; four barriers at x = 28, 48, 68, 88 (each five cones spanning 3.5 m) from alternating sides, south first; start truck rear axle (16, 20), heading 0 | trailer rear (2.5, 20), heading 0 | 1.0 m, 6° | (92, 20) |
 
 Layout constraints (Task 18 tests the first three; the implementer checks the rest by construction):
 - The combination starts straight and is clear for all four pairs (the longest, Arocs + Hüffermann, is 17.27 m from bumper to trailer rear).
 - It can move 0.5 m both ways from the start without an event.
 - No start is already within tolerance of its target.
 - The target zone is inside the yard and overlaps no obstacle.
+- Slalom fit:
+  - The longest trailer rear starts at x = 4.08 (1.58 m from the target; MAN + Krone at 5.71), and the target leaves 2.4 m to the fence.
+  - The truck front starts at 21.35, before the first barrier at 28.
+  - At the waypoint (rear axle x ≥ 89) the truck front is at least 94.35, short of the fence at 100.
+  - Each barrier leaves an 8.5 m passage.
 
 - [ ] **Step 1: Implement `streetFeatures`, `resolveLayout`, the two layouts, the five exercises and the registry** to the tables above.
 
@@ -1011,11 +1030,11 @@ Expected:
 - Test: `src/sim/simulation.test.ts`, `src/sim/replay.test.ts`
 
 **Interfaces:**
-- Consumes: Task 2 sim and vehicle contracts; `resolveCombination`, `trucks`, `trailers`, `truckById`, `trailerById` (`src/vehicles/*`). Tests stub `ContactQuery`; the real query (Task 8) is wired in Tasks 18 and 19.
+- Consumes: Task 2 sim, vehicle and exercise contracts, including `TRUCK_IDS`, `TRAILER_IDS`, `LAYOUT_IDS`, `EXERCISE_IDS`; `wrapAngle` (`src/sim/angle.ts`); `resolveCombination`, `trucks`, `trailers`, `truckById`, `trailerById` (`src/vehicles/*`). Tests stub `ContactQuery`; the real query (Task 8) is wired in Tasks 18 and 19.
 - Produces:
   - `src/sim/constants.ts`: `DT = 1 / 60`, `V_MAX = 5 / 3.6`, `ACCEL = 0.5`, `DECEL = 0.8`, `BRAKE_DECEL = 2.5`, `DRAWBAR_WIDTH = 0.6`, `MAX_STEPS_PER_FRAME = 8`, `PREDICT_STEP = 0.5`.
   - `src/sim/simulation.ts`: `createSimulation(params: VehicleParams, start: StartState, contacts: ContactQuery): Simulation`.
-  - `src/sim/geometry.ts`: `bodyFootprints(params: VehicleParams, s: SimSnapshot): BodyFootprint[]` (order: truck, drawbar, trailer); `wrapAngle(a: number): number`.
+  - `src/sim/geometry.ts`: `bodyFootprints(params: VehicleParams, s: SimSnapshot): BodyFootprint[]` (order: truck, drawbar, trailer).
   - `src/sim/clock.ts`: `advanceClock(accumulator: number, frameSeconds: number): { steps: number; accumulator: number }`.
   - `src/sim/predict.ts`: `predictTrailerRear(params: VehicleParams, from: SimSnapshot, direction: 1 | -1, distance: number): Vec2[]`.
   - `src/sim/replay.ts`: `createInputRecorder(): { record(step: number, control: ControlVector): void; finish(meta: Pick<InputLog, 'layoutId' | 'exerciseId' | 'truckId' | 'trailerId'>, steps: number): InputLog }`; `replaySnapshots(log: InputLog, sim: Simulation): SimSnapshot[]`; `parseInputLog(raw: string | null): InputLog | null`. The `step` passed to `record` is `sim.snapshot().step` before `sim.step(control)` runs, so the first is 0. Replay applies, at step i, the last change whose `step` ≤ i. `finish`'s `steps` is the final `snapshot().step`.
@@ -1076,7 +1095,7 @@ Prediction:
 Recorder:
 - Stores a change only when the control differs from the last stored one.
 - `replaySnapshots` feeds `log.steps` steps.
-- `parseInputLog` returns `null` for anything that is not a version-1 log with valid ids, non-negative integer `steps` and ascending change steps.
+- `parseInputLog` returns `null` for anything that is not a version-1 log whose ids are members of `TRUCK_IDS`, `TRAILER_IDS`, `LAYOUT_IDS` and `EXERCISE_IDS` (or `null` for `exerciseId`), with non-negative integer `steps` and ascending change steps.
 
 - [ ] **Step 1: Write the failing tests `src/sim/simulation.test.ts`**
 
@@ -1182,7 +1201,7 @@ Expected: PASS.
 - Create: `src/render/vehicle-visual.ts`, `dev/vehicles.html`, `dev/vehicles.ts`
 
 **Interfaces:**
-- Consumes: `VehicleVisual` (`src/render/seams.ts`); `truckAnchors`, `trailerAnchors`, `COUPLING_HEIGHT`; `placePose` (`src/render/coords.ts`); `createThreeSceneRenderer`, `placeholderParts`, `placeholderLayout` (Task 6); `trucks`, `trailers` (Task 7).
+- Consumes: `VehicleVisual` (`src/render/seams.ts`); `truckAnchors`, `trailerAnchors`, `COUPLING_HEIGHT`; `placePose` (`src/render/coords.ts`); `createThreeSceneRenderer`, `placeholderParts`, `placeholderLayout`, `mountPerfOverlay` (Task 6); `truckById`, `trailerById`, `resolveCombination` (Task 7).
 - Produces: `proceduralTruck(spec: TruckSpec, palette: ScenePalette): VehicleVisual`, `proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): VehicleVisual`.
 
 - [ ] **Step 1: Implement**
@@ -1201,7 +1220,7 @@ Trailer:
 
 Geometry merged per material; at most 6 draw calls per vehicle.
 
-- [ ] **Step 2: Dev harness** — `dev/vehicles.html` renders all four pairs side by side (placeholder environment) with `?truck=&trailer=` pickers and a slow automatic steer sweep.
+- [ ] **Step 2: Dev harness** — `dev/vehicles.html` renders one pair, chosen by `?truck=&trailer=` (default: the first of each), in the placeholder environment. It sweeps steer and both pivot angles slowly. Poses come from the Task 13 position formulas, inlined in `dev/vehicles.ts` (`H = P₀ − c u(θ₀)`, `P₁ = H − d u(θ₁)`, `P₂ = P₁ − L₂ u(θ₂)`, with `VehicleParams` from `resolveCombination`).
 
 - [ ] **Step 3: Manual verification**
 
@@ -1265,7 +1284,7 @@ Expected:
 - Create: `src/hud/hud.ts`, `src/hud/gauges.ts`, `src/hud/hud.css`, `dev/hud.html`, `dev/hud.ts`
 
 **Interfaces:**
-- Consumes: `SimSnapshot`, `ViewRects`, `AidFlags`, `TopDownMode`; `t`, `formatNumber`, `applyMessages` (Task 5); `computeViewports` (Task 6, harness only).
+- Consumes: `SimSnapshot`, `ViewRects`, `AidFlags`, `TopDownMode`; `t`, `formatNumber`, `applyMessages` (Task 5) with keys including `keySpace`, `keys`, `steer`, `speed`, `brake`, `gear`; `computeViewports` (Task 6, harness only).
 - Produces:
   - `src/hud/hud.ts`: `createHud(root: HTMLElement, opts: { couplingLimit: number; turntableLimit: number; mode: 'exercise' | 'yard'; aids: AidFlags; topDown: TopDownMode }): Hud`, with `Hud = { update(s: SimSnapshot): void; layout(views: ViewRects): void; onAction(cb: (a: HudAction) => void): void; dispose(): void }` and `HudAction = { type: 'topDown'; mode: TopDownMode } | { type: 'aid'; aid: keyof AidFlags; on: boolean } | { type: 'finish' } | { type: 'menu' }`.
   - `src/hud/gauges.ts`: `gaugeLevel(angle: number, limit: number): 'ok' | 'warn' | 'danger'` (`|angle| / limit` < 0.6 → ok, < 0.85 → warn, else danger).
@@ -1274,9 +1293,9 @@ Expected:
 Placement (from `layout(views)`, hairline chrome at the edges):
 - Cockpit: a dashboard band across its bottom 18 % (`--color-surface-muted`, 1px `--color-border` top) with the mono speed readout and the current gear letter (P / R / N / D; `--color-accent` unless P); mirror frames as 1px `--color-border` rounded rects over the mirror rects.
 - Blocked toast: centred near the cockpit top while `blocked` is set (`blockedContact` / `blockedCoupling` / `blockedTurntable`).
-- Top-down: a toggle row along its top edge (`viewFollow`/`viewYard`, four aid toggles); the two pivot gauges in its top-left (visible when `aids.pivots`); in exercise mode, mono counters (contacts, jackknifes, direction changes, time).
+- Top-down: a toggle row along its top edge (`viewFollow`/`viewYard`, four aid toggles); the two pivot gauges in its top-left (visible when `aids.pivots`); in exercise mode, mono counters (contacts, jackknifes, direction changes, time) at its top-right. Its bottom-left corner stays clear, because the lever overlays it in landscape.
 - Top-right of the screen: `finish` (exercise) or `menu` (yard).
-- Key legend: shown only when `matchMedia('(hover: hover) and (pointer: fine)')` matches.
+- Key legend: shown only when `matchMedia('(hover: hover) and (pointer: fine)')` matches. Its bindings (labels from `t`, keys in mono): A / D or ← / → → `steer`; W / S or ↑ / ↓ → `speed`; `keySpace` → `brake`; 1–4 = P / R / N / D → `gear`.
 
 Gauges: SVG semicircle from −limit to +limit with a needle at the angle and a mono readout with sign and `°`. The arc and needle use `--color-success` / `--color-warning` / `--color-danger` by `gaugeLevel`. This is the signature element.
 
@@ -1306,7 +1325,7 @@ Expected:
 
 **Interfaces:**
 - Consumes: `trucks`, `trailers` (Task 7).
-- Produces: `estimatesTable(): string` (Markdown table: Vehicle | Parameter | Value | Basis, one row per `status: 'estimate'` parameter, mm or ° units, data order).
+- Produces: `estimatesTable(): string` (Markdown table: Vehicle | Parameter | Value | Basis, one row per `status: 'estimate'` parameter in data order; values in mm, °, turns, turns/s or a count).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1330,7 +1349,7 @@ README sections:
 - Live URL.
 - Develop: `pnpm install`, `pnpm dev`, `pnpm test`, `pnpm test:e2e`, `pnpm test:perf` (headed, hardware GL, local only), `/?probe`, `?perf=1`.
 - Vehicles and sources (the five spec URLs).
-- Estimated parameters: the generated table between the markers, plus one line that measured values replace estimates in `src/vehicles/*.ts` without code changes, and one line that the turning radius is taken at the outer front wheel centre.
+- Estimated parameters: the generated table between the markers, nested as `<!-- prettier-ignore-start -->`, `<!-- estimates:start -->`, table, `<!-- estimates:end -->`, `<!-- prettier-ignore-end -->` so `format:check` leaves it byte-identical. Then one line that measured values replace estimates in `src/vehicles/*.ts` without code changes, and one line that the turning radius is taken at the outer front wheel centre.
 - Licence: Apache-2.0; Geist under OFL.
 - `© 2026 Patrick Kuhn`.
 
@@ -1345,14 +1364,14 @@ Expected: PASS.
 
 ### Task 18: Every pair drives in every layout and exercise
 
-**Depends on:** 7, 8, 10, 13 · **Parallel with:** 14–17
+**Depends on:** 7, 8, 9, 10, 13 · **Parallel with:** 14–17
 
 **Files:**
 - Test: `src/content/content.test.ts`
 - Modify (only if the test exposes bad coordinates): `src/content/layouts/*.ts`, `src/content/exercises/*.ts`
 
 **Interfaces:**
-- Consumes: `layouts`, `exercises`, `resolveLayout` (Task 10); `trucks`, `trailers`, `resolveCombination` (Task 7); `createSimulation`, `bodyFootprints` (Task 13); `createContactQuery`, `obbOverlap` (Task 8); `targetError` (Task 9).
+- Consumes: `layouts`, `exercises`, `resolveLayout` (Task 10); `LAYOUT_IDS`, `EXERCISE_IDS` (Task 2); `trucks`, `trailers`, `resolveCombination` (Task 7); `createSimulation`, `bodyFootprints` (Task 13); `createContactQuery`, `obbOverlap` (Task 8); `targetError` (Task 9).
 
 - [ ] **Step 1: Write the test**
 
@@ -1375,6 +1394,10 @@ describe.each(cases)('$name', ({ resolved, start, exercise }) => {
     it('target zone lies in the yard and overlaps no obstacle', ...);
     it.each(pairs)('%s + %s does not start inside the target tolerance', ...);
   }
+});
+it('registers exactly the contract ids', () => {
+  expect(Object.keys(layouts).sort()).toEqual([...LAYOUT_IDS].sort());
+  expect(exercises.map((e) => e.id)).toEqual([...EXERCISE_IDS]);
 });
 it('reversing into a real wall raises one contact and recovers forward', () => {
   // test-local wall obstacle behind the start; real query + sim: blocked 'contact', contacts 1; gear D → blocked null
@@ -1417,7 +1440,7 @@ Menu:
 - `<h1>` `appName` and the `tagline`.
 - Truck and trailer `<select>` with the `estimateNote` beside them.
 - `freeYard` buttons for both layouts; one `exercises` button per exercise (title plus its best result, or `noResult`). A button starts immediately with the selected pair.
-- Language and theme selects.
+- Language select (options `langDe`, `langEn`) and theme select (`themeSystem`, `themeLight`, `themeDark`).
 - Footer `© 2026 Patrick Kuhn`.
 - Every storage access goes through `safeStorage`; failures fall back to defaults.
 
@@ -1448,6 +1471,7 @@ Run `pnpm dev --host`. Check on desktop at 1440×900, in DevTools at Galaxy Tab 
 Expected:
 - Cockpit, both mirrors and the top-down view are visible together in every orientation.
 - All four pairs drive forward and backward in both yards and all five exercises.
+- While driving, every pair's drawbar eye meets the truck coupling and the trailer body pivots over the turntable.
 - Each of the five exercises can be driven to "target reached" with MAN + Krone and with Arocs + Hüffermann. An exercise that cannot be completed becomes an issue against its Task 10 file; this task does not edit content.
 - An exercise ends on reaching the target, and the best result shows in the menu.
 - Rotating the tablet mid-run keeps the run going, with the views re-laid out.
@@ -1520,6 +1544,7 @@ test('loads from the subpath and drives an exercise offline', async ({ page, con
   await page.reload();
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(page.locator('[data-hud="speed"]')).toHaveText('0.0 km/h');
   await page.keyboard.press('2');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
   await expect(page.locator('[data-hud="speed"]')).not.toHaveText('0.0 km/h');

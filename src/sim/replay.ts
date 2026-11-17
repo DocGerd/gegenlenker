@@ -5,12 +5,14 @@ import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 
 const GEARS: readonly Gear[] = ['P', 'R', 'N', 'D'];
 
+// Bounds a log's size and the snapshots a replay computes; a corrupt or hostile `steps` must not exhaust memory.
+export const MAX_REPLAY_STEPS = 72_000;
+
+export type RunIds = Pick<InputLog, 'layoutId' | 'exerciseId' | 'truckId' | 'trailerId'>;
+
 export type InputRecorder = {
   record(step: number, control: ControlVector): void;
-  finish(
-    meta: Pick<InputLog, 'layoutId' | 'exerciseId' | 'truckId' | 'trailerId'>,
-    steps: number,
-  ): InputLog;
+  finish(meta: RunIds, steps: number): InputLog;
 };
 
 const sameControl = (a: ControlVector, b: ControlVector): boolean =>
@@ -28,12 +30,18 @@ export function createInputRecorder(): InputRecorder {
   let last: ControlVector | null = null;
   return {
     record(step, control) {
+      if (step >= MAX_REPLAY_STEPS) return;
       if (last !== null && sameControl(last, control)) return;
       last = copyControl(control);
       changes.push({ step, control: last });
     },
     finish(meta, steps) {
-      return { version: 1, ...meta, steps, changes: [...changes] };
+      return {
+        version: 1,
+        ...meta,
+        steps: Math.min(steps, MAX_REPLAY_STEPS),
+        changes: [...changes],
+      };
     },
   };
 }
@@ -69,7 +77,15 @@ function parseControl(v: unknown): ControlVector | null {
   return { steer, lever, brake, gear };
 }
 
-export function parseInputLog(raw: string | null): InputLog | null {
+export function serializeInputLog(log: InputLog, fingerprint: (ids: RunIds) => string): string {
+  return JSON.stringify({ ...log, fingerprint: fingerprint(log) });
+}
+
+/** Null unless the log was stored for the data `fingerprint` now reports for its ids. */
+export function parseInputLog(
+  raw: string | null,
+  fingerprint: (ids: RunIds) => string,
+): InputLog | null {
   if (raw === null) return null;
   let data: unknown;
   try {
@@ -82,6 +98,7 @@ export function parseInputLog(raw: string | null): InputLog | null {
   if (!isMember(LAYOUT_IDS, layoutId) || !isMember(TRUCK_IDS, truckId)) return null;
   if (!isMember(TRAILER_IDS, trailerId) || !isStep(steps) || !Array.isArray(changes)) return null;
   if (exerciseId !== null && !isMember(EXERCISE_IDS, exerciseId)) return null;
+  if (data.fingerprint !== fingerprint({ layoutId, exerciseId, truckId, trailerId })) return null;
   const parsed: InputChange[] = [];
   for (const change of changes as unknown[]) {
     if (!isRecord(change)) return null;
