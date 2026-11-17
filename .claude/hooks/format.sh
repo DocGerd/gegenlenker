@@ -16,8 +16,11 @@ prettier=$root/node_modules/.bin/prettier
 [ -x "$prettier" ] || prettier=$(dirname "$common")/node_modules/.bin/prettier
 [ -x "$prettier" ] || exit 0
 
+config=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)/.prettierrc.json
+[ -f "$config" ] || exit 0
+
 cd "$root" || exit 0
-"$prettier" --write --ignore-unknown \
+"$prettier" --write --ignore-unknown --config "$config" \
   --ignore-path .gitignore --ignore-path .prettierignore \
   --ignore-path "$(git rev-parse --git-path info/exclude)" \
   -- "$file" >/dev/null 2>&1
