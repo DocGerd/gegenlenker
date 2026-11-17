@@ -12,6 +12,7 @@ Dev server: `pnpm dev`. CI runs the rest in order (`.github/workflows/ci.yml`); 
 - Unit tests: `pnpm test`; single test: `pnpm exec vitest run <file> -t '<name>'`
 - Build: `BASE_PATH=/gegenlenker/ pnpm build`
 - Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`)
+- Local-only ignores go in `.git/info/exclude` as unanchored patterns (`dir/`, not `/dir/`); the format scripts pass it to Prettier.
 
 ## Layering
 
@@ -19,6 +20,8 @@ Dev server: `pnpm dev`. CI runs the rest in order (`.github/workflows/ci.yml`); 
 - `src/{contracts,vehicles,sim,scoring,content}` also import none of `render/app/hud/input/pwa/i18n` and use none of `window`, `document`, `navigator`, `localStorage`, `performance`, `requestAnimationFrame` (same config).
 - Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it, so cockpit and mirrors never see them.
 - Vertex colours must be linear: set a `Color` from the palette (`color.set` converts) and pass it to `tint()` (`src/render/environment.ts`); raw palette bytes render too light.
+- ESLint is type-aware (`strictTypeChecked`): fix findings in source, no `eslint-disable`.
+- The `query(root, name, Type)` DOM helpers (menu, hud, controls) throw unless the element is `instanceof Type`: pass the real class (`SVGElement` for `<svg>`/`<g>`, `HTMLSelectElement` for `<select>`).
 - Changing `--scene-*` tokens: keep the T1-T3 contrast targets in `docs/brand/BRAND.md`; `src/styles/tokens.test.ts` enforces them.
 
 ## Units and signs
@@ -59,6 +62,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - UI text goes through `t()`; keys live in `src/i18n/en.ts`, and `de.ts` is typed against them, so both must define every key.
 - Choose the merge method per PR: merge commit when the commits are meaningful; no squash by default.
 - Commit as `13460098+DocGerd@users.noreply.github.com` (repo-local `user.email`), never the owner's real address.
-- `main` requires PRs to be up to date: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next one and wait for CI.
+- `main` ruleset (no bypass) requires up-to-date PRs and resolved review threads: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next one and wait for CI.
+- Pin actions to a full commit SHA with a `# vX.Y.Z` comment (repo enforces `sha_pinning_required`); Dependabot keeps them current.
 - A merge to `main` that passes CI deploys via `.github/workflows/deploy.yml` (`workflow_run`); `workflow_dispatch` is the fallback.
 - Merge reviewed PRs with green CI without asking, until the project moves to gitflow and a first release.
