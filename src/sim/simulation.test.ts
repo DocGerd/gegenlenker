@@ -181,6 +181,27 @@ describe('simulation', () => {
     }
   });
 
+  it('positive steer turns left, and reversing with it swings the trailer rear left first', () => {
+    for (const { p } of pairs) {
+      const forward = createSimulation(p, origin, noContacts);
+      const turned = last(drive(forward, ctl({ steer: 0.5, lever: 1 }), 200));
+      expect(turned.truck.heading).toBeGreaterThan(0);
+
+      const reverse = createSimulation(p, origin, noContacts);
+      const snaps = driveUntil(
+        reverse,
+        ctl({ steer: 0.5, lever: 1, gear: 'R' }),
+        (s) => Math.abs(s.trailerRear.y) > 0.05,
+      );
+      expect(last(snaps).trailerRear.y).toBeGreaterThan(0);
+      for (const s of snaps) {
+        expect(s.trailerRear.y).toBeGreaterThan(-1e-6);
+        expect(wrapAngle(s.truck.heading - s.dolly.heading)).toBeCloseTo(s.couplingAngle, 9);
+        expect(wrapAngle(s.dolly.heading - s.trailer.heading)).toBeCloseTo(s.turntableAngle, 9);
+      }
+    }
+  });
+
   it('straight reversing with a small disturbance diverges', () => {
     const sim = createSimulation(manKrone(), { ...origin, turntableAngle: deg(0.5) }, noContacts);
     const { snaps } = driveDistance(sim, ctl({ lever: 1, gear: 'R' }), 10);
