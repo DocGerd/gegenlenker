@@ -37,3 +37,37 @@ test('loads from the subpath and drives an exercise offline', async ({
   await expect(speed).not.toHaveText('0.0 km/h');
   expect(foreign).toEqual([]);
 });
+
+test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  const reset = page.getByRole('button', { name: en.resetView });
+  const lever = page.locator('[data-ctl="lever"]');
+  await expect(reset).toBeDisabled();
+
+  // Landscape: the speed lever sits inside the top-down pane, above the canvas.
+  const box = await lever.boundingBox();
+  if (box === null) throw new Error('lever has no box');
+  const x = box.x + box.width / 2;
+  await page.mouse.move(x, box.y + box.height - 4);
+  await page.mouse.down();
+  await page.mouse.move(x, box.y + box.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await expect
+    .poll(() => lever.evaluate((el) => el.style.getPropertyValue('--lever')))
+    .not.toBe('0');
+  await expect(reset).toBeDisabled();
+
+  const free = { x: 1024, y: 400 };
+  await page.mouse.move(free.x, free.y);
+  await page.mouse.wheel(0, -400);
+  await expect(reset).toBeEnabled();
+  await reset.click();
+  await expect(reset).toBeDisabled();
+
+  await page.mouse.move(free.x, free.y);
+  await page.mouse.down();
+  await page.mouse.move(free.x - 30, free.y + 20, { steps: 4 });
+  await page.mouse.up();
+  await expect(reset).toBeEnabled();
+});

@@ -4,6 +4,7 @@ import { en } from '../src/i18n/en';
 const sizes = [
   { width: 768, height: 1024 },
   { width: 800, height: 820 },
+  { width: 1024, height: 600 },
   { width: 1280, height: 800 },
 ];
 
@@ -30,7 +31,7 @@ for (const size of sizes) {
     const mirrors = page.locator('.hud-mirror:not([hidden])');
     await expect(mirrors).toHaveCount(2);
     const controls = page.locator(
-      '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever',
+      '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
     );
 
     const mirrorBoxes = await boxes(mirrors);

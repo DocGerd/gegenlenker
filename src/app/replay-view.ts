@@ -3,6 +3,8 @@ import { resolveLayout } from '../content/resolve-layout';
 import type { InputLog } from '../contracts/exercise';
 import type { AidFlags, RenderFrame } from '../contracts/render';
 import type { Simulation } from '../contracts/sim';
+import { createTopDownInput } from '../input/top-down-input';
+import { isDefaultView } from '../input/top-down-view';
 import { formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { computeViewports } from '../render/viewports';
@@ -122,6 +124,8 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     });
     return { el, value };
   });
+  const resetButton = button('app-button', t('resetView'), () => viewInput.reset());
+  resetButton.disabled = true;
   const speedGroup = document.createElement('div');
   speedGroup.className = 'replay-group';
   speedGroup.setAttribute('role', 'group');
@@ -129,7 +133,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   speedGroup.append(...speedButtons.map((s) => s.el));
   const timeLabel = document.createElement('span');
   timeLabel.className = 'replay-time mono';
-  bar.append(playButton, speedGroup, button('app-button', t('back'), exit), timeLabel);
+  bar.append(playButton, speedGroup, resetButton, button('app-button', t('back'), exit), timeLabel);
   stage.append(bar);
 
   function sync(): void {
@@ -149,9 +153,21 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     predicted: NO_PREDICTION,
   };
 
+  const viewInput = createTopDownInput(view.canvas, {
+    mode: 'yard',
+    getRect: () => frame.views.topDown,
+    onChange(next) {
+      frame.topDownView = next;
+      resetButton.disabled = isDefaultView(next);
+      dirty = true;
+    },
+  });
+  cleanups.push(() => viewInput.dispose());
+
   view.start({
     resized(width, height) {
       frame.views = computeViewports(width, height, 'replay');
+      viewInput.relayout();
       dirty = true;
     },
     restored() {

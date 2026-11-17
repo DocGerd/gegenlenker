@@ -44,6 +44,8 @@ export const de: Record<MessageKey, string> = {
   labelTopDown: 'Draufsicht',
   viewFollow: 'Folgen',
   viewYard: 'Ganzer Hof',
+  resetView: 'Ansicht zurücksetzen',
+  zoom: 'Zoom',
   aidPivots: 'Knickwinkel',
   aidPath: 'Vorausschau',
   aidTracks: 'Radspuren',

@@ -29,6 +29,7 @@ export type StageHooks = {
 
 export type RenderStage = {
   readonly renderer: SceneRenderer;
+  readonly canvas: HTMLCanvasElement;
   start(hooks: StageHooks): void;
   dispose(): void;
 };
@@ -116,6 +117,7 @@ export function mountRenderStage(
 
   return {
     renderer,
+    canvas,
     start(next) {
       hooks = next;
       observer.observe(host);

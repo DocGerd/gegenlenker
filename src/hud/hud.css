@@ -123,6 +123,11 @@
   display: none;
 }
 
+/* The single column is too tall for the zoom rows: they would reach the mirror. */
+.hud-cockpit[data-compact] .hud-legend-view {
+  display: none;
+}
+
 .hud-cockpit[data-compact] .hud-legend dl {
   grid-template-columns: auto;
   margin-top: 0;
@@ -132,7 +137,7 @@
   margin-bottom: var(--space-1);
 }
 
-.hud-cockpit[data-compact] .hud-legend dd:last-child {
+.hud-cockpit[data-compact] .hud-legend dd:has(+ .hud-legend-view) {
   margin-bottom: 0;
 }
 
@@ -208,6 +213,29 @@
   border-color: var(--color-accent);
   background: var(--color-accent-tint);
   color: var(--color-accent-strong);
+}
+
+.hud-toggle:disabled {
+  opacity: 0.4;
+}
+
+.hud-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-target);
+  padding: 0;
+}
+
+.hud-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 
 .hud-action {

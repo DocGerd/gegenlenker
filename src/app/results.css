@@ -128,6 +128,10 @@
   min-width: var(--size-target);
 }
 
+.replay-bar .app-button:disabled {
+  opacity: 0.4;
+}
+
 .replay-bar .app-button[aria-pressed='true'] {
   border-color: transparent;
   background: var(--color-accent);

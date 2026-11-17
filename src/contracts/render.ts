@@ -15,6 +15,13 @@ export type ViewRects = {
 };
 export type ViewMode = 'drive' | 'replay';
 export type TopDownMode = 'follow' | 'yard';
+/** Relative to the mode's default framing; pan is in units of its base half-height, sim-plane axes (y up). */
+export type TopDownView = {
+  readonly zoom: number;
+  readonly panX: number;
+  readonly panY: number;
+};
+export const DEFAULT_TOP_DOWN_VIEW: TopDownView = { zoom: 1, panX: 0, panY: 0 };
 export type AidFlags = {
   readonly pivots: boolean;
   readonly path: boolean;
@@ -50,6 +57,8 @@ export type RenderFrame = {
   readonly snapshot: SimSnapshot;
   readonly views: ViewRects;
   readonly topDown: TopDownMode;
+  /** Absent means the default framing. */
+  readonly topDownView?: TopDownView;
   readonly aids: AidFlags;
   readonly predicted: Prediction;
 };
