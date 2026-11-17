@@ -52,6 +52,8 @@ export type DriveHandlers = {
   readonly onExit: (outcome: DriveOutcome) => void;
   /** The run was dropped unscored and unrecorded. */
   readonly onRestart: () => void;
+  /** The run was left unscored; nothing is stored. */
+  readonly onLeave: () => void;
 };
 
 /** Returns the back action: opens the pause sheet, closes it when open, or leaves when no stage could mount. */
@@ -59,7 +61,7 @@ export function startDrive(
   root: HTMLElement,
   run: RunConfig,
   settings: Settings,
-  { onExit, onRestart }: DriveHandlers,
+  { onExit, onRestart, onLeave }: DriveHandlers,
 ): () => void {
   const truck = truckById(run.truckId);
   const trailer = trailerById(run.trailerId);
@@ -126,6 +128,11 @@ export function startDrive(
     dispose();
     onRestart();
   };
+  const leaveUnscored = (): void => {
+    if (disposed) return;
+    dispose();
+    onLeave();
+  };
 
   // The sim stands still while the sheet is open; rendering carries on for resizes.
   let closeSheet: (() => void) | null = null;
@@ -142,6 +149,7 @@ export function startDrive(
       continue: resume,
       restart,
       finish,
+      leave: exercise === null ? null : leaveUnscored,
     });
   };
 

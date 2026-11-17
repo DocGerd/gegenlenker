@@ -222,6 +222,14 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     timeLabel,
   );
   stage.append(bar);
+  playButton.focus();
+  const onEscape = (e: KeyboardEvent): void => {
+    if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
+    e.preventDefault();
+    exit();
+  };
+  window.addEventListener('keydown', onEscape);
+  cleanups.push(() => window.removeEventListener('keydown', onEscape));
 
   function sync(): void {
     const label: MessageKey = playing ? 'pause' : 'play';

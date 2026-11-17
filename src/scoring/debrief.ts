@@ -26,8 +26,9 @@ export type Deltas = Readonly<
   >
 >;
 
-/** Run minus best: negative is better for every measure. */
-export function deltasToBest(r: RunResult, best: RunResult): Deltas {
+/** Run minus best: negative is better for every measure. Null unless both reached the target. */
+export function deltasToBest(r: RunResult, best: RunResult): Deltas | null {
+  if (!r.reached || !best.reached) return null;
   return {
     positionError: r.positionError - best.positionError,
     angleError: r.angleError - best.angleError,

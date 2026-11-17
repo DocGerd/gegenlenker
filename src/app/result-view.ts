@@ -155,13 +155,40 @@ export function showResult(
   );
 
   const buttons = element('div', 'result-actions');
-  if (actions.next !== null) buttons.append(action('nextExercise', actions.next, true));
-  buttons.append(action('retry', actions.retry, actions.next === null));
+  const next = actions.next === null ? null : action('nextExercise', actions.next, true);
+  const retry = action('retry', actions.retry, next === null);
+  if (next !== null) buttons.append(next);
+  buttons.append(retry);
   if (actions.replay !== null) buttons.append(action('replay', actions.replay, false));
   buttons.append(action('menu', actions.menu, false));
 
   card.append(header, values, buttons);
   container.append(card);
   root.append(container);
-  return () => container.remove();
+  (next ?? retry).focus();
+  const onEscape = (e: KeyboardEvent): void => {
+    if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
+    e.preventDefault();
+    actions.menu();
+  };
+  // A run ends while Space (the brake) may still be held; its repeats and release must not click the focused button.
+  let spaceFree = false;
+  const guardSpace = (e: KeyboardEvent): void => {
+    if (e.code !== 'Space' || spaceFree) return;
+    if (e.type === 'keydown' && !e.repeat) {
+      spaceFree = true;
+      return;
+    }
+    if (e.type === 'keyup') spaceFree = true;
+    e.preventDefault();
+  };
+  window.addEventListener('keydown', onEscape);
+  window.addEventListener('keydown', guardSpace, true);
+  window.addEventListener('keyup', guardSpace, true);
+  return () => {
+    window.removeEventListener('keydown', onEscape);
+    window.removeEventListener('keydown', guardSpace, true);
+    window.removeEventListener('keyup', guardSpace, true);
+    container.remove();
+  };
 }
