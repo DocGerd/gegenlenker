@@ -1,5 +1,7 @@
-import type { BestResults, RunResult } from '../contracts/exercise';
+import { exerciseById } from '../content/registry';
+import type { BestResults, InputLog, RunResult } from '../contracts/exercise';
 import { parseBestResults, recordBest, serializeBestResults } from '../scoring/best';
+import { parseInputLog } from '../sim/replay';
 
 export const SETTINGS_KEY = 'gegenlenker.settings.v1';
 export const BEST_KEY = 'gegenlenker.best.v1';
@@ -31,11 +33,22 @@ export function readText(key: string): string | null {
   }
 }
 
-export function writeText(key: string, value: string): void {
+/** False when the value was not stored (quota, revoked access): it then lives only for this session. */
+export function writeText(key: string, value: string): boolean {
   try {
-    safeStorage()?.setItem(key, value);
+    const storage = safeStorage();
+    storage?.setItem(key, value);
+    return storage !== null;
   } catch {
-    // Quota or revoked access: the value lives only for this session.
+    return false;
+  }
+}
+
+export function removeText(key: string): void {
+  try {
+    safeStorage()?.removeItem(key);
+  } catch {
+    // Nothing stored that could be stale.
   }
 }
 
@@ -47,7 +60,42 @@ export function bestResults(): BestResults {
   return best;
 }
 
-export function storeResult(result: RunResult): void {
-  best = recordBest(bestResults(), result).best;
-  writeText(BEST_KEY, serializeBestResults(best));
+/** Returns whether the run is a new best. */
+export function storeResult(result: RunResult): boolean {
+  const recorded = recordBest(bestResults(), result);
+  best = recorded.best;
+  const json = serializeBestResults(best);
+  if (!writeText(BEST_KEY, json)) {
+    // A large old run log must not cost the driver their best result.
+    removeText(LAST_RUN_KEY);
+    writeText(BEST_KEY, json);
+  }
+  return recorded.isNewBest;
+}
+
+// Bounds the snapshots a replay precomputes; a corrupt or hostile `steps` must not exhaust memory.
+export const MAX_REPLAY_STEPS = 72_000;
+
+export function isReplayable(log: InputLog): boolean {
+  if (log.steps === 0 || log.steps > MAX_REPLAY_STEPS) return false;
+  if (log.exerciseId === null) return true;
+  return exerciseById(log.exerciseId).layout === log.layoutId;
+}
+
+// Held in memory as well, so a replay works when storage is unavailable or full.
+let last: InputLog | null | undefined;
+
+export function lastRun(): InputLog | null {
+  if (last === undefined) {
+    const log = parseInputLog(readText(LAST_RUN_KEY));
+    last = log !== null && isReplayable(log) ? log : null;
+  }
+  return last;
+}
+
+export function storeLastRun(log: InputLog): void {
+  if (log.steps === 0) return;
+  last = isReplayable(log) ? log : null;
+  // A failed write must not leave an older run behind to be replayed after a reload.
+  if (last === null || !writeText(LAST_RUN_KEY, JSON.stringify(log))) removeText(LAST_RUN_KEY);
 }

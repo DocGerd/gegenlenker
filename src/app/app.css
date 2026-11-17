@@ -156,7 +156,8 @@
   color: var(--color-text-muted);
 }
 
-.drive {
+.drive,
+.replay {
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -211,6 +212,6 @@
   color: var(--color-on-accent);
 }
 
-.app-screen:has(.drive) ~ .update-toast {
+.app-screen:has(.drive, .replay) ~ .update-toast {
   display: none;
 }
