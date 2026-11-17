@@ -82,6 +82,7 @@ function snapshotAt(
     speed: SPEED,
     control,
     blocked: null,
+    contact: null,
     contacts: 0,
     jackknifes: 0,
     directionChanges: 0,

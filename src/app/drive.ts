@@ -12,12 +12,12 @@ import { isDefaultView } from '../input/top-down-view';
 import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay } from '../render/perf-overlay';
 import { computeViewports } from '../render/viewports';
-import { createRunTracker, runResult } from '../scoring/score';
+import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
 import { createContactQuery } from '../sim/collision';
 import { bodyFootprints } from '../sim/geometry';
-import { DT } from '../sim/constants';
-import { NO_PREDICTION, predictCombination } from '../sim/predict';
+import { CONTACT_WARN_DISTANCE, DT } from '../sim/constants';
+import { contactAhead, NO_PREDICTION, predictCombination } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
@@ -78,8 +78,9 @@ export function startDrive(
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
   let reached = false;
-  // Sticky over aid toggles; paused time does not count, only sim steps taken with an aid on.
+  // Sticky over aid toggles; only sim steps after the first driving input with an aid on count.
   let assisted = false;
+  let startTime: number | null = null;
 
   const stage = document.createElement('div');
   stage.className = 'drive';
@@ -115,6 +116,7 @@ export function startDrive(
             reached,
             tracker?.waypointVisited() ?? true,
             assisted,
+            startTime ?? snapshot.time,
           )
         : null;
     dispose();
@@ -170,6 +172,7 @@ export function startDrive(
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
   let pathStale = true;
+  let warnContact = false;
   const frame: Frame = {
     snapshot,
     views: computeViewports(1, 1, 'drive'),
@@ -290,11 +293,12 @@ export function startDrive(
       const clock =
         closeSheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
-      if (clock.steps > 0 && anyAid(aids)) assisted = true;
       for (let i = 0; i < clock.steps; i++) {
         controls.tick(DT, snapshot.steer);
         const control = controls.control();
         recorder.record(snapshot.step, control);
+        if (startTime === null && isDrivingInput(control)) startTime = snapshot.time;
+        if (startTime !== null && anyAid(aids)) assisted = true;
         snapshot = sim.step(control);
         if (tracker !== null) {
           reached = tracker.update(snapshot);
@@ -314,13 +318,19 @@ export function startDrive(
         frame.predicted = aids.path
           ? predictCombination(params, snapshot, contacts)
           : NO_PREDICTION;
+        // the warning does not depend on the path aid, so a short look-ahead stands in when it is off
+        const ahead = aids.path
+          ? frame.predicted
+          : predictCombination(params, snapshot, contacts, CONTACT_WARN_DISTANCE);
+        warnContact = snapshot.speed !== 0 && contactAhead(ahead);
       }
       frame.snapshot = snapshot;
       frame.waypointVisited = tracker?.waypointVisited() ?? false;
       frame.topDown = topDown;
       frame.aids = aids;
       renderer.render(frame);
-      hud.update(snapshot);
+      hud.update(snapshot, warnContact);
+      hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goal(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
       hud.setTargetArrow(

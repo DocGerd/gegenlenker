@@ -76,6 +76,7 @@ function snapshotAt(seconds: number, v: VehicleParams): SimSnapshot {
     speed: 0,
     control,
     blocked: null,
+    contact: null,
     contacts: 0,
     jackknifes: 0,
     directionChanges: 0,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Obstacle } from '../contracts/layout';
 import type { BodyFootprint, Obb } from '../contracts/sim';
-import { createContactQuery, obbOverlap, OVERLAP_EPSILON } from './collision';
+import { contactPoint, createContactQuery, obbOverlap, OVERLAP_EPSILON } from './collision';
 
 const box = (cx: number, cy: number, halfLength: number, halfWidth: number, heading = 0): Obb => ({
   cx,
@@ -61,6 +61,43 @@ describe('obbOverlap', () => {
   });
 });
 
+describe('contactPoint', () => {
+  it('is the centre of the overlap of axis-aligned boxes', () => {
+    const p = contactPoint(box(0, 0, 2, 1), box(3, 0.5, 2, 1));
+    expect(p.x).toBeCloseTo(1.5);
+    expect(p.y).toBeCloseTo(0.25);
+  });
+
+  it('is the same from either box', () => {
+    const a = box(0, 0, 2, 1, 0.3);
+    const b = box(2.5, 0.4, 1.5, 1, -0.5);
+    const [p, q] = [contactPoint(a, b), contactPoint(b, a)];
+    expect(p.x).toBeCloseTo(q.x);
+    expect(p.y).toBeCloseTo(q.y);
+  });
+
+  it('lies inside both boxes for rotated overlap', () => {
+    const a = box(0, 0, 2, 1, 0.3);
+    const b = box(2.5, 0.4, 1.5, 1, -0.5);
+    const inside = (obb: Obb, p: { x: number; y: number }): boolean => {
+      const [dx, dy] = [p.x - obb.cx, p.y - obb.cy];
+      const [c, s] = [Math.cos(obb.heading), Math.sin(obb.heading)];
+      return (
+        Math.abs(dx * c + dy * s) <= obb.halfLength && Math.abs(-dx * s + dy * c) <= obb.halfWidth
+      );
+    };
+    const p = contactPoint(a, b);
+    expect(inside(a, p)).toBe(true);
+    expect(inside(b, p)).toBe(true);
+  });
+
+  it('is the inner box centre when one box contains the other', () => {
+    const p = contactPoint(box(0, 0, 5, 5), box(1, 2, 1, 1));
+    expect(p.x).toBeCloseTo(1);
+    expect(p.y).toBeCloseTo(2);
+  });
+});
+
 describe('createContactQuery', () => {
   const truck = (obb: Obb): BodyFootprint => ({ body: 'truck', obb });
   const drawbar = (obb: Obb): BodyFootprint => ({ body: 'drawbar', obb });
@@ -78,6 +115,7 @@ describe('createContactQuery', () => {
     expect(query([truck(clearTruck), drawbar(clearDrawbar), trailer(clearTrailer)])).toEqual({
       body: 'truck',
       obstacleId: 'c',
+      point: { x: 0, y: 0 },
     });
   });
 
@@ -87,6 +125,7 @@ describe('createContactQuery', () => {
     expect(query([truck(clearTruck), drawbar(clearDrawbar), trailer(overlapping)])).toEqual({
       body: 'trailer',
       obstacleId: 'self',
+      point: { x: 0, y: 0 },
     });
   });
 

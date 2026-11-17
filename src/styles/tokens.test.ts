@@ -123,7 +123,7 @@ const bundle: Record<string, [light: string, dark?: string | false]> = {
   '--color-surface-subtle': ['f4f5f7', '141619'],
   '--color-surface-muted': ['eef0f2', '1b1e22'],
   '--color-divider': ['e6e9ec', '202428'],
-  '--color-border': ['dce0e4', '2a2e33'],
+  '--color-border': ['80878f', '656b72'],
   '--color-text': ['14161a', 'eceef1'],
   '--color-text-secondary': ['3b4046', 'c2c7cd'],
   '--color-text-muted': ['5e646b', '969ca4'],
@@ -224,6 +224,22 @@ describe('WCAG AA contrast', () => {
         expect(contrast(value(foreground, theme), value(background, theme))).toBeGreaterThanOrEqual(
           4.5,
         );
+      });
+    }
+  }
+});
+
+describe('non-text UI contrast', () => {
+  // WCAG 1.4.11: borders (and the lever rail outline) sit on every surface, the lever fill on its rail.
+  const surfaces = [...grounds, '--color-surface-muted'];
+  const nonText: [indicator: string, ground: string][] = [
+    ...surfaces.map((ground): [string, string] => ['--color-border', ground]),
+    ['--color-accent', '--color-surface-muted'],
+  ];
+  for (const theme of ['light', 'dark'] as const) {
+    for (const [indicator, ground] of nonText) {
+      it(`${theme}: ${indicator} on ${ground} is 3:1 or more`, () => {
+        expect(contrast(value(indicator, theme), value(ground, theme))).toBeGreaterThanOrEqual(3);
       });
     }
   }
@@ -337,6 +353,31 @@ describe('scene tokens', () => {
   it('aid accent against its casing is 3:1 or more', () => {
     expect(contrast(scene('accent'), scene('wheel'))).toBeGreaterThanOrEqual(3);
   });
+
+  // Contact marker: a marking-coloured core on the wheel casing, drawn over what is touched.
+  // The core carries the dark surfaces, the casing the light ones.
+  const darkContactSurfaces = [
+    'cone',
+    'wall',
+    'ramp',
+    'fence',
+    'parked',
+    'hall',
+    'band',
+    'lamp',
+    'street',
+    'tracks',
+  ];
+  it.each(darkContactSurfaces)('contact marker core against %s is 3:1 or more', (surface) => {
+    expect(contrast(scene('marking'), scene(surface))).toBeGreaterThanOrEqual(3);
+  });
+
+  it.each(['yard', 'body', 'cab', 'kerb'])(
+    'contact marker casing against %s is 3:1 or more',
+    (surface) => {
+      expect(contrast(scene('wheel'), scene(surface))).toBeGreaterThanOrEqual(3);
+    },
+  );
 
   // Routing: a single-tone obstacle on the yard resolves to a key that satisfies T1 there.
   describe('obstacle palette keys over the resolved layouts', () => {

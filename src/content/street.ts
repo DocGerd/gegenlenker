@@ -115,7 +115,8 @@ export function addYardEdge(
 }
 
 const LAMP_SIZE = 0.3;
-const LAMP_HEIGHT = 6;
+const MAST_HEIGHT = 10; // floodlight mast in the yard corners
+const STREET_LAMP_HEIGHT = 8;
 const LAMP_INSET = 1.5;
 const LAMP_SPACING = 25;
 
@@ -124,13 +125,41 @@ export function addLamps(b: ObstacleBuilder, street: StreetSpec): void {
   const { minX, minY, maxX, maxY } = YARD;
   for (const x of [minX + LAMP_INSET, maxX - LAMP_INSET]) {
     for (const y of [minY + LAMP_INSET, maxY - LAMP_INSET]) {
-      b.addBox('lamp', x, y, LAMP_SIZE, LAMP_SIZE, 0, LAMP_HEIGHT);
+      b.addBox('lamp', x, y, LAMP_SIZE, LAMP_SIZE, 0, MAST_HEIGHT);
     }
   }
   const y = street.kerbY - street.width - street.pavement / 2;
   for (let x = street.fromX + 15; x <= street.toX - 15; x += LAMP_SPACING) {
-    b.addBox('lamp', x, y, LAMP_SIZE, LAMP_SIZE, 0, LAMP_HEIGHT);
+    b.addBox('lamp', x, y, LAMP_SIZE, LAMP_SIZE, 0, STREET_LAMP_HEIGHT);
   }
+}
+
+const BOLLARD_SIZE = 0.25;
+const BOLLARD_HEIGHT = 1.2;
+const GATEHOUSE = { gap: 3, length: 4, width: 3.2, height: 3, y: 3 }; // gap from the entrance edge
+const BARRIER = { inset: 0.5, y: 2, length: 0.4, width: 0.6, height: 1 };
+const GATEHOUSE_BOLLARD_Y = [1.3, 4.7];
+
+export function addBollard(b: ObstacleBuilder, x: number, y: number): void {
+  b.addBox('bollard', x, y, BOLLARD_SIZE, BOLLARD_SIZE, 0, BOLLARD_HEIGHT);
+}
+
+/** Gatehouse and barrier post beside the entrance, with bollards guarding the gatehouse. */
+export function addGate(b: ObstacleBuilder, { entrance }: StreetSpec): void {
+  const { gap, length, width, height, y } = GATEHOUSE;
+  const x = entrance.toX + gap + length / 2;
+  b.addBox('gatehouse', x, y, length, width, 0, height);
+  for (const by of GATEHOUSE_BOLLARD_Y) addBollard(b, x - length / 2 - 1, by);
+  // heading pi: the boom of the raised barrier points into the entrance
+  b.addBox(
+    'barrier',
+    entrance.toX + BARRIER.inset,
+    BARRIER.y,
+    BARRIER.length,
+    BARRIER.width,
+    Math.PI,
+    BARRIER.height,
+  );
 }
 
 /** Stop line across the yard exit with an arrow pointing out. A kerbed street carries no edge lines. */

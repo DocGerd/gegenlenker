@@ -2,6 +2,7 @@ import type {
   BlockReason,
   ContactQuery,
   ControlVector,
+  SimContact,
   Simulation,
   SimSnapshot,
   StartState,
@@ -9,6 +10,7 @@ import type {
 import type { VehicleParams } from '../contracts/vehicle';
 import { wrapAngle } from './angle';
 import { ACCEL, BRAKE_DECEL, DECEL, DT, EVENT_CLEAR_DISTANCE, V_MAX } from './constants';
+import { SELF_OBSTACLE_ID } from './collision';
 import { bodyFootprints } from './geometry';
 import {
   couplingAngle,
@@ -74,6 +76,7 @@ export function createSimulation(
   let speed = 0;
   let blocked: BlockReason | null = null;
   let blockedSign = 0;
+  let blockedContact: SimContact | null = null;
   let contactCount = 0;
   let jackknifes = 0;
   let directionChanges = 0;
@@ -84,7 +87,9 @@ export function createSimulation(
   const incident = new Set<string>();
   let travelledSinceRejection = 0;
 
-  const rejection = (next: KinematicState): { reason: BlockReason; key: string } | null => {
+  const rejection = (
+    next: KinematicState,
+  ): { reason: BlockReason; key: string; contact?: SimContact } | null => {
     const pivot = pivotViolation(params, next);
     if (pivot !== null) {
       const angle = pivot === 'coupling' ? couplingAngle(next) : turntableAngle(next);
@@ -93,7 +98,7 @@ export function createSimulation(
     const hit = contacts(bodyFootprints(params, joints(params, next)));
     return hit === null
       ? null
-      : { reason: 'contact', key: `contact:${hit.body}:${hit.obstacleId}` };
+      : { reason: 'contact', key: `contact:${hit.body}:${hit.obstacleId}`, contact: hit };
   };
 
   const snapshot = (): SimSnapshot => ({
@@ -107,6 +112,14 @@ export function createSimulation(
     speed,
     control,
     blocked,
+    contact:
+      blocked === 'contact' && blockedContact !== null
+        ? {
+            body: blockedContact.body,
+            point: blockedContact.point,
+            self: blockedContact.obstacleId === SELF_OBSTACLE_ID,
+          }
+        : null,
     contacts: contactCount,
     jackknifes,
     directionChanges,
@@ -144,6 +157,7 @@ export function createSimulation(
           }
           travelledSinceRejection = 0;
           blocked = rejected.reason;
+          blockedContact = rejected.contact ?? null;
           blockedSign = Math.sign(speed);
           speed = 0;
         } else {

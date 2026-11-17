@@ -15,7 +15,7 @@ import {
 
 // Bump when simulation, collision or scoring behaviour changes, so stored runs and replays of old
 // behaviour are dropped. Not for which result is kept as the best (`recordBest`): a run's outcome is unchanged.
-export const SIM_REVISION = 1;
+export const SIM_REVISION = 2;
 
 // A literal, as namespace key order differs between bundle and test runner.
 const constants = {
