@@ -11,6 +11,10 @@ export type InputState = {
 
 export const LEVER_STEP = 0.1;
 export const STEER_STEP = 0.1;
+/** Lever travel per second while W/S/Up/Down is held, after `LEVER_HOLD_DELAY`. */
+export const LEVER_RAMP_RATE = 0.5;
+/** Hold time before the ramp starts, so a tap stays a single `LEVER_STEP`. */
+export const LEVER_HOLD_DELAY = 0.25;
 /** Half-sweep of the fixed arc: pointer angle is steer times this, so full lock reaches the end stops. */
 export const POINTER_SWEEP_DEG = 75;
 /** Wheel rotation within which the wheel reads as straight; it stays so until the larger bound. */
@@ -27,6 +31,15 @@ export function clamp(value: number, min: number, max: number): number {
 
 export function stepLever(s: InputState, direction: 1 | -1): void {
   s.lever = clamp(Math.round((s.lever + direction * LEVER_STEP) * 1000) / 1000, 0, 1);
+}
+
+/** Seconds of this frame that count toward the ramp, given the time already held before it. */
+export const rampTime = (heldBefore: number, dt: number): number =>
+  clamp(heldBefore + dt - LEVER_HOLD_DELAY, 0, dt);
+
+/** Moves the lever by `LEVER_RAMP_RATE` per second for `seconds`; keeps the unrounded value. */
+export function rampLever(s: InputState, direction: 1 | -1, seconds: number): void {
+  s.lever = clamp(s.lever + direction * LEVER_RAMP_RATE * seconds, 0, 1);
 }
 
 /** One mouse-wheel notch on the steering wheel; positive is left. Cancels a pending centring. */
