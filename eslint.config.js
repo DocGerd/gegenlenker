@@ -10,7 +10,7 @@ export default tseslint.config(
   tseslint.configs.strict,
   {
     files: ['**/*.ts'],
-    ignores: ['src/render/**', ...CORE],
+    ignores: ['src/render/**', 'dev/**', ...CORE],
     rules: {
       'no-restricted-imports': [
         'error',
