@@ -132,7 +132,7 @@ export function showResult(
   );
   if (exercise.waypoint !== null) {
     values.append(
-      row('waypoint', t(result.waypointMissed ? 'failed' : 'passed'), {
+      row('waypoint', '', {
         passed: !result.waypointMissed,
       }),
     );

@@ -234,10 +234,14 @@ it('registers exactly the contract ids', () => {
   expect(exercises.map((e) => e.id)).toEqual([...EXERCISE_IDS]);
 });
 
-it('orders exercises by strictness, loosest first: position, then angle', () => {
-  const tolerances = exercises.map((e) => e.tolerances);
-  const sorted = [...tolerances].sort((a, b) => b.position - a.position || b.angle - a.angle);
-  expect(tolerances).toEqual(sorted);
+it('orders exercises as a curriculum, straight reverse first and slalom last', () => {
+  expect(exercises.map((e) => e.id)).toEqual([
+    'straight-reverse',
+    'reverse-bay',
+    'reverse-corner',
+    'dock-ramp',
+    'slalom',
+  ]);
 });
 
 it('reversing into a real wall raises one contact and recovers forward', () => {
