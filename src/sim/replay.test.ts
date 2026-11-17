@@ -3,7 +3,7 @@ import type { InputLog } from '../contracts/exercise';
 import type { ContactQuery, ControlVector, SimSnapshot, StartState } from '../contracts/sim';
 import { resolveCombination } from '../vehicles/resolve';
 import { trailerById, truckById } from '../vehicles/registry';
-import { createInputRecorder, parseInputLog, replaySnapshots } from './replay';
+import { createInputRecorder, MAX_REPLAY_STEPS, parseInputLog, replaySnapshots } from './replay';
 import { createSimulation } from './simulation';
 
 const params = resolveCombination(
@@ -70,6 +70,16 @@ describe('replay', () => {
     ]);
   });
 
+  it('stops recording at the replay limit', () => {
+    const recorder = createInputRecorder();
+    const a = ctl({ lever: 1 });
+    recorder.record(0, a);
+    recorder.record(MAX_REPLAY_STEPS, ctl({ gear: 'R' }));
+    const log = recorder.finish(meta, MAX_REPLAY_STEPS + 10);
+    expect(log.changes).toEqual([{ step: 0, control: a }]);
+    expect(log.steps).toBe(MAX_REPLAY_STEPS);
+  });
+
   it('rejects malformed logs', () => {
     const valid: InputLog = {
       version: 1,
@@ -80,18 +90,37 @@ describe('replay', () => {
         { step: 4, control: ctl({ lever: 1, brake: true }) },
       ],
     };
-    const json = (o: unknown): string => JSON.stringify(o);
-    expect(parseInputLog(null)).toBeNull();
-    expect(parseInputLog('[]')).toBeNull();
-    expect(parseInputLog('not json')).toBeNull();
-    expect(parseInputLog(json({ ...valid, version: 2 }))).toBeNull();
-    expect(parseInputLog(json({ ...valid, truckId: 'scania-r' }))).toBeNull();
-    expect(parseInputLog(json({ ...valid, steps: -1 }))).toBeNull();
-    expect(parseInputLog(json({ ...valid, changes: [...valid.changes].reverse() }))).toBeNull();
-    expect(parseInputLog(json(valid))).toEqual(valid);
-    expect(parseInputLog(json({ ...valid, exerciseId: null }))).toEqual({
+    const fingerprint = (): string => 'data-a';
+    const json = (o: object): string => JSON.stringify({ ...o, fingerprint: 'data-a' });
+    const parse = (raw: string | null) => parseInputLog(raw, fingerprint);
+    expect(parse(null)).toBeNull();
+    expect(parse('[]')).toBeNull();
+    expect(parse('not json')).toBeNull();
+    expect(parse(json({ ...valid, version: 2 }))).toBeNull();
+    expect(parse(json({ ...valid, truckId: 'scania-r' }))).toBeNull();
+    expect(parse(json({ ...valid, steps: -1 }))).toBeNull();
+    expect(parse(json({ ...valid, changes: [...valid.changes].reverse() }))).toBeNull();
+    expect(parse(json(valid))).toEqual(valid);
+    expect(parse(json({ ...valid, exerciseId: null }))).toEqual({
       ...valid,
       exerciseId: null,
     });
+  });
+
+  it('accepts a log only for the data that produced it', () => {
+    const valid: InputLog = { version: 1, ...meta, steps: 10, changes: [] };
+    const seen: unknown[] = [];
+    const fingerprint = (ids: unknown): string => {
+      seen.push(ids);
+      return 'data-a';
+    };
+    expect(parseInputLog(JSON.stringify({ ...valid, fingerprint: 'data-a' }), fingerprint)).toEqual(
+      valid,
+    );
+    expect(seen).toEqual([meta]);
+    expect(
+      parseInputLog(JSON.stringify({ ...valid, fingerprint: 'data-b' }), fingerprint),
+    ).toBeNull();
+    expect(parseInputLog(JSON.stringify(valid), fingerprint)).toBeNull();
   });
 });
