@@ -8,6 +8,9 @@ const STOP_BLOCK = 55;
 const STOP_GAP = 8;
 const MIRROR_GAP = 8;
 const COCKPIT_LABEL = 32;
+const BAND_SHARE = 0.18;
+const LEGEND_GAP = 12;
+const LEGEND_HEIGHT = 244;
 /** Smallest mirror height; where even this cannot clear the controls, it wins. */
 export const MIN_MIRROR_HEIGHT = 48;
 
@@ -18,6 +21,11 @@ export function controlsHeight(cssWidth: number, cssHeight: number): number {
   if (cssWidth >= cssHeight) return steer;
   const lever = clamp(0.24 * vmin, 160, 240) + 2;
   return Math.max(steer, INSET + STOP_BLOCK + STOP_GAP + LABEL_BLOCK + lever);
+}
+
+/** Height the expanded key legend reaches above the viewport bottom; mirrors hud.css (.hud-band height, .hud-legend bottom and height). */
+export function legendHeight(cockpitHeight: number): number {
+  return Math.round(BAND_SHARE * cockpitHeight) + LEGEND_GAP + LEGEND_HEIGHT;
 }
 
 export function computeViewports(cssWidth: number, cssHeight: number, mode: ViewMode): ViewRects {
@@ -39,7 +47,8 @@ export function computeViewports(cssWidth: number, cssHeight: number, mode: View
   const fullWidth = clamp(Math.round(0.15 * cockpit.width), 72, 200);
   const wanted = Math.min(2 * fullWidth, Math.round(0.5 * cockpit.height));
   const floor = cockpit.y + COCKPIT_LABEL;
-  const ceiling = cssHeight - controlsHeight(cssWidth, cssHeight) - MIRROR_GAP;
+  const clear = Math.max(controlsHeight(cssWidth, cssHeight), legendHeight(cockpit.height));
+  const ceiling = cssHeight - clear - MIRROR_GAP;
   const preferred = cockpit.y + Math.round(0.16 * cockpit.height);
   const y = Math.min(preferred, Math.max(floor, ceiling - wanted));
   const mh = clamp(ceiling - y, MIN_MIRROR_HEIGHT, wanted);
