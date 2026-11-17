@@ -1,6 +1,6 @@
 import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
 
-const KEYS: Record<ScenePaletteKey, true> = {
+export const KEYS: Record<ScenePaletteKey, true> = {
   sky: true,
   verge: true,
   yard: true,
@@ -21,6 +21,8 @@ const KEYS: Record<ScenePaletteKey, true> = {
   wheel: true,
   tracks: true,
   accent: true,
+  band: true,
+  cladding: true,
 };
 
 export function readScenePalette(el: Element = document.documentElement): ScenePalette {
