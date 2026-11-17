@@ -2,7 +2,7 @@ import { formatNumber } from '../i18n/i18n';
 
 export type GaugeLevel = 'ok' | 'warn' | 'danger';
 
-export function gaugeLevel(angle: number, limit: number): GaugeLevel {
+function gaugeLevel(angle: number, limit: number): GaugeLevel {
   const ratio = Math.abs(angle) / limit;
   if (ratio < 0.6) return 'ok';
   if (ratio < 0.85) return 'warn';
