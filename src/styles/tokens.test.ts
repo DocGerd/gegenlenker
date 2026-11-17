@@ -218,9 +218,10 @@ describe('WCAG AA contrast', () => {
 
 describe('scene tokens', () => {
   const keys =
-    'sky verge yard pavement street marking kerb wall fence hall ramp lamp parked cone cab body chassis wheel tracks accent'.split(
+    'sky verge yard pavement street marking kerb wall fence hall ramp lamp parked cone cab body chassis wheel tracks accent band cladding'.split(
       ' ',
     );
+  const scene = (key: string) => value(`--scene-${key}`, 'light');
 
   it('defines --scene-<key> for every scene palette key, as 6-digit hex, in :root only', () => {
     for (const key of keys) {
@@ -230,23 +231,60 @@ describe('scene tokens', () => {
     expect(named(darkBlock, '--scene-')).toEqual([]);
   });
 
-  it('keeps bodies, halls and tracks at 1.5:1 or more against the ground they stand on', () => {
-    const standing: [string, string][] = [
-      ['body', 'yard'],
-      ['body', 'street'],
-      ['body', 'pavement'],
-      ['body', 'marking'],
-      ['hall', 'pavement'],
-      ['hall', 'yard'],
-      ['tracks', 'yard'],
-      ['tracks', 'street'],
-    ];
-    for (const [thing, ground] of standing) {
-      const ratio = contrast(
-        value(`--scene-${thing}`, 'light'),
-        value(`--scene-${ground}`, 'light'),
-      );
-      expect(ratio, `${thing} on ${ground}`).toBeGreaterThanOrEqual(1.5);
-    }
+  // T1: a single-tone collision object is darker than the ground it stands on, at 3.1:1 or more.
+  // The street kerb (light on street, 1.05:1 on pavement) and the white bay lines are exempt.
+  const t1: [object: string, ground: string][] = [
+    ['cone', 'yard'],
+    ['band', 'yard'],
+    ['wall', 'yard'],
+    ['fence', 'yard'],
+    ['ramp', 'yard'],
+    ['parked', 'yard'],
+    ['hall', 'yard'],
+    ['lamp', 'yard'],
+    ['lamp', 'pavement'],
+  ];
+  it.each(t1)('T1: %s is darker than %s with 3.1:1 or more', (object, ground) => {
+    expect(luminance(scene(object)), 'darker').toBeLessThan(luminance(scene(ground)));
+    expect(contrast(scene(object), scene(ground))).toBeGreaterThanOrEqual(3.1);
+  });
+
+  // T2: the two tones of a two-tone object differ by 9:1 or more, the dark tone is T1 against its ground.
+  const t2: [dark: string, light: string][] = [
+    ['hall', 'cladding'],
+    ['lamp', 'marking'],
+  ];
+  it.each(t2)('T2: %s against %s is 9:1 or more', (dark, light) => {
+    expect(luminance(scene(dark)), 'darker').toBeLessThan(luminance(scene(light)));
+    expect(contrast(scene(dark), scene(light))).toBeGreaterThanOrEqual(9);
+  });
+
+  // T3: adjacent grounds; pavement against sky is exempt.
+  const t3: [string, string][] = [
+    ['yard', 'pavement'],
+    ['pavement', 'street'],
+    ['yard', 'street'],
+    ['yard', 'verge'],
+    ['pavement', 'verge'],
+    ['street', 'verge'],
+    ['verge', 'sky'],
+    ['street', 'sky'],
+  ];
+  it.each(t3)('T3: %s against %s is 1.5:1 or more', (a, b) => {
+    expect(contrast(scene(a), scene(b))).toBeGreaterThanOrEqual(1.5);
+  });
+
+  // Own vehicle parts keep 1.5:1 against what they stand on or are seen against.
+  const standing: [string, string][] = [
+    ['body', 'yard'],
+    ['body', 'street'],
+    ['body', 'pavement'],
+    ['body', 'marking'],
+    ['body', 'cladding'],
+    ['tracks', 'yard'],
+    ['tracks', 'street'],
+  ];
+  it.each(standing)('%s against %s is 1.5:1 or more', (thing, ground) => {
+    expect(contrast(scene(thing), scene(ground))).toBeGreaterThanOrEqual(1.5);
   });
 });

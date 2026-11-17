@@ -41,7 +41,9 @@ export type ScenePaletteKey =
   | 'chassis'
   | 'wheel'
   | 'tracks'
-  | 'accent';
+  | 'accent'
+  | 'band'
+  | 'cladding';
 export type ScenePalette = Readonly<Record<ScenePaletteKey, number>>;
 export type RenderFrame = {
   readonly snapshot: SimSnapshot;
