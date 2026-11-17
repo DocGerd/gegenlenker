@@ -15,6 +15,7 @@ import type { ResolvedLayout } from '../src/contracts/layout';
 import type { ScenePalette, ScenePaletteKey } from '../src/contracts/render';
 import type { Param, TrailerSpec, TruckSpec } from '../src/contracts/vehicle';
 import { placePose } from '../src/render/coords';
+import { neutralSky } from '../src/render/sky';
 import type { AidsLayer, Environment, RendererParts, VehicleVisual } from '../src/render/seams';
 import { truckAnchors, trailerAnchors } from '../src/vehicles/anchors';
 
@@ -206,7 +207,7 @@ function environment(layout: ResolvedLayout, palette: ScenePalette): Environment
   const horizontal = Math.cos(elevation) * 100;
   // south-west of the scene: world (−, −) is Three (−x, +z)
   sun.position.set(-horizontal / Math.SQRT2, Math.sin(elevation) * 100, horizontal / Math.SQRT2);
-  group.add(sun, new HemisphereLight(palette.sky, palette.verge, 1.4));
+  group.add(sun, new HemisphereLight(neutralSky(palette.sky), palette.verge, 1.4));
 
   return {
     object: group,

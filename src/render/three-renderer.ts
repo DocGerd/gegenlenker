@@ -23,6 +23,7 @@ import { createMirror } from './mirror';
 import { readScenePalette } from './palette';
 import {
   AIDS_LAYER,
+  SKY_LAYER,
   type AidsLayer,
   type Environment,
   type RendererParts,
@@ -69,6 +70,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   const cockpitCamera = new PerspectiveCamera(COCKPIT_FOV, 1, 0.1, FAR);
   cockpitCamera.rotation.order = 'YXZ';
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
+  cockpitCamera.layers.enable(SKY_LAYER);
   topDownCamera.layers.enable(AIDS_LAYER);
   topDownCamera.rotation.x = -Math.PI / 2;
   const mirrorLeft = createMirror();
@@ -274,6 +276,8 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
 
       placeTopDown(frame, topDown, b);
       viewRect(gl, topDown);
+      gl.setClearColor(b.palette.backdrop);
+      gl.clear();
       gl.render(b.scene, topDownCamera);
 
       if (leftRect !== null) mirrorLeft.composite(gl, leftRect, cssHeight);
