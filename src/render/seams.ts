@@ -1,4 +1,4 @@
-import type { Object3D } from 'three';
+import type { Layers, Object3D } from 'three';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
@@ -6,6 +6,12 @@ import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 export const AIDS_LAYER = 1; // seen by the top-down camera only
 export const SKY_LAYER = 2; // seen by the perspective cameras only
 export const CAB_LAYER = 3; // seen by the mirrors only: the cockpit eye sits inside the cab
+export const COCKPIT_LAYERS = [SKY_LAYER];
+export const MIRROR_LAYERS = [SKY_LAYER, CAB_LAYER];
+export const TOP_DOWN_LAYERS = [AIDS_LAYER];
+export function enableLayers(layers: Layers, ids: readonly number[]): void {
+  for (const id of ids) layers.enable(id);
+}
 export interface VehicleVisual {
   readonly object: Object3D;
   update(snapshot: SimSnapshot): void;

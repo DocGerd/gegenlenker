@@ -1,11 +1,19 @@
-import { Box3, Camera, Mesh, Vector3, type Material, type Object3D } from 'three';
+import { Box3, Camera, Layers, Mesh, Vector3, type Material, type Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type Param } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { KEYS } from './palette';
-import { AIDS_LAYER, CAB_LAYER, SKY_LAYER } from './seams';
+import { createMirror } from './mirror';
+import {
+  AIDS_LAYER,
+  CAB_LAYER,
+  COCKPIT_LAYERS,
+  enableLayers,
+  SKY_LAYER,
+  TOP_DOWN_LAYERS,
+} from './seams';
 import { proceduralTrailer, proceduralTruck, SHADOW_HEIGHT, SHADOW_NAME } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -95,21 +103,19 @@ describe('cab front', () => {
   it.each(TRUCK_IDS)(
     'is hidden from the cockpit eye inside the cab but not the mirrors (%s)',
     (id) => {
-      const cockpit = new Camera();
-      cockpit.layers.enable(SKY_LAYER);
-      const mirror = new Camera();
-      mirror.layers.enable(SKY_LAYER);
-      mirror.layers.enable(CAB_LAYER);
-      const topDown = new Camera();
-      topDown.layers.enable(AIDS_LAYER);
+      const cockpit = new Layers();
+      enableLayers(cockpit, COCKPIT_LAYERS);
+      const topDown = new Layers();
+      enableLayers(topDown, TOP_DOWN_LAYERS);
+      const mirror = createMirror().camera.layers;
       const cab = meshes(proceduralTruck(truckById(id), palette).object).filter(
         (m) => m.layers.mask === 1 << CAB_LAYER,
       );
       expect(cab.length).toBeGreaterThan(0);
       for (const m of cab) {
-        expect(m.layers.test(cockpit.layers)).toBe(false);
-        expect(m.layers.test(mirror.layers)).toBe(true);
-        expect(m.layers.test(topDown.layers)).toBe(false);
+        expect(m.layers.test(cockpit)).toBe(false);
+        expect(m.layers.test(mirror)).toBe(true);
+        expect(m.layers.test(topDown)).toBe(false);
       }
     },
   );

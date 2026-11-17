@@ -26,7 +26,9 @@ import { createMirror } from './mirror';
 import { readScenePalette } from './palette';
 import {
   AIDS_LAYER,
-  SKY_LAYER,
+  COCKPIT_LAYERS,
+  enableLayers,
+  TOP_DOWN_LAYERS,
   type AidsLayer,
   type Environment,
   type RendererParts,
@@ -88,8 +90,8 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   const cockpitCamera = new PerspectiveCamera(COCKPIT_FOV, 1, 0.1, FAR);
   cockpitCamera.rotation.order = 'YXZ';
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
-  cockpitCamera.layers.enable(SKY_LAYER);
-  topDownCamera.layers.enable(AIDS_LAYER);
+  enableLayers(cockpitCamera.layers, COCKPIT_LAYERS);
+  enableLayers(topDownCamera.layers, TOP_DOWN_LAYERS);
   topDownCamera.rotation.x = -Math.PI / 2;
   topDownCamera.position.y = SKY_HEIGHT;
   const mirrorLeft = createMirror();
