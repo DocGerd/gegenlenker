@@ -1,7 +1,16 @@
-import { exerciseById } from '../content/registry';
+import { exerciseById, layouts } from '../content/registry';
+import { resolveLayout } from '../content/resolve-layout';
 import type { BestResults, InputLog, RunResult } from '../contracts/exercise';
-import { parseBestResults, recordBest, serializeBestResults } from '../scoring/best';
-import { parseInputLog } from '../sim/replay';
+import {
+  parseBestResults,
+  recordBest,
+  serializeBestResults,
+  type ResultIds,
+} from '../scoring/best';
+import { dataFingerprint } from '../sim/fingerprint';
+import { MAX_REPLAY_STEPS, parseInputLog, serializeInputLog, type RunIds } from '../sim/replay';
+import { trailerById, truckById } from '../vehicles/registry';
+import { resolveCombination } from '../vehicles/resolve';
 
 export const SETTINGS_KEY = 'gegenlenker.settings.v1';
 export const BEST_KEY = 'gegenlenker.best.v1';
@@ -52,11 +61,34 @@ export function removeText(key: string): void {
   }
 }
 
+const fingerprints = new Map<string, string>();
+
+/** Resolves the ids as drive and replay do, so a stored run matches only the data it was driven on. */
+function runFingerprint(ids: RunIds): string {
+  const key = `${ids.layoutId}/${ids.exerciseId}/${ids.truckId}/${ids.trailerId}`;
+  let fingerprint = fingerprints.get(key);
+  if (fingerprint === undefined) {
+    const layout = layouts[ids.layoutId];
+    const exercise = ids.exerciseId === null ? null : exerciseById(ids.exerciseId);
+    fingerprint = dataFingerprint(
+      resolveCombination(truckById(ids.truckId), trailerById(ids.trailerId)),
+      resolveLayout(layout, exercise),
+      exercise?.start ?? layout.start,
+      exercise,
+    );
+    fingerprints.set(key, fingerprint);
+  }
+  return fingerprint;
+}
+
+const resultFingerprint = (r: ResultIds): string =>
+  runFingerprint({ ...r, layoutId: exerciseById(r.exerciseId).layout });
+
 // Held in memory as well, so a finished run shows its result when storage is unavailable.
 let best: BestResults | null = null;
 
 export function bestResults(): BestResults {
-  best ??= parseBestResults(readText(BEST_KEY));
+  best ??= parseBestResults(readText(BEST_KEY), resultFingerprint);
   return best;
 }
 
@@ -64,7 +96,7 @@ export function bestResults(): BestResults {
 export function storeResult(result: RunResult): boolean {
   const recorded = recordBest(bestResults(), result);
   best = recorded.best;
-  const json = serializeBestResults(best);
+  const json = serializeBestResults(best, resultFingerprint);
   if (!writeText(BEST_KEY, json)) {
     // A large old run log must not cost the driver their best result.
     removeText(LAST_RUN_KEY);
@@ -72,9 +104,6 @@ export function storeResult(result: RunResult): boolean {
   }
   return recorded.isNewBest;
 }
-
-// Bounds the snapshots a replay precomputes; a corrupt or hostile `steps` must not exhaust memory.
-export const MAX_REPLAY_STEPS = 72_000;
 
 export function isReplayable(log: InputLog): boolean {
   if (log.steps === 0 || log.steps > MAX_REPLAY_STEPS) return false;
@@ -87,7 +116,7 @@ let last: InputLog | null | undefined;
 
 export function lastRun(): InputLog | null {
   if (last === undefined) {
-    const log = parseInputLog(readText(LAST_RUN_KEY));
+    const log = parseInputLog(readText(LAST_RUN_KEY), runFingerprint);
     last = log !== null && isReplayable(log) ? log : null;
   }
   return last;
@@ -97,5 +126,6 @@ export function storeLastRun(log: InputLog): void {
   if (log.steps === 0) return;
   last = isReplayable(log) ? log : null;
   // A failed write must not leave an older run behind to be replayed after a reload.
-  if (last === null || !writeText(LAST_RUN_KEY, JSON.stringify(log))) removeText(LAST_RUN_KEY);
+  if (last === null || !writeText(LAST_RUN_KEY, serializeInputLog(log, runFingerprint)))
+    removeText(LAST_RUN_KEY);
 }
