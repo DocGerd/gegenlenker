@@ -1,4 +1,5 @@
 import type { Layout, Marking } from '../../contracts/layout';
+import { numberMarkings, solidLine } from '../markings';
 import { addLamps, addYardEdge, BOUNDS, ObstacleBuilder, STREET, YARD } from '../street';
 
 const WALL_THICKNESS = 0.3;
@@ -12,7 +13,12 @@ const BAY_LINE_LENGTH = 18;
 const BAY_LINE_WIDTH = 0.12;
 const TRAILER = { width: 2.5, length: 13.6, height: 4 };
 const TRAILER_X = [82, 86.5, 91, 95.5];
+const TRAILER_PITCH = 4.5;
 const TRAILER_Y = 45;
+const DOCK_NUMBER_HEIGHT = 1.4;
+const DOCK_NUMBER_OFFSET = 1.5; // below the ramp edge
+const PARKING_LINE_WIDTH = 0.12;
+const PARKING_LINE_OVERHANG = 0.75; // beyond the trailer ends
 
 function build(): Layout['obstacles'] {
   const b = new ObstacleBuilder('');
@@ -29,15 +35,31 @@ function build(): Layout['obstacles'] {
 function bayLines(): Marking[] {
   const lines: Marking[] = [];
   for (let x = RAMP.minX; x <= RAMP.maxX; x += BAY_SPACING) {
-    lines.push({
-      kind: 'bay',
-      from: { x, y: RAMP.minY },
-      to: { x, y: RAMP.minY - BAY_LINE_LENGTH },
-      width: BAY_LINE_WIDTH,
-      dashed: false,
-    });
+    lines.push(solidLine('bay', x, RAMP.minY, x, RAMP.minY - BAY_LINE_LENGTH, BAY_LINE_WIDTH));
+    if (x < RAMP.maxX) {
+      lines.push(
+        ...numberMarkings(
+          String((x - RAMP.minX) / BAY_SPACING + 1),
+          'dock-number',
+          x + BAY_SPACING / 2,
+          RAMP.minY - DOCK_NUMBER_OFFSET - DOCK_NUMBER_HEIGHT / 2,
+          DOCK_NUMBER_HEIGHT,
+        ),
+      );
+    }
   }
   return lines;
+}
+
+/** Lines between and beside the parked trailers. */
+function parkingLines(): Marking[] {
+  const y0 = TRAILER_Y - TRAILER.length / 2 - PARKING_LINE_OVERHANG;
+  const y1 = TRAILER_Y + TRAILER.length / 2 + PARKING_LINE_OVERHANG;
+  const xs = [
+    ...TRAILER_X.map((x) => x - TRAILER_PITCH / 2),
+    Math.max(...TRAILER_X) + TRAILER_PITCH / 2,
+  ];
+  return xs.map((x) => solidLine('bay', x, y0, x, y1, PARKING_LINE_WIDTH));
 }
 
 export const logistics: Layout = {
@@ -47,5 +69,5 @@ export const logistics: Layout = {
   street: STREET,
   start: { x: 30, y: 20, heading: 0 },
   obstacles: build(),
-  markings: bayLines(),
+  markings: [...bayLines(), ...parkingLines()],
 };

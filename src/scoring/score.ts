@@ -1,4 +1,4 @@
-import type { ExerciseDefinition, RunResult, TargetZone } from '../contracts/exercise';
+import type { ExerciseDefinition, RunResult, TargetZone, Tolerances } from '../contracts/exercise';
 import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { wrapAngle } from '../sim/angle';
@@ -14,17 +14,32 @@ export function targetError(s: SimSnapshot, zone: TargetZone): { position: numbe
   };
 }
 
-function stoppedInTarget(s: SimSnapshot, exercise: ExerciseDefinition): boolean {
-  const e = targetError(s, exercise.target);
-  return (
-    Math.abs(s.speed) < STOPPED_SPEED &&
-    e.position <= exercise.tolerances.position &&
-    e.angle <= exercise.tolerances.angle
-  );
+/** The pass rule per criterion, shared by the live tracker and the debrief. */
+export function withinTolerance(
+  error: { position: number; angle: number },
+  tolerances: Tolerances,
+): { position: boolean; angle: boolean } {
+  return {
+    position: error.position <= tolerances.position,
+    angle: error.angle <= tolerances.angle,
+  };
 }
+
+function inTolerance(s: SimSnapshot, exercise: ExerciseDefinition): boolean {
+  const ok = withinTolerance(targetError(s, exercise.target), exercise.tolerances);
+  return ok.position && ok.angle;
+}
+
+function stoppedInTarget(s: SimSnapshot, exercise: ExerciseDefinition): boolean {
+  return Math.abs(s.speed) < STOPPED_SPEED && inTolerance(s, exercise);
+}
+
+/** `away`: no cue (turn point pending or far from the target); `outside`: near the target but beyond a tolerance; `inside`: stopping now ends the run. */
+export type GoalState = 'away' | 'outside' | 'inside';
 
 export type RunTracker = {
   update(s: SimSnapshot): boolean;
+  goal(s: SimSnapshot): GoalState;
   waypointVisited(): boolean;
 };
 
@@ -42,6 +57,13 @@ export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
       }
       return waypointVisited && stoppedInTarget(s, exercise);
     },
+    goal(s) {
+      if (!waypointVisited) return 'away';
+      if (inTolerance(s, exercise)) return 'inside';
+      return targetError(s, exercise.target).position <= exercise.target.length
+        ? 'outside'
+        : 'away';
+    },
     waypointVisited: () => waypointVisited,
   };
 }
@@ -54,6 +76,7 @@ export function runResult(
   trailerId: TrailerId,
   reached: boolean,
   waypointVisited: boolean,
+  assisted: boolean,
 ): RunResult {
   const e = targetError(s, exercise.target);
   return {
@@ -61,6 +84,7 @@ export function runResult(
     truckId,
     trailerId,
     reached,
+    assisted,
     waypointMissed: exercise.waypoint !== null && !waypointVisited,
     positionError: e.position,
     angleError: e.angle,

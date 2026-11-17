@@ -14,7 +14,9 @@ import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
 
 export const SETTINGS_KEY = 'gegenlenker.settings.v1';
-export const BEST_KEY = 'gegenlenker.best.v1';
+export const BEST_KEY = 'gegenlenker.best.v2';
+// Bests before the assisted/unaided split cannot be classified, so they are dropped.
+const LEGACY_BEST_KEY = 'gegenlenker.best.v1';
 export const LAST_RUN_KEY = 'gegenlenker.lastRun.v1';
 
 const PROBE_KEY = 'gegenlenker.probe';
@@ -90,12 +92,15 @@ const resultFingerprint = (r: ResultIds): string =>
 let best: BestResults | null = null;
 
 export function bestResults(): BestResults {
-  best ??= parseBestResults(readText(BEST_KEY), resultFingerprint);
+  if (best === null) {
+    removeText(LEGACY_BEST_KEY);
+    best = parseBestResults(readText(BEST_KEY), resultFingerprint);
+  }
   return best;
 }
 
-/** Returns whether the run is a new best. */
-export function storeResult(result: RunResult): boolean {
+/** `previous` is the best this run competed with, read before it was replaced. */
+export function storeResult(result: RunResult): { isNewBest: boolean; previous: RunResult | null } {
   const recorded = recordBest(bestResults(), result);
   best = recorded.best;
   const json = serializeBestResults(best, resultFingerprint);
@@ -104,7 +109,7 @@ export function storeResult(result: RunResult): boolean {
     removeText(LAST_RUN_KEY);
     writeText(BEST_KEY, json);
   }
-  return recorded.isNewBest;
+  return { isNewBest: recorded.isNewBest, previous: recorded.previous };
 }
 
 export function isReplayable(log: InputLog): boolean {

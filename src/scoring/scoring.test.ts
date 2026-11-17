@@ -4,10 +4,13 @@ import type { SimSnapshot } from '../contracts/sim';
 import {
   bestKey,
   compareResults,
+  exerciseDone,
   parseBestResults,
   recordBest,
   serializeBestResults,
 } from './best';
+import { criteria, deltasToBest, endedMoving } from './debrief';
+import { createEventScanner } from './replay-events';
 import { WAYPOINT_RADIUS, createRunTracker, runResult, targetError } from './score';
 
 function snap(over: Partial<SimSnapshot> = {}): SimSnapshot {
@@ -52,6 +55,7 @@ function result(over: Partial<RunResult> = {}): RunResult {
     truckId: 'man-le-18-280',
     trailerId: 'krone-azw-18',
     reached: true,
+    assisted: false,
     waypointMissed: false,
     positionError: 0.1,
     angleError: 1,
@@ -63,7 +67,24 @@ function result(over: Partial<RunResult> = {}): RunResult {
   };
 }
 
-const KEY = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18');
+describe('exerciseDone', () => {
+  it('counts a reached result with any pair, ignoring other exercises and misses', () => {
+    const other = result({ trailerId: 'hueffermann-hpa-24-81-l' });
+    const best = {
+      [bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false)]: result({ reached: false }),
+      [bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l', false)]: other,
+      [bestKey('slalom', 'man-le-18-280', 'krone-azw-18', false)]: result({
+        exerciseId: 'slalom',
+        reached: false,
+      }),
+    };
+    expect(exerciseDone(best, 'reverse-bay')).toBe(true);
+    expect(exerciseDone(best, 'slalom')).toBe(false);
+    expect(exerciseDone({}, 'reverse-bay')).toBe(false);
+  });
+});
+
+const KEY = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false);
 const INSIDE = { trailer: { x: 0, y: 0, heading: -0.1 } };
 
 describe('scoring', () => {
@@ -90,6 +111,15 @@ describe('scoring', () => {
     expect(tracker.update(snap({ ...INSIDE, trailerRear: { x: 0.51, y: 0 } }))).toBe(false);
   });
 
+  it('cues only near the target once the turn point is passed', () => {
+    const tracker = createRunTracker(exercise({ x: 90, y: 25 }));
+    expect(tracker.goal(snap(INSIDE))).toBe('away');
+    tracker.update(snap({ truck: { x: 90, y: 25, heading: 0 } }));
+    expect(tracker.goal(snap(INSIDE))).toBe('inside');
+    expect(tracker.goal(snap({ ...INSIDE, trailerRear: { x: 0.51, y: 0 } }))).toBe('outside');
+    expect(tracker.goal(snap({ ...INSIDE, trailerRear: { x: 16, y: 0 } }))).toBe('away');
+  });
+
   it('requires the waypoint before the target counts', () => {
     const tracker = createRunTracker(exercise({ x: 90, y: 25 }));
     expect(tracker.update(snap(INSIDE))).toBe(false);
@@ -108,7 +138,15 @@ describe('scoring', () => {
       trailerRear: { x: 3, y: 4 },
       trailer: { x: 0, y: 0, heading: 0.1 },
     });
-    const r = runResult(s, exercise(), 'arocs-1835-ak', 'hueffermann-hpa-24-81-l', false, true);
+    const r = runResult(
+      s,
+      exercise(),
+      'arocs-1835-ak',
+      'hueffermann-hpa-24-81-l',
+      false,
+      true,
+      false,
+    );
     expect(r).toMatchObject({
       exerciseId: 'reverse-bay',
       truckId: 'arocs-1835-ak',
@@ -123,7 +161,8 @@ describe('scoring', () => {
     expect(r.angleError).toBeCloseTo(11.459, 3);
 
     expect(
-      runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18', true, true).reached,
+      runResult(snap(INSIDE), exercise(), 'arocs-1835-ak', 'krone-azw-18', true, true, false)
+        .reached,
     ).toBe(true);
   });
 
@@ -139,6 +178,7 @@ describe('scoring', () => {
       'krone-azw-18',
       reached,
       tracker.waypointVisited(),
+      false,
     );
     expect(result.reached).toBe(false);
     expect(result.waypointMissed).toBe(true);
@@ -147,10 +187,10 @@ describe('scoring', () => {
   it('does not flag a waypoint missed when the exercise has none or it was visited', () => {
     const s = snap(INSIDE);
     expect(
-      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false).waypointMissed,
+      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false, false).waypointMissed,
     ).toBe(false);
     expect(
-      runResult(s, exercise({ x: 90, y: 25 }), 'man-le-18-280', 'krone-azw-18', false, true)
+      runResult(s, exercise({ x: 90, y: 25 }), 'man-le-18-280', 'krone-azw-18', false, true, false)
         .waypointMissed,
     ).toBe(false);
   });
@@ -222,7 +262,7 @@ describe('best results', () => {
     const parse = (raw: string | null) => parseBestResults(raw, fingerprint);
     expect(parse(null)).toEqual({});
     expect(parse('{')).toEqual({});
-    expect(parse(JSON.stringify({ version: 2, results: {} }))).toEqual({});
+    expect(parse(JSON.stringify({ version: 1, results: {} }))).toEqual({});
 
     const valid = result();
     expect(parse(serializeBestResults({ [KEY]: valid }, fingerprint))).toEqual({ [KEY]: valid });
@@ -233,21 +273,41 @@ describe('best results', () => {
       fingerprint: 'data-a',
     };
     delete noTime.time;
-    const otherKey = bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l');
+    const otherKey = bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l', false);
     const raw = JSON.stringify({
-      version: 1,
+      version: 2,
       results: { [KEY]: stored, [otherKey]: noTime, 'slalom/man-le-18-280/krone-azw-18': stored },
     });
     expect(parse(raw)).toEqual({ [KEY]: valid });
   });
 
+  it('ranks assisted and unaided runs apart', () => {
+    const unaided = recordBest({}, result({ time: 30 })).best;
+    const assisted = recordBest(unaided, result({ assisted: true, time: 10 }));
+    expect(assisted.isNewBest).toBe(true);
+    expect(assisted.previous).toBeNull();
+    expect(assisted.best[KEY]).toEqual(result({ time: 30 }));
+    expect(assisted.best[bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', true)]?.time).toBe(
+      10,
+    );
+    expect(recordBest(assisted.best, result({ time: 40 })).previous?.time).toBe(30);
+  });
+
+  it('wipes bests stored before aids were recorded', () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      results: { 'reverse-bay/man-le-18-280/krone-azw-18': { ...result(), fingerprint: 'f' } },
+    });
+    expect(parseBestResults(legacy, () => 'f')).toEqual({});
+  });
+
   it('keeps a stored result only for the data that produced it', () => {
     const other = result({ trailerId: 'hueffermann-hpa-24-81-l' });
-    const otherKey = bestKey(other.exerciseId, other.truckId, other.trailerId);
+    const otherKey = bestKey(other.exerciseId, other.truckId, other.trailerId, false);
     const fingerprint = (r: Pick<RunResult, 'exerciseId' | 'truckId' | 'trailerId'>): string =>
       r.trailerId === 'krone-azw-18' ? 'data-a' : 'data-b';
     const raw = (results: Record<string, unknown>): string =>
-      JSON.stringify({ version: 1, results });
+      JSON.stringify({ version: 2, results });
     expect(
       parseBestResults(
         raw({
@@ -258,5 +318,52 @@ describe('best results', () => {
       ),
     ).toEqual({ [KEY]: result() });
     expect(parseBestResults(raw({ [KEY]: result() }), fingerprint)).toEqual({});
+  });
+});
+
+describe('debrief', () => {
+  const tolerances = { position: 0.5, angle: 10 };
+
+  it('judges position and angle against their tolerance, inclusive', () => {
+    const [position, angle] = criteria(
+      result({ positionError: 0.5, angleError: 10.1 }),
+      tolerances,
+    );
+    expect(position?.passed).toBe(true);
+    expect(angle?.passed).toBe(false);
+  });
+
+  it('tells a run that ended while moving from one that missed the target', () => {
+    expect(endedMoving(result({ reached: false }), tolerances)).toBe(true);
+    expect(endedMoving(result({ reached: false, positionError: 2 }), tolerances)).toBe(false);
+    expect(endedMoving(result({ reached: false, waypointMissed: true }), tolerances)).toBe(false);
+    expect(endedMoving(result(), tolerances)).toBe(false);
+  });
+
+  it('reports a faster run as a negative time delta', () => {
+    const d = deltasToBest(result({ time: 25, contacts: 1 }), result({ time: 30 }));
+    expect(d.time).toBe(-5);
+    expect(d.contacts).toBe(1);
+  });
+});
+
+describe('replay events', () => {
+  it('marks contacts, stops, the waypoint and the finish once each', () => {
+    const scanner = createEventScanner(exercise({ x: 90, y: 25 }));
+    const frames: Partial<SimSnapshot>[] = [
+      { step: 1, speed: 1 },
+      { step: 2, speed: 1, contacts: 1 },
+      { step: 3, speed: 0, contacts: 1 },
+      { step: 4, speed: 1, contacts: 1, truck: { x: 90, y: 25, heading: 0 } },
+      { step: 5, speed: 0, contacts: 1, ...INSIDE },
+      { step: 6, speed: 0, contacts: 1, ...INSIDE },
+    ];
+    for (const f of frames) scanner.update(snap(f));
+    expect(scanner.events()).toEqual([
+      { kind: 'contact', step: 2 },
+      { kind: 'stop', step: 3 },
+      { kind: 'waypoint', step: 4 },
+      { kind: 'reached', step: 5 },
+    ]);
   });
 });

@@ -1,12 +1,13 @@
 import type { LayoutId, Marking, Obstacle } from './layout';
 import type { InputChange, Pose2, Vec2 } from './sim';
 import type { TrailerId, TruckId } from './vehicle';
+/** Ordered by strictness, loosest first: position tolerance, then angle tolerance (`content.test.ts` pins it). */
 export const EXERCISE_IDS = [
-  'straight-reverse',
-  'reverse-bay',
-  'reverse-corner',
-  'dock-ramp',
   'slalom',
+  'reverse-corner',
+  'reverse-bay',
+  'straight-reverse',
+  'dock-ramp',
 ] as const;
 export type ExerciseId = (typeof EXERCISE_IDS)[number];
 /** pose: trailer rear-end centre and trailer heading at the goal; the drawn zone extends `length` along pose.heading. */
@@ -34,6 +35,8 @@ export type RunResult = {
   readonly truckId: TruckId;
   readonly trailerId: TrailerId;
   readonly reached: boolean;
+  /** Any aid was on while the run drove. */
+  readonly assisted: boolean;
   /** The exercise has a waypoint the run never came within range of. */
   readonly waypointMissed: boolean;
   readonly positionError: number;

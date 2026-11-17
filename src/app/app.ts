@@ -1,3 +1,4 @@
+import { exercises } from '../content/registry';
 import type { InputLog, RunResult } from '../contracts/exercise';
 import { detectLanguage, setLanguage } from '../i18n/i18n';
 import { requestPersistentStorage } from '../pwa/persist';
@@ -6,7 +7,7 @@ import './app.css';
 import type { DriveOutcome, RunConfig } from './drive';
 import { showMenu } from './menu';
 import { showNotice } from './notice';
-import { showResult } from './result-view';
+import { showResult, type ResultContext } from './result-view';
 import { currentSettings, initSettings, loadSettings } from './settings';
 import {
   isReplayable,
@@ -99,15 +100,26 @@ export function startApp(root: HTMLElement): void {
       .catch((error: unknown) => loadFailed(error, menu));
   };
   const finished = (run: RunConfig, outcome: DriveOutcome): void => {
-    const isNewBest = outcome.result !== null && storeResult(outcome.result);
+    const stored = outcome.result === null ? null : storeResult(outcome.result);
     storeLastRun(outcome.log);
-    if (outcome.result === null) {
+    if (outcome.result === null || stored === null) {
       leave();
       menu();
-    } else result(run, outcome.result, isNewBest, outcome.log);
+    } else result(run, outcome.result, stored, outcome.log);
   };
-  const result = (run: RunConfig, r: RunResult, isNewBest: boolean, log: InputLog): void => {
-    const close = showResult(screen, r, isNewBest, {
+  const result = (run: RunConfig, r: RunResult, context: ResultContext, log: InputLog): void => {
+    const following =
+      r.reached && run.exercise !== null
+        ? exercises[exercises.indexOf(run.exercise) + 1]
+        : undefined;
+    const close = showResult(screen, r, context, {
+      next:
+        following === undefined
+          ? null
+          : () => {
+              close();
+              drive({ ...run, layoutId: following.layout, exercise: following });
+            },
       retry: () => {
         close();
         drive(run);
@@ -115,7 +127,7 @@ export function startApp(root: HTMLElement): void {
       replay: isReplayable(log)
         ? () => {
             close();
-            replay(log, () => result(run, r, isNewBest, log));
+            replay(log, () => result(run, r, context, log));
           }
         : null,
       menu: () => {

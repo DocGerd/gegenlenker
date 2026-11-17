@@ -3,7 +3,13 @@ import type { InputLog } from '../contracts/exercise';
 import type { ContactQuery, ControlVector, SimSnapshot, StartState } from '../contracts/sim';
 import { resolveCombination } from '../vehicles/resolve';
 import { trailerById, truckById } from '../vehicles/registry';
-import { createInputRecorder, MAX_REPLAY_STEPS, parseInputLog, replaySnapshots } from './replay';
+import {
+  createInputRecorder,
+  createReplayCursor,
+  MAX_REPLAY_STEPS,
+  parseInputLog,
+  replaySnapshots,
+} from './replay';
 import { createSimulation } from './simulation';
 
 const params = resolveCombination(
@@ -52,6 +58,31 @@ describe('replay', () => {
     expect(log.steps).toBe(1800);
     const replayed = replaySnapshots(log, createSimulation(params, start, contacts));
     expect(replayed).toEqual(live);
+  });
+
+  it('scrubbing to a step yields the state playing reaches', () => {
+    const sim = createSimulation(params, start, contacts);
+    const recorder = createInputRecorder();
+    for (let i = 0; i < 1800; i++) {
+      const control = script(i);
+      recorder.record(sim.snapshot().step, control);
+      sim.step(control);
+    }
+    const log = recorder.finish(meta, sim.snapshot().step);
+    const makeSim = () => createSimulation(params, start, contacts);
+    const played = replaySnapshots(log, makeSim());
+    let observed = 0;
+    const cursor = createReplayCursor(log, makeSim, () => {
+      observed = 0;
+      return () => observed++;
+    });
+    for (const step of [900, 1799, 300, 301, 1500, 20, 1800, 650, 5000, -3]) {
+      const target = Math.min(Math.max(step, 0), 1800);
+      const snapshot = cursor.seek(step);
+      expect(cursor.step()).toBe(target);
+      expect(snapshot).toEqual(target === 0 ? makeSim().snapshot() : played[target - 1]);
+      expect(observed).toBe(target);
+    }
   });
 
   it('stores only control changes', () => {
