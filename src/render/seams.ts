@@ -5,6 +5,7 @@ import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 export const AIDS_LAYER = 1; // seen by the top-down camera only
 export const SKY_LAYER = 2; // seen by the perspective cameras only
+export const CAB_LAYER = 3; // seen by the mirrors only: the cockpit eye sits inside the cab
 export interface VehicleVisual {
   readonly object: Object3D;
   update(snapshot: SimSnapshot): void;

@@ -5,7 +5,7 @@ import { TRAILER_IDS, TRUCK_IDS, type Param } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { KEYS } from './palette';
-import { AIDS_LAYER, SKY_LAYER } from './seams';
+import { AIDS_LAYER, CAB_LAYER, SKY_LAYER } from './seams';
 import { proceduralTrailer, proceduralTruck, SHADOW_HEIGHT, SHADOW_NAME } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -89,6 +89,30 @@ describe('perspective detail', () => {
   it.each(TRAILER_IDS)('stays off the top-down camera and follows the width Param (%s)', (id) => {
     expectDetailFollowsWidth(trailerById(id), (s) => proceduralTrailer(s, palette).object);
   });
+});
+
+describe('cab front', () => {
+  it.each(TRUCK_IDS)(
+    'is hidden from the cockpit eye inside the cab but not the mirrors (%s)',
+    (id) => {
+      const cockpit = new Camera();
+      cockpit.layers.enable(SKY_LAYER);
+      const mirror = new Camera();
+      mirror.layers.enable(SKY_LAYER);
+      mirror.layers.enable(CAB_LAYER);
+      const topDown = new Camera();
+      topDown.layers.enable(AIDS_LAYER);
+      const cab = meshes(proceduralTruck(truckById(id), palette).object).filter(
+        (m) => m.layers.mask === 1 << CAB_LAYER,
+      );
+      expect(cab.length).toBeGreaterThan(0);
+      for (const m of cab) {
+        expect(m.layers.test(cockpit.layers)).toBe(false);
+        expect(m.layers.test(mirror.layers)).toBe(true);
+        expect(m.layers.test(topDown.layers)).toBe(false);
+      }
+    },
+  );
 });
 
 describe('blob shadows', () => {
