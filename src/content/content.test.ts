@@ -12,6 +12,7 @@ import { targetError, WAYPOINT_RADIUS } from '../scoring/score';
 import type { VehicleParams } from '../contracts/vehicle';
 import { resolveCombination } from '../vehicles/resolve';
 import { trailers, trucks } from '../vehicles/registry';
+import { BARRIER_X, LANE } from './exercises/slalom';
 import { exercises, layouts } from './registry';
 import { resolveLayout } from './resolve-layout';
 
@@ -34,6 +35,9 @@ const cases = [
   })),
 ];
 
+const laneCentre = (LANE.minY + LANE.maxY) / 2;
+const barrierSpacing = BARRIER_X[1] - BARRIER_X[0];
+
 // Test-local steering waypoints for the forward drive out of each target: bay swings out of the
 // bay column and west to the start; corner holds the outer lane through the bend; slalom swings
 // to the open side of each barrier.
@@ -48,7 +52,7 @@ const via: Partial<Record<ExerciseId, Vec2[]>> = {
   ],
   slalom: Array.from({ length: 24 }, (_, i) => {
     const x = 20 + 3 * i;
-    return { x, y: 20 + 3 * Math.cos((Math.PI * (x - 28)) / 20) };
+    return { x, y: laneCentre + 3 * Math.cos((Math.PI * (x - BARRIER_X[0])) / barrierSpacing) };
   }),
 };
 const dist = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);

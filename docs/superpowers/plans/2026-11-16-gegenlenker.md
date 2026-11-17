@@ -912,7 +912,7 @@ Common frame: yard `[0,100] × [0,70]`, bounds `[−40,140] × [−40,100]`. The
 | reverse-bay | logistics | bay 4.0 m wide and 16 m deep between two parked blocks, closed by a wall; start perpendicular to the bay, so the maneuver is a 90° reverse | trailer rear 1.0 m off the wall, pointing out of the bay | 0.5 m, 4° | — |
 | reverse-corner | depot | lane 9 m wide bounded by kerbs, with a 90° corner to the driver's (left) side and a 6 m corner kerb radius | trailer rear 15 m into the second leg, along it | 0.7 m, 5° | — |
 | dock-ramp | logistics | one 4 m bay between two bay lines at the ramp | trailer rear 0.15 m off the ramp face, square to it | 0.3 m, 2° | — |
-| slalom | depot | lane y ∈ [14, 26] bounded by kerbs from x = 2 to 98; four barriers at x = 28, 48, 68, 88 (each five cones spanning 3.5 m) from alternating sides, south first; start truck rear axle (16, 20), heading 0 | trailer rear (2.5, 20), heading 0 | 1.0 m, 6° | (92, 20) |
+| slalom | depot | lane y ∈ [14, 26] bounded by kerbs from x = 2 to 98; four barriers at x = 28, 48, 68, 88 (each seven cones spanning 6.4 m, reaching past the lane centre so the course forces a weave) from alternating sides, south first; start truck rear axle (16, 20), heading 0 | trailer rear (2.5, 20), heading 0 | 1.0 m, 6° | (92, 20) |
 
 Layout constraints (Task 18 tests the first three; the implementer checks the rest by construction):
 - The combination starts straight and is clear for all four pairs (the longest, Arocs + Hüffermann, is 17.27 m from bumper to trailer rear).
