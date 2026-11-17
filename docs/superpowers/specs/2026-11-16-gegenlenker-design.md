@@ -90,7 +90,7 @@ All devices feed one mapping layer producing the core's control vector.
 - One canvas, four viewports: cockpit, left mirror, right mirror, top-down.
 - Mirror cameras sit at the mirror positions looking rearward, drawn flipped into mirror-shaped regions of the cockpit view, with culling corrected for the flip. One main mirror per side.
 - Cockpit overlay: dashboard edge, steering wheel following the input, P / R / N / D, speed.
-- Top-down: orthographic; follow or whole-yard. Switchable aids: pivot angles, predicted path of the trailer rear, wheel tracks, target ghost.
+- Top-down: orthographic; follow or whole-yard. Switchable aids: pivot angles, predicted paths of the trailer rear and the truck's swept corridor, wheel tracks, target ghost.
 
 ### Content
 

@@ -126,10 +126,12 @@ export function dashSegments(
     const b = line[i];
     if (a === undefined || b === undefined) continue;
     const length = Math.hypot(b.x - a.x, b.y - a.y);
-    const [dx, dy] = length === 0 ? [0, 0] : [(b.x - a.x) / length, (b.y - a.y) / length];
+    const inverse = length === 0 ? 0 : 1 / length;
+    const dx = (b.x - a.x) * inverse;
+    const dy = (b.y - a.y) * inverse;
     let at = 0;
     while (at < length) {
-      const dashing = phase < on;
+      const dashing = on - phase > 1e-9; // a sliver left of the dash counts as its end, so `at` always advances
       const end = Math.min(length, at + (dashing ? on : period) - phase);
       if (dashing) emit(a.x + dx * at, a.y + dy * at, a.x + dx * end, a.y + dy * end);
       phase += end - at;

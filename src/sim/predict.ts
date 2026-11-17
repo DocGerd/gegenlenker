@@ -1,4 +1,11 @@
-import type { BlockReason, ContactQuery, Prediction, SimSnapshot, Vec2 } from '../contracts/sim';
+import type {
+  BlockReason,
+  BodyFootprint,
+  ContactQuery,
+  Prediction,
+  SimSnapshot,
+  Vec2,
+} from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
 import { wrapAngle } from './angle';
 import { PREDICT_DISTANCE, PREDICT_STEP, PREDICT_SWEEP } from './constants';
@@ -35,17 +42,22 @@ export function predictCombination(
   const ramp = speed > 0 ? (params.steerRate * params.maxRoadWheelAngle) / speed : 0;
   const innerSide = target >= 0 ? 1 : -1; // the centre of the turn is on the side the wheels point to
 
+  let memo: { q: KinematicState; bodies: readonly BodyFootprint[] } | null = null;
+  const footprints = (q: KinematicState): readonly BodyFootprint[] => {
+    if (memo?.q !== q) memo = { q, bodies: bodyFootprints(params, joints(params, q)) };
+    return memo.bodies;
+  };
   const rejection = (q: KinematicState): BlockReason | null => {
     const pivot = pivotViolation(params, q);
     if (pivot !== null) return pivot;
-    return contacts(bodyFootprints(params, joints(params, q))) === null ? null : 'contact';
+    return contacts(footprints(q)) === null ? null : 'contact';
   };
 
   const trailer: Vec2[] = [];
   const truckOuter: Vec2[] = [];
   const truckInner: Vec2[] = [];
   const recordTruck = (q: KinematicState): void => {
-    const body = bodyFootprints(params, joints(params, q))[0]?.obb;
+    const body = footprints(q)[0]?.obb;
     if (body === undefined) return;
     const [ux, uy] = [Math.cos(body.heading), Math.sin(body.heading)];
     const [nx, ny] = [-uy, ux];
@@ -78,9 +90,12 @@ export function predictCombination(
 
   while (travelled < distance - 1e-9) {
     const h = Math.min(PREDICT_STEP, distance - travelled);
-    const eased =
-      Math.abs(target - delta) <= ramp * h ? target : delta + Math.sign(target - delta) * ramp * h;
-    const through = (delta + eased) / 2;
+    const gap = target - delta;
+    const reached = Math.abs(gap) <= ramp * h;
+    const eased = reached ? target : delta + Math.sign(gap) * ramp * h;
+    // the mean angle over the step: a ramp that ends mid-step only averages over its own share
+    const through =
+      reached && ramp > 0 ? target - (gap * Math.abs(gap)) / (2 * ramp * h) : (delta + eased) / 2;
     const next = rk4(params, q, direction, through, h);
     const reason = rejection(next);
     if (reason !== null) {
