@@ -1,6 +1,6 @@
 import { exercises } from '../content/registry';
 import { LAYOUT_IDS, type LayoutId } from '../contracts/layout';
-import type { ExerciseId, RunResult } from '../contracts/exercise';
+import type { ExerciseId, InputLog, RunResult } from '../contracts/exercise';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import { applyMessages, formatNumber, setLanguage, t, type Lang } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
@@ -110,6 +110,13 @@ function bestLine(result: RunResult | undefined): HTMLElement {
   return line;
 }
 
+/** What the stored run replays: the exercise, or the free yard it was driven in. */
+function replayContext(log: InputLog): string {
+  return log.exerciseId === null
+    ? `${t('freeYard')} · ${t(LAYOUT_NAME[log.layoutId])}`
+    : t(EXERCISE_TITLE[log.exerciseId]);
+}
+
 function startButton(title: string, onClick: () => void): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
@@ -123,7 +130,7 @@ export function showMenu(
   root: HTMLElement,
   onStart: (run: RunConfig) => void,
   /** Null when there is no run to replay. */
-  onReplay: (() => void) | null,
+  replay: { readonly log: InputLog; readonly start: () => void } | null,
 ): () => void {
   const container = document.createElement('div');
   container.className = 'menu-scroll';
@@ -173,9 +180,11 @@ export function showMenu(
     );
 
     const replaySection = query(container, 'replaySection', HTMLElement);
-    if (onReplay === null) replaySection.remove();
+    if (replay === null) replaySection.remove();
     else {
-      query(container, 'replay', HTMLElement).addEventListener('click', onReplay);
+      const button = query(container, 'replay', HTMLElement);
+      button.append(span('menu-best', replayContext(replay.log)));
+      button.addEventListener('click', replay.start);
     }
 
     const exerciseButtons = exercises.map((exercise) => {
