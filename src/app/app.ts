@@ -28,14 +28,16 @@ export function startApp(root: HTMLElement): void {
   screen.className = 'app-screen';
   root.append(screen);
 
-  // Drive and replay each own a history entry, so Android back ends that screen instead of leaving the app.
+  // Drive, replay and result share one history entry, so Android back acts on that screen instead of leaving the app.
   let onBack: (() => void) | null = null;
+  let held = false;
   let ownBack = false;
   window.addEventListener('popstate', () => {
     if (ownBack) {
       ownBack = false;
       return;
     }
+    held = false;
     const exit = onBack;
     onBack = null;
     exit?.();
@@ -45,13 +47,17 @@ export function startApp(root: HTMLElement): void {
     ownBack = true;
     history.back();
   }
+  // Moving between those screens reuses the entry; only going to the menu pops it.
   const enter = (exit: () => void): void => {
-    history.pushState({ screen: true }, '');
+    if (held) history.replaceState({ screen: true }, '');
+    else history.pushState({ screen: true }, '');
+    held = true;
     onBack = exit;
   };
   const leave = (): void => {
-    if (onBack === null) return;
     onBack = null;
+    if (!held) return;
+    held = false;
     ownBack = true;
     history.back();
   };
@@ -68,11 +74,16 @@ export function startApp(root: HTMLElement): void {
   const drive = (run: RunConfig): void => {
     import('./drive')
       .then((m) => {
-        let finish: (() => void) | null = null;
-        enter(() => finish?.());
-        finish = m.startDrive(screen, run, currentSettings(), (outcome) => {
-          leave();
-          finished(run, outcome);
+        let back: (() => void) | null = null;
+        // The sheet outlives the popped entry, so the next back needs a fresh one.
+        const onPop = (): void => {
+          enter(onPop);
+          back?.();
+        };
+        enter(onPop);
+        back = m.startDrive(screen, run, currentSettings(), {
+          onExit: (outcome) => finished(run, outcome),
+          onRestart: () => drive(run),
         });
       })
       .catch((error: unknown) => loadFailed(error, menu));
@@ -82,18 +93,17 @@ export function startApp(root: HTMLElement): void {
       .then((m) => {
         let exit: (() => void) | null = null;
         enter(() => exit?.());
-        exit = m.startReplay(screen, log, () => {
-          leave();
-          onExit();
-        });
+        exit = m.startReplay(screen, log, onExit);
       })
-      .catch((error: unknown) => loadFailed(error, onExit));
+      .catch((error: unknown) => loadFailed(error, menu));
   };
   const finished = (run: RunConfig, outcome: DriveOutcome): void => {
     const isNewBest = outcome.result !== null && storeResult(outcome.result);
     storeLastRun(outcome.log);
-    if (outcome.result === null) menu();
-    else result(run, outcome.result, isNewBest, outcome.log);
+    if (outcome.result === null) {
+      leave();
+      menu();
+    } else result(run, outcome.result, isNewBest, outcome.log);
   };
   const result = (run: RunConfig, r: RunResult, isNewBest: boolean, log: InputLog): void => {
     const close = showResult(screen, r, isNewBest, {
@@ -109,8 +119,13 @@ export function startApp(root: HTMLElement): void {
         : null,
       menu: () => {
         close();
+        leave();
         menu();
       },
+    });
+    enter(() => {
+      close();
+      menu();
     });
   };
   const menu = (): void => {
@@ -123,9 +138,15 @@ export function startApp(root: HTMLElement): void {
       },
       log === null
         ? null
-        : () => {
-            close();
-            replay(log, menu);
+        : {
+            log,
+            start: () => {
+              close();
+              replay(log, () => {
+                leave();
+                menu();
+              });
+            },
           },
     );
   };
