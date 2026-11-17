@@ -6,7 +6,18 @@ export type Rect2 = {
   readonly maxX: number;
   readonly maxY: number;
 };
-export type ObstacleKind = 'kerb' | 'wall' | 'fence' | 'hall' | 'ramp' | 'lamp' | 'parked' | 'cone';
+export type ObstacleKind =
+  | 'kerb'
+  | 'wall'
+  | 'fence'
+  | 'hall'
+  | 'ramp'
+  | 'lamp'
+  | 'parked'
+  | 'cone'
+  | 'bollard'
+  | 'barrier'
+  | 'gatehouse';
 export type Obstacle = {
   readonly id: string;
   readonly kind: ObstacleKind;

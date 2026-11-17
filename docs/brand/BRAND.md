@@ -35,7 +35,7 @@ Text on `--color-accent-tint` is only `--color-text` or `--color-accent-strong`:
 
 Scene colours are theme-independent neutral greys, except the red obstacle cone and the blue sky. Red marks obstacles only; the accent marks target and guidance only. `tokens.test.ts` checks these targets on the hex values (light-theme `:root`), where contrast is `(L1 + 0.05) / (L2 + 0.05)` on relative luminance:
 
-- **T1, single-tone collision object:** darker than the ground it stands on, contrast 3.1:1 or more. Pairs: cone, yard kerb (`--scene-band`), wall, fence, ramp, parked trailer, hall and lamp on yard; lamp on pavement. The cone is T1 in red; its white bands are decoration, not T2.
+- **T1, single-tone collision object:** darker than the ground it stands on, contrast 3.1:1 or more. Pairs: cone, yard kerb (`--scene-band`), wall, fence, ramp, parked trailer, hall, lamp, gatehouse (wall token), bollard and barrier post (lamp token) on yard; lamp on pavement. The cone is T1 in red; its white bands are decoration, not T2.
 - **T2, two-tone object:** the dark tone is T1 against its ground and the two tones differ by 9:1 or more (lamp against its white plinth band) or, for the hall, 6:1 or more (hall against cladding). The hall cannot reach 9:1: cladding must stay 1.5:1 or more against sky, which caps its lightness.
 - **T3, adjacent grounds:** 1.5:1 or more. Pairs: yard, pavement, street and verge against each other, verge, street and hall cladding against sky. Cladding also stays 3:1 or more against the hall and the fence behind it.
 - **T4, sky:** `--scene-sky` is the horizon colour of the sky dome (`src/render/sky.ts`); the zenith is derived from it, deeper and bluer. The perspective-only haze lightens the dome towards `skyHaze` near the horizon; the token values are what T3 and T4 check. It is chromatic so it separates from the grey grounds: OKLab distance 0.08 or more against yard and pavement, where lightness alone cannot (they bracket it); verge and street are T3.
@@ -63,7 +63,7 @@ Scene colours are theme-independent neutral greys, except the red obstacle cone 
 
 ## Perspective-only realism hues
 
-Vehicle detail, yard props and the sky dome (haze, sun halo, skyline) may use these hues in the cockpit and mirror views only. They are not scene tokens: the top-down view keeps strict tokens, so none of them may be a `--color-*` or `--scene-*` value, a `ScenePalette` key or a top-down top face. T1-T4 are unchanged. `src/render/realism-hues.ts` holds them as sRGB; `tokens.test.ts` checks that the table and the module agree. RAL values are sRGB approximations.
+Vehicle detail, yard props (fence grid, hall cladding and roofs, containers, masts, gatehouse) and the sky dome (haze, sun halo, skyline) may use these hues in the cockpit and mirror views only. They are not scene tokens: yard props draw their detail on `SKY_LAYER` while the top-down view draws a plain token copy of the same footprint, so it keeps strict tokens. None of them may be a `--color-*` or `--scene-*` value, a `ScenePalette` key or a top-down top face. T1-T4 are unchanged. `src/render/realism-hues.ts` holds them as sRGB; `tokens.test.ts` checks that the table and the module agree. RAL values are sRGB approximations.
 
 | Key               | Value     | Use                                                       |
 | ----------------- | --------- | --------------------------------------------------------- |
