@@ -8,6 +8,7 @@ const LEFT = ['KeyA', 'ArrowLeft'];
 const RIGHT = ['KeyD', 'ArrowRight'];
 const FASTER = ['KeyW', 'ArrowUp'];
 const SLOWER = ['KeyS', 'ArrowDown'];
+const RESET_STEER = 'KeyC';
 
 const isFormField = (target: EventTarget | null): boolean =>
   target instanceof Element && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
@@ -29,7 +30,10 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
     (e) => {
       if (isFormField(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
       const { code } = e;
-      if (LEFT.includes(code) || RIGHT.includes(code)) held.add(code);
+      if (LEFT.includes(code) || RIGHT.includes(code)) {
+        held.add(code);
+        state.resetting = false;
+      } else if (code === RESET_STEER) state.resetting = true;
       else if (
         e.repeat &&
         (FASTER.includes(code) || SLOWER.includes(code) || code === 'Space' || GEARS[code])
@@ -77,6 +81,7 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
       const left = LEFT.some((k) => held.has(k));
       const right = RIGHT.some((k) => held.has(k));
       if (left !== right) {
+        state.resetting = false;
         state.steer = clamp(state.steer + (left ? 1 : -1) * steerRate * dt, -1, 1);
       }
     },
