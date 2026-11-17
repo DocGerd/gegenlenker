@@ -5,17 +5,27 @@ import {
   Group,
   Mesh,
   MeshLambertMaterial,
+  type Texture,
 } from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { placePose } from './coords';
-import type { VehicleVisual } from './seams';
+import { REALISM_HUES } from './realism-hues';
+import { SKY_LAYER, type VehicleVisual } from './seams';
+import {
+  dollyDetail,
+  frontWheelDetail,
+  plateGeometry,
+  plateTexture,
+  trailerDetail,
+  truckDetail,
+  type PlateSpot,
+} from './vehicle-detail';
+import { box, merge, WHEEL_SEGMENTS, wheelGeometry } from './vehicle-geometry';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
 const TRUCK_WHEEL_RADIUS = 0.5;
-const WHEEL_SEGMENTS = 20;
 const TRUCK_WHEEL_WIDTH = 0.3;
 const TWIN_WHEEL_WIDTH = 0.26;
 const TWIN_OFFSET = 0.15;
@@ -35,6 +45,7 @@ const RAIL_WIDTH = 0.2;
 const SWAP_BODY_HEIGHT = 2.7;
 const RAMP_HEIGHT = 1.2;
 const RAMP_WIDTH = 0.9;
+const RAMP_GAP = 0.15; // from the centreline to the inner ramp edge
 const RAMP_THICKNESS = 0.1;
 const DECK_PLATE = 0.1; // low-loader deck slab
 const BOX_FRAME_DEPTH = 0.25; // rails under a swap body
@@ -47,19 +58,6 @@ const PLATE_THICKNESS = 0.1;
 const POST_HALF_WIDTH = 0.15;
 const AXLE_HALF_THICKNESS = 0.07;
 const SWING_MARGIN = 0.1;
-
-/** Body-frame extents (x forward, y left, z up) as a Three-space box. */
-function box(
-  [x0, x1]: readonly [number, number],
-  [y0, y1]: readonly [number, number],
-  [z0, z1]: readonly [number, number],
-): BufferGeometry {
-  return new BoxGeometry(x1 - x0, z1 - z0, y1 - y0).translate(
-    (x0 + x1) / 2,
-    (z0 + z1) / 2,
-    -(y0 + y1) / 2,
-  );
-}
 
 type Point3 = readonly [x: number, y: number, z: number];
 
@@ -77,40 +75,51 @@ function strut(
     .translate((x0 + x1) / 2, (z0 + z1) / 2, -(y0 + y1) / 2);
 }
 
-/** Axis along body y, built at the origin. */
-function wheelGeometry(radius: number, width: number): BufferGeometry {
-  return new CylinderGeometry(radius, radius, width, WHEEL_SEGMENTS).rotateX(Math.PI / 2);
-}
-
 function wheelAt(radius: number, width: number, x: number, y: number): BufferGeometry {
   return wheelGeometry(radius, width).translate(x, radius, -y);
-}
-
-function merge(parts: BufferGeometry[]): BufferGeometry {
-  // The typings omit the null returned for mismatched attributes.
-  const merged = mergeGeometries(parts) as BufferGeometry | null;
-  if (merged === null) throw new Error('Vehicle parts have mismatched attributes');
-  parts.forEach((p) => p.dispose());
-  return merged;
 }
 
 /** Owns what a visual allocates so `dispose` releases it exactly once. */
 function resources() {
   const geometries = new Set<BufferGeometry>();
   const materials: MeshLambertMaterial[] = [];
+  const textures: Texture[] = [];
+  let detailMaterial: MeshLambertMaterial | null = null;
+  const track = (material: MeshLambertMaterial): MeshLambertMaterial => {
+    materials.push(material);
+    return material;
+  };
   return {
     material(color: number): MeshLambertMaterial {
-      const material = new MeshLambertMaterial({ color });
-      materials.push(material);
-      return material;
+      return track(new MeshLambertMaterial({ color }));
     },
     mesh(geometry: BufferGeometry, material: MeshLambertMaterial): Mesh {
       geometries.add(geometry);
       return new Mesh(geometry, material);
     },
+    /** Perspective-only detail: vertex colours in one shared material, off the top-down camera. */
+    detail(geometry: BufferGeometry): Mesh {
+      detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
+      const mesh = this.mesh(geometry, detailMaterial);
+      mesh.layers.set(SKY_LAYER);
+      return mesh;
+    },
+    plate(spot: PlateSpot): Mesh {
+      const texture = plateTexture();
+      if (texture !== null) textures.push(texture);
+      const material = track(
+        new MeshLambertMaterial(
+          texture === null ? { color: REALISM_HUES.plateWhite } : { map: texture },
+        ),
+      );
+      const mesh = this.mesh(plateGeometry(spot), material);
+      mesh.layers.set(SKY_LAYER);
+      return mesh;
+    },
     dispose(): void {
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
+      textures.forEach((t) => t.dispose());
     },
   };
 }
@@ -186,6 +195,22 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
     frontOverhang: a.frontX - a.frontAxle.x,
   });
 
+  const detail = truckDetail({
+    spec,
+    halfWidth: hw,
+    frontX: a.frontX,
+    rearX: a.rearX,
+    bodyFront,
+    frameTop: FRAME_TOP,
+    floorTop,
+    railBottom: RAIL_BOTTOM,
+    rearAxleX: a.rearAxle.x,
+    rearTrack,
+    twinOffset: TWIN_OFFSET,
+    twinWidth: TWIN_WHEEL_WIDTH,
+    wheelRadius: TRUCK_WHEEL_RADIUS,
+  });
+
   const group = new Group();
   group.add(
     schematic.rear,
@@ -193,14 +218,17 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
     res.mesh(merge(chassis), chassisMaterial),
     res.mesh(merge(body), bodyMaterial),
     res.mesh(merge(rearWheels), wheelMaterial),
+    res.detail(detail.geometry),
+    res.plate(detail.plate),
   );
 
   // each front wheel yaws about its own kingpin, so the two share one geometry
   const frontWheel = wheelGeometry(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH);
+  const frontDetail = frontWheelDetail(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH);
   const kingpin = (side: -1 | 1): Group => {
     const pivot = new Group();
     pivot.position.set(a.frontAxle.x, TRUCK_WHEEL_RADIUS + a.frontAxle.z, (-side * frontTrack) / 2);
-    pivot.add(res.mesh(frontWheel, wheelMaterial), schematic.front());
+    pivot.add(res.mesh(frontWheel, wheelMaterial), res.detail(frontDetail), schematic.front());
     group.add(pivot);
     return pivot;
   };
@@ -302,7 +330,8 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
   } else {
     bodyParts.push(box([a.rearX, a.frontX], [-hw, hw], [underside, deck]));
     for (const side of [-1, 1]) {
-      const [y0, y1] = side < 0 ? [-0.15 - RAMP_WIDTH, -0.15] : [0.15, 0.15 + RAMP_WIDTH];
+      const [y0, y1] =
+        side < 0 ? [-RAMP_GAP - RAMP_WIDTH, -RAMP_GAP] : [RAMP_GAP, RAMP_GAP + RAMP_WIDTH];
       bodyParts.push(
         box([a.rearX, a.rearX + RAMP_THICKNESS], [y0, y1], [deck, deck + RAMP_HEIGHT]),
       );
@@ -334,11 +363,28 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
     frontX: a.frontX,
   });
 
+  const dollyRims = dollyDetail(radius, TRAILER_WHEEL_WIDTH, a.frontAxle.x, track);
+  const trailerRig = trailerDetail({
+    spec,
+    halfWidth: hw,
+    rearX: a.rearX,
+    frontX: a.frontX,
+    deck,
+    underside,
+    bodyTop: isBox ? deck + SWAP_BODY_HEIGHT : deck,
+    isBox,
+    radius,
+    track,
+    wheelWidth: TRAILER_WHEEL_WIDTH,
+    rearAxleXs: a.rearAxles.map((axle) => axle.x),
+  });
+
   const dolly = new Group();
   dolly.add(
     res.mesh(merge(dollyChassis), chassisMaterial),
     res.mesh(merge(dollyWheels), wheelMaterial),
     dollyPlan.mesh,
+    res.detail(dollyRims),
   );
   const trailer = new Group();
   trailer.add(
@@ -346,6 +392,8 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
     res.mesh(merge(bodyParts), bodyMaterial),
     res.mesh(merge([...rails, ...axleBeams]), chassisMaterial),
     res.mesh(merge(trailerWheels), wheelMaterial),
+    res.detail(trailerRig.geometry),
+    res.plate(trailerRig.plate),
   );
   const group = new Group();
   group.add(dolly, trailer);

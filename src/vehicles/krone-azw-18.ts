@@ -19,4 +19,23 @@ export const kroneAzw18: TrailerSpec = {
   deckHeight: estimate(1280, 'midpoint of 1,190–1,370 frame height'),
   couplingLimit: estimate(80, limitBasis),
   turntableLimit: estimate(85, limitBasis),
+  underrunGuard: {
+    depth: estimate(50, typical),
+    inset: estimate(100, typical),
+    lowerEdge: estimate(300, typical),
+    height: estimate(250, typical),
+    strutOffset: estimate(640, typical),
+    strutWidth: estimate(100, typical),
+  },
+  tailLamp: {
+    inset: estimate(150, typical),
+    width: estimate(360, typical),
+    sill: estimate(100, typical),
+    height: estimate(200, typical),
+  },
+  mudflap: {
+    gap: estimate(100, typical),
+    clearance: estimate(125, typical),
+    height: estimate(825, typical),
+  },
 };
