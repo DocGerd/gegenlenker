@@ -35,6 +35,20 @@ describe('skyline', () => {
     }
   });
 
+  it('keeps every part convex, as the fan triangulation requires', () => {
+    for (const s of silhouettes) {
+      for (const part of s.parts) {
+        const turns = part.map(([x0, y0], i) => {
+          const [x1, y1] = part[(i + 1) % part.length] ?? [x0, y0];
+          const [x2, y2] = part[(i + 2) % part.length] ?? [x0, y0];
+          return (x1 - x0) * (y2 - y1) - (y1 - y0) * (x2 - x1);
+        });
+        const sign = Math.sign(turns.find((t) => t !== 0) ?? 0);
+        expect(turns.every((t) => t * sign >= 0)).toBe(true);
+      }
+    }
+  });
+
   it('is seen by the perspective cameras only', () => {
     const skyline = createSkyline(new Color(0x5c6875), new Color(0xdcebf2));
     const perspective = new Camera();
