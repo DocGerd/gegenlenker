@@ -64,7 +64,12 @@ export function bestResults(): BestResults {
 export function storeResult(result: RunResult): boolean {
   const recorded = recordBest(bestResults(), result);
   best = recorded.best;
-  writeText(BEST_KEY, serializeBestResults(best));
+  const json = serializeBestResults(best);
+  if (!writeText(BEST_KEY, json)) {
+    // A large old run log must not cost the driver their best result.
+    removeText(LAST_RUN_KEY);
+    writeText(BEST_KEY, json);
+  }
   return recorded.isNewBest;
 }
 

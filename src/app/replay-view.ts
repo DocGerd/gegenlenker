@@ -2,14 +2,13 @@ import { exerciseById, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { InputLog } from '../contracts/exercise';
 import type { AidFlags, RenderFrame } from '../contracts/render';
-import type { SimSnapshot, Vec2 } from '../contracts/sim';
+import type { Simulation, Vec2 } from '../contracts/sim';
 import { formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { readScenePalette } from '../render/palette';
 import { computeViewports } from '../render/viewports';
 import { createContactQuery } from '../sim/collision';
 import { DT } from '../sim/constants';
-import { replaySnapshots } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
@@ -44,14 +43,38 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   const params = resolveCombination(truck, trailer);
   const exercise = log.exerciseId === null ? null : exerciseById(log.exerciseId);
   const layout = resolveLayout(layouts[log.layoutId], exercise);
-  const sim = createSimulation(
-    params,
-    { truck: exercise?.start ?? layouts[log.layoutId].start },
-    createContactQuery(layout.obstacles),
-  );
-  const first = sim.snapshot();
-  const snapshots: readonly SimSnapshot[] = [first, ...replaySnapshots(log, sim)];
-  const lastIndex = snapshots.length - 1;
+  const makeSim = (): Simulation =>
+    createSimulation(
+      params,
+      { truck: exercise?.start ?? layouts[log.layoutId].start },
+      createContactQuery(layout.obstacles),
+    );
+
+  // Playback only moves forward, so the run is stepped lazily and one snapshot is held.
+  let sim = makeSim();
+  let snapshot = sim.snapshot();
+  let stepped = 0;
+  let nextChange = 0;
+  let control = snapshot.control;
+  const advanceTo = (target: number): void => {
+    while (stepped < target) {
+      for (let change = log.changes[nextChange]; change !== undefined && change.step <= stepped;) {
+        control = change.control;
+        change = log.changes[++nextChange];
+      }
+      snapshot = sim.step(control);
+      stepped++;
+    }
+  };
+  const restart = (): void => {
+    sim = makeSim();
+    snapshot = sim.snapshot();
+    stepped = 0;
+    nextChange = 0;
+    control = snapshot.control;
+    position = 0;
+  };
+  const total = `${formatNumber(log.steps * DT, 1)} s`;
 
   const stage = document.createElement('div');
   stage.className = 'replay';
@@ -93,13 +116,12 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   let playing = true;
   let speed = SPEEDS[0] ?? 1;
   let position = 0;
-  let drawn = -1;
   let dirty = true;
 
   const bar = document.createElement('div');
   bar.className = 'replay-bar';
   const playButton = button('app-button app-button-primary', '', () => {
-    if (!playing && position >= lastIndex) position = 0;
+    if (!playing && position >= log.steps) restart();
     playing = !playing;
     sync();
   });
@@ -130,7 +152,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   sync();
 
   const frame: Frame = {
-    snapshot: first,
+    snapshot,
     views: computeViewports(1, 1, 'replay'),
     topDown: 'yard',
     aids: AIDS,
@@ -161,21 +183,21 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     raf = requestAnimationFrame(tick);
     const dt = last < 0 ? 0 : Math.min((now - last) / 1000, MAX_FRAME_SECONDS);
     last = now;
+    const wasPlaying = playing;
     if (playing) {
-      position = Math.min(lastIndex, position + (1 / DT) * speed * dt);
-      if (position >= lastIndex) {
+      position = Math.min(log.steps, position + (1 / DT) * speed * dt);
+      if (position >= log.steps) {
         playing = false;
         sync();
       }
     }
-    const index = Math.floor(position);
-    if (index === drawn && !dirty) return;
-    drawn = index;
+    advanceTo(Math.floor(position));
+    // A steady cadence while playing: the resolution governor reads uneven frame intervals as overload.
+    if (!wasPlaying && !dirty) return;
     dirty = false;
-    const snapshot = snapshots[index] ?? first;
     frame.snapshot = snapshot;
     renderer.render(frame);
-    timeLabel.textContent = `${formatNumber(snapshot.time, 1)} s`;
+    timeLabel.textContent = `${formatNumber(snapshot.time, 1)} / ${total}`;
   };
 
   const resume = (): void => {
