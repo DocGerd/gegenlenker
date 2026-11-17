@@ -1,5 +1,6 @@
 import type { InputLog, RunResult } from '../contracts/exercise';
 import { detectLanguage, setLanguage } from '../i18n/i18n';
+import { requestPersistentStorage } from '../pwa/persist';
 import { startUpdatePrompt } from '../pwa/update-prompt';
 import './app.css';
 import type { DriveOutcome, RunConfig } from './drive';
@@ -153,4 +154,5 @@ export function startApp(root: HTMLElement): void {
 
   menu();
   startUpdatePrompt(root);
+  void requestPersistentStorage();
 }

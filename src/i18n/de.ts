@@ -71,6 +71,8 @@ export const de: Record<MessageKey, string> = {
   reload: 'Neu laden',
   later: 'Später',
   offlineReady: 'Offline bereit',
+  offlineSetupFailed: 'Offline-Nutzung konnte nicht eingerichtet werden.',
+  dismiss: 'Schließen',
   noWebgl: 'Dieses Gerät kann keine WebGL-2-Grafik anzeigen.',
   contextLost:
     'Grafik unterbrochen. Die Fahrt läuft weiter, sobald sie zurück ist – oder neu laden.',
