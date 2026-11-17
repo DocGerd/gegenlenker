@@ -63,9 +63,13 @@ const MARKUP = `
   <footer class="menu-footer">© 2026 Patrick Kuhn</footer>
 </main>`;
 
-const query = <T extends Element>(root: ParentNode, name: string): T => {
-  const el = root.querySelector<T>(`[data-menu="${name}"]`);
-  if (!el) throw new Error(`menu markup lacks ${name}`);
+const query = <T extends Element>(
+  root: ParentNode,
+  name: string,
+  type: abstract new () => T,
+): T => {
+  const el = root.querySelector(`[data-menu="${name}"]`);
+  if (!(el instanceof type)) throw new Error(`menu markup lacks ${name}`);
   return el;
 };
 
@@ -130,10 +134,10 @@ export function showMenu(
     container.innerHTML = MARKUP;
     applyMessages(container);
 
-    const truck = query<HTMLSelectElement>(container, 'truck');
-    const trailer = query<HTMLSelectElement>(container, 'trailer');
-    const language = query<HTMLSelectElement>(container, 'language');
-    const theme = query<HTMLSelectElement>(container, 'theme');
+    const truck = query(container, 'truck', HTMLSelectElement);
+    const trailer = query(container, 'trailer', HTMLSelectElement);
+    const language = query(container, 'language', HTMLSelectElement);
+    const theme = query(container, 'theme', HTMLSelectElement);
     fillSelect(
       truck,
       trucks.map((s) => [s.id, s.name]),
@@ -160,7 +164,7 @@ export function showMenu(
       return { truckId: s.truckId, trailerId: s.trailerId };
     };
 
-    query<HTMLElement>(container, 'yards').append(
+    query(container, 'yards', HTMLElement).append(
       ...LAYOUT_IDS.map((layoutId) =>
         startButton(t(LAYOUT_NAME[layoutId]), () =>
           onStart({ layoutId, exercise: null, ...pair() }),
@@ -168,10 +172,10 @@ export function showMenu(
       ),
     );
 
-    const replaySection = query<HTMLElement>(container, 'replaySection');
+    const replaySection = query(container, 'replaySection', HTMLElement);
     if (onReplay === null) replaySection.remove();
     else {
-      query<HTMLElement>(container, 'replay').addEventListener('click', onReplay);
+      query(container, 'replay', HTMLElement).addEventListener('click', onReplay);
     }
 
     const exerciseButtons = exercises.map((exercise) => {
@@ -180,7 +184,7 @@ export function showMenu(
       );
       return { button, exercise };
     });
-    query<HTMLElement>(container, 'exercises').append(...exerciseButtons.map((e) => e.button));
+    query(container, 'exercises', HTMLElement).append(...exerciseButtons.map((e) => e.button));
     const refreshBest = (): void => {
       const best = bestResults();
       const { truckId, trailerId } = pair();
@@ -214,7 +218,7 @@ export function showMenu(
       updateSettings({ theme: pref });
     });
 
-    if (focus !== null) query<HTMLElement>(container, focus).focus();
+    if (focus !== null) query(container, focus, HTMLElement).focus();
   };
 
   render(null);

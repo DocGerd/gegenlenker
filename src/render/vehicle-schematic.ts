@@ -96,7 +96,7 @@ function createSchematic(palette: ScenePalette) {
         return mesh;
       };
     },
-    dispose(): void {
+    dispose: (): void => {
       geometries.forEach((g) => g.dispose());
       material.dispose();
     },
