@@ -241,7 +241,10 @@ export function startDrive(
         }
       }
     }
-    if (clock.steps === 0 && !dirty) return;
+    if (clock.steps === 0 && !dirty) {
+      renderer.skipFrame();
+      return;
+    }
     dirty = false;
     if (clock.steps > 0 || pathStale) {
       pathStale = false;

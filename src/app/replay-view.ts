@@ -183,7 +183,6 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     raf = requestAnimationFrame(tick);
     const dt = last < 0 ? 0 : Math.min((now - last) / 1000, MAX_FRAME_SECONDS);
     last = now;
-    const wasPlaying = playing;
     if (playing) {
       position = Math.min(log.steps, position + (1 / DT) * speed * dt);
       if (position >= log.steps) {
@@ -191,9 +190,13 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
         sync();
       }
     }
+    const before = stepped;
     advanceTo(Math.floor(position));
-    // A steady cadence while playing: the resolution governor reads uneven frame intervals as overload.
-    if (!wasPlaying && !dirty) return;
+    if (stepped === before && !dirty) {
+      // Paused frames report nothing: the idle gap must not count as slow.
+      if (playing) renderer.skipFrame();
+      return;
+    }
     dirty = false;
     frame.snapshot = snapshot;
     renderer.render(frame);
