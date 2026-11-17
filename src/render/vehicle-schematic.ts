@@ -177,7 +177,7 @@ export function trailerSchematic(palette: ScenePalette, p: TrailerSchematicParam
       [-1, 1].map((side) => wheel(x, side * half, p.wheelRadius, p.wheelWidth)),
     ),
     // forward only: the pivot rays run 4 m backward from the turntable
-    bar([p.turntableX, 0], [p.turntableX + INDEX_LENGTH, 0], INDEX_WIDTH),
+    bar([p.turntableX + INDEX_WIDTH / 2 + HALO, 0], [p.turntableX + INDEX_LENGTH, 0], INDEX_WIDTH),
   ]);
   return { mesh: mesh(), dispose: s.dispose };
 }
