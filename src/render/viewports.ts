@@ -2,6 +2,23 @@ import type { Rect, ViewMode, ViewRects } from '../contracts/render';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
+// Mirrors the control layout in controls.css and tokens.css: edge inset, label block,
+// stop button. Mirrors stay above these so the controls never cover them.
+const INSET = 16;
+const LABEL_BLOCK = 30;
+const STOP_BLOCK = 55;
+const CLEARANCE = 8;
+const COCKPIT_LABEL = 32;
+
+/** Height the control columns occupy above the viewport bottom. */
+export function controlsHeight(cssWidth: number, cssHeight: number): number {
+  const vmin = Math.min(cssWidth, cssHeight);
+  const steer = INSET + LABEL_BLOCK + clamp(0.38 * vmin, 160, 300) + 2;
+  if (cssWidth >= cssHeight) return steer;
+  const lever = clamp(0.24 * vmin, 160, 240) + 2;
+  return Math.max(steer, INSET + STOP_BLOCK + CLEARANCE + LABEL_BLOCK + lever);
+}
+
 export function computeViewports(cssWidth: number, cssHeight: number, mode: ViewMode): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
@@ -19,12 +36,16 @@ export function computeViewports(cssWidth: number, cssHeight: number, mode: View
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
   }
   const mw = clamp(Math.round(0.15 * cockpit.width), 72, 200);
-  const mh = Math.min(2 * mw, Math.round(0.5 * cockpit.height));
-  const y = cockpit.y + Math.round(0.16 * cockpit.height);
+  const wanted = Math.min(2 * mw, Math.round(0.5 * cockpit.height));
+  const floor = cockpit.y + COCKPIT_LABEL;
+  const ceiling = cssHeight - controlsHeight(cssWidth, cssHeight) - CLEARANCE;
+  const preferred = cockpit.y + Math.round(0.16 * cockpit.height);
+  const y = Math.min(preferred, Math.max(floor, ceiling - wanted));
+  const mh = Math.max(mw, Math.min(wanted, ceiling - y));
   return {
     cockpit,
-    mirrorLeft: { x: cockpit.x + 16, y, width: mw, height: mh },
-    mirrorRight: { x: cockpit.x + cockpit.width - 16 - mw, y, width: mw, height: mh },
+    mirrorLeft: { x: cockpit.x + INSET, y, width: mw, height: mh },
+    mirrorRight: { x: cockpit.x + cockpit.width - INSET - mw, y, width: mw, height: mh },
     topDown,
   };
 }
