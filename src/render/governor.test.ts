@@ -22,7 +22,7 @@ function run(timer: ReturnType<typeof createFrameTimer>, hz: number, frames: num
 describe('frame timer', () => {
   it('sees the 90 Hz render pattern that used to read as overload', () => {
     const { pattern } = run(createFrameTimer(), 90, 6);
-    expect(pattern).toEqual([1, 0, 1, 1, 0, 1]);
+    expect(pattern).toEqual([0, 1, 1, 0, 1, 1]);
   });
 
   it.each([72, 90, 144])('keeps full resolution at a healthy %i Hz cadence', (hz) => {
@@ -45,7 +45,16 @@ describe('frame timer', () => {
     const timer = createFrameTimer();
     const { end } = run(timer, 90, 200);
     timer.resetTiming();
-    run(timer, 90, 200, end + 5000);
+    run(timer, 90, 30, end + 5000);
+    expect(timer.scale()).toBe(1);
+    expect(timer.fps()).toBeCloseTo(90, 0);
+    expect(timer.p95Ms()).toBeCloseTo(1000 / 90, 1);
+  });
+
+  it('does not count a long gap as slow even without a reset', () => {
+    const timer = createFrameTimer();
+    const { end } = run(timer, 90, 200);
+    run(timer, 90, 30, end + 5000);
     expect(timer.scale()).toBe(1);
     expect(timer.fps()).toBeCloseTo(90, 0);
     expect(timer.p95Ms()).toBeCloseTo(1000 / 90, 1);

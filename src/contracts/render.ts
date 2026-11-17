@@ -68,6 +68,8 @@ export interface SceneRenderer {
   ): void;
   resize(cssWidth: number, cssHeight: number): void;
   render(frame: RenderFrame): void;
+  /** Reports an animation frame on which the caller chose not to render, so frame timing still sees it. */
+  skipFrame(): void;
   stats(): RenderStats;
   dispose(): void;
 }
