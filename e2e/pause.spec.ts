@@ -27,6 +27,15 @@ test('back pauses the drive and back again continues', async ({ page }) => {
   await expect(speed(page)).not.toHaveText(paused ?? '');
 });
 
+test('the sheet takes the keyboard: Space continues instead of braking', async ({ page }) => {
+  await startAndRoll(page);
+  await page.goBack();
+  await expect(sheet(page)).toBeVisible();
+  await page.keyboard.press('Space');
+  await expect(sheet(page)).toBeHidden();
+  await expect(speed(page)).not.toHaveText('0.0 km/h');
+});
+
 test('restart leaves no result and no replay', async ({ page }) => {
   await startAndRoll(page);
   await page.goBack();
