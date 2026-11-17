@@ -60,6 +60,57 @@ export function replaySnapshots(log: InputLog, sim: Simulation): SimSnapshot[] {
   return snapshots;
 }
 
+export type ReplayCursor = {
+  /** Steps taken so far. */
+  step(): number;
+  snapshot(): SimSnapshot;
+  /** Clamped to the run; going back rebuilds the run from step 0, so scrubbing equals playing. */
+  seek(step: number): SimSnapshot;
+};
+
+/**
+ * `makeObserver` runs on every rebuild, so state that depends on the whole history
+ * (the scoring tracker) restarts together with the simulation.
+ */
+export function createReplayCursor(
+  log: InputLog,
+  makeSim: () => Simulation,
+  makeObserver?: () => (snapshot: SimSnapshot) => void,
+): ReplayCursor {
+  let sim = makeSim();
+  let observe = makeObserver?.();
+  let snapshot = sim.snapshot();
+  let stepped = 0;
+  let next = 0;
+  let control = snapshot.control;
+  const reset = (): void => {
+    sim = makeSim();
+    observe = makeObserver?.();
+    snapshot = sim.snapshot();
+    stepped = 0;
+    next = 0;
+    control = snapshot.control;
+  };
+  return {
+    step: () => stepped,
+    snapshot: () => snapshot,
+    seek(step) {
+      const target = Math.min(Math.max(Math.floor(step), 0), log.steps);
+      if (target < stepped) reset();
+      while (stepped < target) {
+        for (let change = log.changes[next]; change !== undefined && change.step <= stepped;) {
+          control = change.control;
+          change = log.changes[++next];
+        }
+        snapshot = sim.step(control);
+        observe?.(snapshot);
+        stepped++;
+      }
+      return snapshot;
+    },
+  };
+}
+
 const isMember = <T extends string>(ids: readonly T[], v: unknown): v is T =>
   typeof v === 'string' && (ids as readonly string[]).includes(v);
 
