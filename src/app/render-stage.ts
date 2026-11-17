@@ -44,7 +44,7 @@ export function mountRenderStage(
   try {
     gl = acquireRenderer();
   } catch {
-    showNotice(stage, 'noWebgl', 'back', onBack);
+    showNotice(stage, 'noWebgl', { label: 'back', run: onBack });
     return null;
   }
   const { canvas, renderer } = gl;
@@ -82,7 +82,7 @@ export function mountRenderStage(
   };
   const lose = (): void => {
     pause();
-    notice ??= showNotice(stage, 'contextLost', 'reload', () => location.reload());
+    notice ??= showNotice(stage, 'contextLost', { label: 'reload', run: () => location.reload() });
   };
   const observer = new ResizeObserver(relayout);
 
