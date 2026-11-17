@@ -28,10 +28,13 @@ async function afterSteps(page: Page, steps: number): Promise<Box> {
   const from = (await vehicleBox(page)).step;
   let box = await vehicleBox(page);
   await expect
-    .poll(async () => {
-      box = await vehicleBox(page);
-      return box.step - from;
-    })
+    .poll(
+      async () => {
+        box = await vehicleBox(page);
+        return box.step - from;
+      },
+      { timeout: 60_000 },
+    )
     .toBeGreaterThanOrEqual(steps);
   return box;
 }
@@ -62,6 +65,8 @@ for (const size of sizes) {
     const name = `${size.width}x${size.height} ${folded ? 'panels collapsed' : 'panels open'}`;
 
     test(`follow framing keeps the vehicle clear of the chrome at ${name}`, async ({ page }) => {
+      // The sim runs in real time; software GL on CI renders far below 60 fps.
+      test.setTimeout(180_000);
       await start(page, size);
       if (folded) {
         await page.getByRole('button', { name: en.panelAids, exact: true }).click();
