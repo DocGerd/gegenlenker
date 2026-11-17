@@ -4,7 +4,6 @@ import {
   Color,
   CylinderGeometry,
   DirectionalLight,
-  Float32BufferAttribute,
   Group,
   HemisphereLight,
   Mesh,
@@ -18,10 +17,14 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Tolerances } from '../contracts/exercise';
 import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
-import { AIDS_LAYER, type Environment } from './seams';
+import { AIDS_LAYER, SKY_LAYER, type Environment } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSky, neutralSky } from './sky';
 import { createSkyline } from './skyline';
+import { tint } from './tint';
+import { isOnYard, RESTYLED_KINDS, yardProps } from './yard-props';
+
+export { tint };
 
 const VERGE_Y = 0;
 const SURFACE_Y = 0.005;
@@ -104,19 +107,6 @@ export function toleranceGeometry(
   const ray = (sign: number): BufferGeometry =>
     rectGeometry(0, length, -half, half).rotateY(sign * tilt);
   return mergeGeometries([ring, ray(1), ray(-1)]);
-}
-
-/** Drops uv and adds a linear vertex colour so one material serves every colour. */
-export function tint(geometry: BufferGeometry, color: Color): BufferGeometry {
-  geometry.deleteAttribute('uv');
-  const n = geometry.getAttribute('position').count;
-  const colors = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    colors[i * 3] = color.r;
-    colors[i * 3 + 1] = color.g;
-    colors[i * 3 + 2] = color.b;
-  }
-  return geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
 }
 
 function boxGeometry(
@@ -211,12 +201,13 @@ function addCone(o: Obstacle, palette: ScenePalette, chunks: Chunks, color: Colo
 
 /** Yard kerbs are dark so they stand out from the yard; street kerbs stay light. */
 export function obstaclePaletteKey(kind: ObstacleKind, onYard: boolean): ScenePaletteKey {
-  return kind === 'kerb' && onYard ? 'band' : kind;
+  if (kind === 'kerb' && onYard) return 'band';
+  if (kind === 'bollard' || kind === 'barrier') return 'lamp';
+  if (kind === 'gatehouse') return 'wall';
+  return kind;
 }
 
-export function isOnYard(yard: Rect2, cx: number, cy: number): boolean {
-  return cx > yard.minX && cx < yard.maxX && cy > yard.minY && cy < yard.maxY;
-}
+export { isOnYard };
 
 function addObstacle(
   o: Obstacle,
@@ -369,13 +360,27 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
   geometries.push(ground);
   group.add(new Mesh(ground, solid));
 
+  // Restyled kinds keep a plain token copy for the top-down view only; the cockpit and mirrors draw
+  // the detail copy from yard-props on SKY_LAYER.
   const obstacles = new Chunks(layout.bounds);
+  const topDownOnly = new Chunks(layout.bounds);
+  const detail = new Chunks(layout.bounds);
   const { yard } = layout;
   for (const o of layout.obstacles) {
     const { cx, cy } = o.obb;
-    addObstacle(o, palette, obstacles, color, roof, isOnYard(yard, cx, cy));
+    const chunks = RESTYLED_KINDS.has(o.kind) ? topDownOnly : obstacles;
+    addObstacle(o, palette, chunks, color, roof, isOnYard(yard, cx, cy));
   }
   group.add(...obstacles.meshes(solid, geometries));
+  for (const mesh of topDownOnly.meshes(solid, geometries)) {
+    mesh.layers.set(AIDS_LAYER);
+    group.add(mesh);
+  }
+  for (const piece of yardProps(layout)) detail.add(piece.x, piece.y, piece.geometry);
+  for (const mesh of detail.meshes(solid, geometries)) {
+    mesh.layers.set(SKY_LAYER);
+    group.add(mesh);
+  }
 
   const markings = new Chunks(layout.bounds);
   color.set(palette.marking);
