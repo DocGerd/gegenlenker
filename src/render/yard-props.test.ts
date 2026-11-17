@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ObstacleKind } from '../contracts/layout';
-import { yardProps } from './yard-props';
+import { RESTYLED_KINDS, yardProps } from './yard-props';
 
 const TOLERANCE = 0.05;
 const FILLS_FOOTPRINT: readonly ObstacleKind[] = ['parked', 'gatehouse', 'bollard'];
@@ -27,6 +27,14 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
           Math.abs(b.max.z + (cy - halfWidth)) < TOLERANCE,
       );
       expect(covers, id).toBe(true);
+    }
+  });
+
+  it('yield a piece for every restyled kind present', () => {
+    for (const kind of RESTYLED_KINDS) {
+      const obstacles = resolved.obstacles.filter((o) => o.kind === kind);
+      if (obstacles.length === 0) continue;
+      expect(yardProps({ ...resolved, obstacles }).length, kind).toBeGreaterThan(0);
     }
   });
 });

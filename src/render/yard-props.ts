@@ -1,5 +1,5 @@
 import { Color, type BufferGeometry } from 'three';
-import type { Obstacle, ResolvedLayout } from '../contracts/layout';
+import type { Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
 import { REALISM_HUES as HUE } from './realism-hues';
 import { tint } from './tint';
 import { box, merge } from './vehicle-geometry';
@@ -43,7 +43,7 @@ const CONTAINER_HUES = [
 const CURTAIN_HUES = [HUE.whiteAluminium, HUE.containerBlue, HUE.containerGreen] as const;
 const TRAILER_MIN_LENGTH = 13;
 const BOOM = { length: 4.5, thickness: 0.1, stripe: 0.5, lift: (85 * Math.PI) / 180 };
-const MAST_HEIGHT_MIN = 9;
+const OVERLAY = 0.005; // bands stand this far proud of the body they stripe, so no faces are coplanar
 const FLOODLIGHTS = 3;
 
 /** Boxes in a local frame (x forward, y left, z up), merged and placed at a world pose. */
@@ -65,6 +65,21 @@ class Parts {
 }
 
 const around = (centre: number, half: number): Range => [centre - half, centre + half];
+
+export function isOnYard(yard: Rect2, cx: number, cy: number): boolean {
+  return cx > yard.minX && cx < yard.maxX && cy > yard.minY && cy < yard.maxY;
+}
+
+/** Kinds drawn here: the plain token copy of these is top-down only. Keep in step with `yardProps`. */
+export const RESTYLED_KINDS: ReadonlySet<ObstacleKind> = new Set([
+  'fence',
+  'hall',
+  'parked',
+  'lamp',
+  'bollard',
+  'barrier',
+  'gatehouse',
+]);
 
 /** Along-axis length, across-axis width and heading of a long box, cut along the longer side. */
 function longFrame({ obb }: Obstacle): { along: number; across: number; heading: number } {
@@ -414,14 +429,14 @@ function curtainSider(o: Obstacle, index: number): PropPiece {
   return { x: o.obb.cx, y: o.obb.cy, geometry: p.place(o.obb.cx, o.obb.cy, heading) };
 }
 
-/** Mast with floodlights aimed at `aim`; low street lamps get a single arm luminaire. */
-function lamp(o: Obstacle, aim: { x: number; y: number }): PropPiece {
+/** Yard masts carry floodlights aimed at `aim`; street lamps outside the yard get a single arm. */
+function lamp(o: Obstacle, aim: { x: number; y: number }, yard: Rect2): PropPiece {
   const { cx, cy, halfLength: hl, halfWidth: hw } = o.obb;
   const h = o.height;
   const p = new Parts();
   p.box(around(0, hl), around(0, hw), [0, 0.6], HUE.anthracite);
   p.box(around(0, hl * 0.55), around(0, hw * 0.55), [0.6, h - 0.1], HUE.whiteAluminium);
-  if (h >= MAST_HEIGHT_MIN) {
+  if (isOnYard(yard, cx, cy)) {
     p.box(around(0.1, 0.1), around(0, 0.9), [h - 0.35, h - 0.2], HUE.anthracite);
     for (let i = 0; i < FLOODLIGHTS; i++) {
       const yc = (i - (FLOODLIGHTS - 1) / 2) * 0.6;
@@ -442,10 +457,12 @@ function bollard(o: Obstacle): PropPiece {
   const h = o.height;
   const x = around(0, hl);
   const y = around(0, hw);
+  const bx = around(0, hl + OVERLAY);
+  const by = around(0, hw + OVERLAY);
   const p = new Parts()
     .box(x, y, [0, h], HUE.signalYellow)
-    .box(x, y, [h * 0.55, h * 0.7], HUE.chevronBlack)
-    .box(x, y, [h - 0.05, h], HUE.chevronBlack);
+    .box(bx, by, [h * 0.55, h * 0.7], HUE.chevronBlack)
+    .box(bx, by, [h - 0.05, h + OVERLAY], HUE.chevronBlack);
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
@@ -456,7 +473,7 @@ function barrier(o: Obstacle): PropPiece {
   const p = new Parts()
     .box(around(0, hl), around(0, hw), [0, 0.15], HUE.anthracite)
     .box(around(0, hl), around(0, hw), [0.15, h], HUE.plateWhite)
-    .box(around(0, hl), around(0, hw), [h * 0.55, h * 0.75], HUE.tailLamp);
+    .box(around(0, hl + OVERLAY), around(0, hw + OVERLAY), [h * 0.55, h * 0.75], HUE.tailLamp);
   const stripes = Math.round(BOOM.length / BOOM.stripe);
   for (let i = 0; i < stripes; i++) {
     const arm = box([i * BOOM.stripe, (i + 1) * BOOM.stripe], around(0, BOOM.thickness / 2), [
@@ -508,7 +525,7 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
         );
         break;
       case 'lamp':
-        out.push(lamp(o, aim));
+        out.push(lamp(o, aim, layout.yard));
         break;
       case 'bollard':
         out.push(bollard(o));

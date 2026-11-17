@@ -22,7 +22,7 @@ import { REALISM_HUES } from './realism-hues';
 import { createSky, neutralSky } from './sky';
 import { createSkyline } from './skyline';
 import { tint } from './tint';
-import { yardProps } from './yard-props';
+import { isOnYard, RESTYLED_KINDS, yardProps } from './yard-props';
 
 export { tint };
 
@@ -57,15 +57,6 @@ const CONE_TOP_RATIO = 0.25;
 const CONE_RADIUS_RATIO = 0.8; // of the smaller footprint half-extent
 const BOX_TOP_FACE_FIRST_VERTEX = 8; // BoxGeometry orders +x, -x, +y, ...: four vertices per face
 const BOX_FACE_VERTICES = 4;
-const RESTYLED = new Set<ObstacleKind>([
-  'fence',
-  'hall',
-  'parked',
-  'lamp',
-  'bollard',
-  'barrier',
-  'gatehouse',
-]);
 const SUN_ELEVATION = (50 * Math.PI) / 180;
 const SUN_DISTANCE = 100;
 const SUN_INTENSITY = 2.4;
@@ -216,9 +207,7 @@ export function obstaclePaletteKey(kind: ObstacleKind, onYard: boolean): ScenePa
   return kind;
 }
 
-export function isOnYard(yard: Rect2, cx: number, cy: number): boolean {
-  return cx > yard.minX && cx < yard.maxX && cy > yard.minY && cy < yard.maxY;
-}
+export { isOnYard };
 
 function addObstacle(
   o: Obstacle,
@@ -379,7 +368,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
   const { yard } = layout;
   for (const o of layout.obstacles) {
     const { cx, cy } = o.obb;
-    const chunks = RESTYLED.has(o.kind) ? topDownOnly : obstacles;
+    const chunks = RESTYLED_KINDS.has(o.kind) ? topDownOnly : obstacles;
     addObstacle(o, palette, chunks, color, roof, isOnYard(yard, cx, cy));
   }
   group.add(...obstacles.meshes(solid, geometries));
