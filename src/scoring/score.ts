@@ -2,6 +2,7 @@ import type { ExerciseDefinition, RunResult, TargetZone, Tolerances } from '../c
 import type { ControlVector, SimSnapshot } from '../contracts/sim';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { wrapAngle } from '../sim/angle';
+import { DT } from '../sim/constants';
 
 export const WAYPOINT_RADIUS = 3; // m, truck rear axle to waypoint
 
@@ -70,6 +71,10 @@ export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
 
 /** The run clock and the assisted flag start with the first input that can move the vehicle. */
 export const isDrivingInput = (c: ControlVector): boolean => c.gear !== 'P' || c.lever > 0;
+
+/** Run seconds at `step`: the same float expression as `runResult`'s `time` (snapshot time is `step * DT`), so both screens round alike. */
+export const runSeconds = (step: number, startStep: number): number =>
+  Math.max(0, step * DT - startStep * DT);
 
 /** `reached` and `waypointVisited` come from the `RunTracker`: the snapshot alone cannot know the waypoint; `startTime` is the sim time of the first driving input. */
 export function runResult(

@@ -10,8 +10,16 @@ import {
   serializeBestResults,
 } from './best';
 import { criteria, deltasToBest, endedMoving } from './debrief';
+import { DT } from '../sim/constants';
 import { createEventScanner, runStartStep } from './replay-events';
-import { WAYPOINT_RADIUS, createRunTracker, isDrivingInput, runResult, targetError } from './score';
+import {
+  WAYPOINT_RADIUS,
+  createRunTracker,
+  isDrivingInput,
+  runResult,
+  runSeconds,
+  targetError,
+} from './score';
 
 function snap(over: Partial<SimSnapshot> = {}): SimSnapshot {
   return {
@@ -425,5 +433,30 @@ describe('runStartStep', () => {
 
   it('is the log end when the vehicle never got a driving input', () => {
     expect(runStartStep(log([{ step: 0, control: control('P', 0) }]))).toBe(500);
+  });
+});
+
+describe('runSeconds', () => {
+  it('matches the scored run time to the printed tenth for every start/end pair', () => {
+    const tenth = (n: number): string => n.toFixed(1);
+    for (let start = 0; start < 60; start++) {
+      for (let end = start; end < 200; end++) {
+        const scored = runResult(
+          snap({ time: end * DT }),
+          exercise(),
+          'man-le-18-280',
+          'krone-azw-18',
+          true,
+          true,
+          false,
+          start * DT,
+        ).time;
+        expect(tenth(runSeconds(end, start))).toBe(tenth(scored));
+      }
+    }
+  });
+
+  it('is zero before the run starts', () => {
+    expect(runSeconds(10, 40)).toBe(0);
   });
 });

@@ -9,7 +9,7 @@ import { formatNumber, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { computeViewports } from '../render/viewports';
 import { createEventScanner, runStartStep, type ReplayEventKind } from '../scoring/replay-events';
-import { createRunTracker, type RunTracker } from '../scoring/score';
+import { createRunTracker, runSeconds, type RunTracker } from '../scoring/score';
 import { createContactQuery } from '../sim/collision';
 import { DT } from '../sim/constants';
 import { NO_PREDICTION } from '../sim/predict';
@@ -109,8 +109,8 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   );
   // Times count from the first driving input, like the result screen.
   const startStep = Math.min(runStartStep(log), log.steps);
-  const runSeconds = (step: number): string => formatNumber(Math.max(0, step - startStep) * DT, 1);
-  const total = `${runSeconds(log.steps)} s`;
+  const runLabel = (step: number): string => formatNumber(runSeconds(step, startStep), 1);
+  const total = `${runLabel(log.steps)} s`;
 
   const stage = document.createElement('div');
   stage.className = 'replay';
@@ -199,7 +199,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   });
   const addMarkers = (): void => {
     for (const event of scanner.events()) {
-      const label = `${t(EVENT_LABEL[event.kind])} · ${runSeconds(event.step)} s`;
+      const label = `${t(EVENT_LABEL[event.kind])} · ${runLabel(event.step)} s`;
       const marker = button(`replay-marker replay-marker-${event.kind}`, '', () => {
         position = event.step;
         playing = false;
@@ -296,7 +296,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
         renderer.render(frame);
         // Follows the target, not the cursor, so a catching-up rebuild does not drag the thumb.
         scrubber.value = String(Math.min(log.steps, Math.floor(position)));
-        timeLabel.textContent = `${runSeconds(snapshot.step)} / ${total}`;
+        timeLabel.textContent = `${runLabel(snapshot.step)} / ${total}`;
         readout.textContent = readoutText(snapshot);
       }
       if (scan !== null && advance(scan, log.steps, WORK_BUDGET_MS)) {
