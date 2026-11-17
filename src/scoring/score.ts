@@ -5,7 +5,7 @@ import { wrapAngle } from '../sim/angle';
 
 export const WAYPOINT_RADIUS = 3; // m, truck rear axle to waypoint
 
-const STOPPED_SPEED = 0.05; // m/s
+export const STOPPED_SPEED = 0.05; // m/s
 
 export function targetError(s: SimSnapshot, zone: TargetZone): { position: number; angle: number } {
   return {

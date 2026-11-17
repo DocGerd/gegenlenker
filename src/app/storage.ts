@@ -7,6 +7,7 @@ import {
   serializeBestResults,
   type ResultIds,
 } from '../scoring/best';
+import { STOPPED_SPEED, WAYPOINT_RADIUS } from '../scoring/score';
 import { dataFingerprint } from '../sim/fingerprint';
 import { MAX_REPLAY_STEPS, parseInputLog, serializeInputLog, type RunIds } from '../sim/replay';
 import { trailerById, truckById } from '../vehicles/registry';
@@ -70,12 +71,13 @@ function runFingerprint(ids: RunIds): string {
   if (fingerprint === undefined) {
     const layout = layouts[ids.layoutId];
     const exercise = ids.exerciseId === null ? null : exerciseById(ids.exerciseId);
-    fingerprint = dataFingerprint(
-      resolveCombination(truckById(ids.truckId), trailerById(ids.trailerId)),
-      resolveLayout(layout, exercise),
-      exercise?.start ?? layout.start,
+    fingerprint = dataFingerprint({
+      params: resolveCombination(truckById(ids.truckId), trailerById(ids.trailerId)),
+      obstacles: resolveLayout(layout, exercise).obstacles,
+      start: exercise?.start ?? layout.start,
       exercise,
-    );
+      scoring: { WAYPOINT_RADIUS, STOPPED_SPEED },
+    });
     fingerprints.set(key, fingerprint);
   }
   return fingerprint;
