@@ -1,4 +1,4 @@
-import type { Rect, ViewMode, ViewRects } from '../contracts/render';
+import type { LegendBox, Rect, ViewMode, ViewRects } from '../contracts/render';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -8,9 +8,6 @@ const STOP_BLOCK = 55;
 const STOP_GAP = 8;
 const MIRROR_GAP = 8;
 const COCKPIT_LABEL = 32;
-const BAND_SHARE = 0.18;
-const LEGEND_GAP = 12;
-const LEGEND_HEIGHT = 244;
 /** Smallest mirror height; where even this cannot clear the controls, it wins. */
 export const MIN_MIRROR_HEIGHT = 48;
 
@@ -23,12 +20,13 @@ export function controlsHeight(cssWidth: number, cssHeight: number): number {
   return Math.max(steer, INSET + STOP_BLOCK + STOP_GAP + LABEL_BLOCK + lever);
 }
 
-/** Height the expanded key legend reaches above the viewport bottom; mirrors hud.css (.hud-band height, .hud-legend bottom and height). */
-export function legendHeight(cockpitHeight: number): number {
-  return Math.round(BAND_SHARE * cockpitHeight) + LEGEND_GAP + LEGEND_HEIGHT;
-}
-
-export function computeViewports(cssWidth: number, cssHeight: number, mode: ViewMode): ViewRects {
+/** `legend` is the measured key legend: the mirrors stay above it where it reaches under them. */
+export function computeViewports(
+  cssWidth: number,
+  cssHeight: number,
+  mode: ViewMode,
+  legend: LegendBox | null = null,
+): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
     return { cockpit: null, mirrorLeft: null, mirrorRight: null, topDown: full };
@@ -47,7 +45,10 @@ export function computeViewports(cssWidth: number, cssHeight: number, mode: View
   const fullWidth = clamp(Math.round(0.15 * cockpit.width), 72, 200);
   const wanted = Math.min(2 * fullWidth, Math.round(0.5 * cockpit.height));
   const floor = cockpit.y + COCKPIT_LABEL;
-  const clear = Math.max(controlsHeight(cssWidth, cssHeight), legendHeight(cockpit.height));
+  // The mirror only shrinks and moves inward from its full width, so that width is the worst case.
+  const rightMirrorLeft = cockpit.x + cockpit.width - INSET - fullWidth;
+  const legendClear = legend !== null && legend.right > rightMirrorLeft ? legend.height : 0;
+  const clear = Math.max(controlsHeight(cssWidth, cssHeight), legendClear);
   const ceiling = cssHeight - clear - MIRROR_GAP;
   const preferred = cockpit.y + Math.round(0.16 * cockpit.height);
   const y = Math.min(preferred, Math.max(floor, ceiling - wanted));

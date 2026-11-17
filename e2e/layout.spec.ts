@@ -7,10 +7,20 @@ const sizes = [
   { width: 800, height: 820 },
   { width: 1024, height: 600 },
   { width: 1024, height: 700 },
+  { width: 1200, height: 700 },
+  { width: 1210, height: 720 },
   { width: 1280, height: 649 },
   { width: 1280, height: 720 },
   { width: 1280, height: 800 },
+  { width: 1300, height: 540 },
+  { width: 1300, height: 600 },
   { width: 1366, height: 768 },
+];
+
+/** The key legend wraps differently per language, so every size runs in both. */
+const locales = [
+  { locale: 'en-US', messages: en },
+  { locale: 'de-DE', messages: de },
 ];
 
 const boxes = (loc: Locator) =>
@@ -58,46 +68,54 @@ async function blankRows(page: Page, x: number): Promise<number> {
   );
 }
 
-for (const size of sizes) {
-  test(`mirrors clear the controls at ${size.width}x${size.height}`, async ({ page }) => {
-    await page.setViewportSize(size);
-    await page.goto('./');
-    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+for (const { locale, messages } of locales) {
+  for (const size of sizes) {
+    const at = `${locale} ${size.width}x${size.height}`;
 
-    const mirrors = page.locator('.hud-mirror:not([hidden])');
-    await expect(mirrors).toHaveCount(2);
-    const controls = page.locator(
-      '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
-    );
+    test(`mirrors clear the controls at ${at}`, async ({ browser }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      const page = await context.newPage();
+      await page.goto('./');
+      await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
 
-    const mirrorBoxes = await boxes(mirrors);
-    const controlBoxes = await boxes(controls);
-    expect(controlBoxes.length).toBeGreaterThan(0);
+      const mirrors = page.locator('.hud-mirror:not([hidden])');
+      await expect(mirrors).toHaveCount(2);
+      const controls = page.locator(
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+      );
 
-    for (const m of mirrorBoxes) {
-      for (const c of controlBoxes) {
-        expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
+      const mirrorBoxes = await boxes(mirrors);
+      const controlBoxes = await boxes(controls);
+      expect(controlBoxes.length).toBeGreaterThan(0);
+
+      for (const m of mirrorBoxes) {
+        for (const c of controlBoxes) {
+          expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
+        }
       }
-    }
 
-    const panels = await boxes(
-      page.locator('.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action'),
-    );
-    for (const panel of panels) {
-      for (const c of controlBoxes) {
-        expect(overlaps(panel, c), `${panel.name} overlaps ${c.name}`).toBe(false);
+      const panels = await boxes(
+        page.locator('.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action'),
+      );
+      for (const panel of panels) {
+        for (const c of controlBoxes) {
+          expect(overlaps(panel, c), `${panel.name} overlaps ${c.name}`).toBe(false);
+        }
       }
-    }
-  });
+      await context.close();
+    });
 
-  test(`the cockpit view has no blank band at ${size.width}x${size.height}`, async ({ page }) => {
-    await page.setViewportSize(size);
-    await page.goto('./');
-    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
-    await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
-    await page.waitForTimeout(500);
-    expect(await blankRows(page, Math.round(size.width * 0.3))).toBe(0);
-  });
+    test(`the cockpit view has no blank band at ${at}`, async ({ browser }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      const page = await context.newPage();
+      await page.goto('./');
+      await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
+      await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
+      await page.waitForTimeout(500);
+      expect(await blankRows(page, Math.round(size.width * 0.3))).toBe(0);
+      await context.close();
+    });
+  }
 }
 
 const starts = [
