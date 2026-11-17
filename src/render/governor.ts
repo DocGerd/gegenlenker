@@ -4,7 +4,7 @@ const STEP = 0.15;
 const FLOOR = 0.5;
 const EMA_SMOOTHING = 0.1;
 const P95_WINDOW = 120;
-// Longer than any plausible slow frame: a pause or hidden tab, not load.
+// An isolated interval this long is a pause or hidden tab; a run of them is real load.
 const MAX_GAP_MS = 500;
 
 export function createResolutionGovernor(): {
@@ -56,24 +56,28 @@ export function createFrameTimer(): {
   const ring = new Float64Array(P95_WINDOW);
   const scratch = new Float64Array(P95_WINDOW);
   let last = -1;
+  let longBefore = false;
   let ema = 0;
   let count = 0;
   let next = 0;
   return {
     frame(now) {
       const dt = now - last;
-      if (last >= 0 && dt <= MAX_GAP_MS) {
+      const long = dt > MAX_GAP_MS;
+      if (last >= 0 && (!long || longBefore)) {
         ema = ema === 0 ? dt : ema + EMA_SMOOTHING * (dt - ema);
         ring[next] = dt;
         next = (next + 1) % P95_WINDOW;
         if (count < P95_WINDOW) count++;
         governor.sample(dt);
       }
+      longBefore = last >= 0 && long;
       last = now;
     },
     /** Drops the previous timestamp too, so a gap (pause, hidden tab, new scene) is never sampled. */
     resetTiming() {
       last = -1;
+      longBefore = false;
       ema = 0;
       count = 0;
       next = 0;
