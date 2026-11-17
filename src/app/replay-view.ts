@@ -199,7 +199,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   });
   const addMarkers = (): void => {
     for (const event of scanner.events()) {
-      const label = `${t(EVENT_LABEL[event.kind])} · ${runLabel(event.step)} s`;
+      const label = `${t(EVENT_LABEL[event.kind])} · ${runLabel(event.step)}`;
       const marker = button(`replay-marker replay-marker-${event.kind}`, '', () => {
         position = event.step;
         playing = false;
