@@ -242,3 +242,12 @@ test('leaving without scoring stores no result and no replay', async ({ page }) 
   await expect(menuHeading(page)).toBeVisible();
   await expect(page.getByRole('button', { name: en.replayLastRun })).toHaveCount(0);
 });
+
+test('a double click on an exercise card leaves no text selected on the drive screen', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).dblclick();
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
+});

@@ -51,6 +51,8 @@ export function startApp(root: HTMLElement): void {
   }
   // Moving between those screens reuses the entry; only going to the menu pops it.
   const enter = (exit: () => void): void => {
+    // A double click on the previous screen's control can leave a selection that outlives the swap.
+    window.getSelection()?.removeAllRanges();
     if (held) history.replaceState({ screen: true }, '');
     else history.pushState({ screen: true }, '');
     held = true;

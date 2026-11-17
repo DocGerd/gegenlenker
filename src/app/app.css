@@ -181,6 +181,12 @@
   touch-action: none;
 }
 
+.drive,
+.replay {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .drive-canvas {
   position: absolute;
   inset: 0;
