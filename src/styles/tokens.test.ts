@@ -5,6 +5,7 @@ import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { isOnYard, obstaclePaletteKey } from '../render/environment';
 import { KEYS } from '../render/palette';
+import { REALISM_HUES } from '../render/realism-hues';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -357,5 +358,31 @@ describe('scene tokens', () => {
       expect(kerbs.some(({ onYard }) => onYard)).toBe(true);
       for (const { onYard, key } of kerbs) expect(key).toBe(onYard ? 'band' : 'kerb');
     });
+  });
+});
+
+describe('perspective-only realism hues', () => {
+  const hex = (n: number) => `#${n.toString(16).padStart(6, '0')}`;
+  const documented = new Map<string, string>();
+  const section = read('../../docs/brand/BRAND.md').split('## Perspective-only realism hues')[1];
+  for (const m of (section ?? '').matchAll(/^\|\s*`([A-Za-z]+)`\s*\|\s*`(#[0-9a-fA-F]{6})`/gm)) {
+    if (m[1] && m[2]) documented.set(m[1], m[2].toLowerCase());
+  }
+  const hues = Object.entries(REALISM_HUES).map(([key, n]): [string, string] => [key, hex(n)]);
+
+  it('lists exactly the hues of the render module in BRAND.md', () => {
+    expect(Object.fromEntries(documented)).toEqual(Object.fromEntries(hues));
+  });
+
+  it('keeps every hue distinct', () => {
+    expect(new Set(hues.map(([, h]) => h)).size).toBe(hues.length);
+  });
+
+  it('keeps every hue out of the colour and scene tokens, so none reaches a top-down face', () => {
+    const tokens = new Set(
+      [...root, ...darkBlock].map(([, v]) => v).filter((v) => /^#[0-9a-f]{6}$/.test(v)),
+    );
+    expect(tokens.size).toBeGreaterThan(0);
+    for (const [key, h] of hues) expect(tokens.has(h), key).toBe(false);
   });
 });
