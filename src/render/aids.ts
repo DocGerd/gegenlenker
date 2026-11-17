@@ -32,7 +32,6 @@ const TRACK_JUMP = 5; // a larger gap between samples starts a new line
 const PIVOT_WIDTH = 0.12;
 const PIVOT_LENGTH = 4;
 const GHOST_STRIP = 0.1;
-const GHOST_OPACITY = 0.5;
 const TRACK_Y = 0.02;
 const PATH_Y = 0.03;
 const GHOST_Y = 0.04;
@@ -319,7 +318,7 @@ export function proceduralAids(
     const edge = onAidsLayer(new Mesh(casingGeometry, material(palette.wheel, true, 1, -3)));
     edge.renderOrder = OVERLAY_ORDER - 1;
     edge.position.y = -CASING_DROP;
-    const fill = onAidsLayer(new Mesh(geometry, material(palette.accent, true, GHOST_OPACITY)));
+    const fill = onAidsLayer(new Mesh(geometry, material(palette.accent, true)));
     fill.renderOrder = OVERLAY_ORDER;
     ghost.add(edge, fill);
     ghost.position.y = GHOST_Y;
