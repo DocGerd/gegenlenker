@@ -2,6 +2,7 @@ import {
   BoxGeometry,
   BufferGeometry,
   Color,
+  CylinderGeometry,
   DirectionalLight,
   Float32BufferAttribute,
   Group,
@@ -28,6 +29,12 @@ const CHUNK = 60; // spatial chunk edge: frustum culling works per chunk
 const SPLIT = 30; // long boxes and lines are cut so a chunk's bounds stay local
 const LAMP_HEAD_HEIGHT = 0.4; // the head fills the obstacle footprint, the pole is slimmer
 const LAMP_POLE_RATIO = 0.5;
+const PLINTH = 2.4; // hall height below the cladding
+const POST_BAND = 0.4; // lamp plinth: three bands, dark / white / dark
+const CONE_BASE = 0.05; // dark plate under the cone, the full collision footprint
+const CONE_BANDS = 3;
+const CONE_SIDES = 8;
+const CONE_TOP_RATIO = 0.25;
 const SUN_ELEVATION = (50 * Math.PI) / 180;
 const SUN_DISTANCE = 100;
 
@@ -125,20 +132,64 @@ function splitLine(
   }
 }
 
-function addObstacle(o: Obstacle, palette: ScenePalette, chunks: Chunks, color: Color): void {
+/** Red cone with white bands: a plate over the collision footprint under a tapered body. */
+function addCone(o: Obstacle, palette: ScenePalette, chunks: Chunks, color: Color): void {
+  const { cx, cy, halfLength, halfWidth, heading } = o.obb;
+  color.set(palette.band);
+  chunks.add(
+    cx,
+    cy,
+    tint(boxGeometry(cx, cy, halfLength * 2, halfWidth * 2, heading, 0, CONE_BASE), color),
+  );
+  const bottom = Math.min(halfLength, halfWidth) * 0.8;
+  const top = bottom * CONE_TOP_RATIO;
+  const step = (o.height - CONE_BASE) / CONE_BANDS;
+  for (let i = 0; i < CONE_BANDS; i++) {
+    const radiusLow = bottom + ((top - bottom) * i) / CONE_BANDS;
+    const radiusHigh = bottom + ((top - bottom) * (i + 1)) / CONE_BANDS;
+    color.set(i % 2 === 0 ? palette.cone : palette.marking);
+    const band = new CylinderGeometry(
+      radiusHigh,
+      radiusLow,
+      step,
+      CONE_SIDES,
+      1,
+      i < CONE_BANDS - 1,
+    ).translate(cx, CONE_BASE + step * (i + 0.5), -cy);
+    chunks.add(cx, cy, tint(band, color));
+  }
+}
+
+function addObstacle(
+  o: Obstacle,
+  palette: ScenePalette,
+  chunks: Chunks,
+  color: Color,
+  onYard: boolean,
+): void {
   const { obb, height, kind } = o;
-  color.set(palette[kind]);
+  if (kind === 'cone') {
+    addCone(o, palette, chunks, color);
+    return;
+  }
+  color.set(kind === 'kerb' && onYard ? palette.band : palette[kind]);
   if (kind === 'lamp') {
     const { cx, cy, heading } = obb;
     const [length, width] = [obb.halfLength * 2, obb.halfWidth * 2];
     const top = height - LAMP_HEAD_HEIGHT;
+    for (let i = 0; i < 3; i++) {
+      color.set(i === 1 ? palette.marking : palette.lamp);
+      const band = boxGeometry(cx, cy, length, width, heading, i * POST_BAND, (i + 1) * POST_BAND);
+      chunks.add(cx, cy, tint(band, color));
+    }
+    color.set(palette.lamp);
     const pole = boxGeometry(
       cx,
       cy,
       length * LAMP_POLE_RATIO,
       width * LAMP_POLE_RATIO,
       heading,
-      0,
+      3 * POST_BAND,
       top,
     );
     chunks.add(cx, cy, tint(pole, color));
@@ -150,6 +201,19 @@ function addObstacle(o: Obstacle, palette: ScenePalette, chunks: Chunks, color: 
   const along = (crosswise ? obb.halfWidth : obb.halfLength) * 2;
   const across = (crosswise ? obb.halfLength : obb.halfWidth) * 2;
   const heading = crosswise ? obb.heading + Math.PI / 2 : obb.heading;
+  if (kind === 'hall' && height > PLINTH) {
+    const roof = new Color(palette.hall);
+    splitLine(obb.cx, obb.cy, along, heading, (px, py, piece) => {
+      color.set(palette.hall);
+      chunks.add(px, py, tint(boxGeometry(px, py, piece, across, heading, 0, PLINTH), color));
+      color.set(palette.cladding);
+      const upper = tint(boxGeometry(px, py, piece, across, heading, PLINTH, height), color);
+      const colors = upper.getAttribute('color');
+      for (let v = 8; v < 12; v++) colors.setXYZ(v, roof.r, roof.g, roof.b); // BoxGeometry +y face
+      chunks.add(px, py, upper);
+    });
+    return;
+  }
   splitLine(obb.cx, obb.cy, along, heading, (px, py, piece) =>
     chunks.add(px, py, tint(boxGeometry(px, py, piece, across, heading, 0, height), color)),
   );
@@ -240,7 +304,12 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
   group.add(new Mesh(ground, solid));
 
   const obstacles = new Chunks(layout.bounds);
-  for (const o of layout.obstacles) addObstacle(o, palette, obstacles, color);
+  const { yard } = layout;
+  for (const o of layout.obstacles) {
+    const { cx, cy } = o.obb;
+    const onYard = cx > yard.minX && cx < yard.maxX && cy > yard.minY && cy < yard.maxY;
+    addObstacle(o, palette, obstacles, color, onYard);
+  }
   group.add(...obstacles.meshes(solid, geometries));
 
   const markings = new Chunks(layout.bounds);
