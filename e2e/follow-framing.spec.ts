@@ -124,6 +124,8 @@ for (const { locale, messages } of locales) {
         await page.goto('./?framing=1');
         await page.getByRole('button', { name: label }).click();
         await page.getByRole('button', { name: messages.viewYard, exact: true }).click();
+        // The box still shows the last follow frame until a frame drawn after the click.
+        await afterSteps(page, 1);
         await expect
           .poll(async () => (await chromeHits(page, await vehicleBox(page))).length, {
             message: label,
