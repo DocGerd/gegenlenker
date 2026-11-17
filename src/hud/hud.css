@@ -22,7 +22,7 @@
 
 /* The cockpit always starts at the screen's left edge, where controls.css puts the wheel and gears; the readout and legend start to their right. */
 .hud-cockpit {
-  --hud-inset: calc(var(--space-4) * 3 + var(--ctl-wheel, 160px) + var(--ctl-gears-w, 92px));
+  --hud-inset: calc(var(--space-4) * 3 + var(--ctl-wheel) + var(--ctl-gears-w));
 }
 
 .hud-band {

@@ -5,6 +5,7 @@ import './controls.css';
 import {
   clamp,
   createInputState,
+  POINTER_SWEEP_DEG,
   pointerAngleDeg,
   steerDisplay,
   stepLever,
@@ -16,12 +17,20 @@ import {
 export type Controls = {
   control(): ControlVector;
   /** `actualSteer` is the snapshot's rate-limited steer; the centred cue waits for it. */
-  tick(dt: number, actualSteer?: number): void;
+  tick(dt: number, actualSteer: number): void;
   dispose(): void;
 };
 
 const GEARS: readonly Gear[] = ['P', 'R', 'N', 'D'];
 const DEAD_ZONE_PX = 8;
+
+const ARC_RADIUS = 45.5;
+const ARC_PATH = ((): string => {
+  const rad = (POINTER_SWEEP_DEG * Math.PI) / 180;
+  const x = (ARC_RADIUS * Math.sin(rad)).toFixed(2);
+  const y = (-ARC_RADIUS * Math.cos(rad)).toFixed(2);
+  return `M-${x} ${y}A${ARC_RADIUS} ${ARC_RADIUS} 0 0 1 ${x} ${y}`;
+})();
 
 const RESET_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7" /><path d="M12 2.5v5.5M12 13v.01" /></svg>';
@@ -39,7 +48,7 @@ const markup = (lockToLockTurns: number): string => `
           <path class="ctl-mark" d="M0 -35.5V-24" />
         </svg>
         <svg class="ctl-dial" viewBox="-50 -50 100 100" aria-hidden="true">
-          <path class="ctl-arc" d="M-44 -11.8A45.5 45.5 0 0 1 44 -11.8" />
+          <path class="ctl-arc" d="${ARC_PATH}" />
           ${turnTicks(lockToLockTurns)
             .map(
               (steer) =>
@@ -276,7 +285,7 @@ export function createControls(
       syncBrake();
       return toControlVector(state);
     },
-    tick(dt, actualSteer = state.steer) {
+    tick(dt, actualSteer) {
       keyboard.tick(dt);
       stepReset(state, opts.steerRate, dt);
       syncBrake();

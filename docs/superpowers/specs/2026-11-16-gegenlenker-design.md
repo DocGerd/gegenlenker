@@ -79,8 +79,8 @@ Speed is a latching drive lever, not a held pedal: it stays where set, from stop
 
 | Device | Steering | Speed | Brake | Gear |
 |---|---|---|---|---|
-| Tablet | drag wheel, right thumb | lever, left thumb | stop button | P / R / N / D selector |
-| Keyboard | A / D or arrows | W / S step the lever | space | keys in an on-screen legend |
+| Tablet | drag wheel, left thumb | lever, right thumb | stop button | P / R / N / D selector |
+| Keyboard | A / D or arrows; C centres | W / S step the lever | space | keys in an on-screen legend |
 | Mouse | drag wheel | scroll wheel or click the lever | click stop | click selector |
 
 All devices feed one mapping layer producing the core's control vector.
