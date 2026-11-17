@@ -7,6 +7,7 @@ import './hud.css';
 
 export type HudAction =
   | { type: 'topDown'; mode: TopDownMode }
+  | { type: 'resetView' }
   | { type: 'aid'; aid: keyof AidFlags; on: boolean }
   | { type: 'finish' }
   | { type: 'menu' };
@@ -14,6 +15,8 @@ export type HudAction =
 export type Hud = {
   update(s: SimSnapshot): void;
   layout(views: ViewRects): void;
+  /** The reset-view button is enabled while the top-down view differs from its default framing. */
+  setViewChanged(changed: boolean): void;
   onAction(cb: (a: HudAction) => void): void;
   dispose(): void;
 };
@@ -51,6 +54,9 @@ const MS_TO_KMH = 3.6;
 const COMPACT_WIDTH = 720;
 const COMPACT_WIDTH_WITH_LEVER = 840;
 
+const RESET_VIEW_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>';
+
 const button = (attr: string, value: string, key: MessageKey): string =>
   `<button type="button" class="hud-toggle" ${attr}="${value}" data-i18n="${key}"></button>`;
 
@@ -66,6 +72,8 @@ const MARKUP = (mode: HudOptions['mode']): string => `
         <dt class="mono">W / S · ↑ / ↓</dt><dd data-i18n="speed"></dd>
         <dt class="mono" data-i18n="keySpace"></dt><dd data-i18n="brake"></dd>
         <dt class="mono">1–4 = ${GEAR_NAMES.join(' / ')}</dt><dd data-i18n="gear"></dd>
+        <dt class="mono">+ / −</dt><dd data-i18n="zoom"></dd>
+        <dt class="mono">0</dt><dd data-i18n="resetView"></dd>
       </dl>
     </div>
     <div class="hud-band">
@@ -79,7 +87,7 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views">
-        <span class="hud-label hud-view-label" data-i18n="labelTopDown"></span>${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}</div>
+        <span class="hud-label hud-view-label" data-i18n="labelTopDown"></span>${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button></div>
       <div class="hud-group" data-hud="aids">${AIDS.map(([a, k]) => button('data-aid', a, k)).join('')}</div>
     </div>
     <div class="hud-info">
@@ -190,6 +198,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       { signal },
     );
   }
+  const resetView = query(hud, 'resetView', HTMLButtonElement);
+  resetView.title = t('resetView');
+  resetView.setAttribute('aria-label', t('resetView'));
+  resetView.addEventListener('click', () => emit({ type: 'resetView' }), { signal });
   query(hud, 'action', HTMLElement).addEventListener(
     'click',
     () => emit({ type: opts.mode === 'exercise' ? 'finish' : 'menu' }),
@@ -295,6 +307,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', base.y < 1 && spansRight(base));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
+    },
+    setViewChanged(changed) {
+      if (resetView.disabled === changed) resetView.disabled = !changed;
     },
     onAction(cb) {
       listeners.push(cb);

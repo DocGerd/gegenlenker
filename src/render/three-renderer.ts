@@ -8,12 +8,13 @@ import {
   type Object3D,
 } from 'three';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
-import type {
-  Rect,
-  RenderFrame,
-  RenderStats,
-  SceneRenderer,
-  ScenePalette,
+import {
+  DEFAULT_TOP_DOWN_VIEW,
+  type Rect,
+  type RenderFrame,
+  type RenderStats,
+  type SceneRenderer,
+  type ScenePalette,
 } from '../contracts/render';
 import type { TruckAnchors } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
@@ -28,6 +29,7 @@ import {
   type RendererParts,
   type VehicleVisual,
 } from './seams';
+import { placeTopDownCamera } from './top-down-camera';
 
 const COCKPIT_FOV = 55;
 const COCKPIT_PITCH = MathUtils.degToRad(-6);
@@ -71,6 +73,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
   topDownCamera.layers.enable(AIDS_LAYER);
   topDownCamera.rotation.x = -Math.PI / 2;
+  topDownCamera.position.y = SKY_HEIGHT;
   const mirrorLeft = createMirror();
   const mirrorRight = createMirror();
   const mirrorPosition = new Vector3();
@@ -143,12 +146,13 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       cy = (bounds.minY + bounds.maxY) / 2;
       halfH = Math.max((bounds.maxY - bounds.minY) / 2, (bounds.maxX - bounds.minX) / 2 / aspect);
     }
-    topDownCamera.left = -halfH * aspect;
-    topDownCamera.right = halfH * aspect;
-    topDownCamera.top = halfH;
-    topDownCamera.bottom = -halfH;
-    topDownCamera.position.set(cx, SKY_HEIGHT, -cy);
-    topDownCamera.updateProjectionMatrix();
+    placeTopDownCamera(
+      topDownCamera,
+      { x: cx, y: cy },
+      halfH,
+      aspect,
+      frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW,
+    );
   }
 
   function viewRect(gl: WebGLRenderer, rect: Rect): void {

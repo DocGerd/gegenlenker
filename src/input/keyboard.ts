@@ -10,7 +10,7 @@ const FASTER = ['KeyW', 'ArrowUp'];
 const SLOWER = ['KeyS', 'ArrowDown'];
 const RESET_STEER = 'KeyC';
 
-const isFormField = (target: EventTarget | null): boolean =>
+export const isFormField = (target: EventTarget | null): boolean =>
   target instanceof Element && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
 
 /** Steering keys act in `tick`, at `steerRate` per second; every other key acts on keydown. */

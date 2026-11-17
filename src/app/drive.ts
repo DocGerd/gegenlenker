@@ -6,6 +6,8 @@ import type { AidFlags, RenderFrame } from '../contracts/render';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
 import { createControls } from '../input/controls';
+import { createTopDownInput } from '../input/top-down-input';
+import { isDefaultView } from '../input/top-down-view';
 import { mountPerfOverlay } from '../render/perf-overlay';
 import { computeViewports } from '../render/viewports';
 import { createRunTracker, runResult } from '../scoring/score';
@@ -96,11 +98,35 @@ export function startDrive(
   const { renderer } = view;
   renderer.setScene(layout, truck, trailer);
 
+  let aids: AidFlags = settings.aids;
+  let topDown = settings.topDown;
+  // Set by anything visual besides a sim step; a frame with neither is not redrawn.
+  let dirty = true;
+  let pathStale = true;
+  const frame: Frame = {
+    snapshot,
+    views: computeViewports(1, 1, 'drive'),
+    topDown,
+    aids,
+    predicted: NO_PREDICTION,
+  };
+
   const controls = createControls(stage, {
     lockToLockTurns: truck.steering.lockToLockTurns.value,
     steerRate: params.steerRate,
   });
   cleanups.push(() => controls.dispose());
+  // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
+  const viewInput = createTopDownInput(view.canvas, {
+    mode: topDown,
+    getRect: () => frame.views.topDown,
+    onChange(next) {
+      frame.topDownView = next;
+      dirty = true;
+      hud.setViewChanged(!isDefaultView(next));
+    },
+  });
+  cleanups.push(() => viewInput.dispose());
   const hud = createHud(stage, {
     couplingLimit: params.couplingLimit,
     turntableLimit: params.turntableLimit,
@@ -110,16 +136,14 @@ export function startDrive(
   });
   cleanups.push(() => hud.dispose());
 
-  let aids: AidFlags = settings.aids;
-  let topDown = settings.topDown;
-  // Set by anything visual besides a sim step; a frame with neither is not redrawn.
-  let dirty = true;
-  let pathStale = true;
   hud.onAction((action) => {
     if (action.type === 'topDown') {
       topDown = action.mode;
+      viewInput.setMode(topDown);
       dirty = true;
       updateSettings({ topDown });
+    } else if (action.type === 'resetView') {
+      viewInput.reset();
     } else if (action.type === 'aid') {
       aids = { ...aids, [action.aid]: action.on };
       dirty = true;
@@ -130,19 +154,12 @@ export function startDrive(
     }
   });
 
-  const frame: Frame = {
-    snapshot,
-    views: computeViewports(1, 1, 'drive'),
-    topDown,
-    aids,
-    predicted: NO_PREDICTION,
-  };
-
   let accumulator = 0;
   view.start({
     resized(width, height) {
       frame.views = computeViewports(width, height, 'drive');
       hud.layout(frame.views);
+      viewInput.relayout();
       dirty = true;
     },
     restored() {

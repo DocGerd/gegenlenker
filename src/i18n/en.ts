@@ -42,6 +42,8 @@ export const en = {
   labelTopDown: 'Top view',
   viewFollow: 'Follow',
   viewYard: 'Whole yard',
+  resetView: 'Reset view',
+  zoom: 'Zoom',
   aidPivots: 'Pivot angles',
   aidPath: 'Predicted path',
   aidTracks: 'Wheel tracks',

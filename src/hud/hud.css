@@ -210,6 +210,29 @@
   color: var(--color-accent-strong);
 }
 
+.hud-toggle:disabled {
+  opacity: 0.4;
+}
+
+.hud-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-target);
+  padding: 0;
+}
+
+.hud-icon svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
 .hud-action {
   position: absolute;
   top: var(--space-4);
