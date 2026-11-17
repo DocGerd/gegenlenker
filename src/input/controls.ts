@@ -118,9 +118,13 @@ function bindDrag(el: HTMLElement, h: DragHandlers, signal: AbortSignal): void {
   }
 }
 
-const query = <T extends Element>(root: ParentNode, name: string): T => {
-  const el = root.querySelector<T>(`[data-ctl="${name}"]`);
-  if (!el) throw new Error(`controls markup lacks ${name}`);
+const query = <T extends Element>(
+  root: ParentNode,
+  name: string,
+  type: abstract new () => T,
+): T => {
+  const el = root.querySelector(`[data-ctl="${name}"]`);
+  if (!(el instanceof type)) throw new Error(`controls markup lacks ${name}`);
   return el;
 };
 
@@ -133,18 +137,18 @@ export function createControls(
   const { signal } = abort;
 
   root.insertAdjacentHTML('beforeend', markup(opts.lockToLockTurns));
-  const container = query<HTMLElement>(root, 'root');
+  const container = query(root, 'root', HTMLElement);
   applyMessages(container);
   container.addEventListener('contextmenu', (e) => e.preventDefault(), { signal });
 
-  const stop = query<HTMLElement>(container, 'stop');
-  const lever = query<HTMLElement>(container, 'lever');
+  const stop = query(container, 'stop', HTMLElement);
+  const lever = query(container, 'lever', HTMLElement);
   const rail = lever.querySelector<HTMLElement>('.ctl-rail') as HTMLElement;
-  const gears = query<HTMLElement>(container, 'gears');
-  const wheel = query<HTMLElement>(container, 'wheel');
-  const wheelArt = query<SVGElement>(container, 'wheel-art');
-  const pointer = query<SVGElement>(container, 'pointer');
-  const reset = query<HTMLElement>(container, 'reset');
+  const gears = query(container, 'gears', HTMLElement);
+  const wheel = query(container, 'wheel', HTMLElement);
+  const wheelArt = query(container, 'wheel-art', SVGElement);
+  const pointer = query(container, 'pointer', SVGElement);
+  const reset = query(container, 'reset', HTMLElement);
   reset.title = t('resetSteer');
   reset.setAttribute('aria-label', t('resetSteer'));
   const keyboard = createKeyboard(state, opts.steerRate);

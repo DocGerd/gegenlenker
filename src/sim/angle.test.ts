@@ -8,7 +8,7 @@ const u64 = new BigUint64Array(f64.buffer);
 function stepUlps(a: number, n: number): number {
   f64[0] = a;
   u64[0] = (u64[0] ?? 0n) + BigInt(n);
-  return f64[0] ?? NaN;
+  return f64[0];
 }
 
 describe('wrapAngle', () => {

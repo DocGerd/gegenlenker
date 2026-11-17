@@ -12,7 +12,7 @@ const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) 
 function meshes(root: Object3D): Mesh[] {
   const out: Mesh[] = [];
   root.traverse((o) => {
-    if (o instanceof Mesh) out.push(o);
+    if (o instanceof Mesh) out.push(o as Mesh);
   });
   return out;
 }
