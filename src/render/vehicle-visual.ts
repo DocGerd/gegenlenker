@@ -8,6 +8,8 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
+  MeshStandardMaterial,
+  type Object3D,
   type Texture,
 } from 'three';
 import type { ScenePalette } from '../contracts/render';
@@ -65,6 +67,7 @@ import {
   type PlateSpot,
 } from './vehicle-detail';
 import { box, merge, WHEEL_SEGMENTS, wheelGeometry } from './vehicle-geometry';
+import { createVehicleMaterial, replaceMaterial, type VehicleEnvironment } from './vehicle-pbr';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
 export const SHADOW_NAME = 'blob-shadow';
@@ -119,11 +122,16 @@ function wheelAt(radius: number, width: number, x: number, y: number): BufferGeo
 }
 
 /** Owns what a visual allocates so `dispose` releases it exactly once. */
-function resources() {
+function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const geometries = new Set<BufferGeometry>();
   const materials: Material[] = [];
   const textures: Texture[] = [];
+  const detailMeshes: Mesh[] = [];
   let detailMaterial: MeshLambertMaterial | null = null;
+  let pbrMaterial: MeshStandardMaterial | null = null;
+  const pbrToken = {};
+  let pbrWanted = false;
+  let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
@@ -141,12 +149,35 @@ function resources() {
     detail(geometry: BufferGeometry): Mesh {
       const mesh = this.mesh(geometry, this.detailMaterial());
       mesh.layers.set(SKY_LAYER);
+      detailMeshes.push(mesh);
       return mesh;
     },
     /** The material of every `detail` mesh; shells use it too, so a swap adds no state change. */
     detailMaterial(): Material {
       detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
-      return detailMaterial;
+      return pbrOn && pbrMaterial !== null ? pbrMaterial : detailMaterial;
+    },
+    /**
+     * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
+     * has taken out of it; without `on` it repeats the last request, for shells that attach later.
+     */
+    setPbr(root: Object3D, on = pbrWanted): void {
+      pbrWanted = on;
+      const map = on ? (env?.texture(palette) ?? null) : null;
+      if (map !== null) {
+        pbrMaterial ??= track(createVehicleMaterial(map));
+        pbrMaterial.envMap = map;
+      } else if (pbrMaterial !== null) {
+        pbrMaterial.envMap = null;
+      }
+      pbrOn = map !== null;
+      env?.reportApplied(pbrToken, pbrOn);
+      if (detailMaterial === null || pbrMaterial === null) return;
+      replaceMaterial(
+        [root, ...detailMeshes],
+        [detailMaterial, pbrMaterial],
+        pbrOn ? pbrMaterial : detailMaterial,
+      );
     },
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
@@ -186,6 +217,7 @@ function resources() {
       return mesh;
     },
     dispose(): void {
+      env?.reportApplied(pbrToken, false);
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
       textures.forEach((t) => t.dispose());
@@ -197,6 +229,7 @@ export function proceduralTruck(
   spec: TruckSpec,
   palette: ScenePalette,
   shells?: TruckShells,
+  env?: VehicleEnvironment,
 ): VehicleVisual {
   const a = truckAnchors(spec);
   const hw = spec.width.value / 2000;
@@ -205,7 +238,7 @@ export function proceduralTruck(
   const look = TRUCK_LOOKS[spec.id];
   const cabRear = a.frontX - CAB_LENGTH;
   const bodyFront = bodyFrontX(a.frontX);
-  const res = resources();
+  const res = resources(palette, env);
 
   const cab = [box([cabRear, a.frontX], [-hw, hw], [FRAME_TOP, CAB_HEIGHT])];
 
@@ -354,6 +387,7 @@ export function proceduralTruck(
         onChange: (on) => shells?.cab.attached(cabKey, on),
       },
     );
+    res.setPbr(group);
   };
   const attachBody = (shell: Shell): void => {
     // the marking is part of the detail mesh, so the shortened one replaces the whole mesh
@@ -378,6 +412,7 @@ export function proceduralTruck(
         onChange: (on) => shells?.body.attached(bodyKey, on),
       },
     );
+    res.setPbr(group);
   };
   const attachBoth = (): void => {
     if (loadedShells.cab === null || loadedShells.body === null) return;
@@ -413,6 +448,7 @@ export function proceduralTruck(
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
+      res.setPbr(group, flags.pbr);
     },
     dispose() {
       cancelCab?.();
@@ -429,10 +465,11 @@ export function proceduralTrailer(
   spec: TrailerSpec,
   palette: ScenePalette,
   shells?: Shells<TrailerShell>,
+  env?: VehicleEnvironment,
 ): VehicleVisual {
   const { a, hw, track, deck, isBox, underside, radius, axleZ, plateBottom, plateMid, kink } =
     trailerFrame(spec);
-  const res = resources();
+  const res = resources(palette, env);
 
   // Dolly frame: the turntable centre is the origin; eye and front axle are read as given.
   const armPath = (side: number): [Point3, Point3, Point3] => [
@@ -638,6 +675,7 @@ export function proceduralTrailer(
     );
     applied = { trailer: onBody, dolly: onDolly };
     showShell(vehicleGlb);
+    res.setPbr(group);
   };
   const cancel = shells?.onLoaded(key, attach);
 
@@ -650,6 +688,7 @@ export function proceduralTrailer(
     setQuality(flags) {
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
+      res.setPbr(group, flags.pbr);
     },
     dispose() {
       cancel?.();

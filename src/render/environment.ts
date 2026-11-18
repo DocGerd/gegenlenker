@@ -13,6 +13,7 @@ import {
   PlaneGeometry,
   RingGeometry,
   ShaderLib,
+  Vector3,
   type Material,
   type Texture,
   type WebGLProgramParametersWithUniforms,
@@ -34,7 +35,7 @@ import type { GroundTextures } from './ground-texture';
 import type { QualityFlags } from './quality';
 import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER, type Environment } from './seams';
 import { REALISM_HUES } from './realism-hues';
-import { createSky, neutralSky } from './sky';
+import { createSky, neutralSky, type Sky } from './sky';
 import { createSkyline } from './skyline';
 import { tint } from './tint';
 import { isOnYard, RESTYLED_KINDS, yardProps } from './yard-props';
@@ -459,6 +460,31 @@ export function groundShader(
   shader.fragmentShader = fragmentShader;
 }
 
+/** The sun's position relative to the origin: south-west, where world (−, −) is Three (−x, +z). */
+export function sunPosition(): Vector3 {
+  const horizontal = Math.cos(SUN_ELEVATION) * SUN_DISTANCE;
+  return new Vector3(
+    -horizontal / Math.SQRT2,
+    Math.sin(SUN_ELEVATION) * SUN_DISTANCE,
+    horizontal / Math.SQRT2,
+  );
+}
+
+/** The dome the perspective views show; the vehicle reflections are captured from the same one. */
+export function createSceneSky(palette: ScenePalette): Sky {
+  const ambient = neutralSky(palette.sky);
+  // Radiance of an upward-facing Lambert surface, so the dome below the horizon matches the ground.
+  const lit =
+    (HEMISPHERE_INTENSITY * ambient.r + SUN_INTENSITY * Math.sin(SUN_ELEVATION)) / Math.PI;
+  return createSky(
+    new Color(palette.sky),
+    new Color(palette.verge).multiplyScalar(Math.min(1, lit)),
+    new Color(REALISM_HUES.skyHaze),
+    new Color(REALISM_HUES.sunHalo),
+    sunPosition(),
+  );
+}
+
 export function proceduralEnvironment(
   layout: ResolvedLayout,
   palette: ScenePalette,
@@ -630,28 +656,12 @@ export function proceduralEnvironment(
   }
 
   const sun = new DirectionalLight(0xffffff, SUN_INTENSITY);
-  const horizontal = Math.cos(SUN_ELEVATION) * SUN_DISTANCE;
-  // south-west: world (−, −) is Three (−x, +z)
-  sun.position.set(
-    -horizontal / Math.SQRT2,
-    Math.sin(SUN_ELEVATION) * SUN_DISTANCE,
-    horizontal / Math.SQRT2,
-  );
-  const horizon = new Color(palette.sky);
+  sun.position.copy(sunPosition());
   const ambient = neutralSky(palette.sky);
   group.add(sun, new HemisphereLight(ambient, palette.verge, HEMISPHERE_INTENSITY));
 
-  // Radiance of an upward-facing Lambert surface, so the dome below the horizon matches the ground.
-  const lit =
-    (HEMISPHERE_INTENSITY * ambient.r + SUN_INTENSITY * Math.sin(SUN_ELEVATION)) / Math.PI;
   const haze = new Color(REALISM_HUES.skyHaze);
-  const sky = createSky(
-    horizon,
-    new Color(palette.verge).multiplyScalar(Math.min(1, lit)),
-    haze,
-    new Color(REALISM_HUES.sunHalo),
-    sun.position,
-  );
+  const sky = createSceneSky(palette);
   const skyline = createSkyline(layout.bounds, haze);
   group.add(sky.mesh, skyline.mesh);
 
