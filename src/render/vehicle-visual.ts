@@ -42,6 +42,7 @@ import {
   ARM_WIDTH,
   AXLE_HALF_THICKNESS,
   DRAWBAR_SPREAD,
+  EYE_BLOCK,
   PLATE_RADIUS,
   PLATE_THICKNESS,
   POST_HALF_WIDTH,
@@ -446,7 +447,11 @@ export function proceduralTrailer(
   const dollyChassis = [
     ...arm(-1),
     ...arm(1),
-    box([a.eye.x - 0.15, a.eye.x + 0.05], [-0.1, 0.1], [a.eye.z - 0.07, a.eye.z + 0.07]),
+    box(
+      [a.eye.x - EYE_BLOCK.back, a.eye.x + EYE_BLOCK.front],
+      [-EYE_BLOCK.halfWidth, EYE_BLOCK.halfWidth],
+      [a.eye.z - EYE_BLOCK.halfHeight, a.eye.z + EYE_BLOCK.halfHeight],
+    ),
     new CylinderGeometry(PLATE_RADIUS, PLATE_RADIUS, PLATE_THICKNESS, WHEEL_SEGMENTS).translate(
       0,
       plateMid,
@@ -564,8 +569,7 @@ export function proceduralTrailer(
   const dollyChassisMesh = res.mesh(merge(dollyChassis), chassisMaterial);
   const bodyMesh = res.mesh(merge(bodyParts), bodyMaterial);
   const frameMesh = res.mesh(merge([...rails, ...axleBeams]), chassisMaterial);
-  // a swap body's own marking goes with it when its shell shows a bare chassis
-  const boxDetail = trailerRig.boxGeometry === null ? null : res.detail(trailerRig.boxGeometry);
+  const detailMesh = res.detail(trailerRig.geometry);
   const dolly = new Group();
   dolly.add(
     res.shadow(blobShadow(dollyBlobs, SHADOW_HEIGHT)),
@@ -581,8 +585,7 @@ export function proceduralTrailer(
     bodyMesh,
     frameMesh,
     res.mesh(merge(trailerWheels), wheelMaterial),
-    res.detail(trailerRig.geometry),
-    ...(boxDetail === null ? [] : [boxDetail]),
+    detailMesh,
     res.plate(trailerRig.plate),
   );
   const group = new Group();
@@ -590,34 +593,51 @@ export function proceduralTrailer(
 
   type Applied = ReturnType<typeof applyShell>;
   let applied: { readonly trailer: Applied; readonly dolly: Applied } | null = null;
+  let shown = false;
   let vehicleGlb = true;
   const key = `${spec.id}-trailer`;
+  /** Both halves switch together or not at all; the shell counts as attached only while both show. */
+  const showShell = (on: boolean): void => {
+    if (applied === null || on === shown) return;
+    const halves = [applied.trailer, applied.dolly];
+    try {
+      for (const half of halves) half.setEnabled(on);
+    } catch (error) {
+      console.warn(`Shell ${key} could not be switched; keeping the previous state`, error);
+      try {
+        for (const half of halves) half.setEnabled(shown);
+      } catch (undoError) {
+        console.warn(`Shell ${key} could not be restored`, undoError);
+      }
+      return;
+    }
+    shown = on;
+    shells?.attached(key, on);
+  };
   const attach = (shell: TrailerShell): void => {
     const material = res.detailMaterial();
+    // a swap body's own marking goes with its box: the shell shows the bare chassis
+    const bare = trailerRig.bareGeometry === null ? null : res.detail(trailerRig.bareGeometry);
+    // both start off, so a failure here leaves the groups as they were
     const onBody = applyShell(
       trailer,
       shell.trailer,
       {
         toAids: [bodyMesh, frameMesh],
-        remove: boxDetail === null ? [] : [boxDetail],
+        remove: bare === null ? [] : [detailMesh],
+        add: bare === null ? [] : [bare],
         layer: SKY_LAYER,
       },
-      { material, enabled: vehicleGlb, onChange: (on) => shells?.attached(key, on) },
+      { material, enabled: false },
     );
-    try {
-      applied = {
-        trailer: onBody,
-        dolly: applyShell(
-          dolly,
-          shell.dolly,
-          { toAids: [dollyChassisMesh], remove: [], layer: SKY_LAYER },
-          { material, enabled: vehicleGlb },
-        ),
-      };
-    } catch (error) {
-      onBody.dispose();
-      throw error;
-    }
+    const onDolly = applyShell(
+      dolly,
+      shell.dolly,
+      { toAids: [dollyChassisMesh], remove: [], layer: SKY_LAYER },
+      { material, enabled: false },
+    );
+    applied = { trailer: onBody, dolly: onDolly };
+    showShell(vehicleGlb);
   };
   const cancel = shells?.onLoaded(key, attach);
 
@@ -629,13 +649,11 @@ export function proceduralTrailer(
     },
     setQuality(flags) {
       vehicleGlb = flags.vehicleGlb;
-      applied?.trailer.setEnabled(vehicleGlb);
-      applied?.dolly.setEnabled(vehicleGlb);
+      showShell(vehicleGlb);
     },
     dispose() {
       cancel?.();
-      applied?.trailer.dispose();
-      applied?.dolly.dispose();
+      showShell(false);
       res.dispose();
       dollyPlan.dispose();
       trailerPlan.dispose();
