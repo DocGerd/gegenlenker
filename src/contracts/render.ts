@@ -19,6 +19,28 @@ export type LegendBox = {
   readonly height: number;
 };
 export type ViewMode = 'drive' | 'replay';
+/** Which way the screen is split: the top-down pane beside the cockpit (landscape) or above it (portrait). */
+export type Orientation = 'landscape' | 'portrait';
+/** The top-down pane's share of the screen per orientation: its width in landscape, its height in portrait. */
+export type TopDownLayout = Readonly<Record<Orientation, number>>;
+export const DEFAULT_TOP_DOWN_LAYOUT: TopDownLayout = { landscape: 0.4, portrait: 0.45 };
+/** The widest range a stored share may take; the screen narrows it further (`topDownSplit`). */
+export const TOP_DOWN_SHARE_LIMITS: Readonly<
+  Record<Orientation, { readonly min: number; readonly max: number }>
+> = {
+  landscape: { min: 0.25, max: 0.6 },
+  portrait: { min: 0.3, max: 0.6 },
+};
+/** The split as it applies to the current screen. */
+export type TopDownSplit = {
+  readonly orientation: Orientation;
+  /** In use, within `min`..`max`. */
+  readonly share: number;
+  readonly min: number;
+  readonly max: number;
+  /** The default for this orientation; `min` and `max` always include it. */
+  readonly fallback: number;
+};
 export type TopDownMode = 'follow' | 'yard' | 'chase';
 /**
  * Relative to the mode's default framing; pan is in units of its base half-height, sim-plane axes (y up).

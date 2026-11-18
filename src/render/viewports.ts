@@ -1,4 +1,14 @@
-import type { LegendBox, Rect, ViewMode, ViewRects } from '../contracts/render';
+import {
+  DEFAULT_TOP_DOWN_LAYOUT,
+  TOP_DOWN_SHARE_LIMITS,
+  type LegendBox,
+  type Orientation,
+  type Rect,
+  type TopDownLayout,
+  type TopDownSplit,
+  type ViewMode,
+  type ViewRects,
+} from '../contracts/render';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -62,6 +72,64 @@ export function controlsHeight(
   return Math.max(steer, base + STOP_BLOCK + STOP_GAP + LABEL_BLOCK + lever);
 }
 
+/** The shortest portrait pane its HUD panels are laid out for. */
+const MIN_PORTRAIT_PANE = 320;
+
+/**
+ * Landscape: from this pane width on, the top view's panels stack no lower than `bottom` px below the pane's top
+ * (measured with the longer German wording). The divider sits under them, at the pane's bottom.
+ */
+const PANEL_STACK = [
+  { from: 296, bottom: 545 },
+  { from: 320, bottom: 515 },
+  { from: 360, bottom: 485 },
+  { from: 400, bottom: 380 },
+  { from: 440, bottom: 305 },
+] as const;
+/** The divider's handle and reset button, the gap between them and above, and the pane's bottom padding; mirrors `.hud-split` in hud.css. */
+const DIVIDER_STACK = 2 * 44 + 44 + 8 + 8 + INSET;
+
+/** The narrowest landscape pane whose panels leave room for the divider below them. */
+function panelFloor(cssHeight: number, insets: Insets): number {
+  const fits = PANEL_STACK.find(
+    ({ bottom }) => insets.top + bottom + DIVIDER_STACK + insets.bottom <= cssHeight,
+  );
+  return (fits ?? PANEL_STACK[PANEL_STACK.length - 1])?.from ?? 0;
+}
+
+export const orientationOf = (cssWidth: number, cssHeight: number): Orientation =>
+  cssWidth >= cssHeight ? 'landscape' : 'portrait';
+
+/**
+ * The top-down share in use. It may not take the cockpit below what its controls need: in landscape
+ * the wheel, gears and compact legend side by side, in portrait the controls plus the smallest
+ * mirror above them. The default always stays allowed.
+ */
+export function topDownSplit(
+  cssWidth: number,
+  cssHeight: number,
+  layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
+  legend: LegendBox | null = null,
+  safeInsets?: Insets,
+): TopDownSplit {
+  const insets = safeInsets ?? readSafeInsets();
+  const orientation = orientationOf(cssWidth, cssHeight);
+  const landscape = orientation === 'landscape';
+  const fallback = DEFAULT_TOP_DOWN_LAYOUT[orientation];
+  const limits = TOP_DOWN_SHARE_LIMITS[orientation];
+  const extent = landscape ? cssWidth : cssHeight;
+  const cockpitNeeded = landscape
+    ? insets.left + 3 * INSET + GEARS_WIDTH + LEGEND_WIDTH + wheelSize(cssWidth, cssHeight, insets)
+    : COCKPIT_LABEL +
+      MIN_MIRROR_HEIGHT +
+      MIRROR_GAP +
+      Math.max(controlsHeight(cssWidth, cssHeight, insets), legend?.height ?? 0);
+  const floor = landscape ? panelFloor(cssHeight, insets) : MIN_PORTRAIT_PANE;
+  const min = Math.min(fallback, Math.max(limits.min, floor / extent));
+  const max = Math.min(limits.max, Math.max(fallback, 1 - cockpitNeeded / extent));
+  return { orientation, share: clamp(layout[orientation], min, max), min, max, fallback };
+}
+
 /** `legend` is the measured key legend: the mirrors stay above it where it reaches under them. */
 export function computeViewports(
   cssWidth: number,
@@ -69,20 +137,22 @@ export function computeViewports(
   mode: ViewMode,
   legend: LegendBox | null = null,
   safeInsets?: Insets,
+  layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
 ): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
     return { cockpit: null, mirrorLeft: null, mirrorRight: null, topDown: full };
   }
   const insets = safeInsets ?? readSafeInsets();
+  const { share } = topDownSplit(cssWidth, cssHeight, layout, legend, insets);
   let topDown: Rect;
   let cockpit: Rect;
   if (cssWidth >= cssHeight) {
-    const w = Math.round(0.4 * cssWidth);
+    const w = Math.round(share * cssWidth);
     topDown = { x: cssWidth - w, y: 0, width: w, height: cssHeight };
     cockpit = { x: 0, y: 0, width: cssWidth - w, height: cssHeight };
   } else {
-    const h = cssHeight - Math.round(0.55 * cssHeight);
+    const h = cssHeight - Math.round((1 - share) * cssHeight);
     topDown = { x: 0, y: 0, width: cssWidth, height: h };
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
   }

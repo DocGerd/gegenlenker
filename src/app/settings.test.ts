@@ -9,6 +9,7 @@ const defaults: Settings = {
   trailerId: 'krone-azw-18',
   aids: { pivots: true, path: true, tracks: false, ghost: true },
   topDown: 'follow',
+  topDownLayout: { landscape: 0.4, portrait: 0.45 },
   collapsed: { aids: false, gauges: false, keys: false },
   graphics: 'balanced',
 };
@@ -21,6 +22,7 @@ const stored: Settings = {
   trailerId: 'hueffermann-hpa-24-81-l',
   aids: { pivots: false, path: false, tracks: true, ghost: false },
   topDown: 'yard',
+  topDownLayout: { landscape: 0.5, portrait: 0.35 },
   collapsed: { aids: true, gauges: true, keys: true },
   graphics: 'low',
 };
@@ -64,6 +66,17 @@ describe('loadSettings', () => {
     expect(loadSettings(JSON.stringify({ version: 1, aids: [true] }), 'en').aids).toEqual(
       defaults.aids,
     );
+  });
+
+  it('clamps a stored top-down share to its limits and ignores non-numbers', () => {
+    const layout = (v: unknown) =>
+      loadSettings(JSON.stringify({ version: 1, topDownLayout: v }), 'en').topDownLayout;
+    expect(layout({ landscape: 0.9, portrait: 0.1 })).toEqual({ landscape: 0.6, portrait: 0.3 });
+    expect(layout({ landscape: 0.01, portrait: 0.99 })).toEqual({ landscape: 0.25, portrait: 0.6 });
+    expect(layout({ landscape: '0.5', portrait: null })).toEqual(defaults.topDownLayout);
+    expect(layout({ landscape: 0.5 })).toEqual({ landscape: 0.5, portrait: 0.45 });
+    expect(layout([0.5])).toEqual(defaults.topDownLayout);
+    expect(layout({ landscape: Number.NaN })).toEqual(defaults.topDownLayout);
   });
 
   it('uses the detected language only when none is stored', () => {
