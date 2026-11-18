@@ -19,13 +19,15 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 
 - Only `src/render` imports `three`; `.ts` files are checked by `no-restricted-imports` in `eslint.config.js`, `dev/` harnesses are exempt.
 - `src/{contracts,vehicles,sim,scoring,content}` also import none of `render/app/hud/input/pwa/i18n` and use none of `window`, `document`, `navigator`, `localStorage`, `performance`, `requestAnimationFrame` (same config).
-- Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome) go on `SKY_LAYER` (`src/render/seams.ts`).
+- Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome, skyline) go on `SKY_LAYER`; cab-front parts on `CAB_LAYER` (mirrors only, the cockpit eye is inside the cab). Cameras enable layers via `enableLayers` with `COCKPIT_LAYERS`/`MIRROR_LAYERS`/`TOP_DOWN_LAYERS` (`src/render/seams.ts`).
+- Perspective scenery must stay inside `CAMERA_FAR` (`src/render/seams.ts`); `src/render/skyline.test.ts` pins it.
+- Obstacle kinds in `RESTYLED_KINDS` (`src/render/yard-props.ts`) draw a token copy top-down only plus a detailed perspective prop; a new kind needs both.
 - Vertex colours must be linear: set a `Color` from the palette (`color.set` converts) and pass it to `tint()` (`src/render/environment.ts`); raw palette bytes render too light. `tint()` drops UVs, so textured surfaces need their own geometry and material.
 - ESLint is type-aware (`strictTypeChecked`): fix findings in source, no `eslint-disable`.
 - The `query(root, name, Type)` DOM helpers (menu, hud, controls) throw unless the element is `instanceof Type`: pass the real class (`SVGElement` for `<svg>`/`<g>`, `HTMLSelectElement` for `<select>`).
 - Changing `--scene-*` tokens: keep the T1-T4 contrast targets in `docs/brand/BRAND.md`; `src/styles/tokens.test.ts` enforces them.
 - `tokens.test.ts` checks token hex values, not rendered pixels: fog, tone mapping, ground detail or shadows can break top-down contrast unnoticed. Keep top faces on tokens, put realism on perspective-only layers, and check with a top-down screenshot.
-- Mirror rects avoid the controls via `controlsHeight()` in `src/render/viewports.ts`, which copies control geometry from `src/input/controls.css` and `src/styles/tokens.css`: change both together; `e2e/layout.spec.ts` pins no overlap.
+- Mirror rects avoid the controls via `controlsHeight()` in `src/render/viewports.ts`, which copies control geometry from `src/input/controls.css` and `src/styles/tokens.css`: change both together. They also avoid the measured HUD legend (`hud.legendBox()` → `LegendBox`); `e2e/layout.spec.ts` pins no overlap.
 
 ## Units and signs
 
@@ -47,6 +49,8 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 
 Test logic and critical paths only; no blanket coverage, no tests without value.
 
+- e2e: await web-first assertions (`toHaveCount`, `toBeVisible`; `hudReady()` in `e2e/layout.spec.ts`) before measuring DOM boxes.
+
 ## Tablet perf check (manual, reference device: Android tablet, Chrome)
 
 - Open https://docgerd.github.io/gegenlenker/?perf=1 and start a drive (`src/app/drive.ts` mounts the overlay only there); it shows fps, p95 frame ms, resolution scale, draw calls, GL renderer.
@@ -57,13 +61,14 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 ## Visual check
 
 - Headless Chromium screenshots of the real app work for visual checks (`pnpm exec playwright screenshot --lang de-DE <url> <png>`; scripts reuse the `@playwright/test` devDep); UI language defaults to the browser locale (`navigator.languages`) unless a saved setting overrides it; there is no URL parameter.
+- Headless screenshots run on software GL and passed a see-through skyline; perspective realism changes need an owner device check before calling them done.
 
 ## Workflow
 
 - Changes go through PRs; never push to `main`.
 - `.claude/settings.json` is committed: a PostToolUse hook (`.claude/hooks/format.sh`) runs Prettier on each Edit/Write, and editing `pnpm-lock.yaml` is denied (change it through pnpm). Review `.claude/**` changes like code.
 - Commit and PR titles use conventional prefixes: `feat`, `fix`, `docs`, `ci`, `chore`, `refactor`, `perf`, `test`.
-- UI text goes through `t()`; keys live in `src/i18n/en.ts`, and `de.ts` is typed against them, so both must define every key.
+- UI text goes through `t()`; keys live in `src/i18n/en.ts`, and `de.ts` is typed against them, so both must define every key. German UI wording follows `docs/glossary.md`.
 - Choose the merge method per PR: merge commit when the commits are meaningful; no squash by default.
 - Commit as `13460098+DocGerd@users.noreply.github.com` (repo-local `user.email`), never the owner's real address.
 - `main` ruleset (no bypass) requires up-to-date PRs and resolved review threads: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next one and wait for CI.
