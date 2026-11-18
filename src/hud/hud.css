@@ -324,10 +324,18 @@
   }
 }
 
-/* Only the top row sits beside the finish button: the goal card, or the toolbar when there is none. */
+/* Only the top row sits beside the finish button: the goal card, or the view row when there is no card. */
 .hud-topdown[data-reserve] .hud-goal,
-.hud-topdown[data-reserve] .hud-goal[hidden] + .hud-toolbar {
+.hud-topdown[data-reserve] .hud-goal[hidden] + .hud-toolbar [data-hud='views'] {
   margin-right: calc(var(--hud-action-w) + var(--space-4));
+}
+
+/* The aids row below it may run under the button's end, so it starts clear of the button. */
+.hud-topdown[data-reserve] .hud-goal[hidden] + .hud-toolbar .hud-aids {
+  margin-top: max(
+    0px,
+    calc(var(--size-target) - var(--hud-target) - var(--space-2) + var(--space-1))
+  );
 }
 
 .hud-toolbar {
@@ -335,6 +343,67 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--space-2);
+}
+
+.hud-aids {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.hud-aid-legend {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  box-sizing: border-box;
+  max-width: 26em;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  list-style: none;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-secondary);
+}
+
+.hud-aid-legend li {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+}
+
+.hud-aid-legend li[data-disabled] {
+  opacity: 0.4;
+}
+
+.hud-swatch {
+  flex: none;
+  width: 40px;
+  height: 20px;
+  border-radius: var(--radius-md);
+  background: var(--scene-yard);
+}
+
+.hud-swatch path,
+.hud-swatch rect {
+  fill: none;
+}
+
+.swatch-casing {
+  stroke: var(--scene-wheel);
+}
+
+.swatch-core {
+  stroke: var(--scene-accent);
+}
+
+.swatch-tracks {
+  stroke: var(--scene-tracks);
 }
 
 .hud-group {

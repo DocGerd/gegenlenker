@@ -15,6 +15,10 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Driving area                                    | yard              | Hof                                          |
 | Aids on / off                                   | aids              | Hilfen                                       |
 | Toggle for both angle readouts                  | angle display     | Winkelanzeige                                |
+| Toggle for the predicted corridor               | predicted path    | Vorausschau                                  |
+| Toggle for the past wheel paths                 | wheel tracks      | Radspuren                                    |
+| Toggle for the target outline                   | target ghost      | Zielbild                                     |
+| Bar across the corridor's ends at a block       | stop bar          | Querbalken                                   |
 | Goal of an exercise                             | target            | Ziel                                         |
 | One attempt at an exercise                      | run               | Fahrt                                        |
 | Point to drive through before the target        | turn point        | Wendepunkt                                   |

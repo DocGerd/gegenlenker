@@ -19,6 +19,7 @@ const DRIVE_RADIUS = 15;
 const DRIVE_SPEED = 2;
 const PREDICT_STEP = 0.5;
 const PREDICT_POINTS = 80;
+const CORRIDOR_HALF = 1.25;
 const PREDICT_CURVATURE = 1 / 25;
 
 const stage = document.querySelector<HTMLElement>('#stage');
@@ -110,13 +111,15 @@ function snapshotAt(seconds: number): SimSnapshot {
   };
 }
 
-/** A fixed arc backwards from the trailer rear. */
-function predictedArc(from: SimSnapshot): Vec2[] {
-  const out: Vec2[] = [];
+/** A fixed corridor backwards from the trailer rear, `CORRIDOR_HALF` either side of the centre arc. */
+function predictedCorridor(from: SimSnapshot): { left: Vec2[]; right: Vec2[] } {
+  const out = { left: [] as Vec2[], right: [] as Vec2[] };
   let heading = from.trailer.heading + Math.PI;
   let p = from.trailerRear;
   for (let i = 0; i < PREDICT_POINTS; i++) {
-    out.push(p);
+    // `heading` points away from the trailer, so the trailer's left is heading - 90 degrees
+    out.left.push(advance(p, heading - Math.PI / 2, CORRIDOR_HALF));
+    out.right.push(advance(p, heading + Math.PI / 2, CORRIDOR_HALF));
     heading -= PREDICT_CURVATURE * PREDICT_STEP;
     p = advance(p, heading, PREDICT_STEP);
   }
@@ -189,7 +192,7 @@ const tick = (now: number): void => {
     views: computeViewports(width, height, 'drive'),
     topDown,
     aids,
-    predicted: { ...NO_PREDICTION, trailer: predictedArc(snapshot) },
+    predicted: { ...NO_PREDICTION, lead: 'trailer', ...predictedCorridor(snapshot) },
   };
   renderer.render(frame);
   requestAnimationFrame(tick);

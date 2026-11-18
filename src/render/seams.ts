@@ -11,6 +11,19 @@ export const AIDS_LAYER = 1; // seen by the top-down camera only
 export const CAMERA_FAR = 400;
 export const SKY_LAYER = 2; // seen by the perspective cameras only
 export const CAB_LAYER = 3; // seen by the mirrors and the chase camera: the cockpit eye sits inside the cab
+/** Dash pattern (m) of the forward corridor; the Aids legend draws the same. */
+export const AID_DASH_ON = 0.6;
+export const AID_DASH_OFF = 0.4;
+/** Stroke widths (m) of the top-down aids, each on a dark casing `casing` wide at either edge; the Aids legend draws the same. */
+export const AID_STROKE = {
+  path: 0.2,
+  corridor: 0.1,
+  bar: 0.2,
+  pivot: 0.12,
+  ghost: 0.1,
+  track: 0.1,
+  casing: 0.06,
+} as const;
 export const INTERIOR_LAYER = 4; // seen by the cockpit camera only: the cab interior around the driver's eye
 export const COCKPIT_LAYERS = [SKY_LAYER, INTERIOR_LAYER];
 export const MIRROR_LAYERS = [SKY_LAYER, CAB_LAYER];

@@ -73,6 +73,12 @@ export const en = {
   aidPath: 'Predicted path',
   aidTracks: 'Wheel tracks',
   aidGhost: 'Target ghost',
+  aidLegend: 'What the aid lines mean',
+  legendPivots: 'Center lines of truck, drawbar and trailer; the gap is the angle.',
+  legendPath:
+    'Solid: trailer rear corners (reversing). Dashed: truck front corners (forward). Stop bar: where the held steer stops.',
+  legendTracks: 'Where the wheels have been.',
+  legendGhost: 'Trailer outline at the target.',
   aidTopViewOnly: 'Shown in the follow and whole-yard views only',
   panelAids: 'Aids',
   panelGauges: 'Angles',

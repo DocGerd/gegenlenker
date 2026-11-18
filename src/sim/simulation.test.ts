@@ -579,6 +579,23 @@ describe('simulation', () => {
       return worst;
     };
 
+    /** A corner of the leading end in the snapshot: truck front when driving forward, trailer rear when reversing. */
+    const corner = (p: VehicleParams, gear: 'D' | 'R', s: SimSnapshot, side: 1 | -1): Vec2 => {
+      const obb = bodyFootprints(p, s).find(
+        (b) => b.body === (gear === 'D' ? 'truck' : 'trailer'),
+      )?.obb;
+      if (obb === undefined) throw new Error('no footprint');
+      const along = gear === 'D' ? obb.halfLength : -obb.halfLength;
+      return {
+        x: obb.cx + along * Math.cos(obb.heading) - side * obb.halfWidth * Math.sin(obb.heading),
+        y: obb.cy + along * Math.sin(obb.heading) + side * obb.halfWidth * Math.cos(obb.heading),
+      };
+    };
+    const sides = [
+      [1, (r: Prediction) => r.left],
+      [-1, (r: Prediction) => r.right],
+    ] as const;
+
     /** Drives from a snapshot taken before the wheels settle and compares each point by arc length. */
     const compare = (
       p: VehicleParams,
@@ -597,86 +614,116 @@ describe('simulation', () => {
       return worstGap(predicted, pick(start), snaps.map(pick), dist);
     };
 
-    it('trailer path from an unsettled standstill equals the path driven once the wheels settle', () => {
+    it('both corner lines from an unsettled standstill equal the corners driven once the wheels settle', () => {
+      const p = open(manKrone());
       for (const gear of ['D', 'R'] as const) {
-        const worst = compare(
-          open(manKrone()),
-          gear,
-          0.4,
-          (s) => s.trailerRear,
-          (r) => r.trailer,
-        );
-        expect(worst).toBeLessThan(0.02);
+        for (const [side, line] of sides) {
+          const worst = compare(p, gear, 0.4, (s) => corner(p, gear, s, side), line);
+          expect(worst).toBeLessThan(0.02);
+        }
       }
     });
 
-    it('trailer path from a moving start follows the wheels still ramping to the target', () => {
+    it('both corner lines from a moving start follow the wheels still ramping to the target', () => {
       for (const gear of ['D', 'R'] as const) {
         const p = open(manKrone());
-        const sim = createSimulation(p, origin, noContacts);
-        const cruise = ctl({ lever: 1, gear });
-        driveUntil(sim, cruise, (s) => Math.abs(s.speed) === V_MAX);
-        const turn = ctl({ steer: 0.6, lever: 1, gear });
-        const from = last(drive(sim, turn, 10));
-        expect(Math.abs(from.speed)).toBe(V_MAX);
-        expect(from.steer).toBeGreaterThan(0);
-        expect(from.steer).toBeLessThan(1);
-        const predicted = predictCombination(p, from, noContacts, horizon).trailer;
-        const { snaps, dist } = driveDistance(sim, turn, horizon);
-        const worst = worstGap(
-          predicted,
-          from.trailerRear,
-          snaps.map((s) => s.trailerRear),
-          dist,
-        );
-        expect(worst).toBeLessThan(0.02);
+        for (const [side, line] of sides) {
+          const sim = createSimulation(p, origin, noContacts);
+          const cruise = ctl({ lever: 1, gear });
+          driveUntil(sim, cruise, (s) => Math.abs(s.speed) === V_MAX);
+          const turn = ctl({ steer: 0.6, lever: 1, gear });
+          const from = last(drive(sim, turn, 10));
+          expect(Math.abs(from.speed)).toBe(V_MAX);
+          expect(from.steer).toBeGreaterThan(0);
+          expect(from.steer).toBeLessThan(1);
+          const predicted = line(predictCombination(p, from, noContacts, horizon));
+          const { snaps, dist } = driveDistance(sim, turn, horizon);
+          const worst = worstGap(
+            predicted,
+            corner(p, gear, from, side),
+            snaps.map((s) => corner(p, gear, s, side)),
+            dist,
+          );
+          expect(worst).toBeLessThan(0.02);
+        }
       }
     });
 
-    it('truck lines are the outer front corner and the inner rear-axle side, swapping with the steer sign', () => {
-      const p = open(manKrone());
-      const front = (s: SimSnapshot, side: 1 | -1): Vec2 => {
-        const obb = bodyFootprints(p, s)[0]?.obb;
-        if (obb === undefined) throw new Error('no truck footprint');
-        return {
-          x:
-            obb.cx +
-            obb.halfLength * Math.cos(obb.heading) -
-            side * obb.halfWidth * Math.sin(obb.heading),
-          y:
-            obb.cy +
-            obb.halfLength * Math.sin(obb.heading) +
-            side * obb.halfWidth * Math.cos(obb.heading),
-        };
-      };
-      const rear = (s: SimSnapshot, side: 1 | -1): Vec2 => ({
-        x: s.truck.x - (side * p.truckWidth * Math.sin(s.truck.heading)) / 2,
-        y: s.truck.y + (side * p.truckWidth * Math.cos(s.truck.heading)) / 2,
-      });
-      for (const gear of ['D', 'R'] as const) {
-        // left (positive) steer turns toward the left: the left side is inner, the right front corner outer
-        for (const [steer, inner, outer] of [
-          [0.5, 1, -1],
-          [-0.5, -1, 1],
-        ] as const) {
-          expect(
-            compare(
+    it('the corridor leads with the trailer rear in R and the truck front in D, whatever the steer', () => {
+      const p = manKrone();
+      for (const [gear, lead] of [
+        ['D', 'truck'],
+        ['R', 'trailer'],
+      ] as const) {
+        for (const steer of [-0.5, 0, 0.5]) {
+          const sim = createSimulation(p, origin, noContacts);
+          const from = sim.step(ctl({ steer, gear }));
+          const predicted = predictCombination(p, from, noContacts);
+          expect(predicted.lead).toBe(lead);
+          expect(predicted.left).toHaveLength(predicted.right.length);
+          // left and right share one cross-section at every sample
+          for (const [side, line] of sides) {
+            const first = line(predicted)[0];
+            if (first === undefined) throw new Error('no first sample');
+            expect(dist2(first, corner(p, gear, from, side))).toBeLessThan(1e-9);
+          }
+        }
+      }
+    });
+
+    it('the first sample spans the leading end: the trailer rear in R, the truck front in D', () => {
+      for (const { p } of pairs) {
+        for (const gear of ['D', 'R'] as const) {
+          for (const steer of [-0.5, 0.5]) {
+            const from = createSimulation(p, origin, noContacts).step(ctl({ steer, gear }));
+            const predicted = predictCombination(p, from, noContacts);
+            const [left, right] = [predicted.left[0], predicted.right[0]];
+            if (left === undefined || right === undefined) throw new Error('no first sample');
+            const mid = { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 };
+            const centre =
+              gear === 'R'
+                ? from.trailerRear
+                : {
+                    x: from.truck.x + p.truckFront * Math.cos(from.truck.heading),
+                    y: from.truck.y + p.truckFront * Math.sin(from.truck.heading),
+                  };
+            expect(dist2(mid, centre)).toBeLessThan(1e-9);
+            expect(dist2(left, right)).toBeCloseTo(gear === 'R' ? p.trailerWidth : p.truckWidth, 9);
+          }
+        }
+      }
+    });
+
+    it('the corridor of steer s mirrors that of -s, and its lines are equally long at steer 0', () => {
+      const arc = (line: readonly Vec2[]): number =>
+        line.slice(1).reduce((sum, b, i) => sum + dist2(b, line[i] ?? b), 0);
+      for (const { p } of pairs) {
+        for (const gear of ['D', 'R'] as const) {
+          const at = (steer: number): Prediction =>
+            predictCombination(
               p,
-              gear,
-              steer,
-              (s) => front(s, outer),
-              (r) => r.truckOuter,
-            ),
-          ).toBeLessThan(0.02);
-          expect(
-            compare(
-              p,
-              gear,
-              steer,
-              (s) => rear(s, inner),
-              (r) => r.truckInner,
-            ),
-          ).toBeLessThan(0.02);
+              createSimulation(p, origin, noContacts).step(ctl({ steer, gear })),
+              noContacts,
+            );
+          for (const steer of [0.2, 0.6, 1]) {
+            const [a, b] = [at(steer), at(-steer)];
+            const n = a.left.length;
+            expect(n).toBeGreaterThan(1);
+            expect([a.right.length, b.left.length, b.right.length]).toEqual([n, n, n]);
+            for (const [from, to] of [
+              [a.left, b.right],
+              [a.right, b.left],
+            ] as const) {
+              from.forEach((point, k) => {
+                const mate = to[k];
+                if (mate === undefined) throw new Error('missing mirror point');
+                expect(dist2(point, { x: mate.x, y: -mate.y })).toBeLessThan(1e-6);
+              });
+            }
+          }
+          const straight = at(0);
+          expect(arc(straight.left)).toBeCloseTo(arc(straight.right), 9);
+          expect(straight.left.length).toBeGreaterThan(1);
         }
       }
     });
@@ -691,11 +738,9 @@ describe('simulation', () => {
         const at = last(driveUntil(sim, reverse, (s) => s.blocked !== null));
         expect(predicted.blocked).toBe(at.blocked);
         expect(contactAhead(predicted)).toBe(false);
-        expect(dist2(last(predicted.trailer), at.trailerRear)).toBeLessThan(0.1);
-        expect(predicted.end).not.toBeNull();
-        expect(predicted.end?.truck).toBeCloseTo(at.truck.heading, 1);
-        expect(predicted.end?.trailer).toBeCloseTo(at.trailer.heading, 1);
-        expect(predicted.truckOuter).toHaveLength(predicted.trailer.length);
+        for (const [side, line] of sides) {
+          expect(dist2(last(line(predicted)), corner(p, 'R', at, side))).toBeLessThan(0.1);
+        }
       }
     });
 
@@ -715,7 +760,9 @@ describe('simulation', () => {
         const predicted = predictCombination(p, sim.step({ ...drive, lever: 0 }), wall);
         const at = last(driveUntil(sim, drive, (s) => s.blocked !== null));
         expect(predicted.blocked).toBe('contact');
-        expect(dist2(last(predicted.trailer), at.trailerRear)).toBeLessThan(0.1);
+        for (const [side, line] of sides) {
+          expect(dist2(last(line(predicted)), corner(p, gear, at, side))).toBeLessThan(0.1);
+        }
       }
     });
 
@@ -744,15 +791,14 @@ describe('simulation', () => {
       expect(contactAhead(far)).toBe(false);
     });
 
-    it('stops the truck lines once its heading has swept a half turn, the trailer line goes on', () => {
+    it('keeps both lines to the full horizon on a circle and ends them together at a block', () => {
       const p = open(manKrone());
       const sim = createSimulation(p, origin, noContacts);
       settleSteer(sim, 1);
       const circle = predictCombination(p, sim.snapshot(), noContacts);
-      expect(circle.trailer).toHaveLength(PREDICT_DISTANCE / PREDICT_STEP + 1);
-      expect(circle.truckOuter.length).toBeLessThan(circle.trailer.length);
-      expect(circle.truckInner).toHaveLength(circle.truckOuter.length);
-      expect(circle.end).toBeNull();
+      expect(circle.left).toHaveLength(PREDICT_DISTANCE / PREDICT_STEP + 1);
+      expect(circle.right).toHaveLength(circle.left.length);
+      expect(circle.blocked).toBeNull();
 
       const wall: ContactQuery = (bodies) =>
         bodies.some((b) => b.body === 'trailer' && b.obb.cy > 8)
@@ -760,12 +806,11 @@ describe('simulation', () => {
           : null;
       const blocked = predictCombination(p, sim.snapshot(), wall);
       expect(blocked.blocked).toBe('contact');
-      expect(blocked.truckOuter.length).toBeLessThan(blocked.trailer.length);
-      expect(blocked.end?.truck).toBeNull();
-      expect(blocked.end?.trailer).toBeTypeOf('number');
+      expect(blocked.left.length).toBeLessThan(circle.left.length);
+      expect(blocked.right).toHaveLength(blocked.left.length);
     });
 
-    it('a blocked standstill still yields the block and its end headings', () => {
+    it('a blocked standstill still yields the block and a one-point corridor', () => {
       const p = manKrone();
       const sim = createSimulation(p, origin, noContacts);
       settleSteer(sim, 1);
@@ -774,9 +819,9 @@ describe('simulation', () => {
       const predicted = predictCombination(p, at, noContacts);
       expect(predicted.blocked).toBe(at.blocked);
       // the sim stops short of the block by less than MIN_PARTIAL, so no partial piece is added
-      expect(predicted.trailer).toHaveLength(1);
-      expect(predicted.truckOuter).toHaveLength(1);
-      expect(predicted.end).toEqual({ truck: at.truck.heading, trailer: at.trailer.heading });
+      expect(predicted.left).toHaveLength(1);
+      expect(predicted.right).toHaveLength(1);
+      expect(predicted.lead).toBe('trailer');
     });
 
     it('predicts nothing outside D and R', () => {

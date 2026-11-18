@@ -28,6 +28,11 @@ test('the chase view orbits and zooms without errors, hides the target arrow and
     await expect(page.locator(`[data-aid="${aid}"]`)).toBeDisabled();
   }
   await expect(page.locator('[data-aid="pivots"]')).toBeEnabled();
+  const legendToggle = page.locator('[data-hud="aidLegendToggle"]');
+  await legendToggle.click();
+  await expect(legendToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('[data-aid-legend="path"]')).toHaveAttribute('data-disabled', '');
+  await expect(page.locator('[data-aid-legend="pivots"]')).not.toHaveAttribute('data-disabled');
   const pane = await page.locator('.hud-topdown').boundingBox();
   if (pane === null) throw new Error('no top-down pane');
   const x = pane.x + pane.width / 2;
@@ -43,6 +48,7 @@ test('the chase view orbits and zooms without errors, hides the target arrow and
   expect(JSON.parse(stored ?? '{}')).not.toMatchObject({ topDown: 'chase' });
   await page.locator('[data-view="yard"]').click();
   await expect(page.locator('[data-aid="path"]')).toBeEnabled();
+  await expect(page.locator('[data-aid-legend="path"]')).not.toHaveAttribute('data-disabled');
   await page.keyboard.press('o');
   await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
   expect(errors).toEqual([]);
