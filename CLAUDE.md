@@ -19,7 +19,7 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 
 - Only `src/render` imports `three`; `.ts` files are checked by `no-restricted-imports` in `eslint.config.js`, `dev/` harnesses are exempt.
 - `src/{contracts,vehicles,sim,scoring,content}` also import none of `render/app/hud/input/pwa/i18n` and use none of `window`, `document`, `navigator`, `localStorage`, `performance`, `requestAnimationFrame` (same config).
-- Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome, skyline) go on `SKY_LAYER`; cab-front parts on `CAB_LAYER` (mirrors only, the cockpit eye is inside the cab); no camera frames the cab until #126 closes, so check a frustum before calling a cab change visible. Cameras enable layers via `enableLayers` with `COCKPIT_LAYERS`/`MIRROR_LAYERS`/`TOP_DOWN_LAYERS` (`src/render/seams.ts`).
+- Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome, skyline) go on `SKY_LAYER`; cab-front parts on `CAB_LAYER` (mirrors and the chase view; the cockpit eye is inside the cab); before calling a cab or body change visible, check its frustum (`src/render/shell-visibility.test.ts`). Cameras enable layers via `enableLayers` with `COCKPIT_LAYERS`/`MIRROR_LAYERS`/`CHASE_LAYERS`/`TOP_DOWN_LAYERS` (`src/render/seams.ts`).
 - Perspective scenery must stay inside `CAMERA_FAR` (`src/render/seams.ts`); `src/render/skyline.test.ts` pins it.
 - Obstacle kinds in `RESTYLED_KINDS` (`src/render/yard-props.ts`) draw a token copy top-down only plus a detailed perspective prop; a new kind needs both.
 - Vertex colours must be linear: set a `Color` from the palette (`color.set` converts) and pass it to `tint()` (`src/render/environment.ts`); raw palette bytes render too light. `tint()` drops UVs, so textured surfaces need their own geometry and material.
@@ -48,8 +48,9 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 
 ## Blender assets
 
-- `tools/blender/cab_shell.py` is the source of truth for the cab `.glb`: run it unmodified through the `blender` MCP (`runpy.run_path` on its `wslpath -w` path, `init_globals` `PARAMS_PATH` or `PARAMS_JSON`, and `OUT_PATH`), then `pnpm cab:optimise <raw.glb>` and `pnpm cab:manifest "<Blender version>"`.
-- After changing `tools/blender/cab_shell.py`, cab Params or `src/render/cab-dims.ts`, run `pnpm cab:params` and rebuild; the glb records its input hashes, so `tools/blender/cab-build.test.ts` fails on a manifest regenerated without a rebuild.
+- `tools/blender/{cab_shell,body_shell}.py` (helpers in `shell_common.py`) are the source of truth for the truck cab/body `.glb`s: run each unmodified through the `blender` MCP (`runpy.run_path` on its `wslpath -w` path; `init_globals` `PARAMS_PATH` or `PARAMS_JSON`, `OUT_PATH`, `EXPECTED_SHA256` `{scriptSha256, commonSha256}`), then `pnpm glb:optimise <key> <raw.glb>` and `pnpm glb:manifest "<Blender version>"`; keys are `<truck id>-cab|body`.
+- After changing those scripts, `scripts/glb-optimise.mjs`, cab/body params, `src/render/{cab,body}-dims.ts` or `livery.ts`, run `pnpm glb:params` and rebuild (optimise-only changes need just a re-optimise); `tools/blender/glb-build.test.ts` checks every input hash in the glb. Params numbers are 0 or ≥ 1e-4 (Python and JS print smaller floats differently).
+- Livery is colours only (no lettering, emblems or maker logos). Look dimensions in `src/render/livery.ts` are perspective-only render estimates, not Params, so they stay out of `dataFingerprint`.
 - MCP-run bpy scripts must not call `read_factory_settings`: it reloads preferences and disables the MCP add-on.
 
 ## Tests
