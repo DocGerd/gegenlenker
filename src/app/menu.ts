@@ -153,7 +153,6 @@ export function showMenu(
     const status = offlineStatus();
     el.textContent =
       status === 'ready' ? t('offlineReady') : status === 'failed' ? t('offlineSetupFailed') : '';
-    el.dataset['status'] = status;
   };
   const stopOffline = onOfflineStatus(paintOffline);
 
