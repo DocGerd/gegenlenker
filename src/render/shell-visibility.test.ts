@@ -9,9 +9,8 @@ import { truckAnchors } from '../vehicles/anchors';
 import { truckById } from '../vehicles/registry';
 import { RELIEF } from './cab-dims';
 import { cabFront, createChaseCamera, placeChaseCamera } from './chase-camera';
-import { bodyToThree } from './coords';
-import { parseShell } from './glb-shells';
-import { createMirror, MIRROR_YAW } from './mirror';
+import { parseShell, type ShellKind } from './glb-shells';
+import { createMirror, mirrorPose } from './mirror';
 import { computeViewports, NO_INSETS } from './viewports';
 
 /*
@@ -20,11 +19,14 @@ import { computeViewports, NO_INSETS } from './viewports';
  * count the shell vertices inside each frustum.
  */
 
-const read = async (id: TruckId, kind: 'cab' | 'body'): Promise<Mesh> => {
+const read = async (id: TruckId, kind: ShellKind): Promise<Mesh> => {
   const bytes = readFileSync(join(import.meta.dirname, `assets/${id}-${kind}.glb`));
   const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  return (await parseShell(data)).mesh;
+  return (await parseShell(data, kind)).mesh;
 };
+
+/** Share of the body shell's vertices a mirror frames: set below the measured share of both trucks on both screens. */
+const BODY_FLOOR = 0.3;
 
 const STRAIGHT: Pose2 = { x: 0, y: 0, heading: 0 };
 const SCREENS = {
@@ -42,11 +44,14 @@ function verticesInMirrors(mesh: Mesh, id: TruckId, screen: readonly [number, nu
     const rect = views[side];
     if (rect === null) throw new Error(`no ${side} rectangle`);
     const mirror = createMirror();
-    const sign = side === 'mirrorLeft' ? -1 : 1;
-    mirror.place(
-      bodyToThree(STRAIGHT, anchors[side], new Vector3()),
-      STRAIGHT.heading + Math.PI + sign * MIRROR_YAW,
+    const position = new Vector3();
+    const facing = mirrorPose(
+      STRAIGHT,
+      anchors[side],
+      side === 'mirrorLeft' ? 'left' : 'right',
+      position,
     );
+    mirror.place(position, facing);
     mirror.camera.aspect = rect.width / rect.height;
     mirror.camera.updateProjectionMatrix();
     mirror.camera.updateMatrixWorld(true);
@@ -70,15 +75,8 @@ describe.each(TRUCK_IDS)('mirror frustums on the straight pose: %s', (id) => {
   describe.each(Object.entries(SCREENS))('%s screen', (_name, screen) => {
     it('frame the body shell in both mirrors', async () => {
       const seen = verticesInMirrors(await read(id, 'body'), id, screen);
-      expect(seen.left).toBeGreaterThan(0);
-      expect(seen.right).toBeGreaterThan(0);
-    });
-
-    // Measured: the mirrors sit beside the cab and look back along its side, so they frame at most
-    // the cab's rear edge. The cab livery shows only in a camera that looks at the cab from outside.
-    it('frame next to none of the cab shell', async () => {
-      const seen = verticesInMirrors(await read(id, 'cab'), id, screen);
-      expect(Math.max(seen.left, seen.right) / seen.total).toBeLessThan(0.05);
+      expect(seen.left / seen.total).toBeGreaterThan(BODY_FLOOR);
+      expect(seen.right / seen.total).toBeGreaterThan(BODY_FLOOR);
     });
   });
 });

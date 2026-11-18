@@ -181,6 +181,7 @@ describe.each(trucks)('chase camera and the cab shell of $id', (spec) => {
     const bytes = readFileSync(join(import.meta.dirname, `assets/${spec.id}-cab.glb`));
     const { mesh } = await parseShell(
       bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      'cab',
     );
     const face = cabFront(spec);
     const box = new Box3().setFromObject(mesh);

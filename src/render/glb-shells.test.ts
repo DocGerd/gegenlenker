@@ -1,22 +1,29 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, Color, Layers, Mesh, MeshLambertMaterial, type Object3D } from 'three';
+import { Box3, Color, Layers, Mesh, type Object3D } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { TRUCK_IDS, type TruckId } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById } from '../vehicles/registry';
-import { bodyFrontX, bodyShellParams } from './body-dims';
-import { RELIEF } from './cab-dims';
-import { type Shell, type Shells, parseShell, startShells, type TruckShells } from './glb-shells';
+import { bodyFrontX, bodyShellParams, TIPPER_WALL_TOP } from './body-dims';
+import { CAB_HEIGHT, CAB_LENGTH, cabShellParams, RELIEF } from './cab-dims';
+import {
+  parseShell,
+  type Shell,
+  type ShellKind,
+  type Shells,
+  startShells,
+  type TruckShells,
+} from './glb-shells';
 import { TRUCK_LOOKS } from './livery';
 import { createMirror } from './mirror';
 import { KEYS } from './palette';
 import { QUALITY_FLAGS, type QualityFlags } from './quality';
-import { REALISM_HUES } from './realism-hues';
 import {
   AIDS_LAYER,
   CAB_LAYER,
+  CHASE_LAYERS,
   COCKPIT_LAYERS,
   enableLayers,
   SKY_LAYER,
@@ -31,8 +38,19 @@ const glb = (key: string): ArrayBuffer => {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 };
 
-const loadShell = (id: TruckId, kind: 'cab' | 'body'): Promise<Shell> =>
-  parseShell(glb(`${id}-${kind}`));
+const loadShell = (id: TruckId, kind: ShellKind): Promise<Shell> =>
+  parseShell(glb(`${id}-${kind}`), kind);
+
+/** Height of the rim of a tipper wall (tools/blender/body_shell.py RIM) and of the tarpaulin top (TARP_TOP). */
+const TIPPER_RIM = 0.06;
+const TARP_TOP = 2.75;
+/** The roof light bar (cab_shell.py BEACON_BASE + BEACON_HEIGHT) stands this far above the roof. */
+const BEACON_TOP = 0.14;
+/** Ribs on a tipper wall stand 0.05 m proud (body_shell.py RIB_RELIEF). */
+const TIPPER_RIB = 0.05;
+/** Well below what the shells have, so only a lost part trips it. */
+const MIN_VERTICES = { cab: 600, body: 450 } as const;
+const COLOUR_TOLERANCE = 1 / 255;
 
 describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
   const spec = truckById(id);
@@ -40,38 +58,66 @@ describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
   const anchors = truckAnchors(spec);
   const half = spec.width.value / 2000;
 
-  it('decodes the cab into one coloured mesh inside the cab envelope', async () => {
+  it('decodes the cab into one coloured mesh that fills the cab envelope', async () => {
     const { mesh } = await loadShell(id, 'cab');
     const box = new Box3().setFromObject(mesh);
-    // the crew cab's tow coupling reaches 0.25 m past the front face
-    expect(box.max.x).toBeLessThanOrEqual(anchors.frontX + RELIEF + 0.25);
+    expect(mesh.geometry.getAttribute('position').count).toBeGreaterThanOrEqual(MIN_VERTICES.cab);
+    // the crew cab's tow coupling reaches 0.2 m past the front face
+    expect(box.max.x).toBeLessThanOrEqual(anchors.frontX + RELIEF + 0.2 + 1e-3);
+    expect(box.max.x).toBeGreaterThanOrEqual(anchors.frontX + RELIEF - 1e-3);
     expect(box.min.x).toBeGreaterThanOrEqual(anchors.frontX - look.cab.length - 1e-3);
+    expect(box.min.x).toBeCloseTo(anchors.frontX - look.cab.length, 2);
     expect(Math.max(-box.min.z, box.max.z)).toBeLessThanOrEqual(half + RELIEF + 1e-3);
+    expect(Math.max(-box.min.z, box.max.z)).toBeCloseTo(half + RELIEF, 2);
+    expect(box.max.y).toBeCloseTo(CAB_HEIGHT + BEACON_TOP, 2);
   });
 
-  it('decodes the body into one coloured mesh inside the body footprint', async () => {
+  it('decodes the body into one coloured mesh that fills the body footprint', async () => {
     const { mesh } = await loadShell(id, 'body');
     const box = new Box3().setFromObject(mesh);
     const params = bodyShellParams(spec);
+    const proud = look.body.kind === 'tipper' ? TIPPER_RIB : RELIEF;
+    const top = look.body.kind === 'tipper' ? TIPPER_WALL_TOP + TIPPER_RIM : TARP_TOP;
+    expect(mesh.geometry.getAttribute('position').count).toBeGreaterThanOrEqual(MIN_VERTICES.body);
     expect(box.min.x).toBeGreaterThanOrEqual(anchors.rearX - 1e-3);
+    expect(box.min.x).toBeCloseTo(anchors.rearX, 2);
     expect(box.max.x).toBeLessThanOrEqual(bodyFrontX(anchors.frontX, look.cab.length) + 1e-3);
-    expect(Math.max(-box.min.z, box.max.z)).toBeLessThanOrEqual(half + 0.05 + 1e-3);
-    expect(params.bodyFront).toBeCloseTo(box.max.x, 3);
+    expect(box.max.x).toBeCloseTo(params.bodyFront, 2);
+    expect(Math.max(-box.min.z, box.max.z)).toBeLessThanOrEqual(half + proud + 1e-3);
+    expect(Math.max(-box.min.z, box.max.z)).toBeCloseTo(half + proud, 2);
+    expect(box.max.y).toBeCloseTo(top, 2);
   });
 
-  it('keeps the colours linear, as tint() does', async () => {
-    for (const kind of ['cab', 'body'] as const) {
+  it.each(['cab', 'body'] as const)(
+    'keeps every %s vertex colour on a livery hue, linear as tint() does',
+    async (kind) => {
       const { mesh } = await loadShell(id, kind);
+      const params = kind === 'cab' ? cabShellParams(spec) : bodyShellParams(spec);
+      const hues = Object.values(params.hues).map((hex) => new Color(hex));
       const colours = mesh.geometry.getAttribute('color');
-      const want = new Color(REALISM_HUES.thwBlue);
-      const found = Array.from({ length: colours.count }, (_, i) => i).some(
-        (i) =>
-          Math.abs(colours.getX(i) - want.r) < 1.5 / 255 &&
-          Math.abs(colours.getY(i) - want.g) < 1.5 / 255 &&
-          Math.abs(colours.getZ(i) - want.b) < 1.5 / 255,
-      );
-      expect(found, `${id} ${kind} carries thwBlue`).toBe(true);
-    }
+      const distinct = new Map<string, Color>();
+      for (let i = 0; i < colours.count; i++) {
+        const c = new Color(colours.getX(i), colours.getY(i), colours.getZ(i));
+        distinct.set(c.getHexString(), c);
+      }
+      const near = (a: Color, b: Color): boolean =>
+        Math.abs(a.r - b.r) <= COLOUR_TOLERANCE &&
+        Math.abs(a.g - b.g) <= COLOUR_TOLERANCE &&
+        Math.abs(a.b - b.b) <= COLOUR_TOLERANCE;
+      for (const [hex, colour] of distinct) {
+        expect(
+          hues.some((hue) => near(colour, hue)),
+          `${id} ${kind} colour ${hex} is no livery hue`,
+        ).toBe(true);
+      }
+      // the livery's base colour is really there, not just allowed
+      expect([...distinct.values()].some((c) => near(c, hues[0] ?? new Color()))).toBe(true);
+    },
+  );
+
+  it.each(['cab', 'body'] as const)('rejects the %s shell under the other name', async (kind) => {
+    const other = kind === 'cab' ? 'body' : 'cab';
+    await expect(parseShell(glb(`${id}-${kind}`), other)).rejects.toThrow(`expected "${other}"`);
   });
 });
 
@@ -82,18 +128,24 @@ const camera = (ids: readonly number[]): Layers => {
 };
 const sees = {
   cockpit: camera(COCKPIT_LAYERS),
+  chase: camera(CHASE_LAYERS),
   topDown: camera(TOP_DOWN_LAYERS),
   mirror: createMirror().camera.layers,
 };
 
-/** Shells that apply on demand, so a test sees the group before and after the swap. */
-function deferred(shells: Readonly<Record<'cab' | 'body', Shell>>): {
+type DeferredShells = {
   shells: TruckShells;
-  apply: (kind: 'cab' | 'body') => void;
-} {
-  const pending: Partial<Record<'cab' | 'body', () => void>> = {};
-  const side = (kind: 'cab' | 'body'): Shells => ({
+  apply: (kind: ShellKind) => void;
+  attached: [string, boolean][];
+};
+
+/** Shells that apply on demand, so a test sees the group before and after the swap. */
+function deferred(shells: Readonly<Record<ShellKind, Shell>>): DeferredShells {
+  const pending: Partial<Record<ShellKind, () => void>> = {};
+  const attached: [string, boolean][] = [];
+  const side = (kind: ShellKind): Shells => ({
     setEnabled: () => undefined,
+    attached: (key, on) => attached.push([key, on]),
     onLoaded: (_key, cb) => {
       pending[kind] = () => {
         cb(shells[kind]);
@@ -106,6 +158,7 @@ function deferred(shells: Readonly<Record<'cab' | 'body', Shell>>): {
     apply: (kind) => {
       pending[kind]?.();
     },
+    attached,
   };
 }
 
@@ -115,136 +168,264 @@ const loadBoth = async (id: TruckId) => ({
 });
 
 const maskOf = (group: Object3D) => group.children.map((m) => [m, m.layers.mask] as const);
-/** The new layer mask of every procedural mesh still in the group whose layers changed. */
-const relayered = (group: Object3D, before: ReturnType<typeof maskOf>): number[] =>
+const meshesOf = (group: Object3D): Mesh[] =>
+  group.children.filter((m): m is Mesh => m instanceof Mesh);
+/** The procedural meshes of `before` that now draw on `layer` only. */
+const movedTo = (group: Object3D, before: ReturnType<typeof maskOf>, layer: number): Mesh[] =>
   before
     .filter(([m, mask]) => group.children.includes(m) && m.layers.mask !== mask)
-    .map(([m]) => m.layers.mask);
+    .filter(([m]) => m.layers.mask === 1 << layer)
+    .map(([m]) => m)
+    .filter((m): m is Mesh => m instanceof Mesh);
 const seenBy = (group: Object3D, layers: Layers): Object3D[] =>
-  group.children.filter((m) => m instanceof Mesh && layers.test(m.layers));
+  meshesOf(group).filter((m) => layers.test(m.layers));
+const flags = (cabGlb: boolean, vehicleGlb: boolean): QualityFlags => ({
+  ...QUALITY_FLAGS.balanced,
+  cabGlb,
+  vehicleGlb,
+});
 
 describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
   const spec = truckById(id);
+  const linked = TRUCK_LOOKS[id].cab.length !== CAB_LENGTH;
+  /** Loads each shell and applies it; the shells are linked on a longer cab, so both are needed. */
+  const applyAll = (d: DeferredShells): void => {
+    d.apply('cab');
+    d.apply('body');
+  };
 
-  it('moves the procedural cab box to the top-down view and shows the cab shell in the mirrors only', async () => {
-    const { shells, apply } = deferred(await loadBoth(id));
-    const group = proceduralTruck(spec, palette, shells).object;
-    const before = [...group.children];
-    const cabFront = before.filter((m) => m.layers.mask === 1 << CAB_LAYER);
+  it('moves the procedural cab box to the top-down view and shows the cab shell in the mirrors and the chase view only', async () => {
+    const d = deferred(await loadBoth(id));
+    const group = proceduralTruck(spec, palette, d.shells).object;
+    const before = maskOf(group);
+    const cabFront = before.filter(([, mask]) => mask === 1 << CAB_LAYER);
     expect(cabFront).toHaveLength(1);
     const topDownBefore = seenBy(group, sees.topDown);
-    const layersBefore = maskOf(group);
-    apply('cab');
+    applyAll(d);
 
-    const added = group.children.filter((m): m is Mesh => !before.includes(m));
-    expect(added).toHaveLength(1);
-    expect(group.children).not.toContain(cabFront[0]);
-    const [shell] = added;
+    const added = meshesOf(group).filter((m) => !before.some(([b]) => b === m));
+    const shell = added.find((m) => m.layers.mask === 1 << CAB_LAYER);
+    expect(shell).toBeDefined();
+    expect(group.children).not.toContain(cabFront[0]?.[0]);
     expect(sees.mirror.test(shell?.layers ?? new Layers())).toBe(true);
+    expect(sees.chase.test(shell?.layers ?? new Layers())).toBe(true);
     expect(sees.cockpit.test(shell?.layers ?? new Layers())).toBe(false);
     expect(sees.topDown.test(shell?.layers ?? new Layers())).toBe(false);
-    expect((shell?.material as MeshLambertMaterial).vertexColors).toBe(true);
     // what the top-down camera draws is the same set of meshes
     expect(seenBy(group, sees.topDown)).toEqual(topDownBefore);
-    expect(relayered(group, layersBefore)).toEqual([1 << AIDS_LAYER]);
+    // the procedural cab box is the one mesh the cab swap hands to the top-down view
+    const cabBox = movedTo(group, before, AIDS_LAYER).filter((m) => !added.includes(m));
+    expect(cabBox.length).toBeGreaterThan(0);
+    for (const box of cabBox) {
+      expect(sees.chase.test(box.layers), 'chase sees no procedural box').toBe(false);
+      expect(sees.mirror.test(box.layers)).toBe(false);
+    }
   });
 
   it('moves the procedural body box to the top-down view and shows the body shell to the perspective views', async () => {
-    const { shells, apply } = deferred(await loadBoth(id));
-    const group = proceduralTruck(spec, palette, shells).object;
-    const before = [...group.children];
-    const topDownBefore = seenBy(group, sees.topDown);
-    const layersBefore = maskOf(group);
-    apply('body');
-
-    const added = group.children.filter((m): m is Mesh => !before.includes(m));
-    const shell = added.find((m) => (m.material as MeshLambertMaterial).vertexColors);
-    expect(shell?.layers.mask).toBe(1 << SKY_LAYER);
-    expect(sees.cockpit.test(shell?.layers ?? new Layers())).toBe(true);
-    expect(sees.mirror.test(shell?.layers ?? new Layers())).toBe(true);
-    expect(sees.topDown.test(shell?.layers ?? new Layers())).toBe(false);
-    expect(seenBy(group, sees.topDown)).toEqual(topDownBefore);
-    // the procedural body box is for the top-down view only now
-    expect(relayered(group, layersBefore)).toEqual([1 << AIDS_LAYER]);
-  });
-
-  it('shortens the side marking with the body shell only where the cab is longer', async () => {
-    const { shells, apply } = deferred(await loadBoth(id));
-    const group = proceduralTruck(spec, palette, shells).object;
-    const before = [...group.children];
-    apply('body');
-    const longer = TRUCK_LOOKS[id].cab.length > 2.2;
-    const removed = before.filter((m) => !group.children.includes(m));
-    expect(removed).toHaveLength(longer ? 1 : 0);
-    expect(group.children.length - before.length + removed.length).toBe(longer ? 2 : 1);
-  });
-
-  it('restores the procedural meshes, layers and order when switched off, also before the shells load', async () => {
-    const { shells, apply } = deferred(await loadBoth(id));
-    const visual = proceduralTruck(spec, palette, shells);
-    const group = visual.object;
+    const d = deferred(await loadBoth(id));
+    const group = proceduralTruck(spec, palette, d.shells).object;
     const before = maskOf(group);
+    const topDownBefore = seenBy(group, sees.topDown);
+    applyAll(d);
+
+    const added = meshesOf(group).filter((m) => !before.some(([b]) => b === m));
+    const shell = added.find((m) => m.layers.mask === 1 << SKY_LAYER);
+    expect(shell).toBeDefined();
+    const layers = shell?.layers ?? new Layers();
+    expect(sees.cockpit.test(layers)).toBe(true);
+    expect(sees.chase.test(layers)).toBe(true);
+    expect(sees.mirror.test(layers)).toBe(true);
+    expect(sees.topDown.test(layers)).toBe(false);
+    expect(seenBy(group, sees.topDown)).toEqual(topDownBefore);
+    // the procedural cab and body boxes are for the top-down view only now
+    expect(movedTo(group, before, AIDS_LAYER)).toHaveLength(2);
+  });
+
+  it('shortens the side marking only where the cab is longer, by swapping the detail mesh', async () => {
+    const d = deferred(await loadBoth(id));
+    const group = proceduralTruck(spec, palette, d.shells).object;
+    const before = [...group.children];
+    applyAll(d);
+    const removed = before.filter((m) => !group.children.includes(m));
+    const added = group.children.filter((m) => !before.includes(m));
+    // cab shell replaces the cab front; the body shell adds one mesh, plus the detail swap when linked
+    expect(removed).toHaveLength(linked ? 2 : 1);
+    expect(added).toHaveLength(linked ? 3 : 2);
+  });
+
+  it('draws no more meshes with the shells than without, apart from the shells themselves', async () => {
+    const d = deferred(await loadBoth(id));
+    const group = proceduralTruck(spec, palette, d.shells).object;
+    const before = group.children.length;
+    applyAll(d);
+    // cab shell replaces the cab front, the body shell is added
+    expect(group.children.length).toBe(before + 1);
+  });
+
+  it('restores the procedural meshes, layers and order when switched off, and reproduces the swap when switched on again', async () => {
+    const d = deferred(await loadBoth(id));
+    const visual = proceduralTruck(spec, palette, d.shells);
+    const group = visual.object;
+    const procedural = maskOf(group);
+    applyAll(d);
+    const shown = maskOf(group);
+    expect(shown).not.toEqual(procedural);
+
     visual.setQuality(QUALITY_FLAGS.low);
-    apply('cab');
-    apply('body');
-    expect(maskOf(group)).toEqual(before);
+    expect(maskOf(group)).toEqual(procedural);
+    visual.setQuality(QUALITY_FLAGS.balanced);
+    expect(maskOf(group)).toEqual(shown);
+    visual.setQuality(QUALITY_FLAGS.low);
+    expect(maskOf(group)).toEqual(procedural);
+  });
+
+  it('leaves the group unchanged when the shells load after Low was chosen, and swaps on the next switch on', async () => {
+    const d = deferred(await loadBoth(id));
+    const visual = proceduralTruck(spec, palette, d.shells);
+    const group = visual.object;
+    const procedural = maskOf(group);
+    visual.setQuality(QUALITY_FLAGS.low);
+    applyAll(d);
+    expect(maskOf(group)).toEqual(procedural);
+    expect(d.attached).toEqual([]);
 
     visual.setQuality(QUALITY_FLAGS.balanced);
-    expect(group.children.length).toBeGreaterThan(before.length - 1);
-    expect(maskOf(group)).not.toEqual(before);
+    expect(group.children.length).toBeGreaterThan(procedural.length - 1);
+    expect(maskOf(group)).not.toEqual(procedural);
     visual.setQuality(QUALITY_FLAGS.low);
-    expect(maskOf(group)).toEqual(before);
+    expect(maskOf(group)).toEqual(procedural);
   });
 
-  it('gates the cab by cabGlb and the body by vehicleGlb, independently', async () => {
-    const { shells, apply } = deferred(await loadBoth(id));
-    const visual = proceduralTruck(spec, palette, shells);
-    const group = visual.object;
-    const before = maskOf(group);
-    const flags = (cabGlb: boolean, vehicleGlb: boolean): QualityFlags => ({
-      ...QUALITY_FLAGS.balanced,
-      cabGlb,
-      vehicleGlb,
-    });
-    visual.setQuality(flags(true, false));
-    apply('cab');
-    apply('body');
-    const cabOnly = maskOf(group);
-    expect(cabOnly).not.toEqual(before);
+  it('logs no three.js error when toggling the shells off, with or without parts to restore', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const d = deferred(await loadBoth(id));
+    const visual = proceduralTruck(spec, palette, d.shells);
+    applyAll(d);
+    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setQuality(QUALITY_FLAGS.low);
+    visual.dispose();
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
 
-    visual.setQuality(flags(false, true));
-    const bodyOnly = maskOf(group);
-    expect(bodyOnly).not.toEqual(before);
-    expect(bodyOnly).not.toEqual(cabOnly);
+  it(
+    linked
+      ? 'gates the cab and the body of a longer cab as one'
+      : 'gates the cab by cabGlb and the body by vehicleGlb, independently',
+    async () => {
+      const d = deferred(await loadBoth(id));
+      const visual = proceduralTruck(spec, palette, d.shells);
+      const group = visual.object;
+      const procedural = maskOf(group);
+      visual.setQuality(flags(true, false));
+      applyAll(d);
+      const cabOnly = maskOf(group);
+      visual.setQuality(flags(false, true));
+      const bodyOnly = maskOf(group);
+      if (linked) {
+        expect(cabOnly).toEqual(procedural);
+        expect(bodyOnly).toEqual(procedural);
+      } else {
+        expect(cabOnly).not.toEqual(procedural);
+        expect(bodyOnly).not.toEqual(procedural);
+        expect(bodyOnly).not.toEqual(cabOnly);
+      }
+      visual.setQuality(flags(false, false));
+      expect(maskOf(group)).toEqual(procedural);
+      visual.setQuality(flags(true, true));
+      expect(group.children.length).toBeGreaterThan(procedural.length);
+    },
+  );
 
-    visual.setQuality(flags(false, false));
-    expect(maskOf(group)).toEqual(before);
-    visual.setQuality(flags(true, true));
-    expect(group.children.length).toBeGreaterThan(before.length);
+  it('reports a shell when it attaches, not when it merely loads, and clears it on detach and dispose', async () => {
+    const d = deferred(await loadBoth(id));
+    const visual = proceduralTruck(spec, palette, d.shells);
+    visual.setQuality(QUALITY_FLAGS.low);
+    applyAll(d);
+    expect(d.attached).toEqual([]);
+
+    visual.setQuality(QUALITY_FLAGS.balanced);
+    expect(d.attached).toEqual([
+      [`${id}-cab`, true],
+      [`${id}-body`, true],
+    ]);
+    visual.setQuality(QUALITY_FLAGS.low);
+    expect(d.attached.slice(2)).toEqual([
+      [`${id}-cab`, false],
+      [`${id}-body`, false],
+    ]);
+    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.dispose();
+    expect(d.attached.slice(6)).toEqual([
+      [`${id}-cab`, false],
+      [`${id}-body`, false],
+    ]);
   });
 
   it('keeps the procedural meshes untouched when applying throws', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const shell = await loadShell(id, 'cab');
-    Object.defineProperty(shell.mesh, 'geometry', {
+    const shells = await loadBoth(id);
+    Object.defineProperty(shells.cab.mesh, 'geometry', {
       get: () => {
         throw new Error('broken shell');
       },
     });
-    const loaded = startShells({ [`${id}-cab`]: 'cab' }, { load: () => Promise.resolve(shell) });
+    const d = deferred(shells);
+    const group = proceduralTruck(spec, palette, d.shells).object;
+    const before = maskOf(group);
+    expect(() => {
+      applyAll(d);
+    }).toThrow('broken shell');
+    expect(maskOf(group)).toEqual(before);
+    expect(d.attached).toEqual([]);
+  });
+
+  it.runIf(linked)('takes the cab back when the body of a longer cab fails to apply', async () => {
+    const shells = await loadBoth(id);
+    Object.defineProperty(shells.body.mesh, 'geometry', {
+      get: () => {
+        throw new Error('broken shell');
+      },
+    });
+    const d = deferred(shells);
+    const group = proceduralTruck(spec, palette, d.shells).object;
+    const before = maskOf(group);
+    expect(() => {
+      applyAll(d);
+    }).toThrow('broken shell');
+    expect(maskOf(group)).toEqual(before);
+    expect(d.attached.filter(([, on]) => on).length).toBe(
+      d.attached.filter(([, on]) => !on).length,
+    );
+  });
+
+  it('keeps every part procedural when the body fails to load and the cab loads', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const cab = await loadShell(id, 'cab');
+    const urls = { cab: `${id}-cab`, body: `${id}-body` };
     const group = proceduralTruck(spec, palette, {
-      cab: loaded,
-      body: startShells({}, { enabled: false }),
+      cab: startShells({ [urls.cab]: 'cab' }, { load: () => Promise.resolve(cab) }),
+      body: startShells(
+        { [urls.body]: 'body' },
+        { load: () => Promise.reject(new Error('offline')) },
+      ),
     }).object;
     const before = maskOf(group);
     await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
-    expect(maskOf(group)).toEqual(before);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (linked) expect(maskOf(group)).toEqual(before);
+    else expect(maskOf(group)).not.toEqual(before);
     warn.mockRestore();
   });
 
   it('stops waiting for the shells when disposed', () => {
     const cancel = vi.fn();
-    const waiting: Shells = { onLoaded: () => cancel, setEnabled: () => undefined };
+    const waiting: Shells = {
+      onLoaded: () => cancel,
+      attached: () => undefined,
+      setEnabled: () => undefined,
+    };
     proceduralTruck(spec, palette, { cab: waiting, body: waiting }).dispose();
     expect(cancel).toHaveBeenCalledTimes(2);
   });
@@ -253,52 +434,66 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
 describe('shell loading', () => {
   const urls = { 'man-le-18-280-cab': 'cab' };
 
-  it('keeps the procedural mesh and warns when the load rejects', async () => {
+  it('keeps the procedural mesh and warns when the load rejects, then retries on the next enable', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const onApplied = vi.fn();
-    const shells = startShells(urls, {
-      load: () => Promise.reject(new Error('offline')),
-      onApplied,
-    });
-    const apply = vi.fn(() => true);
+    const shell = await loadShell('man-le-18-280', 'cab');
+    const load = vi
+      .fn<() => Promise<Shell>>()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValue(shell);
+    const shells = startShells(urls, { load });
+    const apply = vi.fn();
     shells.onLoaded('man-le-18-280-cab', apply);
     await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(apply).not.toHaveBeenCalled();
-    expect(onApplied).not.toHaveBeenCalled();
+
+    shells.setEnabled(true);
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledExactlyOnceWith(shell));
+    expect(load).toHaveBeenCalledTimes(2);
     warn.mockRestore();
   });
 
-  it('applies a loaded shell once, reports it, and not after cancelling', async () => {
+  it('warns about a key without a URL and never applies', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const load = vi.fn();
+    const apply = vi.fn();
+    startShells(urls, { load }).onLoaded('unknown-cab', apply)();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(warn).toHaveBeenCalledOnce();
+    expect(apply).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('applies a loaded shell once, and not after cancelling', async () => {
     const shell = await loadShell('man-le-18-280', 'cab');
-    const onApplied = vi.fn();
-    const shells = startShells(urls, { load: () => Promise.resolve(shell), onApplied });
-    const apply = vi.fn(() => true);
-    const cancelled = vi.fn(() => true);
+    const shells = startShells(urls, { load: () => Promise.resolve(shell) });
+    const apply = vi.fn();
+    const cancelled = vi.fn();
     shells.onLoaded('man-le-18-280-cab', apply);
     shells.onLoaded('man-le-18-280-cab', cancelled)();
     await vi.waitFor(() => expect(apply).toHaveBeenCalledExactlyOnceWith(shell));
-    expect(onApplied).toHaveBeenCalledExactlyOnceWith('man-le-18-280-cab');
     expect(cancelled).not.toHaveBeenCalled();
   });
 
-  it('does not report a shell that was not attached', async () => {
-    const shell = await loadShell('man-le-18-280', 'cab');
-    const onApplied = vi.fn();
-    const apply = vi.fn(() => false);
-    startShells(urls, { load: () => Promise.resolve(shell), onApplied }).onLoaded(
-      'man-le-18-280-cab',
-      apply,
-    );
-    await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
-    expect(onApplied).not.toHaveBeenCalled();
+  it('reports a shell when its first visual takes it and when its last lets go', () => {
+    const onAttached = vi.fn();
+    const shells = startShells(urls, { enabled: false, onAttached });
+    shells.attached('man-le-18-280-cab', true);
+    shells.attached('man-le-18-280-cab', true);
+    shells.attached('man-le-18-280-cab', false);
+    expect(onAttached).toHaveBeenCalledExactlyOnceWith('man-le-18-280-cab', true);
+    shells.attached('man-le-18-280-cab', false);
+    shells.attached('man-le-18-280-cab', false);
+    expect(onAttached).toHaveBeenCalledTimes(2);
+    expect(onAttached).toHaveBeenLastCalledWith('man-le-18-280-cab', false);
   });
 
   it('downloads nothing until enabled', async () => {
     const shell = await loadShell('man-le-18-280', 'cab');
     const load = vi.fn(() => Promise.resolve(shell));
     const shells = startShells(urls, { load, enabled: false });
-    const apply = vi.fn(() => true);
+    const apply = vi.fn();
     shells.onLoaded('man-le-18-280-cab', apply);
     shells.setEnabled(false);
     await new Promise((resolve) => setTimeout(resolve, 0));

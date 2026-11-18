@@ -11,6 +11,9 @@ import {
   type WebGLRenderer,
 } from 'three';
 import type { Rect } from '../contracts/render';
+import type { Pose2 } from '../contracts/sim';
+import type { Vec3 } from '../contracts/vehicle';
+import { bodyToThree } from './coords';
 import { QUALITY_FLAGS } from './quality';
 import { CAMERA_FAR, enableLayers, MIRROR_LAYERS } from './seams';
 
@@ -19,6 +22,20 @@ const NEAR = 0.2;
 const PITCH = MathUtils.degToRad(-4);
 /** Each mirror looks this far outward of straight back. */
 export const MIRROR_YAW = MathUtils.degToRad(7);
+
+/**
+ * Writes the position of the mirror at the body-frame `anchor` of a truck at `pose` into `out` and
+ * returns the world heading it looks along.
+ */
+export function mirrorPose(
+  pose: Pose2,
+  anchor: Vec3,
+  side: 'left' | 'right',
+  out: Vector3,
+): number {
+  bodyToThree(pose, anchor, out);
+  return pose.heading + Math.PI + (side === 'left' ? -MIRROR_YAW : MIRROR_YAW);
+}
 
 /** One mirror: the scene is rendered unflipped into a target, then drawn with u → 1 − u. */
 export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsaa) {
