@@ -82,7 +82,7 @@ test('loads from the subpath and drives an exercise offline', async ({
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
-  const reset = page.getByRole('button', { name: en.resetView });
+  const reset = page.getByRole('button', { name: en.resetView, exact: true });
   const lever = page.locator('[data-ctl="lever"]');
   await expect(reset).toBeDisabled();
 

@@ -12,7 +12,7 @@ import { isDefaultView } from '../input/top-down-view';
 import { chaseViewAvailable } from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay } from '../render/perf-overlay';
-import { computeViewports } from '../render/viewports';
+import { computeViewports, topDownSplit } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
 import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
@@ -172,6 +172,7 @@ export function startDrive(
 
   let aids: AidFlags = settings.aids;
   let collapsed = settings.collapsed;
+  let topDownLayout = settings.topDownLayout;
   let topDown: TopDownMode = settings.topDown;
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
@@ -269,13 +270,14 @@ export function startDrive(
   const arrange = (): void => {
     if (size === null) return;
     const { width, height } = size;
-    let views = computeViewports(width, height, 'drive');
+    let views = computeViewports(width, height, 'drive', null, undefined, topDownLayout);
     hud.layout(views);
     const legend = hud.legendBox();
     if (legend !== null) {
-      views = computeViewports(width, height, 'drive', legend);
+      views = computeViewports(width, height, 'drive', legend, undefined, topDownLayout);
       hud.layout(views);
     }
+    hud.setSplit(topDownSplit(width, height, topDownLayout, legend));
     frame.views = views;
     viewInput.relayout();
     remeasure();
@@ -290,6 +292,14 @@ export function startDrive(
       if (topDown !== 'chase') updateSettings({ topDown });
     } else if (action.type === 'resetView') {
       viewInput.reset();
+    } else if (action.type === 'split' || action.type === 'splitReset') {
+      if (size === null) return;
+      const current = topDownSplit(size.width, size.height, topDownLayout, hud.legendBox());
+      const proposed = action.type === 'split' ? action.share : current.fallback;
+      const share = Math.min(current.max, Math.max(current.min, proposed));
+      topDownLayout = { ...topDownLayout, [current.orientation]: share };
+      if (action.type === 'splitReset' || action.commit) updateSettings({ topDownLayout });
+      arrange();
     } else if (action.type === 'collapse') {
       collapsed = { ...collapsed, [action.panel]: action.collapsed };
       updateSettings({ collapsed });

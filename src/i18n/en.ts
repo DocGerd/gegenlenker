@@ -65,6 +65,8 @@ export const en = {
   viewYard: 'Whole yard',
   viewChase: 'Outside view',
   resetView: 'Reset view',
+  viewSize: 'View size',
+  resetViewSize: 'Reset view size',
   zoom: 'Zoom',
   aidPivots: 'Angle display',
   aidPath: 'Predicted path',

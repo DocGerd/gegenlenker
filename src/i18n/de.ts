@@ -71,6 +71,8 @@ export const de: Record<MessageKey, string> = {
   viewYard: 'Ganzer Hof',
   viewChase: 'Außenansicht',
   resetView: 'Ansicht zurücksetzen',
+  viewSize: 'Ansichtsgröße',
+  resetViewSize: 'Ansichtsgröße zurücksetzen',
   zoom: 'Zoom',
   aidPivots: 'Winkelanzeige',
   aidPath: 'Vorausschau',

@@ -4,6 +4,7 @@ import type {
   LegendBox,
   Rect,
   TopDownMode,
+  TopDownSplit,
   ViewRects,
 } from '../contracts/render';
 import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
@@ -17,6 +18,9 @@ import './hud.css';
 export type HudAction =
   | { type: 'topDown'; mode: TopDownMode }
   | { type: 'resetView' }
+  /** A proposed top-down share, unclamped; `commit` ends a drag or is a key step, so it is worth storing. */
+  | { type: 'split'; share: number; commit: boolean }
+  | { type: 'splitReset' }
   | { type: 'aid'; aid: keyof AidFlags; on: boolean }
   | { type: 'collapse'; panel: keyof CollapsedPanels; collapsed: boolean }
   | { type: 'finish' }
@@ -34,6 +38,8 @@ export type Hud = {
   onLegendResize(cb: () => void): void;
   /** The reset-view button is enabled while the top-down view differs from its default framing. */
   setViewChanged(changed: boolean): void;
+  /** The divider between the views: its value, range and orientation. */
+  setSplit(split: TopDownSplit): void;
   /** Points the arrow at a target beyond the top-down view; null hides it. Positions are stage CSS px. */
   setTargetArrow(arrow: { x: number; y: number; angle: number } | null): void;
   /** The live tolerance cue; a no-op in the free yard. */
@@ -124,6 +130,13 @@ const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l
 const RESET_VIEW_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>';
 
+const SPLIT_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM14 5v14" /></svg>';
+/** Key steps move the divider by this share of the screen. */
+const SPLIT_STEP = 0.02;
+const SPLIT_RESET_KEY = 'l';
+const percent = (share: number): number => Math.round(share * 100);
+
 const button = (attr: string, value: string, key: MessageKey): string =>
   `<button type="button" class="hud-toggle" ${attr}="${value}" data-i18n="${key}"></button>`;
 
@@ -177,6 +190,10 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
           : ''
       }
     </div>
+  </div>
+  <div class="hud-split" data-hud="split" hidden>
+    <div class="hud-split-handle" data-hud="splitHandle" role="separator" tabindex="0" aria-keyshortcuts="ArrowLeft ArrowRight ArrowUp ArrowDown Home End"></div>
+    <button type="button" class="hud-toggle hud-icon hud-split-reset" data-hud="splitReset" aria-keyshortcuts="${SPLIT_RESET_KEY.toUpperCase()}" disabled>${SPLIT_ICON}</button>
   </div>
   <div class="hud-arrow" data-hud="targetArrow" role="img" aria-label="${t('targetDirection')}" hidden><svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="M-9 -8L10 0L-9 8L-4 0Z" /></svg></div>
   <button type="button" class="hud-action" data-chrome data-hud="action" data-i18n="${mode === 'exercise' ? 'finish' : 'menu'}"></button>
@@ -318,6 +335,81 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     { signal },
   );
 
+  const split = query(hud, 'split', HTMLElement);
+  const splitHandle = query(hud, 'splitHandle', HTMLElement);
+  const splitReset = query(hud, 'splitReset', HTMLButtonElement);
+  splitHandle.setAttribute('aria-label', t('viewSize'));
+  splitReset.title = `${t('resetViewSize')} (${SPLIT_RESET_KEY.toUpperCase()})`;
+  splitReset.setAttribute('aria-label', t('resetViewSize'));
+  let splitState: TopDownSplit | null = null;
+  let hasCockpit = false;
+  /** The replay's full-screen pane has no divider, and a screen whose range is a single value has nothing to drag. */
+  const syncSplitHidden = (): void =>
+    setHidden(split, !hasCockpit || splitState === null || splitState.max - splitState.min < 1e-4);
+  let drag: { pointer: number; start: number; share: number; last: number } | null = null;
+  const proposeSplit = (share: number, commit: boolean): void =>
+    emit({ type: 'split', share, commit });
+  splitHandle.addEventListener(
+    'pointerdown',
+    (e) => {
+      if (splitState === null || drag !== null || (e.pointerType === 'mouse' && e.button !== 0)) {
+        return;
+      }
+      const vertical = splitState.orientation === 'landscape';
+      splitHandle.setPointerCapture(e.pointerId);
+      drag = {
+        pointer: e.pointerId,
+        start: vertical ? e.clientX : e.clientY,
+        share: splitState.share,
+        last: splitState.share,
+      };
+    },
+    { signal },
+  );
+  splitHandle.addEventListener(
+    'pointermove',
+    (e) => {
+      if (drag === null || splitState === null || e.pointerId !== drag.pointer) return;
+      const delta =
+        splitState.orientation === 'landscape'
+          ? (drag.start - e.clientX) / root.clientWidth
+          : (e.clientY - drag.start) / root.clientHeight;
+      drag.last = drag.share + delta;
+      proposeSplit(drag.last, false);
+    },
+    { signal },
+  );
+  const endDrag = (e: PointerEvent): void => {
+    if (drag === null || e.pointerId !== drag.pointer) return;
+    const { last } = drag;
+    drag = null;
+    // A pointer-focused divider would keep the arrow keys from steering.
+    splitHandle.blur();
+    proposeSplit(last, true);
+  };
+  splitHandle.addEventListener('pointerup', endDrag, { signal });
+  splitHandle.addEventListener('pointercancel', endDrag, { signal });
+  splitHandle.addEventListener(
+    'keydown',
+    (e) => {
+      if (splitState === null || e.ctrlKey || e.metaKey || e.altKey) return;
+      const { share, min, max, orientation } = splitState;
+      const landscape = orientation === 'landscape';
+      let next: number | null = null;
+      if (e.key === (landscape ? 'ArrowLeft' : 'ArrowDown')) next = share + SPLIT_STEP;
+      else if (e.key === (landscape ? 'ArrowRight' : 'ArrowUp')) next = share - SPLIT_STEP;
+      else if (e.key === 'Home') next = min;
+      else if (e.key === 'End') next = max;
+      if (next === null) return;
+      // Stopped here, so the steering keys do not also act on a focused divider.
+      e.preventDefault();
+      e.stopPropagation();
+      proposeSplit(next, true);
+    },
+    { signal },
+  );
+  splitReset.addEventListener('click', () => emit({ type: 'splitReset' }), { signal });
+
   const keyboardLike = matchMedia('(hover: hover) and (pointer: fine)');
   let typed = false;
   const syncLegend = (): void => setHidden(legend, !keyboardLike.matches && !typed);
@@ -328,6 +420,19 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     'keydown',
     (e) => {
       const mode = VIEW_KEYS[e.key.toLowerCase()];
+      if (
+        e.key.toLowerCase() === SPLIT_RESET_KEY &&
+        !split.hidden &&
+        !e.defaultPrevented &&
+        !e.repeat &&
+        !isFormField(e.target) &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        emit({ type: 'splitReset' });
+        e.preventDefault();
+      }
       if (
         mode !== undefined &&
         (mode !== 'chase' || opts.chase) &&
@@ -437,6 +542,28 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', base.y < 1 && spansRight(base));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
+      hasCockpit = c !== null;
+      syncSplitHidden();
+      if (c) {
+        const td = views.topDown;
+        const landscape = root.clientWidth >= root.clientHeight;
+        split.style.left = `${td.x}px`;
+        split.style.top = `${td.y}px`;
+        split.style.height = `${td.height}px`;
+        split.style.width = landscape ? '' : `${td.width}px`;
+      }
+    },
+    setSplit(next) {
+      splitState = next;
+      syncSplitHidden();
+      const vertical = next.orientation === 'landscape';
+      splitHandle.setAttribute('aria-orientation', vertical ? 'vertical' : 'horizontal');
+      splitHandle.setAttribute('aria-valuemin', String(percent(next.min)));
+      splitHandle.setAttribute('aria-valuemax', String(percent(next.max)));
+      splitHandle.setAttribute('aria-valuenow', String(percent(next.share)));
+      splitHandle.setAttribute('aria-valuetext', `${percent(next.share)} %`);
+      const atDefault = Math.abs(next.share - next.fallback) < 1e-4;
+      if (splitReset.disabled !== atDefault) splitReset.disabled = atDefault;
     },
     legendBox() {
       const r = legend.getBoundingClientRect();
