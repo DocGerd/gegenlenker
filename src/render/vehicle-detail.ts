@@ -110,12 +110,13 @@ function mudflap(
   halfWidth: number,
   radius: number,
   rearLimit: number,
+  ceiling = Infinity,
 ): void {
   const front = axleX - radius - m(spec.gap);
   c.box(
     [Math.max(front - FLAP_THICKNESS, rearLimit), front],
     [y - halfWidth, y + halfWidth],
-    [m(spec.clearance), m(spec.clearance) + m(spec.height)],
+    [m(spec.clearance), Math.min(m(spec.clearance) + m(spec.height), ceiling)],
     HUE.chevronBlack,
   );
 }
@@ -370,6 +371,7 @@ export function trailerDetail(p: TrailerDetailParams): {
     );
     for (const axleX of p.rearAxleXs) {
       const y = (side * p.track) / 2;
+      // the flap ends under the deck rather than standing through it
       mudflap(
         c,
         p.spec.mudflap,
@@ -378,6 +380,7 @@ export function trailerDetail(p: TrailerDetailParams): {
         p.wheelWidth / 2 + FLAP_MARGIN,
         p.radius,
         p.rearX + RELIEF,
+        p.underside,
       );
       wheelFaces(c, p.radius, p.wheelWidth, [axleX, y, p.radius]);
     }
