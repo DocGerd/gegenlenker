@@ -3,11 +3,21 @@ import type { Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts
 import { REALISM_HUES as HUE } from './realism-hues';
 import { tint } from './tint';
 import { box, merge } from './vehicle-geometry';
+import {
+  hoopPost,
+  hoopRail,
+  meshBox,
+  palletStack,
+  skip,
+  swapBody,
+  trafficMirror,
+} from './yard-goods';
 
 /*
  * Perspective-only yard detail in realism hues, on SKY_LAYER: the top-down view draws the plain token
  * copy of these obstacles instead. Everything stays inside the obstacle's OBB, apart from thin relief
- * (seals, bumpers, signs, boom, floodlights), so a prop never looks bigger than it collides.
+ * (seals, bumpers, signs, boom, floodlights, hoops), so a prop never looks bigger than it collides.
+ * Loose goods stand only on a ramp top or on the plot behind the yard edge, where nothing can drive.
  */
 
 export type PropPiece = {
@@ -16,7 +26,7 @@ export type PropPiece = {
   readonly geometry: BufferGeometry;
 };
 
-type Range = readonly [number, number];
+export type Range = readonly [number, number];
 
 const SPLIT = 30; // long props are cut so a chunk's bounds stay local
 const PLINTH = 2.4;
@@ -45,9 +55,15 @@ const TRAILER_MIN_LENGTH = 13;
 const BOOM = { length: 4.5, thickness: 0.1, stripe: 0.5, lift: (85 * Math.PI) / 180 };
 const OVERLAY = 0.005; // bands stand this far proud of the body they stripe, so no faces are coplanar
 const FLOODLIGHTS = 3;
+const HOOP = { offset: 0.11, arm: 0.5 }; // off the wall face (0.15 of relief with the post), and along it
+const SWAP_BODY = { length: 7.45, width: 2.55, top: 3.65 };
+const SWAP_HUES = [HUE.whiteAluminium, HUE.containerBlue, HUE.containerGreen] as const;
+const SKIP_HUES = [HUE.containerBlue, HUE.containerOrange, HUE.containerRed] as const;
+/** Neighbouring plot behind the yard edge: unreachable, so decoration needs no collision. */
+const PLOT = { gap: 3, swapX: [14, 26, 38], skipX: [52, 56.5], pallets: 66, meshBoxes: 82 };
 
 /** Boxes in a local frame (x forward, y left, z up), merged and placed at a world pose. */
-class Parts {
+export class Parts {
   private readonly list: BufferGeometry[] = [];
 
   box(x: Range, y: Range, z: Range, hue: number, shade = 1): this {
@@ -264,7 +280,29 @@ function hallDetail(layout: ResolvedLayout, halls: readonly Obstacle[]): PropPie
     out.push(worldPiece(c, r.minY, sign));
   }
 
+  out.push(...cornerHoops(bounds));
   out.push(...docks(layout, halls));
+  return out;
+}
+
+/** Yellow L-shaped impact hoops standing off each outer corner of the hall block. */
+export function cornerHoops(bounds: Footprint): PropPiece[] {
+  const out: PropPiece[] = [];
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      const cx = sx < 0 ? bounds.minX : bounds.maxX;
+      const cy = sy < 0 ? bounds.minY : bounds.maxY;
+      const { offset: g, arm } = HOOP;
+      const a = [cx + sx * g, cy - sy * arm] as const;
+      const b = [cx + sx * g, cy + sy * g] as const;
+      const c = [cx - sx * arm, cy + sy * g] as const;
+      const p = new Parts();
+      for (const post of [a, b, c]) hoopPost(p, post);
+      hoopRail(p, a, b);
+      hoopRail(p, b, c);
+      out.push(worldPiece(cx, cy, p));
+    }
+  }
   return out;
 }
 
@@ -337,10 +375,32 @@ function docks(layout: ResolvedLayout, halls: readonly Obstacle[]): PropPiece[] 
           HUE.signalYellow,
         );
       }
+      rampGoods(p, i, c, r.maxY - 0.7, ramp.height);
       out.push(worldPiece(c, r.minY, p));
     }
   }
   return out;
+}
+
+/** Staged goods on the ramp top in front of a dock door; every fourth bay stays clear. */
+function rampGoods(p: Parts, bay: number, c: number, y: number, z: number): void {
+  switch (bay % 4) {
+    case 0:
+      palletStack(p, { x: c - 0.75, y, z }, 1, 1);
+      palletStack(p, { x: c + 0.75, y, z }, 1, 0.7);
+      break;
+    case 1:
+      meshBox(p, { x: c - 0.7, y, z }, true);
+      meshBox(p, { x: c - 0.7, y, z: z + 0.97 });
+      meshBox(p, { x: c + 0.7, y, z });
+      break;
+    case 3:
+      palletStack(p, { x: c - 0.8, y, z }, 5);
+      palletStack(p, { x: c + 0.7, y, z }, 1, 1.3);
+      break;
+    default:
+      break;
+  }
 }
 
 /** Container on a skeletal chassis: corrugation, corner castings, locking rods, tyres. */
@@ -390,6 +450,66 @@ function container(o: Obstacle, index: number): PropPiece {
     );
   }
   return { x: o.obb.cx, y: o.obb.cy, geometry: p.place(o.obb.cx, o.obb.cy, heading) };
+}
+
+/** Swap body standing on its support legs, filling the obstacle's footprint. */
+function swapBodyProp(o: Obstacle, index: number): PropPiece {
+  const { along: l, across: w, heading } = longFrame(o);
+  const hue = SWAP_HUES[index % SWAP_HUES.length] ?? HUE.whiteAluminium;
+  const p = new Parts();
+  swapBody(p, { x: 0, y: 0, z: 0 }, l, w, o.height, hue);
+  return { x: o.obb.cx, y: o.obb.cy, geometry: p.place(o.obb.cx, o.obb.cy, heading) };
+}
+
+/** Convex mirror on the gatehouse roof corner nearest the entrance, facing the street. */
+function gatehouseMirror(o: Obstacle): PropPiece {
+  const { cx, cy, halfLength: hl, halfWidth: hw, heading } = o.obb;
+  const p = new Parts();
+  trafficMirror(p, { x: -hl + 0.45, y: -hw + 0.45, z: o.height }, (-3 * Math.PI) / 4);
+  return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
+}
+
+/** Swap bodies, skips, pallets and mesh boxes on the neighbouring plot behind the yard's north edge. */
+export function plotGoods(yard: Rect2): PropPiece[] {
+  const out: PropPiece[] = [];
+  const y0 = yard.maxY + PLOT.gap;
+  const piece = (x: number, y: number, heading: number, build: (p: Parts) => void): void => {
+    const p = new Parts();
+    build(p);
+    out.push({ x, y, geometry: p.place(x, y, heading) });
+  };
+  const origin = { x: 0, y: 0, z: 0 };
+  PLOT.swapX.forEach((x, i) => {
+    piece(yard.minX + x, y0 + 3, 0, (p) => {
+      const hue = SWAP_HUES[(i + 1) % SWAP_HUES.length] ?? HUE.whiteAluminium;
+      swapBody(p, origin, SWAP_BODY.length, SWAP_BODY.width, SWAP_BODY.top, hue);
+    });
+  });
+  PLOT.skipX.forEach((x, i) => {
+    for (const row of [0, 1]) {
+      const hue = SKIP_HUES[(i + row) % SKIP_HUES.length] ?? HUE.containerBlue;
+      piece(yard.minX + x, y0 + 2.5 + row * 4, row * 0.12 - 0.06, (p) => skip(p, origin, hue));
+    }
+  });
+  piece(yard.minX + PLOT.pallets, y0 + 4, 0, (p) => {
+    for (let k = 0; k < 4; k++) {
+      for (let j = 0; j < 3; j++) {
+        const at = { x: k * 1.4, y: (j - 1) * 1.1, z: 0 };
+        if ((k + j) % 3 === 0) palletStack(p, at, 4 + ((k * j) % 3));
+        else palletStack(p, at, 1, 0.8 + ((k + 2 * j) % 3) * 0.3);
+      }
+    }
+  });
+  piece(yard.minX + PLOT.meshBoxes, y0 + 4, 0, (p) => {
+    for (let k = 0; k < 5; k++) {
+      for (let j = 0; j < 2; j++) {
+        const at = { x: k * 1.4, y: (j - 0.5) * 1.1, z: 0 };
+        meshBox(p, at, (k + j) % 2 === 0);
+        if (k % 2 === 0) meshBox(p, { ...at, z: 0.97 });
+      }
+    }
+  });
+  return out;
 }
 
 /** Curtain-sider semitrailer: frame, strapped curtain, headboard, underrun bar, tandem-plus axles. */
@@ -509,6 +629,7 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
   const out: PropPiece[] = [];
   let containers = 0;
   let trailers = 0;
+  let swaps = 0;
   for (const o of layout.obstacles) {
     switch (o.kind) {
       case 'fence':
@@ -518,11 +639,12 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
         out.push(...hallWall(o));
         break;
       case 'parked':
-        out.push(
-          longFrame(o).along >= TRAILER_MIN_LENGTH
-            ? curtainSider(o, trailers++)
-            : container(o, containers++),
-        );
+        if (longFrame(o).along >= TRAILER_MIN_LENGTH) {
+          out.push(curtainSider(o, trailers++));
+        } else {
+          const n = containers++;
+          out.push(n % 3 === 1 ? swapBodyProp(o, swaps++) : container(o, n));
+        }
         break;
       case 'lamp':
         out.push(lamp(o, aim, layout.yard));
@@ -534,7 +656,7 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
         out.push(barrier(o));
         break;
       case 'gatehouse':
-        out.push(gatehouse(o));
+        out.push(gatehouse(o), gatehouseMirror(o));
         break;
       default:
         break;
@@ -542,5 +664,6 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
   }
   const halls = layout.obstacles.filter((o) => o.kind === 'hall');
   if (halls.length > 0) out.push(...hallDetail(layout, halls));
+  out.push(...plotGoods(layout.yard));
   return out;
 }
