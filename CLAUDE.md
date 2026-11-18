@@ -12,7 +12,7 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 - Unit tests: `pnpm test`; single test: `pnpm exec vitest run <file> -t '<name>'`
 - Build: `BASE_PATH=/gegenlenker/ pnpm build`
 - Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); it runs only specs matching the `offline` project's `testMatch` in `playwright.config.ts`, so register new specs there.
-- Parallel worktrees: e2e previews on `--strictPort` 4399, so serialize with `flock /tmp/gegenlenker-e2e.lock pnpm test:e2e`; ad-hoc preview servers need another port and `BASE_PATH=/gegenlenker/`.
+- Parallel worktrees: e2e previews on `--strictPort` 4399, so serialize with `flock /tmp/gegenlenker-e2e.lock pnpm test:e2e`; a killed run can orphan a preview on 4399 outside the lock (`ss -ltnp | grep 4399`); ad-hoc preview servers need another port and `BASE_PATH=/gegenlenker/`.
 - Local-only ignores go in `.git/info/exclude` as unanchored patterns (`dir/`, not `/dir/`); the format scripts pass it to Prettier.
 
 ## Layering
@@ -28,6 +28,7 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 - Changing `--scene-*` tokens: keep the T1-T4 contrast targets in `docs/brand/BRAND.md`; `src/styles/tokens.test.ts` enforces them.
 - `tokens.test.ts` checks token hex values, not rendered pixels: fog, tone mapping, ground detail or shadows can break top-down contrast unnoticed. Keep top faces on tokens, put realism on perspective-only layers, and check with a top-down screenshot.
 - Mirror rects avoid the controls via `controlsHeight()` in `src/render/viewports.ts`, which copies control geometry from `src/input/controls.css` and `src/styles/tokens.css`: change both together. They also avoid the measured HUD legend (`hud.legendBox()` → `LegendBox`); `e2e/layout.spec.ts` pins no overlap.
+- Landscape/portrait CSS uses `(min-aspect-ratio: 1/1)`, never `orientation` (square = portrait), to match `viewports.ts`; safe-area padding uses the `--safe-*` tokens, which `computeViewports` also reads.
 
 ## Units and signs
 
@@ -61,6 +62,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 ## Visual check
 
 - Headless Chromium screenshots of the real app work for visual checks (`pnpm exec playwright screenshot --lang de-DE <url> <png>`; scripts reuse the `@playwright/test` devDep); UI language defaults to the browser locale (`navigator.languages`) unless a saved setting overrides it; there is no URL parameter.
+- Plain `playwright screenshot` uses software compositing, which can blank the canvas under opaque composited HUD layers (`.hud-band`); e2e avoids it with GPU-compositing SwiftShader args (`playwright.config.ts`). Read the canvas back before calling a blank region an app bug.
 - Headless screenshots run on software GL and passed a see-through skyline; perspective realism changes need an owner device check before calling them done.
 
 ## Workflow
