@@ -184,10 +184,12 @@ export interface VehicleEnvironment {
   texture(palette: ScenePalette): Texture | null;
   /** Drops the map and a recorded failure; call when the GPU resources are gone (context restored). */
   invalidate(): void;
+  /** A visual reports whether it currently wears the reflective material, for the state. */
+  reportApplied(owner: object, on: boolean): void;
   dispose(): void;
 }
 
-/** `on`: map built and shader compiled; `failed`: vehicles stay plain; null: nothing built. */
+/** `on`: some vehicle wears the reflective material; `failed`: vehicles stay plain; null: none does. */
 export type VehicleEnvironmentState = 'on' | 'failed' | null;
 
 export interface VehicleEnvironmentParts {
@@ -221,7 +223,12 @@ export function createVehicleEnvironment(
   let target: WebGLRenderTarget | null = null;
   let key = '';
   let failed = false;
+  const wearing = new Set<object>();
 
+  const publish = (): void => {
+    if (failed) onState('failed');
+    else onState(wearing.size > 0 && target !== null ? 'on' : null);
+  };
   const release = (): void => {
     target?.dispose();
     target = null;
@@ -230,7 +237,7 @@ export function createVehicleEnvironment(
     release();
     key = '';
     failed = false;
-    onState(null);
+    publish();
   };
 
   return {
@@ -255,20 +262,26 @@ export function createVehicleEnvironment(
             throw new Error('the reflective shader did not compile');
           }
           target = made;
-          onState('on');
+          publish();
         } catch (error) {
           failed = true;
-          onState('failed');
+          publish();
           console.warn('Vehicle reflections failed; keeping the plain shading', error);
         }
       }
       return target?.texture ?? null;
     },
     invalidate,
+    reportApplied(owner, on) {
+      if (on) wearing.add(owner);
+      else wearing.delete(owner);
+      publish();
+    },
     dispose() {
       release();
       renderer = null;
-      onState(null);
+      wearing.clear();
+      publish();
     },
   };
 }

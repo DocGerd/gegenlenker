@@ -57,6 +57,7 @@ const environment = (texture: () => Texture | null): VehicleEnvironment => ({
   attach: () => undefined,
   texture,
   invalidate: () => undefined,
+  reportApplied: () => undefined,
   dispose: () => undefined,
 });
 const fixed = (texture: Texture | null): VehicleEnvironment => environment(() => texture);
@@ -168,14 +169,13 @@ describe('vehicle environment', () => {
 
   it('generates once per palette, reuses it, and replaces it when the palette changes', () => {
     const made: WebGLRenderTarget[] = [];
-    const { env, states, generate } = setup({
+    const { env, generate } = setup({
       generate: () => made[made.push(target()) - 1] as never,
     });
     env.attach(renderer());
     const first = env.texture(palette);
     expect(env.texture(palette)).toBe(first);
     expect(generate).toHaveBeenCalledOnce();
-    expect(states).toContain('on');
     const other = { ...palette, sky: 0x123456 };
     expect(env.texture(other)).not.toBe(first);
     expect(generate).toHaveBeenCalledTimes(2);
@@ -205,6 +205,22 @@ describe('vehicle environment', () => {
     expect(env.texture(palette)).toBeNull();
     expect(disposed(made)).toHaveBeenCalledOnce();
     expect(states.at(-1)).toBe('failed');
+  });
+
+  it('reports on only while a vehicle wears the reflective material', () => {
+    const { env, states } = setup();
+    env.attach(renderer());
+    const visual = proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env);
+    visual.setQuality(QUALITY_FLAGS.balanced);
+    expect(states.at(-1)).toBeNull();
+    visual.setQuality(QUALITY_FLAGS.high);
+    expect(states.at(-1)).toBe('on');
+    visual.setQuality(QUALITY_FLAGS.balanced);
+    expect(states.at(-1)).toBeNull();
+    visual.setQuality(QUALITY_FLAGS.high);
+    expect(states.at(-1)).toBe('on');
+    visual.dispose();
+    expect(states.at(-1)).toBeNull();
   });
 
   it('retries after invalidate and drops the map it held', () => {

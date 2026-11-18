@@ -129,6 +129,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const detailMeshes: Mesh[] = [];
   let detailMaterial: MeshLambertMaterial | null = null;
   let pbrMaterial: MeshStandardMaterial | null = null;
+  const pbrToken = {};
   let pbrWanted = false;
   let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
@@ -170,6 +171,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
         pbrMaterial.envMap = null;
       }
       pbrOn = map !== null;
+      env?.reportApplied(pbrToken, pbrOn);
       if (detailMaterial === null || pbrMaterial === null) return;
       replaceMaterial(
         [root, ...detailMeshes],
@@ -215,6 +217,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       return mesh;
     },
     dispose(): void {
+      env?.reportApplied(pbrToken, false);
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
       textures.forEach((t) => t.dispose());
