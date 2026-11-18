@@ -1,5 +1,7 @@
 import { type Group, type Material, Mesh, type Object3D } from 'three';
-import type { TruckId } from '../contracts/vehicle';
+import type { TrailerId, TruckId } from '../contracts/vehicle';
+import hueffermannUrl from './assets/hueffermann-hpa-24-81-l-trailer.glb?url';
+import kroneUrl from './assets/krone-azw-18-trailer.glb?url';
 import arocsBodyUrl from './assets/arocs-1835-ak-body.glb?url';
 import arocsCabUrl from './assets/arocs-1835-ak-cab.glb?url';
 import manBodyUrl from './assets/man-le-18-280-body.glb?url';
@@ -24,11 +26,18 @@ export const BODY_SHELL_URLS = {
   'man-le-18-280-body': manBodyUrl,
 } as const satisfies Record<`${TruckId}-body`, string>;
 
+export const TRAILER_SHELL_URLS = {
+  'hueffermann-hpa-24-81-l-trailer': hueffermannUrl,
+  'krone-azw-18-trailer': kroneUrl,
+} as const satisfies Record<`${TrailerId}-trailer`, string>;
+
 /** The mesh prototype carrying the glTF node transform; visuals share its geometry. */
 export type Shell = { readonly mesh: Mesh };
 
-/** Decodes one shell; `kind` is the node name the Blender script gives it, so a swapped URL fails. */
-export async function parseShell(data: ArrayBuffer, kind: ShellKind): Promise<Shell> {
+/** A trailer asset holds two rigid groups: the body, and the dolly with its drawbar. */
+export type TrailerShell = { readonly trailer: Shell; readonly dolly: Shell };
+
+async function parseMeshes(data: ArrayBuffer): Promise<Mesh[]> {
   const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
     import('three/addons/loaders/GLTFLoader.js'),
     import('three/addons/libs/meshopt_decoder.module.js'),
@@ -40,27 +49,58 @@ export async function parseShell(data: ArrayBuffer, kind: ShellKind): Promise<Sh
   gltf.scene.traverse((o) => {
     if (o instanceof Mesh) meshes.push(o as Mesh);
   });
+  for (const mesh of meshes) {
+    if (!mesh.geometry.hasAttribute('color'))
+      throw new Error(`shell "${mesh.name}" has no colours`);
+  }
+  return meshes;
+}
+
+/** Decodes one shell; `kind` is the node name the Blender script gives it, so a swapped URL fails. */
+export async function parseShell(data: ArrayBuffer, kind: ShellKind): Promise<Shell> {
+  const meshes = await parseMeshes(data);
   const [mesh] = meshes;
   if (mesh === undefined || meshes.length !== 1) {
     throw new Error(`shell has ${meshes.length} meshes, expected one`);
   }
   if (mesh.name !== kind) throw new Error(`shell is "${mesh.name}", expected "${kind}"`);
-  if (!mesh.geometry.hasAttribute('color')) throw new Error('shell has no colours');
   return { mesh };
 }
 
-async function fetchShell(url: string, key: string): Promise<Shell> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${url}: ${response.status}`);
-  return parseShell(await response.arrayBuffer(), key.endsWith('-cab') ? 'cab' : 'body');
+/** Decodes a trailer asset: exactly the meshes `trailer` and `dolly`. */
+export async function parseTrailerShell(data: ArrayBuffer): Promise<TrailerShell> {
+  const meshes = await parseMeshes(data);
+  const names = meshes.map((m) => m.name).sort();
+  if (names.join() !== 'dolly,trailer') {
+    throw new Error(`trailer shell has meshes [${names.join(', ')}], expected [dolly, trailer]`);
+  }
+  const find = (name: string): Shell => {
+    const mesh = meshes.find((m) => m.name === name);
+    if (mesh === undefined) throw new Error(`trailer shell lacks "${name}"`);
+    return { mesh };
+  };
+  return { trailer: find('trailer'), dolly: find('dolly') };
 }
 
-export interface Shells {
+async function fetchData(url: string): Promise<ArrayBuffer> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
+  return response.arrayBuffer();
+}
+
+async function fetchShell(url: string, key: string): Promise<Shell> {
+  return parseShell(await fetchData(url), key.endsWith('-cab') ? 'cab' : 'body');
+}
+
+export const fetchTrailerShell = async (url: string): Promise<TrailerShell> =>
+  parseTrailerShell(await fetchData(url));
+
+export interface Shells<S = Shell> {
   /**
    * Calls `apply` once the shell has loaded, never when it fails or `key` has none (that warns);
    * the returned function cancels. Always asynchronous, so a visual is built before it is called.
    */
-  onLoaded(key: string, apply: (shell: Shell) => void): () => void;
+  onLoaded(key: string, apply: (shell: S) => void): () => void;
   /** A visual reports that the shell of `key` now sits on it, or no longer does. */
   attached(key: string, on: boolean): void;
   /** Starts the loads on the first call with `true`, and retries the ones that failed. */
@@ -69,6 +109,12 @@ export interface Shells {
 
 export type TruckShells = { readonly cab: Shells; readonly body: Shells };
 
+type StartOptions<S> = {
+  load?: (url: string, key: string) => Promise<S>;
+  onAttached?: (key: string, attached: boolean) => void;
+  enabled?: boolean;
+};
+
 /**
  * Loads every shell once enabled; a failure to load or to apply warns and leaves the procedural
  * mesh, and the next enable retries the load. `onAttached` reports a shell when its first visual
@@ -76,24 +122,28 @@ export type TruckShells = { readonly cab: Shells; readonly body: Shells };
  */
 export function startShells(
   urls: Readonly<Record<string, string>>,
+  options?: StartOptions<Shell>,
+): Shells;
+export function startShells<S>(
+  urls: Readonly<Record<string, string>>,
+  options: StartOptions<S> & { readonly load: (url: string, key: string) => Promise<S> },
+): Shells<S>;
+export function startShells<S>(
+  urls: Readonly<Record<string, string>>,
   {
-    load = fetchShell,
+    load = fetchShell as unknown as (url: string, key: string) => Promise<S>,
     onAttached = () => undefined,
     enabled = true,
-  }: {
-    load?: (url: string, key: string) => Promise<Shell>;
-    onAttached?: (key: string, attached: boolean) => void;
-    enabled?: boolean;
-  } = {},
-): Shells {
-  type Waiter = { readonly key: string; readonly apply: (shell: Shell) => void };
-  const loaded = new Map<string, Shell>();
+  }: StartOptions<S> = {},
+): Shells<S> {
+  type Waiter = { readonly key: string; readonly apply: (shell: S) => void };
+  const loaded = new Map<string, S>();
   const loading = new Set<string>();
   const waiting = new Set<Waiter>();
   const users = new Map<string, number>();
   let on = enabled;
 
-  const deliver = (key: string, shell: Shell): void => {
+  const deliver = (key: string, shell: S): void => {
     for (const waiter of [...waiting].filter((w) => w.key === key)) {
       waiting.delete(waiter);
       try {

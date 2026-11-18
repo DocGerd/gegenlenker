@@ -8,7 +8,13 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
-import { MARKER_HEIGHT } from './body-dims';
+import {
+  CONTOUR_STRIP as STRIP,
+  MARKER_HEIGHT,
+  MARKER_LENGTH,
+  MARKER_SPACING,
+  MARKING_END_MARGIN as END_MARGIN,
+} from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
 import { tint } from './environment';
 import { PLATE_TEXT, REALISM_HUES as HUE } from './realism-hues';
@@ -25,10 +31,6 @@ const RELIEF_OVER = 0.05; // parts laid over a mark
 const WHEEL_RELIEF = [0.01, 0.02, 0.035] as const; // sidewall, rim, hub
 const WHEEL_RATIO = [0.9, 0.62, 0.22] as const; // of the tyre radius
 
-const END_MARGIN = 0.1; // side marking stops short of the body ends
-const STRIP = 0.06; // contour marking, ECE R48 asks at least 50 mm
-const MARKER_LENGTH = 0.2;
-const MARKER_SPACING = 3; // ECE R48 maximum between side marker lamps
 const PLATE_WIDTH = 0.52; // EU standard plate
 const PLATE_HEIGHT = 0.11;
 const FLAP_THICKNESS = 0.02;
@@ -50,23 +52,32 @@ type Range = readonly [number, number];
 const lateral = (side: number, from: number, to: number): Range =>
   side > 0 ? [from, to] : [-to, -from];
 
+type Sink = {
+  add(geometry: BufferGeometry, hue: number): void;
+  box(x: Range, y: Range, z: Range, hue: number): void;
+};
+
 function collector() {
-  const parts: BufferGeometry[] = [];
-  const add = (geometry: BufferGeometry, hue: number): void => {
-    parts.push(tint(geometry, new Color(hue)));
+  const parts: { readonly geometry: BufferGeometry; readonly bare: boolean }[] = [];
+  const sink = (bare: boolean): Sink => {
+    const add = (geometry: BufferGeometry, hue: number): void => {
+      parts.push({ geometry: tint(geometry, new Color(hue)), bare });
+    };
+    return { add, box: (x, y, z, hue) => add(box(x, y, z), hue) };
   };
   return {
-    add,
-    box: (x: Range, y: Range, z: Range, hue: number): void => add(box(x, y, z), hue),
-    build: (): BufferGeometry => merge(parts),
+    ...sink(true),
+    /** A sink whose parts `buildBare` leaves out. */
+    apart: (): Sink => sink(false),
+    build: (): BufferGeometry => merge(parts.map((part) => part.geometry)),
+    buildBare: (): BufferGeometry =>
+      merge(parts.filter((part) => part.bare).map((part) => part.geometry)),
   };
 }
 
-type Collector = ReturnType<typeof collector>;
-
 /** Sidewall, rim and hub as discs standing proud of both tyre faces; centre at body (x, y, z). */
 function wheelFaces(
-  c: Collector,
+  c: Sink,
   radius: number,
   width: number,
   [x, y, z]: readonly [number, number, number],
@@ -92,7 +103,7 @@ export function frontWheelDetail(radius: number, width: number): BufferGeometry 
 }
 
 function mudflap(
-  c: Collector,
+  c: Sink,
   spec: MudflapSpec,
   axleX: number,
   y: number,
@@ -110,13 +121,7 @@ function mudflap(
 }
 
 /** A yellow contour strip along both sides, with amber marker lamps straddling it. */
-function sideMarking(
-  c: Collector,
-  [x0, x1]: Range,
-  halfWidth: number,
-  zc: number,
-  room: number,
-): void {
+function sideMarking(c: Sink, [x0, x1]: Range, halfWidth: number, zc: number, room: number): void {
   const half = Math.min(MARKER_HEIGHT, room) / 2;
   const count = Math.max(2, Math.ceil((x1 - x0) / MARKER_SPACING) + 1);
   for (const side of [-1, 1]) {
@@ -243,7 +248,7 @@ export function truckDetail(p: TruckDetailParams): {
 }
 
 /** Slanted black stripes across a yellow bar, mirrored about the centreline into a chevron. */
-function chevrons(c: Collector, x: Range, halfLength: number, zc: number, height: number): void {
+function chevrons(c: Sink, x: Range, halfLength: number, zc: number, height: number): void {
   const width = height / 2;
   const pitch = width * 2;
   const geometry = (yc: number): BufferGeometry =>
@@ -274,11 +279,17 @@ export type TrailerDetailParams = {
   readonly rearAxleXs: readonly number[];
 };
 
+/**
+ * `bareGeometry` is `geometry` without what sits on a swap body's own faces (the side marking and
+ * the top and side strips), for a shell that shows a bare chassis; it is null for a low-loader.
+ */
 export function trailerDetail(p: TrailerDetailParams): {
   geometry: BufferGeometry;
+  bareGeometry: BufferGeometry | null;
   plate: PlateSpot;
 } {
   const c = collector();
+  const onBox = p.isBox ? c.apart() : c;
   const hw = p.halfWidth;
   const rear: Range = [p.rearX - RELIEF, p.rearX];
   const slab = p.deck - p.underside;
@@ -313,12 +324,13 @@ export function trailerDetail(p: TrailerDetailParams): {
   );
 
   sideMarking(
-    c,
+    onBox,
     [p.rearX + END_MARGIN, p.frontX - END_MARGIN],
     hw,
     lowerZ,
     p.isBox ? p.bodyTop - p.deck : slab,
   );
+  // the lower rear contour stays with the shell: it sits on the lamp carrier
   c.box(
     rear,
     [-(hw - STRIP), hw - STRIP],
@@ -327,10 +339,20 @@ export function trailerDetail(p: TrailerDetailParams): {
   );
   if (p.isBox) {
     const top = p.bodyTop - STRIP;
-    c.box(rear, [-(hw - STRIP), hw - STRIP], [top - STRIP / 2, top + STRIP / 2], HUE.contourRear);
+    onBox.box(
+      rear,
+      [-(hw - STRIP), hw - STRIP],
+      [top - STRIP / 2, top + STRIP / 2],
+      HUE.contourRear,
+    );
     for (const side of [-1, 1]) {
-      c.box(rear, lateral(side, hw - 2 * STRIP, hw - STRIP), [p.deck, p.bodyTop], HUE.contourRear);
-      c.box(
+      onBox.box(
+        rear,
+        lateral(side, hw - 2 * STRIP, hw - STRIP),
+        [p.deck, p.bodyTop],
+        HUE.contourRear,
+      );
+      onBox.box(
         [p.rearX + END_MARGIN, p.frontX - END_MARGIN],
         lateral(side, hw, hw + RELIEF),
         [top - STRIP / 2, top + STRIP / 2],
@@ -363,6 +385,7 @@ export function trailerDetail(p: TrailerDetailParams): {
 
   return {
     geometry: c.build(),
+    bareGeometry: p.isBox ? c.buildBare() : null,
     plate: {
       x: p.rearX - PLATE_RELIEF,
       y: 0,

@@ -1,4 +1,4 @@
-import type { TruckId } from '../contracts/vehicle';
+import type { TrailerId, TruckId } from '../contracts/vehicle';
 
 // No `three` import: the Blender param scripts load this module under plain Node.
 
@@ -18,3 +18,13 @@ export const TRUCK_LOOKS = {
   'arocs-1835-ak': { cab: { style: 'day', length: 2.2 }, body: { kind: 'tipper' } },
   'man-le-18-280': { cab: { style: 'crew', length: 3 }, body: { kind: 'tarp' } },
 } as const satisfies Record<TruckId, TruckLook>;
+
+export type TrailerShellKind = 'low-loader' | 'lafette';
+
+/** The perspective look of a trailer: a Hüffermann low-loader in THW blue, or a bare Krone swap-body chassis. */
+export type TrailerLook = { readonly kind: TrailerShellKind };
+
+export const TRAILER_LOOKS = {
+  'hueffermann-hpa-24-81-l': { kind: 'low-loader' },
+  'krone-azw-18': { kind: 'lafette' },
+} as const satisfies Record<TrailerId, TrailerLook>;
