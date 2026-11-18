@@ -1,15 +1,18 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, Frustum, Matrix4, type Mesh, Vector3 } from 'three';
+import { Box3, Frustum, Matrix4, type Mesh, Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TOP_DOWN_VIEW } from '../contracts/render';
 import type { Pose2 } from '../contracts/sim';
-import { TRUCK_IDS, type TruckId } from '../contracts/vehicle';
+import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
+import { joints, type KinematicState } from '../sim/kinematics';
 import { truckAnchors } from '../vehicles/anchors';
-import { truckById } from '../vehicles/registry';
+import { trailerById, truckById } from '../vehicles/registry';
+import { resolveCombination } from '../vehicles/resolve';
 import { RELIEF } from './cab-dims';
 import { cabFront, createChaseCamera, placeChaseCamera } from './chase-camera';
-import { parseShell, type ShellKind } from './glb-shells';
+import { placePose } from './coords';
+import { parseShell, parseTrailerShell, type ShellKind } from './glb-shells';
 import { createMirror, mirrorPose } from './mirror';
 import { computeViewports, NO_INSETS } from './viewports';
 
@@ -25,6 +28,13 @@ const read = async (id: TruckId, kind: ShellKind): Promise<Mesh> => {
   return (await parseShell(data, kind)).mesh;
 };
 
+const readTrailer = async (id: TrailerId) => {
+  const bytes = readFileSync(join(import.meta.dirname, `assets/${id}-trailer.glb`));
+  return parseTrailerShell(
+    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  );
+};
+
 /** Share of the body shell's vertices a mirror frames: set below the measured share of both trucks on both screens. */
 const BODY_FLOOR = 0.3;
 
@@ -35,8 +45,16 @@ const SCREENS = {
 } as const;
 
 /** Shell vertices inside each mirror's frustum, truck at the straight pose, mirrors placed as the renderer does. */
-function verticesInMirrors(mesh: Mesh, id: TruckId, screen: readonly [number, number]) {
+function verticesInMirrors(
+  mesh: Mesh,
+  id: TruckId,
+  screen: readonly [number, number],
+  place: Pose2 = STRAIGHT,
+) {
   const anchors = truckAnchors(truckById(id));
+  const placed = new Object3D();
+  placePose(placed, place);
+  placed.updateMatrixWorld(true);
   const views = computeViewports(screen[0], screen[1], 'drive', null, NO_INSETS);
   const positions = mesh.geometry.getAttribute('position');
   const world = new Vector3();
@@ -63,7 +81,10 @@ function verticesInMirrors(mesh: Mesh, id: TruckId, screen: readonly [number, nu
     );
     let inside = 0;
     for (let i = 0; i < positions.count; i++) {
-      world.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+      world
+        .fromBufferAttribute(positions, i)
+        .applyMatrix4(mesh.matrixWorld)
+        .applyMatrix4(placed.matrixWorld);
       if (frustum.containsPoint(world)) inside++;
     }
     return inside;
@@ -80,6 +101,45 @@ describe.each(TRUCK_IDS)('mirror frustums on the straight pose: %s', (id) => {
     });
   });
 });
+
+/** Share of the trailer shell's vertices each mirror frames, set below the measured share of every pairing on both screens. */
+const TRAILER_FLOOR = 0.4;
+/** The dolly sits low and far back; its floor is for the mirror on the side the drawbar swings to. */
+const DOLLY_FLOOR = 0.2;
+const COUPLING_ANGLE = (25 * Math.PI) / 180;
+
+const poses = (truck: TruckId, trailer: TrailerId, state: KinematicState) =>
+  joints(resolveCombination(truckById(truck), trailerById(trailer)), state);
+
+describe.each(TRUCK_IDS.flatMap((t) => TRAILER_IDS.map((r) => [t, r] as const)))(
+  'mirror frustums on the trailer shell: %s with %s',
+  (truck, trailer) => {
+    describe.each(Object.entries(SCREENS))('%s screen', (_name, screen) => {
+      it('frame the trailer shell at the straight pose', async () => {
+        const { trailer: shell } = await readTrailer(trailer);
+        const at = poses(truck, trailer, { x: 0, y: 0, th0: 0, th1: 0, th2: 0 });
+        const seen = verticesInMirrors(shell.mesh, truck, screen, at.trailer);
+        expect(seen.left / seen.total).toBeGreaterThan(TRAILER_FLOOR);
+        expect(seen.right / seen.total).toBeGreaterThan(TRAILER_FLOOR);
+      });
+
+      it.each([-1, 1])('frame the dolly at a coupling angle of 25° (%i)', async (sign) => {
+        const { dolly } = await readTrailer(trailer);
+        // th0 - th1 = 25°: the drawbar swings away from the truck's heading to one side
+        const at = poses(truck, trailer, {
+          x: 0,
+          y: 0,
+          th0: 0,
+          th1: -sign * COUPLING_ANGLE,
+          th2: (-sign * COUPLING_ANGLE) / 2,
+        });
+        const seen = verticesInMirrors(dolly.mesh, truck, screen, at.dolly);
+        const near = sign < 0 ? seen.right : seen.left;
+        expect(near / seen.total).toBeGreaterThan(DOLLY_FLOOR);
+      });
+    });
+  },
+);
 
 describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
   it.each(Object.entries(SCREENS))(

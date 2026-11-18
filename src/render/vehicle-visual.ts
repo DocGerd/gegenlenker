@@ -12,7 +12,7 @@ import {
 } from 'three';
 import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
-import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
+import { truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
 import {
   bodyFrontX,
@@ -26,11 +26,33 @@ import {
   WALL_THICKNESS,
 } from './body-dims';
 import { CAB_HEIGHT, CAB_LENGTH, FRAME_TOP, RAIL_BOTTOM, TRUCK_WHEEL_RADIUS } from './cab-dims';
-import { applyShell, type Shell, type TruckShells } from './glb-shells';
+import {
+  applyShell,
+  type Shell,
+  type Shells,
+  type TrailerShell,
+  type TruckShells,
+} from './glb-shells';
 import { TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
 import { CAB_LAYER, SKY_LAYER, type VehicleVisual } from './seams';
+import {
+  ARM_HEIGHT,
+  ARM_WIDTH,
+  AXLE_HALF_THICKNESS,
+  DRAWBAR_SPREAD,
+  PLATE_RADIUS,
+  PLATE_THICKNESS,
+  POST_HALF_WIDTH,
+  RAMP_GAP,
+  RAMP_HEIGHT,
+  RAMP_THICKNESS,
+  RAMP_WIDTH,
+  SWAP_BODY_HEIGHT,
+  TRAILER_WHEEL_WIDTH,
+  trailerFrame,
+} from './trailer-dims';
 import {
   dollyDetail,
   frontWheelDetail,
@@ -43,25 +65,6 @@ import {
 } from './vehicle-detail';
 import { box, merge, WHEEL_SEGMENTS, wheelGeometry } from './vehicle-geometry';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
-
-const TRAILER_WHEEL_WIDTH = 0.3;
-
-const SWAP_BODY_HEIGHT = 2.7;
-const RAMP_HEIGHT = 1.2;
-const RAMP_WIDTH = 0.9;
-const RAMP_GAP = 0.15; // from the centreline to the inner ramp edge
-const RAMP_THICKNESS = 0.1;
-const DECK_PLATE = 0.1; // low-loader deck slab
-const BOX_FRAME_DEPTH = 0.25; // rails under a swap body
-const WHEEL_CLEARANCE = 0.02;
-const DRAWBAR_SPREAD = 0.45; // arm spacing at the turntable end
-const ARM_WIDTH = 0.12;
-const ARM_HEIGHT = 0.1;
-const PLATE_RADIUS = 0.5;
-const PLATE_THICKNESS = 0.1;
-const POST_HALF_WIDTH = 0.15;
-const AXLE_HALF_THICKNESS = 0.07;
-const SWING_MARGIN = 0.1;
 
 export const SHADOW_NAME = 'blob-shadow';
 export const SHADOW_HEIGHT = 0.02; // above the markings
@@ -421,29 +424,14 @@ export function proceduralTruck(
   };
 }
 
-export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): VehicleVisual {
-  const a = trailerAnchors(spec);
-  const hw = spec.width.value / 2000;
-  const track = spec.track.value / 1000;
-  const deck = spec.deckHeight.value / 1000;
-  const isBox = spec.body === 'box';
+export function proceduralTrailer(
+  spec: TrailerSpec,
+  palette: ScenePalette,
+  shells?: Shells<TrailerShell>,
+): VehicleVisual {
+  const { a, hw, track, deck, isBox, underside, radius, axleZ, plateBottom, plateMid, kink } =
+    trailerFrame(spec);
   const res = resources();
-
-  // Wheels, axles, plate and drawbar all stay below the deck's underside.
-  const underside = deck - (isBox ? BOX_FRAME_DEPTH : DECK_PLATE);
-  const radius = Math.min(TRUCK_WHEEL_RADIUS, (underside - WHEEL_CLEARANCE) / 2);
-  const axleZ: readonly [number, number] = [
-    radius - AXLE_HALF_THICKNESS,
-    radius + AXLE_HALF_THICKNESS,
-  ];
-  const plateTop = underside - WHEEL_CLEARANCE;
-  const plateBottom = plateTop - PLATE_THICKNESS;
-  const plateMid = (plateTop + plateBottom) / 2;
-  // clear of the deck front as the body swings over the arms
-  const kink = Math.min(
-    Math.hypot(a.frontX - a.turntable.x, hw) + SWING_MARGIN,
-    a.eye.x - SWING_MARGIN,
-  );
 
   // Dolly frame: the turntable centre is the origin; eye and front axle are read as given.
   const armPath = (side: number): [Point3, Point3, Point3] => [
@@ -573,10 +561,15 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
     ),
   ];
 
+  const dollyChassisMesh = res.mesh(merge(dollyChassis), chassisMaterial);
+  const bodyMesh = res.mesh(merge(bodyParts), bodyMaterial);
+  const frameMesh = res.mesh(merge([...rails, ...axleBeams]), chassisMaterial);
+  // a swap body's own marking goes with it when its shell shows a bare chassis
+  const boxDetail = trailerRig.boxGeometry === null ? null : res.detail(trailerRig.boxGeometry);
   const dolly = new Group();
   dolly.add(
     res.shadow(blobShadow(dollyBlobs, SHADOW_HEIGHT)),
-    res.mesh(merge(dollyChassis), chassisMaterial),
+    dollyChassisMesh,
     res.mesh(merge(dollyWheels), wheelMaterial),
     dollyPlan.mesh,
     res.detail(dollyRims),
@@ -585,14 +578,48 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
   trailer.add(
     res.shadow(blobShadow(trailerBlobs, SHADOW_HEIGHT)),
     trailerPlan.mesh,
-    res.mesh(merge(bodyParts), bodyMaterial),
-    res.mesh(merge([...rails, ...axleBeams]), chassisMaterial),
+    bodyMesh,
+    frameMesh,
     res.mesh(merge(trailerWheels), wheelMaterial),
     res.detail(trailerRig.geometry),
+    ...(boxDetail === null ? [] : [boxDetail]),
     res.plate(trailerRig.plate),
   );
   const group = new Group();
   group.add(dolly, trailer);
+
+  type Applied = ReturnType<typeof applyShell>;
+  let applied: { readonly trailer: Applied; readonly dolly: Applied } | null = null;
+  let vehicleGlb = true;
+  const key = `${spec.id}-trailer`;
+  const attach = (shell: TrailerShell): void => {
+    const material = res.detailMaterial();
+    const onBody = applyShell(
+      trailer,
+      shell.trailer,
+      {
+        toAids: [bodyMesh, frameMesh],
+        remove: boxDetail === null ? [] : [boxDetail],
+        layer: SKY_LAYER,
+      },
+      { material, enabled: vehicleGlb, onChange: (on) => shells?.attached(key, on) },
+    );
+    try {
+      applied = {
+        trailer: onBody,
+        dolly: applyShell(
+          dolly,
+          shell.dolly,
+          { toAids: [dollyChassisMesh], remove: [], layer: SKY_LAYER },
+          { material, enabled: vehicleGlb },
+        ),
+      };
+    } catch (error) {
+      onBody.dispose();
+      throw error;
+    }
+  };
+  const cancel = shells?.onLoaded(key, attach);
 
   return {
     object: group,
@@ -600,8 +627,15 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
     },
-    setQuality: () => undefined,
+    setQuality(flags) {
+      vehicleGlb = flags.vehicleGlb;
+      applied?.trailer.setEnabled(vehicleGlb);
+      applied?.dolly.setEnabled(vehicleGlb);
+    },
     dispose() {
+      cancel?.();
+      applied?.trailer.dispose();
+      applied?.dolly.dispose();
       res.dispose();
       dollyPlan.dispose();
       trailerPlan.dispose();

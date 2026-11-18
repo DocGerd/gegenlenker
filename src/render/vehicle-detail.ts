@@ -274,11 +274,17 @@ export type TrailerDetailParams = {
   readonly rearAxleXs: readonly number[];
 };
 
+/**
+ * `boxGeometry` is what sits on a swap body's own faces (side and rear marking, the top strips);
+ * it is null for a low-loader. The shell of a swap-body carrier shows a bare chassis, so it goes.
+ */
 export function trailerDetail(p: TrailerDetailParams): {
   geometry: BufferGeometry;
+  boxGeometry: BufferGeometry | null;
   plate: PlateSpot;
 } {
   const c = collector();
+  const onBox = p.isBox ? collector() : c;
   const hw = p.halfWidth;
   const rear: Range = [p.rearX - RELIEF, p.rearX];
   const slab = p.deck - p.underside;
@@ -313,13 +319,13 @@ export function trailerDetail(p: TrailerDetailParams): {
   );
 
   sideMarking(
-    c,
+    onBox,
     [p.rearX + END_MARGIN, p.frontX - END_MARGIN],
     hw,
     lowerZ,
     p.isBox ? p.bodyTop - p.deck : slab,
   );
-  c.box(
+  onBox.box(
     rear,
     [-(hw - STRIP), hw - STRIP],
     [lowerZ - STRIP / 2, lowerZ + STRIP / 2],
@@ -327,10 +333,20 @@ export function trailerDetail(p: TrailerDetailParams): {
   );
   if (p.isBox) {
     const top = p.bodyTop - STRIP;
-    c.box(rear, [-(hw - STRIP), hw - STRIP], [top - STRIP / 2, top + STRIP / 2], HUE.contourRear);
+    onBox.box(
+      rear,
+      [-(hw - STRIP), hw - STRIP],
+      [top - STRIP / 2, top + STRIP / 2],
+      HUE.contourRear,
+    );
     for (const side of [-1, 1]) {
-      c.box(rear, lateral(side, hw - 2 * STRIP, hw - STRIP), [p.deck, p.bodyTop], HUE.contourRear);
-      c.box(
+      onBox.box(
+        rear,
+        lateral(side, hw - 2 * STRIP, hw - STRIP),
+        [p.deck, p.bodyTop],
+        HUE.contourRear,
+      );
+      onBox.box(
         [p.rearX + END_MARGIN, p.frontX - END_MARGIN],
         lateral(side, hw, hw + RELIEF),
         [top - STRIP / 2, top + STRIP / 2],
@@ -363,6 +379,7 @@ export function trailerDetail(p: TrailerDetailParams): {
 
   return {
     geometry: c.build(),
+    boxGeometry: p.isBox ? onBox.build() : null,
     plate: {
       x: p.rearX - PLATE_RELIEF,
       y: 0,
