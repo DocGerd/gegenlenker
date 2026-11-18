@@ -26,6 +26,7 @@ import { createMirror } from './mirror';
 import { readScenePalette } from './palette';
 import {
   AIDS_LAYER,
+  CAMERA_FAR,
   COCKPIT_LAYERS,
   enableLayers,
   TOP_DOWN_LAYERS,
@@ -46,7 +47,6 @@ const FOLLOW_RADIUS_MARGIN = 1;
 const LEAD_SECONDS = 0.5;
 const MAX_LEAD_STEP_SECONDS = 0.25;
 const YARD_MARGIN = 5;
-const FAR = 400;
 const SKY_HEIGHT = 200;
 const MAX_PIXEL_RATIO = 2;
 
@@ -87,7 +87,7 @@ function setAidsLayer(object: Object3D): void {
 
 export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   const timer = createFrameTimer();
-  const cockpitCamera = new PerspectiveCamera(COCKPIT_FOV, 1, 0.1, FAR);
+  const cockpitCamera = new PerspectiveCamera(COCKPIT_FOV, 1, 0.1, CAMERA_FAR);
   cockpitCamera.rotation.order = 'YXZ';
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
   enableLayers(cockpitCamera.layers, COCKPIT_LAYERS);

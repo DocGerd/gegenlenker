@@ -481,7 +481,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     new Color(REALISM_HUES.sunHalo),
     sun.position,
   );
-  const skyline = createSkyline(new Color(REALISM_HUES.skylineDark), haze);
+  const skyline = createSkyline(layout.bounds, haze);
   group.add(sky.mesh, skyline.mesh);
 
   return {
