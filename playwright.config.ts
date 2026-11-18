@@ -1,6 +1,11 @@
+import { createHash } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
 
-const url = 'http://127.0.0.1:4399/gegenlenker/';
+// E2E_PORT overrides; otherwise a stable port per checkout (4400-4899) lets worktrees run e2e in parallel.
+const port =
+  process.env['E2E_PORT'] ??
+  String(4400 + (createHash('sha256').update(process.cwd()).digest().readUInt32BE(0) % 500));
+const url = `http://127.0.0.1:${port}/gegenlenker/`;
 
 export default defineConfig({
   testDir: 'e2e',
@@ -35,7 +40,7 @@ export default defineConfig({
   ],
   webServer: {
     // CI builds with BASE_PATH before this runs; locally the build happens here.
-    command: `${process.env['CI'] ? '' : 'pnpm build && '}pnpm preview --host 127.0.0.1 --port 4399 --strictPort`,
+    command: `${process.env['CI'] ? '' : 'pnpm build && '}pnpm preview --host 127.0.0.1 --port ${port} --strictPort`,
     env: { BASE_PATH: '/gegenlenker/' },
     url,
   },
