@@ -83,7 +83,9 @@ function setAidsLayer(object: Object3D): void {
 }
 
 /** `warmUp` holds the resolution governor off while something heavy (a shell, the ground texture) attaches. */
-export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer & { warmUp(): void } {
+export function createThreeSceneRenderer(
+  parts: RendererParts,
+): SceneRenderer & { warmUp: () => void } {
   const timer = createFrameTimer();
   const cockpitCamera = createCockpitCamera();
   const interior = createCockpitInterior();
@@ -241,6 +243,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer & 
     setScene(nextLayout, truck, trailer) {
       disposeBuilt();
       resetTiming();
+      timer.resetScale();
       leadAt = -1;
       const palette = readScenePalette();
       const scene = new Scene();
@@ -280,13 +283,16 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer & 
       const maxSamples = renderer?.capabilities.maxSamples ?? 0;
       mirrorLeft.setSamples(quality.mirrorMsaa, maxSamples);
       mirrorRight.setSamples(quality.mirrorMsaa, maxSamples);
-      if (built !== null) applyQuality(built);
+      if (built !== null) {
+        applyQuality(built);
+        timer.warmUp();
+      }
     },
 
     resize(width, height) {
       cssWidth = width;
       cssHeight = height;
-      timer.resetScale();
+      timer.warmUp();
       applySize();
     },
 
