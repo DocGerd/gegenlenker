@@ -3,6 +3,7 @@ import type { Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts
 import { REALISM_HUES as HUE } from './realism-hues';
 import { tint } from './tint';
 import { box, merge } from './vehicle-geometry';
+import { concreteWall, kerb, loadingRamp, trafficCone } from './yard-concrete';
 import {
   hoopPost,
   hoopRail,
@@ -95,6 +96,10 @@ export const RESTYLED_KINDS: ReadonlySet<ObstacleKind> = new Set([
   'bollard',
   'barrier',
   'gatehouse',
+  'kerb',
+  'wall',
+  'ramp',
+  'cone',
 ]);
 
 /** Along-axis length, across-axis width and heading of a long box, cut along the longer side. */
@@ -572,6 +577,14 @@ function lamp(o: Obstacle, aim: { x: number; y: number }, yard: Rect2): PropPiec
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
+/** Cone on its black base; the base fills the footprint. */
+function cone(o: Obstacle): PropPiece {
+  const { cx, cy, halfLength, halfWidth, heading } = o.obb;
+  const p = new Parts();
+  trafficCone(p, halfLength, halfWidth, o.height);
+  return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
+}
+
 function bollard(o: Obstacle): PropPiece {
   const { cx, cy, halfLength: hl, halfWidth: hw, heading } = o.obb;
   const h = o.height;
@@ -645,6 +658,20 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
           const n = containers++;
           out.push(n % 3 === 1 ? swapBodyProp(o, swaps++) : container(o, n));
         }
+        break;
+      case 'kerb':
+        out.push(...longPieces(o, (p, length, across) => kerb(p, length, across, o.height)));
+        break;
+      case 'wall':
+        out.push(
+          ...longPieces(o, (p, length, across) => concreteWall(p, length, across, o.height)),
+        );
+        break;
+      case 'ramp':
+        out.push(...longPieces(o, (p, length, across) => loadingRamp(p, length, across, o.height)));
+        break;
+      case 'cone':
+        out.push(cone(o));
         break;
       case 'lamp':
         out.push(lamp(o, aim, layout.yard));

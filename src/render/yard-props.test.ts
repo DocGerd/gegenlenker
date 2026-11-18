@@ -8,6 +8,7 @@ import { cornerHoops, plotGoods, RESTYLED_KINDS, yardProps } from './yard-props'
 const TOLERANCE = 0.05;
 const MAX_RELIEF = 0.16; // thin relief only, as for seals and dock lights
 const FILLS_FOOTPRINT: readonly ObstacleKind[] = ['parked', 'gatehouse', 'bollard'];
+const FILLS_AXES: readonly ObstacleKind[] = ['kerb', 'wall', 'ramp', 'cone'];
 
 const cases = [
   ...Object.values(layouts).map((l) => ({ name: l.id, resolved: resolveLayout(l, null) })),
@@ -28,6 +29,27 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
           Math.abs(b.max.z + (cy - halfWidth)) < TOLERANCE,
       );
       expect(covers, id).toBe(true);
+    }
+  });
+
+  it('fill the footprint of kerbs, walls, ramps and cones without outgrowing it', () => {
+    const plot = yardProps({ ...resolved, obstacles: [] }).length;
+    const concrete = resolved.obstacles.filter((o) => FILLS_AXES.includes(o.kind));
+    for (const o of concrete) {
+      const b = new Box3();
+      const own = yardProps({ ...resolved, obstacles: [o] });
+      for (const p of own.slice(0, own.length - plot)) {
+        b.union(new Box3().setFromObject(new Mesh(p.geometry)));
+      }
+      const { cx, cy, heading, halfLength, halfWidth } = o.obb;
+      const [c, s] = [Math.abs(Math.cos(heading)), Math.abs(Math.sin(heading))];
+      const halfX = c * halfLength + s * halfWidth;
+      const halfY = s * halfLength + c * halfWidth;
+      expect(b.min.x, o.id).toBeCloseTo(cx - halfX, 1);
+      expect(b.max.x, o.id).toBeCloseTo(cx + halfX, 1);
+      expect(-b.max.z, o.id).toBeCloseTo(cy - halfY, 1);
+      expect(-b.min.z, o.id).toBeCloseTo(cy + halfY, 1);
+      expect(b.max.y, o.id).toBeLessThanOrEqual(o.height + MAX_RELIEF);
     }
   });
 
