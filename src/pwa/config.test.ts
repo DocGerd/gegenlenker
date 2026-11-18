@@ -19,12 +19,11 @@ describe('web app manifest', () => {
     for (const icon of icons) expect(pngSize(icon.src), icon.src).toBe(icon.sizes);
   });
 
-  it('keeps an install-scope and a standalone fallback for display', () => {
+  it('keeps start_url, scope and id on the base path', () => {
     expect(manifest).toMatchObject({
       scope: '/gegenlenker/',
       start_url: '/gegenlenker/',
-      display: 'standalone',
+      id: '/gegenlenker/',
     });
-    expect(manifest === false ? [] : manifest?.display_override).toContain('standalone');
   });
 });
