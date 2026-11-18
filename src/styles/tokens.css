@@ -70,7 +70,7 @@
 }
 
 /* The cockpit is 60% of a landscape window: where wheel, gears and key legend do not fit side by side the wheel shrinks (src/render/viewports.ts mirrors this). */
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 1/1) {
   :root {
     --ctl-wheel: min(
       clamp(160px, 38vmin, 300px),

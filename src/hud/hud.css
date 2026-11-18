@@ -93,7 +93,7 @@
 }
 
 /* Only in landscape does the cockpit start at the screen's top edge. */
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 1/1) {
   .hud-cockpit > .hud-view-label {
     top: calc(var(--space-2) + var(--safe-top));
   }
@@ -207,13 +207,13 @@
   box-sizing: border-box;
 }
 
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 1/1) {
   .hud-toast-wrap {
     padding-top: calc(var(--space-4) + var(--safe-top));
   }
 }
 
-@media (orientation: portrait) {
+@media not (min-aspect-ratio: 1/1) {
   .hud-toast-wrap {
     padding-right: var(--safe-right);
   }
@@ -299,7 +299,7 @@
 }
 
 /* Only in portrait does the top view reach the screen's left edge. */
-@media (orientation: portrait) {
+@media not (min-aspect-ratio: 1/1) {
   .hud-topdown {
     padding-left: calc(var(--space-4) + var(--safe-left));
   }
@@ -409,7 +409,7 @@
 }
 
 /* Landscape: the lever column with the Stop button sits at the screen's right edge, under the info row. */
-@media (orientation: landscape) {
+@media (min-aspect-ratio: 1/1) {
   .hud-topdown[data-reserve] .hud-info {
     padding-right: calc(var(--space-4) + var(--size-target) * 1.5 + var(--space-3));
   }

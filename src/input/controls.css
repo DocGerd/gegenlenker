@@ -13,7 +13,7 @@
 }
 
 /* A shorter lever reduces the overlap with the right mirror. */
-@media (orientation: portrait) {
+@media not (min-aspect-ratio: 1/1) {
   .ctl {
     --ctl-lever-height: clamp(160px, 24vmin, 240px);
   }
