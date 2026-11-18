@@ -138,32 +138,14 @@ function sideMarking(
   }
 }
 
-/** Side marking along a truck body: a contour strip with amber markers, at floor height. */
-export function truckMarking(p: {
-  readonly halfWidth: number;
-  readonly rearX: number;
-  readonly bodyFront: number;
-  readonly frameTop: number;
-  readonly floorTop: number;
-}): BufferGeometry {
-  const c = collector();
-  const floor = p.floorTop - p.frameTop;
-  sideMarking(
-    c,
-    [p.rearX + END_MARGIN, p.bodyFront - END_MARGIN],
-    p.halfWidth,
-    p.frameTop + floor / 2,
-    floor,
-  );
-  return c.build();
-}
-
 export type TruckDetailParams = {
   readonly spec: Pick<TruckSpec, 'cab' | 'bumperInset' | 'tailLamp' | 'mudflap'>;
   readonly halfWidth: number;
   readonly frontX: number;
   readonly rearX: number;
+  readonly bodyFront: number;
   readonly frameTop: number;
+  readonly floorTop: number;
   readonly railBottom: number;
   readonly rearAxleX: number;
   readonly rearTrack: number;
@@ -219,6 +201,14 @@ export function truckDetail(p: TruckDetailParams): {
   const bumperHalf = hw - m(p.spec.bumperInset);
   cabFront.box(front, [-bumperHalf, bumperHalf], bumper, HUE.anthracite);
 
+  const floor = p.floorTop - p.frameTop;
+  sideMarking(
+    c,
+    [p.rearX + END_MARGIN, p.bodyFront - END_MARGIN],
+    hw,
+    p.frameTop + floor / 2,
+    floor,
+  );
   for (const side of [-1, 1]) {
     c.box(
       [p.rearX - RELIEF, p.rearX],

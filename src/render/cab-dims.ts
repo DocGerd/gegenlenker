@@ -3,7 +3,7 @@ import { truckAnchors } from '../vehicles/anchors';
 import { REALISM_HUES } from './realism-hues';
 import { type TruckLook, TRUCK_LOOKS } from './livery';
 
-// No `three` import: scripts/cab-params.mjs loads this module under plain Node.
+// No `three` import: scripts/glb-params.mjs loads this module under plain Node.
 
 export const CAB_LENGTH = 2.2; // the top-down cab box; the perspective cab may be longer (livery.ts)
 export const CAB_HEIGHT = 2.9;
