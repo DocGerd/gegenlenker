@@ -3,8 +3,10 @@ import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
 
 const sizes = [
+  { width: 740, height: 649 },
   { width: 768, height: 700 },
   { width: 768, height: 1024 },
+  { width: 800, height: 800 },
   { width: 800, height: 820 },
   { width: 900, height: 649 },
   { width: 1000, height: 649 },
@@ -17,6 +19,7 @@ const sizes = [
   { width: 1280, height: 800 },
   { width: 1300, height: 540 },
   { width: 1300, height: 600 },
+  { width: 1350, height: 600 },
   { width: 1366, height: 768 },
 ];
 
