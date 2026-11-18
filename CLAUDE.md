@@ -4,15 +4,15 @@ Truck + turntable drawbar trailer maneuvering trainer. TypeScript, Vite, three.j
 
 ## Verify
 
-Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test:e2e` builds with `BASE_PATH` itself); run it before every PR.
+Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which builds with `BASE_PATH` itself) is the full gate after Install; run it before every PR. `pnpm check` (lint, format, typecheck, unit; no build or e2e) is the fast local loop for review-fix rounds, not the CI `check` job (which also runs e2e).
 
 - Install: `pnpm install --frozen-lockfile`
 - Lint: `pnpm lint`; format: `pnpm format:check` (fix with `pnpm format`)
 - Typecheck: `pnpm typecheck`
 - Unit tests: `pnpm test`; single test: `pnpm exec vitest run <file> -t '<name>'`
 - Build: `BASE_PATH=/gegenlenker/ pnpm build`
-- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); it runs only specs matching the `offline` project's `testMatch` in `playwright.config.ts`, so register new specs there.
-- Parallel worktrees: e2e previews on `--strictPort` 4399, so serialize with `flock /tmp/gegenlenker-e2e.lock pnpm test:e2e`; a killed run can orphan a preview on 4399 outside the lock (`ss -ltnp | grep 4399`); ad-hoc preview servers need another port and `BASE_PATH=/gegenlenker/`.
+- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); it runs only specs listed in `OFFLINE_SPECS` (`e2e/offline-specs.ts`); `tools/e2e-specs.test.ts` fails on an unregistered spec.
+- Parallel worktrees: e2e previews on a port derived from the checkout path (printed as `e2e preview port: N`), so no lock is needed; `E2E_PORT=<n>` overrides a clash (`--strictPort` fails loudly); a killed run can orphan a preview on that port (`ss -ltnp`); ad-hoc preview servers need another port and `BASE_PATH=/gegenlenker/`.
 - Local-only ignores go in `.git/info/exclude` as unanchored patterns (`dir/`, not `/dir/`); the format scripts pass it to Prettier.
 
 ## Layering
@@ -48,8 +48,8 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 
 ## Blender assets
 
-- `tools/blender/{cab_shell,body_shell}.py` (helpers in `shell_common.py`) are the source of truth for the truck cab/body `.glb`s: run each unmodified through the `blender` MCP (`runpy.run_path` on its `wslpath -w` path; `init_globals` `PARAMS_PATH` or `PARAMS_JSON`, `OUT_PATH`, `EXPECTED_SHA256` `{scriptSha256, commonSha256}`), then `pnpm glb:optimise <key> <raw.glb>` and `pnpm glb:manifest "<Blender version>"`; keys are `<truck id>-cab|body`.
-- After changing those scripts, `scripts/glb-optimise.mjs`, cab/body params, `src/render/{cab,body}-dims.ts` or `livery.ts`, run `pnpm glb:params` and rebuild (optimise-only changes need just a re-optimise); `tools/blender/glb-build.test.ts` checks every input hash in the glb. Params numbers are 0 or ≥ 1e-4 (Python and JS print smaller floats differently).
+- `tools/blender/{cab,body,trailer}_shell.py` (helpers in `shell_common.py`) are the source of truth for the vehicle `.glb`s: run each unmodified through the `blender` MCP (`runpy.run_path` on its `wslpath -w` path; `init_globals` `PARAMS_PATH` or `PARAMS_JSON`, `OUT_PATH`, `EXPECTED_SHA256` `{scriptSha256, commonSha256}`), then `pnpm glb:optimise <key> <raw.glb>` and `pnpm glb:manifest "<Blender version>"`; keys are `<truck id>-cab|body` and `<trailer id>-trailer` (one glb, `trailer` + `dolly` nodes).
+- After changing those scripts, `scripts/glb-optimise.mjs`, their params, `src/render/{cab,body,trailer}-dims.ts` or `livery.ts`, run `pnpm glb:params` and rebuild (optimise-only changes need just a re-optimise; editing `shell_common.py` changes `commonSha256` in every glb, so rebuild all assets); `tools/blender/glb-build.test.ts` checks every input hash in the glb. Params numbers are 0 or ≥ 1e-4 (Python and JS print smaller floats differently).
 - Livery is colours only (no lettering, emblems or maker logos). Look dimensions in `src/render/livery.ts` are perspective-only render estimates, not Params, so they stay out of `dataFingerprint`.
 - MCP-run bpy scripts must not call `read_factory_settings`: it reloads preferences and disables the MCP add-on.
 
@@ -83,6 +83,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Choose the merge method per PR: merge commit when the commits are meaningful; no squash by default.
 - Commit as `13460098+DocGerd@users.noreply.github.com` (repo-local `user.email`), never the owner's real address.
 - `main` ruleset (no bypass) requires up-to-date PRs and resolved review threads: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next one and wait for CI.
+- CI runs `lint`, `unit` and `e2e` in parallel; the `main` ruleset requires the aggregate job `check` (needs all three, fails unless all succeeded): keep that job name in `ci.yml`.
 - Pin actions to a full commit SHA with a `# vX.Y.Z` comment (repo enforces `sha_pinning_required`); Dependabot keeps them current.
 - A push to `main` deploys via the gated `build-pages` and `deploy` jobs in `.github/workflows/ci.yml`; `workflow_dispatch` on `main` is the fallback.
 - Merge reviewed PRs with green CI without asking, until the project moves to gitflow and a first release.

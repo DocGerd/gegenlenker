@@ -44,14 +44,16 @@ test('loads from the subpath and drives an exercise offline', async ({
     }
     return urls;
   });
-  for (const truck of ['arocs-1835-ak', 'man-le-18-280']) {
-    for (const kind of ['cab', 'body']) {
-      const shell = new RegExp(`${truck}-${kind}-[\\w-]+\\.glb$`);
-      expect(
-        cached.filter((url) => shell.test(url)),
-        `${truck}-${kind}`,
-      ).toHaveLength(1);
-    }
+  const shells = [
+    ...['arocs-1835-ak', 'man-le-18-280'].flatMap((truck) => [`${truck}-cab`, `${truck}-body`]),
+    ...['krone-azw-18', 'hueffermann-hpa-24-81-l'].map((trailer) => `${trailer}-trailer`),
+  ];
+  for (const key of shells) {
+    const shell = new RegExp(`${key}-[\\w-]+\\.glb$`);
+    expect(
+      cached.filter((url) => shell.test(url)),
+      key,
+    ).toHaveLength(1);
   }
 
   await context.setOffline(true);
@@ -71,7 +73,7 @@ test('loads from the subpath and drives an exercise offline', async ({
   // Set once the shells, loaded from the service-worker cache, have replaced the procedural meshes.
   await expect(page.locator('html')).toHaveAttribute(
     'data-vehicle-shells',
-    'man-le-18-280-body man-le-18-280-cab',
+    'krone-azw-18-trailer man-le-18-280-body man-le-18-280-cab',
   );
   expect(warnings.filter((w) => w.includes('Shell '))).toEqual([]);
   expect(errors).toEqual([]);

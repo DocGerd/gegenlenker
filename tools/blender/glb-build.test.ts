@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { TRUCK_IDS } from '../../src/contracts/vehicle';
+import { TRAILER_IDS, TRUCK_IDS } from '../../src/contracts/vehicle';
 import { MAX_PRECACHE_FILE_BYTES } from '../../src/pwa/config';
 import {
   ASSETS,
@@ -63,9 +63,12 @@ describe.each(ASSETS)('glb shell build: $key', (asset) => {
 });
 
 describe('glb shell assets', () => {
-  it('give every truck a cab and a body', () => {
+  it('give every truck a cab and a body, and every trailer a trailer shell', () => {
     expect(ASSETS.map((a) => a.key).sort()).toEqual(
-      TRUCK_IDS.flatMap((id) => [`${id}-body`, `${id}-cab`]).sort(),
+      [
+        ...TRUCK_IDS.flatMap((id) => [`${id}-body`, `${id}-cab`]),
+        ...TRAILER_IDS.map((id) => `${id}-trailer`),
+      ].sort(),
     );
   });
 

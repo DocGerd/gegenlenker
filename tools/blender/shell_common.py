@@ -1,4 +1,4 @@
-"""Helpers shared by the Gegenlenker glb shell scripts (cab_shell.py, body_shell.py; issue #133).
+"""Helpers shared by the Gegenlenker glb shell scripts (cab_shell.py, body_shell.py, trailer_shell.py; issue #133).
 
 Loaded by the entry scripts with runpy.run_path, never imported: the host's MCP session caches modules.
 Authored in the sim body frame: metres, +X forward, +Y left, +Z up. The glTF exporter's default Y-up
@@ -15,7 +15,7 @@ import os
 
 import bpy
 
-KNOWN_SCENES = ("cab-shell", "body-shell")
+KNOWN_SCENES = ("cab-shell", "body-shell", "trailer-shell")
 DECIMALS = 6
 
 GLTF_OPTIONS = {
@@ -106,6 +106,31 @@ class Shape:
     def box(self, x, y, z, colour):
         (x0, x1), (y0, y1), (z0, z1) = x, y, z
         self.prism([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], z0, z1, colour)
+
+    def tube(self, p0, p1, radius, colour, segments=8):
+        """Regular polygon section of `radius` swept from p0 to p1 (3D points); caps and sides are planar and convex."""
+        d = [b - a for a, b in zip(p0, p1)]
+        length = math.sqrt(sum(c * c for c in d))
+        if length < 1e-9:
+            raise ValueError("degenerate tube")
+        d = [c / length for c in d]
+        ref = (0.0, 0.0, 1.0) if abs(d[2]) < 0.9 else (1.0, 0.0, 0.0)
+        u = (d[1] * ref[2] - d[2] * ref[1], d[2] * ref[0] - d[0] * ref[2], d[0] * ref[1] - d[1] * ref[0])
+        scale = math.sqrt(sum(c * c for c in u))
+        u = [c / scale for c in u]
+        v = (d[1] * u[2] - d[2] * u[1], d[2] * u[0] - d[0] * u[2], d[0] * u[1] - d[1] * u[0])
+        ring = []
+        for i in range(segments):
+            a = 2 * math.pi * i / segments
+            ring.append([radius * (math.cos(a) * u[k] + math.sin(a) * v[k]) for k in range(3)])
+        verts = [tuple(p0[k] + r[k] for k in range(3)) for r in ring]
+        verts += [tuple(p1[k] + r[k] for k in range(3)) for r in ring]
+        n = segments
+        faces = [tuple(reversed(range(n))), tuple(range(n, 2 * n))]
+        for i in range(n):
+            j = (i + 1) % n
+            faces.append((i, j, n + j, n + i))
+        self.add(verts, faces, colour)
 
     def slab(self, p, q, outward, z, colour):
         """Plan segment p -> q thickened by `outward` (to its right, for a counter-clockwise outline)."""

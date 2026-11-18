@@ -277,7 +277,7 @@ describe('replaceMaterial', () => {
 type Make = (env: VehicleEnvironment) => ReturnType<typeof proceduralTruck>;
 const makers: readonly (readonly [string, Make])[] = [
   ['truck', (env) => proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env)],
-  ['trailer', (env) => proceduralTrailer(trailerById(TRAILER_IDS[0]), palette, env)],
+  ['trailer', (env) => proceduralTrailer(trailerById(TRAILER_IDS[0]), palette, undefined, env)],
 ];
 
 describe.each(makers)('reflective detail of the %s', (_kind, make) => {
