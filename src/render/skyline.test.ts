@@ -1,12 +1,10 @@
 import { Camera, Color, Vector3, type BufferGeometry } from 'three';
 import { describe, expect, it } from 'vitest';
-import type { Rect2 } from '../contracts/layout';
+import { BOUNDS } from '../content/street';
 import { AIDS_LAYER, CAMERA_FAR, SKY_LAYER } from './seams';
 import { createSkyline } from './skyline';
-import { buildingGeometry, SINK, skylineGeometry } from './skyline-geometry';
+import { buildingGeometry, buildingParts, SINK, skylineGeometry } from './skyline-geometry';
 import { CLEARANCE, REACH, skylineBuildings, type Building } from './skyline-layout';
-
-const BOUNDS: Rect2 = { minX: -40, minY: -40, maxX: 140, maxY: 100 };
 
 function triangles(g: BufferGeometry): [Vector3, Vector3, Vector3][] {
   const p = g.getAttribute('position');
@@ -132,10 +130,18 @@ describe('skyline', () => {
     expect(facesOutward(tris)).toBe(0);
   });
 
-  it.each(['pylon', 'crane'] as const)('winds the %s outwards overall', (kind) => {
-    const tris = triangles(buildingGeometry(fixture(kind, 'flat')));
-    expect(volume(tris)).toBeGreaterThan(0);
-  });
+  it.each(['pylon', 'crane'] as const)(
+    'builds every part of the %s as a closed solid facing outwards',
+    (kind) => {
+      const parts = buildingParts(fixture(kind, 'flat'));
+      expect(parts.length).toBeGreaterThan(1);
+      for (const part of parts) {
+        const tris = triangles(part);
+        expect(volume(tris)).toBeGreaterThan(0);
+        expect(facesOutward(tris)).toBe(0);
+      }
+    },
+  );
 
   it('is seen by the perspective cameras only', () => {
     const skyline = createSkyline(BOUNDS, new Color(0xdcebf2));

@@ -68,12 +68,13 @@ export function tileUv(tile: Tile): TileUv {
 
 const hex = (n: number): string => `#${n.toString(16).padStart(6, '0')}`;
 
-/** sRGB mix of two hues: the atlas is authored in sRGB, like the palette. */
+/** Mix of two hues as hex; `Color` works in linear space, so `t` is a linear mix. */
 function mix(a: number, b: number, t: number): string {
   const c = new Color(a).lerp(new Color(b), t);
   return `#${c.getHexString()}`;
 }
 
+/** Scales the linear colour by `f`, so it is not a perceptual lightness step. */
 function shade(a: number, f: number): string {
   const c = new Color(a);
   c.multiplyScalar(f);

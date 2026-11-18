@@ -413,7 +413,10 @@ function loft(
   }
 }
 
-function crane(m: Mesher, b: Building): void {
+/** One closed solid: pieces of a landmark may overlap each other, so each is checked alone. */
+type Piece = (m: Mesher) => void;
+
+function cranePieces(b: Building): Piece[] {
   const span = b.length / 2;
   const gauge = b.depth / 2;
   const deck = b.height * 0.78;
@@ -421,16 +424,27 @@ function crane(m: Mesher, b: Building): void {
   const leg = 1.2;
   const reach = span + b.length * BOOM_REACH - b.length / 2;
   const lift = b.height * 0.3;
+  const pieces: Piece[] = [];
   for (const x of [-span, span]) {
     for (const z of [-gauge, gauge]) {
-      block(m, [x - leg, x + leg], [z - leg, z + leg], [-SINK, deck], 'steel');
+      pieces.push((m) => {
+        block(m, [x - leg, x + leg], [z - leg, z + leg], [-SINK, deck], 'steel');
+      });
     }
   }
   for (const z of [-gauge, gauge]) {
-    block(m, [-span - 1.4, span + 1.4], [z - 1.3, z + 1.3], [deck, top], 'steel');
+    pieces.push((m) => {
+      block(m, [-span - 1.4, span + 1.4], [z - 1.3, z + 1.3], [deck, top], 'steel');
+    });
   }
-  block(m, [-span * 0.7, -span * 0.1], [-gauge - 1.3, gauge + 1.3], [deck, top], 'steel');
-  block(m, [-span * 0.6, -span * 0.2], [-3, 3], [top, top + 6], 'stripeRed');
+  pieces.push(
+    (m) => {
+      block(m, [-span * 0.7, -span * 0.1], [-gauge - 1.3, gauge + 1.3], [deck, top], 'steel');
+    },
+    (m) => {
+      block(m, [-span * 0.6, -span * 0.2], [-3, 3], [top, top + 6], 'stripeRed');
+    },
+  );
   const boom: Profile = {
     points: [
       [span, deck + 0.2],
@@ -449,10 +463,15 @@ function crane(m: Mesher, b: Building): void {
       ],
     ],
   };
-  for (const z of [-gauge, gauge]) prism(m, boom, 'z', z - 1, z + 1, plainSkin('steel'));
+  for (const z of [-gauge, gauge]) {
+    pieces.push((m) => {
+      prism(m, boom, 'z', z - 1, z + 1, plainSkin('steel'));
+    });
+  }
+  return pieces;
 }
 
-function landmark(m: Mesher, b: Building): boolean {
+function landmarkPieces(b: Building): Piece[] | null {
   const base = b.length / 2;
   switch (b.kind) {
     case 'chimney': {
@@ -460,72 +479,95 @@ function landmark(m: Mesher, b: Building): boolean {
         -SINK + ((b.height + SINK) * i) / 6,
         base * (1 - 0.4 * (i / 6)),
       ]);
-      loft(m, 8, rings, [
-        'stripeWhite',
-        'stripeWhite',
-        'stripeRed',
-        'stripeWhite',
-        'stripeRed',
-        'stripeWhite',
-      ]);
-      return true;
+      return [
+        (m) => {
+          loft(m, 8, rings, [
+            'stripeWhite',
+            'stripeWhite',
+            'stripeRed',
+            'stripeWhite',
+            'stripeRed',
+            'stripeWhite',
+          ]);
+        },
+      ];
     }
     case 'poplar':
-      loft(
-        m,
-        6,
-        [
-          [-SINK, base * 0.2],
-          [b.height * 0.3, base],
-          [b.height * 0.75, base * 0.8],
-          [b.height, 0],
-        ],
-        ['foliage'],
-      );
-      return true;
+      return [
+        (m) => {
+          loft(
+            m,
+            6,
+            [
+              [-SINK, base * 0.2],
+              [b.height * 0.3, base],
+              [b.height * 0.75, base * 0.8],
+              [b.height, 0],
+            ],
+            ['foliage'],
+          );
+        },
+      ];
     case 'pylon': {
-      loft(
-        m,
-        4,
-        [
-          [-SINK, base],
-          [b.height * 0.62, base * 0.25],
-          [b.height, base * 0.12],
-        ],
-        ['steel'],
-      );
       const bar = 1.2;
-      block(
-        m,
-        [-base * 1.2, base * 1.2],
-        [-bar / 2, bar / 2],
-        [b.height * 0.62, b.height * 0.62 + bar],
-        'steel',
-      );
-      block(
-        m,
-        [-base * 0.85, base * 0.85],
-        [-bar / 2, bar / 2],
-        [b.height * 0.82, b.height * 0.82 + bar],
-        'steel',
-      );
-      return true;
+      return [
+        (m) => {
+          loft(
+            m,
+            4,
+            [
+              [-SINK, base],
+              [b.height * 0.62, base * 0.25],
+              [b.height, base * 0.12],
+            ],
+            ['steel'],
+          );
+        },
+        (m) => {
+          block(
+            m,
+            [-base * 1.2, base * 1.2],
+            [-bar / 2, bar / 2],
+            [b.height * 0.62, b.height * 0.62 + bar],
+            'steel',
+          );
+        },
+        (m) => {
+          block(
+            m,
+            [-base * 0.85, base * 0.85],
+            [-bar / 2, bar / 2],
+            [b.height * 0.82, b.height * 0.82 + bar],
+            'steel',
+          );
+        },
+      ];
     }
     case 'crane':
-      crane(m, b);
-      return true;
+      return cranePieces(b);
     default:
-      return false;
+      return null;
   }
+}
+
+function piecesOf(b: Building): readonly Piece[] {
+  const landmark = landmarkPieces(b);
+  if (landmark !== null) return landmark;
+  return [
+    (m) => {
+      const next = rng(b.seed);
+      const skin =
+        b.kind === 'office'
+          ? officeSkin(b.skin, next)
+          : claddedSkin(b.skin, b.kind === 'hall', next);
+      prism(m, roofProfile(b), 'x', -b.length / 2, b.length / 2, skin);
+    },
+  ];
 }
 
 function addBuilding(m: Mesher, b: Building): void {
   m.place(b.heading, b.x, -b.y, b.haze);
-  if (landmark(m, b)) return;
-  const next = rng(b.seed);
-  const skin =
-    b.kind === 'office' ? officeSkin(b.skin, next) : claddedSkin(b.skin, b.kind === 'hall', next);
-  prism(m, roofProfile(b), 'x', -b.length / 2, b.length / 2, skin);
+  for (const piece of piecesOf(b)) piece(m);
 }
 
 /** One building, world space: for tests and callers that want a single solid. */
@@ -533,6 +575,16 @@ export function buildingGeometry(b: Building): BufferGeometry {
   const m = new Mesher();
   addBuilding(m, b);
   return m.geometry();
+}
+
+/** The closed solids a building is made of, world space: for tests. */
+export function buildingParts(b: Building): BufferGeometry[] {
+  return piecesOf(b).map((piece) => {
+    const m = new Mesher();
+    m.place(b.heading, b.x, -b.y, b.haze);
+    piece(m);
+    return m.geometry();
+  });
 }
 
 /** Every building in one geometry, so the skyline is a single draw call. */
