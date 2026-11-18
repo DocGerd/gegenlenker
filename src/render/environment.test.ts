@@ -1,6 +1,6 @@
 import { Layers, type Object3D } from 'three';
-import { describe, expect, it } from 'vitest';
-import { layouts } from '../content/registry';
+import { describe, expect, it, vi } from 'vitest';
+import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ScenePalette } from '../contracts/render';
 import { createMirror } from './mirror';
@@ -65,5 +65,22 @@ describe('environment quality', () => {
       expect(seen(env.object, cameras[view as keyof typeof cameras]), view).toEqual(meshes);
     }
     env.dispose();
+  });
+});
+
+describe('environment construction', () => {
+  it('never reaches Object3D.add with a non-object, for every layout and exercise', () => {
+    // Object3D.add() with no argument logs "object not an instance of THREE.Object3D".
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const resolved = [
+        ...Object.values(layouts).map((l) => resolveLayout(l, null)),
+        ...exercises.map((e) => resolveLayout(layouts[e.layout], e)),
+      ];
+      for (const l of resolved) proceduralEnvironment(l, palette).dispose();
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
   });
 });

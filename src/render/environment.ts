@@ -372,7 +372,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     const chunks = RESTYLED_KINDS.has(o.kind) ? topDownOnly : obstacles;
     addObstacle(o, palette, chunks, color, roof, isOnYard(yard, cx, cy));
   }
-  group.add(...obstacles.meshes(solid, geometries));
+  for (const mesh of obstacles.meshes(solid, geometries)) group.add(mesh);
   const tokens = topDownOnly.meshes(solid, geometries);
   for (const mesh of tokens) {
     mesh.layers.set(AIDS_LAYER);
@@ -388,7 +388,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
   const markings = new Chunks(layout.bounds);
   color.set(palette.marking);
   for (const m of layout.markings) addMarking(m, markings, color);
-  group.add(...markings.meshes(flat, geometries));
+  for (const mesh of markings.meshes(flat, geometries)) group.add(mesh);
 
   let yardBand: Group | null = null;
   const { target } = layout;

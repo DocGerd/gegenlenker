@@ -16,9 +16,13 @@ test('loads from the subpath and drives an exercise offline', async ({
   });
 
   const warnings: string[] = [];
+  const errors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'warning') warnings.push(m.text());
+    // Offline reloads log resource-load failures for unprecached requests.
+    if (m.type() === 'error' && !/net::ERR_/.test(m.text())) errors.push(m.text());
   });
+  page.on('pageerror', (e) => errors.push(e.message));
 
   await page.goto('./');
   await page.evaluate(async () => {
@@ -70,6 +74,7 @@ test('loads from the subpath and drives an exercise offline', async ({
     'man-le-18-280-body man-le-18-280-cab',
   );
   expect(warnings.filter((w) => w.includes('Shell '))).toEqual([]);
+  expect(errors).toEqual([]);
 });
 
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {
