@@ -14,7 +14,18 @@ const { module } = await runnerImport('/src/vehicles/estimates.ts', {
 });
 
 const text = readFileSync(doc, 'utf8');
-const [head, rest] = text.split(START);
-const tail = rest?.split(END)[1];
-if (tail === undefined) throw new Error('docs/vehicle-data.md has no estimates markers');
-writeFileSync(doc, `${head}${START}\n${module.estimatesTable()}\n${END}${tail}`);
+const once = (marker) => {
+  const at = text.indexOf(marker);
+  if (at === -1 || text.indexOf(marker, at + 1) !== -1) {
+    throw new Error(`docs/vehicle-data.md must contain ${marker} exactly once`);
+  }
+  return at;
+};
+const start = once(START);
+const end = once(END);
+if (end < start)
+  throw new Error('docs/vehicle-data.md has its estimates markers in the wrong order');
+writeFileSync(
+  doc,
+  `${text.slice(0, start)}${START}\n${module.estimatesTable()}\n${text.slice(end)}`,
+);

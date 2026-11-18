@@ -6,11 +6,11 @@ Live: https://docgerd.github.io/gegenlenker/
 
 ## Quickstart
 
-Requires Node 24 and pnpm.
+Requires Node and pnpm as pinned in `.nvmrc` and `package.json`.
 
 ```sh
 pnpm install
-pnpm dev        # dev server; /?probe, ?perf=1
+pnpm dev        # dev server
 pnpm test       # unit tests
 pnpm test:e2e   # Playwright offline check
 pnpm test:perf  # headed, hardware GL, local only
@@ -20,10 +20,7 @@ pnpm verify     # lint, format, typecheck, unit and e2e tests
 
 ## Layout
 
-- `src/`: the app (simulation, vehicles, rendering, HUD, input, i18n, PWA)
-- `dev/`: standalone harness pages
-- `e2e/`: Playwright specs
-- `scripts/`, `tools/`: generators and tooling, including the Blender cab source
+- `src/`: the app
 - `docs/`: reference documentation
 
 ## Documentation

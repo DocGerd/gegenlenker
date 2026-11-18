@@ -1,6 +1,6 @@
 # Vehicle data
 
-Every numeric vehicle dimension in `src/vehicles/*.ts` is either sourced from manufacturer or operator material or an estimate. Vehicle behaviour follows both.
+Every numeric vehicle dimension in `src/vehicles/*.ts` is either sourced from manufacturer or operator material or an estimate.
 
 ## Sources
 

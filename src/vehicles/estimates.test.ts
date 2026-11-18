@@ -8,5 +8,6 @@ it('vehicle-data doc lists every estimated parameter', () => {
     .split('<!-- estimates:start -->')[1]
     ?.split('<!-- estimates:end -->')[0]
     ?.trim();
+  expect(section, 'docs/vehicle-data.md is missing its estimates markers').toBeDefined();
   expect(section).toBe(estimatesTable().trim());
 });
