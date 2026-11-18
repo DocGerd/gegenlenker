@@ -9,8 +9,10 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
 Two vertex-coloured meshes, as two nodes (shell_common.py):
   "trailer"  in the trailer body frame, origin at the effective rear axle, +X forward
   "dolly"    in the dolly frame, origin at the turntable centre, +X forward (towards the drawbar eye)
-Livery is colours only: no lettering, emblems or maker logos. Kinds: "low-loader" (THW-blue deck and
-frame, a grating on the rear deck, silver loading ramps folded upright at the back) and "lafette"
+Livery is colours only: no lettering, emblems or maker logos. Kinds: "low-loader" (a machine
+transporter for a wheel loader: a THW-blue deck with four wheel troughs, a raised front section and a
+grated rear section sloping down to tall aluminium ladder ramps folded upright behind it, on dark-blue
+side members, crossmembers and beams, with lashing points and a rear lamp carrier) and "lafette"
 (a bare swap-body chassis: black frame, white side guard carrying the side contour and marker lamps,
 silver toolbox, yellow locating stops).
 
@@ -33,16 +35,25 @@ srgb = COMMON["srgb_to_linear"]
 
 EPS = 1e-6
 # low-loader
-GRATE_LENGTH = 1.0  # rear deck section laid as a grating
-GRATE_DROP = 0.03  # the grating's pan lies this far below the deck top
+PLATE = 0.08  # deck plating
+SIDE_MEMBER = (0.12, 0.06)  # width, and rise above the deck top
+SKIRT = (0.12, 0.1)  # side members hang this much deeper, from this far ahead of the tandem tyres
+STEP = 0.3  # length of the rise up to the front section
+GRATE_DROP = 0.03  # the grating's pan lies this far below the bar tops
 GRATE_BAR = 0.04
 GRATE_PITCH = 0.12
-PAN_RISE = 0.005
-SIDE_BEAM = 0.14  # edge beams along the deck
-SIDE_BEAM_RISE = 0.05
-RAMP_RIBS = 5
-RAMP_RIB = (0.04, 0.02)  # height and depth of the anti-slip ribs
-HINGE = 0.12
+PAN = 0.01
+TROUGH = (0.9, 0.55, 0.06)  # wheel trough length, width and depth
+TROUGH_AXLES = 2.2  # loader wheelbase: troughs straddle the main deck's middle
+TROUGH_TRACK = 1.6
+CROSS = (0.1, 0.1, 0.8)  # crossmember width, depth below the underside, pitch
+CROSS_REACH = 0.75  # crossmembers stay inboard of the tyres
+BEAM = ((0.38, 0.52), 0.15)  # main beams: lateral range, depth below the underside
+LASHING = (0.08, 0.03, 1.0)  # lashing point length and height, pitch
+STRINGER = 0.08  # ramp side rails
+RUNG = (0.04, 0.18)  # ramp rung height and pitch
+RAMP_CAP = 0.06
+HINGE = (0.12, 0.04, 0.08)  # hinge block width, reach below and above the rear deck
 # lafette
 CROSS_WIDTH = 0.12
 CROSS_DEPTH = 0.14
@@ -72,41 +83,141 @@ def swing_radius(p):
     return math.hypot(abs(d["axleX"]) + p["wheelRadius"], p["track"] / 2 + p["wheelWidth"] / 2)
 
 
+def mirror(side, a, b):
+    """Lateral range (a, b) measured outward from the centreline, on the side +1 (left) or -1."""
+    return (a, b) if side > 0 else (-b, -a)
+
+
+def sloped(shape, xs, bottoms, tops, y, colour):
+    """A beam between upright ends at xs[0] and xs[1], its bottom and top edges straight between them."""
+    (xa, xb), (ba, bb), (ta, tb) = xs, bottoms, tops
+    # the "zx" frame takes (z, x) pairs and extrudes along y
+    shape.prism([(ba, xa), (bb, xb), (tb, xb), (ta, xa)], y[0], y[1], colour, frame="zx")
+
+
+def troughs(p, start, end):
+    """Plan rectangles of the four wheel troughs, centred on the main deck."""
+    length, width, _ = TROUGH
+    mid = (start + end) / 2
+    out = []
+    for xc in (mid - TROUGH_AXLES / 2, mid + TROUGH_AXLES / 2):
+        for yc in (-TROUGH_TRACK / 2, TROUGH_TRACK / 2):
+            out.append(((xc - length / 2, xc + length / 2), (yc - width / 2, yc + width / 2)))
+    return out
+
+
+def plating(shape, xs, ys, holes, z, colour):
+    """Deck plating over xs by ys with rectangular holes, laid as the grid cells outside them."""
+    cuts_x = sorted({xs[0], xs[1], *(c for (x, _) in holes for c in x)})
+    cuts_y = sorted({ys[0], ys[1], *(c for (_, y) in holes for c in y)})
+    for x0, x1 in zip(cuts_x, cuts_x[1:]):
+        for y0, y1 in zip(cuts_y, cuts_y[1:]):
+            inside = any(hx[0] <= x0 + EPS and x1 <= hx[1] + EPS and hy[0] <= y0 + EPS and y1 <= hy[1] + EPS for hx, hy in holes)
+            if not inside:
+                shape.box((x0, x1), (y0, y1), z, colour)
+
+
 def deck_low_loader(p, shape, hues):
     hw, rear, front = p["width"] / 2, p["rearX"], p["frontX"]
-    z0, deck = p["underside"], p["deck"]
-    base, silver, black = hues["base"], hues["silver"], hues["black"]
-    pan_z = deck - GRATE_DROP
-    inner = hw - SIDE_BEAM
-    shape.box((rear, front), (-hw, hw), (z0, pan_z), base)
-    shape.box((rear + GRATE_LENGTH, front), (-inner, inner), (pan_z, deck), base)
+    under, deck = p["underside"], p["deck"]
+    d = p["lowLoader"]
+    base, frame, silver, black = hues["base"], hues["frame"], hues["silver"], hues["black"]
+    drop = deck - d["rearDeck"]
+    width, rise = SIDE_MEMBER
+    inner = hw - width
+    step = d["frontStart"] - STEP
+    # beams below the underside end clear of the dolly tyres' swing
+    reach = p["dolly"]["turntableX"] - swing_radius(p) - p["swingMargin"] - 0.05
+
+    # side members, following the deck: sloped rear, main deck, step and raised front; between the
+    # tandem's mudflaps and the dolly's swing they hang deeper
+    skirt = (max(p["rearAxleXs"]) + p["wheelRadius"] + SKIRT[1], reach)
     for side in (-1, 1):
-        lateral = (inner, hw) if side > 0 else (-hw, -inner)
-        shape.box((rear, front), lateral, (pan_z, deck + SIDE_BEAM_RISE), base)
-    shape.box(
-        (rear + 0.01, rear + GRATE_LENGTH), (-inner, inner), (pan_z, pan_z + PAN_RISE), black
+        y = mirror(side, inner, hw)
+        shape.box((d["carrierX"], d["slopeEnd"]), y, (under - drop, d["rearDeck"] + rise), frame)
+        sloped(shape, (d["slopeEnd"], d["slopeStart"]), (under - drop, under), (d["rearDeck"] + rise, deck + rise), y, frame)
+        shape.box((d["slopeStart"], skirt[0]), y, (under, deck + rise), frame)
+        shape.box(skirt, y, (under - SKIRT[0], deck + rise), frame)
+        shape.box((skirt[1], step), y, (under, deck + rise), frame)
+        sloped(shape, (step, d["frontStart"]), (under, under), (deck + rise, d["frontDeck"] + rise), y, frame)
+        shape.box((d["frontStart"], front), y, (under, d["frontDeck"] + rise), frame)
+    shape.box((front - 0.1, front), (-inner, inner), (under, d["frontDeck"]), frame)
+
+    # lamp carrier across the rear, the ramps' hinges just ahead of it
+    shape.box((rear, d["carrierX"]), (-hw, hw), (under, d["carrierTop"]), frame)
+
+    # main deck: plating with four wheel troughs, then the step and the raised front section
+    holes = troughs(p, d["slopeStart"], step)
+    plating(shape, (d["slopeStart"], step), (-inner, inner), holes, (deck - PLATE, deck), base)
+    trough_floor = deck - TROUGH[2]
+    for x, y in holes:
+        shape.box(x, y, (trough_floor - PAN, trough_floor), black)
+    sloped(shape, (step, d["frontStart"]), (deck - PLATE, d["frontDeck"] - PLATE), (deck, d["frontDeck"]), (-inner, inner), base)
+    shape.box((d["frontStart"], front - 0.1), (-inner, inner), (d["frontDeck"] - PLATE, d["frontDeck"]), base)
+
+    # rear section: a grating over a black pan, sloping down to the ramps
+    run = d["slopeStart"] - d["slopeEnd"]
+
+    def top_at(x):
+        return d["rearDeck"] + drop * (x - d["slopeEnd"]) / run
+
+    sloped(
+        shape,
+        (d["slopeEnd"], d["slopeStart"]),
+        (d["rearDeck"] - GRATE_DROP - PAN, deck - GRATE_DROP - PAN),
+        (d["rearDeck"] - GRATE_DROP, deck - GRATE_DROP),
+        (-inner, inner),
+        black,
     )
-    bars = int(GRATE_LENGTH / GRATE_PITCH + EPS) + 1
+    bars = int((run - GRATE_BAR) / GRATE_PITCH + EPS) + 1
     for i in range(bars):
-        x = rear + i * GRATE_PITCH
-        shape.box((x, x + GRATE_BAR), (-inner, inner), (pan_z, deck), base)
-    ramp = p["ramp"]
-    top = deck + ramp["height"]
-    rib_h, rib_d = RAMP_RIB
+        x = d["slopeEnd"] + i * GRATE_PITCH
+        z = top_at(x + GRATE_BAR / 2)
+        shape.box((x, x + GRATE_BAR), (-inner, inner), (z - GRATE_DROP, z), base)
+
+    # structure below the deck: crossmembers, two main beams and the axles
+    cross_w, cross_d, pitch = CROSS
+    span = reach - d["slopeStart"] - cross_w
+    count = max(2, round(span / pitch) + 1)
+    for i in range(count):
+        x = d["slopeStart"] + span * i / (count - 1)
+        shape.box((x, x + cross_w), (-CROSS_REACH, CROSS_REACH), (under - cross_d, deck - PLATE), frame)
+    (beam_in, beam_out), beam_d = BEAM
     for side in (-1, 1):
-        y = (ramp["gap"], ramp["gap"] + ramp["width"])
-        if side < 0:
-            y = (-y[1], -y[0])
-        front_face = rear + ramp["thickness"]
-        shape.box((rear, front_face), y, (deck, top), silver)
-        for k in range(RAMP_RIBS):
-            z = deck + 0.25 + k * (ramp["height"] - 0.5) / (RAMP_RIBS - 1)
-            shape.box((front_face, front_face + rib_d), (y[0] + 0.05, y[1] - 0.05), (z, z + rib_h), silver)
-        for inset in (0.02, ramp["width"] - HINGE - 0.02):
-            y0 = y[0] + inset
-            shape.box((rear + 0.02, front_face + 0.04), (y0, y0 + HINGE), (deck, deck + HINGE), black)
+        shape.box((d["slopeStart"], reach), mirror(side, beam_in, beam_out), (under - beam_d, deck - PLATE), frame)
     for x in p["rearAxleXs"]:
         shape.box((x - p["axleHalf"], x + p["axleHalf"]), (-p["track"] / 2, p["track"] / 2), p["axleZ"], black)
+
+    # lashing points along the side members' tops
+    length, height, spacing = LASHING
+    count = int((step - d["slopeStart"] - 0.4) / spacing + EPS) + 1
+    for i in range(count):
+        x = d["slopeStart"] + 0.2 + i * spacing
+        for side in (-1, 1):
+            shape.box((x, x + length), mirror(side, inner + 0.02, hw - 0.02), (deck + rise, deck + rise + height), black)
+
+    ramps(p, shape, silver, black)
+
+
+def ramps(p, shape, silver, black):
+    """Aluminium ladder ramps folded upright between the lamp carrier and the sloped deck."""
+    d, ramp = p["lowLoader"], p["ramp"]
+    xs = (d["carrierX"], d["slopeEnd"])
+    z0, top = d["rearDeck"], d["rampTop"]
+    rung_h, pitch = RUNG
+    hinge_w, below, above = HINGE
+    for side in (-1, 1):
+        outer = mirror(side, ramp["gap"], ramp["gap"] + ramp["width"])
+        for y in (mirror(side, ramp["gap"], ramp["gap"] + STRINGER), mirror(side, ramp["gap"] + ramp["width"] - STRINGER, ramp["gap"] + ramp["width"])):
+            shape.box(xs, y, (z0, top), silver)
+        rungs = mirror(side, ramp["gap"] + STRINGER, ramp["gap"] + ramp["width"] - STRINGER)
+        count = int((top - RAMP_CAP - z0 - 0.15) / pitch + EPS)
+        for k in range(count):
+            z = z0 + 0.15 + k * pitch
+            shape.box((xs[0] + 0.02, xs[1] - 0.02), rungs, (z, z + rung_h), silver)
+        shape.box(xs, outer, (top - RAMP_CAP, top), silver)
+        for inset in (0.02, ramp["width"] - hinge_w - 0.02):
+            shape.box(xs, mirror(side, ramp["gap"] + inset, ramp["gap"] + inset + hinge_w), (z0 - below, z0 + above), black)
 
 
 def side_marking(p, shape, side, outer, span, hues):
@@ -228,8 +339,9 @@ def check_trailer(p, shape):
                 raise ValueError("a face lies in the underrun guard")
         if z0 < p["underside"] - EPS and swing_gap(p, (x0, x1), (y0, y1)) < p["swingMargin"] - EPS:
             raise ValueError("a face below the underside enters the dolly wheels' swing")
-    # the tail lamps stand on the ramps or the lamp carrier
-    z_low, z_high = p["deck"] + lamp["sill"], p["deck"] + lamp["sill"] + lamp["height"]
+    # the tail lamps stand on the lamp carrier, at the rear deck's height
+    base = p["lowLoader"]["rearDeck"] if "lowLoader" in p else p["deck"]
+    z_low, z_high = base + lamp["sill"], base + lamp["sill"] + lamp["height"]
     carriers = []
     for (x0, x1), (y0, y1), (z0, z1) in shape.extents():
         if abs(x0 - p["rearX"]) < EPS and abs(x1 - p["rearX"]) < EPS and z0 <= z_low + EPS and z1 >= z_high - EPS:

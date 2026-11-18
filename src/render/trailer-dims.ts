@@ -1,5 +1,6 @@
-import type { TrailerSpec } from '../contracts/vehicle';
-import { trailerAnchors } from '../vehicles/anchors';
+import { TRUCK_IDS, type TrailerSpec } from '../contracts/vehicle';
+import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
+import { truckById } from '../vehicles/registry';
 import {
   CONTOUR_STRIP,
   MARKER_HEIGHT,
@@ -76,9 +77,45 @@ export function trailerFrame(spec: TrailerSpec) {
   };
 }
 
+/**
+ * The low-loader shell's machine deck, and the procedural detail that follows it in perspective.
+ * Render estimates, not Params: the procedural deck and the top-down view keep the flat deck.
+ */
+export const LOW_LOADER = {
+  carrierDepth: 0.08, // rear lamp carrier, ahead of rearX
+  slopeLength: 0.95, // rear section sloping down to the ramps
+  slopeDrop: 0.2,
+  frontLength: 1.6, // raised front section over the dolly
+  frontRise: 0.15,
+  rampAboveEye: 0.1, // folded ramps stand this far above the highest cockpit eye
+} as const;
+
+/** Where the low-loader shell's deck breaks, in the trailer body frame. */
+export function lowLoaderDeck(spec: TrailerSpec) {
+  const { a, deck } = trailerFrame(spec);
+  const rearDeck = deck - LOW_LOADER.slopeDrop;
+  const lampTop = rearDeck + metres(spec.tailLamp.sill) + metres(spec.tailLamp.height);
+  const slopeEnd = a.rearX + LOW_LOADER.carrierDepth + RAMP_THICKNESS; // ramps fold up in between
+  const eye = Math.max(...TRUCK_IDS.map((id) => truckAnchors(truckById(id)).eye.z));
+  return {
+    carrierX: round(a.rearX + LOW_LOADER.carrierDepth),
+    slopeEnd: round(slopeEnd),
+    slopeStart: round(slopeEnd + LOW_LOADER.slopeLength),
+    rearDeck: round(rearDeck),
+    contourZ: round(lampTop + CONTOUR_STRIP),
+    carrierTop: round(lampTop + 2 * CONTOUR_STRIP),
+    frontStart: round(a.frontX - LOW_LOADER.frontLength),
+    frontDeck: round(deck + LOW_LOADER.frontRise),
+    rampTop: round(eye + LOW_LOADER.rampAboveEye),
+  };
+}
+
+export type LowLoaderDeck = ReturnType<typeof lowLoaderDeck>;
+
 const HUES = {
   'low-loader': {
     base: hex(REALISM_HUES.thwBlue),
+    frame: hex(REALISM_HUES.thwBlueDeep),
     black: hex(REALISM_HUES.chevronBlack),
     silver: hex(REALISM_HUES.whiteAluminium),
   },
@@ -98,7 +135,7 @@ export function trailerShellParams(spec: TrailerSpec, look: TrailerLook = TRAILE
   const { a } = f;
   return {
     id: spec.id,
-    schema: 1,
+    schema: 2,
     kind: look.kind,
     width: metres(spec.width),
     rearX: round(a.rearX),
@@ -113,12 +150,7 @@ export function trailerShellParams(spec: TrailerSpec, look: TrailerLook = TRAILE
     axleHalf: AXLE_HALF_THICKNESS,
     rearAxleXs: a.rearAxles.map((axle) => round(axle.x)),
     rail: { halfGap: RAIL_HALF_GAP, width: RAIL_WIDTH },
-    ramp: {
-      gap: RAMP_GAP,
-      width: RAMP_WIDTH,
-      thickness: RAMP_THICKNESS,
-      height: RAMP_HEIGHT,
-    },
+    ramp: { gap: RAMP_GAP, width: RAMP_WIDTH },
     marking: {
       strip: CONTOUR_STRIP,
       markerLength: MARKER_LENGTH,
@@ -151,6 +183,7 @@ export function trailerShellParams(spec: TrailerSpec, look: TrailerLook = TRAILE
       postHalf: POST_HALF_WIDTH,
       axleX: round(a.frontAxle.x),
     },
+    ...(look.kind === 'low-loader' ? { lowLoader: lowLoaderDeck(spec) } : {}),
     hues: HUES[look.kind],
   };
 }

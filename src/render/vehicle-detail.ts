@@ -17,6 +17,7 @@ import {
 } from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
 import { tint } from './environment';
+import type { LowLoaderDeck } from './trailer-dims';
 import { PLATE_TEXT, REALISM_HUES as HUE } from './realism-hues';
 import { box, merge, wheelGeometry } from './vehicle-geometry';
 
@@ -57,22 +58,55 @@ type Sink = {
   box(x: Range, y: Range, z: Range, hue: number): void;
 };
 
+/** Which build a part belongs to: both, only the procedural one, or only the one shown with a shell. */
+type Only = 'procedural' | 'shell' | null;
+
 function collector() {
-  const parts: { readonly geometry: BufferGeometry; readonly bare: boolean }[] = [];
-  const sink = (bare: boolean): Sink => {
+  const parts: { readonly geometry: BufferGeometry; readonly only: Only }[] = [];
+  const sink = (only: Only): Sink => {
     const add = (geometry: BufferGeometry, hue: number): void => {
-      parts.push({ geometry: tint(geometry, new Color(hue)), bare });
+      parts.push({ geometry: tint(geometry, new Color(hue)), only });
     };
     return { add, box: (x, y, z, hue) => add(box(x, y, z), hue) };
   };
+  const build = (skip: Only): BufferGeometry =>
+    merge(parts.filter((part) => part.only !== skip).map((part) => part.geometry));
   return {
-    ...sink(true),
-    /** A sink whose parts `buildBare` leaves out. */
-    apart: (): Sink => sink(false),
-    build: (): BufferGeometry => merge(parts.map((part) => part.geometry)),
-    buildBare: (): BufferGeometry =>
-      merge(parts.filter((part) => part.bare).map((part) => part.geometry)),
+    ...sink(null),
+    only: (which: Exclude<Only, null>): Sink => sink(which),
+    build: (): BufferGeometry => build('shell'),
+    buildShell: (): BufferGeometry => build('procedural'),
   };
+}
+
+/** Body-frame box whose centre height runs from zc0 at x0 to zc1 at x1, sheared so its ends stay upright. */
+function slopedBox(
+  [x0, x1]: Range,
+  [y0, y1]: Range,
+  [zc0, zc1]: Range,
+  height: number,
+): BufferGeometry {
+  const slope = (zc1 - zc0) / (x1 - x0);
+  return new BoxGeometry(x1 - x0, height, y1 - y0)
+    .applyMatrix4(new Matrix4().makeShear(slope, 0, 0, 0, 0, 0))
+    .translate((x0 + x1) / 2, (zc0 + zc1) / 2, -(y0 + y1) / 2);
+}
+
+/** Height offset along x: linear between [x, dz] breakpoints sorted by x, constant beyond them. */
+type Profile = readonly (readonly [number, number])[];
+
+const FLAT: Profile = [];
+
+function offsetAt(profile: Profile, x: number): number {
+  const first = profile[0];
+  if (first === undefined) return 0;
+  let [px, pz] = first;
+  if (x <= px) return pz;
+  for (const [qx, qz] of profile.slice(1)) {
+    if (x <= qx) return pz + ((qz - pz) * (x - px)) / (qx - px);
+    [px, pz] = [qx, qz];
+  }
+  return pz;
 }
 
 /** Sidewall, rim and hub as discs standing proud of both tyre faces; centre at body (x, y, z). */
@@ -121,23 +155,39 @@ function mudflap(
   );
 }
 
-/** A yellow contour strip along both sides, with amber marker lamps straddling it. */
-function sideMarking(c: Sink, [x0, x1]: Range, halfWidth: number, zc: number, room: number): void {
+/**
+ * A yellow contour strip along both sides, with amber marker lamps straddling it; the strip's
+ * centre follows `profile` (zc plus its offset), so it can run down a sloped deck.
+ */
+function sideMarking(
+  c: Sink,
+  [x0, x1]: Range,
+  halfWidth: number,
+  zc: number,
+  room: number,
+  profile: Profile = FLAT,
+): void {
   const half = Math.min(MARKER_HEIGHT, room) / 2;
   const count = Math.max(2, Math.ceil((x1 - x0) / MARKER_SPACING) + 1);
+  const breaks = [x0, ...profile.map(([x]) => x).filter((x) => x > x0 && x < x1), x1];
   for (const side of [-1, 1]) {
-    c.box(
-      [x0, x1],
-      lateral(side, halfWidth, halfWidth + RELIEF),
-      [zc - STRIP / 2, zc + STRIP / 2],
-      HUE.contourSide,
-    );
+    const across = lateral(side, halfWidth, halfWidth + RELIEF);
+    for (let i = 1; i < breaks.length; i++) {
+      const span: Range = [breaks[i - 1] ?? x0, breaks[i] ?? x1];
+      const ends: Range = [zc + offsetAt(profile, span[0]), zc + offsetAt(profile, span[1])];
+      if (ends[0] === ends[1]) {
+        c.box(span, across, [ends[0] - STRIP / 2, ends[0] + STRIP / 2], HUE.contourSide);
+      } else {
+        c.add(slopedBox(span, across, ends, STRIP), HUE.contourSide);
+      }
+    }
     for (let i = 0; i < count; i++) {
       const x = x0 + MARKER_LENGTH + ((x1 - x0 - 2 * MARKER_LENGTH) * i) / (count - 1);
+      const z = zc + offsetAt(profile, x);
       c.box(
         [x - MARKER_LENGTH / 2, x + MARKER_LENGTH / 2],
         lateral(side, halfWidth, halfWidth + RELIEF_OVER),
-        [zc - half, zc + half],
+        [z - half, z + half],
         HUE.sideMarker,
       );
     }
@@ -278,19 +328,26 @@ export type TrailerDetailParams = {
   readonly track: number;
   readonly wheelWidth: number;
   readonly rearAxleXs: readonly number[];
+  /** The low-loader shell's deck, which the marking, rear contour and tail lamps follow with the shell on. */
+  readonly shellDeck: LowLoaderDeck | null;
 };
 
 /**
- * `bareGeometry` is `geometry` without what sits on a swap body's own faces (the side marking and
- * the top and side strips), for a shell that shows a bare chassis; it is null for a low-loader.
+ * `shellGeometry` is the detail shown with the trailer shell, or null when it is `geometry`. A bare
+ * chassis drops what sits on a swap body's own faces (the side marking and the top and side strips);
+ * a low-loader's marking, rear contour and tail lamps follow its sloped rear and lamp carrier.
  */
 export function trailerDetail(p: TrailerDetailParams): {
   geometry: BufferGeometry;
-  bareGeometry: BufferGeometry | null;
+  shellGeometry: BufferGeometry | null;
   plate: PlateSpot;
 } {
   const c = collector();
-  const onBox = p.isBox ? c.apart() : c;
+  const deck = p.shellDeck;
+  const replaced = c.only('procedural');
+  const shellOnly = c.only('shell');
+  const onBox = p.isBox ? replaced : c;
+  const flat = deck === null ? c : replaced;
   const hw = p.halfWidth;
   const rear: Range = [p.rearX - RELIEF, p.rearX];
   const slab = p.deck - p.underside;
@@ -324,20 +381,22 @@ export function trailerDetail(p: TrailerDetailParams): {
     guard[1] - guard[0],
   );
 
-  sideMarking(
-    onBox,
-    [p.rearX + END_MARGIN, p.frontX - END_MARGIN],
-    hw,
-    lowerZ,
-    p.isBox ? p.bodyTop - p.deck : slab,
-  );
-  // the lower rear contour stays with the shell: it sits on the lamp carrier
-  c.box(
-    rear,
-    [-(hw - STRIP), hw - STRIP],
-    [lowerZ - STRIP / 2, lowerZ + STRIP / 2],
-    HUE.contourRear,
-  );
+  const markingSpan: Range = [p.rearX + END_MARGIN, p.frontX - END_MARGIN];
+  const markingRoom = p.isBox ? p.bodyTop - p.deck : slab;
+  sideMarking(p.isBox ? onBox : flat, markingSpan, hw, lowerZ, markingRoom);
+  const rearContour = (sink: Sink, z: number): void => {
+    sink.box(rear, [-(hw - STRIP), hw - STRIP], [z - STRIP / 2, z + STRIP / 2], HUE.contourRear);
+  };
+  // the lower rear contour stays with a bare chassis: it sits on the lamp carrier
+  rearContour(flat, lowerZ);
+  if (deck !== null) {
+    const drop = deck.rearDeck - p.deck;
+    sideMarking(shellOnly, markingSpan, hw, lowerZ, markingRoom, [
+      [deck.slopeEnd, drop],
+      [deck.slopeStart, 0],
+    ]);
+    rearContour(shellOnly, deck.contourZ);
+  }
   if (p.isBox) {
     const top = p.bodyTop - STRIP;
     onBox.box(
@@ -362,13 +421,17 @@ export function trailerDetail(p: TrailerDetailParams): {
     }
   }
 
-  for (const side of [-1, 1]) {
-    c.box(
+  const tailLamps = (sink: Sink, base: number, side: number): void => {
+    sink.box(
       [p.rearX - RELIEF_OVER, p.rearX],
       lateral(side, hw - m(tailLamp.inset) - m(tailLamp.width), hw - m(tailLamp.inset)),
-      [p.deck + m(tailLamp.sill), p.deck + m(tailLamp.sill) + m(tailLamp.height)],
+      [base + m(tailLamp.sill), base + m(tailLamp.sill) + m(tailLamp.height)],
       HUE.tailLamp,
     );
+  };
+  for (const side of [-1, 1]) {
+    tailLamps(flat, p.deck, side);
+    if (deck !== null) tailLamps(shellOnly, deck.rearDeck, side);
     for (const axleX of p.rearAxleXs) {
       const y = (side * p.track) / 2;
       // the flap ends under the deck rather than standing through it
@@ -388,7 +451,7 @@ export function trailerDetail(p: TrailerDetailParams): {
 
   return {
     geometry: c.build(),
-    bareGeometry: p.isBox ? c.buildBare() : null,
+    shellGeometry: p.isBox || deck !== null ? c.buildShell() : null,
     plate: {
       x: p.rearX - PLATE_RELIEF,
       y: 0,

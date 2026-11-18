@@ -68,6 +68,13 @@ describe.skipIf(!python)('trailer_shell.py geometry checks', () => {
     const near = { ...krone, rearAxleXs: [5] };
     expect(run(near)).toMatch(/swing/);
   });
+
+  it('refuse a low-loader whose tail lamps rise above the lamp carrier', () => {
+    const params = trailerShellParams(trailerById('hueffermann-hpa-24-81-l'));
+    if (params.lowLoader === undefined) throw new Error('the Hüffermann has no low-loader deck');
+    const short = { ...params, lowLoader: { ...params.lowLoader, carrierTop: 0.7 } };
+    expect(run(short)).toMatch(/tail lamp has no surface/);
+  });
 });
 
 describe.skipIf(!python)('body_shell.py geometry checks', () => {

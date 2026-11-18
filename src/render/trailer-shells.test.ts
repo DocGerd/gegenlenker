@@ -3,8 +3,9 @@ import { join } from 'node:path';
 import { Box3, Color, Layers, Mesh, type Object3D, Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
-import { TRAILER_IDS, type TrailerId } from '../contracts/vehicle';
-import { trailerById } from '../vehicles/registry';
+import { TRAILER_IDS, TRUCK_IDS, type TrailerId } from '../contracts/vehicle';
+import { truckAnchors } from '../vehicles/anchors';
+import { trailerById, truckById } from '../vehicles/registry';
 import { createMirror } from './mirror';
 import {
   parseTrailerShell,
@@ -27,7 +28,6 @@ import {
 import {
   EYE_BLOCK,
   PLATE_RADIUS,
-  RAMP_HEIGHT,
   SWING_MARGIN,
   TRAILER_WHEEL_WIDTH,
   trailerFrame,
@@ -48,7 +48,7 @@ const MIN_VERTICES = { trailer: 600, dolly: 250 } as const;
 /** Meshopt quantisation moves positions by a couple of millimetres. */
 const TOLERANCE = 5e-3;
 const COLOUR_TOLERANCE = 1 / 255;
-/** Heights above the deck of the tallest parts: the ramps, or the lamp carrier (trailer_shell.py LAMP_BAR). */
+/** Height above the deck of the lamp carrier, a bare chassis' tallest part (trailer_shell.py LAMP_BAR). */
 const LAMP_BAR_HEIGHT = 0.4;
 
 /** Plan distance from (tx, 0) to the segment p-q, in three space (x, z). */
@@ -68,7 +68,7 @@ describe.each(TRAILER_IDS)('trailer shell asset of %s', (id) => {
   it('keeps the trailer inside its footprint and fills it', async () => {
     const { mesh } = (await load(id)).trailer;
     const box = new Box3().setFromObject(mesh);
-    const top = f.deck + (TRAILER_LOOKS[id].kind === 'low-loader' ? RAMP_HEIGHT : LAMP_BAR_HEIGHT);
+    const top = params.lowLoader?.rampTop ?? f.deck + LAMP_BAR_HEIGHT;
     expect(mesh.geometry.getAttribute('position').count).toBeGreaterThanOrEqual(
       MIN_VERTICES.trailer,
     );
@@ -83,6 +83,22 @@ describe.each(TRAILER_IDS)('trailer shell asset of %s', (id) => {
     expect(box.max.y).toBeLessThanOrEqual(top + TOLERANCE);
     expect(box.max.y).toBeCloseTo(top, 2);
   });
+
+  it.runIf(TRAILER_LOOKS[id].kind === 'low-loader')(
+    'folds the ramps up at least to every cockpit eye, behind a sloped rear and a raised front',
+    () => {
+      const deck = params.lowLoader;
+      for (const truck of TRUCK_IDS) {
+        expect(deck?.rampTop).toBeGreaterThanOrEqual(truckAnchors(truckById(truck)).eye.z);
+      }
+      expect(deck?.rearDeck).toBeLessThan(f.deck);
+      expect(deck?.frontDeck).toBeGreaterThan(f.deck);
+      // the lamps sit on the carrier, above the underrun guard's reach below the underside
+      expect((deck?.rearDeck ?? 0) + spec.tailLamp.sill.value / 1000).toBeGreaterThanOrEqual(
+        f.underside,
+      );
+    },
+  );
 
   it('keeps the dolly between its axle, the turntable and the drawbar eye', async () => {
     const { mesh } = (await load(id)).dolly;
@@ -262,7 +278,7 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
   it(
     isBox
       ? 'replaces the detail by one without the swap body marking, and adds the shell'
-      : 'keeps the detail and adds the shell',
+      : 'replaces the detail by one that follows the deck, and adds the shell',
     async () => {
       const d = deferred(await load(id));
       const visual = proceduralTrailer(spec, palette, d.shells);
@@ -273,8 +289,8 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
       const after = sky();
       const added = after.filter((m) => !before.includes(m));
       const removed = before.filter((m) => !after.includes(m));
-      expect(removed).toHaveLength(isBox ? 1 : 0);
-      expect(added).toHaveLength(isBox ? 2 : 1);
+      expect(removed).toHaveLength(1);
+      expect(added).toHaveLength(2);
       if (isBox) {
         const vertices = (m: Mesh): number => m.geometry.getAttribute('position').count;
         const bare = added.find((m) => vertices(m) < vertices(removed[0] ?? m));

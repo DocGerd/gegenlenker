@@ -1,6 +1,6 @@
 {
   "id": "hueffermann-hpa-24-81-l",
-  "schema": 1,
+  "schema": 2,
   "kind": "low-loader",
   "width": 2.55,
   "rearX": -2.22,
@@ -15,7 +15,7 @@
   "axleHalf": 0.07,
   "rearAxleXs": [0.655, -0.655],
   "rail": { "halfGap": 0.45, "width": 0.2 },
-  "ramp": { "gap": 0.15, "width": 0.9, "thickness": 0.1, "height": 1.2 },
+  "ramp": { "gap": 0.15, "width": 0.9 },
   "marking": {
     "strip": 0.06,
     "markerLength": 0.2,
@@ -40,5 +40,16 @@
     "postHalf": 0.15,
     "axleX": 0
   },
-  "hues": { "base": "#00387b", "black": "#101214", "silver": "#a5a5a5" }
+  "lowLoader": {
+    "carrierX": -2.14,
+    "slopeEnd": -2.04,
+    "slopeStart": -1.09,
+    "rearDeck": 0.5,
+    "contourZ": 0.86,
+    "carrierTop": 0.92,
+    "frontStart": 4.9,
+    "frontDeck": 0.85,
+    "rampTop": 2.25
+  },
+  "hues": { "base": "#00387b", "frame": "#00214a", "black": "#101214", "silver": "#a5a5a5" }
 }
