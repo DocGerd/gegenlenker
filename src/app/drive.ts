@@ -334,7 +334,7 @@ export function startDrive(
       dirty = true;
       pathStale = true;
       updateSettings({ aids });
-      remeasure();
+      arrange();
     } else if (closeSheet === null) {
       togglePause();
     }

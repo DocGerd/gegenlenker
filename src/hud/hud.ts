@@ -26,7 +26,7 @@ export type HudAction =
   | { type: 'aid'; aid: keyof AidFlags; on: boolean }
   | { type: 'collapse'; panel: keyof CollapsedPanels; collapsed: boolean }
   /** The aid legend opened or closed, which changes the height of the panels. */
-  | { type: 'aidLegend'; open: boolean }
+  | { type: 'aidLegend' }
   | { type: 'finish' }
   | { type: 'menu' };
 
@@ -308,7 +308,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     () => {
       setHidden(aidLegend, !aidLegend.hidden);
       legendToggle.setAttribute('aria-expanded', String(!aidLegend.hidden));
-      emit({ type: 'aidLegend', open: !aidLegend.hidden });
+      emit({ type: 'aidLegend' });
     },
     { signal },
   );

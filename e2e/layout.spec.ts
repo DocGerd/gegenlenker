@@ -399,12 +399,16 @@ async function expectDividerClearOrHidden(page: Page, size: Size): Promise<void>
     await expect(handle(page)).toBeHidden();
     return;
   }
+  await expect(handle(page)).toBeVisible();
   const panels = await boxes(
     page.locator(
       '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle, .hud-aid-legend',
     ),
   );
-  for (const d of await boxes(page.locator('.hud-split-handle, .hud-split-reset'))) {
+  const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
+  expect(panels.length).toBeGreaterThan(0);
+  expect(divider).toHaveLength(2);
+  for (const d of divider) {
     for (const c of panels) expect(overlaps(d, c), `${d.name} overlaps ${c.name}`).toBe(false);
     expect(d.bottom, `${d.name} on screen`).toBeLessThanOrEqual(size.height);
     expect(d.right, `${d.name} on screen`).toBeLessThanOrEqual(size.width);
@@ -424,7 +428,9 @@ test('opening the aid legend re-measures the divider against the panels', async 
   const toggle = page.locator('[data-hud="aidLegendToggle"]');
   await toggle.click();
   await expect(page.locator('[data-hud="aidLegend"]')).toBeVisible();
-  await expectDividerClearOrHidden(page, size);
+  // The opened legend leaves the divider no room here.
+  await expect(splitBar(page)).toHaveAttribute('hidden', '');
+  await expect(handle(page)).toBeHidden();
 
   await toggle.click();
   await expect(page.locator('[data-hud="aidLegend"]')).toBeHidden();
@@ -443,14 +449,38 @@ test('folding and unfolding a panel re-measures the divider against the panels',
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
 
   const aids = page.locator('[data-panel="aids"]');
+  await expect(aids).toHaveAttribute('aria-pressed', 'true');
   await aids.click();
+  await expect(aids).toHaveAttribute('aria-pressed', 'false');
   await expect(handle(page)).toBeVisible();
   await expectDividerClearOrHidden(page, size);
 
-  // The folded state is stored: the next run lays out with the divider, then unfolds under it.
+  // The folded state is stored: the next run starts with the aids panel folded and the divider in place.
   await startStraightReverse(page, en.exerciseStraightReverse);
+  await expect(aids).toHaveAttribute('aria-pressed', 'false');
   await expect(handle(page)).toBeVisible();
   await aids.click();
+  await expect(aids).toHaveAttribute('aria-pressed', 'true');
+  await expect(splitBar(page)).toHaveAttribute('hidden', '');
+  await expectDividerClearOrHidden(page, size);
+});
+
+test('toggling the pivots aid re-measures the divider against the panels', async ({ page }) => {
+  // The pivots aid shows the gauge panel: with it the divider has no room here, without it it does.
+  const size = { width: 1024, height: 560 };
+  await page.setViewportSize(size);
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const pivots = page.locator('[data-aid="pivots"]');
+  await expect(pivots).toHaveAttribute('aria-pressed', 'true');
+  await expect(splitBar(page)).toHaveAttribute('hidden', '');
+
+  await pivots.click();
+  await expect(pivots).toHaveAttribute('aria-pressed', 'false');
+  await expect(handle(page)).toBeVisible();
+  await expectDividerClearOrHidden(page, size);
+
+  await pivots.click();
+  await expect(pivots).toHaveAttribute('aria-pressed', 'true');
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
   await expectDividerClearOrHidden(page, size);
 });
