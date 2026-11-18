@@ -19,8 +19,10 @@ test('loads from the subpath and drives an exercise offline', async ({
   const errors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'warning') warnings.push(m.text());
-    if (m.type() === 'error') errors.push(m.text());
+    // Offline reloads log resource-load failures for unprecached requests.
+    if (m.type() === 'error' && !/net::ERR_/.test(m.text())) errors.push(m.text());
   });
+  page.on('pageerror', (e) => errors.push(e.message));
 
   await page.goto('./');
   await page.evaluate(async () => {

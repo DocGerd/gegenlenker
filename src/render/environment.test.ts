@@ -1,6 +1,6 @@
 import { Layers, type Object3D } from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import { layouts } from '../content/registry';
+import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ScenePalette } from '../contracts/render';
 import { createMirror } from './mirror';
@@ -69,18 +69,15 @@ describe('environment quality', () => {
 });
 
 describe('environment construction', () => {
-  it('adds no empty batch to the scene graph when every obstacle is restyled', () => {
+  it('never reaches Object3D.add with a non-object, for every layout and exercise', () => {
     // Object3D.add() with no argument logs "object not an instance of THREE.Object3D".
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
-      const l = Object.values(layouts)
-        .map((x) => resolveLayout(x, null))
-        .find(
-          (x) => x.obstacles.length > 0 && x.obstacles.every((o) => RESTYLED_KINDS.has(o.kind)),
-        );
-      expect(l).toBeDefined();
-      if (l === undefined) return;
-      proceduralEnvironment(l, palette).dispose();
+      const resolved = [
+        ...Object.values(layouts).map((l) => resolveLayout(l, null)),
+        ...exercises.map((e) => resolveLayout(layouts[e.layout], e)),
+      ];
+      for (const l of resolved) proceduralEnvironment(l, palette).dispose();
       expect(error).not.toHaveBeenCalled();
     } finally {
       error.mockRestore();
