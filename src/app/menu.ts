@@ -273,7 +273,8 @@ export function showMenu(
 
     graphics.addEventListener('change', () => {
       const preset = GRAPHICS_PRESETS.find((v) => v === graphics.value);
-      if (preset !== undefined) updateSettings({ graphics: preset });
+      if (preset === undefined) graphics.value = currentSettings().graphics;
+      else updateSettings({ graphics: preset });
     });
 
     paintOffline();

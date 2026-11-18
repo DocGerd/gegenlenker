@@ -43,11 +43,12 @@ export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsa
       camera.rotation.set(PITCH, facing - Math.PI / 2, 0);
     },
     /** Takes effect on the next capture: the target is rebuilt because its samples are fixed at creation. */
-    setSamples(next: number): void {
-      if (next === samples) return;
+    setSamples(next: number, maxSamples: number): void {
       samples = next;
-      target?.dispose();
+      if (target === null || target.samples === Math.min(next, maxSamples)) return;
+      target.dispose();
       target = null;
+      material.map = null;
     },
     capture(
       renderer: WebGLRenderer,

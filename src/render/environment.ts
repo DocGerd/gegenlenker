@@ -18,7 +18,7 @@ import type { Tolerances } from '../contracts/exercise';
 import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
 import type { QualityFlags } from './quality';
-import { AIDS_LAYER, SKY_LAYER, type Environment } from './seams';
+import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER, type Environment } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSky, neutralSky } from './sky';
 import { createSkyline } from './skyline';
@@ -501,7 +501,7 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
       // Without the props the obstacles must still show in perspective, so the tokens go to every camera.
       for (const mesh of tokens) {
         if (flags.yardDetail) mesh.layers.set(AIDS_LAYER);
-        else mesh.layers.enable(0);
+        else mesh.layers.enable(DEFAULT_LAYER);
       }
     },
     dispose: () => {

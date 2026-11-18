@@ -317,6 +317,7 @@ export function proceduralTruck(
   let cabGlb = true;
   const cancelShell = shells?.onLoaded(spec.id, (loaded) => {
     shell = applyCabShell(group, cabBox, cabFront, loaded, palette, cabGlb);
+    return cabGlb;
   });
 
   return {
@@ -518,6 +519,7 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
     },
+    setQuality: () => undefined,
     dispose() {
       res.dispose();
       dollyPlan.dispose();

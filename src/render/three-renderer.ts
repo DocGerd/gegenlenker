@@ -96,8 +96,9 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   enableLayers(topDownCamera.layers, TOP_DOWN_LAYERS);
   topDownCamera.rotation.x = -Math.PI / 2;
   topDownCamera.position.y = SKY_HEIGHT;
-  const mirrorLeft = createMirror();
-  const mirrorRight = createMirror();
+  let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
+  const mirrorLeft = createMirror(quality.mirrorMsaa);
+  const mirrorRight = createMirror(quality.mirrorMsaa);
   const mirrorPosition = new Vector3();
   const projected = new Vector3();
 
@@ -107,7 +108,6 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   let cssWidth = 0;
   let cssHeight = 0;
   let appliedRatio = 0;
-  let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
   let contextLost = false;
   let glRenderer = 'unknown';
   let drawCalls = 0;
@@ -145,9 +145,9 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   }
 
   function applyQuality(b: Built): void {
-    b.environment.setQuality?.(quality);
-    b.truck.setQuality?.(quality);
-    b.trailer.setQuality?.(quality);
+    b.environment.setQuality(quality);
+    b.truck.setQuality(quality);
+    b.trailer.setQuality(quality);
   }
 
   function disposeBuilt(): void {
@@ -265,10 +265,13 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     },
 
     setQuality(preset: GraphicsPreset) {
-      quality = QUALITY_FLAGS[preset];
-      appliedRatio = 0;
-      mirrorLeft.setSamples(quality.mirrorMsaa);
-      mirrorRight.setSamples(quality.mirrorMsaa);
+      const next = QUALITY_FLAGS[preset];
+      if (next === quality) return;
+      if (next.pixelRatioCap !== quality.pixelRatioCap) appliedRatio = 0;
+      quality = next;
+      const maxSamples = renderer?.capabilities.maxSamples ?? 0;
+      mirrorLeft.setSamples(quality.mirrorMsaa, maxSamples);
+      mirrorRight.setSamples(quality.mirrorMsaa, maxSamples);
       if (built !== null) applyQuality(built);
     },
 

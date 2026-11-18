@@ -52,6 +52,7 @@ function deferred(shell: CabShell): { shells: CabShells; apply: () => void } {
   let apply = (): void => undefined;
   return {
     shells: {
+      setEnabled: () => undefined,
       onLoaded: (_id, cb) => {
         apply = () => {
           cb(shell);
@@ -119,13 +120,13 @@ describe('cab shell swap', () => {
     const visual = proceduralTruck(spec, palette, shells);
     const group = visual.object;
     const before = group.children.map((m) => [m, m.layers.mask] as const);
-    visual.setQuality?.(QUALITY_FLAGS.low);
+    visual.setQuality(QUALITY_FLAGS.low);
     apply();
     expect(group.children.map((m) => [m, m.layers.mask])).toEqual(before);
 
-    visual.setQuality?.(QUALITY_FLAGS.balanced);
+    visual.setQuality(QUALITY_FLAGS.balanced);
     expect(group.children).toHaveLength(before.length + 1);
-    visual.setQuality?.(QUALITY_FLAGS.low);
+    visual.setQuality(QUALITY_FLAGS.low);
     expect(group.children).toHaveLength(before.length);
     for (const [m, mask] of before) {
       expect(group.children).toContain(m);
@@ -151,7 +152,10 @@ describe('cab shell swap', () => {
 
   it('stops waiting for the shell when disposed', () => {
     const cancel = vi.fn();
-    proceduralTruck(spec, palette, { onLoaded: () => cancel }).dispose();
+    proceduralTruck(spec, palette, {
+      onLoaded: () => cancel,
+      setEnabled: () => undefined,
+    }).dispose();
     expect(cancel).toHaveBeenCalledOnce();
   });
 });
@@ -177,12 +181,35 @@ describe('cab shell loading', () => {
     const shell = await parseCabShell(glb());
     const onApplied = vi.fn();
     const shells = startCabShells(() => Promise.resolve(shell), onApplied);
-    const apply = vi.fn();
-    const cancelled = vi.fn();
+    const apply = vi.fn(() => true);
+    const cancelled = vi.fn(() => true);
     shells.onLoaded('man-le-18-280', apply);
     shells.onLoaded('man-le-18-280', cancelled)();
     await vi.waitFor(() => expect(apply).toHaveBeenCalledExactlyOnceWith(shell));
     expect(onApplied).toHaveBeenCalledExactlyOnceWith('man-le-18-280');
     expect(cancelled).not.toHaveBeenCalled();
+  });
+
+  it('does not report a shell that was not attached', async () => {
+    const shell = await parseCabShell(glb());
+    const onApplied = vi.fn();
+    const apply = vi.fn(() => false);
+    startCabShells(() => Promise.resolve(shell), onApplied).onLoaded('man-le-18-280', apply);
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
+    expect(onApplied).not.toHaveBeenCalled();
+  });
+
+  it('downloads nothing until enabled', async () => {
+    const shell = await parseCabShell(glb());
+    const load = vi.fn(() => Promise.resolve(shell));
+    const shells = startCabShells(load, undefined, false);
+    const apply = vi.fn(() => true);
+    shells.onLoaded('man-le-18-280', apply);
+    shells.setEnabled(false);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(load).not.toHaveBeenCalled();
+    shells.setEnabled(true);
+    await vi.waitFor(() => expect(apply).toHaveBeenCalledOnce());
+    expect(load).toHaveBeenCalledOnce();
   });
 });
