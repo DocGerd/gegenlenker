@@ -12,6 +12,7 @@ import { isDefaultView } from '../input/top-down-view';
 import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay } from '../render/perf-overlay';
 import { computeViewports } from '../render/viewports';
+import { holdWakeLock } from '../pwa/wake-lock';
 import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
 import { createContactQuery } from '../sim/collision';
@@ -157,6 +158,7 @@ export function startDrive(
   const view = mountRenderStage(stage, stage, () => exit(false));
   if (view === null) return () => exit(false);
   cleanups.push(() => view.dispose());
+  cleanups.push(holdWakeLock());
   const onEscape = (e: KeyboardEvent): void => {
     if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
     e.preventDefault();

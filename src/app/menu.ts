@@ -12,6 +12,7 @@ import {
 } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { bestKey, exerciseDone } from '../scoring/best';
+import { offlineStatus, onOfflineStatus } from '../pwa/offline-status';
 import { trailers, trucks } from '../vehicles/registry';
 import type { RunConfig } from './drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
@@ -61,7 +62,10 @@ const MARKUP = `
       <label class="menu-field"><span class="menu-label" data-i18n="theme"></span><select class="menu-select" data-menu="theme"></select></label>
     </div>
   </section>
-  <footer class="menu-footer">© 2026 Patrick Kuhn</footer>
+  <footer class="menu-footer">
+    <span>© 2026 Patrick Kuhn</span>
+    <span class="menu-offline" data-menu="offline" role="status"></span>
+  </footer>
 </main>`;
 
 const query = <T extends Element>(
@@ -142,6 +146,15 @@ export function showMenu(
   const container = document.createElement('div');
   container.className = 'menu-scroll';
   root.append(container);
+
+  const paintOffline = (): void => {
+    const el = container.querySelector('[data-menu="offline"]');
+    if (!(el instanceof HTMLElement)) return;
+    const status = offlineStatus();
+    el.textContent =
+      status === 'ready' ? t('offlineReady') : status === 'failed' ? t('offlineSetupFailed') : '';
+  };
+  const stopOffline = onOfflineStatus(paintOffline);
 
   const render = (focus: string | null): void => {
     const settings = currentSettings();
@@ -244,9 +257,13 @@ export function showMenu(
       updateSettings({ theme: pref });
     });
 
+    paintOffline();
     if (focus !== null) query(container, focus, HTMLElement).focus();
   };
 
   render(null);
-  return () => container.remove();
+  return () => {
+    stopOffline();
+    container.remove();
+  };
 }
