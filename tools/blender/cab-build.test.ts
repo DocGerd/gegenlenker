@@ -8,6 +8,7 @@ import {
   CAB_FILES,
   type CabManifest,
   canonicalJson,
+  glbSceneExtras,
   glbSha256,
   paramsSha256,
   ROOT,
@@ -34,6 +35,13 @@ describe('cab shell build', () => {
       paramsSha256: manifest.paramsSha256,
       glbSha256: manifest.glbSha256,
       glbBytes: manifest.glbBytes,
+    });
+  });
+
+  it('was built from the current script and params', () => {
+    expect(glbSceneExtras()).toEqual({
+      scriptSha256: scriptSha256(),
+      paramsSha256: paramsSha256(),
     });
   });
 

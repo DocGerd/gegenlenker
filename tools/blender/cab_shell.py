@@ -13,6 +13,7 @@ No read_factory_settings: it also reloads preferences and disables add-ons, such
 Deterministic: fixed names, ordered lists, no clock or randomness.
 """
 
+import hashlib
 import json
 import os
 
@@ -37,7 +38,7 @@ GLTF_OPTIONS = {
     "export_all_vertex_colors": False,
     "export_attributes": False,
     "export_image_format": "NONE",
-    "export_extras": False,
+    "export_extras": True,
     "export_cameras": False,
     "export_lights": False,
     "export_animations": False,
@@ -45,6 +46,17 @@ GLTF_OPTIONS = {
     "export_morph": False,
     "export_draco_mesh_compression_enable": False,
 }
+
+# A missing one changes the output (axis, normals, colours, provenance), so it is an error.
+REQUIRED_OPTIONS = (
+    "export_format",
+    "export_yup",
+    "export_vertex_color",
+    "export_normals",
+    "export_apply",
+    "export_extras",
+    "use_active_scene",
+)
 
 
 def srgb_to_linear(hex_colour):
@@ -174,6 +186,10 @@ def fittings(p):
 
 def reset_scene():
     """One empty scene and no leftover datablocks; preferences and add-ons stay untouched."""
+    if bpy.data.filepath:
+        raise RuntimeError("refusing to reset a saved session: " + bpy.data.filepath)
+    if bpy.data.is_dirty and [s.name for s in bpy.data.scenes] != ["cab-shell"]:
+        raise RuntimeError("refusing to reset a session with unsaved work")
     window = bpy.context.window
     keep = bpy.context.scene
     if window is not None:
@@ -230,9 +246,27 @@ def add_object(name, shape, mat, colours):
 
 def export_options(out_path):
     known = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
+    missing = [k for k in REQUIRED_OPTIONS if k not in known]
+    if missing:
+        raise RuntimeError("this Blender lacks glTF export options: " + ", ".join(missing))
     options = {k: v for k, v in sorted(GLTF_OPTIONS.items()) if k in known}
     dropped = sorted(k for k in GLTF_OPTIONS if k not in known)
     return dict(options, filepath=out_path), dropped
+
+
+def provenance(params):
+    """Hashes of this script (LF-normalised) and the params, as tools/blender/cab-build.ts computes them.
+
+    The params hash relies on json.dumps and JSON.stringify printing the same numbers; the
+    committed params use plain decimals, and the glb check in cab-build.test.ts would catch a drift.
+    """
+    with open(__file__, "rb") as f:
+        script = f.read().replace(b"\r\n", b"\n")
+    canonical = json.dumps(params, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return {
+        "scriptSha256": hashlib.sha256(script).hexdigest(),
+        "paramsSha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+    }
 
 
 def main():
@@ -247,10 +281,16 @@ def main():
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
 
     reset_scene()
+    for key, value in provenance(params).items():
+        bpy.context.scene[key] = value
     add_object("cab-body", shell(params), material("cab-body"), colours=False)
     add_object("cab-detail", fittings(params), material("cab-detail"), colours=True)
     options, dropped = export_options(out_path)
-    bpy.ops.export_scene.gltf(**options)
+    if os.path.exists(out_path):
+        os.remove(out_path)
+    status = bpy.ops.export_scene.gltf(**options)
+    if status != {"FINISHED"} or not os.path.isfile(out_path):
+        raise RuntimeError("glTF export did not write " + out_path + ": " + repr(status))
 
     result = {
         "out": out_path,

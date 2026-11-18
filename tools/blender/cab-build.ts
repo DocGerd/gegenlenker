@@ -43,3 +43,11 @@ export const paramsSha256 = (root = ROOT): string =>
   sha256(canonicalJson(JSON.parse(readFileSync(join(root, CAB_FILES.params), 'utf8')) as Json));
 
 export const glbSha256 = (root = ROOT): string => sha256(readFileSync(join(root, CAB_FILES.glb)));
+
+/** The `extras` of the glb's first scene, where cab_shell.py records the hashes of its inputs. */
+export function glbSceneExtras(root = ROOT): unknown {
+  const glb = readFileSync(join(root, CAB_FILES.glb));
+  const json = glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8');
+  const { scenes } = JSON.parse(json) as { scenes: readonly { extras?: unknown }[] };
+  return scenes[0]?.extras;
+}
