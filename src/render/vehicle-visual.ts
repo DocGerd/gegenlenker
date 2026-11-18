@@ -14,6 +14,8 @@ import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
+import { applyCabShell, type CabShells } from './cab-shell';
+import { CAB_HEIGHT, CAB_LENGTH, FRAME_TOP, RAIL_BOTTOM } from './cab-dims';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
 import { CAB_LAYER, SKY_LAYER, type VehicleVisual } from './seams';
@@ -35,14 +37,10 @@ const TWIN_WHEEL_WIDTH = 0.26;
 const TWIN_OFFSET = 0.15;
 const TRAILER_WHEEL_WIDTH = 0.3;
 
-const CAB_LENGTH = 2.2;
-const CAB_HEIGHT = 2.9;
 const CAB_GAP = 0.1;
-const FRAME_TOP = 1.1; // chassis top and floor of cab and body
 const FLOOR_THICKNESS = 0.2;
 const WALL_THICKNESS = 0.1;
 const TIPPER_WALL_TOP = 2.5;
-const RAIL_BOTTOM = 0.65;
 const RAIL_HALF_GAP = 0.45; // lateral centre of each chassis rail
 const RAIL_WIDTH = 0.2;
 
@@ -185,7 +183,11 @@ function resources() {
   };
 }
 
-export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): VehicleVisual {
+export function proceduralTruck(
+  spec: TruckSpec,
+  palette: ScenePalette,
+  shells?: CabShells,
+): VehicleVisual {
   const a = truckAnchors(spec);
   const hw = spec.width.value / 2000;
   const rearTrack = spec.rearTrack.value / 1000;
@@ -283,16 +285,18 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
     ),
   ];
 
+  const cabBox = res.mesh(merge(cab), cabMaterial);
+  const cabFront = res.cabFront(detail.cabFront);
   const group = new Group();
   group.add(
     schematic.rear,
     res.shadow(blobShadow(truckBlobs, SHADOW_HEIGHT)),
-    res.mesh(merge(cab), cabMaterial),
+    cabBox,
     res.mesh(merge(chassis), chassisMaterial),
     res.mesh(merge(body), bodyMaterial),
     res.mesh(merge(rearWheels), wheelMaterial),
     res.detail(detail.geometry),
-    res.cabFront(detail.cabFront),
+    cabFront,
     res.plate(detail.plate),
   );
 
@@ -309,6 +313,11 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
   const pivotLeft = kingpin(1);
   const pivotRight = kingpin(-1);
 
+  let shell: { dispose(): void } | null = null;
+  const cancelShell = shells?.onLoaded(spec.id, (loaded) => {
+    shell = applyCabShell(group, cabBox, cabFront, loaded, palette);
+  });
+
   return {
     object: group,
     update(snapshot) {
@@ -317,6 +326,8 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
       pivotLeft.rotation.y = snapshot.roadWheelAngle;
     },
     dispose() {
+      cancelShell?.();
+      shell?.dispose();
       res.dispose();
       schematic.dispose();
     },

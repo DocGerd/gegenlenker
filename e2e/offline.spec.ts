@@ -15,6 +15,11 @@ test('loads from the subpath and drives an exercise offline', async ({
       foreign.push(url);
   });
 
+  const warnings: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'warning') warnings.push(m.text());
+  });
+
   await page.goto('./');
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
@@ -25,6 +30,17 @@ test('loads from the subpath and drives an exercise offline', async ({
   expect(foreign).toEqual([]);
   const status = page.locator('[data-menu="offline"]');
   await expect(status).toHaveText(en.offlineReady);
+
+  // Precaching is part of installing the worker, so the cab shell is cached before going offline.
+  const cached = await page.evaluate(async () => {
+    const urls: string[] = [];
+    for (const name of await caches.keys()) {
+      const cache = await caches.open(name);
+      for (const request of await cache.keys()) urls.push(request.url);
+    }
+    return urls;
+  });
+  expect(cached.filter((url) => /man-le-18-280-cab-[\w-]+\.glb$/.test(url))).toHaveLength(1);
 
   await context.setOffline(true);
   await page.reload();
@@ -39,6 +55,10 @@ test('loads from the subpath and drives an exercise offline', async ({
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
   await expect(speed).not.toHaveText('0.0 km/h');
   expect(foreign).toEqual([]);
+
+  // Set once the shell, loaded from the service-worker cache, has replaced the procedural cab.
+  await expect(page.locator('html')).toHaveAttribute('data-cab-shell', 'man-le-18-280');
+  expect(warnings.filter((w) => w.includes('Cab shell'))).toEqual([]);
 });
 
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {

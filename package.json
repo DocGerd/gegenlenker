@@ -20,6 +20,9 @@
     "test:perf": "playwright test --project perf",
     "icons": "node scripts/icons.mjs",
     "estimates": "node scripts/estimates.mjs",
+    "cab:params": "node scripts/cab-params.mjs",
+    "cab:optimise": "node scripts/cab-optimise.mjs",
+    "cab:manifest": "node scripts/cab-manifest.mjs",
     "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm test:e2e"
   },
   "dependencies": {
@@ -30,10 +33,14 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
     "@playwright/test": "^1.65.1",
     "@types/node": "^24.19.2",
     "@types/three": "^0.187.0",
     "eslint": "^10.15.0",
+    "meshoptimizer": "^1.3.0",
     "prettier": "^3.10.1",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.73.0",
