@@ -42,7 +42,9 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
       icons,
     },
     workbox: {
-      globPatterns: ['**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}'],
+      globPatterns: [
+        '**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr,wasm}',
+      ],
       maximumFileSizeToCacheInBytes: MAX_PRECACHE_FILE_BYTES,
       navigateFallback: 'index.html',
       cleanupOutdatedCaches: true,

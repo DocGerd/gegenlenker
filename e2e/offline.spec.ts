@@ -94,3 +94,62 @@ test('zooms and pans the top-down view without disturbing the controls', async (
   await page.mouse.up();
   await expect(reset).toBeEnabled();
 });
+
+test('High graphics loads the precached ground texture and transcoder offline', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const origin = new URL(baseURL ?? '').origin;
+  const foreign: string[] = [];
+  context.on('request', (r) => {
+    const url = r.url();
+    if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:'))
+      foreign.push(url);
+  });
+  const warnings: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'warning') warnings.push(m.text());
+  });
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'gegenlenker.settings.v1',
+      JSON.stringify({ version: 1, graphics: 'high' }),
+    );
+  });
+
+  await page.goto('./');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  await expect(page.locator('[data-menu="offline"]')).toHaveText(en.offlineReady);
+
+  // The preset can change offline, so the texture and transcoder are precached whatever is selected.
+  const cached = await page.evaluate(async () => {
+    const urls: string[] = [];
+    for (const name of await caches.keys()) {
+      for (const request of await (await caches.open(name)).keys()) urls.push(request.url);
+    }
+    return urls;
+  });
+  for (const file of [
+    /ground-[\w-]+\.ktx2$/,
+    /basis_transcoder-[\w-]+\.js$/,
+    /basis_transcoder-[\w-]+\.wasm$/,
+  ]) {
+    expect(
+      cached.filter((url) => file.test(url)),
+      String(file),
+    ).toHaveLength(1);
+  }
+
+  await context.setOffline(true);
+  await page.reload();
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  // Set once the texture has loaded and transcoded from the service-worker cache.
+  await expect(page.locator('html')).toHaveAttribute('data-ground-texture', 'ktx2');
+  expect(warnings.filter((w) => w.includes('Ground texture'))).toEqual([]);
+  expect(foreign).toEqual([]);
+});
