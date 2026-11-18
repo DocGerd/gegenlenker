@@ -11,7 +11,7 @@ export default defineConfig({
   projects: [
     {
       name: 'offline',
-      testMatch: /(offline|layout|follow-framing|pause|replay|retry|webgl)\.spec\.ts$/,
+      testMatch: /(offline|layout|follow-framing|chase|pause|replay|retry|webgl)\.spec\.ts$/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

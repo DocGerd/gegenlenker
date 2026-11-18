@@ -22,6 +22,7 @@ import type { TrailerSpec, TruckAnchors, TruckSpec } from '../contracts/vehicle'
 import { truckAnchors } from '../vehicles/anchors';
 import { resolveCombination } from '../vehicles/resolve';
 import { bodyToThree } from './coords';
+import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './chase-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createMirror } from './mirror';
@@ -59,11 +60,17 @@ type Built = {
   readonly environment: Environment;
   readonly aids: AidsLayer;
   readonly anchors: TruckAnchors;
+  readonly cabFront: CabFront;
   readonly palette: ScenePalette;
   readonly yardBounds: Rect2;
   /** Metres from the follow centre that bound the whole combination. */
   readonly radius: number;
 };
+
+/** `rect` in the pane's own px. */
+function relativeTo(pane: Rect, rect: Rect): Rect {
+  return { x: rect.x - pane.x, y: rect.y - pane.y, width: rect.width, height: rect.height };
+}
 
 function fitBounds(layout: ResolvedLayout): Rect2 {
   const fitted = layout.surfaces.filter((s) => s.kind === 'yard' || s.kind === 'street');
@@ -94,6 +101,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
   enableLayers(cockpitCamera.layers, COCKPIT_LAYERS);
   enableLayers(topDownCamera.layers, TOP_DOWN_LAYERS);
+  const chaseCamera = createChaseCamera();
   topDownCamera.rotation.x = -Math.PI / 2;
   topDownCamera.position.y = SKY_HEIGHT;
   let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
@@ -112,6 +120,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   let glRenderer = 'unknown';
   let drawCalls = 0;
   let topDownRect: Rect | null = null;
+  let chaseShown = false;
   const lead = { x: 0, y: 0 };
   let leadAt = -1;
 
@@ -257,6 +266,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
         environment,
         aids,
         anchors: truckAnchors(truck),
+        cabFront: cabFront(truck),
         palette,
         yardBounds: fitBounds(nextLayout),
         radius: followRadius(truck, trailer),
@@ -347,11 +357,29 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
         gl.render(b.scene, cockpitCamera);
       }
 
-      placeTopDown(frame, topDown, b);
       viewRect(gl, topDown);
-      gl.setClearColor(b.palette.backdrop);
-      gl.clear();
-      gl.render(b.scene, topDownCamera);
+      chaseShown = frame.topDown === 'chase';
+      if (chaseShown) {
+        placeChaseCamera(
+          chaseCamera,
+          snapshot.truck,
+          b.cabFront,
+          {
+            width: topDown.width,
+            height: topDown.height,
+            clear: relativeTo(topDown, frame.topDownClear ?? topDown),
+          },
+          frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW,
+        );
+        gl.setClearColor(sky);
+        gl.clear();
+        gl.render(b.scene, chaseCamera);
+      } else {
+        placeTopDown(frame, topDown, b);
+        gl.setClearColor(b.palette.backdrop);
+        gl.clear();
+        gl.render(b.scene, topDownCamera);
+      }
 
       if (leftRect !== null) mirrorLeft.composite(gl, leftRect, cssHeight);
       if (rightRect !== null) mirrorRight.composite(gl, rightRect, cssHeight);
@@ -360,7 +388,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     },
 
     project(x, y) {
-      if (topDownRect === null) return null;
+      if (topDownRect === null || chaseShown) return null;
       const p = projected.set(x, 0, -y).project(topDownCamera);
       return {
         x: topDownRect.x + ((p.x + 1) / 2) * topDownRect.width,

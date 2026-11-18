@@ -19,3 +19,4 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | One attempt at an exercise                      | run              | Fahrt                                        |
 | Point to drive through before the target        | turn point       | Wendepunkt                                   |
 | Render quality setting (Low / Balanced / High)  | graphics quality | Grafikqualität (Niedrig / Ausgewogen / Hoch) |
+| Orbit view of the truck from outside            | outside view     | Außenansicht                                 |

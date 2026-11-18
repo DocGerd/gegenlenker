@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TOP_DOWN_VIEW, type TopDownView } from '../contracts/render';
+import { CHASE_YAW, DEFAULT_TOP_DOWN_VIEW, type TopDownView } from '../contracts/render';
 import {
   ZOOM_LIMITS,
   clampView,
@@ -154,6 +154,75 @@ describe('clampView', () => {
     const wide = view(2, 0.9, 0.5);
     const narrow = clampView(wide, { mode: 'yard', width: 300, height: 400 });
     expect(narrow.panX).toBeCloseTo(0.75 * 0.5, 9);
+  });
+});
+
+describe('chase view', () => {
+  const chase: ViewContext = { mode: 'chase', width: 600, height: 400 };
+
+  it('orbits on drag, never pans, and clamps the yaw to both ends', () => {
+    const dragged = panBy(DEFAULT_TOP_DOWN_VIEW, -50, 80, chase);
+    expect(dragged.panX).toBeGreaterThan(0);
+    expect(dragged.panY).toBe(0);
+    expect(panBy(DEFAULT_TOP_DOWN_VIEW, -1e6, 0, chase).panX).toBe(CHASE_YAW.max);
+    expect(panBy(DEFAULT_TOP_DOWN_VIEW, 1e6, 0, chase).panX).toBe(CHASE_YAW.min);
+  });
+
+  it('clamps the distance at both ends, whatever the anchor', () => {
+    const at = { x: 10, y: 10 };
+    expect(zoomAt(DEFAULT_TOP_DOWN_VIEW, 100, at, chase)).toEqual({
+      zoom: ZOOM_LIMITS.chase.max,
+      panX: 0,
+      panY: 0,
+    });
+    expect(zoomAt(DEFAULT_TOP_DOWN_VIEW, 0.001, at, chase).zoom).toBe(ZOOM_LIMITS.chase.min);
+  });
+
+  it('forces panY to 0 whatever the view', () => {
+    for (const panY of [-3, 0.7]) {
+      const next = clampView(view(1, 0.2, panY), chase);
+      expect(next).toMatchObject({ zoom: 1, panX: 0.2 });
+      expect(next.panY).toBeCloseTo(0, 12);
+    }
+    expect(clampView(view(100, -100, 0), chase)).toMatchObject({
+      zoom: ZOOM_LIMITS.chase.max,
+      panX: CHASE_YAW.min,
+    });
+  });
+
+  it('turns a pinch about a fixed midpoint into distance only', () => {
+    const next = pinch(
+      DEFAULT_TOP_DOWN_VIEW,
+      [
+        { x: 250, y: 200 },
+        { x: 350, y: 200 },
+      ],
+      [
+        { x: 200, y: 200 },
+        { x: 400, y: 200 },
+      ],
+      chase,
+    );
+    expect(next).toEqual({ zoom: 2, panX: 0, panY: 0 });
+  });
+
+  it('turns a moving midpoint into yaw and the finger spread into distance together', () => {
+    const next = pinch(
+      DEFAULT_TOP_DOWN_VIEW,
+      [
+        { x: 250, y: 200 },
+        { x: 350, y: 200 },
+      ],
+      [
+        { x: 230, y: 210 },
+        { x: 430, y: 210 },
+      ],
+      chase,
+    );
+    expect(next.zoom).toBeCloseTo(2, 9);
+    expect(next.panX).toBeCloseTo(panBy(DEFAULT_TOP_DOWN_VIEW, 30, 10, chase).panX, 9);
+    expect(next.panX).toBeLessThan(0);
+    expect(next.panY).toBe(0);
   });
 });
 

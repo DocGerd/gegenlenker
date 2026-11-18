@@ -5,8 +5,8 @@ import manLe18280Url from './assets/man-le-18-280-cab.glb?url';
 import { AIDS_LAYER, CAB_LAYER } from './seams';
 
 /*
- * The Blender cab shell (tools/blender, issue #68), shown in the mirrors only: the cockpit eye sits
- * inside the cab. The top-down view keeps the procedural token box, moved onto AIDS_LAYER.
+ * The Blender cab shell (tools/blender, issue #68), shown in the mirrors and the chase view: the cockpit
+ * eye sits inside the cab. The top-down view keeps the procedural token box, moved onto AIDS_LAYER.
  */
 
 const BODY_NAME = 'cab-body';

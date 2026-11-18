@@ -1,10 +1,14 @@
-import type { SceneRenderer } from '../contracts/render';
+import type { GraphicsPreset, SceneRenderer } from '../contracts/render';
 import { proceduralAids } from './aids';
 import { proceduralEnvironment } from './environment';
 import { startCabShells } from './cab-shell';
 import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
+
+/** Whether the preset offers the outside view. */
+export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
+  QUALITY_FLAGS[preset].chaseView;
 
 export function createSceneRenderer(): SceneRenderer {
   // Positive signal for the offline e2e: set once a shell has replaced a truck's procedural cab.

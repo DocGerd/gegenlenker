@@ -7,12 +7,13 @@ import type { QualityFlags } from './quality';
 /** three.js default layer: every camera sees it. */
 export const DEFAULT_LAYER = 0;
 export const AIDS_LAYER = 1; // seen by the top-down camera only
-/** Far plane of the cockpit and mirror cameras. */
+/** Far plane of the cockpit, mirror and chase cameras. */
 export const CAMERA_FAR = 400;
 export const SKY_LAYER = 2; // seen by the perspective cameras only
-export const CAB_LAYER = 3; // seen by the mirrors only: the cockpit eye sits inside the cab
+export const CAB_LAYER = 3; // seen by the mirrors and the chase camera: the cockpit eye sits inside the cab
 export const COCKPIT_LAYERS = [SKY_LAYER];
 export const MIRROR_LAYERS = [SKY_LAYER, CAB_LAYER];
+export const CHASE_LAYERS = [SKY_LAYER, CAB_LAYER];
 export const TOP_DOWN_LAYERS = [AIDS_LAYER];
 export function enableLayers(layers: Layers, ids: readonly number[]): void {
   for (const id of ids) layers.enable(id);
