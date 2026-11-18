@@ -2,14 +2,14 @@
 
 - Status: proposed (owner's current choice: stay on three.js, migrate to `WebGPURenderer`)
 - Date: 2026-11-19
-- Issue: #162 (desk research only; no UE5 install, no prototype)
+- Issue: #162 (spike: assess rebuilding in Unreal Engine 5 + Blender; desk research only; no UE5 install, no prototype)
 
 ## Context
 
 Gegenlenker is a TypeScript + three.js PWA (Vite, offline, Apache-2.0). Targets set by the owner:
 
-- Desktop browser (reference: RTX 4090), High preset, at least 60 fps.
-- Android tablet (reference: Galaxy Tab S7) lower priority, but it must keep working.
+- Desktop browser (owner-stated reference device: RTX 4090), High preset, at least 60 fps.
+- Android tablet (owner-stated reference device: Galaxy Tab S7) lower priority, but it must keep working. The older plan doc (`docs/superpowers/plans/2026-11-16-gegenlenker.md`) used a Galaxy Tab S9 profile; the owner now names the S7.
 - Assets: CC0 and CC-BY only; Blender is the authoring tool.
 
 Question: would a full Unreal Engine 5 rebuild beat the current stack, and which middle paths exist?
@@ -26,11 +26,11 @@ Question: would a full Unreal Engine 5 rebuild beat the current stack, and which
 ### UE5 mobile and web
 
 - Nanite is not supported on the mobile renderer; it needs SM6 by default, which UE does not officially support on Android ([Arm, 2026-03-18](https://developer.arm.com/community/arm-community-blogs/b/mobile-graphics-and-gaming-blog/posts/mali-and-unreal-engine-s-nanite-enabling-the-future-of-mobile-graphics)).
-- Lumen on Android is experimental since UE 5.4, only on high-end Vulkan SM5 devices (Adreno 7xx, Mali G7xx, Xclipse 9xx) and only via the desktop renderer, which "incurs a significant performance cost compared to mobile forward or deferred rendering"; Epic does not yet recommend shipping with it ([Epic docs](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-lumen-global-illumination-on-mobile-in-unreal-engine)). The Tab S7 (Adreno 650) is below that list.
+- Lumen on Android is experimental since UE 5.4, only on high-end Vulkan SM5 devices (Adreno 7xx, Mali G7xx, Xclipse 9xx) and only via the desktop renderer, which "incurs a significant performance cost compared to mobile forward or deferred rendering"; Epic does not yet recommend shipping with it ([Epic docs](https://dev.epicgames.com/documentation/en-us/unreal-engine/using-lumen-global-illumination-on-mobile-in-unreal-engine)). The Tab S7 (Adreno 650, Vulkan 1.1 per [Notebookcheck](https://www.notebookcheck.net/Adreno-650-vs-Adreno-720-vs-Adreno-732_9971_12490_12763.247598.0.html)) is not on that list.
 - So the Lumen/Nanite visual ceiling applies on desktop only; the tablet gets mobile forward rendering with baked lighting, which Blender-baked three.js assets can approach.
-- No maintained web export: the HTML5 target was removed during UE4 and never shipped for UE5 ([Summer Engine summary](https://www.summerengine.com/make-great-games/unreal-engine-html5-export.md), vendor blog); users still ask for it in 2025 with no Epic reply ([forum](https://forums.unrealengine.com/t/could-you-bring-back-html5-support-for-ue5/2518727)). Epic's browser route is Pixel Streaming (server-side GPU, video to the client), which breaks offline play and adds per-user server cost.
+- No maintained web export: the HTML5 target was removed during UE4 and never shipped for UE5 (unconfirmed by Epic; [Summer Engine summary](https://www.summerengine.com/make-great-games/unreal-engine-html5-export.md), vendor blog); users still ask for it in 2025 with no Epic reply ([forum](https://forums.unrealengine.com/t/could-you-bring-back-html5-support-for-ue5/2518727)). Epic's browser route is Pixel Streaming (server-side GPU, video to the client), which breaks offline play and adds per-user server cost.
 - APK size: no current UE5 measurement found; UE4-era forum reports range from about 19 MB (hand-stripped) to about 150 MB for an empty project ([example](https://forums.unrealengine.com/t/why-an-empty-project-weights-about-200mb/474322)). Measure in a prototype if option A is revisited.
-- Licence: 5% royalty on gross revenue above the first USD 1M lifetime per product; 3.5% under the Epic Games Store launch programme ([Epic licence page](https://www.unrealengine.com/license), [EULA change log](https://www.unrealengine.com/eula-change-log/unreal)). These pages returned 403 to our fetcher, so the terms come from search excerpts: re-check the current EULA before relying on them. For a free app the royalty is moot; licence is not the blocker.
+- Licence: a royalty applies only to revenue above a threshold, so for a free app it is not the blocker; re-check the current [EULA](https://www.unrealengine.com/license) if that changes.
 
 ### three.js `WebGPURenderer`
 
@@ -54,9 +54,9 @@ Shares of non-test `src/` lines (reproduce: `find src -name '*.ts' ! -name '*.te
 
 | Area                                          | Share | UE5 (A)                            | three WebGPU (B)               |
 | --------------------------------------------- | ----- | ---------------------------------- | ------------------------------ |
-| `render/`                                     | ~55%  | rewrite (Blueprint/C++, materials) | renderer swap + shader port    |
+| `render/`                                     | ~50%  | rewrite (Blueprint/C++, materials) | renderer swap + shader port    |
 | `sim/ scoring/ vehicles/ contracts/ content/` | ~20%  | port to C++ (or WASM plugin)       | unchanged                      |
-| `app/ hud/ input/ pwa/ i18n/`                 | ~25%  | rewrite (UMG, touch, packaging)    | unchanged                      |
+| `app/ hud/ input/ pwa/ i18n/`                 | ~30%  | rewrite (UMG, touch, packaging)    | unchanged                      |
 | Tests (unit, Playwright e2e, CI, Pages)       | large | rebuilt from scratch               | e2e adapts, unit mostly intact |
 
 - A also loses: fingerprinted runs unless the C++ sim is bit-identical, the offline PWA install/update flow, URL-reachable web play, and the `pnpm install` contributor setup (replaced by a UE editor install and heavy CI runners).
@@ -86,4 +86,4 @@ Rejected: A (no web, no offline PWA, Lumen/Nanite do not reach the tablet, full 
 - Epic ships a maintained web export, or Lumen/Nanite-class features on the mobile renderer.
 - The migration gate fails (fps, first-frame stall, shader parity) or `WebGPURenderer` regresses on the tablet fallback.
 - three.js marks `WebGPURenderer` stable or deprecates `WebGLRenderer`.
-- Visual targets (#159, #160) prove unreachable with baked three.js assets.
+- Visual targets (#159 realistic cockpit, #160 richer yard environment) prove unreachable with baked three.js assets.
