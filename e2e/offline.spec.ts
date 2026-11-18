@@ -170,6 +170,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   const marker = page.locator('html');
   await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/);
   const target = await marker.getAttribute('data-ground-texture');
+  await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect
     .poll(async () => {
       const { runtime } = await cached();
@@ -182,7 +183,8 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await page.reload();
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   await expect(marker).toHaveAttribute('data-ground-texture', target ?? '');
-  expect(warnings.filter((w) => w.includes('Ground texture'))).toEqual([]);
+  await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
+  expect(warnings.filter((w) => /Ground texture|Vehicle reflection/.test(w))).toEqual([]);
   expect(errors).toEqual([]);
   expect(foreign).toEqual([]);
 });

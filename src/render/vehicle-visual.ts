@@ -8,6 +8,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
+  MeshStandardMaterial,
   type Object3D,
   type Texture,
 } from 'three';
@@ -121,8 +122,10 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const geometries = new Set<BufferGeometry>();
   const materials: Material[] = [];
   const textures: Texture[] = [];
+  const detailMeshes: Mesh[] = [];
   let detailMaterial: MeshLambertMaterial | null = null;
-  let pbrMaterial: Material | null = null;
+  let pbrMaterial: MeshStandardMaterial | null = null;
+  let pbrWanted = false;
   let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
   const track = <M extends Material>(material: M): M => {
@@ -141,6 +144,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     detail(geometry: BufferGeometry): Mesh {
       const mesh = this.mesh(geometry, this.detailMaterial());
       mesh.layers.set(SKY_LAYER);
+      detailMeshes.push(mesh);
       return mesh;
     },
     /** The material of every `detail` mesh; shells use it too, so a swap adds no state change. */
@@ -149,15 +153,25 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       return pbrOn && pbrMaterial !== null ? pbrMaterial : detailMaterial;
     },
     /**
-     * Reflective shading for everything below `root` that wears the detail material (#69). Run it
-     * after shells are added or removed: a detached shell may keep the old material until it returns.
+     * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
+     * has taken out of it; without `on` it repeats the last request, for shells that attach later.
      */
-    setPbr(root: Object3D, on: boolean): void {
+    setPbr(root: Object3D, on = pbrWanted): void {
+      pbrWanted = on;
       const map = on ? (env?.texture(palette) ?? null) : null;
-      if (map !== null) pbrMaterial ??= track(createVehicleMaterial(map));
+      if (map !== null) {
+        pbrMaterial ??= track(createVehicleMaterial(map));
+        pbrMaterial.envMap = map;
+      } else if (pbrMaterial !== null) {
+        pbrMaterial.envMap = null;
+      }
       pbrOn = map !== null;
       if (detailMaterial === null || pbrMaterial === null) return;
-      replaceMaterial(root, [detailMaterial, pbrMaterial], pbrOn ? pbrMaterial : detailMaterial);
+      replaceMaterial(
+        [root, ...detailMeshes],
+        [detailMaterial, pbrMaterial],
+        pbrOn ? pbrMaterial : detailMaterial,
+      );
     },
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
@@ -366,6 +380,7 @@ export function proceduralTruck(
         onChange: (on) => shells?.cab.attached(cabKey, on),
       },
     );
+    res.setPbr(group);
   };
   const attachBody = (shell: Shell): void => {
     // the marking is part of the detail mesh, so the shortened one replaces the whole mesh
@@ -390,6 +405,7 @@ export function proceduralTruck(
         onChange: (on) => shells?.body.attached(bodyKey, on),
       },
     );
+    res.setPbr(group);
   };
   const attachBoth = (): void => {
     if (loadedShells.cab === null || loadedShells.body === null) return;

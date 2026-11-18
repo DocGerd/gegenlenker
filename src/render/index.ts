@@ -32,11 +32,18 @@ export function createSceneRenderer(): SceneRenderer {
     if (state === null) delete document.documentElement.dataset['groundTexture'];
     else document.documentElement.dataset['groundTexture'] = state;
   });
-  const vehicleEnvironment = createVehicleEnvironment();
+  // Read by the offline e2e: `on` once the vehicle reflections are built, `failed` if they fell back.
+  const vehicleEnvironment = createVehicleEnvironment((state) => {
+    if (state === null) delete document.documentElement.dataset['vehiclePbr'];
+    else document.documentElement.dataset['vehiclePbr'] = state;
+  });
   const renderer = createThreeSceneRenderer({
     onRenderer: (gl) => {
       groundTextures.attach(gl);
       vehicleEnvironment.attach(gl);
+    },
+    onContextRestored: () => {
+      vehicleEnvironment.invalidate();
     },
     truck: (spec, palette) => proceduralTruck(spec, palette, shells, vehicleEnvironment),
     trailer: (spec, palette) => proceduralTrailer(spec, palette, vehicleEnvironment),
