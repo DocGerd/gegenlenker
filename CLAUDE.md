@@ -78,6 +78,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - `.claude/settings.json` is committed: a PostToolUse hook (`.claude/hooks/format.sh`) runs Prettier on each Edit/Write, and editing `pnpm-lock.yaml` is denied (change it through pnpm). Review `.claude/**` changes like code.
 - Commit and PR titles use conventional prefixes: `feat`, `fix`, `docs`, `ci`, `chore`, `refactor`, `perf`, `test`.
 - UI text goes through `t()`; keys live in `src/i18n/en.ts`, and `de.ts` is typed against them, so both must define every key. German UI wording follows `docs/glossary.md`.
+- A PR with a user-visible change adds a fragment `changelog.d/<pr>.<added|changed|fixed>.md` and never edits `CHANGELOG.md` (format in `changelog.d/README.md`); docs, CI, chore and test-only PRs add none. Fragments are folded in at release.
 - Choose the merge method per PR: merge commit when the commits are meaningful; no squash by default.
 - Commit as `13460098+DocGerd@users.noreply.github.com` (repo-local `user.email`), never the owner's real address.
 - `main` ruleset (no bypass) requires up-to-date PRs and resolved review threads: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next one and wait for CI.
