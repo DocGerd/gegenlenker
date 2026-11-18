@@ -5,7 +5,7 @@ import { runnerImport } from 'vite';
 const START = '<!-- estimates:start -->';
 const END = '<!-- estimates:end -->';
 const root = join(import.meta.dirname, '..');
-const readme = join(root, 'README.md');
+const doc = join(root, 'docs', 'vehicle-data.md');
 
 const { module } = await runnerImport('/src/vehicles/estimates.ts', {
   root,
@@ -13,8 +13,19 @@ const { module } = await runnerImport('/src/vehicles/estimates.ts', {
   logLevel: 'error',
 });
 
-const text = readFileSync(readme, 'utf8');
-const [head, rest] = text.split(START);
-const tail = rest?.split(END)[1];
-if (tail === undefined) throw new Error('README has no estimates markers');
-writeFileSync(readme, `${head}${START}\n${module.estimatesTable()}\n${END}${tail}`);
+const text = readFileSync(doc, 'utf8');
+const once = (marker) => {
+  const at = text.indexOf(marker);
+  if (at === -1 || text.indexOf(marker, at + 1) !== -1) {
+    throw new Error(`docs/vehicle-data.md must contain ${marker} exactly once`);
+  }
+  return at;
+};
+const start = once(START);
+const end = once(END);
+if (end < start)
+  throw new Error('docs/vehicle-data.md has its estimates markers in the wrong order');
+writeFileSync(
+  doc,
+  `${text.slice(0, start)}${START}\n${module.estimatesTable()}\n${text.slice(end)}`,
+);

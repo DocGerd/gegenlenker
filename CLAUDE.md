@@ -48,7 +48,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 
 - Every numeric vehicle dimension is a `Param` (`id`, `name`, `body` are not) with `status` `'sourced'` (`source` is an https URL from `src/vehicles/sources.ts`) or `'estimate'` (`source` is the basis).
 - Use `sourced()` or `estimate()`; never present an estimate as sourced.
-- Adding, changing, sourcing or removing an estimate means running `pnpm estimates` (rewrites the README table between the `estimates:` markers); `src/vehicles/estimates.test.ts` fails otherwise.
+- Adding, changing, sourcing or removing an estimate means running `pnpm estimates` (rewrites the table in `docs/vehicle-data.md` between the `estimates:` markers); `src/vehicles/estimates.test.ts` fails otherwise.
 - Bump `SIM_REVISION` in `src/sim/fingerprint.ts` only for sim, collision or scoring logic changes; `dataFingerprint` already hashes vehicle params, obstacle ids and OBBs, start, exercise, sim constants and scoring thresholds: visual-only prop changes keep stored runs; adding or moving a collision prop invalidates them for that layout.
 
 ## Blender assets
@@ -87,6 +87,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Commit and PR titles use conventional prefixes: `feat`, `fix`, `docs`, `ci`, `chore`, `refactor`, `perf`, `test`.
 - UI text goes through `t()`; keys live in `src/i18n/en.ts`, and `de.ts` is typed against them, so both must define every key. German UI wording follows `docs/glossary.md`.
 - User-visible PRs add a `changelog.d/<pr>.<category>.md` fragment (format: `changelog.d/README.md`); never edit `CHANGELOG.md`.
+- The README is the front door (what, quickstart, links); reference material goes in `docs/` and is linked from it.
 - Choose the merge method per PR: merge commit when the commits are meaningful; no squash by default.
 - Commit as `13460098+DocGerd@users.noreply.github.com` (repo-local `user.email`), never the owner's real address.
 - `main` ruleset (no bypass) requires up-to-date PRs and resolved review threads: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next one and wait for CI.
