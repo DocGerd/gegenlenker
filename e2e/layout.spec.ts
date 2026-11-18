@@ -68,6 +68,19 @@ async function blankRows(page: Page, x: number): Promise<number> {
   );
 }
 
+/** Waits until the HUD, gauges and controls are laid out, so measuring never sees an empty set. */
+async function hudReady(page: Page): Promise<void> {
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
+  const gauges = page.locator('.hud-gauge');
+  await expect(gauges).toHaveCount(2);
+  await expect(gauges.first()).toBeVisible();
+  await expect(gauges.last()).toBeVisible();
+  await expect(page.locator('.hud-counters')).toBeVisible();
+  await expect(page.locator('.hud-action')).toBeVisible();
+  await expect(page.locator('.ctl-wheel')).toBeVisible();
+  await expect(page.locator('.ctl-lever')).toBeVisible();
+}
+
 for (const { locale, messages } of locales) {
   for (const size of sizes) {
     const at = `${locale} ${size.width}x${size.height}`;
@@ -78,8 +91,8 @@ for (const { locale, messages } of locales) {
       await page.goto('./');
       await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
 
+      await hudReady(page);
       const mirrors = page.locator('.hud-mirror:not([hidden])');
-      await expect(mirrors).toHaveCount(2);
       const controls = page.locator(
         '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
       );
@@ -97,6 +110,7 @@ for (const { locale, messages } of locales) {
       const panels = await boxes(
         page.locator('.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action'),
       );
+      expect(panels.length).toBeGreaterThan(0);
       for (const panel of panels) {
         for (const c of controlBoxes) {
           expect(overlaps(panel, c), `${panel.name} overlaps ${c.name}`).toBe(false);
@@ -134,6 +148,7 @@ for (const start of starts) {
     const rows = new Set((await boxes(buttons)).map((b) => Math.round(b.top)));
     expect(rows.size).toBeLessThanOrEqual(2);
 
+    await expect(page.locator('.hud-info')).toBeVisible();
     const [info] = await boxes(page.locator('.hud-info'));
     expect(info?.bottom).toBeLessThan(768 / 2);
   });
@@ -148,6 +163,7 @@ test('the two gauges stay equally wide in German', async ({ browser }) => {
   await page.goto('./');
   await page.getByRole('button', { name: de.exerciseStraightReverse }).click();
 
+  await hudReady(page);
   const widths = (await boxes(page.locator('.hud-gauge'))).map((b) => b.right - b.left);
   expect(widths).toHaveLength(2);
   expect(widths[0]).toBeCloseTo(widths[1] ?? 0, 0);
