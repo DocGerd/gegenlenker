@@ -638,3 +638,84 @@
   stroke-width: 2;
   stroke-linejoin: round;
 }
+
+/* The divider sits inside the top view, along the seam to the cockpit; its strip is the pane's height (landscape) or width (portrait), out of the way of the cockpit's mirrors and controls. */
+.hud-split {
+  position: absolute;
+  box-sizing: border-box;
+  width: var(--size-target);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding-bottom: calc(var(--space-4) + var(--safe-bottom));
+  pointer-events: none;
+}
+
+.hud-split-handle {
+  position: relative;
+  box-sizing: border-box;
+  height: calc(var(--size-target) * 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  pointer-events: auto;
+  touch-action: none;
+  cursor: col-resize;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.hud-split-handle::before {
+  content: '';
+  width: 4px;
+  height: 40%;
+  border-radius: 2px;
+  background: var(--color-text-secondary);
+}
+
+.hud-split-handle:focus-visible,
+.hud-split-handle:active {
+  border-color: var(--color-accent);
+}
+
+.hud-split-handle:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.hud-toggle.hud-split-reset {
+  min-width: var(--size-target);
+  min-height: var(--size-target);
+  align-self: center;
+}
+
+/* Portrait: the seam runs across the screen, so the divider is a horizontal bar at the pane's bottom edge. */
+@media not (min-aspect-ratio: 1/1) {
+  .hud-split {
+    width: auto;
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 0 calc(var(--space-4) + var(--safe-right)) 0 0;
+  }
+
+  .hud-split-handle {
+    width: calc(var(--size-target) * 2);
+    height: var(--size-target);
+    cursor: row-resize;
+  }
+
+  .hud-split-handle::before {
+    width: 40%;
+    height: 4px;
+  }
+
+  .hud-toggle.hud-split-reset {
+    align-self: flex-end;
+  }
+}

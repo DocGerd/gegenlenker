@@ -293,3 +293,220 @@ test('the key legend folds away and stays folded in the next run', async ({ page
   await expect(page.locator('.hud-legend dl')).toBeHidden();
   await expect(toggle).toBeVisible();
 });
+
+const handle = (page: Page) => page.locator('[data-hud="splitHandle"]');
+const splitBar = (page: Page) => page.locator('[data-hud="split"]');
+
+/** A short landscape screen: no panel row fits above the divider. */
+const splitSizes = [...sizes, { width: 844, height: 390 }];
+
+/** Two animation frames: the legend's resize observer re-lays out after the first one. */
+const settled = (page: Page) =>
+  page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+
+async function startStraightReverse(page: Page, label: string): Promise<void> {
+  await page.goto('./');
+  await page.getByRole('button', { name: label }).click();
+  await hudReady(page);
+}
+
+for (const { locale, messages } of locales) {
+  for (const size of splitSizes) {
+    const at = `${locale} ${size.width}x${size.height}`;
+
+    test(`the divider at its smallest and largest share clears the cockpit and the panels at ${at}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      const page = await context.newPage();
+      await startStraightReverse(page, messages.exerciseStraightReverse);
+
+      await expect(handle(page)).toHaveCount(1);
+      await expect(handle(page)).toHaveAttribute('aria-valuemin', /^\d+$/);
+      await expect(handle(page)).toHaveAttribute('aria-valuemax', /^\d+$/);
+      const min = Number(await handle(page).getAttribute('aria-valuemin'));
+      const max = Number(await handle(page).getAttribute('aria-valuemax'));
+      // Where the panels or the cockpit leave the split no room, there is no divider.
+      if (min === max) {
+        await expect(splitBar(page)).toHaveAttribute('hidden', '');
+        await expect(handle(page)).toBeHidden();
+        await context.close();
+        return;
+      }
+      expect(min).toBeLessThan(max);
+      await expect(splitBar(page)).not.toHaveAttribute('hidden', '');
+      await expect(handle(page)).toBeVisible();
+
+      for (const key of ['Home', 'End']) {
+        await handle(page).focus();
+        await page.keyboard.press(key);
+        await expect(handle(page)).toHaveAttribute(
+          'aria-valuenow',
+          String(key === 'Home' ? min : max),
+        );
+        await settled(page);
+
+        const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
+        const controls = await boxes(
+          page.locator(
+            '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+          ),
+        );
+        const panels = await boxes(
+          page.locator(
+            '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle',
+          ),
+        );
+        const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
+        expect(mirrors).toHaveLength(2);
+        expect(divider).toHaveLength(2);
+        for (const m of mirrors) {
+          for (const c of [...controls, ...divider]) {
+            expect(overlaps(m, c), `${c.name} overlaps a mirror at ${key}`).toBe(false);
+          }
+        }
+        for (const d of divider) {
+          for (const c of [...controls, ...panels]) {
+            expect(overlaps(d, c), `${d.name} overlaps ${c.name} at ${key}`).toBe(false);
+          }
+          expect(d.left, `${d.name} on screen`).toBeGreaterThanOrEqual(0);
+          expect(d.top, `${d.name} on screen`).toBeGreaterThanOrEqual(0);
+          expect(d.right, `${d.name} on screen`).toBeLessThanOrEqual(size.width);
+          expect(d.bottom, `${d.name} on screen`).toBeLessThanOrEqual(size.height);
+        }
+        for (const p of panels) {
+          for (const c of controls) {
+            expect(overlaps(p, c), `${p.name} overlaps ${c.name} at ${key}`).toBe(false);
+          }
+        }
+      }
+      await context.close();
+    });
+  }
+}
+
+test('dragging the divider resizes the top view, persists, and resets', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const topLeft = async () => (await boxes(page.locator('.hud-topdown')))[0]?.left ?? 0;
+  const defaultLeft = await topLeft();
+  expect(defaultLeft).toBe(768);
+  const reset = page.locator('[data-hud="splitReset"]');
+  await expect(reset).toBeDisabled();
+
+  const b = await handle(page).boundingBox();
+  if (b === null) throw new Error('divider has no box');
+  expect(b.width).toBeGreaterThanOrEqual(44);
+  const x = b.x + b.width / 2;
+  const y = b.y + b.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - 120, y, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(topLeft).toBeCloseTo(defaultLeft - 120, -1);
+  // A dragged divider gives focus back, so the arrow keys steer again.
+  await expect(handle(page)).not.toBeFocused();
+  await expect(reset).toBeEnabled();
+
+  // Stored per orientation, so the next run starts with the same split.
+  await page.reload();
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await hudReady(page);
+  await expect.poll(topLeft).toBeCloseTo(defaultLeft - 120, -1);
+
+  await page.locator('[data-hud="splitReset"]').click();
+  await expect.poll(topLeft).toBe(defaultLeft);
+  await expect(page.locator('[data-hud="splitReset"]')).toBeDisabled();
+
+  await handle(page).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect.poll(topLeft).toBeLessThan(defaultLeft);
+  await page.keyboard.press('KeyL');
+  await expect.poll(topLeft).toBe(defaultLeft);
+  // Nothing to reset: the shortcut does nothing.
+  await page.keyboard.press('KeyL');
+  await settled(page);
+  expect(await topLeft()).toBe(defaultLeft);
+});
+
+test('rotating mid-drag cancels it, and the divider works again afterwards', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const topLeft = async () => (await boxes(page.locator('.hud-topdown')))[0]?.left ?? 0;
+  const defaultLeft = await topLeft();
+  const b = await handle(page).boundingBox();
+  if (b === null) throw new Error('divider has no box');
+  const x = b.x + b.width / 2;
+  const y = b.y + b.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - 120, y, { steps: 6 });
+  await expect.poll(topLeft).toBeLessThan(defaultLeft);
+
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await expect(handle(page)).toHaveAttribute('aria-orientation', 'horizontal');
+  await page.mouse.up();
+
+  // The portrait divider takes a fresh drag, which an orphaned one would have swallowed.
+  const bottom = async () => (await boxes(page.locator('.hud-topdown')))[0]?.bottom ?? 0;
+  const before = await bottom();
+  const p = await handle(page).boundingBox();
+  if (p === null) throw new Error('divider has no box');
+  const px = p.x + p.width / 2;
+  const py = p.y + p.height / 2;
+  await page.mouse.move(px, py);
+  await page.mouse.down();
+  await page.mouse.move(px, py - 40, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(bottom).toBeLessThan(before);
+
+  // The cancelled landscape drag was not stored.
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect.poll(topLeft).toBe(defaultLeft);
+});
+
+test('the divider is keyboard-operable and exposes its value', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const sep = handle(page);
+  await expect(sep).toHaveAttribute('role', 'separator');
+  await expect(sep).toHaveAttribute('aria-orientation', 'vertical');
+  await expect(sep).toHaveAttribute('aria-valuenow', '40');
+  const min = Number(await sep.getAttribute('aria-valuemin'));
+  const max = Number(await sep.getAttribute('aria-valuemax'));
+  expect(min).toBeLessThan(max);
+  await sep.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(sep).toHaveAttribute('aria-valuenow', '42');
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(sep).toHaveAttribute('aria-valuenow', '38');
+  await page.keyboard.press('End');
+  await expect(sep).toHaveAttribute('aria-valuenow', String(max));
+  await page.keyboard.press('Home');
+  await expect(sep).toHaveAttribute('aria-valuenow', String(min));
+});
+
+test('the divider runs across the screen in portrait', async ({ page }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const sep = handle(page);
+  await expect(sep).toHaveAttribute('aria-orientation', 'horizontal');
+  const bottom = async () => (await boxes(page.locator('.hud-topdown')))[0]?.bottom ?? 0;
+  const before = await bottom();
+  await sep.focus();
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(bottom).toBeLessThan(before);
+  await page.keyboard.press('Home');
+  await settled(page);
+  const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
+  const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
+  for (const m of mirrors) {
+    for (const d of divider) expect(overlaps(m, d), `${d.name} overlaps a mirror`).toBe(false);
+  }
+});

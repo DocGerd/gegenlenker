@@ -1,10 +1,14 @@
 import {
   DEFAULT_GRAPHICS,
+  DEFAULT_TOP_DOWN_LAYOUT,
   GRAPHICS_PRESETS,
+  TOP_DOWN_SHARE_LIMITS,
   type AidFlags,
   type CollapsedPanels,
   type GraphicsPreset,
   type DrivingView,
+  type Orientation,
+  type TopDownLayout,
 } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
@@ -18,6 +22,7 @@ export type Settings = {
   readonly trailerId: TrailerId;
   readonly aids: AidFlags;
   readonly topDown: DrivingView;
+  readonly topDownLayout: TopDownLayout;
   readonly collapsed: CollapsedPanels;
   readonly graphics: GraphicsPreset;
 };
@@ -30,6 +35,14 @@ const TOP_DOWN: readonly DrivingView[] = ['follow', 'yard'];
 
 const pick = <T extends string>(ids: readonly T[], v: unknown, fallback: T): T =>
   ids.find((id) => id === v) ?? fallback;
+
+/** A finite number clamped to the orientation's limits; anything else is the default. */
+const share = (orientation: Orientation, v: unknown): number => {
+  const { min, max } = TOP_DOWN_SHARE_LIMITS[orientation];
+  return typeof v === 'number' && Number.isFinite(v)
+    ? Math.min(max, Math.max(min, v))
+    : DEFAULT_TOP_DOWN_LAYOUT[orientation];
+};
 
 const flag = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean' ? v : fallback);
 
@@ -47,6 +60,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
   const s = isRecord(data) && data['version'] === 1 ? data : {};
   const aids = isRecord(s['aids']) ? s['aids'] : {};
   const collapsed = isRecord(s['collapsed']) ? s['collapsed'] : {};
+  const layout = isRecord(s['topDownLayout']) ? s['topDownLayout'] : {};
   return {
     version: 1,
     language: pick(LANGS, s['language'], detected),
@@ -60,6 +74,10 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
       ghost: flag(aids['ghost'], DEFAULT_AIDS.ghost),
     },
     topDown: pick(TOP_DOWN, s['topDown'], 'follow'),
+    topDownLayout: {
+      landscape: share('landscape', layout['landscape']),
+      portrait: share('portrait', layout['portrait']),
+    },
     collapsed: {
       aids: flag(collapsed['aids'], DEFAULT_COLLAPSED.aids),
       gauges: flag(collapsed['gauges'], DEFAULT_COLLAPSED.gauges),

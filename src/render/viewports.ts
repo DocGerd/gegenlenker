@@ -1,4 +1,14 @@
-import type { LegendBox, Rect, ViewMode, ViewRects } from '../contracts/render';
+import {
+  DEFAULT_TOP_DOWN_LAYOUT,
+  TOP_DOWN_SHARE_LIMITS,
+  type LegendBox,
+  type Orientation,
+  type Rect,
+  type TopDownLayout,
+  type TopDownSplit,
+  type ViewMode,
+  type ViewRects,
+} from '../contracts/render';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -62,6 +72,79 @@ export function controlsHeight(
   return Math.max(steer, base + STOP_BLOCK + STOP_GAP + LABEL_BLOCK + lever);
 }
 
+/** The bottom edge of the top view's HUD panels, px below the pane's top, were the pane `paneWidth` wide. */
+export type PanelStack = (paneWidth: number) => number;
+
+/** A px custom property of the root element; `fallback` outside a document. */
+function tokenPx(name: string, fallback: number): number {
+  if (typeof document === 'undefined') return fallback;
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || fallback;
+}
+
+/**
+ * What the divider takes along the pane's edge (and a gap to the panels above it); mirrors `.hud-split`
+ * in hud.css: landscape the handle, the reset button, their gap and the pane's bottom padding;
+ * portrait only the handle row, flush with the pane's bottom.
+ */
+function dividerExtent(orientation: Orientation, insets: Insets): number {
+  const target = tokenPx('--size-target', 44);
+  const gap = tokenPx('--space-2', 8);
+  if (orientation === 'portrait') return target + gap;
+  return 3 * target + 2 * gap + tokenPx('--space-4', INSET) + insets.bottom;
+}
+
+export const orientationOf = (cssWidth: number, cssHeight: number): Orientation =>
+  cssWidth >= cssHeight ? 'landscape' : 'portrait';
+
+/**
+ * The top-down share in use. It may not take the cockpit below what its controls need: in landscape
+ * the wheel, gears and compact legend side by side, in portrait the controls plus the smallest
+ * mirror above them; nor the top view below what its panels and the divider need (`panels`).
+ * The default always stays allowed. Where it leaves no room for the divider, `min` and `max`
+ * both equal the default.
+ */
+export function topDownSplit(
+  cssWidth: number,
+  cssHeight: number,
+  layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
+  legend: LegendBox | null = null,
+  safeInsets?: Insets,
+  panels: PanelStack | null = null,
+): TopDownSplit {
+  const insets = safeInsets ?? readSafeInsets();
+  const orientation = orientationOf(cssWidth, cssHeight);
+  const landscape = orientation === 'landscape';
+  const fallback = DEFAULT_TOP_DOWN_LAYOUT[orientation];
+  const limits = TOP_DOWN_SHARE_LIMITS[orientation];
+  const extent = landscape ? cssWidth : cssHeight;
+  const cockpitNeeded = landscape
+    ? insets.left + 3 * INSET + GEARS_WIDTH + LEGEND_WIDTH + wheelSize(cssWidth, cssHeight, insets)
+    : COCKPIT_LABEL +
+      MIN_MIRROR_HEIGHT +
+      MIRROR_GAP +
+      Math.max(controlsHeight(cssWidth, cssHeight, insets), legend?.height ?? 0);
+  const max = Math.min(limits.max, Math.max(fallback, 1 - cockpitNeeded / extent));
+  const divider = dividerExtent(orientation, insets);
+  // Landscape the panels wrap with the pane's width, so a wider pane is what makes room; portrait the
+  // width is fixed and the pane's height must hold the panels.
+  const fits = (pane: number): boolean =>
+    panels === null ||
+    (landscape ? panels(pane) + divider <= cssHeight : panels(cssWidth) + divider <= pane);
+  let hi = fallback * extent;
+  if (!fits(hi)) return { orientation, share: fallback, min: fallback, max: fallback, fallback };
+  let lo = limits.min * extent;
+  if (fits(lo)) hi = lo;
+  else if (landscape) {
+    while (hi - lo > 1) {
+      const mid = (lo + hi) / 2;
+      if (fits(mid)) hi = mid;
+      else lo = mid;
+    }
+  } else if (panels !== null) hi = panels(cssWidth) + divider;
+  const min = Math.min(fallback, Math.max(limits.min, hi / extent));
+  return { orientation, share: clamp(layout[orientation], min, max), min, max, fallback };
+}
+
 /** `legend` is the measured key legend: the mirrors stay above it where it reaches under them. */
 export function computeViewports(
   cssWidth: number,
@@ -69,20 +152,23 @@ export function computeViewports(
   mode: ViewMode,
   legend: LegendBox | null = null,
   safeInsets?: Insets,
+  layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
+  panels: PanelStack | null = null,
 ): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
     return { cockpit: null, mirrorLeft: null, mirrorRight: null, topDown: full };
   }
   const insets = safeInsets ?? readSafeInsets();
+  const { share } = topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
   let topDown: Rect;
   let cockpit: Rect;
   if (cssWidth >= cssHeight) {
-    const w = Math.round(0.4 * cssWidth);
+    const w = Math.round(share * cssWidth);
     topDown = { x: cssWidth - w, y: 0, width: w, height: cssHeight };
     cockpit = { x: 0, y: 0, width: cssWidth - w, height: cssHeight };
   } else {
-    const h = cssHeight - Math.round(0.55 * cssHeight);
+    const h = cssHeight - Math.round((1 - share) * cssHeight);
     topDown = { x: 0, y: 0, width: cssWidth, height: h };
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
   }
