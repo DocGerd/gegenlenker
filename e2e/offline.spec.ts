@@ -99,3 +99,79 @@ test('zooms and pans the top-down view without disturbing the controls', async (
   await page.mouse.up();
   await expect(reset).toBeEnabled();
 });
+
+test('High graphics caches the ground texture and transcoder on first use and applies them offline', async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  const origin = new URL(baseURL ?? '').origin;
+  const foreign: string[] = [];
+  context.on('request', (r) => {
+    const url = r.url();
+    if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:'))
+      foreign.push(url);
+  });
+  let offline = false;
+  const warnings: string[] = [];
+  const errors: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'warning') warnings.push(m.text());
+    if (m.type() === 'error' && !(offline && /net::ERR_/.test(m.text()))) errors.push(m.text());
+  });
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'gegenlenker.settings.v1',
+      JSON.stringify({ version: 1, graphics: 'high' }),
+    );
+  });
+
+  await page.goto('./');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  await expect(page.locator('[data-menu="offline"]')).toHaveText(en.offlineReady);
+
+  const cached = async (): Promise<{ precache: string[]; runtime: string[] }> =>
+    page.evaluate(async () => {
+      const urls: Record<'precache' | 'runtime', string[]> = { precache: [], runtime: [] };
+      for (const name of await caches.keys()) {
+        const bucket = name.includes('precache') ? urls.precache : urls.runtime;
+        for (const request of await (await caches.open(name)).keys()) bucket.push(request.url);
+      }
+      return urls;
+    });
+  const files = [
+    /ground-[\w-]+\.ktx2$/,
+    /basis_transcoder-[\w-]+\.js$/,
+    /basis_transcoder-[\w-]+\.wasm$/,
+  ];
+  const matching = (urls: string[], file: RegExp): string[] => urls.filter((url) => file.test(url));
+
+  // Installing does not download them: only High draws the texture, so the other presets skip the cost.
+  const installed = await cached();
+  for (const file of files) expect(matching(installed.precache, file), String(file)).toEqual([]);
+
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  const marker = page.locator('html');
+  await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/);
+  const target = await marker.getAttribute('data-ground-texture');
+  await expect
+    .poll(async () => {
+      const { runtime } = await cached();
+      return files.map((file) => matching(runtime, file).length);
+    })
+    .toEqual([1, 1, 1]);
+
+  offline = true;
+  await context.setOffline(true);
+  await page.reload();
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(marker).toHaveAttribute('data-ground-texture', target ?? '');
+  expect(warnings.filter((w) => w.includes('Ground texture'))).toEqual([]);
+  expect(errors).toEqual([]);
+  expect(foreign).toEqual([]);
+});

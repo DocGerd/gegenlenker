@@ -235,6 +235,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
         powerPreference: 'high-performance',
       });
       renderer.autoClear = false;
+      parts.onRenderer?.(renderer);
       renderer.info.autoReset = false;
       const gl = renderer.getContext();
       const ext = gl.getExtension('WEBGL_debug_renderer_info');

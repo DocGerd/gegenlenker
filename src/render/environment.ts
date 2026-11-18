@@ -8,15 +8,29 @@ import {
   HemisphereLight,
   Mesh,
   MeshBasicMaterial,
+  Float32BufferAttribute,
   MeshLambertMaterial,
   PlaneGeometry,
   RingGeometry,
+  ShaderLib,
   type Material,
+  type Texture,
+  type WebGLProgramParametersWithUniforms,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Tolerances } from '../contracts/exercise';
-import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
+import type {
+  Marking,
+  Obstacle,
+  ObstacleKind,
+  Rect2,
+  ResolvedLayout,
+  SurfaceKind,
+} from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
+import { GROUND_TEXTURE_MEAN } from './ground-texture-pixels';
+import { GROUND_SHADER_MARKER, GROUND_SURFACES } from './ground-texture-spec';
+import type { GroundTextures } from './ground-texture';
 import type { QualityFlags } from './quality';
 import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER, type Environment } from './seams';
 import { REALISM_HUES } from './realism-hues';
@@ -305,8 +319,17 @@ function addMarking(m: Marking, chunks: Chunks, color: Color): void {
   }
 }
 
+type GroundCell = {
+  readonly x0: number;
+  readonly x1: number;
+  readonly y0: number;
+  readonly y1: number;
+  /** `undefined` is the verge. */
+  readonly kind: SurfaceKind | undefined;
+};
+
 /** Non-overlapping ground: the grid spanned by the surface edges, each cell a surface or verge. */
-function groundGeometry(layout: ResolvedLayout, palette: ScenePalette): BufferGeometry {
+function groundCells(layout: ResolvedLayout): GroundCell[] {
   const { bounds, surfaces } = layout;
   const edges = (lo: number, hi: number, values: number[]): number[] =>
     [...new Set([lo, hi, ...values.filter((v) => v > lo && v < hi)])].sort((a, b) => a - b);
@@ -320,8 +343,7 @@ function groundGeometry(layout: ResolvedLayout, palette: ScenePalette): BufferGe
     bounds.maxY,
     surfaces.flatMap((s) => [s.rect.minY, s.rect.maxY]),
   );
-  const color = new Color();
-  const cells: BufferGeometry[] = [];
+  const cells: GroundCell[] = [];
   for (let i = 0; i + 1 < xs.length; i++) {
     for (let j = 0; j + 1 < ys.length; j++) {
       const x0 = xs[i] ?? 0;
@@ -333,18 +355,115 @@ function groundGeometry(layout: ResolvedLayout, palette: ScenePalette): BufferGe
       const surface = surfaces.find(
         ({ rect: r }) => mx > r.minX && mx < r.maxX && my > r.minY && my < r.maxY,
       );
-      color.set(surface === undefined ? palette.verge : palette[surface.kind]);
-      cells.push(
-        tint(rectGeometry(x0, x1, y0, y1, surface === undefined ? VERGE_Y : SURFACE_Y), color),
-      );
+      cells.push({ x0, x1, y0, y1, kind: surface?.kind });
     }
   }
+  return cells;
+}
+
+const cellColor = (cell: GroundCell, palette: ScenePalette, color: Color): Color =>
+  color.set(cell.kind === undefined ? palette.verge : palette[cell.kind]);
+
+const cellHeight = (cell: GroundCell): number => (cell.kind === undefined ? VERGE_Y : SURFACE_Y);
+
+function groundGeometry(layout: ResolvedLayout, palette: ScenePalette): BufferGeometry {
+  const color = new Color();
+  const cells = groundCells(layout).map((c) =>
+    tint(rectGeometry(c.x0, c.x1, c.y0, c.y1, cellHeight(c)), cellColor(c, palette, color)),
+  );
   const merged = mergeGeometries(cells);
   cells.forEach((g) => g.dispose());
   return merged;
 }
 
-export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePalette): Environment {
+const GROUND_TEXTURED = Object.values(GROUND_SURFACES);
+
+/**
+ * The same cells as `groundGeometry`, carrying world-space UVs (one texture tile per `tile` metres)
+ * and which texture channel each cell reads; the verge selects none and keeps its token colour.
+ */
+export function texturedGroundGeometry(
+  layout: ResolvedLayout,
+  palette: ScenePalette,
+): BufferGeometry {
+  const { minX, minY } = layout.bounds;
+  const color = new Color();
+  const cells = groundCells(layout).map((c) => {
+    const geometry = tint(
+      rectGeometry(c.x0, c.x1, c.y0, c.y1, cellHeight(c)),
+      cellColor(c, palette, color),
+    );
+    const entry = GROUND_TEXTURED.find((e) => e.surface === c.kind);
+    const position = geometry.getAttribute('position');
+    const uvs: number[] = [];
+    const selects: number[] = [];
+    for (let i = 0; i < position.count; i++) {
+      const tile = entry?.tile ?? 1;
+      uvs.push((position.getX(i) - minX) / tile, (-position.getZ(i) - minY) / tile);
+      selects.push(
+        entry?.channel === 0 ? 1 : 0,
+        entry?.channel === 1 ? 1 : 0,
+        entry?.channel === 2 ? 1 : 0,
+      );
+    }
+    return geometry
+      .setAttribute('uv', new Float32BufferAttribute(uvs, 2))
+      .setAttribute('groundSelect', new Float32BufferAttribute(selects, 3));
+  });
+  const merged = mergeGeometries(cells);
+  cells.forEach((g) => g.dispose());
+  return merged;
+}
+
+/** Replaces `anchor` once; throws when three's shader no longer contains it, so a patch never half-applies. */
+function inject(source: string, anchor: string, replacement: string): string {
+  if (!source.includes(anchor)) throw new Error(`Ground shader: ${anchor} not found`);
+  return source.replace(anchor, replacement);
+}
+
+/**
+ * Lambert shading with the ground map read per vertex-selected channel, scaled so the surface keeps
+ * its token brightness on average (the sky below the horizon is matched to it). Bright surfaces
+ * would exceed their token with a bright texel, so the product is clamped to 1.
+ */
+export function groundShader(
+  shader: Pick<WebGLProgramParametersWithUniforms, 'vertexShader' | 'fragmentShader'>,
+): void {
+  const gain = (1 / GROUND_TEXTURE_MEAN).toFixed(6);
+  const vertexShader = inject(
+    inject(
+      shader.vertexShader,
+      '#include <common>',
+      '#include <common>\nattribute vec3 groundSelect;\nvarying vec3 vGroundSelect;',
+    ),
+    '#include <begin_vertex>',
+    '#include <begin_vertex>\nvGroundSelect = groundSelect;',
+  );
+  const fragmentShader = inject(
+    inject(
+      shader.fragmentShader,
+      '#include <common>',
+      '#include <common>\nvarying vec3 vGroundSelect;',
+    ),
+    '#include <map_fragment>',
+    `#ifdef USE_MAP
+        vec3 ${GROUND_SHADER_MARKER} = texture2D( map, vMapUv ).rgb;
+        float groundWeight = vGroundSelect.x + vGroundSelect.y + vGroundSelect.z;
+        diffuseColor.rgb = min(
+          diffuseColor.rgb * mix( 1.0, dot( ${GROUND_SHADER_MARKER}, vGroundSelect ) * ${gain}, groundWeight ),
+          vec3( 1.0 )
+        );
+      #endif`,
+  );
+  shader.vertexShader = vertexShader;
+  shader.fragmentShader = fragmentShader;
+}
+
+export function proceduralEnvironment(
+  layout: ResolvedLayout,
+  palette: ScenePalette,
+  groundTextures?: GroundTextures,
+): Environment {
   const group = new Group();
   const geometries: BufferGeometry[] = [];
   const solid = new MeshLambertMaterial({ vertexColors: true });
@@ -359,7 +478,56 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
 
   const ground = groundGeometry(layout, palette);
   geometries.push(ground);
-  group.add(new Mesh(ground, solid));
+  const tokenGround = new Mesh(ground, solid);
+  group.add(tokenGround);
+
+  // High: perspective cameras draw this textured copy of the ground instead, top-down keeps the tokens.
+  let texturedGround: Mesh | null = null;
+  let texturedGroundMaterial: MeshLambertMaterial | null = null;
+  let groundTextureOn = false;
+  let groundDisabled = false;
+  let groundReported = false;
+  const syncGround = (): void => {
+    const on = groundTextureOn && texturedGround !== null && !groundDisabled;
+    tokenGround.layers.set(on ? AIDS_LAYER : DEFAULT_LAYER);
+    if (texturedGround !== null) texturedGround.visible = on;
+    if (on !== groundReported) {
+      groundReported = on;
+      groundTextures?.reportApplied(on);
+    }
+  };
+  const cancelGroundTexture = groundTextures?.onLoaded(
+    (texture: Texture) => {
+      let geometry: BufferGeometry | null = null;
+      let material: MeshLambertMaterial | null = null;
+      try {
+        // the patch runs at first render, where a throw would escape; prove it applies to this three
+        groundShader({
+          vertexShader: ShaderLib.lambert.vertexShader,
+          fragmentShader: ShaderLib.lambert.fragmentShader,
+        });
+        geometry = texturedGroundGeometry(layout, palette);
+        material = new MeshLambertMaterial({ vertexColors: true, map: texture });
+        material.onBeforeCompile = groundShader;
+        material.customProgramCacheKey = () => 'ground-detail';
+        const mesh = new Mesh(geometry, material);
+        mesh.layers.set(SKY_LAYER);
+        group.add(mesh);
+        geometries.push(geometry);
+        texturedGroundMaterial = material;
+        texturedGround = mesh;
+        syncGround();
+      } catch (error) {
+        geometry?.dispose();
+        material?.dispose();
+        console.warn('Ground texture could not be applied; keeping the token ground', error);
+      }
+    },
+    () => {
+      groundDisabled = true;
+      syncGround();
+    },
+  );
 
   // Restyled kinds keep a plain token copy for the top-down view only; the cockpit and mirrors draw
   // the detail copy from yard-props on SKY_LAYER.
@@ -497,6 +665,8 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     },
     setQuality(flags: QualityFlags): void {
       skyline.mesh.visible = flags.skyline;
+      groundTextureOn = flags.groundTexture;
+      syncGround();
       for (const mesh of props) mesh.visible = flags.yardDetail;
       // Without the props the obstacles must still show in perspective, so the tokens go to every camera.
       for (const mesh of tokens) {
@@ -505,6 +675,10 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
       }
     },
     dispose: () => {
+      cancelGroundTexture?.();
+      groundDisabled = true;
+      syncGround();
+      texturedGroundMaterial?.dispose();
       geometries.forEach((g) => g.dispose());
       gate?.material.dispose();
       solid.dispose();
