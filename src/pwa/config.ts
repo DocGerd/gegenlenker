@@ -20,6 +20,9 @@ const icons = [
   { src: 'pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
 ];
 
+/** Workbox skips larger files when precaching; the default, pinned so the cab glb test can import it. */
+export const MAX_PRECACHE_FILE_BYTES = 2 * 1024 * 1024;
+
 export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOptions> {
   return {
     registerType: 'prompt',
@@ -40,6 +43,7 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
     },
     workbox: {
       globPatterns: ['**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}'],
+      maximumFileSizeToCacheInBytes: MAX_PRECACHE_FILE_BYTES,
       navigateFallback: 'index.html',
       cleanupOutdatedCaches: true,
       clientsClaim: true,

@@ -21,6 +21,8 @@
     "icons": "node scripts/icons.mjs",
     "estimates": "node scripts/estimates.mjs",
     "cab:params": "node scripts/cab-params.mjs",
+    "cab:optimise": "node scripts/cab-optimise.mjs",
+    "cab:manifest": "node scripts/cab-manifest.mjs",
     "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm test:e2e"
   },
   "dependencies": {
