@@ -15,8 +15,12 @@ The entry text only: no leading `- `, no `### Category` heading. End it with the
 The result screen shows the delta to the previous best ([#84](https://github.com/DocGerd/gegenlenker/pull/84)).
 ```
 
-`tools/changelog-fragments.test.ts` fails on a misnamed fragment or one that opens with a heading.
+`tools/changelog-fragments.test.ts` fails on a misnamed fragment, or one that is not a single bullet-free, heading-free line ending in its own PR link.
 
 ## Release
 
-At the release cut, fold each fragment into the new `## [X.Y.Z] - date` section of `CHANGELOG.md` under its `### Category` heading as a top-level bullet, then delete the fragment files. Check this directory again right before tagging: a fragment merged after the fold is otherwise lost.
+1. Rename `## [Unreleased]` to `## [X.Y.Z] - date`, keeping its bullets.
+2. Add each fragment as a top-level bullet under its `### Category` heading.
+3. Add a fresh empty `## [Unreleased]`.
+4. Delete only the folded files, by name, never by glob.
+5. Before tagging, confirm `changelog.d/` holds only `README.md`; a fragment merged after the fold is otherwise lost.
