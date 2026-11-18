@@ -323,16 +323,18 @@ export function startDrive(
         updateSettings({ topDownLayout: savedLayout });
       }
       arrange();
+    } else if (action.type === 'aidLegend') {
+      arrange();
     } else if (action.type === 'collapse') {
       collapsed = { ...collapsed, [action.panel]: action.collapsed };
       updateSettings({ collapsed });
-      remeasure();
+      arrange();
     } else if (action.type === 'aid') {
       aids = { ...aids, [action.aid]: action.on };
       dirty = true;
       pathStale = true;
       updateSettings({ aids });
-      remeasure();
+      arrange();
     } else if (closeSheet === null) {
       togglePause();
     }
