@@ -8,6 +8,7 @@ const REALISM: readonly (keyof QualityFlags)[] = [
   'cabGlb',
   'vehicleGlb',
   'chaseView',
+  'cockpitInterior',
   'groundTexture',
   'pbr',
 ];

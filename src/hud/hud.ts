@@ -52,6 +52,8 @@ export type HudOptions = {
   topDown: TopDownMode;
   /** Offers the chase view; the preset's `chaseView` flag. */
   chase: boolean;
+  /** Draws the mirror housings; the preset's `cockpitInterior` flag. */
+  interior: boolean;
   collapsed: CollapsedPanels;
 };
 
@@ -213,6 +215,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   root.insertAdjacentHTML('beforeend', MARKUP(opts.mode, opts.chase));
   const hud = query(root, 'root', HTMLElement);
+  hud.toggleAttribute('data-interior', opts.interior);
   applyMessages(hud);
 
   const cockpit = query(hud, 'cockpit', HTMLElement);

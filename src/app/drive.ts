@@ -9,7 +9,7 @@ import { t } from '../i18n/i18n';
 import { createControls } from '../input/controls';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
-import { chaseViewAvailable } from '../render';
+import { chaseViewAvailable, interiorAvailable } from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay } from '../render/perf-overlay';
 import { computeViewports } from '../render/viewports';
@@ -212,6 +212,7 @@ export function startDrive(
     aids: settings.aids,
     topDown,
     chase: chaseViewAvailable(settings.graphics),
+    interior: interiorAvailable(settings.graphics),
     collapsed,
   });
   cleanups.push(() => hud.dispose());

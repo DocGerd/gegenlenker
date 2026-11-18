@@ -43,6 +43,7 @@ const hud = createHud(stage, {
   aids: { pivots: true, path: true, tracks: false, ghost: false },
   topDown: 'follow',
   chase: true,
+  interior: true,
   collapsed: { aids: false, gauges: false, keys: false },
 });
 hud.onAction((a) => console.info('hud action', JSON.stringify(a)));
