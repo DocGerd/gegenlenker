@@ -97,6 +97,7 @@ export function lowLoaderDeck(spec: TrailerSpec) {
   const lampTop = rearDeck + metres(spec.tailLamp.sill) + metres(spec.tailLamp.height);
   const slopeEnd = a.rearX + LOW_LOADER.carrierDepth + RAMP_THICKNESS; // ramps fold up in between
   const eye = Math.max(...TRUCK_IDS.map((id) => truckAnchors(truckById(id)).eye.z));
+  if (!Number.isFinite(eye)) throw new Error('lowLoaderDeck: no truck eye to fold the ramps above');
   return {
     carrierX: round(a.rearX + LOW_LOADER.carrierDepth),
     slopeEnd: round(slopeEnd),

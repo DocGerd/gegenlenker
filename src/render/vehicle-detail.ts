@@ -147,10 +147,12 @@ function mudflap(
   ceiling = Infinity,
 ): void {
   const front = axleX - radius - m(spec.gap);
+  const top = Math.min(m(spec.clearance) + m(spec.height), ceiling);
+  if (top <= m(spec.clearance)) return;
   c.box(
     [Math.max(front - FLAP_THICKNESS, rearLimit), front],
     [y - halfWidth, y + halfWidth],
-    [m(spec.clearance), Math.min(m(spec.clearance) + m(spec.height), ceiling)],
+    [m(spec.clearance), top],
     HUE.chevronBlack,
   );
 }
@@ -167,13 +169,19 @@ function sideMarking(
   room: number,
   profile: Profile = FLAT,
 ): void {
+  profile.reduce((prev, [x]) => {
+    if (x <= prev) throw new Error('sideMarking: the profile is not strictly increasing in x');
+    return x;
+  }, -Infinity);
   const half = Math.min(MARKER_HEIGHT, room) / 2;
   const count = Math.max(2, Math.ceil((x1 - x0) / MARKER_SPACING) + 1);
-  const breaks = [x0, ...profile.map(([x]) => x).filter((x) => x > x0 && x < x1), x1];
+  const inner = profile.map(([x]) => x).filter((x) => x > x0 && x < x1);
   for (const side of [-1, 1]) {
     const across = lateral(side, halfWidth, halfWidth + RELIEF);
-    for (let i = 1; i < breaks.length; i++) {
-      const span: Range = [breaks[i - 1] ?? x0, breaks[i] ?? x1];
+    let from = x0;
+    for (const to of [...inner, x1]) {
+      const span: Range = [from, to];
+      from = to;
       const ends: Range = [zc + offsetAt(profile, span[0]), zc + offsetAt(profile, span[1])];
       if (ends[0] === ends[1]) {
         c.box(span, across, [ends[0] - STRIP / 2, ends[0] + STRIP / 2], HUE.contourSide);

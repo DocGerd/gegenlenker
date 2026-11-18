@@ -7,6 +7,7 @@ import { TRAILER_IDS, TRUCK_IDS, type TrailerId } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { createMirror } from './mirror';
+import { REALISM_HUES } from './realism-hues';
 import {
   parseTrailerShell,
   type Shells,
@@ -27,12 +28,14 @@ import {
 } from './seams';
 import {
   EYE_BLOCK,
+  lowLoaderDeck,
   PLATE_RADIUS,
   SWING_MARGIN,
   TRAILER_WHEEL_WIDTH,
   trailerFrame,
   trailerShellParams,
 } from './trailer-dims';
+import { trailerDetail } from './vehicle-detail';
 import { proceduralTrailer } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -85,18 +88,47 @@ describe.each(TRAILER_IDS)('trailer shell asset of %s', (id) => {
   });
 
   it.runIf(TRAILER_LOOKS[id].kind === 'low-loader')(
-    'folds the ramps up at least to every cockpit eye, behind a sloped rear and a raised front',
-    () => {
+    'folds the ramps up to every cockpit eye, and runs from the sloped rear deck up to the raised front',
+    async () => {
       const deck = params.lowLoader;
+      if (deck === undefined) throw new Error('no low-loader deck');
       for (const truck of TRUCK_IDS) {
-        expect(deck?.rampTop).toBeGreaterThanOrEqual(truckAnchors(truckById(truck)).eye.z);
+        expect(deck.rampTop).toBeGreaterThanOrEqual(truckAnchors(truckById(truck)).eye.z);
       }
-      expect(deck?.rearDeck).toBeLessThan(f.deck);
-      expect(deck?.frontDeck).toBeGreaterThan(f.deck);
       // the lamps sit on the carrier, above the underrun guard's reach below the underside
-      expect((deck?.rearDeck ?? 0) + spec.tailLamp.sill.value / 1000).toBeGreaterThanOrEqual(
-        f.underside,
+      expect(deck.rearDeck + spec.tailLamp.sill.value / 1000).toBeGreaterThanOrEqual(f.underside);
+
+      const { mesh } = (await load(id)).trailer;
+      mesh.updateWorldMatrix(true, false);
+      const positions = mesh.geometry.getAttribute('position');
+      const point = new Vector3();
+      // whether the deck has a surface at height y inside the side members, within a window in x
+      const hasSurface = (x0: number, x1: number, y: number, tolerance: number): boolean => {
+        for (let i = 0; i < positions.count; i++) {
+          point.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+          if (
+            point.x >= x0 &&
+            point.x <= x1 &&
+            Math.abs(point.z) < f.hw - 0.1 &&
+            Math.abs(point.y - y) <= tolerance
+          ) {
+            return true;
+          }
+        }
+        return false;
+      };
+      // the grating starts at the rear deck's height just behind the ramps' foot, and the raised front begins at its own
+      expect(hasSurface(deck.slopeEnd + 0.03, deck.slopeEnd + 0.05, deck.rearDeck, 0.02)).toBe(
+        true,
       );
+      expect(
+        hasSurface(
+          deck.frontStart - TOLERANCE,
+          deck.frontStart + TOLERANCE,
+          deck.frontDeck,
+          TOLERANCE,
+        ),
+      ).toBe(true);
     },
   );
 
@@ -296,6 +328,62 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
         const bare = added.find((m) => vertices(m) < vertices(removed[0] ?? m));
         expect(bare).toBeDefined();
       }
+    },
+  );
+
+  it.runIf(!isBox)(
+    'puts the tail lamps and side contour on the low-loader deck in the shell detail',
+    () => {
+      const f = trailerFrame(spec);
+      const deck = lowLoaderDeck(spec);
+      const { shellGeometry } = trailerDetail({
+        spec,
+        halfWidth: f.hw,
+        rearX: f.a.rearX,
+        frontX: f.a.frontX,
+        deck: f.deck,
+        underside: f.underside,
+        bodyTop: f.deck,
+        isBox: false,
+        radius: f.radius,
+        track: f.track,
+        wheelWidth: TRAILER_WHEEL_WIDTH,
+        rearAxleXs: f.a.rearAxles.map((axle) => axle.x),
+        shellDeck: deck,
+      });
+      if (shellGeometry === null) throw new Error('a low-loader has shell detail');
+      const heights = (hue: number, xMax: number): number[] => {
+        const wanted = new Color(hue);
+        const colours = shellGeometry.getAttribute('color');
+        const positions = shellGeometry.getAttribute('position');
+        const out: number[] = [];
+        for (let i = 0; i < positions.count; i++) {
+          const same =
+            Math.abs(colours.getX(i) - wanted.r) < COLOUR_TOLERANCE &&
+            Math.abs(colours.getY(i) - wanted.g) < COLOUR_TOLERANCE &&
+            Math.abs(colours.getZ(i) - wanted.b) < COLOUR_TOLERANCE;
+          if (same && positions.getX(i) <= xMax) out.push(positions.getY(i));
+        }
+        return out;
+      };
+      const sill = spec.tailLamp.sill.value / 1000;
+      const lamp = heights(REALISM_HUES.tailLamp, Infinity);
+      expect(lamp.length).toBeGreaterThan(0);
+      expect(Math.min(...lamp)).toBeCloseTo(deck.rearDeck + sill, 3);
+      expect(Math.max(...lamp)).toBeCloseTo(
+        deck.rearDeck + sill + spec.tailLamp.height.value / 1000,
+        3,
+      );
+      // behind the slope the contour strip sits as far below the flat deck's as the rear deck does
+      const strip = heights(REALISM_HUES.contourSide, deck.slopeEnd + 1e-3);
+      expect(strip.length).toBeGreaterThan(0);
+      expect(Math.min(...strip)).toBeCloseTo(
+        (f.deck + f.underside) / 2 +
+          deck.rearDeck -
+          f.deck -
+          trailerShellParams(spec).marking.strip / 2,
+        3,
+      );
     },
   );
 
