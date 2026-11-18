@@ -15,9 +15,9 @@ import {
 } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
-import { TRAILER_IDS, TRUCK_IDS, type TruckId } from '../contracts/vehicle';
+import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import { trailerById, truckById } from '../vehicles/registry';
-import { parseShell, type ShellKind, startShells } from './glb-shells';
+import { parseShell, parseTrailerShell, type ShellKind, startShells } from './glb-shells';
 import { KEYS } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import { REALISM_HUES } from './realism-hues';
@@ -415,5 +415,46 @@ describe('reflective shells', () => {
     expect(standardOf(visual.object).length).toBeGreaterThan(2);
     visual.setQuality(QUALITY_FLAGS.balanced);
     expect(standardOf(visual.object)).toHaveLength(0);
+  });
+});
+
+describe.each(TRAILER_IDS)('reflective trailer shell of %s', (id) => {
+  const load = async (): Promise<Awaited<ReturnType<typeof parseTrailerShell>>> => {
+    const bytes = readFileSync(
+      join(import.meta.dirname, `assets/${id satisfies TrailerId}-trailer.glb`),
+    );
+    return parseTrailerShell(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    );
+  };
+
+  it('follows the preset with the shell and its bare detail swapped in and out', async () => {
+    const loaded = await load();
+    let attach = (): void => undefined;
+    const shells = {
+      setEnabled: () => undefined,
+      attached: () => undefined,
+      onLoaded: (_key: string, cb: (shell: typeof loaded) => void) => {
+        attach = () => {
+          cb(loaded);
+        };
+        return () => undefined;
+      },
+    };
+    const visual = proceduralTrailer(trailerById(id), palette, shells, fixed(new Texture()));
+    const detail = meshes(visual.object).filter(
+      (m) => m.material instanceof MeshLambertMaterial && m.material.vertexColors,
+    );
+    attach();
+    visual.setQuality(QUALITY_FLAGS.high);
+    expect(standardOf(visual.object).length).toBeGreaterThan(1);
+    visual.setQuality(QUALITY_FLAGS.balanced);
+    expect(standardOf(visual.object)).toHaveLength(0);
+    visual.setQuality(QUALITY_FLAGS.high);
+    for (const mesh of detail) expect(mesh.material).toBeInstanceOf(MeshStandardMaterial);
+    for (const m of meshes(visual.object)) {
+      if (m.material instanceof MeshStandardMaterial)
+        expect(m.layers.isEnabled(AIDS_LAYER)).toBe(false);
+    }
   });
 });
