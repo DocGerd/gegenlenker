@@ -1,5 +1,6 @@
 import { exercises } from '../content/registry';
 import { LAYOUT_IDS, type LayoutId } from '../contracts/layout';
+import { GRAPHICS_PRESETS, type GraphicsPreset } from '../contracts/render';
 import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import {
@@ -31,6 +32,12 @@ const THEME_NAME: Readonly<Record<Settings['theme'], MessageKey>> = {
   dark: 'themeDark',
 };
 
+const GRAPHICS_NAME: Readonly<Record<GraphicsPreset, MessageKey>> = {
+  low: 'graphicsLow',
+  balanced: 'graphicsBalanced',
+  high: 'graphicsHigh',
+};
+
 const MARKUP = `
 <main class="menu">
   <header class="menu-header">
@@ -60,6 +67,7 @@ const MARKUP = `
     <div class="menu-fields">
       <label class="menu-field"><span class="menu-label" data-i18n="language"></span><select class="menu-select" data-menu="language"></select></label>
       <label class="menu-field"><span class="menu-label" data-i18n="theme"></span><select class="menu-select" data-menu="theme"></select></label>
+      <label class="menu-field"><span class="menu-label" data-i18n="graphics"></span><select class="menu-select" data-menu="graphics"></select></label>
     </div>
   </section>
   <footer class="menu-footer">
@@ -165,6 +173,7 @@ export function showMenu(
     const trailer = query(container, 'trailer', HTMLSelectElement);
     const language = query(container, 'language', HTMLSelectElement);
     const theme = query(container, 'theme', HTMLSelectElement);
+    const graphics = query(container, 'graphics', HTMLSelectElement);
     fillSelect(
       truck,
       trucks.map((s) => [s.id, s.name]),
@@ -184,6 +193,11 @@ export function showMenu(
       theme,
       (Object.keys(THEME_NAME) as Settings['theme'][]).map((v) => [v, t(THEME_NAME[v])]),
       settings.theme,
+    );
+    fillSelect(
+      graphics,
+      GRAPHICS_PRESETS.map((v) => [v, t(GRAPHICS_NAME[v])]),
+      settings.graphics,
     );
 
     const pair = (): Pick<RunConfig, 'truckId' | 'trailerId'> => {
@@ -255,6 +269,11 @@ export function showMenu(
       if (pref === undefined) return;
       applyTheme(pref);
       updateSettings({ theme: pref });
+    });
+
+    graphics.addEventListener('change', () => {
+      const preset = GRAPHICS_PRESETS.find((v) => v === graphics.value);
+      if (preset !== undefined) updateSettings({ graphics: preset });
     });
 
     paintOffline();

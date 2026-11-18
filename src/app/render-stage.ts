@@ -1,5 +1,6 @@
 import type { SceneRenderer } from '../contracts/render';
 import { createSceneRenderer } from '../render';
+import { currentSettings } from './settings';
 import { showNotice } from './notice';
 
 // One renderer and canvas for the whole session: a fresh WebGL context per run would hit the browser's context limit.
@@ -48,6 +49,7 @@ export function mountRenderStage(
     return null;
   }
   const { canvas, renderer } = gl;
+  renderer.setQuality(currentSettings().graphics);
   host.append(canvas);
 
   const abort = new AbortController();

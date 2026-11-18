@@ -1,4 +1,11 @@
-import type { AidFlags, CollapsedPanels, TopDownMode } from '../contracts/render';
+import {
+  DEFAULT_GRAPHICS,
+  GRAPHICS_PRESETS,
+  type AidFlags,
+  type CollapsedPanels,
+  type GraphicsPreset,
+  type TopDownMode,
+} from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
 import { SETTINGS_KEY, writeText } from './storage';
@@ -12,6 +19,7 @@ export type Settings = {
   readonly aids: AidFlags;
   readonly topDown: TopDownMode;
   readonly collapsed: CollapsedPanels;
+  readonly graphics: GraphicsPreset;
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
@@ -57,6 +65,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
       gauges: flag(collapsed['gauges'], DEFAULT_COLLAPSED.gauges),
       keys: flag(collapsed['keys'], DEFAULT_COLLAPSED.keys),
     },
+    graphics: pick(GRAPHICS_PRESETS, s['graphics'], DEFAULT_GRAPHICS),
   };
 }
 

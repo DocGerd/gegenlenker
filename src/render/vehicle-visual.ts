@@ -313,9 +313,10 @@ export function proceduralTruck(
   const pivotLeft = kingpin(1);
   const pivotRight = kingpin(-1);
 
-  let shell: { dispose(): void } | null = null;
+  let shell: ReturnType<typeof applyCabShell> | null = null;
+  let cabGlb = true;
   const cancelShell = shells?.onLoaded(spec.id, (loaded) => {
-    shell = applyCabShell(group, cabBox, cabFront, loaded, palette);
+    shell = applyCabShell(group, cabBox, cabFront, loaded, palette, cabGlb);
   });
 
   return {
@@ -324,6 +325,10 @@ export function proceduralTruck(
       placePose(group, snapshot.truck);
       pivotRight.rotation.y = snapshot.roadWheelAngle;
       pivotLeft.rotation.y = snapshot.roadWheelAngle;
+    },
+    setQuality(flags) {
+      cabGlb = flags.cabGlb;
+      shell?.setEnabled(cabGlb);
     },
     dispose() {
       cancelShell?.();

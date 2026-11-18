@@ -102,8 +102,8 @@ function instance(proto: Mesh, material: MeshLambertMaterial): Mesh {
 
 /**
  * Swaps the procedural cab for the shell in one step: the box stays top-down only, the shell and
- * the lit cab front trade places in the mirrors. Returns what the visual must dispose.
- * Everything that can throw runs before the group is touched.
+ * the lit cab front trade places in the mirrors. Returns what the visual must dispose, and a switch
+ * back to the procedural cab. Everything that can throw runs before the group is touched.
  */
 export function applyCabShell(
   group: Group,
@@ -111,7 +111,8 @@ export function applyCabShell(
   cabFront: Mesh,
   shell: CabShell,
   palette: ScenePalette,
-): { dispose(): void } {
+  enabled = true,
+): { dispose(): void; setEnabled(on: boolean): void } {
   const materials = [
     new MeshLambertMaterial({ color: palette.cab }),
     new MeshLambertMaterial({ vertexColors: true }),
@@ -123,8 +124,18 @@ export function applyCabShell(
     materials.forEach((m) => m.dispose());
     throw error;
   }
-  cabBox.layers.set(AIDS_LAYER);
-  group.remove(cabFront);
-  group.add(...meshes);
-  return { dispose: () => materials.forEach((m) => m.dispose()) };
+  const boxLayers = cabBox.layers.mask;
+  const setEnabled = (on: boolean): void => {
+    if (on) {
+      cabBox.layers.set(AIDS_LAYER);
+      group.remove(cabFront);
+      group.add(...meshes);
+    } else {
+      cabBox.layers.mask = boxLayers;
+      group.remove(...meshes);
+      group.add(cabFront);
+    }
+  };
+  if (enabled) setEnabled(true);
+  return { dispose: () => materials.forEach((m) => m.dispose()), setEnabled };
 }

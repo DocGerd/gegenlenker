@@ -9,7 +9,9 @@ import {
 } from 'three';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
+  DEFAULT_GRAPHICS,
   DEFAULT_TOP_DOWN_VIEW,
+  type GraphicsPreset,
   type Rect,
   type RenderFrame,
   type RenderStats,
@@ -24,6 +26,7 @@ import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createMirror } from './mirror';
 import { readScenePalette } from './palette';
+import { QUALITY_FLAGS } from './quality';
 import {
   AIDS_LAYER,
   CAMERA_FAR,
@@ -48,7 +51,6 @@ const LEAD_SECONDS = 0.5;
 const MAX_LEAD_STEP_SECONDS = 0.25;
 const YARD_MARGIN = 5;
 const SKY_HEIGHT = 200;
-const MAX_PIXEL_RATIO = 2;
 
 type Built = {
   readonly scene: Scene;
@@ -105,6 +107,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   let cssWidth = 0;
   let cssHeight = 0;
   let appliedRatio = 0;
+  let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
   let contextLost = false;
   let glRenderer = 'unknown';
   let drawCalls = 0;
@@ -131,7 +134,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   }
 
   const ratio = (): number =>
-    Math.min(window.devicePixelRatio || 1, MAX_PIXEL_RATIO) * timer.scale();
+    Math.min(window.devicePixelRatio || 1, quality.pixelRatioCap) * timer.scale();
 
   function applySize(): void {
     if (renderer === null || cssWidth === 0) return;
@@ -139,6 +142,12 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     renderer.setPixelRatio(r);
     renderer.setSize(cssWidth, cssHeight, false);
     appliedRatio = r;
+  }
+
+  function applyQuality(b: Built): void {
+    b.environment.setQuality?.(quality);
+    b.truck.setQuality?.(quality);
+    b.trailer.setQuality?.(quality);
   }
 
   function disposeBuilt(): void {
@@ -252,6 +261,15 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
         yardBounds: fitBounds(nextLayout),
         radius: followRadius(truck, trailer),
       };
+      applyQuality(built);
+    },
+
+    setQuality(preset: GraphicsPreset) {
+      quality = QUALITY_FLAGS[preset];
+      appliedRatio = 0;
+      mirrorLeft.setSamples(quality.mirrorMsaa);
+      mirrorRight.setSamples(quality.mirrorMsaa);
+      if (built !== null) applyQuality(built);
     },
 
     resize(width, height) {

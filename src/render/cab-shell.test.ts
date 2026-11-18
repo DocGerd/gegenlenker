@@ -9,6 +9,7 @@ import { type CabShell, type CabShells, parseCabShell, startCabShells } from './
 import { CAB_LENGTH, RELIEF } from './cab-dims';
 import { createMirror } from './mirror';
 import { KEYS } from './palette';
+import { QUALITY_FLAGS } from './quality';
 import { CAB_LAYER, COCKPIT_LAYERS, enableLayers, TOP_DOWN_LAYERS } from './seams';
 import { proceduralTruck } from './vehicle-visual';
 
@@ -110,6 +111,25 @@ describe('cab shell swap', () => {
       [cab.max, body.max],
     ] as const) {
       expect(a.distanceTo(b)).toBeLessThan(0.05);
+    }
+  });
+
+  it('restores the procedural cab for the mirrors when the shell is switched off, also before it loads', async () => {
+    const { shells, apply } = deferred(await parseCabShell(glb()));
+    const visual = proceduralTruck(spec, palette, shells);
+    const group = visual.object;
+    const before = group.children.map((m) => [m, m.layers.mask] as const);
+    visual.setQuality?.(QUALITY_FLAGS.low);
+    apply();
+    expect(group.children.map((m) => [m, m.layers.mask])).toEqual(before);
+
+    visual.setQuality?.(QUALITY_FLAGS.balanced);
+    expect(group.children).toHaveLength(before.length + 1);
+    visual.setQuality?.(QUALITY_FLAGS.low);
+    expect(group.children).toHaveLength(before.length);
+    for (const [m, mask] of before) {
+      expect(group.children).toContain(m);
+      expect(m.layers.mask).toBe(mask);
     }
   });
 

@@ -39,6 +39,10 @@ export type CollapsedPanels = {
   readonly gauges: boolean;
   readonly keys: boolean;
 };
+/** Perspective-view realism and render cost; the top-down view looks the same at every preset. */
+export type GraphicsPreset = 'low' | 'balanced' | 'high';
+export const GRAPHICS_PRESETS: readonly GraphicsPreset[] = ['low', 'balanced', 'high'];
+export const DEFAULT_GRAPHICS: GraphicsPreset = 'balanced';
 export type ScenePaletteKey =
   | 'sky'
   | 'backdrop'
@@ -88,6 +92,8 @@ export type RenderStats = {
 export interface SceneRenderer {
   init(canvas: HTMLCanvasElement): void; // throws when WebGL 2 is unavailable
   setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec): void;
+  /** Applies at once, to the current scene and to every later one. */
+  setQuality(preset: GraphicsPreset): void;
   resize(cssWidth: number, cssHeight: number): void;
   render(frame: RenderFrame): void;
   /** Sim-plane point to screen CSS px as of the last render; null before the first. */
