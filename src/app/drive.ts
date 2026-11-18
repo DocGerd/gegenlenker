@@ -2,15 +2,15 @@ import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
 import type { LayoutId } from '../contracts/layout';
-import type { AidFlags, RenderFrame } from '../contracts/render';
+import type { AidFlags, RenderFrame, TopDownMode } from '../contracts/render';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
 import { t } from '../i18n/i18n';
 import { createControls } from '../input/controls';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
+import { chaseViewAvailable } from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
-import { QUALITY_FLAGS } from '../render/quality';
 import { mountPerfOverlay } from '../render/perf-overlay';
 import { computeViewports } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
@@ -172,9 +172,7 @@ export function startDrive(
 
   let aids: AidFlags = settings.aids;
   let collapsed = settings.collapsed;
-  const chase = QUALITY_FLAGS[settings.graphics].chaseView;
-  // A stored chase view falls back to follow on a preset without it; the stored choice stays.
-  let topDown = settings.topDown === 'chase' && !chase ? 'follow' : settings.topDown;
+  let topDown: TopDownMode = settings.topDown;
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
   let pathStale = true;
@@ -213,7 +211,7 @@ export function startDrive(
         : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
     aids: settings.aids,
     topDown,
-    chase,
+    chase: chaseViewAvailable(settings.graphics),
     collapsed,
   });
   cleanups.push(() => hud.dispose());
@@ -252,6 +250,10 @@ export function startDrive(
         ys.push(p.y);
       }
     }
+    if (xs.length === 0) {
+      delete stage.dataset['vehicleBox'];
+      return;
+    }
     const box = {
       left: Math.min(...xs),
       top: Math.min(...ys),
@@ -285,7 +287,7 @@ export function startDrive(
       topDown = action.mode;
       viewInput.setMode(topDown);
       dirty = true;
-      updateSettings({ topDown });
+      if (topDown !== 'chase') updateSettings({ topDown });
     } else if (action.type === 'resetView') {
       viewInput.reset();
     } else if (action.type === 'collapse') {

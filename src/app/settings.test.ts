@@ -26,9 +26,9 @@ const stored: Settings = {
 };
 
 describe('loadSettings', () => {
-  it('keeps a stored chase view', () => {
+  it('loads a stored chase view as follow', () => {
     expect(loadSettings(JSON.stringify({ version: 1, topDown: 'chase' }), 'en').topDown).toBe(
-      'chase',
+      'follow',
     );
   });
 

@@ -18,12 +18,16 @@ async function start(page: Page, settings: object): Promise<string[]> {
   return errors;
 }
 
-test('the chase view orbits and zooms without errors, and hides the target arrow', async ({
+test('the chase view orbits and zooms without errors, hides the target arrow and the top-down aids, and is not stored', async ({
   page,
 }) => {
-  const errors = await start(page, { topDown: 'chase' });
-  const chase = page.locator('[data-view="chase"]');
-  await expect(chase).toHaveAttribute('aria-pressed', 'true');
+  const errors = await start(page, {});
+  await page.locator('[data-view="chase"]').click();
+  await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
+  for (const aid of ['path', 'tracks', 'ghost']) {
+    await expect(page.locator(`[data-aid="${aid}"]`)).toBeDisabled();
+  }
+  await expect(page.locator('[data-aid="pivots"]')).toBeEnabled();
   const pane = await page.locator('.hud-topdown').boundingBox();
   if (pane === null) throw new Error('no top-down pane');
   const x = pane.x + pane.width / 2;
@@ -34,15 +38,27 @@ test('the chase view orbits and zooms without errors, and hides the target arrow
   await page.mouse.up();
   await page.mouse.wheel(0, -300);
   await expect(page.locator('[data-hud="resetView"]')).toBeEnabled();
-  await page.locator('[data-view="yard"]').click();
-  await page.locator('[data-view="chase"]').click();
   await expect(page.locator('[data-hud="targetArrow"]')).toBeHidden();
+  const stored = await page.evaluate((key) => localStorage.getItem(key), SETTINGS_KEY);
+  expect(JSON.parse(stored ?? '{}')).not.toMatchObject({ topDown: 'chase' });
+  await page.locator('[data-view="yard"]').click();
+  await expect(page.locator('[data-aid="path"]')).toBeEnabled();
+  await page.keyboard.press('o');
+  await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
   expect(errors).toEqual([]);
 });
 
-test('Low graphics hides the chase view and a stored one shows follow', async ({ page }) => {
-  const errors = await start(page, { topDown: 'chase', graphics: 'low' });
+test('a drive starts in the stored follow or yard view, never in chase', async ({ page }) => {
+  const errors = await start(page, { topDown: 'chase' });
+  await expect(page.locator('[data-view="follow"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[data-view="chase"]')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('Low graphics offers no chase view and ignores its key', async ({ page }) => {
+  const errors = await start(page, { graphics: 'low' });
   await expect(page.locator('[data-view="chase"]')).toBeHidden();
+  await page.keyboard.press('o');
   await expect(page.locator('[data-view="follow"]')).toHaveAttribute('aria-pressed', 'true');
   expect(errors).toEqual([]);
 });

@@ -1,4 +1,4 @@
-import type { TopDownMode, TopDownView } from '../contracts/render';
+import { CHASE_YAW, CHASE_ZOOM, type TopDownMode, type TopDownView } from '../contracts/render';
 
 export type Point = { readonly x: number; readonly y: number };
 /** The pane the view is shown in; `mode` selects the limits. */
@@ -13,11 +13,9 @@ export const ZOOM_LIMITS: Readonly<
 > = {
   follow: { min: 0.5, max: 4 },
   yard: { min: 1, max: 16 },
-  chase: { min: 0.6, max: 2.5 },
+  chase: CHASE_ZOOM,
 };
 
-/** A quarter turn each way from the default pose: the camera stays ahead of the cab's rear, not inside the body. */
-export const CHASE_YAW_LIMIT = Math.PI / 2;
 const CHASE_YAW_PER_PIXEL = 0.01;
 
 /** Follow keeps the target this fraction of the visible half-extent from the centre at most. */
@@ -31,15 +29,20 @@ const MIN_PINCH_PIXELS = 1;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
-function panLimits(zoom: number, ctx: ViewContext): Point {
+/** Allowed `panX` range and the largest `|panY|`. */
+function panLimits(zoom: number, ctx: ViewContext): { x: readonly [number, number]; y: number } {
   const aspect = ctx.width / ctx.height;
   switch (ctx.mode) {
     case 'chase':
-      return { x: CHASE_YAW_LIMIT, y: 0 };
-    case 'follow':
-      return { x: (FOLLOW_TARGET_REACH * aspect) / zoom, y: FOLLOW_TARGET_REACH / zoom };
-    case 'yard':
-      return { x: aspect * (1 - 1 / zoom), y: 1 - 1 / zoom };
+      return { x: [CHASE_YAW.min, CHASE_YAW.max], y: 0 };
+    case 'follow': {
+      const x = (FOLLOW_TARGET_REACH * aspect) / zoom;
+      return { x: [-x, x], y: FOLLOW_TARGET_REACH / zoom };
+    }
+    case 'yard': {
+      const x = aspect * (1 - 1 / zoom);
+      return { x: [-x, x], y: 1 - 1 / zoom };
+    }
   }
 }
 
@@ -49,7 +52,7 @@ export function clampView(view: TopDownView, ctx: ViewContext): TopDownView {
   const limit = panLimits(zoom, ctx);
   return {
     zoom,
-    panX: clamp(view.panX, -limit.x, limit.x),
+    panX: clamp(view.panX, limit.x[0], limit.x[1]),
     panY: clamp(view.panY, -limit.y, limit.y),
   };
 }

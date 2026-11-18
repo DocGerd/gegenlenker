@@ -1,20 +1,27 @@
-import { MathUtils, Vector3, type PerspectiveCamera } from 'three';
-import type { Rect, TopDownView } from '../contracts/render';
+import { MathUtils, PerspectiveCamera, Vector3 } from 'three';
+import {
+  CHASE_AZIMUTH,
+  CHASE_YAW,
+  CHASE_ZOOM,
+  type Rect,
+  type TopDownView,
+} from '../contracts/render';
 import type { Pose2 } from '../contracts/sim';
 import type { TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { bodyToThree } from './coords';
 import { CAB_HEIGHT, FRAME_TOP } from './cab-dims';
+import { CAMERA_FAR, CHASE_LAYERS, enableLayers } from './seams';
 
-export const CHASE_FOV = 40;
-/** Camera azimuth from the truck's forward axis, counter-clockwise from above: ahead of the cab, off its left front. */
-const DEFAULT_AZIMUTH = MathUtils.degToRad(38);
+const CHASE_FOV = 40;
 const PITCH = MathUtils.degToRad(14);
 /** Metres behind the front face that the camera looks at. */
 const AIM_BEHIND_FRONT = 0.4;
 /** Distance beyond the one that just fits the cab front's bounding sphere. */
 const FIT_MARGIN = 1.25;
 const MIN_ASPECT = 0.3;
+/** Floor of the free rect's half-angle tangent, so a collapsed free rect cannot push the distance to infinity. */
+const MIN_TAN_FIT = 0.1;
 
 /** The cab's front face in the truck body frame (x forward, y left, z up), metres. */
 export type CabFront = {
@@ -23,6 +30,12 @@ export type CabFront = {
   readonly bottom: number;
   readonly top: number;
 };
+
+export function createChaseCamera(): PerspectiveCamera {
+  const camera = new PerspectiveCamera(CHASE_FOV, 1, 0.1, CAMERA_FAR);
+  enableLayers(camera.layers, CHASE_LAYERS);
+  return camera;
+}
 
 export function cabFront(spec: TruckSpec): CabFront {
   return {
@@ -47,14 +60,18 @@ export type ChaseFrame = {
   readonly clear: Rect;
 };
 
+const frameAspect = (frame: ChaseFrame): number => Math.max(frame.width / frame.height, MIN_ASPECT);
+
 /** Distance at which the face's bounding sphere fills the narrower half-angle of the free rect. */
 export function chaseDistance(face: CabFront, frame: ChaseFrame): number {
   const radius = Math.hypot(face.halfWidth, (face.top - face.bottom) / 2);
   const tanVertical = Math.tan(MathUtils.degToRad(CHASE_FOV / 2));
-  const aspect = Math.max(frame.width / frame.height, MIN_ASPECT);
-  const tanFit = Math.min(
-    tanVertical * (frame.clear.height / frame.height),
-    tanVertical * aspect * (frame.clear.width / frame.width),
+  const tanFit = Math.max(
+    Math.min(
+      tanVertical * (frame.clear.height / frame.height),
+      tanVertical * frameAspect(frame) * (frame.clear.width / frame.width),
+    ),
+    MIN_TAN_FIT,
   );
   return (FIT_MARGIN * radius) / Math.sin(Math.atan(tanFit));
 }
@@ -65,7 +82,7 @@ const offset = new Vector3();
 
 /**
  * Orbits the cab front, framed in the part of the pane the HUD leaves free: `view.panX` turns the camera around the truck (counter-clockwise from
- * above, radians) and `view.zoom` divides the fitted distance.
+ * above, radians) and `view.zoom` divides the fitted distance. Both are clamped to the chase ranges, which keep the camera ahead of the cab front.
  */
 export function placeChaseCamera(
   camera: PerspectiveCamera,
@@ -74,8 +91,10 @@ export function placeChaseCamera(
   frame: ChaseFrame,
   view: TopDownView,
 ): void {
-  const azimuth = DEFAULT_AZIMUTH + view.panX;
-  const distance = chaseDistance(face, frame) / view.zoom;
+  if (frame.width <= 0 || frame.height <= 0) return;
+  const azimuth = CHASE_AZIMUTH.default + MathUtils.clamp(view.panX, CHASE_YAW.min, CHASE_YAW.max);
+  const distance =
+    chaseDistance(face, frame) / MathUtils.clamp(view.zoom, CHASE_ZOOM.min, CHASE_ZOOM.max);
   const middle = (face.bottom + face.top) / 2;
   bodyToThree(pose, { x: face.x - AIM_BEHIND_FRONT, y: 0, z: middle }, aim);
   const horizontal = distance * Math.cos(PITCH);
@@ -86,7 +105,7 @@ export function placeChaseCamera(
   );
   bodyToThree(pose, { x: offset.x, y: offset.y, z: offset.z }, eye);
   camera.fov = CHASE_FOV;
-  camera.aspect = frame.width / frame.height;
+  camera.aspect = frameAspect(frame);
   camera.position.copy(eye);
   camera.lookAt(aim);
   // Moves the aim from the pane's centre to the free rect's.

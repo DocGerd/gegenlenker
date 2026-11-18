@@ -107,7 +107,9 @@ const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
   ['aids', 'panelAids'],
   ['gauges', 'panelGauges'],
 ];
-const VIEW_KEYS: Record<string, TopDownMode> = { f: 'follow', y: 'yard' };
+const VIEW_KEYS: Record<string, TopDownMode> = { f: 'follow', y: 'yard', o: 'chase' };
+/** Aids drawn in the top-down view only; the outside view shows none of them. */
+const TOP_DOWN_AIDS: readonly (keyof AidFlags)[] = ['path', 'tracks', 'ghost'];
 const GEAR_NAMES: readonly Gear[] = ['P', 'R', 'N', 'D'];
 const MS_TO_KMH = 3.6;
 /**
@@ -125,7 +127,7 @@ const RESET_VIEW_ICON =
 const button = (attr: string, value: string, key: MessageKey): string =>
   `<button type="button" class="hud-toggle" ${attr}="${value}" data-i18n="${key}"></button>`;
 
-const MARKUP = (mode: HudOptions['mode']): string => `
+const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
     <span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>
@@ -138,7 +140,7 @@ const MARKUP = (mode: HudOptions['mode']): string => `
         <dt class="mono" data-i18n="keySpace"></dt><dd data-i18n="brake"></dd>
         <dt class="mono">1–4 = ${GEAR_NAMES.join(' / ')}</dt><dd data-i18n="gear"></dd>
         <dt class="mono hud-legend-view" data-i18n="keyEsc"></dt><dd class="hud-legend-view" data-i18n="pause"></dd>
-        <dt class="mono hud-legend-view">F / Y</dt><dd class="hud-legend-view" data-i18n="viewSwitch"></dd>
+        <dt class="mono hud-legend-view">${chase ? 'F / Y / O' : 'F / Y'}</dt><dd class="hud-legend-view" data-i18n="${chase ? 'viewSwitch' : 'viewSwitchNoOutside'}"></dd>
         <dt class="mono hud-legend-view" data-i18n="keyWheel"></dt><dd class="hud-legend-view" data-i18n="steer"></dd>
         <dt class="mono hud-legend-view" data-i18n="keyLever"></dt><dd class="hud-legend-view" data-i18n="speed"></dd>
         <dt class="mono hud-legend-view">+ / −</dt><dd class="hud-legend-view" data-i18n="zoom"></dd>
@@ -158,7 +160,8 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
-      <div class="hud-group" data-hud="views" data-chrome role="group" aria-label="${t('labelTopDown')}">${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
+      <div class="hud-group" data-hud="views" data-chrome>
+        <div class="hud-group" role="group" aria-label="${t('labelView')}">${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
       <div class="hud-group" data-hud="aids" data-chrome>${AIDS.map(([a, k]) => button('data-aid', a, k)).join('')}</div>
     </div>
     <div class="hud-info">
@@ -208,7 +211,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     for (const cb of listeners) cb(a);
   };
 
-  root.insertAdjacentHTML('beforeend', MARKUP(opts.mode));
+  root.insertAdjacentHTML('beforeend', MARKUP(opts.mode, opts.chase));
   const hud = query(root, 'root', HTMLElement);
   applyMessages(hud);
 
@@ -248,15 +251,20 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   if (!opts.chase) {
     for (const b of viewButtons) if (b.dataset['view'] === 'chase') setHidden(b, true);
   }
-  const aidButtons = [...hud.querySelectorAll<HTMLElement>('[data-aid]')];
+  const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
   const panelButtons = [...hud.querySelectorAll<HTMLElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
   const aidsBox = query(hud, 'aids', HTMLElement);
   const keysToggle = query(hud, 'keysToggle', HTMLButtonElement);
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
-    for (const b of aidButtons)
-      b.setAttribute('aria-pressed', String(aids[b.dataset['aid'] as keyof AidFlags]));
+    for (const b of aidButtons) {
+      const aid = b.dataset['aid'] as keyof AidFlags;
+      b.setAttribute('aria-pressed', String(aids[aid]));
+      b.disabled = view === 'chase' && TOP_DOWN_AIDS.includes(aid);
+      if (b.disabled) b.title = t('aidTopViewOnly');
+      else b.removeAttribute('title');
+    }
     for (const b of panelButtons)
       b.setAttribute(
         'aria-pressed',
@@ -322,6 +330,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       const mode = VIEW_KEYS[e.key.toLowerCase()];
       if (
         mode !== undefined &&
+        (mode !== 'chase' || opts.chase) &&
         !e.defaultPrevented &&
         !e.repeat &&
         !isFormField(e.target) &&

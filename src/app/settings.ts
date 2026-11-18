@@ -4,7 +4,7 @@ import {
   type AidFlags,
   type CollapsedPanels,
   type GraphicsPreset,
-  type TopDownMode,
+  type DrivingView,
 } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
@@ -17,7 +17,7 @@ export type Settings = {
   readonly truckId: TruckId;
   readonly trailerId: TrailerId;
   readonly aids: AidFlags;
-  readonly topDown: TopDownMode;
+  readonly topDown: DrivingView;
   readonly collapsed: CollapsedPanels;
   readonly graphics: GraphicsPreset;
 };
@@ -26,7 +26,7 @@ const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost:
 const DEFAULT_COLLAPSED: CollapsedPanels = { aids: false, gauges: false, keys: false };
 const LANGS: readonly Lang[] = ['de', 'en'];
 const THEMES: readonly Settings['theme'][] = ['system', 'light', 'dark'];
-const TOP_DOWN: readonly TopDownMode[] = ['follow', 'yard', 'chase'];
+const TOP_DOWN: readonly DrivingView[] = ['follow', 'yard'];
 
 const pick = <T extends string>(ids: readonly T[], v: unknown, fallback: T): T =>
   ids.find((id) => id === v) ?? fallback;

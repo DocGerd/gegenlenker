@@ -60,7 +60,7 @@ export const en = {
   blockedCoupling: 'Coupling angle at limit stop – drive the other way',
   blockedTurntable: 'Turntable angle at limit stop – drive the other way',
   labelCockpit: 'Cockpit',
-  labelTopDown: 'View',
+  labelView: 'View',
   viewFollow: 'Follow',
   viewYard: 'Whole yard',
   viewChase: 'Outside view',
@@ -70,6 +70,7 @@ export const en = {
   aidPath: 'Predicted path',
   aidTracks: 'Wheel tracks',
   aidGhost: 'Target ghost',
+  aidTopViewOnly: 'Shown in the follow and whole-yard views only',
   panelAids: 'Aids',
   panelGauges: 'Angles',
   targetDirection: 'Direction to the target',
@@ -122,8 +123,9 @@ export const en = {
   keyScroll: 'Scroll',
   keyWheel: 'Wheel: drag/scroll',
   keyLever: 'Lever: drag/scroll',
-  viewSwitch: 'Follow / whole yard',
-  panView: 'Pan view',
+  viewSwitch: 'Follow / whole yard / outside view',
+  viewSwitchNoOutside: 'Follow / whole yard',
+  panView: 'Pan / orbit view',
 } as const;
 
 export type MessageKey = keyof typeof en;

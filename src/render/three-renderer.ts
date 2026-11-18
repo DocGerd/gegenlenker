@@ -22,7 +22,7 @@ import type { TrailerSpec, TruckAnchors, TruckSpec } from '../contracts/vehicle'
 import { truckAnchors } from '../vehicles/anchors';
 import { resolveCombination } from '../vehicles/resolve';
 import { bodyToThree } from './coords';
-import { CHASE_FOV, cabFront, placeChaseCamera, type CabFront } from './chase-camera';
+import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './chase-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createMirror } from './mirror';
@@ -31,7 +31,6 @@ import { QUALITY_FLAGS } from './quality';
 import {
   AIDS_LAYER,
   CAMERA_FAR,
-  CHASE_LAYERS,
   COCKPIT_LAYERS,
   enableLayers,
   TOP_DOWN_LAYERS,
@@ -102,8 +101,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
   enableLayers(cockpitCamera.layers, COCKPIT_LAYERS);
   enableLayers(topDownCamera.layers, TOP_DOWN_LAYERS);
-  const chaseCamera = new PerspectiveCamera(CHASE_FOV, 1, 0.1, CAMERA_FAR);
-  enableLayers(chaseCamera.layers, CHASE_LAYERS);
+  const chaseCamera = createChaseCamera();
   topDownCamera.rotation.x = -Math.PI / 2;
   topDownCamera.position.y = SKY_HEIGHT;
   let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
@@ -176,9 +174,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     let cx: number;
     let cy: number;
     let halfH: number;
-    // Chase on a preset without it falls back to follow at its default framing.
-    const chaseFallback = frame.topDown === 'chase';
-    if (frame.topDown === 'follow' || chaseFallback) {
+    if (frame.topDown === 'follow') {
       const { truck, trailer, trailerRear, speed, control } = frame.snapshot;
       const frontX = b.anchors.frontX;
       const bumperX = truck.x + Math.cos(truck.heading) * frontX;
@@ -218,7 +214,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       { x: cx, y: cy },
       halfH,
       aspect,
-      (chaseFallback ? undefined : frame.topDownView) ?? DEFAULT_TOP_DOWN_VIEW,
+      frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW,
     );
     topDownCamera.updateMatrixWorld();
     topDownRect = rect;
@@ -362,7 +358,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       }
 
       viewRect(gl, topDown);
-      chaseShown = frame.topDown === 'chase' && quality.chaseView;
+      chaseShown = frame.topDown === 'chase';
       if (chaseShown) {
         placeChaseCamera(
           chaseCamera,

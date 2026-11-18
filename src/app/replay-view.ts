@@ -177,7 +177,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   const viewGroup = document.createElement('div');
   viewGroup.className = 'replay-group';
   viewGroup.setAttribute('role', 'group');
-  viewGroup.setAttribute('aria-label', t('labelTopDown'));
+  viewGroup.setAttribute('aria-label', t('labelView'));
   viewGroup.append(...viewButtons.map((v) => v.el));
   const timeLabel = document.createElement('span');
   timeLabel.className = 'replay-time mono';
