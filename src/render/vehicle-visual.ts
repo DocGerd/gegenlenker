@@ -8,6 +8,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
+  type Object3D,
   type Texture,
 } from 'three';
 import type { ScenePalette } from '../contracts/render';
@@ -42,6 +43,7 @@ import {
   type PlateSpot,
 } from './vehicle-detail';
 import { box, merge, WHEEL_SEGMENTS, wheelGeometry } from './vehicle-geometry';
+import { createVehicleMaterial, replaceMaterial, type VehicleEnvironment } from './vehicle-pbr';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
 const TRAILER_WHEEL_WIDTH = 0.3;
@@ -115,11 +117,13 @@ function wheelAt(radius: number, width: number, x: number, y: number): BufferGeo
 }
 
 /** Owns what a visual allocates so `dispose` releases it exactly once. */
-function resources() {
+function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const geometries = new Set<BufferGeometry>();
   const materials: Material[] = [];
   const textures: Texture[] = [];
   let detailMaterial: MeshLambertMaterial | null = null;
+  let pbrMaterial: Material | null = null;
+  let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
@@ -142,7 +146,18 @@ function resources() {
     /** The material of every `detail` mesh; shells use it too, so a swap adds no state change. */
     detailMaterial(): Material {
       detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
-      return detailMaterial;
+      return pbrOn && pbrMaterial !== null ? pbrMaterial : detailMaterial;
+    },
+    /**
+     * Reflective shading for everything below `root` that wears the detail material (#69). Run it
+     * after shells are added or removed: a detached shell may keep the old material until it returns.
+     */
+    setPbr(root: Object3D, on: boolean): void {
+      const map = on ? (env?.texture(palette) ?? null) : null;
+      if (map !== null) pbrMaterial ??= track(createVehicleMaterial(map));
+      pbrOn = map !== null;
+      if (detailMaterial === null || pbrMaterial === null) return;
+      replaceMaterial(root, [detailMaterial, pbrMaterial], pbrOn ? pbrMaterial : detailMaterial);
     },
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
@@ -193,6 +208,7 @@ export function proceduralTruck(
   spec: TruckSpec,
   palette: ScenePalette,
   shells?: TruckShells,
+  env?: VehicleEnvironment,
 ): VehicleVisual {
   const a = truckAnchors(spec);
   const hw = spec.width.value / 2000;
@@ -201,7 +217,7 @@ export function proceduralTruck(
   const look = TRUCK_LOOKS[spec.id];
   const cabRear = a.frontX - CAB_LENGTH;
   const bodyFront = bodyFrontX(a.frontX);
-  const res = resources();
+  const res = resources(palette, env);
 
   const cab = [box([cabRear, a.frontX], [-hw, hw], [FRAME_TOP, CAB_HEIGHT])];
 
@@ -409,6 +425,7 @@ export function proceduralTruck(
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
+      res.setPbr(group, flags.pbr);
     },
     dispose() {
       cancelCab?.();
@@ -421,13 +438,17 @@ export function proceduralTruck(
   };
 }
 
-export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): VehicleVisual {
+export function proceduralTrailer(
+  spec: TrailerSpec,
+  palette: ScenePalette,
+  env?: VehicleEnvironment,
+): VehicleVisual {
   const a = trailerAnchors(spec);
   const hw = spec.width.value / 2000;
   const track = spec.track.value / 1000;
   const deck = spec.deckHeight.value / 1000;
   const isBox = spec.body === 'box';
-  const res = resources();
+  const res = resources(palette, env);
 
   // Wheels, axles, plate and drawbar all stay below the deck's underside.
   const underside = deck - (isBox ? BOX_FRAME_DEPTH : DECK_PLATE);
@@ -600,7 +621,9 @@ export function proceduralTrailer(spec: TrailerSpec, palette: ScenePalette): Veh
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
     },
-    setQuality: () => undefined,
+    setQuality(flags) {
+      res.setPbr(group, flags.pbr);
+    },
     dispose() {
       res.dispose();
       dollyPlan.dispose();
