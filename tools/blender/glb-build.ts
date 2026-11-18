@@ -1,25 +1,26 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { TRUCK_IDS, type TruckId } from '../../src/contracts/vehicle';
+import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../../src/contracts/vehicle';
 import { bodyShellParams } from '../../src/render/body-dims';
 import { cabShellParams } from '../../src/render/cab-dims';
-import { truckById } from '../../src/vehicles/registry';
+import { trailerShellParams } from '../../src/render/trailer-dims';
+import { trailerById, truckById } from '../../src/vehicles/registry';
 
 export const ROOT = join(import.meta.dirname, '../..');
 
 export const COMMON_SCRIPT = 'tools/blender/shell_common.py';
 export const OPTIMISE_SCRIPT = 'scripts/glb-optimise.mjs';
 
-export type AssetKind = 'cab' | 'body';
+export type AssetKind = 'cab' | 'body' | 'trailer';
 
 export type Json =
   null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 
 export type Asset = {
-  /** `<truck id>-<kind>`; names the glb and its manifest. */
+  /** `<vehicle id>-<kind>`; names the glb and its manifest. */
   readonly key: string;
-  readonly truckId: TruckId;
+  readonly vehicleId: TruckId | TrailerId;
   readonly kind: AssetKind;
   readonly script: string;
   readonly params: string;
@@ -32,27 +33,30 @@ export type Asset = {
 const SCRIPTS: Readonly<Record<AssetKind, string>> = {
   cab: 'tools/blender/cab_shell.py',
   body: 'tools/blender/body_shell.py',
+  trailer: 'tools/blender/trailer_shell.py',
 };
 
-const asset = (truckId: TruckId, kind: AssetKind): Asset => {
-  const key = `${truckId}-${kind}`;
+const asset = (vehicleId: TruckId | TrailerId, kind: AssetKind, build: () => Json): Asset => {
+  const key = `${vehicleId}-${kind}`;
   return {
     key,
-    truckId,
+    vehicleId,
     kind,
     script: SCRIPTS[kind],
-    params: `tools/blender/params/${truckId}.${kind}.json`,
+    params: `tools/blender/params/${vehicleId}.${kind}.json`,
     glb: `src/render/assets/${key}.glb`,
     manifest: `src/render/assets/${key}.manifest.json`,
-    build: () =>
-      kind === 'cab' ? cabShellParams(truckById(truckId)) : bodyShellParams(truckById(truckId)),
+    build,
   };
 };
 
-export const ASSETS: readonly Asset[] = TRUCK_IDS.flatMap((id) => [
-  asset(id, 'cab'),
-  asset(id, 'body'),
-]);
+export const ASSETS: readonly Asset[] = [
+  ...TRUCK_IDS.flatMap((id) => [
+    asset(id, 'cab', () => cabShellParams(truckById(id))),
+    asset(id, 'body', () => bodyShellParams(truckById(id))),
+  ]),
+  ...TRAILER_IDS.map((id) => asset(id, 'trailer', () => trailerShellParams(trailerById(id)))),
+];
 
 export function assetByKey(key: string): Asset {
   const found = ASSETS.find((a) => a.key === key);

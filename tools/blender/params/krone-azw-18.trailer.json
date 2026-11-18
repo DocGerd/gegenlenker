@@ -1,0 +1,33 @@
+{
+  "id": "krone-azw-18",
+  "schema": 1,
+  "kind": "lafette",
+  "width": 2.55,
+  "rearX": -1.675,
+  "frontX": 5.77,
+  "deck": 1.28,
+  "underside": 1.03,
+  "track": 2.04,
+  "wheelRadius": 0.5,
+  "axleZ": [0.43, 0.57],
+  "axleHalf": 0.07,
+  "rearAxleXs": [0],
+  "rail": { "halfGap": 0.45, "width": 0.2 },
+  "ramp": { "gap": 0.15, "width": 0.9, "thickness": 0.1, "height": 1.2 },
+  "guard": { "depth": 0.05, "inset": 0.1 },
+  "tailLamp": { "inset": 0.15, "width": 0.36, "sill": 0.1, "height": 0.2 },
+  "dolly": {
+    "eyeX": 2.2,
+    "eyeZ": 0.9,
+    "spread": 0.45,
+    "armRadius": 0.05,
+    "kink": 1.509122,
+    "plateRadius": 0.5,
+    "plateTop": 1.01,
+    "plateBottom": 0.91,
+    "plateMid": 0.96,
+    "postHalf": 0.15,
+    "axleX": 0
+  },
+  "hues": { "base": "#101214", "white": "#f6f6f6", "silver": "#a5a5a5", "yellow": "#f9a800" }
+}
