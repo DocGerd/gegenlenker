@@ -19,7 +19,7 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 
 - Only `src/render` imports `three`; `.ts` files are checked by `no-restricted-imports` in `eslint.config.js`, `dev/` harnesses are exempt.
 - `src/{contracts,vehicles,sim,scoring,content}` also import none of `render/app/hud/input/pwa/i18n` and use none of `window`, `document`, `navigator`, `localStorage`, `performance`, `requestAnimationFrame` (same config).
-- Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome, skyline) go on `SKY_LAYER`; cab-front parts on `CAB_LAYER` (mirrors only, the cockpit eye is inside the cab). Cameras enable layers via `enableLayers` with `COCKPIT_LAYERS`/`MIRROR_LAYERS`/`TOP_DOWN_LAYERS` (`src/render/seams.ts`).
+- Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome, skyline) go on `SKY_LAYER`; cab-front parts on `CAB_LAYER` (mirrors only, the cockpit eye is inside the cab); no camera frames the cab until #126 closes, so check a frustum before calling a cab change visible. Cameras enable layers via `enableLayers` with `COCKPIT_LAYERS`/`MIRROR_LAYERS`/`TOP_DOWN_LAYERS` (`src/render/seams.ts`).
 - Perspective scenery must stay inside `CAMERA_FAR` (`src/render/seams.ts`); `src/render/skyline.test.ts` pins it.
 - Obstacle kinds in `RESTYLED_KINDS` (`src/render/yard-props.ts`) draw a token copy top-down only plus a detailed perspective prop; a new kind needs both.
 - Vertex colours must be linear: set a `Color` from the palette (`color.set` converts) and pass it to `tint()` (`src/render/environment.ts`); raw palette bytes render too light. `tint()` drops UVs, so textured surfaces need their own geometry and material.
@@ -46,6 +46,12 @@ Dev server: `pnpm dev`. `pnpm verify` runs the checks below after Install (`test
 - Adding, changing, sourcing or removing an estimate means running `pnpm estimates` (rewrites the README table between the `estimates:` markers); `src/vehicles/estimates.test.ts` fails otherwise.
 - Bump `SIM_REVISION` in `src/sim/fingerprint.ts` only for sim, collision or scoring logic changes; `dataFingerprint` already hashes vehicle params, obstacle ids and OBBs, start, exercise, sim constants and scoring thresholds: visual-only prop changes keep stored runs; adding or moving a collision prop invalidates them for that layout.
 
+## Blender assets
+
+- `tools/blender/cab_shell.py` is the source of truth for the cab `.glb`: run it unmodified through the `blender` MCP (`runpy.run_path` on its `wslpath -w` path, `init_globals` `PARAMS_PATH` or `PARAMS_JSON`, and `OUT_PATH`), then `pnpm cab:optimise <raw.glb>` and `pnpm cab:manifest "<Blender version>"`.
+- After changing `tools/blender/cab_shell.py`, cab Params or `src/render/cab-dims.ts`, run `pnpm cab:params` and rebuild; the glb records its input hashes, so `tools/blender/cab-build.test.ts` fails on a manifest regenerated without a rebuild.
+- MCP-run bpy scripts must not call `read_factory_settings`: it reloads preferences and disables the MCP add-on.
+
 ## Tests
 
 Test logic and critical paths only; no blanket coverage, no tests without value.
@@ -63,6 +69,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 
 - Headless Chromium screenshots of the real app work for visual checks (`pnpm exec playwright screenshot --lang de-DE <url> <png>`; scripts reuse the `@playwright/test` devDep); UI language defaults to the browser locale (`navigator.languages`) unless a saved setting overrides it; there is no URL parameter.
 - Plain `playwright screenshot` can show a blank canvas under `.hud-band` (software compositing); e2e passes GPU-compositing SwiftShader args in `playwright.config.ts`. Read the canvas back before calling a blank region an app bug.
+- Standstill drive screenshots are byte-identical across runs, so before/after can be compared by hash; the sim steps on wall-clock time, so shots after driving differ run to run.
 - Headless screenshots run on software GL and passed a see-through skyline; perspective realism changes need an owner device check before calling them done.
 
 ## Workflow
