@@ -56,6 +56,10 @@
   --ctl-wheel: clamp(160px, 38vmin, 300px);
   --ctl-gears-w: calc(var(--size-target) * 2.1);
   --hud-legend-w: 176px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
   --shadow-sm: 0 1px 2px rgba(20, 22, 26, 0.06);
   --shadow-md: 0 8px 24px rgba(20, 22, 26, 0.1), 0 2px 6px rgba(20, 22, 26, 0.06);
   --duration-fast: 150ms;
@@ -70,7 +74,10 @@
   :root {
     --ctl-wheel: min(
       clamp(160px, 38vmin, 300px),
-      max(120px, 60vw - 3 * var(--space-4) - var(--ctl-gears-w) - var(--hud-legend-w))
+      max(
+        148px,
+        60vw - var(--safe-left) - 3 * var(--space-4) - var(--ctl-gears-w) - var(--hud-legend-w)
+      )
     );
   }
 }
