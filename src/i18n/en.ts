@@ -123,9 +123,9 @@ export const en = {
   keyScroll: 'Scroll',
   keyWheel: 'Wheel: drag/scroll',
   keyLever: 'Lever: drag/scroll',
-  viewSwitch: 'Follow / whole yard / outside view',
+  viewSwitch: 'Follow / yard / outside',
   viewSwitchNoOutside: 'Follow / whole yard',
-  panView: 'Pan / orbit view',
+  panView: 'Pan / orbit',
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -130,7 +130,7 @@ export const de: Record<MessageKey, string> = {
   keyScroll: 'Scrollen',
   keyWheel: 'Rad: ziehen/scrollen',
   keyLever: 'Hebel: ziehen/scrollen',
-  viewSwitch: 'Folgen / ganzer Hof / Außenansicht',
+  viewSwitch: 'Folgen / Hof / Außen',
   viewSwitchNoOutside: 'Folgen / ganzer Hof',
-  panView: 'Ansicht verschieben / drehen',
+  panView: 'Verschieben / drehen',
 };
