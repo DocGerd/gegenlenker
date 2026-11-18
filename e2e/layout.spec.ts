@@ -43,6 +43,15 @@ const boxes = (loc: Locator) =>
     }),
   );
 
+/** How far each mirror housing's arm reaches past the mirror's outer side, from the arm's computed style. */
+const armReach = (loc: Locator) =>
+  loc.evaluateAll((els) =>
+    els.map((el) => {
+      const arm = getComputedStyle(el, '::before');
+      return Math.max(-parseFloat(arm.left), -parseFloat(arm.right));
+    }),
+  );
+
 const overlaps = (
   a: Awaited<ReturnType<typeof boxes>>[number],
   b: Awaited<ReturnType<typeof boxes>>[number],
@@ -110,6 +119,25 @@ for (const { locale, messages } of locales) {
       for (const m of mirrorBoxes) {
         for (const c of controlBoxes) {
           expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
+        }
+      }
+
+      // Balanced is the default preset, so the housings are drawn: the arms stay clear too.
+      await expect(page.locator('.hud[data-interior]')).toHaveCount(1);
+      const [leftBox, rightBox] = mirrorBoxes;
+      const [leftArm, rightArm] = await armReach(mirrors);
+      if (leftBox === undefined || rightBox === undefined) throw new Error('two mirrors');
+      if (leftArm === undefined || rightArm === undefined) throw new Error('two arms');
+      expect(Math.min(leftArm, rightArm), 'arms are drawn').toBeGreaterThan(0);
+      const armed = [
+        { ...leftBox, left: leftBox.left - leftArm },
+        { ...rightBox, right: rightBox.right + rightArm },
+      ];
+      for (const m of armed) {
+        expect(m.left, 'arm on screen').toBeGreaterThanOrEqual(0);
+        expect(m.right, 'arm on screen').toBeLessThanOrEqual(size.width);
+        for (const c of controlBoxes) {
+          expect(overlaps(m, c), `${c.name} overlaps a mirror housing`).toBe(false);
         }
       }
 

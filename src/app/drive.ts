@@ -15,7 +15,7 @@ import { t } from '../i18n/i18n';
 import { createControls } from '../input/controls';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
-import { chaseViewAvailable } from '../render';
+import { chaseViewAvailable, interiorAvailable } from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay } from '../render/perf-overlay';
 import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
@@ -173,7 +173,7 @@ export function startDrive(
   };
   window.addEventListener('keydown', onEscape);
   cleanups.push(() => window.removeEventListener('keydown', onEscape));
-  const { renderer } = view;
+  const { renderer, graphics } = view;
   renderer.setScene(layout, truck, trailer);
 
   let aids: AidFlags = settings.aids;
@@ -219,7 +219,8 @@ export function startDrive(
         : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
     aids: settings.aids,
     topDown,
-    chase: chaseViewAvailable(settings.graphics),
+    chase: chaseViewAvailable(graphics),
+    interior: interiorAvailable(graphics),
     collapsed,
   });
   cleanups.push(() => hud.dispose());

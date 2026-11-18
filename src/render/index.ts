@@ -18,6 +18,10 @@ import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].chaseView;
 
+/** Whether the preset draws the cab interior and the mirror housings. */
+export const interiorAvailable = (preset: GraphicsPreset): boolean =>
+  QUALITY_FLAGS[preset].cockpitInterior;
+
 export function createSceneRenderer(): SceneRenderer {
   // Positive signal for the offline e2e: the shells now attached to a vehicle, sorted and
   // space-separated; absent when none is. Each group loads on the first preset that wants it.
