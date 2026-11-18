@@ -6,10 +6,14 @@ export function webgl2Supported(): boolean {
   try {
     const gl = document.createElement('canvas').getContext('webgl2');
     if (gl === null) return false;
-    gl.getExtension('WEBGL_lose_context')?.loseContext();
     supported = true;
-  } catch {
-    // A throwing probe counts as unsupported; the next start probes again.
+    try {
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+    } catch (error) {
+      console.warn('Could not release the WebGL probe context', error);
+    }
+  } catch (error) {
+    console.warn('WebGL 2 probe failed', error);
   }
   return supported;
 }
