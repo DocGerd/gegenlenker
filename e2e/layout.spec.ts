@@ -3,8 +3,13 @@ import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
 
 const sizes = [
+  { width: 740, height: 649 },
+  { width: 768, height: 700 },
   { width: 768, height: 1024 },
+  { width: 800, height: 800 },
   { width: 800, height: 820 },
+  { width: 900, height: 649 },
+  { width: 1000, height: 649 },
   { width: 1024, height: 600 },
   { width: 1024, height: 700 },
   { width: 1200, height: 700 },
@@ -14,6 +19,7 @@ const sizes = [
   { width: 1280, height: 800 },
   { width: 1300, height: 540 },
   { width: 1300, height: 600 },
+  { width: 1350, height: 600 },
   { width: 1366, height: 768 },
 ];
 
@@ -116,6 +122,11 @@ for (const { locale, messages } of locales) {
           expect(overlaps(panel, c), `${panel.name} overlaps ${c.name}`).toBe(false);
         }
       }
+
+      const clipped = await page
+        .locator('.hud-gauge .hud-label')
+        .evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth).length);
+      expect(clipped, 'a gauge label is wider than its gauge').toBe(0);
       await context.close();
     });
 
@@ -130,6 +141,76 @@ for (const { locale, messages } of locales) {
       await context.close();
     });
   }
+}
+
+const insets = { top: 24, left: 48, bottom: 20, right: 48 };
+
+const insetSizes = [
+  { width: 1280, height: 720 },
+  { width: 1024, height: 600 },
+  { width: 900, height: 649 },
+  { width: 768, height: 1024 },
+];
+
+for (const size of insetSizes) {
+  test(`the drive screen stays inside the safe area at ${size.width}x${size.height}`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale: 'en-US', viewport: size });
+    const page = await context.newPage();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+    await page.goto('./');
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue('--safe-left'),
+        ),
+      )
+      .toBe(`${insets.left}px`);
+    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+    await hudReady(page);
+
+    const placed = await boxes(
+      page.locator(
+        [
+          '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever',
+          '.hud-action, .hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-legend',
+          '.hud-gear, .hud-speed, .hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])',
+        ].join(', '),
+      ),
+    );
+    expect(placed.length).toBeGreaterThan(0);
+    for (const b of placed) {
+      const at = `${b.name} in the safe area`;
+      expect(b.left, at).toBeGreaterThanOrEqual(insets.left);
+      expect(b.right, at).toBeLessThanOrEqual(size.width - insets.right);
+      expect(b.bottom, at).toBeLessThanOrEqual(size.height - insets.bottom);
+    }
+    const topEdge = await boxes(
+      page.locator('.hud-action, .hud-goal:not([hidden]), .hud-cockpit > .hud-view-label'),
+    );
+    const landscape = size.width >= size.height;
+    for (const b of topEdge) {
+      // In portrait the cockpit label sits mid-screen, so only the top view's panels reach the top edge.
+      if (landscape || !b.name.includes('view-label')) {
+        expect(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(insets.top);
+      }
+    }
+
+    const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
+    const controls = await boxes(
+      page.locator(
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+      ),
+    );
+    for (const m of mirrors) {
+      for (const c of controls) {
+        expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
+      }
+    }
+    await context.close();
+  });
 }
 
 const starts = [

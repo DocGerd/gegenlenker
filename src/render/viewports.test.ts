@@ -53,3 +53,39 @@ describe('computeViewports key legend', () => {
     expect(computeViewports(1280, 720, 'drive', legend)).toEqual(base);
   });
 });
+
+describe('computeViewports safe-area insets', () => {
+  const insets = { top: 24, right: 48, bottom: 20, left: 48 };
+
+  it('keep the mirrors inside the safe area and above the inset controls', () => {
+    for (const [w, h] of [
+      [1280, 720],
+      [1024, 600],
+      [768, 700],
+      [768, 1024],
+      [800, 820],
+    ] as const) {
+      const { cockpit, mirrorLeft, mirrorRight } = computeViewports(w, h, 'drive', null, insets);
+      if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
+        throw new Error('drive mode has mirrors');
+      }
+      const at = `${w}x${h}`;
+      expect(mirrorLeft.x, at).toBeGreaterThanOrEqual(insets.left);
+      for (const m of [mirrorLeft, mirrorRight]) {
+        expect(m.y, at).toBeGreaterThanOrEqual(cockpit.y + (cockpit.y === 0 ? insets.top : 0));
+        expect(m.y + m.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h, insets));
+      }
+      // Only a cockpit that reaches the screen's right edge has the inset there.
+      if (cockpit.x + cockpit.width >= w) {
+        expect(mirrorRight.x + mirrorRight.width, at).toBeLessThanOrEqual(w - insets.right);
+      }
+    }
+  });
+
+  it('match the plain layout when there are none', () => {
+    const none = { top: 0, right: 0, bottom: 0, left: 0 };
+    expect(computeViewports(1280, 720, 'drive', null, none)).toEqual(
+      computeViewports(1280, 720, 'drive'),
+    );
+  });
+});
