@@ -82,7 +82,8 @@ function setAidsLayer(object: Object3D): void {
   object.traverse((o) => o.layers.set(AIDS_LAYER));
 }
 
-export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
+/** `warmUp` holds the resolution governor off while something heavy (a shell, the ground texture) attaches. */
+export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer & { warmUp(): void } {
   const timer = createFrameTimer();
   const cockpitCamera = createCockpitCamera();
   const interior = createCockpitInterior();
@@ -384,6 +385,10 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
         x: topDownRect.x + ((p.x + 1) / 2) * topDownRect.width,
         y: topDownRect.y + ((1 - p.y) / 2) * topDownRect.height,
       };
+    },
+
+    warmUp() {
+      timer.warmUp();
     },
 
     skipFrame() {

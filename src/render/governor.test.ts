@@ -55,4 +55,67 @@ describe('frame timer', () => {
     expect(timer.fps()).toBeCloseTo(90, 0);
     expect(timer.p95Ms()).toBeCloseTo(1000 / 90, 1);
   });
+
+  describe('stepping back up', () => {
+    function slowedTimer() {
+      const timer = createFrameTimer();
+      const { end } = run(timer, 40, 61);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+      return { timer, end };
+    }
+
+    it('restores full resolution after sustained headroom, and not before', () => {
+      const { timer, end } = slowedTimer();
+      const { end: mid } = run(timer, 90, 180, end);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+      run(timer, 90, 500, mid);
+      expect(timer.scale()).toBe(1);
+    });
+
+    it('holds the scale while frames sit between the step-up and step-down limits', () => {
+      const { timer, end } = slowedTimer();
+      run(timer, 1000 / 18.2, 2000, end);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+    });
+
+    it('waits longer after a step up is followed by a step down', () => {
+      const { timer, end } = slowedTimer();
+      const { end: healthy } = run(timer, 90, 500, end);
+      expect(timer.scale()).toBe(1);
+      const { end: slow } = run(timer, 40, 8, healthy);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+      // The first hold would have elapsed by now; the doubled one has not.
+      const { end: short } = run(timer, 90, 500, slow);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+      run(timer, 90, 500, short);
+      expect(timer.scale()).toBe(1);
+    });
+  });
+
+  describe('warm-up', () => {
+    it('ignores slow frames right after a reset, then governs again', () => {
+      const timer = createFrameTimer();
+      timer.resetTiming();
+      const { end } = run(timer, 40, 60);
+      expect(timer.scale()).toBe(1);
+      run(timer, 40, 200, end);
+      expect(timer.scale()).toBeLessThan(1);
+    });
+
+    it('ignores a hitch after warmUp without dropping the scale', () => {
+      const timer = createFrameTimer();
+      const { end } = run(timer, 90, 100);
+      timer.warmUp();
+      run(timer, 1000 / 150, 10, end);
+      run(timer, 90, 60, end + 1500);
+      expect(timer.scale()).toBe(1);
+    });
+
+    it('still reports the real cadence while warming up', () => {
+      const timer = createFrameTimer();
+      timer.resetTiming();
+      run(timer, 40, 30);
+      expect(timer.fps()).toBeCloseTo(40, 0);
+    });
+  });
 });
