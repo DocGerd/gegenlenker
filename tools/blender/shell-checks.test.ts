@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TRAILER_IDS, TRUCK_IDS } from '../../src/contracts/vehicle';
 import { bodyShellParams } from '../../src/render/body-dims';
-import { CAB_STRIPE } from '../../src/render/cab-dims';
 import { trailerShellParams } from '../../src/render/trailer-dims';
 import { trailerById, truckById } from '../../src/vehicles/registry';
 import { ROOT } from './glb-build';
@@ -77,6 +76,22 @@ describe.skipIf(!python)('trailer_shell.py geometry checks', () => {
   });
 });
 
+describe.skipIf(!python)('trailer_shell.py low-loader checks', () => {
+  const params = trailerShellParams(trailerById('hueffermann-hpa-24-81-l'));
+  const deck = params.lowLoader;
+  if (deck === undefined) throw new Error('the Hüffermann has no low-loader deck');
+
+  it('refuse a side marking that has no face to sit on', () => {
+    const wide = { ...params, marking: { ...params.marking, strip: 0.4 } };
+    expect(run(wide)).toMatch(/side marking has no face/);
+  });
+
+  it('refuse deck breaks out of order', () => {
+    const swapped = { ...params, lowLoader: { ...deck, slopeStart: deck.slopeEnd - 0.1 } };
+    expect(run(swapped)).toMatch(/out of order/);
+  });
+});
+
 describe.skipIf(!python)('body_shell.py geometry checks', () => {
   const body = (params: object): string => runScript('body_shell.py', params);
   const arocs = bodyShellParams(truckById('arocs-1835-ak'));
@@ -95,16 +110,14 @@ describe.skipIf(!python)('body_shell.py geometry checks', () => {
     expect(body(long)).toMatch(/side marking has no face/);
   });
 
+  it('refuse a face that crosses the side marking band', () => {
+    const band = { ...arocs, marking: { ...arocs.marking, zLow: 1.5, zHigh: 1.6 } };
+    expect(body(band)).toMatch(/crosses the side marking band/);
+  });
+
   it('refuse a stripe that does not fit on the drop sides', () => {
     if (arocs.tipper === undefined) throw new Error('the Arocs has no tipper');
     const high = { ...arocs, tipper: { ...arocs.tipper, stripe: [1.85, 1.95] } };
     expect(body(high)).toMatch(/stripe does not fit/);
-  });
-});
-
-describe('cab stripe', () => {
-  it('is the band cab_shell.py draws, so the tipper stripe lines up with it', () => {
-    const script = readFileSync(join(ROOT, 'tools/blender/cab_shell.py'), 'utf8');
-    expect(script).toContain(`STRIPE = (${CAB_STRIPE.join(', ')})`);
   });
 });

@@ -35,6 +35,7 @@ srgb = COMMON["srgb_to_linear"]
 
 EPS = 1e-6
 # low-loader
+MARKING_STEP = 0.05  # spacing of the side marking's coverage check
 PLATE = 0.08  # deck plating
 SIDE_MEMBER = (0.12, 0.06)  # width, and rise above the deck top
 SKIRT = (0.12, 0.1)  # side members hang this much deeper, from this far ahead of the tandem tyres
@@ -50,6 +51,7 @@ CROSS = (0.1, 0.1, 0.8)  # crossmember width, depth below the underside, pitch
 CROSS_REACH = 0.75  # crossmembers stay inboard of the tyres
 BEAM = ((0.38, 0.52), 0.15)  # main beams: lateral range, depth below the underside
 LASHING = (0.08, 0.03, 1.0)  # lashing point length and height, pitch
+LASHING_MARGIN = 0.4  # lashing points keep this much of the main deck's length clear, split between both ends
 STRINGER = 0.08  # ramp side rails
 RUNG = (0.04, 0.18)  # ramp rung height and pitch
 RAMP_CAP = 0.06
@@ -108,6 +110,9 @@ def troughs(p, start, end):
 
 def plating(shape, xs, ys, holes, z, colour):
     """Deck plating over xs by ys with rectangular holes, laid as the grid cells outside them."""
+    for hx, hy in holes:
+        if hx[0] < xs[0] - EPS or hx[1] > xs[1] + EPS or hy[0] < ys[0] - EPS or hy[1] > ys[1] + EPS:
+            raise ValueError("a wheel trough leaves the deck plating")
     cuts_x = sorted({xs[0], xs[1], *(c for (x, _) in holes for c in x)})
     cuts_y = sorted({ys[0], ys[1], *(c for (_, y) in holes for c in y)})
     for x0, x1 in zip(cuts_x, cuts_x[1:]):
@@ -128,10 +133,13 @@ def deck_low_loader(p, shape, hues):
     step = d["frontStart"] - STEP
     # beams below the underside end clear of the dolly tyres' swing
     reach = p["dolly"]["turntableX"] - swing_radius(p) - p["swingMargin"] - 0.05
+    skirt = (max(p["rearAxleXs"]) + p["wheelRadius"] + SKIRT[1], reach)
+    order = (rear, d["carrierX"], d["slopeEnd"], d["slopeEnd"] + GRATE_BAR, d["slopeStart"], skirt[0], skirt[1], step, d["frontStart"], front)
+    if any(a >= b for a, b in zip(order, order[1:])) or d["slopeStart"] + CROSS[0] >= reach or step - d["slopeStart"] < LASHING_MARGIN:
+        raise ValueError("the low-loader's deck breaks are out of order or leave too little room")
 
     # side members, following the deck: sloped rear, main deck, step and raised front; between the
     # tandem's mudflaps and the dolly's swing they hang deeper
-    skirt = (max(p["rearAxleXs"]) + p["wheelRadius"] + SKIRT[1], reach)
     for side in (-1, 1):
         y = mirror(side, inner, hw)
         shape.box((d["carrierX"], d["slopeEnd"]), y, (under - drop, d["rearDeck"] + rise), frame)
@@ -190,9 +198,9 @@ def deck_low_loader(p, shape, hues):
 
     # lashing points along the side members' tops
     length, height, spacing = LASHING
-    count = int((step - d["slopeStart"] - 0.4) / spacing + EPS) + 1
+    count = int((step - d["slopeStart"] - LASHING_MARGIN) / spacing + EPS) + 1
     for i in range(count):
-        x = d["slopeStart"] + 0.2 + i * spacing
+        x = d["slopeStart"] + LASHING_MARGIN / 2 + i * spacing
         for side in (-1, 1):
             shape.box((x, x + length), mirror(side, inner + 0.02, hw - 0.02), (deck + rise, deck + rise + height), black)
 
@@ -212,6 +220,8 @@ def ramps(p, shape, silver, black):
             shape.box(xs, y, (z0, top), silver)
         rungs = mirror(side, ramp["gap"] + STRINGER, ramp["gap"] + ramp["width"] - STRINGER)
         count = int((top - RAMP_CAP - z0 - 0.15) / pitch + EPS)
+        if count < 1:
+            raise ValueError("the folded ramps are too short for a rung")
         for k in range(count):
             z = z0 + 0.15 + k * pitch
             shape.box((xs[0] + 0.02, xs[1] - 0.02), rungs, (z, z + rung_h), silver)
@@ -322,6 +332,41 @@ def swing_gap(p, xs, ys):
     return math.hypot(dx, dy) - swing_radius(p)
 
 
+def inside(poly, x, z, tol=1e-5):
+    """Whether (x, z) lies in the convex polygon, within tol."""
+    signs = set()
+    for (x0, z0), (x1, z1) in zip(poly, poly[1:] + poly[:1]):
+        length = math.hypot(x1 - x0, z1 - z0)
+        if length < EPS:
+            continue
+        cross = ((x1 - x0) * (z - z0) - (z1 - z0) * (x - x0)) / length
+        if abs(cross) > tol:
+            signs.add(cross > 0)
+    return len(signs) < 2
+
+
+def check_marking(p, shape):
+    """The side marking, which follows the deck down its slope, keeps a face on each side to sit on."""
+    d, mark, hw = p["lowLoader"], p["marking"], p["width"] / 2
+    centre = (p["deck"] + p["underside"]) / 2
+    half = max(mark["strip"], min(mark["markerHeight"], p["deck"] - p["underside"])) / 2
+    start, end = p["rearX"] + mark["endMargin"], p["frontX"] - mark["endMargin"]
+    steps = math.ceil((end - start) / MARKING_STEP)
+    for side in (-1, 1):
+        faces = []
+        for face in shape.faces:
+            points = [shape.verts[i] for i in face]
+            if all(abs(y - side * hw) < EPS for _, y, _ in points):
+                faces.append([(x, z) for x, _, z in points])
+        for i in range(steps + 1):
+            x = start + (end - start) * i / steps
+            slope = min(1.0, max(0.0, (x - d["slopeEnd"]) / (d["slopeStart"] - d["slopeEnd"])))
+            z = centre + (d["rearDeck"] - p["deck"]) * (1 - slope)
+            for edge in (z - half, z + half):
+                if not any(inside(poly, x, edge) for poly in faces):
+                    raise ValueError("the side marking has no face to sit on")
+
+
 def check_trailer(p, shape):
     hw = p["width"] / 2
     lamp, guard = p["tailLamp"], p["guard"]
@@ -339,8 +384,10 @@ def check_trailer(p, shape):
                 raise ValueError("a face lies in the underrun guard")
         if z0 < p["underside"] - EPS and swing_gap(p, (x0, x1), (y0, y1)) < p["swingMargin"] - EPS:
             raise ValueError("a face below the underside enters the dolly wheels' swing")
+    if p["kind"] == "low-loader":
+        check_marking(p, shape)
     # the tail lamps stand on the lamp carrier, at the rear deck's height
-    base = p["lowLoader"]["rearDeck"] if "lowLoader" in p else p["deck"]
+    base = p["lowLoader"]["rearDeck"] if p["kind"] == "low-loader" else p["deck"]
     z_low, z_high = base + lamp["sill"], base + lamp["sill"] + lamp["height"]
     carriers = []
     for (x0, x1), (y0, y1), (z0, z1) in shape.extents():
