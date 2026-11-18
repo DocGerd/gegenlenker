@@ -24,7 +24,8 @@ export const AID_STROKE = {
   track: 0.1,
   casing: 0.06,
 } as const;
-export const COCKPIT_LAYERS = [SKY_LAYER];
+export const INTERIOR_LAYER = 4; // seen by the cockpit camera only: the cab interior around the driver's eye
+export const COCKPIT_LAYERS = [SKY_LAYER, INTERIOR_LAYER];
 export const MIRROR_LAYERS = [SKY_LAYER, CAB_LAYER];
 export const CHASE_LAYERS = [SKY_LAYER, CAB_LAYER];
 export const TOP_DOWN_LAYERS = [AIDS_LAYER];

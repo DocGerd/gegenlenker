@@ -1,12 +1,4 @@
-import {
-  MathUtils,
-  OrthographicCamera,
-  PerspectiveCamera,
-  Scene,
-  Vector3,
-  WebGLRenderer,
-  type Object3D,
-} from 'three';
+import { OrthographicCamera, Scene, Vector3, WebGLRenderer, type Object3D } from 'three';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
   DEFAULT_GRAPHICS,
@@ -21,8 +13,9 @@ import {
 import type { TrailerSpec, TruckAnchors, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { resolveCombination } from '../vehicles/resolve';
-import { bodyToThree } from './coords';
 import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './chase-camera';
+import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
+import { createCockpitInterior } from './cockpit-interior';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createMirror, mirrorPose } from './mirror';
@@ -30,8 +23,6 @@ import { readScenePalette } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import {
   AIDS_LAYER,
-  CAMERA_FAR,
-  COCKPIT_LAYERS,
   enableLayers,
   TOP_DOWN_LAYERS,
   type AidsLayer,
@@ -41,8 +32,6 @@ import {
 } from './seams';
 import { placeTopDownCamera } from './top-down-camera';
 
-const COCKPIT_FOV = 55;
-const COCKPIT_PITCH = MathUtils.degToRad(-6);
 const FOLLOW_HALF_HEIGHT = 20;
 /** Metres added to the vehicle's bounding radius. */
 const FOLLOW_RADIUS_MARGIN = 1;
@@ -95,10 +84,9 @@ function setAidsLayer(object: Object3D): void {
 
 export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   const timer = createFrameTimer();
-  const cockpitCamera = new PerspectiveCamera(COCKPIT_FOV, 1, 0.1, CAMERA_FAR);
-  cockpitCamera.rotation.order = 'YXZ';
+  const cockpitCamera = createCockpitCamera();
+  const interior = createCockpitInterior();
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
-  enableLayers(cockpitCamera.layers, COCKPIT_LAYERS);
   enableLayers(topDownCamera.layers, TOP_DOWN_LAYERS);
   const chaseCamera = createChaseCamera();
   topDownCamera.rotation.x = -Math.PI / 2;
@@ -158,6 +146,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     b.environment.setQuality(quality);
     b.truck.setQuality(quality);
     b.trailer.setQuality(quality);
+    interior.setQuality(quality);
   }
 
   function disposeBuilt(): void {
@@ -260,7 +249,13 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       const environment = parts.environment(nextLayout, palette);
       const aids = parts.aids(truck, trailer, nextLayout, palette);
       setAidsLayer(aids.object);
-      scene.add(environment.object, truckVisual.object, trailerVisual.object, aids.object);
+      scene.add(
+        environment.object,
+        truckVisual.object,
+        trailerVisual.object,
+        aids.object,
+        interior.object,
+      );
       built = {
         scene,
         truck: truckVisual,
@@ -315,7 +310,6 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       gl.setScissorTest(false);
 
       const anchors = b.anchors;
-      const heading = snapshot.truck.heading;
       const { cockpit, mirrorLeft: leftRect, mirrorRight: rightRect, topDown } = views;
 
       if (leftRect !== null) {
@@ -347,10 +341,8 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       gl.setScissorTest(true);
 
       if (cockpit !== null) {
-        bodyToThree(snapshot.truck, anchors.eye, cockpitCamera.position);
-        cockpitCamera.rotation.set(COCKPIT_PITCH, heading - Math.PI / 2, 0);
-        cockpitCamera.aspect = cockpit.width / cockpit.height;
-        cockpitCamera.updateProjectionMatrix();
+        placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit);
+        interior.place(cockpitCamera, cockpit, leftRect, rightRect);
         viewRect(gl, cockpit);
         gl.render(b.scene, cockpitCamera);
       }
@@ -412,6 +404,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
 
     dispose() {
       disposeBuilt();
+      interior.dispose();
       mirrorLeft.dispose();
       mirrorRight.dispose();
       canvas?.removeEventListener('webglcontextlost', onLost);

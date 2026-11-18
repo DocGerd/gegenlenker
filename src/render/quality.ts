@@ -12,6 +12,8 @@ export type QualityFlags = {
   readonly cabGlb: boolean;
   readonly vehicleGlb: boolean;
   readonly chaseView: boolean;
+  /** Dashboard, pillars, header and visor around the cockpit view, and the mirror housings. */
+  readonly cockpitInterior: boolean;
   readonly groundTexture: boolean;
   readonly pbr: boolean;
 };
@@ -24,6 +26,7 @@ const BALANCED: QualityFlags = {
   cabGlb: true,
   vehicleGlb: true,
   chaseView: true,
+  cockpitInterior: true,
   groundTexture: false,
   pbr: false,
 };
@@ -37,6 +40,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     cabGlb: false,
     vehicleGlb: false,
     chaseView: false,
+    cockpitInterior: false,
     groundTexture: false,
     pbr: false,
   },
