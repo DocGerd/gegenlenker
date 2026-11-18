@@ -328,7 +328,7 @@ export function startDrive(
     } else if (action.type === 'collapse') {
       collapsed = { ...collapsed, [action.panel]: action.collapsed };
       updateSettings({ collapsed });
-      remeasure();
+      arrange();
     } else if (action.type === 'aid') {
       aids = { ...aids, [action.aid]: action.on };
       dirty = true;

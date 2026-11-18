@@ -2,6 +2,8 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
 
+type Size = { width: number; height: number };
+
 const sizes = [
   { width: 740, height: 649 },
   { width: 768, height: 700 },
@@ -390,6 +392,25 @@ for (const { locale, messages } of locales) {
   }
 }
 
+/** The divider is hidden, or clear of every panel (and the open aid legend) and on screen. */
+async function expectDividerClearOrHidden(page: Page, size: Size): Promise<void> {
+  await settled(page);
+  if ((await splitBar(page).getAttribute('hidden')) !== null) {
+    await expect(handle(page)).toBeHidden();
+    return;
+  }
+  const panels = await boxes(
+    page.locator(
+      '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle, .hud-aid-legend',
+    ),
+  );
+  for (const d of await boxes(page.locator('.hud-split-handle, .hud-split-reset'))) {
+    for (const c of panels) expect(overlaps(d, c), `${d.name} overlaps ${c.name}`).toBe(false);
+    expect(d.bottom, `${d.name} on screen`).toBeLessThanOrEqual(size.height);
+    expect(d.right, `${d.name} on screen`).toBeLessThanOrEqual(size.width);
+  }
+}
+
 test('opening the aid legend re-measures the divider against the panels', async ({ page }) => {
   // The tallest landscape screen here where the opened legend no longer leaves room for the divider.
   const size = { width: 1280, height: 600 };
@@ -403,27 +424,35 @@ test('opening the aid legend re-measures the divider against the panels', async 
   const toggle = page.locator('[data-hud="aidLegendToggle"]');
   await toggle.click();
   await expect(page.locator('[data-hud="aidLegend"]')).toBeVisible();
-  await settled(page);
-  if ((await splitBar(page).getAttribute('hidden')) === null) {
-    const panels = await boxes(
-      page.locator(
-        '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle, .hud-aid-legend',
-      ),
-    );
-    for (const d of await boxes(page.locator('.hud-split-handle, .hud-split-reset'))) {
-      for (const c of panels) expect(overlaps(d, c), `${d.name} overlaps ${c.name}`).toBe(false);
-      expect(d.bottom, `${d.name} on screen`).toBeLessThanOrEqual(size.height);
-      expect(d.right, `${d.name} on screen`).toBeLessThanOrEqual(size.width);
-    }
-  } else {
-    await expect(handle(page)).toBeHidden();
-  }
+  await expectDividerClearOrHidden(page, size);
 
   await toggle.click();
   await expect(page.locator('[data-hud="aidLegend"]')).toBeHidden();
   await expect(handle(page)).toBeVisible();
   await expect(handle(page)).toHaveAttribute('aria-valuemin', min ?? '');
   await expect(handle(page)).toHaveAttribute('aria-valuemax', max ?? '');
+});
+
+test('folding and unfolding a panel re-measures the divider against the panels', async ({
+  page,
+}) => {
+  // Short enough that the unfolded aids panel leaves no room for the divider, the folded one does.
+  const size = { width: 1024, height: 560 };
+  await page.setViewportSize(size);
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  await expect(splitBar(page)).toHaveAttribute('hidden', '');
+
+  const aids = page.locator('[data-panel="aids"]');
+  await aids.click();
+  await expect(handle(page)).toBeVisible();
+  await expectDividerClearOrHidden(page, size);
+
+  // The folded state is stored: the next run lays out with the divider, then unfolds under it.
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  await expect(handle(page)).toBeVisible();
+  await aids.click();
+  await expect(splitBar(page)).toHaveAttribute('hidden', '');
+  await expectDividerClearOrHidden(page, size);
 });
 
 test('dragging the divider resizes the top view, persists, and resets', async ({ page }) => {
