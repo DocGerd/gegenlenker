@@ -1,5 +1,6 @@
 import { registerSW } from 'virtual:pwa-register';
 import { t } from '../i18n/i18n';
+import { setOfflineStatus } from './offline-status';
 import './update-prompt.css';
 
 const OFFLINE_READY_MS = 4000;
@@ -32,6 +33,11 @@ export function startUpdatePrompt(root: HTMLElement): void {
     return el;
   };
 
+  // onOfflineReady fires only on first install; a controlled page was served by a completed precache.
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller !== null) {
+    setOfflineStatus('ready');
+  }
+
   const updateSW = registerSW({
     onNeedRefresh() {
       show(
@@ -50,9 +56,11 @@ export function startUpdatePrompt(root: HTMLElement): void {
     },
     onRegisterError(error) {
       console.error('SW registration failed', error);
+      setOfflineStatus('failed');
       show(t('offlineSetupFailed'), button(t('dismiss'), hide));
     },
     onOfflineReady() {
+      setOfflineStatus('ready');
       show(t('offlineReady'));
       hideTimer = window.setTimeout(hide, OFFLINE_READY_MS);
     },

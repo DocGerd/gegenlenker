@@ -23,10 +23,13 @@ test('loads from the subpath and drives an exercise offline', async ({
   await page.reload();
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   expect(foreign).toEqual([]);
+  const status = page.locator('[data-menu="offline"]');
+  await expect(status).toHaveText(en.offlineReady);
 
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
+  await expect(status).toHaveText(en.offlineReady);
 
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   const speed = page.locator('[data-hud="speed"]');
