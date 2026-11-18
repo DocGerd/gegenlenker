@@ -15,7 +15,7 @@ import { truckAnchors } from '../vehicles/anchors';
 import { resolveCombination } from '../vehicles/resolve';
 import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './chase-camera';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
-import { createCockpitInterior, interiorLayout } from './cockpit-interior';
+import { createCockpitInterior } from './cockpit-interior';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createMirror, mirrorPose } from './mirror';
@@ -342,7 +342,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
 
       if (cockpit !== null) {
         placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit);
-        interior.place(cockpitCamera, interiorLayout(cockpit, leftRect, rightRect));
+        interior.place(cockpitCamera, cockpit, leftRect, rightRect);
         viewRect(gl, cockpit);
         gl.render(b.scene, cockpitCamera);
       }

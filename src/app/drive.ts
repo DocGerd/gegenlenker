@@ -167,7 +167,7 @@ export function startDrive(
   };
   window.addEventListener('keydown', onEscape);
   cleanups.push(() => window.removeEventListener('keydown', onEscape));
-  const { renderer } = view;
+  const { renderer, graphics } = view;
   renderer.setScene(layout, truck, trailer);
 
   let aids: AidFlags = settings.aids;
@@ -211,8 +211,8 @@ export function startDrive(
         : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
     aids: settings.aids,
     topDown,
-    chase: chaseViewAvailable(settings.graphics),
-    interior: interiorAvailable(settings.graphics),
+    chase: chaseViewAvailable(graphics),
+    interior: interiorAvailable(graphics),
     collapsed,
   });
   cleanups.push(() => hud.dispose());

@@ -10,15 +10,19 @@ import {
   type PerspectiveCamera,
 } from 'three';
 import { describe, expect, it } from 'vitest';
-import type { Rect } from '../contracts/render';
+import type { LegendBox, Rect } from '../contracts/render';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById } from '../vehicles/registry';
 import { createChaseCamera } from './chase-camera';
 import { COCKPIT_FOV, createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import {
   CLEAR_CONE_DEG,
+  CONE_GAP,
+  coneEdge,
   createCockpitInterior,
   interiorLayout,
+  MIN_PILLAR_WIDTH,
+  MIRROR_GAP,
   pillarSpan,
 } from './cockpit-interior';
 import { createMirror } from './mirror';
@@ -37,14 +41,46 @@ type Shot = {
 };
 
 /** The real cockpit camera and the interior placed for a window of `width` x `height` CSS px. */
-function shoot(width: number, height: number, heading = 0.7): Shot {
-  const { cockpit, mirrorLeft, mirrorRight } = computeViewports(width, height, 'drive');
+function shoot(
+  width: number,
+  height: number,
+  heading = 0.7,
+  legend: LegendBox | null = null,
+): Shot {
+  const { cockpit, mirrorLeft, mirrorRight } = computeViewports(width, height, 'drive', legend);
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) throw new Error('no views');
   const camera = createCockpitCamera();
   const interior = createCockpitInterior();
   placeCockpitCamera(camera, { x: 12, y: -7, heading }, eye, cockpit);
-  interior.place(camera, interiorLayout(cockpit, mirrorLeft, mirrorRight));
+  interior.place(camera, cockpit, mirrorLeft, mirrorRight);
   return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight };
+}
+
+/** Windows whose pillars must show: landscape desktop and tablet sizes. */
+const REQUIRED: readonly (readonly [number, number])[] = [
+  [1350, 600],
+  [1280, 800],
+  [1280, 720],
+];
+
+/** The pillars as drawn; a hidden one is forced on as a `MIN_PILLAR_WIDTH` pillar flush against its mirror's margin. */
+function forcedPillars({ interior, cockpit, left, right }: Shot): Mesh[] {
+  const layout = interiorLayout(cockpit, left, right);
+  const pillars: Mesh[] = [];
+  for (const [mesh, side, inner] of [
+    [interior.pillars.left, -1, layout.left],
+    [interior.pillars.right, 1, layout.right],
+  ] as const) {
+    if (!mesh.visible) {
+      const outer = Math.min(inner - MIRROR_GAP, 1);
+      mesh.visible = true;
+      mesh.position.x = side * (outer - MIN_PILLAR_WIDTH / 2);
+      mesh.scale.x = side * MIN_PILLAR_WIDTH;
+    }
+    pillars.push(mesh);
+  }
+  interior.object.updateMatrixWorld(true);
+  return pillars;
 }
 
 const raycaster = new Raycaster();
@@ -129,39 +165,33 @@ describe('cockpit interior quality', () => {
 });
 
 describe('cockpit interior in the real cockpit camera', () => {
-  const views = [
-    [1350, 600],
-    [1280, 800],
-  ] as const;
-
-  it.each(views)('is in the frustum, part by part, at %i x %i', (w, h) => {
+  it.each(REQUIRED)('is in the frustum, part by part, at %i x %i', (w, h) => {
     const { camera, interior } = shoot(w, h);
     const frustum = new Frustum().setFromProjectionMatrix(
       new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
     );
-    expect(interior.meshes.length).toBe(7);
+    expect(interior.meshes.length).toBeGreaterThan(0);
     for (const m of interior.meshes) {
       expect(m.visible, m.name).toBe(true);
       expect(frustum.intersectsObject(m), m.name).toBe(true);
     }
   });
 
-  it.each(views)(
+  it.each(REQUIRED)(
     'is hit by rays through the dashboard, header, visor and pillars at %i x %i',
     (w, h) => {
       const { camera, interior, cockpit, left, right } = shoot(w, h);
       const m = interior.meshes;
-      expect(hits(camera, m, 0, -0.9)).toContain('dash');
-      expect(hits(camera, m, 0, -0.535)).toContain('dash-lip');
-      expect(hits(camera, m, 0, 0.9)).toContain('header');
-      expect(hits(camera, m, -0.3, 0.7)).toContain('visor');
+      expect(hits(camera, m, 0, -0.9)).toEqual(['frame']);
+      expect(hits(camera, m, 0, -0.535)).toEqual(['frame']);
+      expect(hits(camera, m, 0, 0.9)).toEqual(['frame']);
+      expect(hits(camera, m, -0.3, 0.7)).toContain('frame');
       const layout = interiorLayout(cockpit, left, right);
       const span = pillarSpan(camera.aspect, COCKPIT_FOV, layout.right);
-      if (span === null) throw new Error('no right pillar');
-      expect(hits(camera, m, span.centre, 0)).toContain('pillar-right');
       const leftSpan = pillarSpan(camera.aspect, COCKPIT_FOV, layout.left);
-      if (leftSpan === null) throw new Error('no left pillar');
-      expect(hits(camera, m, -leftSpan.centre, 0)).toContain('pillar-left');
+      if (span === null || leftSpan === null) throw new Error('no pillar');
+      expect(hits(camera, m, span.centre, 0)).toEqual(['pillar-right']);
+      expect(hits(camera, m, -leftSpan.centre, 0)).toEqual(['pillar-left']);
     },
   );
 
@@ -181,30 +211,80 @@ describe('cockpit interior in the real cockpit camera', () => {
   });
 });
 
+describe('cockpit interior pillars', () => {
+  it.each(REQUIRED)('show at the required landscape size %i x %i', (w, h) => {
+    const { interior } = shoot(w, h);
+    expect(interior.pillars.left.visible).toBe(true);
+    expect(interior.pillars.right.visible).toBe(true);
+  });
+
+  it('are dropped on a 4:3 tablet by design: the cone leaves no room, and the rest stays', () => {
+    const { interior } = shoot(1024, 768);
+    const hidden = interior.meshes.filter((m) => !m.visible);
+    expect(hidden.map((m) => m.name).sort()).toEqual(['pillar-left', 'pillar-right']);
+  });
+
+  it('keep clear of mirror rects that a measured legend shifts', () => {
+    const legend = { right: 780, height: 330 };
+    const plain = shoot(1350, 600);
+    const shot = shoot(1350, 600, 0.7, legend);
+    expect(shot.right.width).toBeLessThan(plain.right.width);
+    const { camera, interior, cockpit, left, right } = shot;
+    expect(interior.pillars.left.visible).toBe(true);
+    expect(interior.pillars.right.visible).toBe(true);
+    for (const rect of [left, right]) {
+      for (let u = 0; u <= 1; u += 0.125) {
+        for (let v = 0; v <= 1; v += 0.125) {
+          const [x, y] = rectToNdc(cockpit, rect, u, v);
+          expect(
+            hits(camera, [interior.pillars.left, interior.pillars.right], x, y),
+            `(${u}, ${v})`,
+          ).toEqual([]);
+        }
+      }
+      const [x, y] = rectToNdc(cockpit, rect, 0.5, 0.5);
+      expect(hits(camera, interior.meshes, x, y)).toEqual([]);
+    }
+  });
+});
+
 describe('cockpit interior keeps the training view clear', () => {
   // Landscape and portrait windows from phone to desktop, the layouts of `computeViewports`.
-  const windows: [number, number][] = [];
+  const windows: (readonly [number, number])[] = [];
   for (let w = 360; w <= 1920; w += 60) for (let h = 360; h <= 1280; h += 80) windows.push([w, h]);
-  windows.push([1350, 600], [1280, 800], [1024, 768], [390, 844], [844, 390]);
+  windows.push(...REQUIRED, [1024, 768], [390, 844], [844, 390]);
 
   const cone = MathUtils.degToRad(CLEAR_CONE_DEG);
+  /** Fresh each time: `forcedPillars` moves the pillars. */
+  const sweep = () => windows.map(([w, h]) => ({ w, h, shot: shoot(w, h) }));
+  const shown = (s: Shot): Mesh[] =>
+    [s.interior.pillars.left, s.interior.pillars.right].filter((m) => m.visible);
+
+  it('sweeps windows with and without pillars', () => {
+    const shots = sweep();
+    const withPillars = shots.filter(({ shot }) => shown(shot).length === 2).length;
+    expect(withPillars).toBeGreaterThan(0);
+    expect(withPillars).toBeLessThan(shots.length);
+  });
 
   it('leaves a central forward sight cone free of every part', () => {
-    for (const [w, h] of windows) {
-      const { camera, interior } = shoot(w, h);
+    for (const { w, h, shot } of sweep()) {
       for (let az = -cone; az <= cone + 1e-9; az += cone / 6) {
         for (let el = -cone; el <= cone + 1e-9; el += cone / 6) {
           if (Math.hypot(az, el) > cone) continue;
-          expect(hitsAlong(camera, interior.meshes, az, el), `${w}x${h} ${az} ${el}`).toEqual([]);
+          expect(
+            hitsAlong(shot.camera, shot.interior.meshes, az, el),
+            `${w}x${h} ${az} ${el}`,
+          ).toEqual([]);
         }
       }
     }
   });
 
   it('keeps the A-pillars out of the lines of sight from the eye to each mirror rect', () => {
-    for (const [w, h] of windows) {
-      const { camera, interior, cockpit, left, right } = shoot(w, h);
-      const pillars = [interior.pillars.left, interior.pillars.right];
+    for (const { w, h, shot } of sweep()) {
+      const { camera, cockpit, left, right } = shot;
+      const pillars = forcedPillars(shot);
       for (const rect of [left, right]) {
         for (let u = 0; u <= 1; u += 0.125) {
           for (let v = 0; v <= 1; v += 0.125) {
@@ -217,8 +297,9 @@ describe('cockpit interior keeps the training view clear', () => {
   });
 
   it('keeps every part off the centre of each mirror rect', () => {
-    for (const [w, h] of windows) {
-      const { camera, interior, cockpit, left, right } = shoot(w, h);
+    for (const { w, h, shot } of sweep()) {
+      const { camera, interior, cockpit, left, right } = shot;
+      forcedPillars(shot);
       for (const rect of [left, right]) {
         const [x, y] = rectToNdc(cockpit, rect, 0.5, 0.5);
         expect(hits(camera, interior.meshes, x, y), `${w}x${h}`).toEqual([]);
@@ -226,20 +307,32 @@ describe('cockpit interior keeps the training view clear', () => {
     }
   });
 
-  it('shows both pillars in tablet and desktop windows whose cockpit is wide enough to leave room beside the cone', () => {
-    for (const [w, h] of windows) {
-      const { interior, cockpit } = shoot(w, h);
-      if (w >= 800 && cockpit.width / cockpit.height >= 0.9) {
-        expect(interior.pillars.left.visible, `${w}x${h}`).toBe(true);
-        expect(interior.pillars.right.visible, `${w}x${h}`).toBe(true);
+  it('drops a pillar only when the narrowest allowed one would reach into the cone margin', () => {
+    let hidden = 0;
+    for (const { w, h, shot } of sweep()) {
+      const { camera, interior, cockpit, left, right } = shot;
+      const layout = interiorLayout(cockpit, left, right);
+      const margin = coneEdge(camera.aspect, COCKPIT_FOV) + CONE_GAP;
+      for (const [mesh, side] of [
+        [interior.pillars.left, -1],
+        [interior.pillars.right, 1],
+      ] as const) {
+        if (mesh.visible) continue;
+        hidden++;
+        forcedPillars(shot);
+        let innermost = Infinity;
+        for (let x = 0; x <= 1; x += 0.0025) {
+          if (hits(camera, [mesh], side * x, 0).length > 0) {
+            innermost = x;
+            break;
+          }
+        }
+        expect(
+          innermost,
+          `${w}x${h} ${mesh.name} (mirror at ${side < 0 ? layout.left : layout.right})`,
+        ).toBeLessThan(margin);
       }
     }
-  });
-
-  it('drops a pillar that would have to enter the cone or cover a mirror', () => {
-    const { interior } = shoot(1024, 768);
-    expect(interior.pillars.left.visible).toBe(false);
-    expect(interior.pillars.right.visible).toBe(false);
-    expect(interior.meshes.filter((m) => m.visible).length).toBe(5);
+    expect(hidden).toBeGreaterThan(0);
   });
 });

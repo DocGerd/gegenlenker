@@ -72,7 +72,7 @@
   box-shadow: var(--hud-frame);
 }
 
-/* Mirror housing: a mounting arm on the outer side, drawn past the frame. It only grows into the free margin beside the mirror, never towards the controls or the legend. */
+/* Mirror housing arm on the outer side, past the frame. */
 .hud[data-interior] .hud-mirror::before {
   content: '';
   position: absolute;
