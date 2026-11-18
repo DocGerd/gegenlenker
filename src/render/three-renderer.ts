@@ -25,7 +25,7 @@ import { bodyToThree } from './coords';
 import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './chase-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
-import { createMirror } from './mirror';
+import { createMirror, MIRROR_YAW } from './mirror';
 import { readScenePalette } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import {
@@ -43,7 +43,6 @@ import { placeTopDownCamera } from './top-down-camera';
 
 const COCKPIT_FOV = 55;
 const COCKPIT_PITCH = MathUtils.degToRad(-6);
-const MIRROR_YAW = MathUtils.degToRad(7);
 const FOLLOW_HALF_HEIGHT = 20;
 /** Metres added to the vehicle's bounding radius. */
 const FOLLOW_RADIUS_MARGIN = 1;

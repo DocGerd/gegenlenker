@@ -17,6 +17,8 @@ import { CAMERA_FAR, enableLayers, MIRROR_LAYERS } from './seams';
 const FOV = 46;
 const NEAR = 0.2;
 const PITCH = MathUtils.degToRad(-4);
+/** Each mirror looks this far outward of straight back. */
+export const MIRROR_YAW = MathUtils.degToRad(7);
 
 /** One mirror: the scene is rendered unflipped into a target, then drawn with u → 1 − u. */
 export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsaa) {

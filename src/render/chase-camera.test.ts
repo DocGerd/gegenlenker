@@ -13,7 +13,6 @@ import {
 import type { Pose2 } from '../contracts/sim';
 import { trucks } from '../vehicles/registry';
 import { CAB_HEIGHT, RELIEF } from './cab-dims';
-import { parseCabShell } from './cab-shell';
 import {
   cabFront,
   cabFrontCorners,
@@ -24,6 +23,7 @@ import {
   type ChaseFrame,
 } from './chase-camera';
 import { bodyToThree } from './coords';
+import { parseShell } from './glb-shells';
 import { KEYS } from './palette';
 import { AIDS_LAYER, CAB_LAYER, CAMERA_FAR, DEFAULT_LAYER, SKY_LAYER } from './seams';
 import { proceduralTruck } from './vehicle-visual';
@@ -176,20 +176,21 @@ describe.each(trucks)('chase camera, $id', (spec) => {
   });
 });
 
-describe('chase camera and the cab shell', () => {
-  it('frames the face the glb actually has', async () => {
-    const bytes = readFileSync(join(import.meta.dirname, 'assets/man-le-18-280-cab.glb'));
-    const shell = await parseCabShell(
+describe.each(trucks)('chase camera and the cab shell of $id', (spec) => {
+  it('is framed around the face the glb actually has', async () => {
+    const bytes = readFileSync(join(import.meta.dirname, `assets/${spec.id}-cab.glb`));
+    const { mesh } = await parseShell(
       bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
     );
-    const spec = trucks.find((s) => s.id === 'man-le-18-280');
-    if (spec === undefined) throw new Error('truck missing');
     const face = cabFront(spec);
-    const box = new Box3().setFromObject(shell.body).union(new Box3().setFromObject(shell.detail));
+    const box = new Box3().setFromObject(mesh);
     const half = Math.max(-box.min.z, box.max.z);
     const tolerance = RELIEF + 1e-3;
-    expect(Math.abs(box.max.x - face.x)).toBeLessThanOrEqual(tolerance);
-    expect(Math.abs(box.max.y - face.top)).toBeLessThanOrEqual(tolerance);
+    // The crew cab's tow coupling reaches 0.25 m past the face; the light bar and roof rack stand up to 0.3 m above the roof.
+    expect(box.max.x).toBeGreaterThanOrEqual(face.x - tolerance);
+    expect(box.max.x).toBeLessThanOrEqual(face.x + 0.25 + tolerance);
+    expect(box.max.y).toBeGreaterThanOrEqual(face.top);
+    expect(box.max.y).toBeLessThanOrEqual(face.top + 0.3);
     expect(box.min.y).toBeLessThanOrEqual(face.bottom);
     expect(Math.abs(half - face.halfWidth)).toBeLessThanOrEqual(tolerance);
   });

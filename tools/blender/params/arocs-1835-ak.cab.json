@@ -1,0 +1,40 @@
+{
+  "id": "arocs-1835-ak",
+  "schema": 2,
+  "style": "day",
+  "width": 2.5,
+  "frontX": 5.35,
+  "frontAxleX": 3.9,
+  "wheelRadius": 0.5,
+  "cabLength": 2.2,
+  "cabHeight": 2.9,
+  "frameTop": 1.1,
+  "railBottom": 0.65,
+  "relief": 0.03,
+  "plateRelief": 0.06,
+  "bumperInset": 0.1,
+  "cab": {
+    "windscreenInset": 0.15,
+    "glassSill": 0.9,
+    "glassHeight": 0.756,
+    "sideGlassSetback": 0.176,
+    "sideGlassLength": 0.814,
+    "grilleWidth": 1.25,
+    "grilleSill": 0.144,
+    "grilleHeight": 0.54,
+    "headlampInset": 0.125,
+    "headlampWidth": 0.4,
+    "lampSill": 0.18,
+    "lampHeight": 0.396
+  },
+  "hues": {
+    "body": "#00387b",
+    "glass": "#293133",
+    "grille": "#101214",
+    "lamp": "#f4f4ee",
+    "white": "#f6f6f6",
+    "beacon": "#1f6fe5",
+    "black": "#101214",
+    "silver": "#a5a5a5"
+  }
+}

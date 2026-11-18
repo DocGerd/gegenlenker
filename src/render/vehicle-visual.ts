@@ -14,8 +14,20 @@ import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
-import { applyCabShell, type CabShells } from './cab-shell';
-import { CAB_HEIGHT, CAB_LENGTH, FRAME_TOP, RAIL_BOTTOM } from './cab-dims';
+import {
+  bodyFrontX,
+  FLOOR_TOP,
+  RAIL_HALF_GAP,
+  RAIL_WIDTH,
+  TIPPER_WALL_TOP,
+  TRUCK_WHEEL_WIDTH,
+  TWIN_OFFSET,
+  TWIN_WHEEL_WIDTH,
+  WALL_THICKNESS,
+} from './body-dims';
+import { CAB_HEIGHT, CAB_LENGTH, FRAME_TOP, RAIL_BOTTOM, TRUCK_WHEEL_RADIUS } from './cab-dims';
+import { applyShell, type TruckShells } from './glb-shells';
+import { TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
 import { CAB_LAYER, SKY_LAYER, type VehicleVisual } from './seams';
@@ -26,23 +38,13 @@ import {
   plateTexture,
   trailerDetail,
   truckDetail,
+  truckMarking,
   type PlateSpot,
 } from './vehicle-detail';
 import { box, merge, WHEEL_SEGMENTS, wheelGeometry } from './vehicle-geometry';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
-const TRUCK_WHEEL_RADIUS = 0.5;
-const TRUCK_WHEEL_WIDTH = 0.3;
-const TWIN_WHEEL_WIDTH = 0.26;
-const TWIN_OFFSET = 0.15;
 const TRAILER_WHEEL_WIDTH = 0.3;
-
-const CAB_GAP = 0.1;
-const FLOOR_THICKNESS = 0.2;
-const WALL_THICKNESS = 0.1;
-const TIPPER_WALL_TOP = 2.5;
-const RAIL_HALF_GAP = 0.45; // lateral centre of each chassis rail
-const RAIL_WIDTH = 0.2;
 
 const SWAP_BODY_HEIGHT = 2.7;
 const RAMP_HEIGHT = 1.2;
@@ -186,14 +188,15 @@ function resources() {
 export function proceduralTruck(
   spec: TruckSpec,
   palette: ScenePalette,
-  shells?: CabShells,
+  shells?: TruckShells,
 ): VehicleVisual {
   const a = truckAnchors(spec);
   const hw = spec.width.value / 2000;
   const rearTrack = spec.rearTrack.value / 1000;
   const frontTrack = spec.frontTrack.value / 1000;
+  const look = TRUCK_LOOKS[spec.id];
   const cabRear = a.frontX - CAB_LENGTH;
-  const bodyFront = cabRear - CAB_GAP;
+  const bodyFront = bodyFrontX(a.frontX);
   const res = resources();
 
   const cab = [box([cabRear, a.frontX], [-hw, hw], [FRAME_TOP, CAB_HEIGHT])];
@@ -217,7 +220,7 @@ export function proceduralTruck(
     ),
   ];
 
-  const floorTop = FRAME_TOP + FLOOR_THICKNESS;
+  const floorTop = FLOOR_TOP;
   const body = [box([a.rearX, bodyFront], [-hw, hw], [FRAME_TOP, floorTop])];
   if (spec.body === 'tipper') {
     body.push(
@@ -263,9 +266,7 @@ export function proceduralTruck(
     halfWidth: hw,
     frontX: a.frontX,
     rearX: a.rearX,
-    bodyFront,
     frameTop: FRAME_TOP,
-    floorTop,
     railBottom: RAIL_BOTTOM,
     rearAxleX: a.rearAxle.x,
     rearTrack,
@@ -287,14 +288,28 @@ export function proceduralTruck(
 
   const cabBox = res.mesh(merge(cab), cabMaterial);
   const cabFront = res.cabFront(detail.cabFront);
+  const bodyBox = res.mesh(merge(body), bodyMaterial);
+  const markingGeometry = (front: number) =>
+    truckMarking({
+      halfWidth: hw,
+      rearX: a.rearX,
+      bodyFront: front,
+      frameTop: FRAME_TOP,
+      floorTop,
+    });
+  const marking = res.detail(markingGeometry(bodyFront));
+  // a longer perspective cab pushes the body, and with it the marking, further back
+  const shellFront = bodyFrontX(a.frontX, look.cab.length);
+  const shellMarking = shellFront === bodyFront ? null : res.detail(markingGeometry(shellFront));
   const group = new Group();
   group.add(
     schematic.rear,
     res.shadow(blobShadow(truckBlobs, SHADOW_HEIGHT)),
     cabBox,
     res.mesh(merge(chassis), chassisMaterial),
-    res.mesh(merge(body), bodyMaterial),
+    bodyBox,
     res.mesh(merge(rearWheels), wheelMaterial),
+    marking,
     res.detail(detail.geometry),
     cabFront,
     res.plate(detail.plate),
@@ -313,11 +328,33 @@ export function proceduralTruck(
   const pivotLeft = kingpin(1);
   const pivotRight = kingpin(-1);
 
-  let shell: ReturnType<typeof applyCabShell> | null = null;
+  type Applied = ReturnType<typeof applyShell>;
+  let cabShell: Applied | null = null;
+  let bodyShell: Applied | null = null;
   let cabGlb = true;
-  const cancelShell = shells?.onLoaded(spec.id, (loaded) => {
-    shell = applyCabShell(group, cabBox, cabFront, loaded, palette, cabGlb);
+  let vehicleGlb = true;
+  const cancelCab = shells?.cab.onLoaded(`${spec.id}-cab`, (loaded) => {
+    cabShell = applyShell(
+      group,
+      loaded,
+      { toAids: [cabBox], remove: [cabFront], layer: CAB_LAYER },
+      cabGlb,
+    );
     return cabGlb;
+  });
+  const cancelBody = shells?.body.onLoaded(`${spec.id}-body`, (loaded) => {
+    bodyShell = applyShell(
+      group,
+      loaded,
+      {
+        toAids: [bodyBox],
+        remove: shellMarking === null ? [] : [marking],
+        add: shellMarking === null ? [] : [shellMarking],
+        layer: SKY_LAYER,
+      },
+      vehicleGlb,
+    );
+    return vehicleGlb;
   });
 
   return {
@@ -329,11 +366,15 @@ export function proceduralTruck(
     },
     setQuality(flags) {
       cabGlb = flags.cabGlb;
-      shell?.setEnabled(cabGlb);
+      vehicleGlb = flags.vehicleGlb;
+      cabShell?.setEnabled(cabGlb);
+      bodyShell?.setEnabled(vehicleGlb);
     },
     dispose() {
-      cancelShell?.();
-      shell?.dispose();
+      cancelCab?.();
+      cancelBody?.();
+      cabShell?.dispose();
+      bodyShell?.dispose();
       res.dispose();
       schematic.dispose();
     },

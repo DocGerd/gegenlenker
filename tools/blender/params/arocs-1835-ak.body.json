@@ -1,0 +1,17 @@
+{
+  "id": "arocs-1835-ak",
+  "schema": 2,
+  "kind": "tipper",
+  "width": 2.5,
+  "rearX": -1.435,
+  "bodyFront": 3.05,
+  "frameTop": 1.1,
+  "floorTop": 1.3,
+  "wallThickness": 0.1,
+  "wallTop": 2.5,
+  "relief": 0.03,
+  "rearAxleX": 0,
+  "wheelRadius": 0.5,
+  "marking": { "zLow": 1.15, "zHigh": 1.25 },
+  "hues": { "body": "#00387b", "white": "#f6f6f6" }
+}

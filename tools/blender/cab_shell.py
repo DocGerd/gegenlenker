@@ -1,108 +1,37 @@
-"""Generic truck cab shell for the Gegenlenker mirrors (issue #68).
+"""THW truck cab shell for the Gegenlenker mirrors (issues #68, #133).
 
 Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
   PARAMS_PATH  path of tools/blender/params/<id>.cab.json
   PARAMS_JSON  the same JSON as text; wins over PARAMS_PATH (for hosts that cannot read the path)
   OUT_PATH     where the raw .glb is written
+  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ...}; the run aborts on a mismatch
 
-Authored in the sim body frame: metres, +X forward, +Y left, +Z up, origin at the rear axle. The
-glTF exporter's default Y-up conversion then yields Three space (x = x, z = -y).
+One vertex-coloured mesh, "cab", in the sim body frame (shell_common.py). Livery is colours only: no
+lettering, emblems or maker logos. Styles: "day" (short day cab) and "crew" (double cab with a second
+side window row, a roof rack and a front tow coupling).
 
 Tested Blender version: 5.3.0 (bpy.app.version_string is printed and recorded in the manifest).
-No read_factory_settings: it also reloads preferences and disables add-ons, such as the host's MCP add-on.
-Deterministic: fixed names, ordered lists, no clock or randomness.
 """
 
-import hashlib
-import json
 import os
+import runpy
 
-import bpy
+COMMON_FILE = os.path.join(os.path.dirname(__file__), "shell_common.py")
+COMMON = runpy.run_path(COMMON_FILE)
+Shape = COMMON["Shape"]
+srgb = COMMON["srgb_to_linear"]
 
 CORNER = 0.12  # vertical front edges are chamfered by this much (<= every glass/lamp inset)
 ROOF = 0.12  # the roof's front edge drops and recedes by this much
 BUMPER_DEPTH = 0.15
-
-GLTF_OPTIONS = {
-    "export_format": "GLB",
-    "use_active_scene": True,
-    "use_selection": False,
-    "export_apply": True,
-    "export_yup": True,
-    "export_materials": "EXPORT",
-    "export_normals": True,
-    "export_texcoords": False,
-    "export_tangents": False,
-    "export_vertex_color": "ACTIVE",
-    "export_active_vertex_color_when_no_material": True,
-    "export_all_vertex_colors": False,
-    "export_attributes": False,
-    "export_image_format": "NONE",
-    "export_extras": True,
-    "export_cameras": False,
-    "export_lights": False,
-    "export_animations": False,
-    "export_skins": False,
-    "export_morph": False,
-    "export_draco_mesh_compression_enable": False,
-}
-
-# A missing one changes the output (axis, normals, colours, provenance), so it is an error.
-REQUIRED_OPTIONS = (
-    "export_format",
-    "export_yup",
-    "export_vertex_color",
-    "export_normals",
-    "export_apply",
-    "export_extras",
-    "use_active_scene",
-)
-
-
-def srgb_to_linear(hex_colour):
-    out = []
-    for i in (1, 3, 5):
-        c = int(hex_colour[i : i + 2], 16) / 255
-        out.append(c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4)
-    return out + [1.0]
-
-
-class Shape:
-    """Indexed polygons with one colour per face."""
-
-    def __init__(self):
-        self.verts = []
-        self.faces = []
-        self.colours = []
-
-    def add(self, verts, faces, colour):
-        base = len(self.verts)
-        self.verts.extend(verts)
-        for face in faces:
-            self.faces.append(tuple(base + i for i in face))
-            self.colours.append(colour)
-
-    def box(self, x, y, z, colour):
-        (x0, x1), (y0, y1), (z0, z1) = x, y, z
-        verts = [
-            (x0, y0, z0),
-            (x1, y0, z0),
-            (x1, y1, z0),
-            (x0, y1, z0),
-            (x0, y0, z1),
-            (x1, y0, z1),
-            (x1, y1, z1),
-            (x0, y1, z1),
-        ]
-        faces = [
-            (3, 2, 1, 0),
-            (4, 5, 6, 7),
-            (0, 1, 5, 4),
-            (1, 2, 6, 5),
-            (2, 3, 7, 6),
-            (3, 0, 4, 7),
-        ]
-        self.add(verts, faces, colour)
+CORNER_LENGTH = 0.5  # white lower front corner wraps this far back along each side
+CORNER_HEIGHT = 0.5
+STRIPE = (0.62, 0.76)  # side stripe, above the frame top
+CREW_GLASS = (0.2, 0.75)  # pillar gap and length of the second side window
+ARCH_ANGLES = (35, 145)
+ARCH_CLEARANCE = (0.06, 0.14)  # inner and outer radius beyond the tyre
+BEACON_BASE = 0.04
+BEACON_HEIGHT = 0.1
 
 
 def plan(rear, front, half, corner):
@@ -117,7 +46,7 @@ def plan(rear, front, half, corner):
     ]
 
 
-def shell(p):
+def shell(p, shape, colour):
     hw = p["width"] / 2
     rear = p["frontX"] - p["cabLength"]
     z0, z2 = p["frameTop"], p["cabHeight"]
@@ -133,17 +62,11 @@ def shell(p):
         for i in range(n):
             j = (i + 1) % n
             faces.append((ring + i, ring + j, ring + n + j, ring + n + i))
-    shape = Shape()
-    shape.add(verts, faces, [1.0, 1.0, 1.0, 1.0])
-    return shape
+    shape.add(verts, faces, colour)
 
 
-def fittings(p):
+def front_fittings(p, shape, hues):
     c, hw, front = p["cab"], p["width"] / 2, p["frontX"]
-    glass = srgb_to_linear(p["hues"]["glass"])
-    grille = srgb_to_linear(p["hues"]["grille"])
-    lamp = srgb_to_linear(p["hues"]["lamp"])
-    bumper = srgb_to_linear(p["hues"]["bumper"])
     relief = p["relief"]
     ahead = (front, front + relief)
 
@@ -153,14 +76,13 @@ def fittings(p):
 
     glass_z = above(c["glassSill"], c["glassHeight"])
     lamp_z = above(c["lampSill"], c["lampHeight"])
-    shape = Shape()
     ws = hw - c["windscreenInset"]
-    shape.box(ahead, (-ws, ws), glass_z, glass)
+    shape.box(ahead, (-ws, ws), glass_z, hues["glass"])
     shape.box(
         ahead,
         (-c["grilleWidth"] / 2, c["grilleWidth"] / 2),
         above(c["grilleSill"], c["grilleHeight"]),
-        grille,
+        hues["grille"],
     )
     outer = hw - c["headlampInset"]
     inner = outer - c["headlampWidth"]
@@ -170,135 +92,110 @@ def fittings(p):
     )
     for side in (-1, 1):
         lateral = (inner, outer) if side > 0 else (-outer, -inner)
-        shape.box(ahead, lateral, lamp_z, lamp)
+        shape.box(ahead, lateral, lamp_z, hues["lamp"])
         edge = (hw, hw + relief) if side > 0 else (-hw - relief, -hw)
-        shape.box(side_x, edge, glass_z, glass)
+        shape.box(side_x, edge, glass_z, hues["glass"])
+        if p["style"] == "crew":
+            gap, length = CREW_GLASS
+            rear_x = (side_x[0] - gap - length, side_x[0] - gap)
+            shape.box(rear_x, edge, glass_z, hues["glass"])
     half = hw - p["bumperInset"]
     # The front face sits at frontX + relief, where the plate expects it.
     shape.box(
         (front + relief - BUMPER_DEPTH, front + relief),
         (-half, half),
         (p["railBottom"], p["frameTop"]),
-        bumper,
+        hues["white"],
     )
-    return shape
 
 
-def reset_scene():
-    """One empty scene and no leftover datablocks; preferences and add-ons stay untouched."""
-    if bpy.data.filepath:
-        raise RuntimeError("refusing to reset a saved session: " + bpy.data.filepath)
-    if bpy.data.is_dirty and [s.name for s in bpy.data.scenes] != ["cab-shell"]:
-        raise RuntimeError("refusing to reset a session with unsaved work")
-    window = bpy.context.window
-    keep = bpy.context.scene
-    if window is not None:
-        keep = bpy.data.scenes.new("cab-shell")
-        window.scene = keep
-    for scene in list(bpy.data.scenes):
-        if scene != keep:
-            bpy.data.scenes.remove(scene)
-    keep.name = "cab-shell"
-    for blocks in (
-        bpy.data.objects,
-        bpy.data.meshes,
-        bpy.data.materials,
-        bpy.data.collections,
-        bpy.data.cameras,
-        bpy.data.lights,
-        bpy.data.images,
-        bpy.data.actions,
-        bpy.data.node_groups,
-        bpy.data.curves,
-    ):
-        for block in list(blocks):
-            blocks.remove(block)
+def livery(p, shape, hues):
+    hw, front = p["width"] / 2, p["frontX"]
+    rear = front - p["cabLength"]
+    relief, z0 = p["relief"], p["frameTop"]
+    # white lower front corners: the chamfers and the side panels just behind them
+    corner_z = (z0, z0 + CORNER_HEIGHT)
+    right = [(front - CORNER_LENGTH, -hw), (front - CORNER, -hw), (front, -hw + CORNER)]
+    left = [(front, hw - CORNER), (front - CORNER, hw), (front - CORNER_LENGTH, hw)]
+    for points in (right, left):
+        for a, b in zip(points, points[1:]):
+            shape.slab(a, b, relief, corner_z, hues["white"])
+    stripe_z = (z0 + STRIPE[0], z0 + STRIPE[1])
+    for side in (-1, 1):
+        edge = (hw, hw + relief) if side > 0 else (-hw - relief, -hw)
+        shape.box((rear + 0.1, front - CORNER_LENGTH - 0.1), edge, stripe_z, hues["white"])
+        # white arches over the front wheels, outboard of the cab side
+        radius = p["wheelRadius"]
+        shape.arch(
+            (p["frontAxleX"], radius),
+            (radius + ARCH_CLEARANCE[0], radius + ARCH_CLEARANCE[1]),
+            ARCH_ANGLES,
+            edge,
+            hues["white"],
+        )
 
 
-def material(name):
-    mat = bpy.data.materials.new(name)
-    if hasattr(mat, "use_nodes") and not mat.use_nodes:
-        mat.use_nodes = True
-    node = mat.node_tree.nodes.get("Principled BSDF") if mat.node_tree else None
-    if node is not None:
-        node.inputs["Base Color"].default_value = (1.0, 1.0, 1.0, 1.0)
-        node.inputs["Metallic"].default_value = 0.0
-        node.inputs["Roughness"].default_value = 1.0
-    return mat
+def roof(p, shape, hues):
+    front, z2 = p["frontX"], p["cabHeight"]
+    rear = front - p["cabLength"]
+    crew = p["style"] == "crew"
+    half = 0.6 if crew else 0.55
+    x = (front - ROOF - 1.05, front - ROOF - 0.8)
+    shape.box(x, (-half, half), (z2, z2 + BEACON_BASE), hues["black"])
+    shape.box(
+        (x[0] + 0.02, x[1] - 0.02),
+        (-half + 0.04, half - 0.04),
+        (z2 + BEACON_BASE, z2 + BEACON_BASE + BEACON_HEIGHT),
+        hues["beacon"],
+    )
+    if not crew:
+        return
+    # roof rack: four legs, two rails, three cross bars
+    x0, x1, y = rear + 0.45, rear + 1.45, 0.85
+    bar, leg, top = 0.04, 0.05, z2 + 0.05 + 0.04
+    for xs in (x0, x1 - bar):
+        for ys in (-y, y - bar):
+            shape.box((xs, xs + bar), (ys, ys + bar), (z2, z2 + 0.05), hues["silver"])
+    for ys in (-y, y - bar):
+        shape.box((x0, x1), (ys, ys + bar), (z2 + leg, top), hues["silver"])
+    for xs in (x0, (x0 + x1 - bar) / 2, x1 - bar):
+        shape.box((xs, xs + bar), (-y, y), (z2 + leg, top), hues["silver"])
 
 
-def add_object(name, shape, mat, colours):
-    mesh = bpy.data.meshes.new(name)
-    mesh.from_pydata(shape.verts, [], shape.faces)
-    mesh.update()
-    mesh.validate()
-    if colours:
-        attr = mesh.color_attributes.new(name="Color", type="FLOAT_COLOR", domain="CORNER")
-        flat = []
-        for face, colour in zip(shape.faces, shape.colours):
-            flat.extend(colour * len(face))
-        attr.data.foreach_set("color", flat)
-        mesh.color_attributes.active_color = attr
-    mesh.materials.append(mat)
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.scene.collection.objects.link(obj)
-
-
-def export_options(out_path):
-    known = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
-    missing = [k for k in REQUIRED_OPTIONS if k not in known]
-    if missing:
-        raise RuntimeError("this Blender lacks glTF export options: " + ", ".join(missing))
-    options = {k: v for k, v in sorted(GLTF_OPTIONS.items()) if k in known}
-    dropped = sorted(k for k in GLTF_OPTIONS if k not in known)
-    return dict(options, filepath=out_path), dropped
-
-
-def provenance(params):
-    """Hashes of this script (LF-normalised) and the params, as tools/blender/cab-build.ts computes them.
-
-    The params hash relies on json.dumps and JSON.stringify printing the same numbers; the
-    committed params use plain decimals, and the glb check in cab-build.test.ts would catch a drift.
-    """
-    with open(__file__, "rb") as f:
-        script = f.read().replace(b"\r\n", b"\n")
-    canonical = json.dumps(params, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return {
-        "scriptSha256": hashlib.sha256(script).hexdigest(),
-        "paramsSha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-    }
+def tow_coupling(p, shape, hues):
+    front, relief = p["frontX"], p["relief"]
+    shape.box(
+        (front - 0.05, front + relief + 0.06),
+        (-0.1, 0.1),
+        (0.42, 0.6),
+        hues["black"],
+    )
+    shape.box(
+        (front + relief + 0.06, front + relief + 0.2),
+        (-0.04, 0.04),
+        (0.46, 0.56),
+        hues["black"],
+    )
 
 
 def main():
-    if globals().get("PARAMS_JSON"):
-        params = json.loads(PARAMS_JSON)
-    else:
-        with open(PARAMS_PATH, encoding="utf-8") as f:
-            params = json.load(f)
+    params = COMMON["load_params"](globals())
     if params["relief"] >= params["plateRelief"]:
         raise ValueError("the bumper face must stay behind the plate")
-    out_path = OUT_PATH
-    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    if params["style"] not in ("day", "crew"):
+        raise ValueError("unknown cab style " + repr(params["style"]))
+    hashes = COMMON["provenance"](__file__, COMMON_FILE, params)
+    COMMON["check_expected"](hashes, globals().get("EXPECTED_SHA256"))
+    hues = {key: srgb(value) for key, value in sorted(params["hues"].items())}
 
-    reset_scene()
-    for key, value in provenance(params).items():
-        bpy.context.scene[key] = value
-    add_object("cab-body", shell(params), material("cab-body"), colours=False)
-    add_object("cab-detail", fittings(params), material("cab-detail"), colours=True)
-    options, dropped = export_options(out_path)
-    if os.path.exists(out_path):
-        os.remove(out_path)
-    status = bpy.ops.export_scene.gltf(**options)
-    if status != {"FINISHED"} or not os.path.isfile(out_path):
-        raise RuntimeError("glTF export did not write " + out_path + ": " + repr(status))
-
-    result = {
-        "out": out_path,
-        "blender": bpy.app.version_string,
-        "unsupportedExportOptions": dropped,
-    }
-    print(json.dumps(result, sort_keys=True))
-    return result
+    shape = Shape()
+    shell(params, shape, hues["body"])
+    front_fittings(params, shape, hues)
+    livery(params, shape, hues)
+    roof(params, shape, hues)
+    if params["style"] == "crew":
+        tow_coupling(params, shape, hues)
+    return COMMON["export"](OUT_PATH, "cab-shell", hashes, [("cab", shape)])
 
 
 RESULT = main()

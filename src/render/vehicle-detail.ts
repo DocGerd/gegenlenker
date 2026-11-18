@@ -8,6 +8,7 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
+import { MARKER_HEIGHT } from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
 import { tint } from './environment';
 import { PLATE_TEXT, REALISM_HUES as HUE } from './realism-hues';
@@ -27,7 +28,6 @@ const WHEEL_RATIO = [0.9, 0.62, 0.22] as const; // of the tyre radius
 const END_MARGIN = 0.1; // side marking stops short of the body ends
 const STRIP = 0.06; // contour marking, ECE R48 asks at least 50 mm
 const MARKER_LENGTH = 0.2;
-const MARKER_HEIGHT = 0.1;
 const MARKER_SPACING = 3; // ECE R48 maximum between side marker lamps
 const PLATE_WIDTH = 0.52; // EU standard plate
 const PLATE_HEIGHT = 0.11;
@@ -138,14 +138,32 @@ function sideMarking(
   }
 }
 
+/** Side marking along a truck body: a contour strip with amber markers, at floor height. */
+export function truckMarking(p: {
+  readonly halfWidth: number;
+  readonly rearX: number;
+  readonly bodyFront: number;
+  readonly frameTop: number;
+  readonly floorTop: number;
+}): BufferGeometry {
+  const c = collector();
+  const floor = p.floorTop - p.frameTop;
+  sideMarking(
+    c,
+    [p.rearX + END_MARGIN, p.bodyFront - END_MARGIN],
+    p.halfWidth,
+    p.frameTop + floor / 2,
+    floor,
+  );
+  return c.build();
+}
+
 export type TruckDetailParams = {
   readonly spec: Pick<TruckSpec, 'cab' | 'bumperInset' | 'tailLamp' | 'mudflap'>;
   readonly halfWidth: number;
   readonly frontX: number;
   readonly rearX: number;
-  readonly bodyFront: number;
   readonly frameTop: number;
-  readonly floorTop: number;
   readonly railBottom: number;
   readonly rearAxleX: number;
   readonly rearTrack: number;
@@ -201,14 +219,6 @@ export function truckDetail(p: TruckDetailParams): {
   const bumperHalf = hw - m(p.spec.bumperInset);
   cabFront.box(front, [-bumperHalf, bumperHalf], bumper, HUE.anthracite);
 
-  const floor = p.floorTop - p.frameTop;
-  sideMarking(
-    c,
-    [p.rearX + END_MARGIN, p.bodyFront - END_MARGIN],
-    hw,
-    p.frameTop + floor / 2,
-    floor,
-  );
   for (const side of [-1, 1]) {
     c.box(
       [p.rearX - RELIEF, p.rearX],
