@@ -123,7 +123,7 @@ Only where they catch real defects: simulation core, collision, scoring, vehicle
 
 ## Vehicle data
 
-Starting values in mm. Estimates are flagged in the data files and listed in the README; measured values replace them without code changes.
+Starting values in mm. Estimates are flagged in the data files and listed in `docs/vehicle-data.md`; measured values replace them without code changes.
 
 | Vehicle | Sourced | Estimated |
 |---|---|---|
