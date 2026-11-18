@@ -1,7 +1,7 @@
 import type { GraphicsPreset, SceneRenderer } from '../contracts/render';
 import { proceduralAids } from './aids';
 import { proceduralEnvironment } from './environment';
-import { startCabShells } from './cab-shell';
+import { BODY_SHELL_URLS, CAB_SHELL_URLS, startShells } from './glb-shells';
 import { startGroundTextures } from './ground-texture';
 import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
@@ -12,15 +12,20 @@ export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].chaseView;
 
 export function createSceneRenderer(): SceneRenderer {
-  // Positive signal for the offline e2e: set once a shell has replaced a truck's procedural cab.
-  // Loads wait for the first preset that wants the glb.
-  const shells = startCabShells(
-    undefined,
-    (id) => {
-      document.documentElement.dataset['cabShell'] = id;
-    },
-    false,
-  );
+  // Positive signal for the offline e2e: the shells now attached to a vehicle, sorted and
+  // space-separated; absent when none is. Each group loads on the first preset that wants it.
+  const attached = new Set<string>();
+  const onAttached = (key: string, on: boolean): void => {
+    if (on) attached.add(key);
+    else attached.delete(key);
+    const { dataset } = document.documentElement;
+    if (attached.size > 0) dataset['vehicleShells'] = [...attached].sort().join(' ');
+    else delete dataset['vehicleShells'];
+  };
+  const shells = {
+    cab: startShells(CAB_SHELL_URLS, { onAttached, enabled: false }),
+    body: startShells(BODY_SHELL_URLS, { onAttached, enabled: false }),
+  };
   // Read by the offline e2e: the transcoded format while the textured ground is drawn, else absent.
   const groundTextures = startGroundTextures(undefined, (state) => {
     if (state === null) delete document.documentElement.dataset['groundTexture'];
@@ -38,8 +43,10 @@ export function createSceneRenderer(): SceneRenderer {
   return {
     ...renderer,
     setQuality(preset) {
-      shells.setEnabled(QUALITY_FLAGS[preset].cabGlb);
-      groundTextures.setEnabled(QUALITY_FLAGS[preset].groundTexture);
+      const flags = QUALITY_FLAGS[preset];
+      shells.cab.setEnabled(flags.cabGlb);
+      shells.body.setEnabled(flags.vehicleGlb);
+      groundTextures.setEnabled(flags.groundTexture);
       renderer.setQuality(preset);
     },
     dispose() {

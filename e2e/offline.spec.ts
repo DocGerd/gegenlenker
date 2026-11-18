@@ -35,7 +35,7 @@ test('loads from the subpath and drives an exercise offline', async ({
   const status = page.locator('[data-menu="offline"]');
   await expect(status).toHaveText(en.offlineReady);
 
-  // Precaching is part of installing the worker, so the cab shell is cached before going offline.
+  // Precaching is part of installing the worker, so every shell is cached before going offline.
   const cached = await page.evaluate(async () => {
     const urls: string[] = [];
     for (const name of await caches.keys()) {
@@ -44,7 +44,15 @@ test('loads from the subpath and drives an exercise offline', async ({
     }
     return urls;
   });
-  expect(cached.filter((url) => /man-le-18-280-cab-[\w-]+\.glb$/.test(url))).toHaveLength(1);
+  for (const truck of ['arocs-1835-ak', 'man-le-18-280']) {
+    for (const kind of ['cab', 'body']) {
+      const shell = new RegExp(`${truck}-${kind}-[\\w-]+\\.glb$`);
+      expect(
+        cached.filter((url) => shell.test(url)),
+        `${truck}-${kind}`,
+      ).toHaveLength(1);
+    }
+  }
 
   await context.setOffline(true);
   await page.reload();
@@ -60,9 +68,12 @@ test('loads from the subpath and drives an exercise offline', async ({
   await expect(speed).not.toHaveText('0.0 km/h');
   expect(foreign).toEqual([]);
 
-  // Set once the shell, loaded from the service-worker cache, has replaced the procedural cab.
-  await expect(page.locator('html')).toHaveAttribute('data-cab-shell', 'man-le-18-280');
-  expect(warnings.filter((w) => w.includes('Cab shell'))).toEqual([]);
+  // Set once the shells, loaded from the service-worker cache, have replaced the procedural meshes.
+  await expect(page.locator('html')).toHaveAttribute(
+    'data-vehicle-shells',
+    'man-le-18-280-body man-le-18-280-cab',
+  );
+  expect(warnings.filter((w) => w.includes('Shell '))).toEqual([]);
   expect(errors).toEqual([]);
 });
 

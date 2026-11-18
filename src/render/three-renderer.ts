@@ -25,7 +25,7 @@ import { bodyToThree } from './coords';
 import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './chase-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
-import { createMirror } from './mirror';
+import { createMirror, mirrorPose } from './mirror';
 import { readScenePalette } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import {
@@ -43,7 +43,6 @@ import { placeTopDownCamera } from './top-down-camera';
 
 const COCKPIT_FOV = 55;
 const COCKPIT_PITCH = MathUtils.degToRad(-6);
-const MIRROR_YAW = MathUtils.degToRad(7);
 const FOLLOW_HALF_HEIGHT = 20;
 /** Metres added to the vehicle's bounding radius. */
 const FOLLOW_RADIUS_MARGIN = 1;
@@ -318,10 +317,8 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       const { cockpit, mirrorLeft: leftRect, mirrorRight: rightRect, topDown } = views;
 
       if (leftRect !== null) {
-        mirrorLeft.place(
-          bodyToThree(snapshot.truck, anchors.mirrorLeft, mirrorPosition),
-          heading + Math.PI - MIRROR_YAW,
-        );
+        const facing = mirrorPose(snapshot.truck, anchors.mirrorLeft, 'left', mirrorPosition);
+        mirrorLeft.place(mirrorPosition, facing);
         mirrorLeft.capture(
           gl,
           b.scene,
@@ -331,10 +328,8 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
         );
       }
       if (rightRect !== null) {
-        mirrorRight.place(
-          bodyToThree(snapshot.truck, anchors.mirrorRight, mirrorPosition),
-          heading + Math.PI + MIRROR_YAW,
-        );
+        const facing = mirrorPose(snapshot.truck, anchors.mirrorRight, 'right', mirrorPosition);
+        mirrorRight.place(mirrorPosition, facing);
         mirrorRight.capture(
           gl,
           b.scene,

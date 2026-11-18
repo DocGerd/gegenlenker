@@ -14,8 +14,20 @@ import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
-import { applyCabShell, type CabShells } from './cab-shell';
-import { CAB_HEIGHT, CAB_LENGTH, FRAME_TOP, RAIL_BOTTOM } from './cab-dims';
+import {
+  bodyFrontX,
+  FLOOR_TOP,
+  RAIL_HALF_GAP,
+  RAIL_WIDTH,
+  TIPPER_WALL_TOP,
+  TRUCK_WHEEL_WIDTH,
+  TWIN_OFFSET,
+  TWIN_WHEEL_WIDTH,
+  WALL_THICKNESS,
+} from './body-dims';
+import { CAB_HEIGHT, CAB_LENGTH, FRAME_TOP, RAIL_BOTTOM, TRUCK_WHEEL_RADIUS } from './cab-dims';
+import { applyShell, type Shell, type TruckShells } from './glb-shells';
+import { TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
 import { CAB_LAYER, SKY_LAYER, type VehicleVisual } from './seams';
@@ -26,23 +38,13 @@ import {
   plateTexture,
   trailerDetail,
   truckDetail,
+  type TruckDetailParams,
   type PlateSpot,
 } from './vehicle-detail';
 import { box, merge, WHEEL_SEGMENTS, wheelGeometry } from './vehicle-geometry';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
-const TRUCK_WHEEL_RADIUS = 0.5;
-const TRUCK_WHEEL_WIDTH = 0.3;
-const TWIN_WHEEL_WIDTH = 0.26;
-const TWIN_OFFSET = 0.15;
 const TRAILER_WHEEL_WIDTH = 0.3;
-
-const CAB_GAP = 0.1;
-const FLOOR_THICKNESS = 0.2;
-const WALL_THICKNESS = 0.1;
-const TIPPER_WALL_TOP = 2.5;
-const RAIL_HALF_GAP = 0.45; // lateral centre of each chassis rail
-const RAIL_WIDTH = 0.2;
 
 const SWAP_BODY_HEIGHT = 2.7;
 const RAMP_HEIGHT = 1.2;
@@ -133,10 +135,14 @@ function resources() {
     },
     /** Perspective-only detail: vertex colours in one shared material, off the top-down camera. */
     detail(geometry: BufferGeometry): Mesh {
-      detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
-      const mesh = this.mesh(geometry, detailMaterial);
+      const mesh = this.mesh(geometry, this.detailMaterial());
       mesh.layers.set(SKY_LAYER);
       return mesh;
+    },
+    /** The material of every `detail` mesh; shells use it too, so a swap adds no state change. */
+    detailMaterial(): Material {
+      detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
+      return detailMaterial;
     },
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
@@ -186,14 +192,15 @@ function resources() {
 export function proceduralTruck(
   spec: TruckSpec,
   palette: ScenePalette,
-  shells?: CabShells,
+  shells?: TruckShells,
 ): VehicleVisual {
   const a = truckAnchors(spec);
   const hw = spec.width.value / 2000;
   const rearTrack = spec.rearTrack.value / 1000;
   const frontTrack = spec.frontTrack.value / 1000;
+  const look = TRUCK_LOOKS[spec.id];
   const cabRear = a.frontX - CAB_LENGTH;
-  const bodyFront = cabRear - CAB_GAP;
+  const bodyFront = bodyFrontX(a.frontX);
   const res = resources();
 
   const cab = [box([cabRear, a.frontX], [-hw, hw], [FRAME_TOP, CAB_HEIGHT])];
@@ -217,7 +224,7 @@ export function proceduralTruck(
     ),
   ];
 
-  const floorTop = FRAME_TOP + FLOOR_THICKNESS;
+  const floorTop = FLOOR_TOP;
   const body = [box([a.rearX, bodyFront], [-hw, hw], [FRAME_TOP, floorTop])];
   if (spec.body === 'tipper') {
     body.push(
@@ -258,7 +265,7 @@ export function proceduralTruck(
     frontOverhang: a.frontX - a.frontAxle.x,
   });
 
-  const detail = truckDetail({
+  const detailParams: TruckDetailParams = {
     spec,
     halfWidth: hw,
     frontX: a.frontX,
@@ -272,7 +279,8 @@ export function proceduralTruck(
     twinOffset: TWIN_OFFSET,
     twinWidth: TWIN_WHEEL_WIDTH,
     wheelRadius: TRUCK_WHEEL_RADIUS,
-  });
+  };
+  const detail = truckDetail(detailParams);
 
   const wheelSpan = TWIN_OFFSET * 2 + TWIN_WHEEL_WIDTH;
   const truckBlobs = [
@@ -287,15 +295,17 @@ export function proceduralTruck(
 
   const cabBox = res.mesh(merge(cab), cabMaterial);
   const cabFront = res.cabFront(detail.cabFront);
+  const bodyBox = res.mesh(merge(body), bodyMaterial);
+  const detailMesh = res.detail(detail.geometry);
   const group = new Group();
   group.add(
     schematic.rear,
     res.shadow(blobShadow(truckBlobs, SHADOW_HEIGHT)),
     cabBox,
     res.mesh(merge(chassis), chassisMaterial),
-    res.mesh(merge(body), bodyMaterial),
+    bodyBox,
     res.mesh(merge(rearWheels), wheelMaterial),
-    res.detail(detail.geometry),
+    detailMesh,
     cabFront,
     res.plate(detail.plate),
   );
@@ -313,11 +323,78 @@ export function proceduralTruck(
   const pivotLeft = kingpin(1);
   const pivotRight = kingpin(-1);
 
-  let shell: ReturnType<typeof applyCabShell> | null = null;
+  /*
+   * A longer perspective cab pushes the body, and with it the side marking, back from where the
+   * top-down body ends. Cab and body then swap as one, so the cab never overlaps the procedural body.
+   */
+  const linked = look.cab.length !== CAB_LENGTH;
+  type Applied = ReturnType<typeof applyShell>;
+  let cabShell: Applied | null = null;
+  let bodyShell: Applied | null = null;
   let cabGlb = true;
-  const cancelShell = shells?.onLoaded(spec.id, (loaded) => {
-    shell = applyCabShell(group, cabBox, cabFront, loaded, palette, cabGlb);
-    return cabGlb;
+  let vehicleGlb = true;
+  const loadedShells: { cab: Shell | null; body: Shell | null } = { cab: null, body: null };
+  const cabKey = `${spec.id}-cab`;
+  const bodyKey = `${spec.id}-body`;
+  const cabOn = (): boolean => (linked ? cabGlb && vehicleGlb : cabGlb);
+  const bodyOn = (): boolean => (linked ? cabGlb && vehicleGlb : vehicleGlb);
+
+  const attachCab = (shell: Shell): void => {
+    cabShell = applyShell(
+      group,
+      shell,
+      { toAids: [cabBox], remove: [cabFront], layer: CAB_LAYER },
+      {
+        material: res.detailMaterial(),
+        enabled: cabOn(),
+        onChange: (on) => shells?.cab.attached(cabKey, on),
+      },
+    );
+  };
+  const attachBody = (shell: Shell): void => {
+    // the marking is part of the detail mesh, so the shortened one replaces the whole mesh
+    const shortened = linked
+      ? res.detail(
+          truckDetail({ ...detailParams, bodyFront: bodyFrontX(a.frontX, look.cab.length) })
+            .geometry,
+        )
+      : null;
+    bodyShell = applyShell(
+      group,
+      shell,
+      {
+        toAids: [bodyBox],
+        remove: shortened === null ? [] : [detailMesh],
+        add: shortened === null ? [] : [shortened],
+        layer: SKY_LAYER,
+      },
+      {
+        material: res.detailMaterial(),
+        enabled: bodyOn(),
+        onChange: (on) => shells?.body.attached(bodyKey, on),
+      },
+    );
+  };
+  const attachBoth = (): void => {
+    if (loadedShells.cab === null || loadedShells.body === null) return;
+    attachCab(loadedShells.cab);
+    try {
+      attachBody(loadedShells.body);
+    } catch (error) {
+      cabShell?.dispose();
+      cabShell = null;
+      throw error;
+    }
+  };
+  const cancelCab = shells?.cab.onLoaded(cabKey, (loaded) => {
+    loadedShells.cab = loaded;
+    if (linked) attachBoth();
+    else attachCab(loaded);
+  });
+  const cancelBody = shells?.body.onLoaded(bodyKey, (loaded) => {
+    loadedShells.body = loaded;
+    if (linked) attachBoth();
+    else attachBody(loaded);
   });
 
   return {
@@ -329,11 +406,15 @@ export function proceduralTruck(
     },
     setQuality(flags) {
       cabGlb = flags.cabGlb;
-      shell?.setEnabled(cabGlb);
+      vehicleGlb = flags.vehicleGlb;
+      cabShell?.setEnabled(cabOn());
+      bodyShell?.setEnabled(bodyOn());
     },
     dispose() {
-      cancelShell?.();
-      shell?.dispose();
+      cancelCab?.();
+      cancelBody?.();
+      cabShell?.dispose();
+      bodyShell?.dispose();
       res.dispose();
       schematic.dispose();
     },

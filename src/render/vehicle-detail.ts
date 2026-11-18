@@ -8,6 +8,7 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
+import { MARKER_HEIGHT } from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
 import { tint } from './environment';
 import { PLATE_TEXT, REALISM_HUES as HUE } from './realism-hues';
@@ -27,7 +28,6 @@ const WHEEL_RATIO = [0.9, 0.62, 0.22] as const; // of the tyre radius
 const END_MARGIN = 0.1; // side marking stops short of the body ends
 const STRIP = 0.06; // contour marking, ECE R48 asks at least 50 mm
 const MARKER_LENGTH = 0.2;
-const MARKER_HEIGHT = 0.1;
 const MARKER_SPACING = 3; // ECE R48 maximum between side marker lamps
 const PLATE_WIDTH = 0.52; // EU standard plate
 const PLATE_HEIGHT = 0.11;

@@ -22,6 +22,9 @@ export const REALISM_HUES = {
   skylineDark: 0x5c6875, // distant industrial silhouettes
   skyHaze: 0xdcebf2, // horizon haze, pale blue-grey
   sunHalo: 0xfff1d0, // warm glow around the sun
+  thwBlue: 0x00387b, // THW cab, body and tarpaulin; RAL 5002 sRGB approximation
+  liveryWhite: 0xf6f6f6, // THW bumper, corners, arches and side stripe; RAL 9016
+  beaconBlue: 0x1f6fe5, // roof light bar lens
 } as const;
 
 export type RealismHueKey = keyof typeof REALISM_HUES;

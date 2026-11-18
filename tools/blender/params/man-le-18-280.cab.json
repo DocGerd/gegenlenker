@@ -1,8 +1,12 @@
 {
   "id": "man-le-18-280",
+  "schema": 2,
+  "style": "crew",
   "width": 2.49,
   "frontX": 5.22,
-  "cabLength": 2.2,
+  "frontAxleX": 3.9,
+  "wheelRadius": 0.5,
+  "cabLength": 3,
   "cabHeight": 2.9,
   "frameTop": 1.1,
   "railBottom": 0.65,
@@ -23,5 +27,14 @@
     "lampSill": 0.18,
     "lampHeight": 0.396
   },
-  "hues": { "glass": "#293133", "grille": "#101214", "lamp": "#f4f4ee", "bumper": "#293133" }
+  "hues": {
+    "body": "#00387b",
+    "glass": "#293133",
+    "grille": "#101214",
+    "lamp": "#f4f4ee",
+    "white": "#f6f6f6",
+    "beacon": "#1f6fe5",
+    "black": "#101214",
+    "silver": "#a5a5a5"
+  }
 }
