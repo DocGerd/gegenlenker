@@ -14,6 +14,7 @@ import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
+import { CAB_HEIGHT, CAB_LENGTH, FRAME_TOP, RAIL_BOTTOM } from './cab-dims';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
 import { CAB_LAYER, SKY_LAYER, type VehicleVisual } from './seams';
@@ -35,14 +36,10 @@ const TWIN_WHEEL_WIDTH = 0.26;
 const TWIN_OFFSET = 0.15;
 const TRAILER_WHEEL_WIDTH = 0.3;
 
-const CAB_LENGTH = 2.2;
-const CAB_HEIGHT = 2.9;
 const CAB_GAP = 0.1;
-const FRAME_TOP = 1.1; // chassis top and floor of cab and body
 const FLOOR_THICKNESS = 0.2;
 const WALL_THICKNESS = 0.1;
 const TIPPER_WALL_TOP = 2.5;
-const RAIL_BOTTOM = 0.65;
 const RAIL_HALF_GAP = 0.45; // lateral centre of each chassis rail
 const RAIL_WIDTH = 0.2;
 

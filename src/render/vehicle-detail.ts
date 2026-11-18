@@ -8,6 +8,7 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
+import { PLATE_RELIEF, RELIEF } from './cab-dims';
 import { tint } from './environment';
 import { PLATE_TEXT, REALISM_HUES as HUE } from './realism-hues';
 import { box, merge, wheelGeometry } from './vehicle-geometry';
@@ -19,9 +20,7 @@ import { box, merge, wheelGeometry } from './vehicle-geometry';
  * The cab front (glass, grille, lamps, bumper) is built apart: its back faces would block the cockpit eye.
  */
 
-const RELIEF = 0.03; // marks and lamps on a body face
 const RELIEF_OVER = 0.05; // parts laid over a mark
-const PLATE_RELIEF = 0.06;
 const WHEEL_RELIEF = [0.01, 0.02, 0.035] as const; // sidewall, rim, hub
 const WHEEL_RATIO = [0.9, 0.62, 0.22] as const; // of the tyre radius
 
