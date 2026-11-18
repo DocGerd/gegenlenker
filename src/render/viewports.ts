@@ -21,7 +21,7 @@ export type Insets = {
   readonly left: number;
 };
 
-const NO_INSETS: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
+export const NO_INSETS: Insets = { top: 0, right: 0, bottom: 0, left: 0 };
 
 export function readSafeInsets(): Insets {
   if (typeof document === 'undefined') return NO_INSETS;
@@ -68,12 +68,13 @@ export function computeViewports(
   cssHeight: number,
   mode: ViewMode,
   legend: LegendBox | null = null,
-  insets: Insets = readSafeInsets(),
+  safeInsets?: Insets,
 ): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
     return { cockpit: null, mirrorLeft: null, mirrorRight: null, topDown: full };
   }
+  const insets = safeInsets ?? readSafeInsets();
   let topDown: Rect;
   let cockpit: Rect;
   if (cssWidth >= cssHeight) {
