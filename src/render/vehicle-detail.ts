@@ -71,7 +71,7 @@ function wheelFaces(
   width: number,
   [x, y, z]: readonly [number, number, number],
 ): void {
-  const hues = [HUE.anthracite, HUE.whiteAluminium, HUE.anthracite] as const;
+  const hues = [HUE.chevronBlack, HUE.whiteAluminium, HUE.chevronBlack] as const;
   hues.forEach((hue, i) => {
     c.add(
       wheelGeometry(radius * (WHEEL_RATIO[i] ?? 1), width + 2 * (WHEEL_RELIEF[i] ?? 0)).translate(
@@ -199,7 +199,7 @@ export function truckDetail(p: TruckDetailParams): {
   }
   const bumper: Range = [p.railBottom, p.frameTop];
   const bumperHalf = hw - m(p.spec.bumperInset);
-  cabFront.box(front, [-bumperHalf, bumperHalf], bumper, HUE.anthracite);
+  cabFront.box(front, [-bumperHalf, bumperHalf], bumper, HUE.chevronBlack);
 
   const floor = p.floorTop - p.frameTop;
   sideMarking(
@@ -301,7 +301,7 @@ export function trailerDetail(p: TrailerDetailParams): {
         m(underrunGuard.strutOffset) + m(underrunGuard.strutWidth),
       ),
       [guard[1], p.underside],
-      HUE.anthracite,
+      HUE.chevronBlack,
     );
   }
   chevrons(
