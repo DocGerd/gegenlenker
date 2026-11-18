@@ -11,6 +11,7 @@ import {
 import { startGroundTextures } from './ground-texture';
 import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
+import { createVehicleEnvironment } from './vehicle-pbr';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
 /** Whether the preset offers the outside view. */
@@ -46,12 +47,22 @@ export function createSceneRenderer(): SceneRenderer {
     if (state === null) delete document.documentElement.dataset['groundTexture'];
     else document.documentElement.dataset['groundTexture'] = state;
   });
+  // Read by the offline e2e: `on` once the vehicle reflections are built, `failed` if they fell back.
+  const vehicleEnvironment = createVehicleEnvironment((state) => {
+    if (state === null) delete document.documentElement.dataset['vehiclePbr'];
+    else document.documentElement.dataset['vehiclePbr'] = state;
+  });
   const renderer = createThreeSceneRenderer({
     onRenderer: (gl) => {
       groundTextures.attach(gl);
+      vehicleEnvironment.attach(gl);
     },
-    truck: (spec, palette) => proceduralTruck(spec, palette, shells),
-    trailer: (spec, palette) => proceduralTrailer(spec, palette, shells.trailer),
+    onContextRestored: () => {
+      vehicleEnvironment.invalidate();
+    },
+    truck: (spec, palette) => proceduralTruck(spec, palette, shells, vehicleEnvironment),
+    trailer: (spec, palette) =>
+      proceduralTrailer(spec, palette, shells.trailer, vehicleEnvironment),
     environment: (layout, palette) => proceduralEnvironment(layout, palette, groundTextures),
     aids: proceduralAids,
   });
@@ -68,6 +79,7 @@ export function createSceneRenderer(): SceneRenderer {
     dispose() {
       renderer.dispose();
       groundTextures.dispose();
+      vehicleEnvironment.dispose();
     },
   };
 }
