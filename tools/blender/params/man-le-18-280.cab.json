@@ -1,0 +1,27 @@
+{
+  "id": "man-le-18-280",
+  "width": 2.49,
+  "frontX": 5.22,
+  "cabLength": 2.2,
+  "cabHeight": 2.9,
+  "frameTop": 1.1,
+  "railBottom": 0.65,
+  "relief": 0.03,
+  "plateRelief": 0.06,
+  "bumperInset": 0.1,
+  "cab": {
+    "windscreenInset": 0.149,
+    "glassSill": 0.9,
+    "glassHeight": 0.756,
+    "sideGlassSetback": 0.176,
+    "sideGlassLength": 0.814,
+    "grilleWidth": 1.245,
+    "grilleSill": 0.144,
+    "grilleHeight": 0.54,
+    "headlampInset": 0.125,
+    "headlampWidth": 0.398,
+    "lampSill": 0.18,
+    "lampHeight": 0.396
+  },
+  "hues": { "glass": "#293133", "grille": "#101214", "lamp": "#f4f4ee", "bumper": "#293133" }
+}

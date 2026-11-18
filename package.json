@@ -20,6 +20,7 @@
     "test:perf": "playwright test --project perf",
     "icons": "node scripts/icons.mjs",
     "estimates": "node scripts/estimates.mjs",
+    "cab:params": "node scripts/cab-params.mjs",
     "verify": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test && pnpm test:e2e"
   },
   "dependencies": {
