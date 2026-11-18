@@ -4,15 +4,15 @@ Truck + turntable drawbar trailer maneuvering trainer. TypeScript, Vite, three.j
 
 ## Verify
 
-Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which builds with `BASE_PATH` itself) is the full gate after Install; run it before every PR. `pnpm check` (lint, format, typecheck, unit; no build or e2e) is the fast loop for review-fix rounds.
+Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which builds with `BASE_PATH` itself) is the full gate after Install; run it before every PR. `pnpm check` (lint, format, typecheck, unit; no build or e2e) is the fast local loop for review-fix rounds, not the CI `check` job (which also runs e2e).
 
 - Install: `pnpm install --frozen-lockfile`
 - Lint: `pnpm lint`; format: `pnpm format:check` (fix with `pnpm format`)
 - Typecheck: `pnpm typecheck`
 - Unit tests: `pnpm test`; single test: `pnpm exec vitest run <file> -t '<name>'`
 - Build: `BASE_PATH=/gegenlenker/ pnpm build`
-- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); it runs only specs matching the `offline` project's `testMatch` in `playwright.config.ts`, so register new specs there.
-- Parallel worktrees: e2e previews on a per-checkout port (4400 + sha256(cwd) mod 500, `playwright.config.ts`), so no lock is needed; `E2E_PORT=<n>` overrides a clash (`--strictPort` fails loudly); ad-hoc preview servers need another port and `BASE_PATH=/gegenlenker/`.
+- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); it runs only specs listed in `OFFLINE_SPECS` (`e2e/offline-specs.ts`); `tools/e2e-specs.test.ts` fails on an unregistered spec.
+- Parallel worktrees: e2e previews on a port derived from the checkout path (printed as `e2e preview port: N`), so no lock is needed; `E2E_PORT=<n>` overrides a clash (`--strictPort` fails loudly); a killed run can orphan a preview on that port (`ss -ltnp`); ad-hoc preview servers need another port and `BASE_PATH=/gegenlenker/`.
 - Local-only ignores go in `.git/info/exclude` as unanchored patterns (`dir/`, not `/dir/`); the format scripts pass it to Prettier.
 
 ## Layering
