@@ -1,0 +1,33 @@
+import type { AidFlags } from '../contracts/render';
+import { AID_DASH_OFF, AID_DASH_ON } from '../render/seams';
+
+const SCALE = 12; // px per metre of the aid strokes
+const CASING = 0.06 * SCALE; // dark edge on each side of an accent stroke
+
+const stroke = (d: string, metres: number, dash = ''): string => {
+  const width = metres * SCALE;
+  const dashes = dash === '' ? '' : ` stroke-dasharray="${dash}"`;
+  return (
+    `<path class="swatch-casing" d="${d}" stroke-width="${width + 2 * CASING}"${dashes} />` +
+    `<path class="swatch-core" d="${d}" stroke-width="${width}"${dashes} />`
+  );
+};
+
+const outline = (metres: number): string => {
+  const rect = (cls: string, width: number): string =>
+    `<rect class="${cls}" x="5" y="4" width="30" height="12" stroke-width="${width}" />`;
+  return rect('swatch-casing', metres * SCALE + 2 * CASING) + rect('swatch-core', metres * SCALE);
+};
+
+const DASH = `${AID_DASH_ON * SCALE} ${AID_DASH_OFF * SCALE}`;
+
+const SHAPES: Record<keyof AidFlags, string> = {
+  pivots: stroke('M4 10 L36 5', 0.12) + stroke('M4 10 L36 15', 0.12),
+  path: stroke('M3 6 H31', 0.2) + stroke('M3 14 H31', 0.1, DASH) + stroke('M35 3 V17', 0.2),
+  tracks: '<path class="swatch-tracks" d="M3 7 H37 M3 13 H37" stroke-width="1.2" />',
+  ghost: outline(0.1),
+};
+
+/** A small drawing of one aid's stroke, in the same tokens and dash the top-down view uses. */
+export const aidSwatch = (aid: keyof AidFlags): string =>
+  `<svg class="hud-swatch" viewBox="0 0 40 20" aria-hidden="true">${SHAPES[aid]}</svg>`;

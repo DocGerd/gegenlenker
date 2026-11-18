@@ -11,6 +11,7 @@ import type { GoalState } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
+import { aidSwatch } from './aid-swatches';
 import { createGauge, type Gauge } from './gauges';
 import './hud.css';
 
@@ -97,11 +98,11 @@ const VIEWS: readonly [TopDownMode, MessageKey][] = [
   ['yard', 'viewYard'],
   ['chase', 'viewChase'],
 ];
-const AIDS: readonly [keyof AidFlags, MessageKey][] = [
-  ['pivots', 'aidPivots'],
-  ['path', 'aidPath'],
-  ['tracks', 'aidTracks'],
-  ['ghost', 'aidGhost'],
+const AIDS: readonly [keyof AidFlags, MessageKey, MessageKey][] = [
+  ['pivots', 'aidPivots', 'legendPivots'],
+  ['path', 'aidPath', 'legendPath'],
+  ['tracks', 'aidTracks', 'legendTracks'],
+  ['ghost', 'aidGhost', 'legendGhost'],
 ];
 const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
   ['aids', 'panelAids'],
@@ -121,11 +122,18 @@ const COMPACT_WIDTH_WITH_LEVER = 840;
 
 const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
 
+const INFO_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>';
+
 const RESET_VIEW_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>';
 
 const button = (attr: string, value: string, key: MessageKey): string =>
   `<button type="button" class="hud-toggle" ${attr}="${value}" data-i18n="${key}"></button>`;
+
+/** The meaning in the legend list is the toggle's description. */
+const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
+  `<button type="button" class="hud-toggle" data-aid="${aid}" aria-describedby="aid-meaning-${aid}" data-i18n="${key}"></button>`;
 
 const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
 <div class="hud" data-hud="root">
@@ -162,7 +170,10 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <div class="hud-group" role="group" aria-label="${t('labelView')}">${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
-      <div class="hud-group" data-hud="aids" data-chrome>${AIDS.map(([a, k]) => button('data-aid', a, k)).join('')}</div>
+      <div class="hud-aids" data-hud="aids" data-chrome>
+        <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
+        <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
+      </div>
     </div>
     <div class="hud-info">
       <div class="hud-gauges" data-hud="gauges" data-chrome></div>
@@ -255,13 +266,32 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const panelButtons = [...hud.querySelectorAll<HTMLElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
   const aidsBox = query(hud, 'aids', HTMLElement);
+  const legendItems = new Map(
+    [...hud.querySelectorAll<HTMLElement>('[data-aid-legend]')].map((li) => [
+      li.dataset['aidLegend'] as keyof AidFlags,
+      li,
+    ]),
+  );
   const keysToggle = query(hud, 'keysToggle', HTMLButtonElement);
+  const legendToggle = query(hud, 'aidLegendToggle', HTMLButtonElement);
+  const aidLegend = query(hud, 'aidLegend', HTMLElement);
+  legendToggle.title = t('aidLegend');
+  legendToggle.setAttribute('aria-label', t('aidLegend'));
+  legendToggle.addEventListener(
+    'click',
+    () => {
+      setHidden(aidLegend, !aidLegend.hidden);
+      legendToggle.setAttribute('aria-expanded', String(!aidLegend.hidden));
+    },
+    { signal },
+  );
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
     for (const b of aidButtons) {
       const aid = b.dataset['aid'] as keyof AidFlags;
       b.setAttribute('aria-pressed', String(aids[aid]));
       b.disabled = view === 'chase' && TOP_DOWN_AIDS.includes(aid);
+      legendItems.get(aid)?.toggleAttribute('data-disabled', b.disabled);
       if (b.disabled) b.title = t('aidTopViewOnly');
       else b.removeAttribute('title');
     }
