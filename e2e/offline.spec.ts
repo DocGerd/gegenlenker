@@ -16,8 +16,10 @@ test('loads from the subpath and drives an exercise offline', async ({
   });
 
   const warnings: string[] = [];
+  const errors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'warning') warnings.push(m.text());
+    if (m.type() === 'error') errors.push(m.text());
   });
 
   await page.goto('./');
@@ -59,6 +61,7 @@ test('loads from the subpath and drives an exercise offline', async ({
   // Set once the shell, loaded from the service-worker cache, has replaced the procedural cab.
   await expect(page.locator('html')).toHaveAttribute('data-cab-shell', 'man-le-18-280');
   expect(warnings.filter((w) => w.includes('Cab shell'))).toEqual([]);
+  expect(errors).toEqual([]);
 });
 
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {

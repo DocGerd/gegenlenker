@@ -1,5 +1,5 @@
 import { Layers, type Object3D } from 'three';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ScenePalette } from '../contracts/render';
@@ -65,5 +65,25 @@ describe('environment quality', () => {
       expect(seen(env.object, cameras[view as keyof typeof cameras]), view).toEqual(meshes);
     }
     env.dispose();
+  });
+});
+
+describe('environment construction', () => {
+  it('adds no empty batch to the scene graph when every obstacle is restyled', () => {
+    // Object3D.add() with no argument logs "object not an instance of THREE.Object3D".
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const l = Object.values(layouts)
+        .map((x) => resolveLayout(x, null))
+        .find(
+          (x) => x.obstacles.length > 0 && x.obstacles.every((o) => RESTYLED_KINDS.has(o.kind)),
+        );
+      expect(l).toBeDefined();
+      if (l === undefined) return;
+      proceduralEnvironment(l, palette).dispose();
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      error.mockRestore();
+    }
   });
 });
