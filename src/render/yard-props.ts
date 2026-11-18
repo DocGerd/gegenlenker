@@ -112,11 +112,13 @@ function longFrame({ obb }: Obstacle): { along: number; across: number; heading:
   };
 }
 
+/** Cuts a long box into pieces; `build` also gets the piece's start, in metres along the obstacle. */
 function longPieces(
   o: Obstacle,
-  build: (parts: Parts, length: number, across: number) => void,
+  build: (parts: Parts, length: number, across: number, offset: number) => void,
 ): PropPiece[] {
   const { along, across, heading } = longFrame(o);
+  if (!(along > 0)) return [];
   const n = Math.max(1, Math.ceil(along / SPLIT));
   const step = along / n;
   const out: PropPiece[] = [];
@@ -125,7 +127,7 @@ function longPieces(
     const x = o.obb.cx + Math.cos(heading) * offset;
     const y = o.obb.cy + Math.sin(heading) * offset;
     const parts = new Parts();
-    build(parts, step, across);
+    build(parts, step, across, step * i);
     out.push({ x, y, geometry: parts.place(x, y, heading) });
   }
   return out;
@@ -634,6 +636,10 @@ function gatehouse(o: Obstacle): PropPiece {
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
+function unhandled(kind: never): never {
+  throw new Error(`Yard props: no drawing for obstacle kind ${String(kind)}`);
+}
+
 export function yardProps(layout: ResolvedLayout): PropPiece[] {
   const aim = {
     x: (layout.yard.minX + layout.yard.maxX) / 2,
@@ -660,11 +666,17 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
         }
         break;
       case 'kerb':
-        out.push(...longPieces(o, (p, length, across) => kerb(p, length, across, o.height)));
+        out.push(
+          ...longPieces(o, (p, length, across, offset) =>
+            kerb(p, length, across, o.height, offset),
+          ),
+        );
         break;
       case 'wall':
         out.push(
-          ...longPieces(o, (p, length, across) => concreteWall(p, length, across, o.height)),
+          ...longPieces(o, (p, length, across, offset) =>
+            concreteWall(p, length, across, o.height, offset),
+          ),
         );
         break;
       case 'ramp':
@@ -686,7 +698,7 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
         out.push(gatehouse(o), gatehouseMirror(o));
         break;
       default:
-        break;
+        return unhandled(o.kind);
     }
   }
   const halls = layout.obstacles.filter((o) => o.kind === 'hall');

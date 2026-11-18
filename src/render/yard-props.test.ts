@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ObstacleKind } from '../contracts/layout';
+import { OVERLAY } from './yard-concrete';
 import { cornerHoops, plotGoods, RESTYLED_KINDS, yardProps } from './yard-props';
 
 const TOLERANCE = 0.05;
 const MAX_RELIEF = 0.16; // thin relief only, as for seals and dock lights
+const FLOAT32 = 1e-4;
 const FILLS_FOOTPRINT: readonly ObstacleKind[] = ['parked', 'gatehouse', 'bollard'];
 const FILLS_AXES: readonly ObstacleKind[] = ['kerb', 'wall', 'ramp', 'cone'];
 
@@ -14,6 +16,31 @@ const cases = [
   ...Object.values(layouts).map((l) => ({ name: l.id, resolved: resolveLayout(l, null) })),
   ...exercises.map((e) => ({ name: e.id, resolved: resolveLayout(layouts[e.layout], e) })),
 ];
+
+describe('yard prop coverage', () => {
+  it('has a layout or exercise with every kerb, wall, ramp and cone kind', () => {
+    for (const kind of FILLS_AXES) {
+      const present = cases.some(({ resolved }) => resolved.obstacles.some((o) => o.kind === kind));
+      expect(present, kind).toBe(true);
+    }
+  });
+
+  it('draws a synthetic obstacle of every restyled kind', () => {
+    const { resolved } = cases[0] ?? { resolved: undefined };
+    if (resolved === undefined) throw new Error('no layout');
+    const baseline = yardProps({ ...resolved, obstacles: [] }).length;
+    for (const kind of RESTYLED_KINDS) {
+      const obstacle = {
+        id: `synthetic-${kind}`,
+        kind,
+        obb: { cx: 20, cy: 20, halfLength: 2, halfWidth: 0.5, heading: 0 },
+        height: 1,
+      };
+      const drawn = yardProps({ ...resolved, obstacles: [obstacle] }).length;
+      expect(drawn, kind).toBeGreaterThan(baseline);
+    }
+  });
+});
 
 describe.each(cases)('$name yard props', ({ resolved }) => {
   it('draw a detail copy over the whole footprint of solid props', () => {
@@ -49,7 +76,8 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
       expect(b.max.x, o.id).toBeCloseTo(cx + halfX, 1);
       expect(-b.max.z, o.id).toBeCloseTo(cy - halfY, 1);
       expect(-b.min.z, o.id).toBeCloseTo(cy + halfY, 1);
-      expect(b.max.y, o.id).toBeLessThanOrEqual(o.height + MAX_RELIEF);
+      expect(b.max.y, o.id).toBeGreaterThanOrEqual(o.height - FLOAT32);
+      expect(b.max.y, o.id).toBeLessThanOrEqual(o.height + OVERLAY + FLOAT32);
     }
   });
 
