@@ -9,6 +9,10 @@ let query: MediaQueryList | null = null;
 function sync(): void {
   const dark = preference === 'dark' || (preference === 'system' && query?.matches === true);
   document.documentElement.dataset['theme'] = dark ? 'dark' : 'light';
+  // Native controls and scrollbars follow the chosen theme; "system" leaves both schemes to the browser.
+  document
+    .querySelector('meta[name="color-scheme"]')
+    ?.setAttribute('content', preference === 'system' ? 'light dark' : preference);
   syncThemeColor();
 }
 
