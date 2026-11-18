@@ -49,36 +49,49 @@ export interface CabShells {
   /**
    * Calls `apply` once the truck's shell has loaded, never when it fails or the truck has none;
    * the returned function cancels. Always asynchronous, so a visual is built before it is called.
+   * `apply` returns whether the shell now sits on the truck.
    */
-  onLoaded(truckId: TruckId, apply: (shell: CabShell) => void): () => void;
+  onLoaded(truckId: TruckId, apply: (shell: CabShell) => boolean): () => void;
+  /** Starts the loads on the first call with `true`; nothing is downloaded before. */
+  setEnabled(on: boolean): void;
 }
 
 /**
- * Starts every load now; a failure to load or to apply warns and leaves the procedural cab.
- * `onApplied` reports each successful application, for tests and diagnostics.
+ * Starts every load once enabled; a failure to load or to apply warns and leaves the procedural cab.
+ * `onApplied` reports each shell that ends up on a truck, for tests and diagnostics.
  */
 export function startCabShells(
   load: (url: string) => Promise<CabShell> = fetchCabShell,
   onApplied: (truckId: TruckId) => void = () => undefined,
+  enabled = true,
 ): CabShells {
+  let start = (): void => undefined;
+  const started = new Promise<void>((resolve) => {
+    start = resolve;
+  });
+  if (enabled) start();
   const loads = new Map<TruckId, Promise<CabShell | null>>();
   for (const [id, url] of Object.entries(URLS) as [TruckId, string][]) {
     loads.set(
       id,
-      load(url).catch((error: unknown) => {
-        console.warn(`Cab shell ${id} failed to load; keeping the procedural cab`, error);
-        return null;
-      }),
+      started
+        .then(() => load(url))
+        .catch((error: unknown) => {
+          console.warn(`Cab shell ${id} failed to load; keeping the procedural cab`, error);
+          return null;
+        }),
     );
   }
   return {
+    setEnabled(on) {
+      if (on) start();
+    },
     onLoaded(truckId, apply) {
       let cancelled = false;
       void loads.get(truckId)?.then((shell) => {
         if (shell === null || cancelled) return;
         try {
-          apply(shell);
-          onApplied(truckId);
+          if (apply(shell)) onApplied(truckId);
         } catch (error) {
           console.warn(
             `Cab shell ${truckId} could not be applied; keeping the procedural cab`,
@@ -102,8 +115,8 @@ function instance(proto: Mesh, material: MeshLambertMaterial): Mesh {
 
 /**
  * Swaps the procedural cab for the shell in one step: the box stays top-down only, the shell and
- * the lit cab front trade places in the mirrors. Returns what the visual must dispose.
- * Everything that can throw runs before the group is touched.
+ * the lit cab front trade places in the mirrors. Returns what the visual must dispose, and a switch
+ * back to the procedural cab. Everything that can throw runs before the group is touched.
  */
 export function applyCabShell(
   group: Group,
@@ -111,7 +124,8 @@ export function applyCabShell(
   cabFront: Mesh,
   shell: CabShell,
   palette: ScenePalette,
-): { dispose(): void } {
+  enabled = true,
+): { dispose(): void; setEnabled(on: boolean): void } {
   const materials = [
     new MeshLambertMaterial({ color: palette.cab }),
     new MeshLambertMaterial({ vertexColors: true }),
@@ -123,8 +137,18 @@ export function applyCabShell(
     materials.forEach((m) => m.dispose());
     throw error;
   }
-  cabBox.layers.set(AIDS_LAYER);
-  group.remove(cabFront);
-  group.add(...meshes);
-  return { dispose: () => materials.forEach((m) => m.dispose()) };
+  const boxLayers = cabBox.layers.mask;
+  const setEnabled = (on: boolean): void => {
+    if (on) {
+      cabBox.layers.set(AIDS_LAYER);
+      group.remove(cabFront);
+      group.add(...meshes);
+    } else {
+      cabBox.layers.mask = boxLayers;
+      group.remove(...meshes);
+      group.add(cabFront);
+    }
+  };
+  if (enabled) setEnabled(true);
+  return { dispose: () => materials.forEach((m) => m.dispose()), setEnabled };
 }

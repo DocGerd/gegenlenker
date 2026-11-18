@@ -17,7 +17,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Tolerances } from '../contracts/exercise';
 import type { Marking, Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
-import { AIDS_LAYER, SKY_LAYER, type Environment } from './seams';
+import type { QualityFlags } from './quality';
+import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER, type Environment } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSky, neutralSky } from './sky';
 import { createSkyline } from './skyline';
@@ -372,12 +373,14 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
     addObstacle(o, palette, chunks, color, roof, isOnYard(yard, cx, cy));
   }
   group.add(...obstacles.meshes(solid, geometries));
-  for (const mesh of topDownOnly.meshes(solid, geometries)) {
+  const tokens = topDownOnly.meshes(solid, geometries);
+  for (const mesh of tokens) {
     mesh.layers.set(AIDS_LAYER);
     group.add(mesh);
   }
   for (const piece of yardProps(layout)) detail.add(piece.x, piece.y, piece.geometry);
-  for (const mesh of detail.meshes(solid, geometries)) {
+  const props = detail.meshes(solid, geometries);
+  for (const mesh of props) {
     mesh.layers.set(SKY_LAYER);
     group.add(mesh);
   }
@@ -490,6 +493,15 @@ export function proceduralEnvironment(layout: ResolvedLayout, palette: ScenePale
       if (yardBand !== null) yardBand.visible = frame.topDown === 'yard';
       if (gate !== null) {
         gate.material.color.copy(frame.waypointVisited === true ? gate.passed : gate.pending);
+      }
+    },
+    setQuality(flags: QualityFlags): void {
+      skyline.mesh.visible = flags.skyline;
+      for (const mesh of props) mesh.visible = flags.yardDetail;
+      // Without the props the obstacles must still show in perspective, so the tokens go to every camera.
+      for (const mesh of tokens) {
+        if (flags.yardDetail) mesh.layers.set(AIDS_LAYER);
+        else mesh.layers.enable(DEFAULT_LAYER);
       }
     },
     dispose: () => {

@@ -10,6 +10,7 @@ const defaults: Settings = {
   aids: { pivots: true, path: true, tracks: false, ghost: true },
   topDown: 'follow',
   collapsed: { aids: false, gauges: false, keys: false },
+  graphics: 'balanced',
 };
 
 const stored: Settings = {
@@ -21,6 +22,7 @@ const stored: Settings = {
   aids: { pivots: false, path: false, tracks: true, ghost: false },
   topDown: 'yard',
   collapsed: { aids: true, gauges: true, keys: true },
+  graphics: 'low',
 };
 
 describe('loadSettings', () => {
@@ -44,6 +46,7 @@ describe('loadSettings', () => {
       aids: { pivots: 'no', tracks: true },
       topDown: null,
       collapsed: { aids: true, gauges: 'no' },
+      graphics: 'ultra',
     });
     expect(loadSettings(raw, 'en')).toEqual({
       ...defaults,
