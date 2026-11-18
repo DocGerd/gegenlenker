@@ -67,6 +67,7 @@ export const en = {
   resetView: 'Reset view',
   viewSize: 'View size',
   resetViewSize: 'Reset view size',
+  resetViewAndSize: 'Reset view / size',
   zoom: 'Zoom',
   aidPivots: 'Angle display',
   aidPath: 'Predicted path',

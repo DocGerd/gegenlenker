@@ -7,6 +7,8 @@ import {
   NO_INSETS,
   topDownSplit,
   wheelSize,
+  type Insets,
+  type PanelStack,
 } from './viewports';
 
 describe('computeViewports mirrors', () => {
@@ -101,8 +103,24 @@ describe('computeViewports safe-area insets', () => {
 describe('top-down split', () => {
   const sizes: (readonly [number, number])[] = [];
   for (let w = 320; w <= 2000; w += 80) for (let h = 320; h <= 2000; h += 80) sizes.push([w, h]);
+  sizes.push([844, 390]);
   const insets = { top: 24, right: 48, bottom: 20, left: 48 };
   const legend = { right: 700, height: 200 };
+  /** Stands in for the measured panels: the bottom edge steps down as the pane narrows, and the safe area pushes it further. */
+  const STEPS = [
+    { from: 296, bottom: 545 },
+    { from: 320, bottom: 515 },
+    { from: 360, bottom: 485 },
+    { from: 400, bottom: 380 },
+    { from: 440, bottom: 305 },
+  ];
+  const stack =
+    (inset: Insets | undefined): PanelStack =>
+    (paneWidth) => {
+      let bottom = 600;
+      for (const step of STEPS) if (paneWidth >= step.from) bottom = step.bottom;
+      return bottom + (inset?.top ?? 0);
+    };
   const edges = [
     { landscape: 0, portrait: 0 },
     { landscape: 1, portrait: 1 },
@@ -125,23 +143,51 @@ describe('top-down split', () => {
   it('always allows the default and orders min, default and max', () => {
     for (const [w, h] of sizes) {
       for (const inset of [undefined, insets]) {
-        const { min, max, fallback } = topDownSplit(w, h, undefined, legend, inset);
+        const split = topDownSplit(w, h, undefined, legend, inset, stack(inset));
+        const { min, max, fallback } = split;
         expect(min, `${w}x${h}`).toBeLessThanOrEqual(fallback);
         expect(fallback, `${w}x${h}`).toBeLessThanOrEqual(max);
-        expect(topDownSplit(w, h, undefined, legend, inset).share).toBe(fallback);
+        expect(split.share).toBe(fallback);
       }
     }
   });
 
   it('clamps the share to the screen range', () => {
-    const [lo, hi] = edges.map((layout) => topDownSplit(1280, 720, layout, null, insets));
+    const [lo, hi] = edges.map((layout) =>
+      topDownSplit(1280, 720, layout, null, insets, stack(insets)),
+    );
     expect(lo?.share).toBe(lo?.min);
     expect(hi?.share).toBe(hi?.max);
     // The insets crowd the panels, so the pane may not shrink as far as without them.
     expect(lo?.min).toBeCloseTo(360 / 1280);
-    expect(topDownSplit(1280, 720, edges[0], null, NO_INSETS).min).toBeCloseTo(0.25);
+    expect(topDownSplit(1280, 720, edges[0], null, NO_INSETS, stack(NO_INSETS)).min).toBeCloseTo(
+      0.25,
+    );
     expect(hi?.max).toBeLessThan(0.6);
-    expect(topDownSplit(1000, 1024, edges[0], null, insets).min).toBeCloseTo(0.3125);
+    // Portrait: the pane's height holds the panels and the divider row.
+    expect(topDownSplit(1000, 1024, edges[0], null, insets, stack(insets)).min).toBeCloseTo(
+      (305 + insets.top + 44 + 8) / 1024,
+    );
+  });
+
+  it('has no room for the divider where no panel row fits above it', () => {
+    for (const layout of edges) {
+      const split = topDownSplit(844, 390, layout, null, NO_INSETS, stack(NO_INSETS));
+      expect(split).toMatchObject({ min: 0.4, max: 0.4, share: 0.4 });
+    }
+    // Measured per width: the same screen with a roomier stack has a range again.
+    const roomy = topDownSplit(844, 390, edges[1], null, NO_INSETS, () => 100);
+    expect(roomy.min).toBeCloseTo(0.25);
+    expect(roomy.max).toBeGreaterThan(roomy.min);
+  });
+
+  it('finds the narrowest pane the measured panels allow', () => {
+    // Fits from a 300 px pane on: the search lands on that width, not the range's edge.
+    const { min } = topDownSplit(1000, 800, edges[0], null, NO_INSETS, (w) =>
+      w >= 300 ? 100 : 5000,
+    );
+    expect(min * 1000).toBeGreaterThanOrEqual(300);
+    expect(min * 1000).toBeLessThan(301.5);
   });
 
   it('tiles the screen and keeps the mirrors clear of the controls at both ends of the range', () => {
@@ -156,6 +202,7 @@ describe('top-down split', () => {
             legend,
             inset,
             layout,
+            stack(inset),
           );
           if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
             throw new Error('drive mode has mirrors');
@@ -172,7 +219,7 @@ describe('top-down split', () => {
             expect(m.x + m.width, at).toBeLessThanOrEqual(cockpit.x + cockpit.width);
             expect(m.y, at).toBeGreaterThanOrEqual(cockpit.y);
             // The default layout may itself leave no room; only a range this module widened must clear.
-            const { share, fallback } = topDownSplit(w, h, layout, legend, inset);
+            const { share, fallback } = topDownSplit(w, h, layout, legend, inset, stack(inset));
             if (share !== fallback && m.height !== MIN_MIRROR_HEIGHT) {
               expect(m.y + m.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h, inset));
             }
@@ -187,9 +234,9 @@ describe('top-down split', () => {
 
   it('leaves a landscape cockpit wide enough for the wheel, gears and legend', () => {
     for (const [w, h] of sizes.filter(([a, b]) => a >= b)) {
-      const { share, fallback } = topDownSplit(w, h, edges[1], null, insets);
+      const { share, fallback } = topDownSplit(w, h, edges[1], null, insets, stack(insets));
       if (share === fallback) continue;
-      const { cockpit } = computeViewports(w, h, 'drive', null, insets, edges[1]);
+      const { cockpit } = computeViewports(w, h, 'drive', null, insets, edges[1], stack(insets));
       const needed = insets.left + 3 * 16 + 92.4 + 176 + wheelSize(w, h, insets);
       expect(cockpit?.width, `${w}x${h}`).toBeGreaterThanOrEqual(needed - 1);
     }

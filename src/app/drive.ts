@@ -2,7 +2,13 @@ import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
 import type { LayoutId } from '../contracts/layout';
-import type { AidFlags, RenderFrame, TopDownMode } from '../contracts/render';
+import {
+  DEFAULT_TOP_DOWN_LAYOUT,
+  TOP_DOWN_SHARE_LIMITS,
+  type AidFlags,
+  type RenderFrame,
+  type TopDownMode,
+} from '../contracts/render';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
 import { t } from '../i18n/i18n';
@@ -12,7 +18,7 @@ import { isDefaultView } from '../input/top-down-view';
 import { chaseViewAvailable } from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay } from '../render/perf-overlay';
-import { computeViewports, topDownSplit } from '../render/viewports';
+import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
 import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
@@ -173,6 +179,7 @@ export function startDrive(
   let aids: AidFlags = settings.aids;
   let collapsed = settings.collapsed;
   let topDownLayout = settings.topDownLayout;
+  let savedLayout = topDownLayout;
   let topDown: TopDownMode = settings.topDown;
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
@@ -270,14 +277,23 @@ export function startDrive(
   const arrange = (): void => {
     if (size === null) return;
     const { width, height } = size;
-    let views = computeViewports(width, height, 'drive', null, undefined, topDownLayout);
+    // One measurement per pane width for this layout pass; each forces a layout.
+    const measured = new Map<number, number>();
+    const panels = (paneWidth: number): number => {
+      const known = measured.get(paneWidth);
+      if (known !== undefined) return known;
+      const bottom = hud.panelsBottom(paneWidth);
+      measured.set(paneWidth, bottom);
+      return bottom;
+    };
+    let views = computeViewports(width, height, 'drive', null, undefined, topDownLayout, panels);
     hud.layout(views);
     const legend = hud.legendBox();
     if (legend !== null) {
-      views = computeViewports(width, height, 'drive', legend, undefined, topDownLayout);
+      views = computeViewports(width, height, 'drive', legend, undefined, topDownLayout, panels);
       hud.layout(views);
     }
-    hud.setSplit(topDownSplit(width, height, topDownLayout, legend));
+    hud.setSplit(topDownSplit(width, height, topDownLayout, legend, undefined, panels));
     frame.views = views;
     viewInput.relayout();
     remeasure();
@@ -294,11 +310,17 @@ export function startDrive(
       viewInput.reset();
     } else if (action.type === 'split' || action.type === 'splitReset') {
       if (size === null) return;
-      const current = topDownSplit(size.width, size.height, topDownLayout, hud.legendBox());
-      const proposed = action.type === 'split' ? action.share : current.fallback;
-      const share = Math.min(current.max, Math.max(current.min, proposed));
-      topDownLayout = { ...topDownLayout, [current.orientation]: share };
-      if (action.type === 'splitReset' || action.commit) updateSettings({ topDownLayout });
+      const reset = action.type === 'splitReset';
+      const orientation = reset ? orientationOf(size.width, size.height) : action.orientation;
+      // The user's choice, within what any screen allows; the screen's own range applies where it is used.
+      const { min, max } = TOP_DOWN_SHARE_LIMITS[orientation];
+      const proposed = reset ? DEFAULT_TOP_DOWN_LAYOUT[orientation] : action.share;
+      const share = Math.min(max, Math.max(min, proposed));
+      topDownLayout = { ...topDownLayout, [orientation]: share };
+      if ((reset || action.commit) && share !== savedLayout[orientation]) {
+        savedLayout = { ...savedLayout, [orientation]: share };
+        updateSettings({ topDownLayout: savedLayout });
+      }
       arrange();
     } else if (action.type === 'collapse') {
       collapsed = { ...collapsed, [action.panel]: action.collapsed };

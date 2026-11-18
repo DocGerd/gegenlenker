@@ -73,6 +73,7 @@ export const de: Record<MessageKey, string> = {
   resetView: 'Ansicht zurücksetzen',
   viewSize: 'Ansichtsgröße',
   resetViewSize: 'Ansichtsgröße zurücksetzen',
+  resetViewAndSize: 'Standardansicht',
   zoom: 'Zoom',
   aidPivots: 'Winkelanzeige',
   aidPath: 'Vorausschau',
