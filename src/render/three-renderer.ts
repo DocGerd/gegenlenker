@@ -130,6 +130,8 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
   const onRestored = (): void => {
     contextLost = false;
     resetTiming();
+    parts.onContextRestored?.();
+    if (built !== null) applyQuality(built);
   };
   const onVisibility = (): void => {
     if (document.visibilityState === 'visible') resetTiming();
