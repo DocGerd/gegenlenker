@@ -11,24 +11,24 @@ import {
 } from 'three';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette } from '../contracts/render';
-import type { Pose2, Vec2 } from '../contracts/sim';
+import type { Pose2, Prediction, Vec2 } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors } from '../vehicles/anchors';
 import { placePose } from './coords';
 import { outlineGeometry } from './environment';
-import { AID_DASH_OFF, AID_DASH_ON, AIDS_LAYER, type AidsLayer } from './seams';
+import { AID_DASH_OFF, AID_DASH_ON, AID_STROKE, AIDS_LAYER, type AidsLayer } from './seams';
 
-const PATH_WIDTH = 0.2;
+const PATH_WIDTH = AID_STROKE.path;
 const PATH_CAPACITY = 512;
-const CORRIDOR_WIDTH = 0.1;
-const BAR_WIDTH = 0.2;
-const TRACK_WIDTH = 0.1;
+const CORRIDOR_WIDTH = AID_STROKE.corridor;
+const BAR_WIDTH = AID_STROKE.bar;
+const TRACK_WIDTH = AID_STROKE.track;
 const TRACK_CAPACITY = 2000;
 const TRACK_SPACING = 0.25;
 const TRACK_JUMP = 5; // a larger gap between samples starts a new line
-const PIVOT_WIDTH = 0.12;
+const PIVOT_WIDTH = AID_STROKE.pivot;
 const PIVOT_LENGTH = 4;
-const GHOST_STRIP = 0.1;
+const GHOST_STRIP = AID_STROKE.ghost;
 const TRACK_Y = 0.02;
 const PATH_Y = 0.03;
 const GHOST_Y = 0.04;
@@ -39,7 +39,7 @@ const MARKER_PULSE = 0.3; // fraction of the radius the pulse adds
 const MARKER_HZ = 1.5;
 const MARKER_Y = 0.06;
 const OVERLAY_ORDER = 10;
-const CASING = 0.06; // dark edge on each side of an accent stroke
+const CASING = AID_STROKE.casing;
 const CASING_DROP = 0.005;
 const mm = (v: number): number => v / 1000;
 
@@ -254,6 +254,28 @@ class CasedRibbon {
   }
 }
 
+/**
+ * The stop bar across the corridor's last sample. A block at the first sample would put it on the
+ * leading body's own edge, so then it moves clear of the body, outward along the lead direction.
+ */
+function stopBarEnds(
+  predicted: Pick<Prediction, 'lead' | 'left' | 'right'>,
+): readonly [Vec2, Vec2] | null {
+  const { lead, left, right } = predicted;
+  const a = left[left.length - 1];
+  const b = right[right.length - 1];
+  if (lead === null || a === undefined || b === undefined) return null;
+  if (left.length > 1) return [a, b];
+  const [dx, dy] = [a.x - b.x, a.y - b.y];
+  const length = Math.hypot(dx, dy);
+  const out = ((lead === 'truck' ? 1 : -1) * (BAR_WIDTH / 2 + CASING)) / length;
+  const [ox, oy] = [dy * out, -dx * out];
+  return [
+    { x: a.x + ox, y: a.y + oy },
+    { x: b.x + ox, y: b.y + oy },
+  ];
+}
+
 export function proceduralAids(
   truck: TruckSpec,
   trailer: TrailerSpec,
@@ -407,11 +429,10 @@ export function proceduralAids(
       style(solid, 'trailer');
       style(dashed, 'truck');
 
-      const [leftEnd, rightEnd] = corridor.map((line) => line[line.length - 1]);
-      stopBar.object.visible =
-        aids.path && predicted.blocked !== null && leftEnd !== undefined && rightEnd !== undefined;
-      if (stopBar.object.visible && leftEnd !== undefined && rightEnd !== undefined) {
-        stopBar.set(0, leftEnd.x, leftEnd.y, rightEnd.x, rightEnd.y);
+      const bar = aids.path && predicted.blocked !== null ? stopBarEnds(predicted) : null;
+      stopBar.object.visible = bar !== null;
+      if (bar !== null) {
+        stopBar.set(0, bar[0].x, bar[0].y, bar[1].x, bar[1].y);
         stopBar.flush(1);
       }
 

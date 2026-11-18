@@ -57,7 +57,7 @@ export function predictCombination(
   const right: Vec2[] = [];
   const record = (q: KinematicState): void => {
     const body = footprints(q).find((b) => b.body === lead)?.obb;
-    if (body === undefined) return;
+    if (body === undefined) throw new Error(`no ${lead} footprint`);
     const [ux, uy] = [Math.cos(body.heading), Math.sin(body.heading)];
     const end = direction * body.halfLength;
     for (const [line, side] of [
@@ -115,6 +115,7 @@ export function predictCombination(
     record(q);
   }
 
+  if (left.length !== right.length) throw new Error('corridor lines differ in length');
   return { lead, left, right, blocked, blockedAt };
 }
 

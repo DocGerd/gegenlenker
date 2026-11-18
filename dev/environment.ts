@@ -117,8 +117,9 @@ function predictedCorridor(from: SimSnapshot): { left: Vec2[]; right: Vec2[] } {
   let heading = from.trailer.heading + Math.PI;
   let p = from.trailerRear;
   for (let i = 0; i < PREDICT_POINTS; i++) {
-    out.left.push(advance(p, heading + Math.PI / 2, CORRIDOR_HALF));
-    out.right.push(advance(p, heading - Math.PI / 2, CORRIDOR_HALF));
+    // `heading` points away from the trailer, so the trailer's left is heading - 90 degrees
+    out.left.push(advance(p, heading - Math.PI / 2, CORRIDOR_HALF));
+    out.right.push(advance(p, heading + Math.PI / 2, CORRIDOR_HALF));
     heading -= PREDICT_CURVATURE * PREDICT_STEP;
     p = advance(p, heading, PREDICT_STEP);
   }

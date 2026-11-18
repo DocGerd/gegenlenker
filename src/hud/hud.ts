@@ -267,10 +267,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const collapsed = { ...opts.collapsed };
   const aidsBox = query(hud, 'aids', HTMLElement);
   const legendItems = new Map(
-    [...hud.querySelectorAll<HTMLElement>('[data-aid-legend]')].map((li) => [
-      li.dataset['aidLegend'] as keyof AidFlags,
-      li,
-    ]),
+    AIDS.map(([aid]) => {
+      const li = hud.querySelector<HTMLElement>(`[data-aid-legend="${aid}"]`);
+      if (li === null) throw new Error(`no legend item for ${aid}`);
+      return [aid, li] as const;
+    }),
   );
   const keysToggle = query(hud, 'keysToggle', HTMLButtonElement);
   const legendToggle = query(hud, 'aidLegendToggle', HTMLButtonElement);
@@ -291,7 +292,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       const aid = b.dataset['aid'] as keyof AidFlags;
       b.setAttribute('aria-pressed', String(aids[aid]));
       b.disabled = view === 'chase' && TOP_DOWN_AIDS.includes(aid);
-      legendItems.get(aid)?.toggleAttribute('data-disabled', b.disabled);
+      const item = legendItems.get(aid);
+      if (item === undefined) throw new Error(`no legend item for ${aid}`);
+      item.toggleAttribute('data-disabled', b.disabled);
       if (b.disabled) b.title = t('aidTopViewOnly');
       else b.removeAttribute('title');
     }
