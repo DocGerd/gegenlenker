@@ -26,6 +26,12 @@ const stored: Settings = {
 };
 
 describe('loadSettings', () => {
+  it('keeps a stored chase view', () => {
+    expect(loadSettings(JSON.stringify({ version: 1, topDown: 'chase' }), 'en').topDown).toBe(
+      'chase',
+    );
+  });
+
   it('falls back to defaults for missing, corrupt or foreign data', () => {
     for (const raw of [null, '{', '[]', 'null', '42', JSON.stringify({ ...stored, version: 2 })]) {
       expect(loadSettings(raw, 'en'), String(raw)).toEqual(defaults);

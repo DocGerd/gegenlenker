@@ -26,7 +26,7 @@ const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost:
 const DEFAULT_COLLAPSED: CollapsedPanels = { aids: false, gauges: false, keys: false };
 const LANGS: readonly Lang[] = ['de', 'en'];
 const THEMES: readonly Settings['theme'][] = ['system', 'light', 'dark'];
-const TOP_DOWN: readonly TopDownMode[] = ['follow', 'yard'];
+const TOP_DOWN: readonly TopDownMode[] = ['follow', 'yard', 'chase'];
 
 const pick = <T extends string>(ids: readonly T[], v: unknown, fallback: T): T =>
   ids.find((id) => id === v) ?? fallback;

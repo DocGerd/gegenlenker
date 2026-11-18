@@ -42,6 +42,7 @@ const hud = createHud(stage, {
       : { title: 'Reverse into a bay', brief: 'Reverse the trailer into the bay and stop.' },
   aids: { pivots: true, path: true, tracks: false, ghost: false },
   topDown: 'follow',
+  chase: true,
   collapsed: { aids: false, gauges: false, keys: false },
 });
 hud.onAction((a) => console.info('hud action', JSON.stringify(a)));

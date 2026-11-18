@@ -19,8 +19,11 @@ export type LegendBox = {
   readonly height: number;
 };
 export type ViewMode = 'drive' | 'replay';
-export type TopDownMode = 'follow' | 'yard';
-/** Relative to the mode's default framing; pan is in units of its base half-height, sim-plane axes (y up). */
+export type TopDownMode = 'follow' | 'yard' | 'chase';
+/**
+ * Relative to the mode's default framing; pan is in units of its base half-height, sim-plane axes (y up).
+ * In `chase`, `zoom` divides the orbit distance, `panX` is the orbit yaw in radians and `panY` stays 0.
+ */
 export type TopDownView = {
   readonly zoom: number;
   readonly panX: number;

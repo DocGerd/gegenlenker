@@ -10,6 +10,7 @@ import { createControls } from '../input/controls';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
 import { clearRect, targetArrow } from '../render/follow-framing';
+import { QUALITY_FLAGS } from '../render/quality';
 import { mountPerfOverlay } from '../render/perf-overlay';
 import { computeViewports } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
@@ -171,7 +172,9 @@ export function startDrive(
 
   let aids: AidFlags = settings.aids;
   let collapsed = settings.collapsed;
-  let topDown = settings.topDown;
+  const chase = QUALITY_FLAGS[settings.graphics].chaseView;
+  // A stored chase view falls back to follow on a preset without it; the stored choice stays.
+  let topDown = settings.topDown === 'chase' && !chase ? 'follow' : settings.topDown;
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
   let pathStale = true;
@@ -209,7 +212,8 @@ export function startDrive(
         ? null
         : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
     aids: settings.aids,
-    topDown: settings.topDown,
+    topDown,
+    chase,
     collapsed,
   });
   cleanups.push(() => hud.dispose());

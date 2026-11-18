@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TOP_DOWN_VIEW, type TopDownView } from '../contracts/render';
 import {
+  CHASE_YAW_LIMIT,
   ZOOM_LIMITS,
   clampView,
   isDefaultView,
@@ -154,6 +155,37 @@ describe('clampView', () => {
     const wide = view(2, 0.9, 0.5);
     const narrow = clampView(wide, { mode: 'yard', width: 300, height: 400 });
     expect(narrow.panX).toBeCloseTo(0.75 * 0.5, 9);
+  });
+});
+
+describe('chase view', () => {
+  const chase: ViewContext = { mode: 'chase', width: 600, height: 400 };
+
+  it('orbits on drag, never pans, and clamps the yaw and distance', () => {
+    const dragged = panBy(DEFAULT_TOP_DOWN_VIEW, -50, 80, chase);
+    expect(dragged.panX).toBeGreaterThan(0);
+    expect(dragged.panY).toBe(0);
+    expect(panBy(DEFAULT_TOP_DOWN_VIEW, -1e6, 0, chase).panX).toBe(CHASE_YAW_LIMIT);
+    expect(zoomAt(DEFAULT_TOP_DOWN_VIEW, 100, { x: 10, y: 10 }, chase)).toEqual({
+      zoom: ZOOM_LIMITS.chase.max,
+      panX: 0,
+      panY: 0,
+    });
+  });
+
+  it('turns a pinch into distance and a two-finger drag into yaw', () => {
+    const a = { x: 250, y: 200 };
+    const b = { x: 350, y: 200 };
+    const next = pinch(
+      DEFAULT_TOP_DOWN_VIEW,
+      [a, b],
+      [
+        { x: 200, y: 200 },
+        { x: 400, y: 200 },
+      ],
+      chase,
+    );
+    expect(next).toEqual({ zoom: 2, panX: 0, panY: 0 });
   });
 });
 

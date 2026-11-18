@@ -50,6 +50,8 @@ export type HudOptions = {
   exercise: { title: string; brief: string } | null;
   aids: AidFlags;
   topDown: TopDownMode;
+  /** Offers the chase view; the preset's `chaseView` flag. */
+  chase: boolean;
   collapsed: CollapsedPanels;
 };
 
@@ -93,6 +95,7 @@ function toastFor(
 const VIEWS: readonly [TopDownMode, MessageKey][] = [
   ['follow', 'viewFollow'],
   ['yard', 'viewYard'],
+  ['chase', 'viewChase'],
 ];
 const AIDS: readonly [keyof AidFlags, MessageKey][] = [
   ['pivots', 'aidPivots'],
@@ -155,8 +158,7 @@ const MARKUP = (mode: HudOptions['mode']): string => `
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
-      <div class="hud-group" data-hud="views" data-chrome>
-        <span class="hud-label hud-view-label" data-i18n="labelTopDown"></span>${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
+      <div class="hud-group" data-hud="views" data-chrome role="group" aria-label="${t('labelTopDown')}">${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
       <div class="hud-group" data-hud="aids" data-chrome>${AIDS.map(([a, k]) => button('data-aid', a, k)).join('')}</div>
     </div>
     <div class="hud-info">
@@ -243,6 +245,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let view = opts.topDown;
   const aids = { ...opts.aids };
   const viewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
+  if (!opts.chase) {
+    for (const b of viewButtons) if (b.dataset['view'] === 'chase') setHidden(b, true);
+  }
   const aidButtons = [...hud.querySelectorAll<HTMLElement>('[data-aid]')];
   const panelButtons = [...hud.querySelectorAll<HTMLElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
