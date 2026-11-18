@@ -8,6 +8,8 @@ const STOP_BLOCK = 55;
 const STOP_GAP = 8;
 const MIRROR_GAP = 8;
 const COCKPIT_LABEL = 32;
+/** Per side, so the area grows by its square. */
+const MIRROR_SCALE = 1.22;
 /** Smallest mirror height; where even this cannot clear the controls, it wins. */
 export const MIN_MIRROR_HEIGHT = 48;
 
@@ -83,23 +85,41 @@ export function computeViewports(
     topDown = { x: 0, y: 0, width: cssWidth, height: h };
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
   }
-  const fullWidth = clamp(Math.round(0.15 * cockpit.width), 72, 200);
-  const wanted = Math.min(2 * fullWidth, Math.round(0.5 * cockpit.height));
+  const fullWidth = clamp(
+    Math.round(MIRROR_SCALE * 0.15 * cockpit.width),
+    Math.round(MIRROR_SCALE * 72),
+    Math.round(MIRROR_SCALE * 200),
+  );
+  const wanted = Math.min(2 * fullWidth, Math.round(MIRROR_SCALE * 0.5 * cockpit.height));
   // Only a cockpit that starts at the screen's top edge sits under the display cut-out there.
   const top = cockpit.y === 0 ? insets.top : 0;
   const floor = cockpit.y + top + COCKPIT_LABEL;
   const left = cockpit.x + INSET + insets.left;
   const right =
     cockpit.x + cockpit.width - INSET - (cockpit.x + cockpit.width >= cssWidth ? insets.right : 0);
-  // The mirror only shrinks and moves inward from its full width, so that width is the worst case.
-  const rightMirrorLeft = right - fullWidth;
-  const legendClear = legend !== null && legend.right > rightMirrorLeft ? legend.height : 0;
-  const clear = Math.max(controlsHeight(cssWidth, cssHeight, insets), legendClear);
-  const ceiling = cssHeight - clear - MIRROR_GAP;
+  const controls = controlsHeight(cssWidth, cssHeight, insets);
   const preferred = cockpit.y + top + Math.round(0.16 * cockpit.height);
-  const y = Math.min(preferred, Math.max(floor, ceiling - wanted));
-  const mh = clamp(ceiling - y, MIN_MIRROR_HEIGHT, wanted);
-  const mw = Math.round((fullWidth * mh) / wanted);
+  /** The largest mirror with its bottom `clear` above the viewport bottom and at most `maxWidth` wide. */
+  const fit = (clear: number, maxWidth: number) => {
+    const ceiling = cssHeight - clear - MIRROR_GAP;
+    const y = Math.min(preferred, Math.max(floor, ceiling - wanted));
+    let height = clamp(ceiling - y, MIN_MIRROR_HEIGHT, wanted);
+    if ((fullWidth * height) / wanted > maxWidth) {
+      height = Math.max(MIN_MIRROR_HEIGHT, Math.floor((maxWidth * wanted) / fullWidth));
+    }
+    return { y, width: Math.round((fullWidth * height) / wanted), height };
+  };
+  // The mirror only shrinks and moves inward from its full width, so that width is the worst case.
+  const reachesLegend = legend !== null && legend.right > right - fullWidth;
+  let mirror = fit(controls, fullWidth);
+  if (legend !== null && reachesLegend) {
+    // Either sit above the legend, or beside it where that leaves the larger mirror.
+    const above = fit(Math.max(controls, legend.height), fullWidth);
+    const beside = fit(controls, Math.max(0, right - legend.right));
+    const fits = right - beside.width >= legend.right;
+    mirror = !fits || above.width * above.height >= beside.width * beside.height ? above : beside;
+  }
+  const { y, width: mw, height: mh } = mirror;
   return {
     cockpit,
     mirrorLeft: { x: left, y, width: mw, height: mh },
