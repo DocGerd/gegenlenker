@@ -1,4 +1,4 @@
-import type { SceneRenderer } from '../contracts/render';
+import type { GraphicsPreset, SceneRenderer } from '../contracts/render';
 import { createSceneRenderer } from '../render';
 import { currentSettings } from './settings';
 import { showNotice } from './notice';
@@ -30,6 +30,8 @@ export type StageHooks = {
 
 export type RenderStage = {
   readonly renderer: SceneRenderer;
+  /** The preset the renderer was set to: read it for anything that must follow the renderer's quality. */
+  readonly graphics: GraphicsPreset;
   readonly canvas: HTMLCanvasElement;
   start(hooks: StageHooks): void;
   dispose(): void;
@@ -49,7 +51,8 @@ export function mountRenderStage(
     return null;
   }
   const { canvas, renderer } = gl;
-  renderer.setQuality(currentSettings().graphics);
+  const { graphics } = currentSettings();
+  renderer.setQuality(graphics);
   host.append(canvas);
 
   const abort = new AbortController();
@@ -119,6 +122,7 @@ export function mountRenderStage(
 
   return {
     renderer,
+    graphics,
     canvas,
     start(next) {
       hooks = next;
