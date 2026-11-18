@@ -35,7 +35,7 @@ import {
   type TrailerShell,
   type TruckShells,
 } from './glb-shells';
-import { TRUCK_LOOKS } from './livery';
+import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
 import { CAB_LAYER, SKY_LAYER, type VehicleVisual } from './seams';
@@ -54,6 +54,7 @@ import {
   RAMP_WIDTH,
   SWAP_BODY_HEIGHT,
   TRAILER_WHEEL_WIDTH,
+  lowLoaderDeck,
   trailerFrame,
 } from './trailer-dims';
 import {
@@ -579,6 +580,7 @@ export function proceduralTrailer(
     track,
     wheelWidth: TRAILER_WHEEL_WIDTH,
     rearAxleXs: a.rearAxles.map((axle) => axle.x),
+    shellDeck: TRAILER_LOOKS[spec.id].kind === 'low-loader' ? lowLoaderDeck(spec) : null,
   });
 
   const dollyBlobs = [
@@ -653,8 +655,8 @@ export function proceduralTrailer(
   };
   const attach = (shell: TrailerShell): void => {
     const material = res.detailMaterial();
-    // a swap body's own marking goes with its box: the shell shows the bare chassis
-    const bare = trailerRig.bareGeometry === null ? null : res.detail(trailerRig.bareGeometry);
+    // a bare chassis drops the swap body's marking; a low-loader's detail follows its deck
+    const bare = trailerRig.shellGeometry === null ? null : res.detail(trailerRig.shellGeometry);
     // both start off, so a failure here leaves the groups as they were
     const onBody = applyShell(
       trailer,

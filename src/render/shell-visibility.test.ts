@@ -35,8 +35,14 @@ const readTrailer = async (id: TrailerId) => {
   );
 };
 
-/** Share of the body shell's vertices a mirror frames: set below the measured share of both trucks on both screens. */
-const BODY_FLOOR = 0.3;
+/**
+ * Share of the body shell's vertices a mirror frames, per truck: about 0.8 of the measured share on
+ * both screens. The Arocs' is lower, as its subframe and tailgate add vertices the mirrors do not frame.
+ */
+const BODY_FLOOR: Record<TruckId, number> = {
+  'man-le-18-280': 0.37,
+  'arocs-1835-ak': 0.15,
+};
 
 const STRAIGHT: Pose2 = { x: 0, y: 0, heading: 0 };
 const SCREENS = {
@@ -131,8 +137,8 @@ describe.each(TRUCK_IDS)('mirror frustums on the straight pose: %s', (id) => {
   describe.each(Object.entries(SCREENS))('%s screen', (_name, screen) => {
     it('frame the body shell in both mirrors', async () => {
       const seen = verticesInMirrors(await read(id, 'body'), id, screen);
-      expect(seen.left / seen.total).toBeGreaterThan(BODY_FLOOR);
-      expect(seen.right / seen.total).toBeGreaterThan(BODY_FLOOR);
+      expect(seen.left / seen.total).toBeGreaterThan(BODY_FLOOR[id]);
+      expect(seen.right / seen.total).toBeGreaterThan(BODY_FLOOR[id]);
     });
   });
 });

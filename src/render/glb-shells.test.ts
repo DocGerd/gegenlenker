@@ -1,13 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, Color, Layers, Mesh, type Object3D } from 'three';
+import { Box3, Color, Layers, Mesh, type Object3D, Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { TRUCK_IDS, type TruckId } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById } from '../vehicles/registry';
-import { bodyFrontX, bodyShellParams, TIPPER_WALL_TOP } from './body-dims';
-import { CAB_HEIGHT, CAB_LENGTH, cabShellParams, RELIEF } from './cab-dims';
+import { bodyFrontX, bodyShellParams } from './body-dims';
+import { CAB_HEIGHT, CAB_LENGTH, CAB_STRIPE, cabShellParams, FRAME_TOP, RELIEF } from './cab-dims';
+import { REALISM_HUES } from './realism-hues';
 import {
   parseShell,
   type Shell,
@@ -41,13 +42,15 @@ const glb = (key: string): ArrayBuffer => {
 const loadShell = (id: TruckId, kind: ShellKind): Promise<Shell> =>
   parseShell(glb(`${id}-${kind}`), kind);
 
-/** Height of the rim of a tipper wall (tools/blender/body_shell.py RIM) and of the tarpaulin top (TARP_TOP). */
+/** Height of the rim on a tipper's headboard (tools/blender/body_shell.py RIM) and of the tarpaulin top (TARP_TOP). */
 const TIPPER_RIM = 0.06;
 const TARP_TOP = 2.75;
 /** The roof light bar (cab_shell.py BEACON_BASE + BEACON_HEIGHT) stands this far above the roof. */
 const BEACON_TOP = 0.14;
-/** Ribs on a tipper wall stand 0.05 m proud (body_shell.py RIB_RELIEF). */
-const TIPPER_RIB = 0.05;
+/** A tipper's corner posts stand 0.06 m proud of its walls (body_shell.py POST). */
+const TIPPER_POST = 0.06;
+/** Meshopt quantisation moves positions by a couple of millimetres. */
+const TOLERANCE = 5e-3;
 /** Well below what the shells have, so only a lost part trips it. */
 const MIN_VERTICES = { cab: 600, body: 450 } as const;
 const COLOUR_TOLERANCE = 1 / 255;
@@ -76,8 +79,8 @@ describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
     const { mesh } = await loadShell(id, 'body');
     const box = new Box3().setFromObject(mesh);
     const params = bodyShellParams(spec);
-    const proud = look.body.kind === 'tipper' ? TIPPER_RIB : RELIEF;
-    const top = look.body.kind === 'tipper' ? TIPPER_WALL_TOP + TIPPER_RIM : TARP_TOP;
+    const proud = params.tipper === undefined ? RELIEF : TIPPER_POST;
+    const top = params.tipper === undefined ? TARP_TOP : params.tipper.headboardTop + TIPPER_RIM;
     expect(mesh.geometry.getAttribute('position').count).toBeGreaterThanOrEqual(MIN_VERTICES.body);
     expect(box.min.x).toBeGreaterThanOrEqual(anchors.rearX - 1e-3);
     expect(box.min.x).toBeCloseTo(anchors.rearX, 2);
@@ -87,6 +90,40 @@ describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
     expect(Math.max(-box.min.z, box.max.z)).toBeCloseTo(half + proud, 2);
     expect(box.max.y).toBeCloseTo(top, 2);
   });
+
+  it.runIf(look.body.kind === 'tipper')(
+    'keeps the tipper walls below the cab and its stripe level with the cab stripe',
+    async () => {
+      const params = bodyShellParams(spec);
+      expect(params.tipper?.headboardTop).toBeLessThan(CAB_HEIGHT);
+      // the white faces on the outside of each side wall, above the lower front corners and arches
+      const stripe = async (kind: ShellKind, beyond: number): Promise<[number, number]> => {
+        const { mesh } = await loadShell(id, kind);
+        const white = new Color(REALISM_HUES.liveryWhite);
+        const positions = mesh.geometry.getAttribute('position');
+        const colours = mesh.geometry.getAttribute('color');
+        const point = new Vector3();
+        let [low, high] = [Infinity, -Infinity];
+        for (let i = 0; i < positions.count; i++) {
+          const colour = new Color(colours.getX(i), colours.getY(i), colours.getZ(i));
+          if (Math.abs(colour.r - white.r) + Math.abs(colour.b - white.b) > 2 * COLOUR_TOLERANCE)
+            continue;
+          point.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+          if (Math.abs(point.z) < beyond - TOLERANCE || point.y < FRAME_TOP + 0.55) continue;
+          low = Math.min(low, point.y);
+          high = Math.max(high, point.y);
+        }
+        return [low, high];
+      };
+      const cab = await stripe('cab', half + RELIEF);
+      const body = await stripe('body', half + RELIEF);
+      expect(cab[0]).toBeCloseTo(FRAME_TOP + CAB_STRIPE[0], 2);
+      expect(cab[1]).toBeCloseTo(FRAME_TOP + CAB_STRIPE[1], 2);
+      expect(body[0]).toBeCloseTo(cab[0], 2);
+      expect(body[1]).toBeCloseTo(cab[1], 2);
+      expect(body[1]).toBeLessThan(params.tipper?.wallTop ?? 0);
+    },
+  );
 
   it.each(['cab', 'body'] as const)(
     'keeps every %s vertex colour on a livery hue, linear as tint() does',

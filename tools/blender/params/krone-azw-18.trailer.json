@@ -1,6 +1,6 @@
 {
   "id": "krone-azw-18",
-  "schema": 1,
+  "schema": 2,
   "kind": "lafette",
   "width": 2.55,
   "rearX": -1.675,
@@ -15,7 +15,7 @@
   "axleHalf": 0.07,
   "rearAxleXs": [0],
   "rail": { "halfGap": 0.45, "width": 0.2 },
-  "ramp": { "gap": 0.15, "width": 0.9, "thickness": 0.1, "height": 1.2 },
+  "ramp": { "gap": 0.15, "width": 0.9 },
   "marking": {
     "strip": 0.06,
     "markerLength": 0.2,

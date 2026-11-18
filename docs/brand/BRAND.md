@@ -89,6 +89,7 @@ Vehicle detail, yard props (fence grid, hall cladding and roofs, containers, mas
 | `skyHaze`         | `#dcebf2` | horizon haze of the sky dome; buildings fade to it        |
 | `sunHalo`         | `#fff1d0` | glow around the sun on the sky dome                       |
 | `thwBlue`         | `#00387b` | THW cab, body and tarpaulin, RAL 5002 sRGB approximation  |
+| `thwBlueDeep`     | `#00214a` | low-loader frame members, a darker THW blue               |
 | `liveryWhite`     | `#f6f6f6` | THW bumper, corners, arches and stripe, RAL 9016          |
 | `beaconBlue`      | `#1f6fe5` | roof light bar lens                                       |
 | `headliner`       | `#6f716a` | cockpit roof header lining                                |

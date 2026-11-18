@@ -23,6 +23,7 @@ export const REALISM_HUES = {
   skyHaze: 0xdcebf2, // horizon haze, pale blue-grey
   sunHalo: 0xfff1d0, // warm glow around the sun
   thwBlue: 0x00387b, // THW cab, body and tarpaulin; RAL 5002 sRGB approximation
+  thwBlueDeep: 0x00214a, // low-loader side members and crossmembers, a darker THW blue
   liveryWhite: 0xf6f6f6, // THW bumper, corners, arches and side stripe; RAL 9016
   beaconBlue: 0x1f6fe5, // roof light bar lens
   headliner: 0x6f716a, // cab roof header lining
