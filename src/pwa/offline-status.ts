@@ -18,3 +18,18 @@ export function onOfflineStatus(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+
+type InstallHost = {
+  readonly installing: Pick<ServiceWorker, 'state' | 'addEventListener'> | null;
+};
+
+/** A first install that goes redundant fires neither onOfflineReady nor onRegisterError. */
+export function failOnRedundantInstall(registration: InstallHost, controlled: () => boolean): void {
+  const worker = registration.installing;
+  if (worker === null || controlled()) return;
+  worker.addEventListener('statechange', () => {
+    if (worker.state !== 'redundant' || controlled() || status === 'ready') return;
+    console.error('Service worker install failed');
+    setOfflineStatus('failed');
+  });
+}
