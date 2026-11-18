@@ -21,6 +21,11 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - `src/{contracts,vehicles,sim,scoring,content}` also import none of `render/app/hud/input/pwa/i18n` and use none of `window`, `document`, `navigator`, `localStorage`, `performance`, `requestAnimationFrame` (same config).
 - Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome, skyline) go on `SKY_LAYER`; cab-front parts on `CAB_LAYER` (mirrors and the chase view; the cockpit eye is inside the cab); before calling a cab or body change visible, check its frustum (`src/render/shell-visibility.test.ts`). Cameras enable layers via `enableLayers` with `COCKPIT_LAYERS`/`MIRROR_LAYERS`/`CHASE_LAYERS`/`TOP_DOWN_LAYERS` (`src/render/seams.ts`).
 - Perspective scenery must stay inside `CAMERA_FAR` (`src/render/seams.ts`); `src/render/skyline.test.ts` pins it.
+- Graphics presets (`src/render/quality.ts`) gate every realism layer: a new perspective feature adds a flag (off on Low); top-down output never depends on the preset (check by screenshot hash per preset).
+- Perspective-only materials (vehicle PBR, ground texture) set maps/`envMap` per material, never `scene.environment`; layer-0 materials (seen top-down) never change.
+- Cockpit interior: `INTERIOR_LAYER` (cockpit camera only), authored in the camera's NDC; `cockpit-interior.test.ts` pins the sight cone and mirror sight lines. The bottom of the cockpit is the opaque `.hud-band` (height in `src/hud/hud.css`): nothing a trainee must see goes there.
+- Top-down share: `settings.topDownLayout`, clamped per screen by `topDownSplit()` from the measured `hud.panelsBottom`; `e2e/layout.spec.ts` divider checks guard it.
+- Prediction (`src/sim/predict.ts`) is display-only: one corner pair of the leading end; legend swatches share `AID_STROKE`/`AID_DASH_*` (`seams.ts`).
 - Obstacle kinds in `RESTYLED_KINDS` (`src/render/yard-props.ts`) draw a token copy top-down only plus a detailed perspective prop; a new kind needs both.
 - Vertex colours must be linear: set a `Color` from the palette (`color.set` converts) and pass it to `tint()` (`src/render/environment.ts`); raw palette bytes render too light. `tint()` drops UVs, so textured surfaces need their own geometry and material.
 - ESLint is type-aware (`strictTypeChecked`): fix findings in source, no `eslint-disable`.
@@ -52,12 +57,14 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - After changing those scripts, `scripts/glb-optimise.mjs`, their params, `src/render/{cab,body,trailer}-dims.ts` or `livery.ts`, run `pnpm glb:params` and rebuild (optimise-only changes need just a re-optimise; editing `shell_common.py` changes `commonSha256` in every glb, so rebuild all assets); `tools/blender/glb-build.test.ts` checks every input hash in the glb. Params numbers are 0 or ≥ 1e-4 (Python and JS print smaller floats differently).
 - Livery is colours only (no lettering, emblems or maker logos). Look dimensions in `src/render/livery.ts` are perspective-only render estimates, not Params, so they stay out of `dataFingerprint`.
 - MCP-run bpy scripts must not call `read_factory_settings`: it reloads preferences and disables the MCP add-on.
+- `tools/textures/` makes the KTX2 ground texture (`pnpm ground:texture`); `tools/textures/ground-build.test.ts` fails when stale; it is runtime-cached at High, not precached.
 
 ## Tests
 
 Test logic and critical paths only; no blanket coverage, no tests without value.
 
 - e2e: await web-first assertions (`toHaveCount`, `toBeVisible`; `hudReady()` in `e2e/layout.spec.ts`) before measuring DOM boxes.
+- Never spread a possibly empty list into `add()`: three reports that (and shader errors) only via `console.error`, not pageerror, so only specs with a `console` listener (`offline.spec.ts`, `cockpit.spec.ts`) catch it; new specs should listen too.
 
 ## Tablet perf check (manual, reference device: Android tablet, Chrome)
 
@@ -70,7 +77,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 
 - Headless Chromium screenshots of the real app work for visual checks (`pnpm exec playwright screenshot --lang de-DE <url> <png>`; scripts reuse the `@playwright/test` devDep); UI language defaults to the browser locale (`navigator.languages`) unless a saved setting overrides it; there is no URL parameter.
 - Plain `playwright screenshot` can show a blank canvas under `.hud-band` (software compositing); e2e passes GPU-compositing SwiftShader args in `playwright.config.ts`. Read the canvas back before calling a blank region an app bug.
-- Standstill drive screenshots are byte-identical across runs, so before/after can be compared by hash; the sim steps on wall-clock time, so shots after driving differ run to run.
+- Compare before/after by hash only at standstill with `performance.now`/rAF pinned in the shoot script: the resolution governor and the sim both step on wall-clock time, so other shots differ run to run.
 - Headless screenshots run on software GL and passed a see-through skyline; perspective realism changes need an owner device check before calling them done.
 
 ## Workflow
