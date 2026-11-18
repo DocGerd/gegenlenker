@@ -24,7 +24,7 @@ const themeColorMeta: Plugin = {
 export default defineConfig({
   base,
   build: {
-    assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? false : undefined),
+    assetsInlineLimit: (file) => (/\.(woff2?|glb)$/.test(file) ? false : undefined),
   },
   plugins: [
     themeColorMeta,

@@ -14,6 +14,7 @@ import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
+import { applyCabShell, type CabShells } from './cab-shell';
 import { CAB_HEIGHT, CAB_LENGTH, FRAME_TOP, RAIL_BOTTOM } from './cab-dims';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
@@ -182,7 +183,11 @@ function resources() {
   };
 }
 
-export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): VehicleVisual {
+export function proceduralTruck(
+  spec: TruckSpec,
+  palette: ScenePalette,
+  shells?: CabShells,
+): VehicleVisual {
   const a = truckAnchors(spec);
   const hw = spec.width.value / 2000;
   const rearTrack = spec.rearTrack.value / 1000;
@@ -280,16 +285,18 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
     ),
   ];
 
+  const cabBox = res.mesh(merge(cab), cabMaterial);
+  const cabFront = res.cabFront(detail.cabFront);
   const group = new Group();
   group.add(
     schematic.rear,
     res.shadow(blobShadow(truckBlobs, SHADOW_HEIGHT)),
-    res.mesh(merge(cab), cabMaterial),
+    cabBox,
     res.mesh(merge(chassis), chassisMaterial),
     res.mesh(merge(body), bodyMaterial),
     res.mesh(merge(rearWheels), wheelMaterial),
     res.detail(detail.geometry),
-    res.cabFront(detail.cabFront),
+    cabFront,
     res.plate(detail.plate),
   );
 
@@ -306,6 +313,11 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
   const pivotLeft = kingpin(1);
   const pivotRight = kingpin(-1);
 
+  let shell: { dispose(): void } | null = null;
+  const cancelShell = shells?.onLoaded(spec.id, (loaded) => {
+    shell = applyCabShell(group, cabBox, cabFront, loaded, palette);
+  });
+
   return {
     object: group,
     update(snapshot) {
@@ -314,6 +326,8 @@ export function proceduralTruck(spec: TruckSpec, palette: ScenePalette): Vehicle
       pivotLeft.rotation.y = snapshot.roadWheelAngle;
     },
     dispose() {
+      cancelShell?.();
+      shell?.dispose();
       res.dispose();
       schematic.dispose();
     },
