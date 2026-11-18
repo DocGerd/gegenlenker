@@ -9,5 +9,4 @@ export const PREDICT_STEP = 0.5;
 export const PREDICT_DISTANCE = 30;
 /** A predicted contact nearer than this (m) raises the first warning stage. */
 export const CONTACT_WARN_DISTANCE = 3;
-export const PREDICT_SWEEP = Math.PI;
 export const EVENT_CLEAR_DISTANCE = 0.5;

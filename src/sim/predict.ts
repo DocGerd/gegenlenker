@@ -7,27 +7,26 @@ import type {
   Vec2,
 } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
-import { wrapAngle } from './angle';
-import { CONTACT_WARN_DISTANCE, PREDICT_DISTANCE, PREDICT_STEP, PREDICT_SWEEP } from './constants';
+import { CONTACT_WARN_DISTANCE, PREDICT_DISTANCE, PREDICT_STEP } from './constants';
 import { bodyFootprints } from './geometry';
 import { joints, pivotViolation, rk4, type KinematicState } from './kinematics';
 
 export const NO_PREDICTION: Prediction = {
-  trailer: [],
-  truckOuter: [],
-  truckInner: [],
+  lead: null,
+  left: [],
+  right: [],
   blocked: null,
   blockedAt: null,
-  end: null,
 };
 
 const BISECTIONS = 6;
 const MIN_PARTIAL = 0.03; // a shorter last piece is dropped, so a blocked start keeps a single point
 
 /**
- * The paths of the trailer rear and the truck's swept corridor with the target steer held.
- * Unit speed makes time steps arc-length steps; the road wheels ramp toward the target along the
- * arc at the rate they would at the current speed, and reach it at once from standstill.
+ * The paths of the two corners of the leading end with the target steer held: the trailer's rear
+ * when reversing, the truck's front when driving forward. Unit speed makes time steps arc-length
+ * steps; the road wheels ramp toward the target along the arc at the rate they would at the current
+ * speed, and reach it at once from standstill.
  */
 export function predictCombination(
   params: VehicleParams,
@@ -41,7 +40,7 @@ export function predictCombination(
   const target = Math.min(1, Math.max(-1, steer)) * params.maxRoadWheelAngle;
   const speed = Math.abs(from.speed);
   const ramp = speed > 0 ? (params.steerRate * params.maxRoadWheelAngle) / speed : 0;
-  const innerSide = target >= 0 ? 1 : -1; // the centre of the turn is on the side the wheels point to
+  const lead = gear === 'D' ? 'truck' : 'trailer';
 
   let memo: { q: KinematicState; bodies: readonly BodyFootprint[] } | null = null;
   const footprints = (q: KinematicState): readonly BodyFootprint[] => {
@@ -54,25 +53,22 @@ export function predictCombination(
     return contacts(footprints(q)) === null ? null : 'contact';
   };
 
-  const trailer: Vec2[] = [];
-  const truckOuter: Vec2[] = [];
-  const truckInner: Vec2[] = [];
-  const recordTruck = (q: KinematicState): void => {
-    const body = footprints(q)[0]?.obb;
+  const left: Vec2[] = [];
+  const right: Vec2[] = [];
+  const record = (q: KinematicState): void => {
+    const body = footprints(q).find((b) => b.body === lead)?.obb;
     if (body === undefined) return;
     const [ux, uy] = [Math.cos(body.heading), Math.sin(body.heading)];
-    const [nx, ny] = [-uy, ux];
-    const outer = body.halfWidth * -innerSide;
-    const inner = body.halfWidth * innerSide;
-    truckOuter.push({
-      x: body.cx + body.halfLength * ux + outer * nx,
-      y: body.cy + body.halfLength * uy + outer * ny,
-    });
-    truckInner.push({ x: q.x + inner * nx, y: q.y + inner * ny });
-  };
-  const record = (q: KinematicState, truckLive: boolean): void => {
-    trailer.push(joints(params, q).trailerRear);
-    if (truckLive) recordTruck(q);
+    const end = direction * body.halfLength;
+    for (const [line, side] of [
+      [left, 1],
+      [right, -1],
+    ] as const) {
+      line.push({
+        x: body.cx + end * ux - side * body.halfWidth * uy,
+        y: body.cy + end * uy + side * body.halfWidth * ux,
+      });
+    }
   };
 
   let q: KinematicState = {
@@ -84,11 +80,9 @@ export function predictCombination(
   };
   let delta = speed > 0 ? from.roadWheelAngle : target;
   let travelled = 0;
-  let sweep = 0;
-  let truckLive = true;
   let blocked: BlockReason | null = null;
   let blockedAt: number | null = null;
-  record(q, true);
+  record(q);
 
   while (travelled < distance - 1e-9) {
     const h = Math.min(PREDICT_STEP, distance - travelled);
@@ -111,26 +105,17 @@ export function predictCombination(
       blockedAt = travelled + lo;
       if (lo >= MIN_PARTIAL) {
         q = rk4(params, q, direction, through, lo);
-        record(q, truckLive);
+        record(q);
       }
       break;
     }
-    sweep += Math.abs(wrapAngle(next.th0 - q.th0));
     q = next;
     delta = eased;
     travelled += h;
-    record(q, truckLive);
-    if (sweep >= PREDICT_SWEEP) truckLive = false;
+    record(q);
   }
 
-  return {
-    trailer,
-    truckOuter,
-    truckInner,
-    blocked,
-    blockedAt,
-    end: blocked === null ? null : { truck: truckLive ? q.th0 : null, trailer: q.th2 },
-  };
+  return { lead, left, right, blocked, blockedAt };
 }
 
 /** First warning stage: the held steer leads into a contact within `CONTACT_WARN_DISTANCE`. */

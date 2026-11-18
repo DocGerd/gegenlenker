@@ -16,15 +16,12 @@ import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors } from '../vehicles/anchors';
 import { placePose } from './coords';
 import { outlineGeometry } from './environment';
-import { AIDS_LAYER, type AidsLayer } from './seams';
+import { AID_DASH_OFF, AID_DASH_ON, AIDS_LAYER, type AidsLayer } from './seams';
 
 const PATH_WIDTH = 0.2;
 const PATH_CAPACITY = 512;
 const CORRIDOR_WIDTH = 0.1;
-const DASH_ON = 0.6;
-const DASH_OFF = 0.4;
-const TICK_WIDTH = 0.2;
-const TICK_LENGTH = 1.2;
+const BAR_WIDTH = 0.2;
 const TRACK_WIDTH = 0.1;
 const TRACK_CAPACITY = 2000;
 const TRACK_SPACING = 0.25;
@@ -288,11 +285,14 @@ export function proceduralAids(
 
   const accent = material(palette.accent, false);
   const casing = material(palette.wheel, false, 1, -3);
-  const path = new CasedRibbon(PATH_CAPACITY, PATH_WIDTH, PATH_Y, accent, casing);
-  const corridor = [0, 1].map(
+  // the corridor's two lines: solid behind the trailer, dashed ahead of the truck
+  const solid = [0, 1].map(
+    () => new CasedRibbon(PATH_CAPACITY, PATH_WIDTH, PATH_Y, accent, casing),
+  );
+  const dashed = [0, 1].map(
     () => new CasedRibbon(PATH_CAPACITY, CORRIDOR_WIDTH, PATH_Y, accent, casing),
   );
-  const ticks = new CasedRibbon(3, TICK_WIDTH, PATH_Y, accent, casing);
+  const stopBar = new CasedRibbon(1, BAR_WIDTH, PATH_Y, accent, casing);
   const trackMaterial = material(palette.tracks, false);
   const tracks = [0, 1, 2, 3].map(
     () => new SegmentRibbon(TRACK_CAPACITY, TRACK_WIDTH, TRACK_Y, trackMaterial),
@@ -314,9 +314,9 @@ export function proceduralAids(
     OVERLAY_ORDER + 2,
   );
   group.add(
-    path.object,
-    ...corridor.map((c) => c.object),
-    ticks.object,
+    ...solid.map((c) => c.object),
+    ...dashed.map((c) => c.object),
+    stopBar.object,
     pivots.object,
     marker.object,
     ...tracks.map((t) => t.mesh),
@@ -384,43 +384,35 @@ export function proceduralAids(
         if (aids.tracks) t.flush(history.wheels[i]?.count ?? 0);
       }
 
-      const { trailer: trailerLine, end } = predicted;
-      path.object.visible = aids.path && trailerLine.length > 1;
-      if (path.object.visible) {
-        const n = Math.min(trailerLine.length, PATH_CAPACITY + 1);
-        for (let i = 1; i < n; i++) {
-          const a = trailerLine[i - 1];
-          const b = trailerLine[i];
-          if (a !== undefined && b !== undefined) path.set(i - 1, a.x, a.y, b.x, b.y);
-        }
-        path.flush(n - 1);
-      }
-
-      const lines = [predicted.truckOuter, predicted.truckInner];
-      corridor.forEach((ribbon, i) => {
-        const line = lines[i] ?? [];
-        ribbon.object.visible = aids.path && line.length > 1;
-        if (!ribbon.object.visible) return;
-        let count = 0;
-        dashSegments(line, DASH_ON, DASH_OFF, (ax, ay, bx, by) => {
-          if (count < PATH_CAPACITY) ribbon.set(count++, ax, ay, bx, by);
+      const corridor = [predicted.left, predicted.right];
+      const style = (ribbons: readonly CasedRibbon[], lead: 'trailer' | 'truck'): void => {
+        ribbons.forEach((ribbon, i) => {
+          const line = corridor[i] ?? [];
+          ribbon.object.visible = aids.path && predicted.lead === lead && line.length > 1;
+          if (!ribbon.object.visible) return;
+          let count = 0;
+          const add = (ax: number, ay: number, bx: number, by: number): void => {
+            if (count < PATH_CAPACITY) ribbon.set(count++, ax, ay, bx, by);
+          };
+          if (lead === 'truck') dashSegments(line, AID_DASH_ON, AID_DASH_OFF, add);
+          else {
+            for (let k = 1; k < line.length; k++) {
+              const [a, b] = [line[k - 1], line[k]];
+              if (a !== undefined && b !== undefined) add(a.x, a.y, b.x, b.y);
+            }
+          }
+          ribbon.flush(count);
         });
-        ribbon.flush(count);
-      });
+      };
+      style(solid, 'trailer');
+      style(dashed, 'truck');
 
-      ticks.object.visible = aids.path && end !== null;
-      if (end !== null && aids.path) {
-        let count = 0;
-        const tick = (at: Vec2 | undefined, heading: number | null): void => {
-          if (at === undefined || heading === null) return;
-          const nx = -Math.sin(heading) * (TICK_LENGTH / 2);
-          const ny = Math.cos(heading) * (TICK_LENGTH / 2);
-          ticks.set(count++, at.x - nx, at.y - ny, at.x + nx, at.y + ny);
-        };
-        tick(trailerLine[trailerLine.length - 1], end.trailer);
-        tick(predicted.truckOuter[predicted.truckOuter.length - 1], end.truck);
-        tick(predicted.truckInner[predicted.truckInner.length - 1], end.truck);
-        ticks.flush(count);
+      const [leftEnd, rightEnd] = corridor.map((line) => line[line.length - 1]);
+      stopBar.object.visible =
+        aids.path && predicted.blocked !== null && leftEnd !== undefined && rightEnd !== undefined;
+      if (stopBar.object.visible && leftEnd !== undefined && rightEnd !== undefined) {
+        stopBar.set(0, leftEnd.x, leftEnd.y, rightEnd.x, rightEnd.y);
+        stopBar.flush(1);
       }
 
       pivots.object.visible = aids.pivots;
@@ -447,9 +439,9 @@ export function proceduralAids(
       if (ghost !== null) ghost.visible = aids.ghost;
     },
     dispose(): void {
-      path.dispose();
-      corridor.forEach((c) => c.dispose());
-      ticks.dispose();
+      solid.forEach((c) => c.dispose());
+      dashed.forEach((c) => c.dispose());
+      stopBar.dispose();
       pivots.dispose();
       marker.dispose();
       tracks.forEach((t) => t.dispose());

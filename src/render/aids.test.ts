@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { Vec2 } from '../contracts/sim';
+import type { Obb, Vec2 } from '../contracts/sim';
+import { bodyFootprints } from '../sim/geometry';
+import { predictCombination } from '../sim/predict';
+import { createSimulation } from '../sim/simulation';
+import { resolveCombination } from '../vehicles/resolve';
+import { trailerById, truckById } from '../vehicles/registry';
 import { dashSegments } from './aids';
+import { AID_DASH_OFF, AID_DASH_ON } from './seams';
 
 type Dash = { from: Vec2; to: Vec2 };
 
@@ -45,5 +51,37 @@ describe('dashSegments', () => {
       { x: 10, y: 0 },
     ];
     expect(total(dashes(line, 0.6, 0.4))).toBeCloseTo(6, 6);
+  });
+});
+
+describe('the predicted corridor', () => {
+  const p = resolveCombination(truckById('man-le-18-280'), trailerById('krone-azw-18'));
+  const inside = (o: Obb, q: Vec2): boolean => {
+    const [dx, dy] = [q.x - o.cx, q.y - o.cy];
+    const [c, s] = [Math.cos(o.heading), Math.sin(o.heading)];
+    return Math.abs(dx * c + dy * s) <= o.halfLength && Math.abs(dy * c - dx * s) <= o.halfWidth;
+  };
+
+  it('keeps the dashes of both lines out from under the bodies, aligned or at a slight angle', () => {
+    for (const gear of ['D', 'R'] as const) {
+      for (const degrees of [0, 2, -2]) {
+        const sim = createSimulation(
+          p,
+          { truck: { x: 0, y: 0, heading: 0 }, couplingAngle: (degrees * Math.PI) / 180 },
+          () => null,
+        );
+        const now = sim.step({ steer: 0, lever: 0, brake: false, gear });
+        const bodies = bodyFootprints(p, now);
+        const predicted = predictCombination(p, now, () => null);
+        for (const line of [predicted.left, predicted.right]) {
+          const mids: Vec2[] = [];
+          dashSegments(line, AID_DASH_ON, AID_DASH_OFF, (ax, ay, bx, by) =>
+            mids.push({ x: (ax + bx) / 2, y: (ay + by) / 2 }),
+          );
+          expect(mids.length).toBeGreaterThan(0);
+          for (const mid of mids) expect(bodies.some((b) => inside(b.obb, mid))).toBe(false);
+        }
+      }
+    }
   });
 });
