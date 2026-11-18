@@ -9,7 +9,7 @@ export const GROUND_FILES = {
   sources: [
     'tools/textures/ground-texture.ts',
     'tools/textures/noise.ts',
-    'src/render/ground-texture-spec.ts',
+    'src/render/ground-texture-pixels.ts',
   ],
   ktx2: 'src/render/assets/ground.ktx2',
   manifest: 'src/render/assets/ground.manifest.json',
@@ -18,10 +18,10 @@ export const GROUND_FILES = {
 /** Linear data packed into RGB, so no sRGB transfer and no perceptual weighting. */
 export const ENCODER_OPTIONS = {
   isUASTC: true,
-  uastcLDRQualityLevel: 2,
+  uastcLDRQualityLevel: 3,
   needSupercompression: true,
   enableRDO: true,
-  rdoQualityLevel: 3,
+  rdoQualityLevel: 1,
   generateMipmap: true,
   isPerceptual: false,
   isSetKTX2SRGBTransferFunc: false,

@@ -150,6 +150,6 @@ The turning radius is taken at the outer front wheel centre.
 
 ## Licence
 
-Apache-2.0. Geist is used under the SIL Open Font License.
+Apache-2.0. Geist is used under the SIL Open Font License (`public/licenses/geist-OFL.txt`); the Basis Universal transcoder shipped with the ground texture is Apache-2.0 (`public/licenses/basis-universal-Apache-2.0.txt`).
 
 © 2026 Patrick Kuhn

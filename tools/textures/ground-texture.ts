@@ -1,9 +1,9 @@
 import {
-  GROUND_SURFACES,
+  GROUND_CHANNELS,
   GROUND_TEXTURE_MEAN,
   GROUND_TEXTURE_SIZE,
   type GroundMaterial,
-} from '../../src/render/ground-texture-spec';
+} from '../../src/render/ground-texture-pixels';
 import { fbm, hash, ridge, smoothstep } from './noise';
 
 /*
@@ -29,7 +29,7 @@ const cracks = (u: number, v: number, seed: number): number =>
   smoothstep(0.984, 0.998, ridge(u, v, 6, 3, seed)) *
   smoothstep(0.6, 0.68, fbm(u, v, 3, 2, seed + 1));
 
-/** Saw-cut slabs of 4 m with aggregate grain, pores, mottling, oil stains and hairline cracks. */
+/** Saw-cut slabs with aggregate grain, pores, mottling, oil stains and hairline cracks. */
 const concrete: Field = (u, v, x, y) => {
   const slabs = 2;
   const slabX = Math.floor((x * slabs) / SIZE);
@@ -79,7 +79,7 @@ const asphalt: Field = (u, v, x, y) => {
 
 const PAVER = { length: 64, height: 32 };
 
-/** Pavers of 0.2 × 0.1 m in running bond: per-stone tone, bevelled edges, sand joints, stains. */
+/** Pavers in running bond: per-stone tone, bevelled edges, sand joints, stains. */
 const pavers: Field = (u, v, x, y) => {
   const row = Math.floor(y / PAVER.height);
   const shifted = x + (row % 2 === 0 ? 0 : PAVER.length / 2);
@@ -118,10 +118,7 @@ export type GroundPixels = {
 
 export function generateGroundTexture(): GroundPixels {
   const rgba = new Uint8Array(SIZE * SIZE * 4).fill(255);
-  for (const [name, { channel }] of Object.entries(GROUND_SURFACES) as [
-    GroundMaterial,
-    { channel: number },
-  ][]) {
+  for (const [name, channel] of Object.entries(GROUND_CHANNELS) as [GroundMaterial, number][]) {
     const field = FIELDS[name];
     const values = new Float32Array(SIZE * SIZE);
     for (let y = 0; y < SIZE; y++) {

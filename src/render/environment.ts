@@ -12,6 +12,7 @@ import {
   MeshLambertMaterial,
   PlaneGeometry,
   RingGeometry,
+  ShaderLib,
   type Material,
   type Texture,
   type WebGLProgramParametersWithUniforms,
@@ -27,7 +28,8 @@ import type {
   SurfaceKind,
 } from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
-import { GROUND_SURFACES, GROUND_TEXTURE_MEAN } from './ground-texture-spec';
+import { GROUND_TEXTURE_MEAN } from './ground-texture-pixels';
+import { GROUND_SHADER_MARKER, GROUND_SURFACES } from './ground-texture-spec';
 import type { GroundTextures } from './ground-texture';
 import type { QualityFlags } from './quality';
 import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER, type Environment } from './seams';
@@ -413,30 +415,48 @@ export function texturedGroundGeometry(
   return merged;
 }
 
+/** Replaces `anchor` once; throws when three's shader no longer contains it, so a patch never half-applies. */
+function inject(source: string, anchor: string, replacement: string): string {
+  if (!source.includes(anchor)) throw new Error(`Ground shader: ${anchor} not found`);
+  return source.replace(anchor, replacement);
+}
+
 /**
  * Lambert shading with the ground map read per vertex-selected channel, scaled so the surface keeps
- * its token brightness on average (the sky below the horizon is matched to it).
+ * its token brightness on average (the sky below the horizon is matched to it). Bright surfaces
+ * would exceed their token with a bright texel, so the product is clamped to 1.
  */
 export function groundShader(
   shader: Pick<WebGLProgramParametersWithUniforms, 'vertexShader' | 'fragmentShader'>,
 ): void {
   const gain = (1 / GROUND_TEXTURE_MEAN).toFixed(6);
-  shader.vertexShader = shader.vertexShader
-    .replace(
+  const vertexShader = inject(
+    inject(
+      shader.vertexShader,
       '#include <common>',
       '#include <common>\nattribute vec3 groundSelect;\nvarying vec3 vGroundSelect;',
-    )
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGroundSelect = groundSelect;');
-  shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vGroundSelect;')
-    .replace(
-      '#include <map_fragment>',
-      `#ifdef USE_MAP
-        vec3 groundDetail = texture2D( map, vMapUv ).rgb;
+    ),
+    '#include <begin_vertex>',
+    '#include <begin_vertex>\nvGroundSelect = groundSelect;',
+  );
+  const fragmentShader = inject(
+    inject(
+      shader.fragmentShader,
+      '#include <common>',
+      '#include <common>\nvarying vec3 vGroundSelect;',
+    ),
+    '#include <map_fragment>',
+    `#ifdef USE_MAP
+        vec3 ${GROUND_SHADER_MARKER} = texture2D( map, vMapUv ).rgb;
         float groundWeight = vGroundSelect.x + vGroundSelect.y + vGroundSelect.z;
-        diffuseColor.rgb *= mix( 1.0, dot( groundDetail, vGroundSelect ) * ${gain}, groundWeight );
+        diffuseColor.rgb = min(
+          diffuseColor.rgb * mix( 1.0, dot( ${GROUND_SHADER_MARKER}, vGroundSelect ) * ${gain}, groundWeight ),
+          vec3( 1.0 )
+        );
       #endif`,
-    );
+  );
+  shader.vertexShader = vertexShader;
+  shader.fragmentShader = fragmentShader;
 }
 
 export function proceduralEnvironment(
@@ -465,32 +485,49 @@ export function proceduralEnvironment(
   let texturedGround: Mesh | null = null;
   let texturedGroundMaterial: MeshLambertMaterial | null = null;
   let groundTextureOn = false;
+  let groundDisabled = false;
+  let groundReported = false;
   const syncGround = (): void => {
-    const on = groundTextureOn && texturedGround !== null;
+    const on = groundTextureOn && texturedGround !== null && !groundDisabled;
     tokenGround.layers.set(on ? AIDS_LAYER : DEFAULT_LAYER);
     if (texturedGround !== null) texturedGround.visible = on;
-  };
-  const cancelGroundTexture = groundTextures?.onLoaded((texture: Texture) => {
-    let geometry: BufferGeometry | null = null;
-    let material: MeshLambertMaterial | null = null;
-    try {
-      geometry = texturedGroundGeometry(layout, palette);
-      material = new MeshLambertMaterial({ vertexColors: true, map: texture });
-      material.onBeforeCompile = groundShader;
-      material.customProgramCacheKey = () => 'ground-detail';
-      const mesh = new Mesh(geometry, material);
-      mesh.layers.set(SKY_LAYER);
-      group.add(mesh);
-      geometries.push(geometry);
-      texturedGroundMaterial = material;
-      texturedGround = mesh;
-      syncGround();
-    } catch (error) {
-      geometry?.dispose();
-      material?.dispose();
-      console.warn('Ground texture could not be applied; keeping the token ground', error);
+    if (on !== groundReported) {
+      groundReported = on;
+      groundTextures?.reportApplied(on);
     }
-  });
+  };
+  const cancelGroundTexture = groundTextures?.onLoaded(
+    (texture: Texture) => {
+      let geometry: BufferGeometry | null = null;
+      let material: MeshLambertMaterial | null = null;
+      try {
+        // the patch runs at first render, where a throw would escape; prove it applies to this three
+        groundShader({
+          vertexShader: ShaderLib.lambert.vertexShader,
+          fragmentShader: ShaderLib.lambert.fragmentShader,
+        });
+        geometry = texturedGroundGeometry(layout, palette);
+        material = new MeshLambertMaterial({ vertexColors: true, map: texture });
+        material.onBeforeCompile = groundShader;
+        material.customProgramCacheKey = () => 'ground-detail';
+        const mesh = new Mesh(geometry, material);
+        mesh.layers.set(SKY_LAYER);
+        group.add(mesh);
+        geometries.push(geometry);
+        texturedGroundMaterial = material;
+        texturedGround = mesh;
+        syncGround();
+      } catch (error) {
+        geometry?.dispose();
+        material?.dispose();
+        console.warn('Ground texture could not be applied; keeping the token ground', error);
+      }
+    },
+    () => {
+      groundDisabled = true;
+      syncGround();
+    },
+  );
 
   // Restyled kinds keep a plain token copy for the top-down view only; the cockpit and mirrors draw
   // the detail copy from yard-props on SKY_LAYER.
@@ -639,6 +676,8 @@ export function proceduralEnvironment(
     },
     dispose: () => {
       cancelGroundTexture?.();
+      groundDisabled = true;
+      syncGround();
       texturedGroundMaterial?.dispose();
       geometries.forEach((g) => g.dispose());
       gate?.material.dispose();

@@ -1,18 +1,15 @@
 /*
- * Contract between tools/textures (which authors the ground texture) and the renderer (which reads it).
- * One linear RGB tile; each channel is a different surface, picked per vertex in the ground shader.
+ * How the renderer maps the authored ground texture (tools/textures) onto the scene. Not part of the
+ * texture build: retuning it must not force a re-encode (the pixel inputs are ground-texture-pixels.ts).
  */
-
-export const GROUND_TEXTURE_SIZE = 1024;
-
-/** Mean linear value of every channel; the shader multiplies by its inverse, so a surface keeps its token brightness. */
-export const GROUND_TEXTURE_MEAN = 0.7;
+import { GROUND_CHANNELS } from './ground-texture-pixels';
 
 /** Texture channel, world-space tile edge in metres, and the palette surface it textures. */
 export const GROUND_SURFACES = {
-  concrete: { channel: 0, tile: 8, surface: 'yard' },
-  asphalt: { channel: 1, tile: 4, surface: 'street' },
-  pavers: { channel: 2, tile: 3.2, surface: 'pavement' },
+  concrete: { channel: GROUND_CHANNELS.concrete, tile: 8, surface: 'yard' },
+  asphalt: { channel: GROUND_CHANNELS.asphalt, tile: 4, surface: 'street' },
+  pavers: { channel: GROUND_CHANNELS.pavers, tile: 3.2, surface: 'pavement' },
 } as const;
 
-export type GroundMaterial = keyof typeof GROUND_SURFACES;
+/** Marks the injected fragment code, so a compile failure can be traced to the ground material. */
+export const GROUND_SHADER_MARKER = 'groundDetail';

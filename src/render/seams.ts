@@ -36,7 +36,7 @@ export interface AidsLayer {
   dispose(): void;
 }
 export type RendererParts = {
-  /** Called once the WebGL renderer exists, for parts that need its capabilities. */
+  /** Called once the WebGL renderer exists, for parts that need its capabilities; parts keep the first renderer they see. */
   readonly onRenderer?: (renderer: WebGLRenderer) => void;
   readonly truck: (spec: TruckSpec, palette: ScenePalette) => VehicleVisual;
   readonly trailer: (spec: TrailerSpec, palette: ScenePalette) => VehicleVisual;

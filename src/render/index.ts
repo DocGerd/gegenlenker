@@ -21,9 +21,10 @@ export function createSceneRenderer(): SceneRenderer {
     },
     false,
   );
-  // Positive signal for the offline e2e: set once the ground texture has loaded and transcoded.
-  const groundTextures = startGroundTextures(undefined, () => {
-    document.documentElement.dataset['groundTexture'] = 'ktx2';
+  // Read by the offline e2e: the transcoded format while the textured ground is drawn, else absent.
+  const groundTextures = startGroundTextures(undefined, (state) => {
+    if (state === null) delete document.documentElement.dataset['groundTexture'];
+    else document.documentElement.dataset['groundTexture'] = state;
   });
   const renderer = createThreeSceneRenderer({
     onRenderer: (gl) => {
@@ -40,6 +41,10 @@ export function createSceneRenderer(): SceneRenderer {
       shells.setEnabled(QUALITY_FLAGS[preset].cabGlb);
       groundTextures.setEnabled(QUALITY_FLAGS[preset].groundTexture);
       renderer.setQuality(preset);
+    },
+    dispose() {
+      renderer.dispose();
+      groundTextures.dispose();
     },
   };
 }
