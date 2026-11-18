@@ -20,25 +20,38 @@ export function holdWakeLock(
   let released = false;
   let pending = false;
   let sentinel: Sentinel | null = null;
+  // A visibility change that arrives while a request is in flight is retried once it settles.
+  let again = false;
 
+  const releaseQuietly = (lock: Sentinel): void => {
+    lock.release().catch((error: unknown) => console.debug('Wake lock release failed', error));
+  };
   const acquire = (): void => {
-    if (released || pending || sentinel !== null || doc.visibilityState !== 'visible') return;
+    if (released || sentinel !== null || doc.visibilityState !== 'visible') return;
+    if (pending) {
+      again = true;
+      return;
+    }
     pending = true;
     api
       .request('screen')
       .then((lock) => {
         if (released) {
-          void lock.release().catch(() => undefined);
+          releaseQuietly(lock);
           return;
         }
         sentinel = lock;
         lock.addEventListener('release', () => {
+          console.debug('Wake lock released by the browser');
           if (sentinel === lock) sentinel = null;
         });
       })
       .catch((error: unknown) => console.warn('Screen wake lock unavailable', error))
       .finally(() => {
         pending = false;
+        if (!again) return;
+        again = false;
+        acquire();
       });
   };
   doc.addEventListener('visibilitychange', acquire);
@@ -50,6 +63,6 @@ export function holdWakeLock(
     doc.removeEventListener('visibilitychange', acquire);
     const lock = sentinel;
     sentinel = null;
-    void lock?.release().catch(() => undefined);
+    if (lock !== null) releaseQuietly(lock);
   };
 }

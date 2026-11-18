@@ -82,4 +82,23 @@ describe('holdWakeLock', () => {
     expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
   });
+
+  it('retries once when the page became visible again during a failed request', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let calls = 0;
+    const { api, host, visibility, show } = setup(() => {
+      calls++;
+      if (calls > 1)
+        return Promise.resolve(
+          Object.assign(new EventTarget(), { release: vi.fn(() => Promise.resolve()) }),
+        );
+      return Promise.reject(new Error('hidden'));
+    });
+    holdWakeLock(host, visibility);
+    show('hidden');
+    show('visible');
+    await flush();
+    expect(api.request).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
 });
