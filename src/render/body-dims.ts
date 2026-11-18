@@ -16,6 +16,10 @@ export const TIPPER_WALL_TOP = 2.5;
 export const RAIL_HALF_GAP = 0.45; // lateral centre of each chassis rail
 export const RAIL_WIDTH = 0.2;
 export const MARKER_HEIGHT = 0.1; // side marker lamps; the yellow strip is thinner
+export const CONTOUR_STRIP = 0.06; // contour marking, ECE R48 asks at least 50 mm
+export const MARKER_LENGTH = 0.2;
+export const MARKER_SPACING = 3; // ECE R48 maximum between side marker lamps
+export const MARKING_END_MARGIN = 0.1; // side marking stops short of the body ends
 
 export const FLOOR_TOP = FRAME_TOP + FLOOR_THICKNESS;
 

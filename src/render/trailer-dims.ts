@@ -1,6 +1,14 @@
 import type { TrailerSpec } from '../contracts/vehicle';
 import { trailerAnchors } from '../vehicles/anchors';
-import { RAIL_HALF_GAP, RAIL_WIDTH } from './body-dims';
+import {
+  CONTOUR_STRIP,
+  MARKER_HEIGHT,
+  MARKER_LENGTH,
+  MARKER_SPACING,
+  MARKING_END_MARGIN,
+  RAIL_HALF_GAP,
+  RAIL_WIDTH,
+} from './body-dims';
 import { hex, metres, round, TRUCK_WHEEL_RADIUS } from './cab-dims';
 import { TRAILER_LOOKS, type TrailerLook } from './livery';
 import { REALISM_HUES } from './realism-hues';
@@ -24,6 +32,8 @@ export const PLATE_THICKNESS = 0.1;
 export const POST_HALF_WIDTH = 0.15;
 export const AXLE_HALF_THICKNESS = 0.07;
 export const SWING_MARGIN = 0.1;
+/** The drawbar eye's block, in the dolly frame: reach behind and ahead of the eye, half width and half height. */
+export const EYE_BLOCK = { back: 0.15, front: 0.05, halfWidth: 0.1, halfHeight: 0.07 } as const;
 
 /**
  * Dimensions both the procedural trailer and its shell derive from the Params. Body frame: the
@@ -77,6 +87,8 @@ const HUES = {
     white: hex(REALISM_HUES.liveryWhite),
     silver: hex(REALISM_HUES.whiteAluminium),
     yellow: hex(REALISM_HUES.signalYellow),
+    contour: hex(REALISM_HUES.contourSide),
+    marker: hex(REALISM_HUES.sideMarker),
   },
 } as const;
 
@@ -96,6 +108,8 @@ export function trailerShellParams(spec: TrailerSpec, look: TrailerLook = TRAILE
     track: round(f.track),
     wheelRadius: round(f.radius),
     axleZ: f.axleZ.map(round),
+    wheelWidth: TRAILER_WHEEL_WIDTH,
+    swingMargin: SWING_MARGIN,
     axleHalf: AXLE_HALF_THICKNESS,
     rearAxleXs: a.rearAxles.map((axle) => round(axle.x)),
     rail: { halfGap: RAIL_HALF_GAP, width: RAIL_WIDTH },
@@ -104,6 +118,13 @@ export function trailerShellParams(spec: TrailerSpec, look: TrailerLook = TRAILE
       width: RAMP_WIDTH,
       thickness: RAMP_THICKNESS,
       height: RAMP_HEIGHT,
+    },
+    marking: {
+      strip: CONTOUR_STRIP,
+      markerLength: MARKER_LENGTH,
+      markerHeight: MARKER_HEIGHT,
+      spacing: MARKER_SPACING,
+      endMargin: MARKING_END_MARGIN,
     },
     guard: {
       depth: metres(spec.underrunGuard.depth),
@@ -118,6 +139,8 @@ export function trailerShellParams(spec: TrailerSpec, look: TrailerLook = TRAILE
     dolly: {
       eyeX: round(a.eye.x),
       eyeZ: round(a.eye.z),
+      eyeBlock: EYE_BLOCK,
+      turntableX: round(a.turntable.x),
       spread: DRAWBAR_SPREAD,
       armRadius: round(ARM_HEIGHT / 2),
       kink: round(f.kink),
