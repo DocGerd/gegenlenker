@@ -108,14 +108,16 @@ def tarp(p, shape, hues):
 
 
 def check_bands(p, shape):
-    """Nothing here may share a face with what the procedural detail draws."""
+    """Nothing here may share a face with what the procedural detail draws, nor leave the body."""
     hw = p["width"] / 2
     lo, hi = p["marking"]["zLow"], p["marking"]["zHigh"]
-    for x, y, z in shape.verts:
-        if x < p["rearX"] - EPS:
-            raise ValueError("a vertex lies behind the rear face, where the tail lamps are")
-        if abs(y) > hw + EPS and lo - EPS < z < hi + EPS:
-            raise ValueError("a vertex enters the side marking band")
+    for (x0, x1), (y0, y1), (z0, z1) in shape.extents():
+        if x0 < p["rearX"] - EPS:
+            raise ValueError("a face lies behind the rear face, where the tail lamps are")
+        if x1 > p["bodyFront"] + EPS:
+            raise ValueError("a face reaches past the body front")
+        if max(abs(y0), abs(y1)) > hw + EPS and z0 < hi + EPS and z1 > lo - EPS:
+            raise ValueError("a face crosses the side marking band")
 
 
 def main():

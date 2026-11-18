@@ -21,6 +21,7 @@ COMMON = runpy.run_path(COMMON_FILE)
 Shape = COMMON["Shape"]
 srgb = COMMON["srgb_to_linear"]
 
+EPS = 1e-6
 CORNER = 0.12  # vertical front edges are chamfered by this much (<= every glass/lamp inset)
 ROOF = 0.12  # the roof's front edge drops and recedes by this much
 BUMPER_DEPTH = 0.15
@@ -178,6 +179,17 @@ def tow_coupling(p, shape, hues):
     )
 
 
+def check_envelope(p, shape):
+    """The cab stays behind the body and clear of the plate: only the tow coupling stands ahead of the bumper face."""
+    rear = p["frontX"] - p["cabLength"]
+    face = p["frontX"] + p["relief"]
+    for (x0, x1), _, (z0, z1) in shape.extents():
+        if x0 < rear - EPS:
+            raise ValueError("a face reaches behind the cab")
+        if x1 > face + EPS and z1 > p["railBottom"] + EPS:
+            raise ValueError("a face stands ahead of the bumper face above the plate's rail line")
+
+
 def main():
     params = COMMON["load_params"](globals())
     if params["relief"] >= params["plateRelief"]:
@@ -195,6 +207,7 @@ def main():
     roof(params, shape, hues)
     if params["style"] == "crew":
         tow_coupling(params, shape, hues)
+    check_envelope(params, shape)
     return COMMON["export"](OUT_PATH, "cab-shell", hashes, [("cab", shape)])
 
 

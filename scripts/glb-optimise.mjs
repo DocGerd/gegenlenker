@@ -28,6 +28,9 @@ const io = new NodeIO()
   .registerDependencies({ 'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder });
 
 const document = await io.readBinary(readFileSync(input));
+const [scene] = document.getRoot().listScenes();
+if (scene === undefined) throw new Error(`${input} has no scene`);
+scene.setExtras({ ...scene.getExtras(), optimiseSha256: module.optimiseSha256(root) });
 await document.transform(prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
 
 // Exporter and tool stamps change with versions and runs; the manifest records the versions instead.

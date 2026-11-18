@@ -11,6 +11,7 @@ import {
   glbSha256,
   type GlbManifest,
   type Json,
+  optimiseSha256,
   paramsSha256,
   ROOT,
   scriptSha256,
@@ -47,9 +48,10 @@ describe.each(ASSETS)('glb shell build: $key', (asset) => {
     });
   });
 
-  it('was built from the current scripts and params', () => {
+  it('was built and optimised by the current scripts from the current params', () => {
     expect(glbSceneExtras(asset)).toEqual({
       commonSha256: commonSha256(),
+      optimiseSha256: optimiseSha256(),
       paramsSha256: paramsSha256(asset),
       scriptSha256: scriptSha256(asset),
     });

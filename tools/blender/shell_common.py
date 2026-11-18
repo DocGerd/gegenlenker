@@ -42,17 +42,6 @@ GLTF_OPTIONS = {
     "export_draco_mesh_compression_enable": False,
 }
 
-# A missing one changes the output (axis, normals, colours, provenance), so it is an error.
-REQUIRED_OPTIONS = (
-    "export_format",
-    "export_yup",
-    "export_vertex_color",
-    "export_normals",
-    "export_apply",
-    "export_extras",
-    "use_active_scene",
-)
-
 # (u, v, w) -> (x, y, z); every frame is right-handed, so u x v = +w.
 FRAMES = {
     "xy": lambda u, v, w: (u, v, w),
@@ -91,6 +80,12 @@ class Shape:
         for face in faces:
             self.faces.append(tuple(base + i for i in face))
             self.colours.append(colour)
+
+    def extents(self):
+        """Per face: ((x0, x1), (y0, y1), (z0, z1)), for checks on whole faces rather than vertices."""
+        for face in self.faces:
+            points = [self.verts[i] for i in face]
+            yield tuple((min(c), max(c)) for c in zip(*points))
 
     def prism(self, poly, w0, w1, colour, frame="xy"):
         """Convex polygon (u, v) extruded from w0 to w1 along the frame's third axis."""
@@ -188,7 +183,10 @@ def add_object(name, shape, mat):
     mesh = bpy.data.meshes.new(name)
     mesh.from_pydata(shape.verts, [], shape.faces)
     mesh.update()
-    mesh.validate()
+    if mesh.validate():
+        raise RuntimeError(name + ": mesh.validate() repaired the geometry")
+    if len(mesh.polygons) != len(shape.faces):
+        raise RuntimeError("%s: %d polygons, expected %d" % (name, len(mesh.polygons), len(shape.faces)))
     attr = mesh.color_attributes.new(name="Color", type="FLOAT_COLOR", domain="CORNER")
     flat = []
     for face, colour in zip(shape.faces, shape.colours):
@@ -202,12 +200,10 @@ def add_object(name, shape, mat):
 
 def export_options(out_path):
     known = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
-    missing = [k for k in REQUIRED_OPTIONS if k not in known]
+    missing = sorted(k for k in GLTF_OPTIONS if k not in known)
     if missing:
         raise RuntimeError("this Blender lacks glTF export options: " + ", ".join(missing))
-    options = {k: v for k, v in sorted(GLTF_OPTIONS.items()) if k in known}
-    dropped = sorted(k for k in GLTF_OPTIONS if k not in known)
-    return dict(options, filepath=out_path), dropped
+    return dict(sorted(GLTF_OPTIONS.items()), filepath=out_path)
 
 
 def file_sha256(path):
@@ -220,7 +216,8 @@ def provenance(entry_file, common_file, params):
     """Hashes of both scripts and the params, as glb-build.ts computes them.
 
     The params hash relies on json.dumps and JSON.stringify printing the same numbers: the params
-    hold no float below 1e-4 and no whole float, which glb-build.test.ts checks.
+    file is written by JavaScript, so whole numbers load as ints, and glb-build.test.ts keeps every
+    number out of the range below 1e-4.
     """
     canonical = json.dumps(params, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return {
@@ -252,7 +249,7 @@ def export(out_path, scene_name, hashes, objects):
         bpy.context.scene[key] = value
     for name, shape in objects:
         add_object(name, shape, material(name))
-    options, dropped = export_options(out_path)
+    options = export_options(out_path)
     if os.path.exists(out_path):
         os.remove(out_path)
     status = bpy.ops.export_scene.gltf(**options)
@@ -261,7 +258,6 @@ def export(out_path, scene_name, hashes, objects):
     result = {
         "out": out_path,
         "blender": bpy.app.version_string,
-        "unsupportedExportOptions": dropped,
         **hashes,
     }
     print(json.dumps(result, sort_keys=True))

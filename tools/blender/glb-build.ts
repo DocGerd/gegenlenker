@@ -9,6 +9,7 @@ import { truckById } from '../../src/vehicles/registry';
 export const ROOT = join(import.meta.dirname, '../..');
 
 export const COMMON_SCRIPT = 'tools/blender/shell_common.py';
+export const OPTIMISE_SCRIPT = 'scripts/glb-optimise.mjs';
 
 export type AssetKind = 'cab' | 'body';
 
@@ -80,6 +81,7 @@ const fileSha256 = (root: string, file: string): string =>
 
 export const scriptSha256 = (a: Asset, root = ROOT): string => fileSha256(root, a.script);
 export const commonSha256 = (root = ROOT): string => fileSha256(root, COMMON_SCRIPT);
+export const optimiseSha256 = (root = ROOT): string => fileSha256(root, OPTIMISE_SCRIPT);
 
 /** Sorted keys, no whitespace: formatting and key order cannot change the hash. */
 export function canonicalJson(value: Json): string {
@@ -96,7 +98,7 @@ export const paramsSha256 = (a: Asset, root = ROOT): string =>
 
 export const glbSha256 = (a: Asset, root = ROOT): string => sha256(readFileSync(join(root, a.glb)));
 
-/** The `extras` of the glb's first scene, where the scripts record the hashes of their inputs. */
+/** The `extras` of the glb's first scene, where the Blender script and the optimiser record the hashes of their inputs. */
 export function glbSceneExtras(a: Asset, root = ROOT): unknown {
   const glb = readFileSync(join(root, a.glb));
   const json = glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8');
