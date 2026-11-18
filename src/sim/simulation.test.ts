@@ -662,8 +662,34 @@ describe('simulation', () => {
           expect(predicted.lead).toBe(lead);
           expect(predicted.left).toHaveLength(predicted.right.length);
           // left and right share one cross-section at every sample
-          expect(predicted.left[0]).toEqual(corner(p, gear, from, 1));
-          expect(predicted.right[0]).toEqual(corner(p, gear, from, -1));
+          for (const [side, line] of sides) {
+            const first = line(predicted)[0];
+            if (first === undefined) throw new Error('no first sample');
+            expect(dist2(first, corner(p, gear, from, side))).toBeLessThan(1e-9);
+          }
+        }
+      }
+    });
+
+    it('the first sample spans the leading end: the trailer rear in R, the truck front in D', () => {
+      for (const { p } of pairs) {
+        for (const gear of ['D', 'R'] as const) {
+          for (const steer of [-0.5, 0.5]) {
+            const from = createSimulation(p, origin, noContacts).step(ctl({ steer, gear }));
+            const predicted = predictCombination(p, from, noContacts);
+            const [left, right] = [predicted.left[0], predicted.right[0]];
+            if (left === undefined || right === undefined) throw new Error('no first sample');
+            const mid = { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2 };
+            const centre =
+              gear === 'R'
+                ? from.trailerRear
+                : {
+                    x: from.truck.x + p.truckFront * Math.cos(from.truck.heading),
+                    y: from.truck.y + p.truckFront * Math.sin(from.truck.heading),
+                  };
+            expect(dist2(mid, centre)).toBeLessThan(1e-9);
+            expect(dist2(left, right)).toBeCloseTo(gear === 'R' ? p.trailerWidth : p.truckWidth, 9);
+          }
         }
       }
     });
@@ -681,15 +707,17 @@ describe('simulation', () => {
             );
           for (const steer of [0.2, 0.6, 1]) {
             const [a, b] = [at(steer), at(-steer)];
-            expect(a.left).toHaveLength(b.right.length);
+            const n = a.left.length;
+            expect(n).toBeGreaterThan(1);
+            expect([a.right.length, b.left.length, b.right.length]).toEqual([n, n, n]);
             for (const [from, to] of [
               [a.left, b.right],
               [a.right, b.left],
             ] as const) {
               from.forEach((point, k) => {
-                expect(
-                  dist2(point, { x: to[k]?.x ?? Number.NaN, y: -(to[k]?.y ?? 0) }),
-                ).toBeLessThan(1e-6);
+                const mate = to[k];
+                if (mate === undefined) throw new Error('missing mirror point');
+                expect(dist2(point, { x: mate.x, y: -mate.y })).toBeLessThan(1e-6);
               });
             }
           }
