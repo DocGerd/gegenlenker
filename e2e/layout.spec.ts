@@ -390,6 +390,42 @@ for (const { locale, messages } of locales) {
   }
 }
 
+test('opening the aid legend re-measures the divider against the panels', async ({ page }) => {
+  // The tallest landscape screen here where the opened legend no longer leaves room for the divider.
+  const size = { width: 1280, height: 600 };
+  await page.setViewportSize(size);
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  await expect(handle(page)).toBeVisible();
+  const min = await handle(page).getAttribute('aria-valuemin');
+  const max = await handle(page).getAttribute('aria-valuemax');
+  expect(min).not.toBe(max);
+
+  const toggle = page.locator('[data-hud="aidLegendToggle"]');
+  await toggle.click();
+  await expect(page.locator('[data-hud="aidLegend"]')).toBeVisible();
+  await settled(page);
+  if ((await splitBar(page).getAttribute('hidden')) === null) {
+    const panels = await boxes(
+      page.locator(
+        '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle, .hud-aid-legend',
+      ),
+    );
+    for (const d of await boxes(page.locator('.hud-split-handle, .hud-split-reset'))) {
+      for (const c of panels) expect(overlaps(d, c), `${d.name} overlaps ${c.name}`).toBe(false);
+      expect(d.bottom, `${d.name} on screen`).toBeLessThanOrEqual(size.height);
+      expect(d.right, `${d.name} on screen`).toBeLessThanOrEqual(size.width);
+    }
+  } else {
+    await expect(handle(page)).toBeHidden();
+  }
+
+  await toggle.click();
+  await expect(page.locator('[data-hud="aidLegend"]')).toBeHidden();
+  await expect(handle(page)).toBeVisible();
+  await expect(handle(page)).toHaveAttribute('aria-valuemin', min ?? '');
+  await expect(handle(page)).toHaveAttribute('aria-valuemax', max ?? '');
+});
+
 test('dragging the divider resizes the top view, persists, and resets', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await startStraightReverse(page, en.exerciseStraightReverse);

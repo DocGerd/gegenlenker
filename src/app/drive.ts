@@ -323,6 +323,8 @@ export function startDrive(
         updateSettings({ topDownLayout: savedLayout });
       }
       arrange();
+    } else if (action.type === 'aidLegend') {
+      arrange();
     } else if (action.type === 'collapse') {
       collapsed = { ...collapsed, [action.panel]: action.collapsed };
       updateSettings({ collapsed });
