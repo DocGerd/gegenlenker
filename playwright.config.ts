@@ -1,10 +1,25 @@
 import { createHash } from 'node:crypto';
 import { defineConfig, devices } from '@playwright/test';
+import { OFFLINE_SPECS } from './e2e/offline-specs';
 
-// E2E_PORT overrides; otherwise a stable port per checkout (4400-4899) lets worktrees run e2e in parallel.
-const port =
-  process.env['E2E_PORT'] ??
-  String(4400 + (createHash('sha256').update(process.cwd()).digest().readUInt32BE(0) % 500));
+// E2E_PORT overrides; otherwise a stable port per checkout lets worktrees run e2e in parallel.
+const previewPort = (): number => {
+  const raw = process.env['E2E_PORT'];
+  if (raw === undefined || raw === '') {
+    const hash = createHash('sha256')
+      .update(import.meta.dirname)
+      .digest()
+      .readUInt32BE(0);
+    return 4400 + (hash % 20000);
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1024 || value > 65535)
+    throw new Error(`E2E_PORT must be an integer in 1024-65535, got "${raw}"`);
+  return value;
+};
+const port = previewPort();
+if (process.env['TEST_WORKER_INDEX'] === undefined)
+  console.log(`e2e preview port: ${String(port)}`);
 const url = `http://127.0.0.1:${port}/gegenlenker/`;
 
 export default defineConfig({
@@ -16,7 +31,7 @@ export default defineConfig({
   projects: [
     {
       name: 'offline',
-      testMatch: /(offline|layout|follow-framing|chase|pause|replay|retry|webgl)\.spec\.ts$/,
+      testMatch: OFFLINE_SPECS,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
