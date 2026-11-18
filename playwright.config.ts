@@ -18,7 +18,7 @@ export default defineConfig({
         locale: 'en-US',
         serviceWorkers: 'allow',
         launchOptions: {
-          args: ['--use-gl=angle', '--use-angle=swiftshader-webgl', '--enable-unsafe-swiftshader'],
+          args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
         },
       },
     },

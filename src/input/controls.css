@@ -13,7 +13,7 @@
 }
 
 /* A shorter lever reduces the overlap with the right mirror. */
-@media (orientation: portrait) {
+@media not (min-aspect-ratio: 1/1) {
   .ctl {
     --ctl-lever-height: clamp(160px, 24vmin, 240px);
   }
@@ -59,7 +59,7 @@
 .ctl-gears,
 .ctl-steer {
   position: absolute;
-  bottom: var(--space-4);
+  bottom: calc(var(--space-4) + var(--safe-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -67,17 +67,17 @@
 }
 
 .ctl-steer {
-  left: var(--space-4);
+  left: calc(var(--space-4) + var(--safe-left));
 }
 
 .ctl-gears {
-  left: calc(var(--space-4) * 2 + var(--ctl-wheel));
+  left: calc(var(--space-4) * 2 + var(--ctl-wheel) + var(--safe-left));
   width: var(--ctl-gears-w);
   align-items: stretch;
 }
 
 .ctl-pedals {
-  right: var(--space-4);
+  right: calc(var(--space-4) + var(--safe-right));
 }
 
 .ctl-gears > div {
