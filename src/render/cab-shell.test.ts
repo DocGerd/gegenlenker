@@ -1,14 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, Mesh, MeshLambertMaterial, type Object3D } from 'three';
+import { Box3, Layers, Mesh, MeshLambertMaterial } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById } from '../vehicles/registry';
-import { type CabShells, parseCabShell, startCabShells } from './cab-shell';
+import { type CabShell, type CabShells, parseCabShell, startCabShells } from './cab-shell';
 import { CAB_LENGTH, RELIEF } from './cab-dims';
+import { createMirror } from './mirror';
 import { KEYS } from './palette';
-import { AIDS_LAYER, CAB_LAYER } from './seams';
+import { CAB_LAYER, COCKPIT_LAYERS, enableLayers, TOP_DOWN_LAYERS } from './seams';
 import { proceduralTruck } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -17,14 +18,6 @@ const spec = truckById('man-le-18-280');
 const glb = (): ArrayBuffer => {
   const bytes = readFileSync(join(import.meta.dirname, 'assets/man-le-18-280-cab.glb'));
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-};
-
-const meshesOf = (root: Object3D): Mesh[] => {
-  const out: Mesh[] = [];
-  root.traverse((o) => {
-    if (o instanceof Mesh) out.push(o as Mesh);
-  });
-  return out;
 };
 
 describe('cab shell asset', () => {
@@ -42,34 +35,98 @@ describe('cab shell asset', () => {
   });
 });
 
-describe('cab shell swap', () => {
-  const loaded = async (): Promise<CabShells> => {
-    const shell = await parseCabShell(glb());
-    return { onLoaded: (_id, apply) => (apply(shell), () => undefined) };
-  };
-  const count = (root: Object3D, layer: number): number =>
-    meshesOf(root).filter((m) => m.layers.mask === 1 << layer).length;
-  const procedural = proceduralTruck(spec, palette).object;
+const camera = (ids: readonly number[]): Layers => {
+  const layers = new Layers();
+  enableLayers(layers, ids);
+  return layers;
+};
+const sees = {
+  cockpit: camera(COCKPIT_LAYERS),
+  topDown: camera(TOP_DOWN_LAYERS),
+  mirror: createMirror().camera.layers,
+};
 
-  it('moves the box top-down only and shows the shell in the mirrors only', async () => {
-    const swapped = proceduralTruck(spec, palette, await loaded()).object;
-    expect(count(swapped, AIDS_LAYER)).toBe(count(procedural, AIDS_LAYER) + 1);
-    expect(count(swapped, 0)).toBe(count(procedural, 0) - 1);
-    // the shell's two meshes replace the single cab front
-    expect(count(swapped, CAB_LAYER)).toBe(count(procedural, CAB_LAYER) + 1);
-    const shell = meshesOf(swapped).filter(
-      (m) => m.layers.mask === 1 << CAB_LAYER && m.material instanceof MeshLambertMaterial,
+/** Shells that apply on demand, so a test sees the group before and after the swap. */
+function deferred(shell: CabShell): { shells: CabShells; apply: () => void } {
+  let apply = (): void => undefined;
+  return {
+    shells: {
+      onLoaded: (_id, cb) => {
+        apply = () => {
+          cb(shell);
+        };
+        return () => undefined;
+      },
+    },
+    apply: () => {
+      apply();
+    },
+  };
+}
+
+describe('cab shell swap', () => {
+  it('hides the box from the mirrors, shows the shell to them only, and drops the cab front', async () => {
+    const { shells, apply } = deferred(await parseCabShell(glb()));
+    const group = proceduralTruck(spec, palette, shells).object;
+    const before = [...group.children];
+    const cabFront = before.filter((m) => m.layers.mask === 1 << CAB_LAYER);
+    const box = before.find(
+      (m) =>
+        sees.cockpit.test(m.layers) && sees.mirror.test(m.layers) && sees.topDown.test(m.layers),
     );
+    expect(cabFront).toHaveLength(1);
+    expect(box).toBeDefined();
+    apply();
+
+    const after = group.children;
+    expect(after).not.toContain(cabFront[0]);
+    expect(after.filter((m) => !before.includes(m))).toHaveLength(2);
+    for (const kept of before.filter((m) => m !== cabFront[0] && m !== box)) {
+      expect(after).toContain(kept);
+    }
+
+    expect(sees.topDown.test(box?.layers ?? new Layers())).toBe(true);
+    expect(sees.mirror.test(box?.layers ?? new Layers())).toBe(false);
+    expect(sees.cockpit.test(box?.layers ?? new Layers())).toBe(false);
+
+    const shell = after.filter((m): m is Mesh => m instanceof Mesh && !before.includes(m));
+    for (const m of shell) {
+      expect(sees.mirror.test(m.layers)).toBe(true);
+      expect(sees.cockpit.test(m.layers)).toBe(false);
+      expect(sees.topDown.test(m.layers)).toBe(false);
+    }
     expect(shell.map((m) => (m.material as MeshLambertMaterial).vertexColors).sort()).toEqual([
       false,
       true,
     ]);
+
+    group.updateMatrixWorld(true);
+    const cab = new Box3().setFromObject(box ?? new Mesh());
+    const body = new Box3().setFromObject(
+      shell.find((m) => !(m.material as MeshLambertMaterial).vertexColors) ?? new Mesh(),
+    );
+    for (const [a, b] of [
+      [cab.min, body.min],
+      [cab.max, body.max],
+    ] as const) {
+      expect(a.distanceTo(b)).toBeLessThan(0.05);
+    }
   });
 
-  it('leaves the procedural cab when no shell arrives', () => {
-    const waiting = proceduralTruck(spec, palette, { onLoaded: () => () => undefined }).object;
-    const layers = (root: Object3D) => meshesOf(root).map((m) => m.layers.mask);
-    expect(layers(waiting)).toEqual(layers(procedural));
+  it('keeps the procedural cab untouched when applying throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const shell = await parseCabShell(glb());
+    Object.defineProperty(shell.detail, 'geometry', {
+      get: () => {
+        throw new Error('broken shell');
+      },
+    });
+    const loaded = startCabShells(() => Promise.resolve(shell));
+    const group = proceduralTruck(spec, palette, loaded).object;
+    const before = group.children.map((m) => [m, m.layers.mask] as const);
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
+    expect(group.children.map((m) => [m, m.layers.mask])).toEqual(before);
+    warn.mockRestore();
   });
 
   it('stops waiting for the shell when disposed', () => {
@@ -80,24 +137,32 @@ describe('cab shell swap', () => {
 });
 
 describe('cab shell loading', () => {
-  it('warns and never applies when the load fails', async () => {
+  it('keeps the procedural cab and warns when the load rejects', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const apply = vi.fn();
-    const shells = startCabShells(() => Promise.reject(new Error('offline')));
-    shells.onLoaded('man-le-18-280', apply);
+    const onApplied = vi.fn();
+    const shells = startCabShells(() => Promise.reject(new Error('offline')), onApplied);
+    const group = proceduralTruck(spec, palette, shells).object;
+    const before = group.children.map((m) => [m, m.layers.mask] as const);
+    const box = group.children.filter((m) => m.layers.mask === 1);
+    const front = group.children.filter((m) => m.layers.mask === 1 << CAB_LAYER);
     await vi.waitFor(() => expect(warn).toHaveBeenCalledOnce());
-    expect(apply).not.toHaveBeenCalled();
+    expect(onApplied).not.toHaveBeenCalled();
+    expect(group.children.map((m) => [m, m.layers.mask])).toEqual(before);
+    expect(box.length).toBeGreaterThan(0);
+    expect(front).toHaveLength(1);
     warn.mockRestore();
   });
 
-  it('applies a loaded shell once, and not after cancelling', async () => {
+  it('applies a loaded shell once, reports it, and not after cancelling', async () => {
     const shell = await parseCabShell(glb());
-    const shells = startCabShells(() => Promise.resolve(shell));
+    const onApplied = vi.fn();
+    const shells = startCabShells(() => Promise.resolve(shell), onApplied);
     const apply = vi.fn();
     const cancelled = vi.fn();
     shells.onLoaded('man-le-18-280', apply);
     shells.onLoaded('man-le-18-280', cancelled)();
     await vi.waitFor(() => expect(apply).toHaveBeenCalledExactlyOnceWith(shell));
+    expect(onApplied).toHaveBeenCalledExactlyOnceWith('man-le-18-280');
     expect(cancelled).not.toHaveBeenCalled();
   });
 });

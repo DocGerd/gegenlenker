@@ -53,9 +53,13 @@ export interface CabShells {
   onLoaded(truckId: TruckId, apply: (shell: CabShell) => void): () => void;
 }
 
-/** Starts every load now; a failure warns and leaves the procedural cab. */
+/**
+ * Starts every load now; a failure to load or to apply warns and leaves the procedural cab.
+ * `onApplied` reports each successful application, for tests and diagnostics.
+ */
 export function startCabShells(
   load: (url: string) => Promise<CabShell> = fetchCabShell,
+  onApplied: (truckId: TruckId) => void = () => undefined,
 ): CabShells {
   const loads = new Map<TruckId, Promise<CabShell | null>>();
   for (const [id, url] of Object.entries(URLS) as [TruckId, string][]) {
@@ -71,7 +75,16 @@ export function startCabShells(
     onLoaded(truckId, apply) {
       let cancelled = false;
       void loads.get(truckId)?.then((shell) => {
-        if (shell !== null && !cancelled) apply(shell);
+        if (shell === null || cancelled) return;
+        try {
+          apply(shell);
+          onApplied(truckId);
+        } catch (error) {
+          console.warn(
+            `Cab shell ${truckId} could not be applied; keeping the procedural cab`,
+            error,
+          );
+        }
       });
       return () => {
         cancelled = true;
@@ -90,6 +103,7 @@ function instance(proto: Mesh, material: MeshLambertMaterial): Mesh {
 /**
  * Swaps the procedural cab for the shell in one step: the box stays top-down only, the shell and
  * the lit cab front trade places in the mirrors. Returns what the visual must dispose.
+ * Everything that can throw runs before the group is touched.
  */
 export function applyCabShell(
   group: Group,
@@ -102,8 +116,15 @@ export function applyCabShell(
     new MeshLambertMaterial({ color: palette.cab }),
     new MeshLambertMaterial({ vertexColors: true }),
   ] as const;
+  let meshes: Mesh[];
+  try {
+    meshes = [instance(shell.body, materials[0]), instance(shell.detail, materials[1])];
+  } catch (error) {
+    materials.forEach((m) => m.dispose());
+    throw error;
+  }
   cabBox.layers.set(AIDS_LAYER);
   group.remove(cabFront);
-  group.add(instance(shell.body, materials[0]), instance(shell.detail, materials[1]));
+  group.add(...meshes);
   return { dispose: () => materials.forEach((m) => m.dispose()) };
 }

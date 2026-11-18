@@ -56,16 +56,8 @@ test('loads from the subpath and drives an exercise offline', async ({
   await expect(speed).not.toHaveText('0.0 km/h');
   expect(foreign).toEqual([]);
 
-  // The renderer starts loading the shell when it is created, here from the service-worker cache.
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        performance
-          .getEntriesByType('resource')
-          .some((e) => /man-le-18-280-cab-[\w-]+\.glb$/.test(e.name)),
-      ),
-    )
-    .toBe(true);
+  // Set once the shell, loaded from the service-worker cache, has replaced the procedural cab.
+  await expect(page.locator('html')).toHaveAttribute('data-cab-shell', 'man-le-18-280');
   expect(warnings.filter((w) => w.includes('Cab shell'))).toEqual([]);
 });
 
