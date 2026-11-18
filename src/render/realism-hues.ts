@@ -17,6 +17,8 @@ export const REALISM_HUES = {
   containerRed: 0x9a2d22,
   containerGreen: 0x2f6b4a,
   containerOrange: 0xc9661c,
+  concrete: 0x8c8c86, // precast concrete: kerbs, walls, loading ramps
+  coneRed: 0xcc0605, // RAL 3020 traffic red, cone body
   skylineDark: 0x5c6875, // distant industrial silhouettes
   skyHaze: 0xdcebf2, // horizon haze, pale blue-grey
   sunHalo: 0xfff1d0, // warm glow around the sun
