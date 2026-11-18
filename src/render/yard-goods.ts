@@ -1,4 +1,4 @@
-import { CylinderGeometry } from 'three';
+import { type BufferGeometry, CylinderGeometry } from 'three';
 import { REALISM_HUES as HUE } from './realism-hues';
 import { box } from './vehicle-geometry';
 import type { Parts, Range } from './yard-props';
@@ -20,6 +20,7 @@ const ZINC = HUE.whiteAluminium;
 const PALLET = { length: 1.2, width: 0.8, height: 0.144 };
 const MESH_BOX = { length: 1.24, width: 0.84, height: 0.97, foot: 0.15, barPitch: 0.15 };
 const SKIP = { length: 3.4, width: 1.7, height: 1.2, floor: 0.16, wall: 0.04 };
+const OVERLAY = 0.005; // castings stand this far proud of the body, so no faces are coplanar
 const SWAP = { leg: 0.08, legHeight: 1, ribPitch: 1.1 };
 
 /** Wood pallet: three runners under five deck boards. */
@@ -102,6 +103,17 @@ export function meshBox(p: Parts, at: At, loaded = false): void {
   }
 }
 
+/** Widens a plate from its base (y = 0) to `ratio` times its width along `axis` at `height`, so plates meet at the rim. */
+function taper(g: BufferGeometry, axis: 'x' | 'z', ratio: number, height: number): BufferGeometry {
+  const pos = g.getAttribute('position');
+  for (let i = 0; i < pos.count; i++) {
+    const k = 1 + (ratio - 1) * (pos.getY(i) / height);
+    if (axis === 'x') pos.setX(i, pos.getX(i) * k);
+    else pos.setZ(i, pos.getZ(i) * k);
+  }
+  return g;
+}
+
 /** Open skip (Absetzmulde): sloped plate walls on skids, rim and a heap of spoil. */
 export function skip(p: Parts, at: At, hue: number): void {
   const { length: l, width: w, height: h, floor, wall } = SKIP;
@@ -116,7 +128,12 @@ export function skip(p: Parts, at: At, hue: number): void {
   flat([-l / 2 + 0.25, l / 2 - 0.25], [-base, base], [0.1, floor], hue, 0.7);
   for (const y of [-0.45, 0.45]) flat([-l / 2, l / 2], around(y, 0.06), [0, 0.1], HUE.anthracite);
   for (const side of [-1, 1]) {
-    const plate = box([-sideLength / 2, sideLength / 2], [-wall / 2, wall / 2], [0, slant])
+    const plate = taper(
+      box([-sideLength / 2, sideLength / 2], [-wall / 2, wall / 2], [0, slant]),
+      'x',
+      l / sideLength,
+      slant,
+    )
       .rotateX(-side * lean)
       .translate(at.x, at.z + floor, -(at.y + side * base));
     p.add(plate, hue);
@@ -130,7 +147,12 @@ export function skip(p: Parts, at: At, hue: number): void {
   const endLean = Math.atan2(0.25, rise);
   const endSlant = rise / Math.cos(endLean);
   for (const end of [-1, 1]) {
-    const plate = box([-wall / 2, wall / 2], [-base, base], [0, endSlant])
+    const plate = taper(
+      box([-wall / 2, wall / 2], [-base, base], [0, endSlant]),
+      'z',
+      w / 2 / base,
+      endSlant,
+    )
       .rotateZ(-end * endLean)
       .translate(at.x + end * (l / 2 - 0.25), at.z + floor, -at.y);
     p.add(plate, hue, 0.9);
@@ -175,9 +197,11 @@ export function swapBody(
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
       for (const z of [legHeight, bodyTop - 0.16] as const) {
-        const x: Range = sx > 0 ? [l / 2 - 0.16, l / 2] : [-l / 2, -l / 2 + 0.16];
-        const y: Range = sy > 0 ? [w / 2 - 0.16, w / 2] : [-w / 2, -w / 2 + 0.16];
-        bx(x, y, [z, z + 0.16], HUE.anthracite);
+        const x: Range =
+          sx > 0 ? [l / 2 - 0.16, l / 2 + OVERLAY] : [-l / 2 - OVERLAY, -l / 2 + 0.16];
+        const y: Range =
+          sy > 0 ? [w / 2 - 0.16, w / 2 + OVERLAY] : [-w / 2 - OVERLAY, -w / 2 + 0.16];
+        bx(x, y, [z - OVERLAY, z + 0.16 + OVERLAY], HUE.anthracite);
       }
     }
   }

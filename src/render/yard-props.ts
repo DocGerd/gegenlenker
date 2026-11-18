@@ -465,7 +465,7 @@ function swapBodyProp(o: Obstacle, index: number): PropPiece {
 function gatehouseMirror(o: Obstacle): PropPiece {
   const { cx, cy, halfLength: hl, halfWidth: hw, heading } = o.obb;
   const p = new Parts();
-  trafficMirror(p, { x: -hl + 0.25, y: -hw + 0.25, z: o.height }, (-3 * Math.PI) / 4);
+  trafficMirror(p, { x: -hl + 0.45, y: -hw + 0.45, z: o.height }, (-3 * Math.PI) / 4);
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
