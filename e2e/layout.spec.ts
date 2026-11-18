@@ -3,8 +3,11 @@ import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
 
 const sizes = [
+  { width: 768, height: 700 },
   { width: 768, height: 1024 },
   { width: 800, height: 820 },
+  { width: 900, height: 649 },
+  { width: 1000, height: 649 },
   { width: 1024, height: 600 },
   { width: 1024, height: 700 },
   { width: 1200, height: 700 },
@@ -116,6 +119,11 @@ for (const { locale, messages } of locales) {
           expect(overlaps(panel, c), `${panel.name} overlaps ${c.name}`).toBe(false);
         }
       }
+
+      const clipped = await page
+        .locator('.hud-gauge .hud-label')
+        .evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth).length);
+      expect(clipped, 'a gauge label is wider than its gauge').toBe(0);
       await context.close();
     });
 

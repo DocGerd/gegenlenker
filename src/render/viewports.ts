@@ -11,10 +11,22 @@ const COCKPIT_LABEL = 32;
 /** Smallest mirror height; where even this cannot clear the controls, it wins. */
 export const MIN_MIRROR_HEIGHT = 48;
 
+const GEARS_WIDTH = 92.4;
+const LEGEND_WIDTH = 176;
+const MIN_NARROW_WHEEL = 120;
+
+/** The steering wheel's size; mirrors `--ctl-wheel` in tokens.css. */
+export function wheelSize(cssWidth: number, cssHeight: number): number {
+  const wheel = clamp(0.38 * Math.min(cssWidth, cssHeight), 160, 300);
+  if (cssWidth < cssHeight) return wheel;
+  const room = 0.6 * cssWidth - 3 * INSET - GEARS_WIDTH - LEGEND_WIDTH;
+  return Math.min(wheel, Math.max(MIN_NARROW_WHEEL, room));
+}
+
 /** Height the control columns occupy above the viewport bottom; mirrors controls.css (--ctl-wheel, --ctl-lever-height, --size-target). */
 export function controlsHeight(cssWidth: number, cssHeight: number): number {
   const vmin = Math.min(cssWidth, cssHeight);
-  const steer = INSET + LABEL_BLOCK + clamp(0.38 * vmin, 160, 300) + 2;
+  const steer = INSET + LABEL_BLOCK + wheelSize(cssWidth, cssHeight) + 2;
   if (cssWidth >= cssHeight) return steer;
   const lever = clamp(0.24 * vmin, 160, 240) + 2;
   return Math.max(steer, INSET + STOP_BLOCK + STOP_GAP + LABEL_BLOCK + lever);
