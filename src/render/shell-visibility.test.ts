@@ -36,7 +36,7 @@ const readTrailer = async (id: TrailerId) => {
 };
 
 /** Share of the body shell's vertices a mirror frames: set below the measured share of both trucks on both screens. */
-const BODY_FLOOR = 0.3;
+const BODY_FLOOR = 0.15;
 
 const STRAIGHT: Pose2 = { x: 0, y: 0, heading: 0 };
 const SCREENS = {

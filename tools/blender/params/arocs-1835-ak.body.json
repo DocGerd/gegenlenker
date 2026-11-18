@@ -1,6 +1,6 @@
 {
   "id": "arocs-1835-ak",
-  "schema": 2,
+  "schema": 3,
   "kind": "tipper",
   "width": 2.5,
   "rearX": -1.435,
@@ -8,10 +8,14 @@
   "frameTop": 1.1,
   "floorTop": 1.3,
   "wallThickness": 0.1,
-  "wallTop": 2.5,
   "relief": 0.03,
   "rearAxleX": 0,
+  "rearTrack": 1.85,
+  "twin": { "offset": 0.15, "width": 0.26 },
   "wheelRadius": 0.5,
-  "marking": { "zLow": 1.15, "zHigh": 1.25 },
-  "hues": { "body": "#00387b", "white": "#f6f6f6" }
+  "rail": { "halfGap": 0.45, "width": 0.2 },
+  "marking": { "zLow": 1.15, "zHigh": 1.25, "endMargin": 0.1 },
+  "tailLamp": { "inset": 0.1, "width": 0.275, "sill": 0.02, "height": 0.16 },
+  "tipper": { "wallTop": 1.9, "headboardTop": 2.4, "stripe": [1.72, 1.86] },
+  "hues": { "body": "#00387b", "white": "#f6f6f6", "black": "#101214" }
 }

@@ -12,6 +12,8 @@ export const RAIL_BOTTOM = 0.65;
 export const RELIEF = 0.03; // marks and lamps on a body face
 export const TRUCK_WHEEL_RADIUS = 0.5;
 export const PLATE_RELIEF = 0.06; // plate stands this far ahead of the bumper face
+/** The cab's white side stripe above the frame top (cab_shell.py STRIPE); the tipper's stripe lines up with it. */
+export const CAB_STRIPE = [0.62, 0.76] as const;
 
 export const round = (value: number): number => Math.round(value * 1e6) / 1e6;
 export const metres = (param: Param): number => round(param.value / 1000);
