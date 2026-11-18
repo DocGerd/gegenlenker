@@ -1,4 +1,4 @@
-import type { Layers, Object3D } from 'three';
+import type { Layers, Object3D, WebGLRenderer } from 'three';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
@@ -36,6 +36,8 @@ export interface AidsLayer {
   dispose(): void;
 }
 export type RendererParts = {
+  /** Called once the WebGL renderer exists, for parts that need its capabilities; parts keep the first renderer they see. */
+  readonly onRenderer?: (renderer: WebGLRenderer) => void;
   readonly truck: (spec: TruckSpec, palette: ScenePalette) => VehicleVisual;
   readonly trailer: (spec: TrailerSpec, palette: ScenePalette) => VehicleVisual;
   readonly environment: (layout: ResolvedLayout, palette: ScenePalette) => Environment;

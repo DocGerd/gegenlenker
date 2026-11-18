@@ -23,6 +23,9 @@ const icons = [
 /** Workbox skips larger files when precaching; the default, pinned so the cab glb test can import it. */
 export const MAX_PRECACHE_FILE_BYTES = 2 * 1024 * 1024;
 
+/** The hashed ground texture and its Basis transcoder; `globIgnores` below spells the same files as globs. */
+const GROUND_ASSETS = /\/(?:ground-[\w-]+\.ktx2|basis_transcoder-[\w-]+\.(?:js|wasm))$/;
+
 export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOptions> {
   return {
     registerType: 'prompt',
@@ -43,6 +46,19 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
     },
     workbox: {
       globPatterns: ['**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}'],
+      globIgnores: ['**/ground-*.ktx2', '**/basis_transcoder-*'],
+      runtimeCaching: [
+        {
+          // Only High draws the ground texture, so the other presets do not pay for it on install.
+          urlPattern: GROUND_ASSETS,
+          handler: 'CacheFirst',
+          options: {
+            cacheName: 'ground-texture',
+            cacheableResponse: { statuses: [200] },
+            expiration: { maxEntries: 6 },
+          },
+        },
+      ],
       maximumFileSizeToCacheInBytes: MAX_PRECACHE_FILE_BYTES,
       navigateFallback: 'index.html',
       cleanupOutdatedCaches: true,
