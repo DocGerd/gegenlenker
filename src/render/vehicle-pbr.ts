@@ -22,6 +22,7 @@ import {
 } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
 import { createSceneSky } from './environment';
+import { setGraded, type GradeSample } from './grade';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
 
@@ -131,6 +132,25 @@ export class VehicleNodeMaterial extends MeshStandardNodeMaterial {
 /** The one reflective material every perspective-only vehicle mesh shares, so a swap adds no draw call. */
 export const createVehicleMaterial = (envMap: Texture): VehicleNodeMaterial =>
   new VehicleNodeMaterial(envMap);
+
+/** The graded reflective material on an empty reflection map, for the grade's shader check. */
+export function vehicleGradeSample(gpu: WebGPURenderer): GradeSample {
+  const generator = new PMREMGenerator(gpu);
+  const map = generator.fromScene(new Scene(), 0, MAP_NEAR, MAP_FAR, { size: 16 });
+  generator.dispose();
+  const material = createVehicleMaterial(map.texture);
+  setGraded(material, true);
+  const geometry = new BoxGeometry();
+  geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
+  return {
+    mesh: new Mesh(geometry, material),
+    dispose: () => {
+      map.dispose();
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+}
 
 const topDownLayers = new Layers();
 enableLayers(topDownLayers, TOP_DOWN_LAYERS);

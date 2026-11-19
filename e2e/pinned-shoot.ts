@@ -40,6 +40,7 @@ const READY: Readonly<Record<Preset, Readonly<Record<string, (value: string) => 
     'data-ground-texture': (v) => v.startsWith('ktx2:'),
     'data-vehicle-pbr': (v) => v === 'on',
     'data-sky-hdri': (v) => v === 'on',
+    'data-perspective-grade': (v) => v === 'on',
   },
 };
 
