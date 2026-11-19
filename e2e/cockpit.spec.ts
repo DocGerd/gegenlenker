@@ -3,14 +3,7 @@ import { en } from '../src/i18n/en';
 import { COCKPIT_FOV } from '../src/render/cockpit-camera';
 import { interiorLayout, pillarSpan } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
-import {
-  attachmentsReady,
-  GROUND_LOAD,
-  HIGH_SCREENSHOT_POLL,
-  SCREENSHOT_POLL,
-  throughIntermediate,
-  type Preset,
-} from './pinned-shoot';
+import { attachmentsReady, throughIntermediate, type Preset } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 /** What is left of an unlit vertex colour's distance from the hue once the 8-bit intermediate's rounding is applied to the hue. */
@@ -149,7 +142,7 @@ test('the cockpit interior follows the graphics preset on the shared renderer', 
         near(pillarLeft, PILLAR),
         near(pillarRight, PILLAR),
       ];
-    }, SCREENSHOT_POLL)
+    })
     .toEqual([true, true, true, true]);
 
   await page.getByRole('button', { name: en.finish }).click();
@@ -166,7 +159,7 @@ test('the cockpit interior follows the graphics preset on the shared renderer', 
     .poll(async () => {
       const [top, bottom] = await cockpitPixels(page, [points.header, points.dash]);
       return [isSky(top), isGround(bottom)];
-    }, SCREENSHOT_POLL)
+    })
     .toEqual([true, true]);
   const [header, dash, pillarLeft, pillarRight] = await cockpitPixels(page, [
     points.header,
@@ -196,7 +189,7 @@ test('the Balanced cockpit sky is blue near the top and fades to haze towards th
   const x = Math.round(cockpit.width * 0.58);
   const points = [0.14, 0.31].map((f) => [x, Math.round(cockpit.height * f)] as const);
   await expect
-    .poll(async () => isSky((await panePixels(page, '.hud-cockpit', points))[0]), SCREENSHOT_POLL)
+    .poll(async () => isSky((await panePixels(page, '.hud-cockpit', points))[0]))
     .toBe(true);
   const [top = [], horizon = []] = await panePixels(page, '.hud-cockpit', points);
   expect(top[0] ?? 0, 'red channel: the haze is paler than the zenith').toBeLessThan(
@@ -241,7 +234,6 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
   test(`each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`, async ({
     page,
   }) => {
-    if (preset === 'high') test.setTimeout(90_000);
     const errors = collectErrors(page);
     await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
       SETTINGS_KEY,
@@ -249,7 +241,7 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     ] as const);
     await page.goto('./');
     await drive(page);
-    await expect.poll(() => attachmentsReady(page, preset), GROUND_LOAD).toBe(true);
+    await expect.poll(() => attachmentsReady(page, preset)).toBe(true);
 
     // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
     // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.
@@ -304,13 +296,10 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     };
     let seen: Awaited<ReturnType<typeof sample>> = [];
     await expect
-      .poll(
-        async () => {
-          seen = await sample();
-          return seen.map((s) => `${s.side}: ${String(s.drawn)}`);
-        },
-        preset === 'high' ? HIGH_SCREENSHOT_POLL : SCREENSHOT_POLL,
-      )
+      .poll(async () => {
+        seen = await sample();
+        return seen.map((s) => `${s.side}: ${String(s.drawn)}`);
+      })
       .toEqual(sides.map((s) => `${s.side}: true`));
     for (const { side, outerYard, innerYard } of seen) {
       expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
