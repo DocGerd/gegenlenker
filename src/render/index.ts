@@ -71,9 +71,9 @@ export function createSceneRenderer(): SceneRenderer {
     pbrState = state;
   });
   const renderer = createThreeSceneRenderer({
-    onRenderer: (gl) => {
-      groundTextures.attach(gl);
-      vehicleEnvironment.attach(gl);
+    onRenderer: (gpu) => {
+      groundTextures.attach(gpu);
+      vehicleEnvironment.attach(gpu);
     },
     truck: (spec, palette) => proceduralTruck(spec, palette, shells, vehicleEnvironment),
     trailer: (spec, palette) =>

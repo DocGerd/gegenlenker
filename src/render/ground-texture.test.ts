@@ -1,27 +1,85 @@
-import { DataTexture, RGBA_BPTC_Format, type Texture, WebGLRenderer } from 'three';
+import { DataTexture, RGBA_BPTC_Format, type Texture } from 'three';
+import { WebGPURenderer } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { describeGroundTexture, startGroundTextures, transcoderUrls } from './ground-texture';
+import {
+  describeGroundTexture,
+  loadGroundTexture,
+  precompileGround,
+  startGroundTextures,
+  transcoderUrls,
+} from './ground-texture';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
 
-type ShaderErrorHook = NonNullable<WebGLRenderer['debug']['onShaderError']>;
+type ShaderErrorHook = NonNullable<WebGPURenderer['debug']['onShaderError']>;
 
-const renderer = (): WebGLRenderer =>
-  Object.assign(Object.create(WebGLRenderer.prototype) as WebGLRenderer, {
+const renderer = (): WebGPURenderer =>
+  Object.assign(Object.create(WebGPURenderer.prototype) as WebGPURenderer, {
     debug: { onShaderError: null },
   });
 const texture = (): Texture => new DataTexture(new Uint8Array(4), 1, 1);
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-const shaderError = (gl: WebGLRenderer, fragment: string): void => {
+const shaderError = (gl: WebGPURenderer, fragment: string): void => {
   const context = {
     getShaderSource: (shader: unknown) => shader,
     getShaderInfoLog: () => 'log',
     getProgramInfoLog: () => 'log',
-  } as unknown as WebGLRenderingContext;
+  } as unknown as WebGL2RenderingContext;
   const hook = gl.debug.onShaderError as ShaderErrorHook;
   hook(...([context, {}, 'vertex', fragment] as unknown as Parameters<ShaderErrorHook>));
 };
 
 afterEach(() => vi.restoreAllMocks());
+
+const loaderTexture = vi.hoisted(() => ({ next: null as Texture | null }));
+vi.mock('three/addons/loaders/KTX2Loader.js', () => ({
+  KTX2Loader: class {
+    setTranscoderPath() {
+      return this;
+    }
+    detectSupport() {
+      return this;
+    }
+    loadAsync() {
+      return Promise.resolve(loaderTexture.next);
+    }
+    dispose() {
+      return undefined;
+    }
+  },
+}));
+
+/** A renderer whose ground build yields `fragment`, on a context that is `lost` or not. */
+const building = (fragment: string | null, lost = false): WebGPURenderer =>
+  Object.assign(renderer(), {
+    debug: {
+      onShaderError: null,
+      getShaderAsync: () => Promise.resolve({ fragmentShader: fragment }),
+    },
+    getContext: () => ({ isContextLost: () => lost }),
+  });
+const marked = `vec3 ${GROUND_SHADER_MARKER};`;
+
+describe('ground precompile', () => {
+  it('passes a build that carries the marker', async () => {
+    await expect(precompileGround(building(marked), texture())).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ['three swapped in a plain material', building('void main() {}')],
+    ['the context is lost', building(marked, true)],
+  ])('rejects when %s', async (_, gl) => {
+    await expect(precompileGround(gl, texture())).rejects.toThrow();
+  });
+
+  it('frees the loaded texture and rethrows when the precompile fails', async () => {
+    const loaded = texture();
+    const disposed = vi.fn();
+    loaded.addEventListener('dispose', disposed);
+    loaderTexture.next = loaded;
+    await expect(loadGroundTexture(building(null))).rejects.toThrow();
+    expect(disposed).toHaveBeenCalledOnce();
+  });
+});
 
 describe('ground textures', () => {
   it('downloads nothing until a renderer is attached and a preset wants the texture', async () => {
@@ -180,6 +238,26 @@ describe('ground textures', () => {
       textures.onLoaded(late);
       await settle();
       expect(late).not.toHaveBeenCalled();
+    });
+
+    it('frees a texture whose shader was rejected while it loaded, and applies nothing', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const loaded = texture();
+      const disposed = vi.fn();
+      loaded.addEventListener('dispose', disposed);
+      const gl = renderer();
+      // the precompile in the default loader is where a shader error surfaces first
+      const textures = startGroundTextures(() => {
+        shaderError(gl, `vec3 ${GROUND_SHADER_MARKER};`);
+        return Promise.resolve(loaded);
+      });
+      const apply = vi.fn();
+      textures.onLoaded(apply);
+      textures.attach(gl);
+      textures.setEnabled(true);
+      await settle();
+      expect(apply).not.toHaveBeenCalled();
+      expect(disposed).toHaveBeenCalledOnce();
     });
 
     it('leaves other programs to the previous handler, or logs them', () => {

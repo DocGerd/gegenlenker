@@ -1,5 +1,9 @@
 import {
+  Float32BufferAttribute,
   LoadingManager,
+  Mesh,
+  PerspectiveCamera,
+  PlaneGeometry,
   RepeatWrapping,
   RGB_ETC1_Format,
   RGB_ETC2_Format,
@@ -11,13 +15,16 @@ import {
   RGBA_S3TC_DXT1_Format,
   RGBA_S3TC_DXT5_Format,
   RGBAFormat,
+  Scene,
   type Texture,
-  type WebGLRenderer,
 } from 'three';
+import type { WebGPURenderer } from 'three/webgpu';
 import groundUrl from './assets/ground.ktx2?url';
 import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
+import { createGroundMaterial } from './ground-material';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
+import { gpuLost } from './seams';
 
 /*
  * The authored ground detail map (tools/textures, issue #69): a KTX2 file transcoded on the device
@@ -50,7 +57,7 @@ export interface GroundTextures {
    * The renderer whose compressed-format support picks the transcoding target, and whose shader
    * errors are watched; a later one (after a loss) replaces it and keeps a loaded texture.
    */
-  attach(renderer: WebGLRenderer): void;
+  attach(renderer: WebGPURenderer): void;
   /**
    * Starts the load on the first call with `true` once a renderer is attached; nothing is downloaded
    * before. A failed load is retried by the next such call, once.
@@ -76,7 +83,39 @@ export function transcoderUrls(url: string): string {
   return url;
 }
 
-export async function loadGroundTexture(renderer: WebGLRenderer): Promise<Texture> {
+/**
+ * Builds the ground material for `texture` before any ground wears it, so a node or pipeline error
+ * rejects here instead of in a frame; a GLSL error also reaches the shader watch. three swaps a
+ * material whose node graph throws for a plain one and only logs it, hence the marker check.
+ */
+export async function precompileGround(renderer: WebGPURenderer, texture: Texture): Promise<void> {
+  const geometry = new PlaneGeometry();
+  const vertices = geometry.getAttribute('position').count;
+  geometry
+    .setAttribute('color', new Float32BufferAttribute(new Float32Array(vertices * 3), 3))
+    .setAttribute('groundSelect', new Float32BufferAttribute(new Float32Array(vertices * 3), 3));
+  const material = createGroundMaterial(texture);
+  const mesh = new Mesh(geometry, material);
+  const scene = new Scene();
+  scene.add(mesh);
+  try {
+    const { fragmentShader } = await renderer.debug.getShaderAsync(
+      scene,
+      new PerspectiveCamera(),
+      mesh,
+    );
+    if (fragmentShader?.includes(GROUND_SHADER_MARKER) !== true) {
+      throw new Error('the ground shader did not build');
+    }
+    // a compile on a lost context passes vacuously
+    if (gpuLost(renderer)) throw new Error('the GPU context was lost');
+  } finally {
+    material.dispose();
+    geometry.dispose();
+  }
+}
+
+export async function loadGroundTexture(renderer: WebGPURenderer): Promise<Texture> {
   const { KTX2Loader } = await import('three/addons/loaders/KTX2Loader.js');
   const loader = new KTX2Loader(new LoadingManager().setURLModifier(transcoderUrls))
     // an empty path would fetch the transcoder from a CDN; the URL modifier replaces what is fetched
@@ -86,6 +125,12 @@ export async function loadGroundTexture(renderer: WebGLRenderer): Promise<Textur
     const texture = await loader.loadAsync(groundUrl);
     texture.wrapS = texture.wrapT = RepeatWrapping;
     texture.anisotropy = ANISOTROPY;
+    try {
+      await precompileGround(renderer, texture);
+    } catch (error) {
+      texture.dispose();
+      throw error;
+    }
     return texture;
   } finally {
     loader.dispose();
@@ -102,10 +147,10 @@ type Subscriber = {
  * while some subscriber draws the texture and `null` otherwise; the offline e2e reads it.
  */
 export function startGroundTextures(
-  load: (renderer: WebGLRenderer) => Promise<Texture> = loadGroundTexture,
+  load: (renderer: WebGPURenderer) => Promise<Texture> = loadGroundTexture,
   onApplied: (state: string | null) => void = () => undefined,
 ): GroundTextures {
-  let renderer: WebGLRenderer | null = null;
+  let renderer: WebGPURenderer | null = null;
   let enabled = false;
   let loading = false;
   let attempts = 0;
@@ -141,7 +186,7 @@ export function startGroundTextures(
   };
 
   /** three skips its own report once `onShaderError` is set, so unrelated programs are logged here. */
-  const watchShaderErrors = (gl: WebGLRenderer): void => {
+  const watchShaderErrors = (gl: WebGPURenderer): void => {
     const previous = gl.debug.onShaderError;
     const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
       if (context.getShaderSource(fragment)?.includes(GROUND_SHADER_MARKER) === true) reject();
@@ -168,7 +213,7 @@ export function startGroundTextures(
     load(renderer)
       .then((texture) => {
         loading = false;
-        if (disposed) {
+        if (disposed || rejected) {
           texture.dispose();
           return;
         }

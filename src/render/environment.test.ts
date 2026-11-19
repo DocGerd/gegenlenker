@@ -1,14 +1,21 @@
-import { DataTexture, Layers, type Object3D, ShaderLib, type Texture } from 'three';
+import { DataTexture, Layers, type Object3D, type Texture } from 'three';
+import { MeshLambertNodeMaterial } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ScenePalette } from '../contracts/render';
 import { createMirror } from './mirror';
-import { groundShader, proceduralEnvironment, texturedGroundGeometry } from './environment';
+import { proceduralEnvironment, texturedGroundGeometry } from './environment';
+import { createGroundMaterial } from './ground-material';
 import type { GroundTextures } from './ground-texture';
-import { GROUND_SHADER_MARKER, GROUND_SURFACES } from './ground-texture-spec';
+import { GROUND_SURFACES } from './ground-texture-spec';
 import { KEYS } from './palette';
 import { QUALITY_FLAGS } from './quality';
+vi.mock('./ground-material', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./ground-material')>();
+  return { createGroundMaterial: vi.fn(actual.createGroundMaterial) };
+});
+
 import { COCKPIT_LAYERS, DEFAULT_LAYER, enableLayers, TOP_DOWN_LAYERS } from './seams';
 import { RESTYLED_KINDS } from './yard-props';
 
@@ -174,53 +181,26 @@ describe('environment ground texture', () => {
     geometry.dispose();
   });
 
-  it('patches the chunks of the real Lambert shader', () => {
-    const shader = {
-      vertexShader: ShaderLib.lambert.vertexShader,
-      fragmentShader: ShaderLib.lambert.fragmentShader,
-    };
-    groundShader(shader);
-    for (const injected of ['attribute vec3 groundSelect;', 'vGroundSelect = groundSelect;']) {
-      expect(shader.vertexShader).toContain(injected);
-    }
-    for (const injected of [
-      'varying vec3 vGroundSelect;',
-      `dot( ${GROUND_SHADER_MARKER}, vGroundSelect )`,
-    ]) {
-      expect(shader.fragmentShader).toContain(injected);
-    }
-    expect(shader.fragmentShader).not.toContain('#include <map_fragment>');
-    expect(shader.fragmentShader).toContain('vec3( 1.0 )');
+  it('shades the textured ground with its own colour node over the vertex colours', () => {
+    const material = createGroundMaterial(new DataTexture());
+    expect(material).toBeInstanceOf(MeshLambertNodeMaterial);
+    expect(material.vertexColors).toBe(true);
+    expect(material.colorNode).not.toBeNull();
+    material.dispose();
   });
 
-  it('throws without touching the shader when an anchor is missing', () => {
-    const shader = {
-      vertexShader: ShaderLib.lambert.vertexShader,
-      fragmentShader: 'void main() {}',
-    };
-    expect(() => {
-      groundShader(shader);
-    }).toThrow('#include <common>');
-    expect(shader.vertexShader).toBe(ShaderLib.lambert.vertexShader);
-    expect(shader.fragmentShader).toBe('void main() {}');
-  });
-
-  it('keeps the token ground and warns once when the shader patch cannot apply', () => {
+  it('keeps the token ground and warns once when the material cannot be built', () => {
     if (layout === undefined) return;
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const lambert = ShaderLib.lambert;
-    const original = lambert.fragmentShader;
+    vi.mocked(createGroundMaterial).mockImplementationOnce(() => {
+      throw new Error('no node material');
+    });
     const { textures, deliver, applied } = fakeTextures();
     const env = proceduralEnvironment(layout, palette, textures);
     const before = seen(env.object, cameras.cockpit);
     const children = env.object.children.length;
     env.setQuality(QUALITY_FLAGS.high);
-    lambert.fragmentShader = 'void main() {}';
-    try {
-      deliver();
-    } finally {
-      lambert.fragmentShader = original;
-    }
+    deliver();
     expect(warn).toHaveBeenCalledOnce();
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
     expect(env.object.children).toHaveLength(children);
