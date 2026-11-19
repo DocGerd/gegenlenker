@@ -2,32 +2,11 @@ import type { ExerciseDefinition } from '../contracts/exercise';
 import type { Obstacle } from '../contracts/layout';
 import type { Pose2 } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
-import { OVERLAP_EPSILON } from './collision';
-import {
-  ACCEL,
-  BRAKE_DECEL,
-  DECEL,
-  DRAWBAR_WIDTH,
-  DT,
-  EVENT_CLEAR_DISTANCE,
-  V_MAX,
-} from './constants';
+import { SIM_CONSTANTS } from './constants';
 
 // Bump when simulation, collision or scoring behaviour changes, so stored runs and replays of old
 // behaviour are dropped. Not for which result is kept as the best (`recordBest`): a run's outcome is unchanged.
 export const SIM_REVISION = 2;
-
-// A literal, as namespace key order differs between bundle and test runner.
-const constants = {
-  DT,
-  V_MAX,
-  ACCEL,
-  DECEL,
-  BRAKE_DECEL,
-  DRAWBAR_WIDTH,
-  EVENT_CLEAR_DISTANCE,
-  OVERLAP_EPSILON,
-};
 
 export type RunData = {
   readonly params: VehicleParams;
@@ -56,7 +35,7 @@ export function dataFingerprint({ params, obstacles, start, exercise, scoring }:
     ]),
     start,
     exercise && [exercise.target, exercise.tolerances, exercise.waypoint],
-    constants,
+    SIM_CONSTANTS,
     scoring,
   ]);
   let hash = 0x811c9dc5;
