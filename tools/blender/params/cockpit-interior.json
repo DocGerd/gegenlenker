@@ -1,0 +1,162 @@
+{
+  "schema": 1,
+  "fov": 55,
+  "aspect": 2.4,
+  "overscan": 1.1,
+  "bleed": 1.05,
+  "dash": { "centre": -0.52, "curve": 0.06, "lip": 0.035 },
+  "header": { "centre": 0.78, "curve": -0.06 },
+  "visor": { "left": -0.5, "right": -0.08, "bottom": 0.62, "lip": 0.025 },
+  "pillar": { "centre": 0.91, "width": 0.12, "lean": 0.25 },
+  "atlas": {
+    "size": 2048,
+    "maskSize": 1024,
+    "regions": {
+      "dashLeft": {
+        "kind": "edge",
+        "anchor": "dash",
+        "rect": [0, 0, 2048, 512],
+        "x": [-2.64, 0],
+        "y": [-0.08, 0.62]
+      },
+      "dashRight": {
+        "kind": "edge",
+        "anchor": "dash",
+        "rect": [0, 512, 2048, 512],
+        "x": [0, 2.64],
+        "y": [-0.08, 0.62]
+      },
+      "headerLeft": {
+        "kind": "edge",
+        "anchor": "header",
+        "rect": [0, 1024, 2048, 256],
+        "x": [-2.64, 0],
+        "y": [0.35, 0]
+      },
+      "headerRight": {
+        "kind": "edge",
+        "anchor": "header",
+        "rect": [0, 1280, 2048, 256],
+        "x": [0, 2.64],
+        "y": [0.35, 0]
+      },
+      "visor": {
+        "kind": "quad",
+        "part": "visor",
+        "rect": [0, 1536, 1024, 256],
+        "x": [0, 1],
+        "y": [1, 0]
+      },
+      "pillar": {
+        "kind": "quad",
+        "part": "pillar",
+        "rect": [0, 1792, 2048, 256],
+        "x": [0, 1],
+        "y": [0, 1]
+      }
+    }
+  },
+  "materials": {
+    "dash": {
+      "hue": "#2a2c2e",
+      "roughness": 0.65,
+      "source": "plastic",
+      "normal": 0.6,
+      "tile": 0.25
+    },
+    "trim": {
+      "hue": "#293133",
+      "roughness": 0.5,
+      "source": "plastic",
+      "normal": 0.25,
+      "tile": 0.4
+    },
+    "headliner": {
+      "hue": "#6f716a",
+      "roughness": 0.9,
+      "source": "fabric",
+      "normal": 0.8,
+      "tile": 0.3
+    },
+    "visor": {
+      "hue": "#2e3236",
+      "roughness": 0.55,
+      "source": "leather",
+      "normal": 0.3,
+      "tile": 0.3
+    },
+    "seal": { "hue": "#141516", "roughness": 0.7, "source": "rubber", "normal": 0.5, "tile": 0.2 },
+    "console": {
+      "hue": "#1b1d1f",
+      "roughness": 0.5,
+      "source": "plastic",
+      "normal": 0.3,
+      "tile": 0.25
+    },
+    "grille": {
+      "hue": "#18191a",
+      "roughness": 0.7,
+      "source": "plastic",
+      "normal": 0.6,
+      "tile": 0.25
+    },
+    "display": {
+      "hue": "#0b0d10",
+      "roughness": 0.15,
+      "source": "plastic",
+      "normal": 0.05,
+      "tile": 0.25
+    }
+  },
+  "samples": { "colour": 16, "occlusion": 64, "occlusionDistance": 0.25 },
+  "maps": {
+    "plastic": { "colour": "Color", "normal": "NormalGL", "roughness": "Roughness", "ao": null },
+    "leather": { "colour": "Color", "normal": "NormalGL", "roughness": "Roughness", "ao": null },
+    "rubber": { "colour": "Color", "normal": "NormalGL", "roughness": "Roughness", "ao": null },
+    "fabric": {
+      "colour": "Color",
+      "normal": "NormalGL",
+      "roughness": "Roughness",
+      "ao": "AmbientOcclusion"
+    }
+  },
+  "sources": {
+    "plastic": {
+      "url": "https://ambientcg.com/a/Plastic006",
+      "licence": "CC0-1.0",
+      "files": {
+        "Plastic006/Plastic006_2K-JPG_Color.jpg": "f35b6190d8ec055ffff775849ead3278e32248999b6f047c92103cc40a90e4ca",
+        "Plastic006/Plastic006_2K-JPG_NormalGL.jpg": "b6331bb56ab61eb2dbcea051a93e0819f1025ebe5f9abe215a761a1930cf59af",
+        "Plastic006/Plastic006_2K-JPG_Roughness.jpg": "76caae54f89b62ebc0d56ce6b3597bb7b3ebecf7960b189052521622756962b5"
+      }
+    },
+    "fabric": {
+      "url": "https://ambientcg.com/a/Fabric030",
+      "licence": "CC0-1.0",
+      "files": {
+        "Fabric030/Fabric030_2K-JPG_Color.jpg": "7aa2ae8d953523c1e7489b4fa7ffd3cfda8f463738db4ddebbbaf126a1ee351a",
+        "Fabric030/Fabric030_2K-JPG_NormalGL.jpg": "7c871bf6969e45e5aa11c5d04c7ad141dbc0aadf1124b7eeb9b0b42eb0c8890b",
+        "Fabric030/Fabric030_2K-JPG_Roughness.jpg": "ac4806ea54090d5979f5052eb02f72b27cb01762ebfafa82cce2464e5274c1ec",
+        "Fabric030/Fabric030_2K-JPG_AmbientOcclusion.jpg": "19d2e4f9f510f8582412120087bc9326fb42aa6b18fff2666d5b1fd56836dc69"
+      }
+    },
+    "leather": {
+      "url": "https://ambientcg.com/a/Leather037",
+      "licence": "CC0-1.0",
+      "files": {
+        "Leather037/Leather037_2K-JPG_Color.jpg": "a9eaa4b723a541062c47c619b20c2399f90d18fb4627c031231b1a6786fe8a13",
+        "Leather037/Leather037_2K-JPG_NormalGL.jpg": "04b01b79fdb46470af38e1f1ea82bb53b607d6235aa8137b93a5fb41a56c5293",
+        "Leather037/Leather037_2K-JPG_Roughness.jpg": "801c202182181386969a251470f76b854b47a9236d832f77c4fe736ca2fc6f8e"
+      }
+    },
+    "rubber": {
+      "url": "https://ambientcg.com/a/Rubber004",
+      "licence": "CC0-1.0",
+      "files": {
+        "Rubber004/Rubber004_2K-JPG_Color.jpg": "9d560551d0beae1726f98c8a72a12441a01e28413417ebd0c8229bcec20dbcfc",
+        "Rubber004/Rubber004_2K-JPG_NormalGL.jpg": "59242ba156992a6cf9f8cb461be117667f8e14d0aad5a6a801f6fc825223d4df",
+        "Rubber004/Rubber004_2K-JPG_Roughness.jpg": "84486ce9e73fa0dc4c70ec86ab33e94e409ebdd8ad194f164abf554a167ccdc7"
+      }
+    }
+  }
+}

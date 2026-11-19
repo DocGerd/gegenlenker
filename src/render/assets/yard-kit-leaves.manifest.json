@@ -1,0 +1,15 @@
+{
+  "scriptSha256": "71f6b621953397d48ecfd4188b81ad78517ea96c0a24e3c3c616c2acfa187738",
+  "commonSha256": "60f8a9ba9aeaa53d455d5879ddb099f315bf50a0c4fea2f78b1fa2b6cb47e2d2",
+  "kitCommonSha256": "c18db8b22537a7b24a488e6c1da414dfea2543076f819c112b627d53a7b748bf",
+  "paramsSha256": "6c1eb3fc45aa0be5a67d4a45210290917e6901f886176a8d2089338acfa55cc9",
+  "pixelsSha256": "b14574a2f11a0ff5ad72eac933e4a0b963891386330f8100a80143437141ea67",
+  "blenderVersion": "5.3.0",
+  "encoderVersion": "0.6.0",
+  "inputsSha256": "f2b7161a4fe597dadc230d3b24bac12310e5e48626a5bbb37f56971f20bf7cbc",
+  "width": 1024,
+  "height": 1024,
+  "mipLevels": 11,
+  "ktx2Sha256": "0b65854fbf13439101e8cd5daf8d5e23b4d5bf10e1e71924a854eb188a0c4218",
+  "ktx2Bytes": 459213
+}

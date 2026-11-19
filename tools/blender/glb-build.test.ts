@@ -6,54 +6,48 @@ import { MAX_PRECACHE_FILE_BYTES } from '../../src/pwa/config';
 import {
   ASSETS,
   canonicalJson,
-  commonSha256,
   glbSceneExtras,
   glbSha256,
   type GlbManifest,
   type Json,
   optimiseSha256,
-  paramsSha256,
   ROOT,
-  scriptSha256,
+  RUNS,
+  runHashes,
   unsafeNumbers,
 } from './glb-build';
 
 const read = (file: string): unknown => JSON.parse(readFileSync(join(ROOT, file), 'utf8'));
 
 /** Red means stale inputs: rerun `pnpm glb:params`, the Blender script, `pnpm glb:optimise`, `pnpm glb:manifest`. */
-describe.each(ASSETS)('glb shell build: $key', (asset) => {
-  const manifest = read(asset.manifest) as GlbManifest;
-
-  it('commits the params the current vehicle data produces', () => {
-    expect(read(asset.params)).toEqual(asset.build());
+describe.each(RUNS)('blender params: $key', (run) => {
+  it('commits the params the current data produces', () => {
+    expect(read(run.params)).toEqual(run.build());
   });
 
   it('keeps every param number out of the range where Python and JavaScript print differently', () => {
-    expect(unsafeNumbers(asset.build())).toEqual([]);
+    expect(unsafeNumbers(run.build())).toEqual([]);
   });
+});
+
+describe.each(ASSETS)('glb build: $key', (asset) => {
+  const manifest = read(asset.manifest) as GlbManifest;
+  const { blenderVersion, gltfTransformVersion, ...recorded } = manifest;
 
   it('hashes the scripts, params and glb recorded in the manifest', () => {
+    expect(blenderVersion).not.toBe('');
+    expect(gltfTransformVersion).not.toBe('');
     expect({
-      scriptSha256: scriptSha256(asset),
-      commonSha256: commonSha256(),
-      paramsSha256: paramsSha256(asset),
+      ...runHashes(asset),
       glbSha256: glbSha256(asset),
       glbBytes: statSync(join(ROOT, asset.glb)).size,
-    }).toEqual({
-      scriptSha256: manifest.scriptSha256,
-      commonSha256: manifest.commonSha256,
-      paramsSha256: manifest.paramsSha256,
-      glbSha256: manifest.glbSha256,
-      glbBytes: manifest.glbBytes,
-    });
+    }).toEqual(recorded);
   });
 
   it('was built and optimised by the current scripts from the current params', () => {
     expect(glbSceneExtras(asset)).toEqual({
-      commonSha256: commonSha256(),
+      ...runHashes(asset),
       optimiseSha256: optimiseSha256(),
-      paramsSha256: paramsSha256(asset),
-      scriptSha256: scriptSha256(asset),
     });
   });
 
@@ -63,11 +57,12 @@ describe.each(ASSETS)('glb shell build: $key', (asset) => {
 });
 
 describe('glb shell assets', () => {
-  it('give every truck a cab and a body, and every trailer a trailer shell', () => {
+  it('give every truck a cab and a body, every trailer a trailer shell, and the yard a kit', () => {
     expect(ASSETS.map((a) => a.key).sort()).toEqual(
       [
         ...TRUCK_IDS.flatMap((id) => [`${id}-body`, `${id}-cab`]),
         ...TRAILER_IDS.map((id) => `${id}-trailer`),
+        'yard-kit',
       ].sort(),
     );
   });
