@@ -17,7 +17,7 @@ import {
   perspectiveLight,
   perspectiveSunDirection,
 } from './light-rig';
-import { domeGround } from './environment';
+import { domeGround } from './scene-sky';
 import { KEYS } from './palette';
 import { AIDS_LAYER, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
 

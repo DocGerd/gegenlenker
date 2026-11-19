@@ -8,7 +8,8 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ScenePalette } from '../contracts/render';
-import { rectGeometry, tint } from './environment';
+import { rectGeometry } from './ground-geometry';
+import { tint } from './tint';
 import { AIDS_LAYER } from './seams';
 
 /*

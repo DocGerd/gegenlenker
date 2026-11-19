@@ -15,7 +15,7 @@ import type { Pose2, Prediction, Vec2 } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors } from '../vehicles/anchors';
 import { placePose } from './coords';
-import { outlineGeometry } from './environment';
+import { outlineGeometry } from './ground-geometry';
 import { AID_DASH_OFF, AID_DASH_ON, AID_STROKE, AIDS_LAYER, type AidsLayer } from './seams';
 
 const PATH_WIDTH = AID_STROKE.path;
