@@ -64,7 +64,7 @@ export type DriveHandlers = {
   readonly onLeave: () => void;
 };
 
-/** Returns the back action: opens the pause sheet, closes it when open, or leaves when no stage could mount. */
+/** Returns the back action: opens the pause sheet, or closes it when open. */
 export function startDrive(
   root: HTMLElement,
   run: RunConfig,
@@ -164,14 +164,20 @@ export function startDrive(
 
   const view = mountRenderStage(stage, stage, () => exit(false));
   cleanups.push(() => view.dispose());
-  cleanups.push(holdWakeLock());
+  // Released early when the stage halts behind a notice: nothing may drive or hold the screen under it.
+  const live: (() => void)[] = [];
+  const halt = (): void => {
+    for (const release of live.splice(0).reverse()) release();
+  };
+  cleanups.push(halt);
+  live.push(resume, holdWakeLock());
   const onEscape = (e: KeyboardEvent): void => {
     if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
     e.preventDefault();
     togglePause();
   };
   window.addEventListener('keydown', onEscape);
-  cleanups.push(() => window.removeEventListener('keydown', onEscape));
+  live.push(() => window.removeEventListener('keydown', onEscape));
   const { renderer, graphics } = view;
   renderer.setScene(layout, truck, trailer);
 
@@ -196,7 +202,7 @@ export function startDrive(
     lockToLockTurns: truck.steering.lockToLockTurns.value,
     steerRate: params.steerRate,
   });
-  cleanups.push(() => controls.dispose());
+  live.push(() => controls.dispose());
   // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
   const viewInput = createTopDownInput(view.surface, {
     mode: topDown,
@@ -207,7 +213,7 @@ export function startDrive(
       hud.setViewChanged(!isDefaultView(next));
     },
   });
-  cleanups.push(() => viewInput.dispose());
+  live.push(() => viewInput.dispose());
   const hud = createHud(stage, {
     couplingLimit: params.couplingLimit,
     turntableLimit: params.turntableLimit,
@@ -348,6 +354,7 @@ export function startDrive(
     restored() {
       dirty = true;
     },
+    halted: halt,
     frame(seconds) {
       if (reached) {
         finish();

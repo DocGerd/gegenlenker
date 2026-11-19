@@ -3,6 +3,7 @@ import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
   DEFAULT_GRAPHICS,
   DEFAULT_TOP_DOWN_VIEW,
+  GraphicsStartError,
   type GraphicsPreset,
   type Rect,
   type RenderFrame,
@@ -84,8 +85,12 @@ function setAidsLayer(object: Object3D): void {
 
 /** Settles once the GPU renderer can draw; rejects when it cannot start. */
 const startGpu = (canvas: HTMLCanvasElement): Promise<WebGLRenderer> =>
-  new Promise((resolve) => {
-    resolve(new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }));
+  new Promise((resolve, reject) => {
+    try {
+      resolve(new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }));
+    } catch (error) {
+      reject(new GraphicsStartError('unavailable', { cause: error }));
+    }
   });
 
 /** `warmUp` holds the resolution governor off while something heavy (a shell, the ground texture) attaches. */
@@ -217,7 +222,12 @@ export function createThreeSceneRenderer(
   }
 
   function releaseGpu(): void {
-    canvas?.removeEventListener('webglcontextlost', onLost);
+    if (canvas !== null) {
+      canvas.removeEventListener('webglcontextlost', onLost);
+      // three's loss handler asks the browser to restore this context; a 0x0 canvas keeps that cheap.
+      canvas.width = 0;
+      canvas.height = 0;
+    }
     renderer?.dispose();
     renderer = null;
     canvas = null;
@@ -236,7 +246,9 @@ export function createThreeSceneRenderer(
       const next = await startGpu(target);
       if (mine !== generation) {
         next.dispose();
-        return;
+        target.width = 0;
+        target.height = 0;
+        throw new GraphicsStartError('superseded');
       }
       renderer = next;
       canvas = target;

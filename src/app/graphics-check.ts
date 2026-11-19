@@ -13,7 +13,7 @@ function webgl2Supported(): boolean {
     }
     return true;
   } catch (error) {
-    console.warn('WebGL 2 probe failed', error);
+    console.error('WebGL 2 probe failed', error);
     return false;
   }
 }

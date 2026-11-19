@@ -1,4 +1,4 @@
-import type { GraphicsPreset, SceneRenderer } from '../contracts/render';
+import { GraphicsStartError, type GraphicsPreset, type SceneRenderer } from '../contracts/render';
 import { createSceneRenderer } from '../render';
 import { currentSettings } from './settings';
 import { showNotice } from './notice';
@@ -28,10 +28,20 @@ function startOnFreshCanvas(s: Shared): Promise<void> {
   return s.renderer.init(canvas);
 }
 
+const superseded = (error: unknown): boolean =>
+  error instanceof GraphicsStartError && error.reason === 'superseded';
+
 function setReady(s: Shared, next: Promise<void>): void {
   s.ready = next;
-  // A loss may happen while no stage is mounted to handle the outcome.
-  next.catch(() => undefined);
+  // Handled here because no stage may be mounted when it settles.
+  next.then(
+    () => {
+      s.started = true;
+    },
+    (error: unknown) => {
+      if (!superseded(error)) console.error('Graphics could not start', error);
+    },
+  );
 }
 
 /** A hidden page may lose the context again, so a fresh one waits until it is shown. */
@@ -63,9 +73,14 @@ function acquireRenderer(): Shared {
   let recent = 0;
   let lastLoss = -Infinity;
   renderer.onLost(() => {
-    const now = performance.now();
-    recent = now - lastLoss > RECREATE_WINDOW_MS ? 1 : recent + 1;
-    lastLoss = now;
+    // Browsers drop the contexts of hidden pages; only losses while shown count towards giving up.
+    const hidden = document.visibilityState === 'hidden';
+    if (!hidden) {
+      const now = performance.now();
+      recent = now - lastLoss > RECREATE_WINDOW_MS ? 1 : recent + 1;
+      lastLoss = now;
+    }
+    console.warn(`Graphics context lost${hidden ? ' while hidden' : ''}; starting afresh`);
     setReady(
       s,
       recent > MAX_RECREATES
@@ -91,6 +106,8 @@ export type StageHooks = {
   readonly frame: (seconds: number) => void;
   /** The renderer came back on a fresh canvas after a loss; redraw. */
   readonly restored: () => void;
+  /** The stage stopped for good behind a notice: release what must not outlive the drawing. */
+  readonly halted?: () => void;
 };
 
 export type RenderStage = {
@@ -151,28 +168,35 @@ export function mountRenderStage(
   };
   const observer = new ResizeObserver(relayout);
 
+  const halt = (show: () => HTMLElement): void => {
+    if (notice !== null) return;
+    notice = show();
+    hooks?.halted?.();
+  };
   const track = (pending: Promise<void>, recovering: boolean): void => {
     ready = false;
     pause();
     pending.then(
       () => {
         if (signal.aborted || pending !== s.ready) return;
-        s.started = true;
         ready = true;
         if (recovering) hooks?.restored();
         resume();
       },
-      () => {
-        if (signal.aborted || pending !== s.ready) return;
+      (error: unknown) => {
+        if (signal.aborted || pending !== s.ready || superseded(error)) return;
+        const reload = { label: 'reload', run: () => location.reload() } as const;
+        const back = { label: 'back', run: onBack } as const;
         if (s.started) {
-          notice ??= showNotice(stage, 'contextLost', {
-            label: 'reload',
-            run: () => location.reload(),
-          });
-        } else {
-          forget(s);
-          notice ??= showNotice(stage, 'noWebgl', { label: 'back', run: onBack });
+          halt(() => showNotice(stage, 'contextLost', reload));
+          return;
         }
+        forget(s);
+        halt(() =>
+          error instanceof GraphicsStartError && error.reason === 'unavailable'
+            ? showNotice(stage, 'noWebgl', back)
+            : showNotice(stage, 'graphicsFailed', reload, back),
+        );
       },
     );
   };
@@ -199,6 +223,7 @@ export function mountRenderStage(
     surface,
     start(next) {
       hooks = next;
+      if (notice !== null) next.halted?.();
       observer.observe(host);
       relayout();
       resume();

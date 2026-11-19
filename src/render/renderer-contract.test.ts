@@ -1,0 +1,164 @@
+import { Group } from 'three';
+import { describe, expect, it, vi } from 'vitest';
+import { layouts } from '../content/registry';
+import { resolveLayout } from '../content/resolve-layout';
+import type { RenderFrame, SceneRenderer, ScenePalette } from '../contracts/render';
+import { createContactQuery } from '../sim/collision';
+import { NO_PREDICTION } from '../sim/predict';
+import { createSimulation } from '../sim/simulation';
+import { resolveCombination } from '../vehicles/resolve';
+import { trailerById, truckById } from '../vehicles/registry';
+import { createThreeSceneRenderer } from './three-renderer';
+import { computeViewports } from './viewports';
+
+const draws = vi.hoisted(() => ({ count: 0 }));
+
+vi.mock('three', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('three')>();
+  // Called with `new`; any method not listed is a no-op, and `then` stays absent so a promise
+  // does not take the renderer for a thenable.
+  function FakeWebGLRenderer(): object {
+    const own: Record<PropertyKey, unknown> = {
+      info: { autoReset: true, reset: () => undefined, render: { calls: 0 } },
+      getContext: () => ({ getExtension: () => null }),
+      render: () => {
+        draws.count++;
+      },
+    };
+    return new Proxy(own, {
+      get: (target, key) =>
+        key in target || key === 'then' ? target[key] : (target[key] = () => undefined),
+    });
+  }
+  return { ...actual, WebGLRenderer: FakeWebGLRenderer };
+});
+
+vi.mock('./palette', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./palette')>();
+  return {
+    ...actual,
+    readScenePalette: (): ScenePalette =>
+      Object.fromEntries(Object.keys(actual.KEYS).map((k) => [k, 0x808080])) as ScenePalette,
+  };
+});
+
+vi.stubGlobal('document', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+vi.stubGlobal('window', { devicePixelRatio: 1 });
+
+type Harness = {
+  readonly create: () => SceneRenderer;
+  readonly canvas: () => HTMLCanvasElement;
+  /** The GPU API reports `canvas`'s context lost. */
+  readonly lose: (canvas: HTMLCanvasElement) => void;
+  readonly draws: () => number;
+};
+
+const part = () => ({
+  object: new Group(),
+  update: () => undefined,
+  setQuality: () => undefined,
+  dispose: () => undefined,
+});
+
+const three: Harness = {
+  create: () =>
+    createThreeSceneRenderer({ truck: part, trailer: part, environment: part, aids: part }),
+  canvas: () => {
+    const listeners = new Map<string, Set<() => void>>();
+    return {
+      width: 300,
+      height: 150,
+      addEventListener: (type: string, fn: () => void) => {
+        const set = listeners.get(type) ?? new Set();
+        set.add(fn);
+        listeners.set(type, set);
+      },
+      removeEventListener: (type: string, fn: () => void) => listeners.get(type)?.delete(fn),
+      dispatch: (type: string) => {
+        for (const fn of [...(listeners.get(type) ?? [])]) fn();
+      },
+    } as unknown as HTMLCanvasElement;
+  },
+  lose: (canvas) => {
+    (canvas as unknown as { dispatch: (type: string) => void }).dispatch('webglcontextlost');
+  },
+  draws: () => draws.count,
+};
+
+const truck = truckById('man-le-18-280');
+const trailer = trailerById('krone-azw-18');
+const layout = resolveLayout(layouts.depot, null);
+const frame: RenderFrame = {
+  snapshot: createSimulation(
+    resolveCombination(truck, trailer),
+    { truck: layouts.depot.start },
+    createContactQuery(layout.obstacles),
+  ).snapshot(),
+  views: computeViewports(800, 600, 'replay'),
+  topDown: 'yard',
+  aids: { pivots: false, path: false, tracks: false, ghost: false },
+  predicted: NO_PREDICTION,
+};
+
+describe.each([['three', three]] as const)('SceneRenderer contract: %s', (_, h) => {
+  async function started(): Promise<{ renderer: SceneRenderer; canvas: HTMLCanvasElement }> {
+    const renderer = h.create();
+    renderer.setScene(layout, truck, trailer);
+    renderer.resize(800, 600);
+    const canvas = h.canvas();
+    await renderer.init(canvas);
+    return { renderer, canvas };
+  }
+
+  it('projects nothing before the first render, then a point on screen', async () => {
+    const { renderer } = await started();
+    expect(renderer.project(0, 0)).toBeNull();
+    renderer.render(frame);
+    expect(renderer.project(0, 0)).not.toBeNull();
+  });
+
+  it('stops drawing on a loss and tells each listener once, until it unsubscribes', async () => {
+    const { renderer, canvas } = await started();
+    const kept = vi.fn();
+    const dropped = vi.fn();
+    renderer.onLost(kept);
+    const unsubscribe = renderer.onLost(dropped);
+    unsubscribe();
+    h.lose(canvas);
+    expect(renderer.stats().contextLost).toBe(true);
+    expect(kept).toHaveBeenCalledOnce();
+    expect(dropped).not.toHaveBeenCalled();
+
+    const before = h.draws();
+    renderer.render(frame);
+    renderer.skipFrame();
+    expect(h.draws()).toBe(before);
+  });
+
+  it('draws the kept scene again once started on a fresh canvas', async () => {
+    const { renderer, canvas } = await started();
+    const lost = vi.fn();
+    renderer.onLost(lost);
+    h.lose(canvas);
+    const fresh = h.canvas();
+    await renderer.init(fresh);
+    expect(renderer.stats().contextLost).toBe(false);
+    const before = h.draws();
+    renderer.render(frame);
+    expect(h.draws()).toBeGreaterThan(before);
+
+    h.lose(canvas);
+    expect(lost).toHaveBeenCalledOnce();
+    h.lose(fresh);
+    expect(lost).toHaveBeenCalledTimes(2);
+  });
+
+  it('can be disposed twice and draws nothing after', async () => {
+    const { renderer } = await started();
+    renderer.dispose();
+    renderer.dispose();
+    const before = h.draws();
+    renderer.render(frame);
+    expect(h.draws()).toBe(before);
+  });
+});

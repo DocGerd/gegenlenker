@@ -55,6 +55,11 @@ export async function startPinnedDrive(
   await page.goto('./');
   await page.getByRole('button', { name: new RegExp(`^${exercise}`) }).click();
   await page.locator('.hud-mirror:not([hidden])').nth(1).waitFor();
+  await settle(page, preset);
+}
+
+/** Steps the pinned clock until `preset`'s attachments are in place, then settles. */
+export async function settle(page: Page, preset: Preset): Promise<void> {
   const want = READY[preset];
   for (let i = 0; ; i++) {
     await step(page, 1);

@@ -94,10 +94,12 @@ export function startApp(root: HTMLElement): void {
 
   // Loaded on demand so the menu paints without parsing three.js.
   const drive = (run: RunConfig): void => {
-    void probeGraphics().then((backend) => {
-      if (backend === null) noWebgl();
-      else loadDrive(run);
-    });
+    probeGraphics()
+      .then((backend) => {
+        if (backend === null) noWebgl();
+        else loadDrive(run);
+      })
+      .catch((error: unknown) => loadFailed(error, () => drive(run)));
   };
   const loadDrive = (run: RunConfig): void => {
     import('./drive')
@@ -121,10 +123,12 @@ export function startApp(root: HTMLElement): void {
       .catch((error: unknown) => loadFailed(error, () => drive(run)));
   };
   const replay = (log: InputLog, onExit: () => void): void => {
-    void probeGraphics().then((backend) => {
-      if (backend === null) noWebgl();
-      else loadReplay(log, onExit);
-    });
+    probeGraphics()
+      .then((backend) => {
+        if (backend === null) noWebgl();
+        else loadReplay(log, onExit);
+      })
+      .catch((error: unknown) => loadFailed(error, () => replay(log, onExit)));
   };
   const loadReplay = (log: InputLog, onExit: () => void): void => {
     import('./replay-view')

@@ -123,6 +123,7 @@ export const en = {
   dismiss: 'Dismiss',
   noWebgl: 'This device cannot show WebGL 2 graphics.',
   contextLost: 'The graphics stopped and could not restart. Reload to continue.',
+  graphicsFailed: 'The graphics could not start. Reload to try again.',
   loadFailed: 'Could not load. Check the connection and try again.',
   langDe: 'Deutsch',
   langEn: 'English',

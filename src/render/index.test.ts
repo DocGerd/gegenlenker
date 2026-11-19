@@ -34,6 +34,7 @@ vi.mock('./vehicle-pbr', () => ({
 vi.mock('./three-renderer', () => ({
   createThreeSceneRenderer: () => ({
     warmUp: mocks.warmUp,
+    onLost: vi.fn(),
     setQuality: vi.fn(),
     dispose: vi.fn(),
   }),

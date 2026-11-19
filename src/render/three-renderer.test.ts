@@ -2,13 +2,14 @@ import { Group, type WebGLRenderer } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
-import type { ScenePalette } from '../contracts/render';
+import { GraphicsStartError, type ScenePalette } from '../contracts/render';
 import { trailerById, truckById } from '../vehicles/registry';
 import type { QualityFlags } from './quality';
 import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
 
 const made = vi.hoisted(() => [] as { dispose: () => void }[]);
+const fail = vi.hoisted(() => ({ next: false }));
 
 vi.mock('three', async (importOriginal) => {
   const actual = await importOriginal<typeof import('three')>();
@@ -17,6 +18,10 @@ vi.mock('three', async (importOriginal) => {
     info = { autoReset: true };
     dispose = vi.fn();
     constructor() {
+      if (fail.next) {
+        fail.next = false;
+        throw new Error('Error creating WebGL context.');
+      }
       made.push(this);
     }
     getContext() {
@@ -80,7 +85,12 @@ describe('renderer quality', () => {
 
 describe('renderer start', () => {
   const canvas = (): HTMLCanvasElement =>
-    ({ addEventListener: vi.fn(), removeEventListener: vi.fn() }) as unknown as HTMLCanvasElement;
+    ({
+      width: 300,
+      height: 150,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }) as unknown as HTMLCanvasElement;
   const truck = truckById('man-le-18-280');
   const trailer = trailerById('krone-azw-18');
 
@@ -101,12 +111,15 @@ describe('renderer start', () => {
     for (const log of applied) expect(log).toHaveLength(2);
   });
 
-  it('drops a start that a later init or dispose superseded', async () => {
+  const superseded = new GraphicsStartError('superseded');
+
+  it('rejects a start that a later init or dispose superseded and drops its renderer', async () => {
     const onRenderer = vi.fn();
     const { renderer } = stubParts(onRenderer);
     const first = renderer.init(canvas());
     const second = renderer.init(canvas());
-    await Promise.all([first, second]);
+    await expect(first).rejects.toEqual(superseded);
+    await second;
     expect(onRenderer).toHaveBeenCalledOnce();
     expect(onRenderer).toHaveBeenCalledWith(made[1]);
     expect(made[0]?.dispose).toHaveBeenCalledOnce();
@@ -114,9 +127,25 @@ describe('renderer start', () => {
 
     const late = renderer.init(canvas());
     renderer.dispose();
-    await late;
+    await expect(late).rejects.toEqual(superseded);
     expect(onRenderer).toHaveBeenCalledOnce();
     expect(made[1]?.dispose).toHaveBeenCalledOnce();
     expect(made[2]?.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('rejects as unavailable when no context can be made', async () => {
+    fail.next = true;
+    const { renderer } = stubParts();
+    const error: unknown = await renderer.init(canvas()).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(GraphicsStartError);
+    expect(error).toMatchObject({ reason: 'unavailable' });
+  });
+
+  it('shrinks a canvas it lets go of, so a restored context there holds no backing store', async () => {
+    const { renderer } = stubParts();
+    const old = canvas();
+    await renderer.init(old);
+    await renderer.init(canvas());
+    expect([old.width, old.height]).toEqual([0, 0]);
   });
 });

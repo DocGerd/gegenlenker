@@ -8,11 +8,13 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
-import { shoot, startPinnedDrive } from '../e2e/pinned-shoot.ts';
+import { distinctColours, shoot, startPinnedDrive } from '../e2e/pinned-shoot.ts';
 
 const PRESETS = ['low', 'balanced', 'high'];
 const SHOTS = ['cockpit', 'mirrorLeft', 'mirrorRight', 'follow', 'yard', 'chase'];
 const EXERCISE = 'Straight reverse';
+// A drawn pane has far more; a blank pane or a notice has a handful.
+const MIN_COLOURS = 50;
 // Same GL as the e2e `offline` project, so hashes match what CI renders.
 const ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'];
 
@@ -40,9 +42,14 @@ try {
     await startPinnedDrive(page, preset, EXERCISE);
     const chase = await page.locator('[data-view="chase"]').isVisible();
     for (const shot of SHOTS) {
-      if (shot === 'chase' && !chase) continue;
-      const png = await shoot(page, shot);
       const name = `${preset}-${shot}`;
+      if (shot === 'chase' && !chase) {
+        console.log(`skip   ${name}: no chase view at this preset`);
+        continue;
+      }
+      const png = await shoot(page, shot);
+      const colours = await distinctColours(page, png);
+      if (colours < MIN_COLOURS) throw new Error(`${name} has ${colours} colours: not drawn`);
       writeFileSync(join(values.out, `${name}.png`), png);
       hashes[name] = createHash('sha256').update(png).digest('hex');
     }

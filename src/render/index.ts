@@ -81,6 +81,10 @@ export function createSceneRenderer(): SceneRenderer {
     environment: (layout, palette) => proceduralEnvironment(layout, palette, groundTextures),
     aids: proceduralAids,
   });
+  // Read by the e2e: the GPU API of the live renderer, absent while there is none.
+  renderer.onLost(() => {
+    delete document.documentElement.dataset['renderBackend'];
+  });
   const { warmUp: warmTarget, ...sceneRenderer } = renderer;
   warm.target = warmTarget;
   if (warm.pending) warmTarget();
@@ -88,7 +92,6 @@ export function createSceneRenderer(): SceneRenderer {
     ...sceneRenderer,
     async init(canvas) {
       await renderer.init(canvas);
-      // Read by the e2e: the GPU API in use.
       document.documentElement.dataset['renderBackend'] = renderer.stats().backend;
     },
     setQuality(preset) {
