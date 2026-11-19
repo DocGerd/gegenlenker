@@ -27,7 +27,7 @@ import {
 } from './cockpit-interior';
 import { createMirror } from './mirror';
 import { QUALITY_FLAGS } from './quality';
-import { enableLayers, INTERIOR_LAYER, SKY_LAYER, TOP_DOWN_LAYERS } from './seams';
+import { enableLayers, INTERIOR_LAYER, PERSPECTIVE_LAYER, TOP_DOWN_LAYERS } from './seams';
 import { computeViewports } from './viewports';
 
 const eye = truckAnchors(truckById('man-le-18-280')).eye;
@@ -147,9 +147,9 @@ describe('cockpit interior layers', () => {
     }
   });
 
-  it('keeps the cockpit camera on the sky layer too, and no other camera on the interior', () => {
+  it('keeps the cockpit camera on the perspective layer too, and no other camera on the interior', () => {
     const cockpit = createCockpitCamera().layers;
-    expect(cockpit.isEnabled(SKY_LAYER)).toBe(true);
+    expect(cockpit.isEnabled(PERSPECTIVE_LAYER)).toBe(true);
     for (const layers of [createMirror().camera.layers, createChaseCamera().layers]) {
       expect(layers.isEnabled(INTERIOR_LAYER)).toBe(false);
     }

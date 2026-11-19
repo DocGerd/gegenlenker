@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Obstacle } from '../contracts/layout';
 import type { BodyFootprint, Obb } from '../contracts/sim';
-import { contactPoint, createContactQuery, obbOverlap, OVERLAP_EPSILON } from './collision';
+import { contactPoint, createContactQuery, obbOverlap } from './collision';
+import { OVERLAP_EPSILON } from './constants';
 
 const box = (cx: number, cy: number, halfLength: number, halfWidth: number, heading = 0): Obb => ({
   cx,

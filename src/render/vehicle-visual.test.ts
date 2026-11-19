@@ -12,7 +12,7 @@ import {
   CAB_LAYER,
   COCKPIT_LAYERS,
   enableLayers,
-  SKY_LAYER,
+  PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
 } from './seams';
 import { proceduralTrailer, proceduralTruck, SHADOW_HEIGHT, SHADOW_NAME } from './vehicle-visual';
@@ -60,7 +60,7 @@ describe.each([
 });
 
 const detailOf = (root: Object3D): Mesh[] =>
-  meshes(root).filter((m) => m.layers.mask === 1 << SKY_LAYER && m.name !== SHADOW_NAME);
+  meshes(root).filter((m) => m.layers.mask === 1 << PERSPECTIVE_LAYER && m.name !== SHADOW_NAME);
 
 const shadowsOf = (root: Object3D): Mesh[] => meshes(root).filter((m) => m.name === SHADOW_NAME);
 
@@ -138,7 +138,7 @@ describe('blob shadows', () => {
       const topDown = new Camera();
       topDown.layers.enable(AIDS_LAYER);
       const cockpit = new Camera();
-      cockpit.layers.enable(SKY_LAYER);
+      cockpit.layers.enable(PERSPECTIVE_LAYER);
       expect(shadowsOf(object).length).toBeGreaterThan(0);
       for (const m of shadowsOf(object)) {
         const material = m.material as Material;
@@ -235,7 +235,7 @@ describe('number plate grade', () => {
     meshes(root).filter((m) => {
       const material = m.material as Material & { vertexColors?: boolean; isNodeMaterial?: true };
       return (
-        m.layers.mask === 1 << SKY_LAYER &&
+        m.layers.mask === 1 << PERSPECTIVE_LAYER &&
         material.isNodeMaterial === true &&
         !material.vertexColors
       );
