@@ -1,7 +1,6 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
-import { SCREENSHOT_POLL } from './pinned-shoot';
 
 type Size = { width: number; height: number };
 
@@ -154,7 +153,7 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 /** The cockpit pane is drawn from the first row down, once a frame has landed. */
 async function expectNoBlankBand(page: Page, size: Size): Promise<void> {
   await settled(page);
-  await expect.poll(() => blankRows(page, Math.round(size.width * 0.3)), SCREENSHOT_POLL).toBe(0);
+  await expect.poll(() => blankRows(page, Math.round(size.width * 0.3))).toBe(0);
 }
 
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };

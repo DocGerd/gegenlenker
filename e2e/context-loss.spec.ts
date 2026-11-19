@@ -4,8 +4,6 @@ import { en } from '../src/i18n/en';
 import {
   bareScreenshot,
   distinctColours,
-  GROUND_LOAD,
-  HIGH_SCREENSHOT_POLL,
   MIN_DRAWN_COLOURS,
   settle,
   shoot,
@@ -90,7 +88,6 @@ async function startDrive(page: Page): Promise<void> {
 }
 
 test('a lost GPU context comes back on a fresh canvas and the drive goes on', async ({ page }) => {
-  test.setTimeout(90_000);
   const problems = collectProblems(page);
   await page.addInitScript(
     ([key, value]) => {
@@ -102,9 +99,9 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await startDrive(page);
   const html = page.locator('html');
   await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
-  await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/, GROUND_LOAD);
+  await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
   // a loss during a load would warn and spend a retry
-  await expect(html).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
+  await expect(html).toHaveAttribute('data-sky-hdri', 'on');
   await page.evaluate(() => {
     const seen: (string | null)[] = [];
     Object.assign(window, { pbrSeen: seen });
@@ -132,7 +129,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   const pane = await page.locator('[data-hud="topDown"]').boundingBox();
   if (pane === null) throw new Error('no top-down pane');
   await expect
-    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)), HIGH_SCREENSHOT_POLL)
+    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)))
     .toBeGreaterThan(MIN_DRAWN_COLOURS);
 
   const speed = page.locator('[data-hud="speed"]');
@@ -150,7 +147,6 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
 });
 
 test('the cockpit looks the same after a loss as before it', async ({ page }) => {
-  test.setTimeout(90_000);
   const problems = collectProblems(page);
   await watchFailedTextures(page);
   await startPinnedDrive(page, 'high', en.exerciseStraightReverse);

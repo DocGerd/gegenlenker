@@ -1,7 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { en } from '../src/i18n/en';
 import { collectThreeProblems } from './three-problems';
-import { GROUND_LOAD } from './pinned-shoot';
 
 test('loads from the subpath and drives an exercise offline', async ({
   page,
@@ -195,10 +194,10 @@ test('High graphics caches the ground and sky textures and transcoder on first u
 
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   const marker = page.locator('html');
-  await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/, GROUND_LOAD);
+  await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/);
   const target = await marker.getAttribute('data-ground-texture');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
-  await expect(marker).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
   await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
   // WebGL 2 stays the default until WebGPU passes its gate (docs/perf.md)
   await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
@@ -228,9 +227,9 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   await context.setOffline(true);
   await page.reload();
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
-  await expect(marker).toHaveAttribute('data-ground-texture', target ?? '', GROUND_LOAD);
+  await expect(marker).toHaveAttribute('data-ground-texture', target ?? '');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
-  await expect(marker).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
   await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
   expect(
     warnings.filter((w) =>
