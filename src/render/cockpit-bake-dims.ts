@@ -8,7 +8,7 @@ const hex = (rgb: number): string => `#${rgb.toString(16).padStart(6, '0')}`;
 /** The widest supported cockpit aspect; narrower views crop the bake instead of stretching it. */
 export const BAKE_ASPECT = 2.4;
 /** The bake renders this far past the view edge, in NDC, so the bleed is covered. */
-const OVERSCAN = 1.1;
+const OVERSCAN = 1.2;
 
 function bakePillar(): { centre: number; width: number } {
   const span = pillarSpan(BAKE_ASPECT, COCKPIT_FOV, 1);
@@ -66,7 +66,8 @@ export const COCKPIT_ATLAS = {
 
 /**
  * Inputs of the cockpit interior bake: the NDC contracts of `cockpit-interior.ts` at the bake
- * aspect, the part materials (mean albedo near today's flat hues) and the atlas layout.
+ * aspect, the part materials (mean albedo near today's flat hues; `contrast` scales the source
+ * texture about its mean) and the atlas layout.
  */
 export function cockpitBakeParams() {
   return {
@@ -82,13 +83,21 @@ export function cockpitBakeParams() {
     pillar: { ...bakePillar(), lean: 0.25 },
     atlas: COCKPIT_ATLAS,
     materials: {
-      dash: { hue: '#2a2c2e', roughness: 0.65, source: 'plastic', normal: 0.6, tile: 0.25 },
+      dash: {
+        hue: '#2a2c2e',
+        roughness: 0.65,
+        source: 'plastic',
+        normal: 0.6,
+        tile: 0.25,
+        contrast: 0.3,
+      },
       trim: {
         hue: hex(REALISM_HUES.anthracite),
         roughness: 0.5,
         source: 'plastic',
         normal: 0.25,
         tile: 0.4,
+        contrast: 0.3,
       },
       headliner: {
         hue: hex(REALISM_HUES.headliner),
@@ -96,12 +105,48 @@ export function cockpitBakeParams() {
         source: 'fabric',
         normal: 0.8,
         tile: 0.3,
+        contrast: 0.6,
       },
-      visor: { hue: '#2e3236', roughness: 0.55, source: 'leather', normal: 0.3, tile: 0.3 },
-      seal: { hue: '#141516', roughness: 0.7, source: 'rubber', normal: 0.5, tile: 0.2 },
-      console: { hue: '#1b1d1f', roughness: 0.5, source: 'plastic', normal: 0.3, tile: 0.25 },
-      grille: { hue: '#18191a', roughness: 0.7, source: 'plastic', normal: 0.6, tile: 0.25 },
-      display: { hue: '#0b0d10', roughness: 0.15, source: 'plastic', normal: 0.05, tile: 0.25 },
+      visor: {
+        hue: '#2e3236',
+        roughness: 0.55,
+        source: 'leather',
+        normal: 0.3,
+        tile: 0.3,
+        contrast: 0.5,
+      },
+      seal: {
+        hue: '#141516',
+        roughness: 0.7,
+        source: 'rubber',
+        normal: 0.5,
+        tile: 0.2,
+        contrast: 0.5,
+      },
+      console: {
+        hue: '#1b1d1f',
+        roughness: 0.5,
+        source: 'plastic',
+        normal: 0.3,
+        tile: 0.25,
+        contrast: 0.3,
+      },
+      grille: {
+        hue: '#18191a',
+        roughness: 0.7,
+        source: 'plastic',
+        normal: 0.6,
+        tile: 0.25,
+        contrast: 0.5,
+      },
+      display: {
+        hue: '#0b0d10',
+        roughness: 0.15,
+        source: 'plastic',
+        normal: 0.05,
+        tile: 0.25,
+        contrast: 0.2,
+      },
     },
     samples: { colour: 16, occlusion: 64, occlusionDistance: 0.25 },
   };

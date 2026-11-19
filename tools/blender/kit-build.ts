@@ -1,7 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { canonicalJson, ROOT, type Run, runHashes, sha256, YARD_KIT_RUN } from './glb-build';
-import { yardKitParams } from './kit-params';
+import {
+  canonicalJson,
+  COCKPIT_INTERIOR_RUN,
+  ROOT,
+  type Run,
+  runHashes,
+  sha256,
+  YARD_KIT_RUN,
+} from './glb-build';
+import { cockpitInteriorParams, yardKitParams } from './kit-params';
 
 /**
  * KTX2 encodings of the baked kit atlases (ktx2-encoder options). Albedo and masks tolerate ETC1S;
@@ -75,16 +83,21 @@ const texture = (run: Run, key: string, encoding: Encoding, size: number): KitTe
 });
 
 const yard = yardKitParams();
+const cockpit = cockpitInteriorParams();
 
 export const KIT_TEXTURES: readonly KitTexture[] = [
   texture(YARD_KIT_RUN, 'yard-kit-atlas-a', 'albedo', yard.atlas.size),
   texture(YARD_KIT_RUN, 'yard-kit-atlas-b', 'packed', yard.atlas.size),
   texture(YARD_KIT_RUN, 'yard-kit-leaves', 'cards', yard.leafAtlas.size),
+  texture(COCKPIT_INTERIOR_RUN, 'cockpit-atlas-a', 'albedo', cockpit.atlas.size),
+  texture(COCKPIT_INTERIOR_RUN, 'cockpit-atlas-b', 'packed', cockpit.atlas.size),
+  texture(COCKPIT_INTERIOR_RUN, 'cockpit-atlas-m', 'mask', cockpit.atlas.maskSize),
 ];
 
-/** Download budget per bake in bytes (the visual design's asset list, rows 8, 9 and 12). */
+/** Download budget per bake in bytes (the visual design's asset list, rows 8, 9, 12 and 11). */
 export const KIT_BUDGETS: Readonly<Record<string, number>> = {
   'yard-kit': 2_700_000,
+  'cockpit-interior': 4_200_000,
 };
 
 export const KV_INPUTS = 'gegenlenker.inputsSha256';

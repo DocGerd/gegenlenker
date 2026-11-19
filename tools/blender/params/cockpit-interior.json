@@ -2,7 +2,7 @@
   "schema": 1,
   "fov": 55,
   "aspect": 2.4,
-  "overscan": 1.1,
+  "overscan": 1.2,
   "bleed": 1.05,
   "dash": { "centre": -0.52, "curve": 0.06, "lip": 0.035 },
   "header": { "centre": 0.78, "curve": -0.06 },
@@ -62,50 +62,64 @@
       "roughness": 0.65,
       "source": "plastic",
       "normal": 0.6,
-      "tile": 0.25
+      "tile": 0.25,
+      "contrast": 0.3
     },
     "trim": {
       "hue": "#293133",
       "roughness": 0.5,
       "source": "plastic",
       "normal": 0.25,
-      "tile": 0.4
+      "tile": 0.4,
+      "contrast": 0.3
     },
     "headliner": {
       "hue": "#6f716a",
       "roughness": 0.9,
       "source": "fabric",
       "normal": 0.8,
-      "tile": 0.3
+      "tile": 0.3,
+      "contrast": 0.6
     },
     "visor": {
       "hue": "#2e3236",
       "roughness": 0.55,
       "source": "leather",
       "normal": 0.3,
-      "tile": 0.3
+      "tile": 0.3,
+      "contrast": 0.5
     },
-    "seal": { "hue": "#141516", "roughness": 0.7, "source": "rubber", "normal": 0.5, "tile": 0.2 },
+    "seal": {
+      "hue": "#141516",
+      "roughness": 0.7,
+      "source": "rubber",
+      "normal": 0.5,
+      "tile": 0.2,
+      "contrast": 0.5
+    },
     "console": {
       "hue": "#1b1d1f",
       "roughness": 0.5,
       "source": "plastic",
       "normal": 0.3,
-      "tile": 0.25
+      "tile": 0.25,
+      "contrast": 0.3
     },
     "grille": {
       "hue": "#18191a",
       "roughness": 0.7,
       "source": "plastic",
       "normal": 0.6,
-      "tile": 0.25
+      "tile": 0.25,
+      "contrast": 0.5
     },
     "display": {
       "hue": "#0b0d10",
       "roughness": 0.15,
       "source": "plastic",
       "normal": 0.05,
-      "tile": 0.25
+      "tile": 0.25,
+      "contrast": 0.2
     }
   },
   "samples": { "colour": 16, "occlusion": 64, "occlusionDistance": 0.25 },
