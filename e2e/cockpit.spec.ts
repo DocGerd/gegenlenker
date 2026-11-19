@@ -192,9 +192,12 @@ test('the Balanced cockpit sky is blue near the top and fades to haze towards th
   expect(errors).toEqual([]);
 });
 
-/** Bright and not blue: yard ground, where `isGround` alone would also take the sky. */
+/**
+ * Bright and not blue: yard ground, where `isGround` alone would also take the sky. High's light
+ * rig is lowered so no white clips, which leaves its lit yard darker than on the other presets.
+ */
 const isYard = (p: number[] | undefined): boolean =>
-  p !== undefined && !isSky(p) && p.reduce((a, b) => a + b, 0) > 500;
+  p !== undefined && !isSky(p) && p.reduce((a, b) => a + b, 0) > 450;
 
 /** Probe points in the lower half of a mirror, on three columns hugging its left or right edge. */
 function edgePoints(width: number, height: number, side: 'left' | 'right') {
