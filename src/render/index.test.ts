@@ -21,7 +21,15 @@ vi.mock('./glb-shells', () => ({
   CAB_SHELL_URLS: {},
   BODY_SHELL_URLS: {},
   TRAILER_SHELL_URLS: {},
-  fetchTrailerShell: vi.fn(),
+  trailerShellFrom: vi.fn(),
+  startGlbAsset: (
+    _urls: unknown,
+    _parse: unknown,
+    options: { onAttached: (key: string, on: boolean) => void },
+  ) => {
+    if (mocks.syncAttach) options.onAttached('cab', true);
+    return { setEnabled: vi.fn() };
+  },
   startShells: (_urls: unknown, options: { onAttached: (key: string, on: boolean) => void }) => {
     if (mocks.syncAttach) options.onAttached('cab', true);
     return { setEnabled: vi.fn() };
@@ -150,9 +158,12 @@ describe('scene renderer attach hooks', () => {
 
   it('gives the vehicles the loaded sky, and takes it away when the sky is reverted', () => {
     createSceneRenderer();
-    const [apply, revert] = mocks.skyOnLoaded.mock.calls[0] as [(map: object) => void, () => void];
+    const [apply, revert] = mocks.skyOnLoaded.mock.calls[0] as [
+      (maps: { sky: object }) => void,
+      () => void,
+    ];
     const map = {};
-    apply(map);
+    apply({ sky: map });
     expect(mocks.setSky).toHaveBeenLastCalledWith(map);
     revert();
     expect(mocks.setSky).toHaveBeenLastCalledWith(null);
@@ -160,9 +171,9 @@ describe('scene renderer attach hooks', () => {
 
   it('reflects the analytic sky while the grade that tone-maps the capture has failed', () => {
     createSceneRenderer();
-    const [apply] = mocks.skyOnLoaded.mock.calls[0] as [(map: object) => void];
+    const [apply] = mocks.skyOnLoaded.mock.calls[0] as [(maps: { sky: object }) => void];
     const map = {};
-    apply(map);
+    apply({ sky: map });
     mocks.grade?.('failed');
     expect(mocks.setSky).toHaveBeenLastCalledWith(null);
     mocks.grade?.('on');

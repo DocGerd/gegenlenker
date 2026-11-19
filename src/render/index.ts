@@ -5,8 +5,9 @@ import { proceduralEnvironment } from './environment';
 import {
   BODY_SHELL_URLS,
   CAB_SHELL_URLS,
-  fetchTrailerShell,
+  startGlbAsset,
   startShells,
+  trailerShellFrom,
   TRAILER_SHELL_URLS,
 } from './glb-shells';
 import { createGradeCheck, precompileGrade } from './grade';
@@ -50,11 +51,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   const shells = {
     cab: startShells(CAB_SHELL_URLS, { onAttached, enabled: false }),
     body: startShells(BODY_SHELL_URLS, { onAttached, enabled: false }),
-    trailer: startShells(TRAILER_SHELL_URLS, {
-      load: fetchTrailerShell,
-      onAttached,
-      enabled: false,
-    }),
+    trailer: startGlbAsset(TRAILER_SHELL_URLS, trailerShellFrom, { onAttached, enabled: false }),
   };
   // Read by the offline e2e: the transcoded format while the textured ground is drawn, `failed` once given up on, else absent.
   let groundState: string | null = null;
@@ -94,8 +91,8 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     vehicleEnvironment.setSky(gradeFailed ? null : skyMap);
   };
   skyTexture.onLoaded(
-    (map) => {
-      skyMap = map;
+    ({ sky }) => {
+      skyMap = sky;
       syncReflection();
     },
     () => {
