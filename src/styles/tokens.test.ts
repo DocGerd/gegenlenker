@@ -58,6 +58,7 @@ const named = (tokens: Tokens, prefix: string) =>
 describe('tokens.css matches docs/brand/BRAND.md', () => {
   it('reads every token row from BRAND.md', () => {
     expect(brand.light.size).toBeGreaterThan(0);
+    for (const name of named(root, '--color-')) expect(brand.light.has(name), name).toBe(true);
   });
 
   it('defines every BRAND.md token with its light value in :root', () => {
@@ -116,64 +117,45 @@ function oklch(hex: string): [l: number, c: number, h: number] {
   return [lightness, Math.hypot(a, b), ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360];
 }
 
-// Bare hex: the colour-literal lint rule is for UI code, and this is the reference data.
-const bundle: Record<string, [light: string, dark?: string | false]> = {
-  '--color-bg': ['fbfbfc', '0d0e10'],
-  '--color-surface': ['ffffff', '15171a'],
-  '--color-surface-subtle': ['f4f5f7', '141619'],
-  '--color-surface-muted': ['eef0f2', '1b1e22'],
-  '--color-divider': ['e6e9ec', '202428'],
-  '--color-border': ['80878f', '656b72'],
-  '--color-text': ['14161a', 'eceef1'],
-  '--color-text-secondary': ['3b4046', 'c2c7cd'],
-  '--color-text-muted': ['5e646b', '969ca4'],
-  '--color-accent': ['0f7c72', '01afa1'],
-  '--color-success': ['2e7d46', '5fbe7c'],
-  '--color-warning': ['9a6b1a', 'd6a23e'],
-  '--color-danger': ['bc4438', 'e0726a'],
-  '--font-sans': ["'Geist', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"],
-  '--font-mono': ["'Geist Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace"],
-  '--text-2xs': ['11px'],
-  '--text-sm': ['13px'],
-  '--leading-sm': ['19px'],
-  '--text-md': ['14px'],
-  '--leading-md': ['22px'],
-  '--text-lg': ['16px'],
-  '--leading-lg': ['26px'],
-  '--text-xl': ['20px'],
-  '--leading-xl': ['26px'],
-  '--text-2xl': ['24px'],
-  '--leading-2xl': ['30px'],
-  '--text-3xl': ['36px'],
-  '--leading-3xl': ['40px'],
-  '--weight-regular': ['400'],
-  '--weight-medium': ['500'],
-  '--weight-semibold': ['600'],
-  '--tracking-tight': ['-0.02em'],
-  '--space-1': ['4px'],
-  '--space-2': ['8px'],
-  '--space-3': ['12px'],
-  '--space-4': ['16px'],
-  '--space-6': ['24px'],
-  '--space-8': ['32px'],
-  '--space-12': ['48px'],
-  '--radius-sm': ['3px'],
-  '--radius-md': ['6px'],
-  '--radius-lg': ['10px'],
-  '--radius-xl': ['16px'],
-  '--radius-pill': ['100px'],
+const bundle: Record<string, string> = {
+  '--font-sans': "'Geist', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif",
+  '--font-mono': "'Geist Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace",
+  '--text-2xs': '11px',
+  '--text-sm': '13px',
+  '--leading-sm': '19px',
+  '--text-md': '14px',
+  '--leading-md': '22px',
+  '--text-lg': '16px',
+  '--leading-lg': '26px',
+  '--text-xl': '20px',
+  '--leading-xl': '26px',
+  '--text-2xl': '24px',
+  '--leading-2xl': '30px',
+  '--text-3xl': '36px',
+  '--leading-3xl': '40px',
+  '--weight-regular': '400',
+  '--weight-medium': '500',
+  '--weight-semibold': '600',
+  '--tracking-tight': '-0.02em',
+  '--space-1': '4px',
+  '--space-2': '8px',
+  '--space-3': '12px',
+  '--space-4': '16px',
+  '--space-6': '24px',
+  '--space-8': '32px',
+  '--space-12': '48px',
+  '--radius-sm': '3px',
+  '--radius-md': '6px',
+  '--radius-lg': '10px',
+  '--radius-xl': '16px',
+  '--radius-pill': '100px',
 };
 
-const resolve = (token: string) => (/^[0-9a-f]{6}$/.test(token) ? `#${token}` : token);
-
-describe('tokens.css matches the re-typed brand bundle', () => {
-  for (const [name, [light, dark]] of Object.entries(bundle)) {
-    it(`${name} light`, () => {
-      expect(value(name, 'light')).toBe(resolve(light));
-    });
-    if (dark === false) continue;
-    it(`${name} dark`, () => {
-      expect(value(name, 'dark')).toBe(resolve(dark || light));
+describe('tokens.css matches the non-colour brand tokens', () => {
+  for (const [name, expected] of Object.entries(bundle)) {
+    it(name, () => {
+      expect(value(name, 'light')).toBe(expected);
+      expect(value(name, 'dark')).toBe(expected);
     });
   }
 });
