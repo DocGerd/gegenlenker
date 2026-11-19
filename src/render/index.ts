@@ -1,4 +1,5 @@
 import type { GraphicsPreset, SceneRenderer } from '../contracts/render';
+import type { Texture } from 'three';
 import { proceduralAids } from './aids';
 import { proceduralEnvironment } from './environment';
 import {
@@ -85,18 +86,28 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     }
     skyState = state;
   });
-  // the vehicles reflect the HDRI sky once it has loaded; pbr and the HDRI are both High-only
+  // The vehicles reflect the HDRI sky once it has loaded; pbr and the HDRI are both High-only. The
+  // capture is untoned, so without the grade they reflect the analytic sky instead.
+  let skyMap: Texture | null = null;
+  let gradeFailed = false;
+  const syncReflection = (): void => {
+    vehicleEnvironment.setSky(gradeFailed ? null : skyMap);
+  };
   skyTexture.onLoaded(
     (map) => {
-      vehicleEnvironment.setSky(map);
+      skyMap = map;
+      syncReflection();
     },
     () => {
-      vehicleEnvironment.setSky(null);
+      skyMap = null;
+      syncReflection();
     },
   );
   // Read by the offline e2e: `on` once the perspective grade compiled while the preset grades, `failed` if it fell back.
   const gradeCheck = createGradeCheck(
     (state) => {
+      gradeFailed = state === 'failed';
+      syncReflection();
       if (state === null) delete document.documentElement.dataset['perspectiveGrade'];
       else {
         document.documentElement.dataset['perspectiveGrade'] = state;

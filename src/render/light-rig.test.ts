@@ -17,6 +17,7 @@ import {
   perspectiveLight,
   perspectiveSunDirection,
 } from './light-rig';
+import { domeGround } from './environment';
 import { KEYS } from './palette';
 import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER } from './seams';
 
@@ -77,6 +78,14 @@ describe('perspective light rig', () => {
     expect(up.g / up.r).toBeCloseTo(1, 3);
     expect(up.b / up.r).toBeCloseTo(1, 3);
     expect(up.r).toBeLessThanOrEqual(legacyIrradiance(scene));
+    expect(light.groundIrradiance).toBeCloseTo(up.r, 4);
+  });
+
+  it('continues the ground below the horizon of the dome with the rig that lights it', () => {
+    const verge = new Color(scene.verge);
+    const expected = (irradiance: number) => verge.clone().multiplyScalar(irradiance / Math.PI);
+    expect(domeGround(scene, true).getHex()).toBe(expected(light.groundIrradiance).getHex());
+    expect(domeGround(scene, false).getHex()).toBe(expected(legacyIrradiance(scene)).getHex());
   });
 });
 

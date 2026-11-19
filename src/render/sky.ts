@@ -71,6 +71,8 @@ export type Sky = {
   setHdri(map: Texture | null): void;
   /** Moves the analytic sun halo. */
   setSun(direction: Vector3): void;
+  /** The colour below the horizon. */
+  setGround(colour: Color): void;
   dispose(): void;
 };
 
@@ -171,6 +173,9 @@ export function createSky(
     },
     setSun(direction) {
       sunUniform.value.copy(direction).normalize();
+    },
+    setGround(colour) {
+      groundColour.value.copy(colour);
     },
     dispose: () => {
       geometry.dispose();

@@ -97,7 +97,7 @@ export function toneMap(color: Node<'vec3'>): Node<'vec3'> {
 
 export type Rgb = readonly [number, number, number];
 
-/** `toneMap` on the CPU, from the same constants. */
+/** `toneMap` on the CPU, from the same constants; the tests pin the curve here, so change both together. */
 export function toneMapRgb(color: Rgb, exposure = GRADE.exposure.value): Rgb {
   const c: Rgb = [color[0] * exposure, color[1] * exposure, color[2] * exposure];
   const peak = Math.max(...c);
@@ -159,6 +159,8 @@ export function setGraded(
   entry.wanted = on;
   sync(material, entry);
 }
+
+export const gradeDisabled = (): boolean => disabled;
 
 /** Takes the grade off every graded material and keeps it off, or lets the wanted ones wear it again. */
 export function setGradeDisabled(off: boolean): void {

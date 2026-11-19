@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   ground: null as ((state: string | null) => void) | null,
   pbr: null as ((state: 'on' | 'failed' | null) => void) | null,
   sky: null as ((state: string | null) => void) | null,
+  grade: null as ((state: 'on' | 'failed' | null) => void) | null,
   skyAttach: vi.fn(),
   skySetEnabled: vi.fn(),
   skyOnLoaded: vi.fn(),
@@ -65,6 +66,13 @@ vi.mock('./three-renderer', () => ({
       setQuality: mocks.setQuality,
       dispose: vi.fn(),
     };
+  },
+}));
+vi.mock('./grade', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./grade')>()),
+  createGradeCheck: (onState: (state: 'on' | 'failed' | null) => void) => {
+    mocks.grade = onState;
+    return { attach: vi.fn(), setWanted: vi.fn(), dispose: vi.fn() };
   },
 }));
 vi.mock('./aids', () => ({ proceduralAids: vi.fn() }));
@@ -148,6 +156,17 @@ describe('scene renderer attach hooks', () => {
     expect(mocks.setSky).toHaveBeenLastCalledWith(map);
     revert();
     expect(mocks.setSky).toHaveBeenLastCalledWith(null);
+  });
+
+  it('reflects the analytic sky while the grade that tone-maps the capture has failed', () => {
+    createSceneRenderer();
+    const [apply] = mocks.skyOnLoaded.mock.calls[0] as [(map: object) => void];
+    const map = {};
+    apply(map);
+    mocks.grade?.('failed');
+    expect(mocks.setSky).toHaveBeenLastCalledWith(null);
+    mocks.grade?.('on');
+    expect(mocks.setSky).toHaveBeenLastCalledWith(map);
   });
 
   it('publishes the sky state, warming up for a new drawn one but not for failed', () => {

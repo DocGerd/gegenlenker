@@ -417,15 +417,22 @@ export function texturedGroundGeometry(
 }
 
 /**
+ * The verge as an upward-facing Lambert surface lit by the legacy rig, or by the perspective rig
+ * when `split`, so the dome below the horizon continues the ground.
+ */
+export function domeGround(palette: ScenePalette, split: boolean): Color {
+  const irradiance = split ? perspectiveLight(palette).groundIrradiance : legacyIrradiance(palette);
+  return new Color(palette.verge).multiplyScalar(Math.min(1, irradiance / Math.PI));
+}
+
+/**
  * The dome the perspective views show; the vehicle reflections are captured from the same one,
  * with `tone` off, since the material reading the capture tone-maps it.
  */
 export function createSceneSky(palette: ScenePalette, tone = true): Sky {
-  // Radiance of an upward-facing Lambert surface, so the dome below the horizon matches the ground.
-  const lit = legacyIrradiance(palette) / Math.PI;
   return createSky(
     new Color(palette.sky),
-    new Color(palette.verge).multiplyScalar(Math.min(1, lit)),
+    domeGround(palette, false),
     new Color(REALISM_HUES.skyHaze),
     new Color(REALISM_HUES.sunHalo),
     sunPosition(),
@@ -607,6 +614,8 @@ export function proceduralEnvironment(
   const sunDirection = perspectiveSunDirection();
   const haze = new Color(REALISM_HUES.skyHaze);
   const sky = createSceneSky(palette);
+  const legacyGround = domeGround(palette, false);
+  const splitGround = domeGround(palette, true);
   const skyline = createSkyline(layout.bounds, haze);
   group.add(sky.mesh, skyline.mesh);
 
@@ -651,6 +660,7 @@ export function proceduralEnvironment(
       graded = flags.perspectiveLighting;
       rig.setSplit(graded);
       sky.setSun(graded ? sunDirection : sunPosition());
+      sky.setGround(graded ? splitGround : legacyGround);
       GRADE.sunDirection.value.copy(sunDirection);
       GRADE.fogDensity.value = flags.aerialPerspective ? FOG_DENSITY : 0;
       hdriOn = flags.hdriSky;

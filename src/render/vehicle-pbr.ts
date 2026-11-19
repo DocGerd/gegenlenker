@@ -21,8 +21,8 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
-import { createSceneSky } from './environment';
-import { buildSerially } from './grade';
+import { createSceneSky, domeGround } from './environment';
+import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
@@ -177,6 +177,9 @@ export function vehicleShaderCompiles(gpu: WebGPURenderer, envMap: Texture): Pro
 
 async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
   const material = createVehicleMaterial(envMap, createLampEmission());
+  // only High reflects, and High grades: check the graded variant the vehicles wear
+  const graded = !gradeDisabled();
+  setGraded(material, graded);
   const geometry = withSlot(new BoxGeometry());
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   const mesh = new Mesh(geometry, material);
@@ -207,7 +210,8 @@ async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise
   debug.onShaderError = watcher;
   try {
     const { fragmentShader } = await gpu.debug.getShaderAsync(scene, new PerspectiveCamera(), mesh);
-    if (fragmentShader?.includes(VEHICLE_SHADER_MARKER) !== true) {
+    const markers = graded ? [VEHICLE_SHADER_MARKER, GRADE_SHADER_MARKER] : [VEHICLE_SHADER_MARKER];
+    if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
       console.warn('Vehicle reflection shader failed to build');
       return false;
     }
@@ -263,6 +267,8 @@ export function generateSkyMap(
 ): RenderTarget {
   // untoned: the reflective material tone-maps what it reflects
   const sky = createSceneSky(palette, false);
+  // only High captures, and it lights the perspective views with the split rig
+  sky.setGround(domeGround(palette, true));
   sky.setHdri(hdri);
   // the dome sits on SKY_LAYER for the game cameras; the capture camera sees layer 0 only
   sky.mesh.layers.set(0);

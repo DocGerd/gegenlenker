@@ -55,6 +55,8 @@ export type PerspectiveLight = {
   readonly scale: Color;
   readonly sunColor: Color;
   readonly sunIntensity: number;
+  /** Irradiance on an upward-facing surface, the same in every channel. */
+  readonly groundIrradiance: number;
   /** Sky SH plus the yard's bounce from below. */
   readonly sh: SphericalHarmonics3;
   readonly hazeToward: Color;
@@ -143,6 +145,7 @@ export function perspectiveLight(palette: ScenePalette): PerspectiveLight {
     scale,
     sunColor,
     sunIntensity: sunIntensity * cap,
+    groundIrradiance: total * cap,
     sh,
     hazeToward: new Color(...horizonToward).multiply(scale),
     hazeAway: new Color(...horizonAway).multiply(scale),
