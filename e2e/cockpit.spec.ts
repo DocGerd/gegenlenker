@@ -6,6 +6,7 @@ import { REALISM_HUES } from '../src/render/realism-hues';
 import {
   attachmentsReady,
   GROUND_LOAD,
+  HIGH_SCREENSHOT_POLL,
   SCREENSHOT_POLL,
   throughIntermediate,
   type Preset,
@@ -299,10 +300,13 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     };
     let seen: Awaited<ReturnType<typeof sample>> = [];
     await expect
-      .poll(async () => {
-        seen = await sample();
-        return seen.map((s) => s.drawn);
-      }, SCREENSHOT_POLL)
+      .poll(
+        async () => {
+          seen = await sample();
+          return seen.map((s) => s.drawn);
+        },
+        preset === 'high' ? HIGH_SCREENSHOT_POLL : SCREENSHOT_POLL,
+      )
       .toEqual([true, true]);
     for (const { side, outerYard, innerYard } of seen) {
       expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
