@@ -184,7 +184,8 @@ export function createLightRig(palette: ScenePalette): LightRig {
 
   const light = perspectiveLight(palette);
   const sun = new DirectionalLight(light.sunColor, light.sunIntensity);
-  sun.position.copy(perspectiveSunDirection().multiplyScalar(SUN_DISTANCE));
+  const sunDirection = perspectiveSunDirection();
+  sun.position.copy(sunDirection).multiplyScalar(SUN_DISTANCE);
   prepareShadow(sun);
   const probe = new LightProbe(light.sh, 1);
   for (const l of [sun, probe]) {
@@ -211,7 +212,7 @@ export function createLightRig(palette: ScenePalette): LightRig {
     },
     fitShadow(focus) {
       if (sun.castShadow) {
-        const fit = fitSunShadow(focus, perspectiveSunDirection(), SHADOW_MAP_SIZE);
+        const fit = fitSunShadow(focus, sunDirection, SHADOW_MAP_SIZE);
         sun.position.copy(fit.position);
         sun.target.position.copy(fit.target);
         const camera = sun.shadow.camera;
