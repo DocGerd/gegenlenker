@@ -3,6 +3,25 @@ import tseslint from 'typescript-eslint';
 
 const CORE = ['src/{contracts,vehicles,sim,scoring,content}/**'];
 const THREE = ['three', 'three/*'];
+const DOM_GLOBALS = [
+  'window',
+  'document',
+  'navigator',
+  'localStorage',
+  'performance',
+  'requestAnimationFrame',
+];
+const NONDETERMINISTIC_GLOBALS = [
+  'globalThis',
+  'self',
+  'location',
+  'matchMedia',
+  'fetch',
+  'sessionStorage',
+  'indexedDB',
+  'setTimeout',
+  'setInterval',
+];
 
 export default tseslint.config(
   { ignores: ['dist', 'node_modules', '.remember', '.claude', '.superpowers'] },
@@ -50,17 +69,34 @@ export default tseslint.config(
               ],
               message: 'Core modules import no Three.js, DOM, or UI layers',
             },
+            {
+              regex: '^(\\.\\./)+(render|app|hud|input|pwa|i18n)(/|$)',
+              message: 'Core modules import no Three.js, DOM, or UI layers',
+            },
           ],
         },
       ],
-      'no-restricted-globals': [
+      'no-restricted-globals': ['error', ...DOM_GLOBALS],
+    },
+  },
+  {
+    files: CORE,
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-globals': ['error', ...DOM_GLOBALS, ...NONDETERMINISTIC_GLOBALS],
+      'no-restricted-properties': [
         'error',
-        'window',
-        'document',
-        'navigator',
-        'localStorage',
-        'performance',
-        'requestAnimationFrame',
+        { object: 'Math', property: 'random', message: 'Core modules are deterministic' },
+        { object: 'Date', property: 'now', message: 'Core modules are deterministic' },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'ImportExpression', message: 'Core modules import statically' },
+        { selector: 'MetaProperty', message: 'Core modules do not read module metadata' },
+        {
+          selector: ":matches(NewExpression, CallExpression)[callee.name='Date']",
+          message: 'Core modules are deterministic',
+        },
       ],
     },
   },
