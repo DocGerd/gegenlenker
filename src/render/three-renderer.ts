@@ -82,7 +82,10 @@ function setAidsLayer(object: Object3D): void {
   object.traverse((o) => o.layers.set(AIDS_LAYER));
 }
 
-export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
+/** `warmUp` holds the resolution governor off while something heavy (a shell, the ground texture) attaches. */
+export function createThreeSceneRenderer(
+  parts: RendererParts,
+): SceneRenderer & { warmUp: () => void } {
   const timer = createFrameTimer();
   const cockpitCamera = createCockpitCamera();
   const interior = createCockpitInterior();
@@ -240,6 +243,7 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
     setScene(nextLayout, truck, trailer) {
       disposeBuilt();
       resetTiming();
+      timer.resetScale();
       leadAt = -1;
       const palette = readScenePalette();
       const scene = new Scene();
@@ -279,13 +283,16 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
       const maxSamples = renderer?.capabilities.maxSamples ?? 0;
       mirrorLeft.setSamples(quality.mirrorMsaa, maxSamples);
       mirrorRight.setSamples(quality.mirrorMsaa, maxSamples);
-      if (built !== null) applyQuality(built);
+      if (built !== null) {
+        applyQuality(built);
+        timer.warmUp();
+      }
     },
 
     resize(width, height) {
       cssWidth = width;
       cssHeight = height;
-      timer.resetScale();
+      timer.warmUp();
       applySize();
     },
 
@@ -384,6 +391,10 @@ export function createThreeSceneRenderer(parts: RendererParts): SceneRenderer {
         x: topDownRect.x + ((p.x + 1) / 2) * topDownRect.width,
         y: topDownRect.y + ((1 - p.y) / 2) * topDownRect.height,
       };
+    },
+
+    warmUp() {
+      timer.warmUp();
     },
 
     skipFrame() {
