@@ -51,6 +51,23 @@ export default tseslint.config(
     },
   },
   {
+    files: ['e2e/**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@playwright/test',
+              importNames: ['test', 'expect'],
+              message: "Import test and expect from './fixtures' so the console guard applies",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: CORE,
     rules: {
       'no-restricted-imports': [
