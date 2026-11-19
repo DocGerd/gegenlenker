@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { en } from '../src/i18n/en';
+import { collectThreeProblems } from './three-problems';
 
 test('loads from the subpath and drives an exercise offline', async ({
   page,
@@ -15,6 +16,7 @@ test('loads from the subpath and drives an exercise offline', async ({
       foreign.push(url);
   });
 
+  const three = collectThreeProblems(page);
   const warnings: string[] = [];
   const errors: string[] = [];
   page.on('console', (m) => {
@@ -77,9 +79,11 @@ test('loads from the subpath and drives an exercise offline', async ({
   );
   expect(warnings.filter((w) => w.includes('Shell '))).toEqual([]);
   expect(errors).toEqual([]);
+  expect(three).toEqual([]);
 });
 
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {
+  const three = collectThreeProblems(page);
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   const reset = page.getByRole('button', { name: en.resetView, exact: true });
@@ -111,6 +115,7 @@ test('zooms and pans the top-down view without disturbing the controls', async (
   await page.mouse.move(free.x - 30, free.y + 20, { steps: 4 });
   await page.mouse.up();
   await expect(reset).toBeEnabled();
+  expect(three).toEqual([]);
 });
 
 test('High graphics caches the ground texture and transcoder on first use and applies them offline', async ({
@@ -126,6 +131,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
       foreign.push(url);
   });
   let offline = false;
+  const three = collectThreeProblems(page);
   const warnings: string[] = [];
   const errors: string[] = [];
   page.on('console', (m) => {
@@ -173,7 +179,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/);
   const target = await marker.getAttribute('data-ground-texture');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
-  // CI has no WebGPU adapter; the WebGL 2 backend is what devices without one get
+  // The renderer is forced onto its WebGL 2 backend until the WebGPU backend is enabled
   await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
   await expect
     .poll(async () => {
@@ -203,5 +209,6 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
   expect(warnings.filter((w) => /Ground texture|Vehicle reflection/.test(w))).toEqual([]);
   expect(errors).toEqual([]);
+  expect(three).toEqual([]);
   expect(foreign).toEqual([]);
 });

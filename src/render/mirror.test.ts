@@ -1,20 +1,24 @@
-import { type RenderTarget, Scene } from 'three';
+import { type Mesh, type Object3D, type RenderTarget, Scene } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { createMirror, mirrorSamples } from './mirror';
 
-/** Records the render targets a mirror binds; the fake accepts what three's renderer would. */
-function fakeRenderer(): { gl: WebGPURenderer; bound: RenderTarget[] } {
+/** Records the render targets a mirror binds and the scenes it draws; the fake accepts what three's renderer would. */
+function fakeRenderer(): { gl: WebGPURenderer; bound: RenderTarget[]; drawn: Object3D[] } {
   const bound: RenderTarget[] = [];
+  const drawn: Object3D[] = [];
   const gl = {
     setRenderTarget: (target: RenderTarget | null) => {
       if (target !== null) bound.push(target);
     },
     setClearColor: () => undefined,
     clear: () => undefined,
-    render: () => undefined,
+    render: (scene: Object3D) => drawn.push(scene),
+    setViewport: () => undefined,
+    setScissor: () => undefined,
+    setScissorTest: () => undefined,
   } as unknown as WebGPURenderer;
-  return { gl, bound };
+  return { gl, bound, drawn };
 }
 
 describe('mirror samples', () => {
@@ -40,5 +44,20 @@ describe('mirror samples', () => {
     mirror.capture(gl, scene, 64, 32, 0);
     expect(bound[1]).not.toBe(first);
     expect(bound[1]?.samples).toBe(0);
+  });
+});
+
+describe('mirror quad', () => {
+  it('flips the texture in u (a mirror) and in v (the target reads back upside down)', () => {
+    const { gl, drawn } = fakeRenderer();
+    createMirror().composite(gl, { x: 0, y: 0, width: 64, height: 32 });
+    const quad = drawn[0]?.children[0] as Mesh;
+    const position = quad.geometry.getAttribute('position');
+    const uv = quad.geometry.getAttribute('uv');
+    expect(uv.count).toBe(4);
+    for (let i = 0; i < uv.count; i++) {
+      expect(uv.getX(i)).toBe(1 - (position.getX(i) + 1) / 2);
+      expect(uv.getY(i)).toBe(1 - (position.getY(i) + 1) / 2);
+    }
   });
 });
