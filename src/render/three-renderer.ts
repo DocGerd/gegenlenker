@@ -1,4 +1,4 @@
-import { OrthographicCamera, Scene, Vector3, type Object3D } from 'three';
+import { OrthographicCamera, Scene, UnsignedByteType, Vector3, type Object3D } from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
@@ -100,6 +100,8 @@ async function startGpu(canvas: HTMLCanvasElement): Promise<WebGPURenderer> {
       antialias: true,
       powerPreference: 'high-performance',
       forceWebGL: true,
+      // the 8-bit canvas WebGLRenderer drew into; half-float with MSAA is far slower on software GL
+      outputBufferType: UnsignedByteType,
     });
     await gpu.init();
     return gpu;
