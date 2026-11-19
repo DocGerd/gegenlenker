@@ -614,11 +614,15 @@ export function proceduralEnvironment(
   let hdriOn = false;
   let hdriMap: Texture | null = null;
   let hdriReported = false;
+  let disposed = false;
   const syncSky = (): void => {
     const on = hdriOn && hdriMap !== null;
     sky.setHdri(on ? hdriMap : null);
-    GRADE.hazeToward.value.copy(on ? light.hazeToward : haze);
-    GRADE.hazeAway.value.copy(on ? light.hazeAway : haze);
+    // the haze uniforms are shared: a disposed environment must not overwrite the live one's
+    if (!disposed) {
+      GRADE.hazeToward.value.copy(on ? light.hazeToward : haze);
+      GRADE.hazeAway.value.copy(on ? light.hazeAway : haze);
+    }
     if (on !== hdriReported) {
       hdriReported = on;
       skyTexture?.reportApplied(on);
@@ -667,6 +671,7 @@ export function proceduralEnvironment(
     dispose: () => {
       cancelGroundTexture?.();
       cancelSkyTexture?.();
+      disposed = true;
       hdriMap = null;
       hdriOn = false;
       syncSky();
