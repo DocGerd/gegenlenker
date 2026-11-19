@@ -1,7 +1,7 @@
 import { Color, PerspectiveCamera, RepeatWrapping, Scene, Vector3, type Texture } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import skyUrl from './assets/sky.ktx2?url';
-import { loadKtx2, startTextureAsset, TEXTURE_FAILED, type GroundTextures } from './ground-texture';
+import { startTextureSet, type TextureMaps, type TextureSet } from './texture-set';
 import { buildSerially } from './grade';
 import { gpuLost } from './seams';
 import { createSky, SKY_SHADER_MARKER } from './sky';
@@ -12,7 +12,10 @@ import { createSky, SKY_SHADER_MARKER } from './sky';
  */
 
 /** Builds an HDRI sky dome before any sky wears `map`, so a node or GLSL error rejects here. */
-export async function precompileSky(renderer: WebGPURenderer, map: Texture): Promise<void> {
+export async function precompileSky(
+  renderer: WebGPURenderer,
+  { sky: map }: TextureMaps<'sky'>,
+): Promise<void> {
   const black = new Color(0);
   const sky = createSky(black, black, black, black, new Vector3(0, 1, 0));
   sky.setHdri(map);
@@ -32,28 +35,23 @@ export async function precompileSky(renderer: WebGPURenderer, map: Texture): Pro
   }
 }
 
-export async function loadSkyTexture(renderer: WebGPURenderer): Promise<Texture> {
-  const map = await loadKtx2(renderer, skyUrl);
-  map.wrapS = RepeatWrapping;
-  try {
-    await precompileSky(renderer, map);
-  } catch (error) {
-    map.dispose();
-    throw error;
-  }
-  return map;
-}
+/** The sky's textures; `sky` is the HDRI map. */
+export type SkyTextures = TextureSet<'sky'>;
 
 /** `onApplied` receives `on` while some sky draws the texture, `failed` once given up on, else null; the e2e reads it. */
 export function startSkyTexture(
-  load: (renderer: WebGPURenderer) => Promise<Texture> = loadSkyTexture,
+  load?: (renderer: WebGPURenderer) => Promise<Texture>,
   onApplied: (state: string | null) => void = () => undefined,
-): GroundTextures {
-  return startTextureAsset({
-    load,
-    onApplied: (state) => {
-      onApplied(state === null || state === TEXTURE_FAILED ? state : 'on');
+): SkyTextures {
+  return startTextureSet({
+    urls: { sky: skyUrl },
+    prepare: (_, texture) => {
+      texture.wrapS = RepeatWrapping;
     },
+    precompile: precompileSky,
+    describe: () => 'on',
+    ...(load === undefined ? {} : { load: async (gl) => ({ sky: await load(gl) }) }),
+    onApplied,
     label: 'Sky texture',
     fallback: 'the analytic sky',
     marker: SKY_SHADER_MARKER,

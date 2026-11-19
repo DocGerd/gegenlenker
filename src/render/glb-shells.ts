@@ -38,7 +38,18 @@ export type Shell = { readonly mesh: Mesh; readonly lens: Mesh | null };
 /** A trailer asset holds two rigid groups: the body, and the dolly with its drawbar. */
 export type TrailerShell = { readonly trailer: Shell; readonly dolly: Shell };
 
-async function parseMeshes(data: ArrayBuffer): Promise<Mesh[]> {
+/** A vertex attribute a glb must carry on every mesh. */
+export type GlbAttribute = 'color' | 'uv';
+
+export type GlbOptions = {
+  /** Attributes every mesh must have; the default is the shells' `color`. */
+  readonly require?: readonly GlbAttribute[];
+};
+
+async function parseMeshes(
+  data: ArrayBuffer,
+  require: readonly GlbAttribute[] = ['color'],
+): Promise<Mesh[]> {
   const [{ GLTFLoader }, { MeshoptDecoder }] = await Promise.all([
     import('three/addons/loaders/GLTFLoader.js'),
     import('three/addons/libs/meshopt_decoder.module.js'),
@@ -51,10 +62,23 @@ async function parseMeshes(data: ArrayBuffer): Promise<Mesh[]> {
     if (o instanceof Mesh) meshes.push(o as Mesh);
   });
   for (const mesh of meshes) {
-    if (!mesh.geometry.hasAttribute('color'))
-      throw new Error(`shell "${mesh.name}" has no colours`);
+    for (const attribute of require) {
+      if (!mesh.geometry.hasAttribute(attribute))
+        throw new Error(`glb mesh "${mesh.name}" has no ${attribute}`);
+    }
   }
   return meshes;
+}
+
+async function fetchData(url: string): Promise<ArrayBuffer> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`${url}: ${response.status}`);
+  return response.arrayBuffer();
+}
+
+/** Fetches and decodes a glb into its meshes, which keep the materials the file names. */
+export async function loadGlb(url: string, { require }: GlbOptions = {}): Promise<Mesh[]> {
+  return parseMeshes(await fetchData(url), require);
 }
 
 const lensName = (group: string): string => `${group}-lens`;
@@ -81,14 +105,24 @@ function groupMeshes(meshes: readonly Mesh[], groups: readonly string[]): Map<st
 
 /** Decodes one shell; `kind` is the node name the Blender script gives it, so a swapped URL fails. */
 export async function parseShell(data: ArrayBuffer, kind: ShellKind): Promise<Shell> {
-  const shell = groupMeshes(await parseMeshes(data), [kind]).get(kind);
+  return shellFrom(await parseMeshes(data), kind);
+}
+
+/** The shell of `kind` among already decoded meshes. */
+export function shellFrom(meshes: readonly Mesh[], kind: ShellKind): Shell {
+  const shell = groupMeshes(meshes, [kind]).get(kind);
   if (shell === undefined) throw new Error(`shell lacks "${kind}"`);
   return shell;
 }
 
 /** Decodes a trailer asset: the meshes `trailer` and `dolly`, and their lenses. */
 export async function parseTrailerShell(data: ArrayBuffer): Promise<TrailerShell> {
-  const groups = groupMeshes(await parseMeshes(data), ['trailer', 'dolly']);
+  return trailerShellFrom(await parseMeshes(data));
+}
+
+/** The trailer and dolly shells among already decoded meshes. */
+export function trailerShellFrom(meshes: readonly Mesh[]): TrailerShell {
+  const groups = groupMeshes(meshes, ['trailer', 'dolly']);
   const find = (name: string): Shell => {
     const shell = groups.get(name);
     if (shell === undefined) throw new Error(`trailer shell lacks "${name}"`);
@@ -97,18 +131,9 @@ export async function parseTrailerShell(data: ArrayBuffer): Promise<TrailerShell
   return { trailer: find('trailer'), dolly: find('dolly') };
 }
 
-async function fetchData(url: string): Promise<ArrayBuffer> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`${url}: ${response.status}`);
-  return response.arrayBuffer();
-}
-
 async function fetchShell(url: string, key: string): Promise<Shell> {
-  return parseShell(await fetchData(url), key.endsWith('-cab') ? 'cab' : 'body');
+  return shellFrom(await loadGlb(url), key.endsWith('-cab') ? 'cab' : 'body');
 }
-
-export const fetchTrailerShell = async (url: string): Promise<TrailerShell> =>
-  parseTrailerShell(await fetchData(url));
 
 export interface Shells<S = Shell> {
   /**
@@ -221,6 +246,19 @@ export function startShells<S>(
       };
     },
   };
+}
+
+/** `startShells` over glbs: each is fetched with `loadGlb` and turned into `S` by `parse`. */
+export function startGlbAsset<S>(
+  urls: Readonly<Record<string, string>>,
+  parse: (meshes: Mesh[], key: string) => S,
+  { require, ...options }: Omit<StartOptions<S>, 'load'> & GlbOptions = {},
+): Shells<S> {
+  return startShells(urls, {
+    ...options,
+    load: async (url, key) =>
+      parse(await loadGlb(url, require === undefined ? {} : { require }), key),
+  });
 }
 
 const homes = new WeakMap<Object3D, Map<Object3D, number>>();

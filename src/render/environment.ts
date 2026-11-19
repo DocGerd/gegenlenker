@@ -24,6 +24,7 @@ import {
 } from './ground-geometry';
 import { createGroundMaterial } from './ground-material';
 import type { GroundTextures } from './ground-texture';
+import type { SkyTextures } from './sky-texture';
 import {
   createLightRig,
   perspectiveLight,
@@ -219,7 +220,7 @@ export function proceduralEnvironment(
   layout: ResolvedLayout,
   palette: ScenePalette,
   groundTextures?: GroundTextures,
-  skyTexture?: GroundTextures,
+  skyTexture?: SkyTextures,
 ): Environment {
   const group = new Group();
   const geometries: BufferGeometry[] = [];
@@ -254,7 +255,7 @@ export function proceduralEnvironment(
     }
   };
   const cancelGroundTexture = groundTextures?.onLoaded(
-    (texture: Texture) => {
+    ({ detail: texture }) => {
       let geometry: BufferGeometry | null = null;
       let material: MeshLambertNodeMaterial | null = null;
       try {
@@ -413,7 +414,7 @@ export function proceduralEnvironment(
     }
   };
   const cancelSkyTexture = skyTexture?.onLoaded(
-    (map: Texture) => {
+    ({ sky: map }) => {
       hdriMap = map;
       syncSky();
     },
