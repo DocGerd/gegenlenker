@@ -213,6 +213,8 @@ for (const preset of ['low', 'balanced', 'high']) {
   test(`each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`, async ({
     page,
   }) => {
+    // High also transcodes the ground and sky textures meanwhile
+    if (preset === 'high') test.slow();
     const errors = collectErrors(page);
     await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
       SETTINGS_KEY,
