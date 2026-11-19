@@ -18,6 +18,8 @@ import {
   type Reading,
   type Run,
   MIN_FPS,
+  backendProblem,
+  drawnBackend,
   cellVerdict,
   checksOk,
   isIgnorableFailure,
@@ -275,9 +277,8 @@ async function measure(
     if (!final) throw new Error('perf overlay produced no samples');
     errors.push(...failed.map((f) => `request failed: ${f}`));
     errors.push(...samples.flatMap(readingProblems));
-    if (opts.backend !== null && opts.backend !== 'auto' && !final.gl.startsWith(opts.backend)) {
-      errors.push(`drawn on ${final.gl.trim()}, not ${opts.backend}`);
-    }
+    const wrongBackend = backendProblem(opts.backend, final.gl);
+    if (wrongBackend !== null) errors.push(wrongBackend);
     return {
       reading: {
         fps: median(samples.map((s) => s.fps)),
@@ -316,6 +317,7 @@ function printMatrix(cells: Cell[], opts: Options): boolean {
     return [
       c.preset,
       c.pair.join(' + '),
+      [...new Set(readings.map((r) => drawnBackend(r.gl)))].join('/'),
       String(Math.min(...readings.map((r) => r.fps))),
       Math.max(...readings.map((r) => r.p95)).toFixed(1),
       Math.min(...readings.map((r) => r.scale)).toFixed(2),
@@ -324,7 +326,7 @@ function printMatrix(cells: Cell[], opts: Options): boolean {
       ok ? 'ok' : 'FAIL',
     ];
   });
-  const head = ['preset', 'vehicles', 'fps', 'p95 ms', 'scale', 'calls', 'passed', ''];
+  const head = ['preset', 'vehicles', 'backend', 'fps', 'p95 ms', 'scale', 'calls', 'passed', ''];
   const width = head.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]?.length ?? 0)));
   const line = (r: string[]): string =>
     r

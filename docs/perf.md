@@ -15,7 +15,7 @@ pnpm perf:tablet [--throttle <n>] [--preset low|balanced|high|all] [--runs <n>]
 - `--no-perf` needs `--functional`. `--functional` adds checks for offline service worker, history back from a drive, wake lock and two-thumb touch (wheel and lever together). Any console error, failed request or lost or software WebGL context during a perf cell or check also fails it, as does a vehicle that does not move.
 - A cell passes at at least 58 fps with the resolution scale still at 1.00. The exit code is 1 when any cell or check fails (or every check skips), 2 when the harness itself fails or the options are invalid.
 - It aborts on a software renderer (SwiftShader, llvmpipe), where fps is meaningless; `--allow-software` overrides that for debugging the harness.
-- `--backend` sets the app's `?backend=` (see below) and fails a cell drawn on another backend. For WebGPU it adds `--enable-unsafe-webgpu`, and on WSL `--use-webgpu-adapter=opengles`: WSL has no hardware Vulkan driver, so Dawn's OpenGL ES backend is its only hardware adapter, and that one runs in compatibility mode (no canvas MSAA).
+- `--backend` sets the app's `?backend=` (see below) and fails a cell drawn on another backend; `auto` fails one not drawn on WebGPU, since it runs the WebGPU gate. The table names each cell's backend. For WebGPU it adds `--enable-unsafe-webgpu`, and on WSL `--use-webgpu-adapter=opengles`: WSL has no hardware Vulkan driver, so Dawn's OpenGL ES backend is its only hardware adapter, and that one runs in compatibility mode (no canvas MSAA).
 
 Needs a display (headed Chromium). On WSL it sets the GPU environment (`GALLIUM_DRIVER=d3d12`, `LD_LIBRARY_PATH=/usr/lib/wsl/lib`, ANGLE on desktop GL) when `/usr/lib/wsl/lib` exists; elsewhere Chromium picks its default GPU path.
 
@@ -27,11 +27,11 @@ The renderer is three.js's `WebGPURenderer`. `?backend=` picks its GPU API:
 - `webgpu`: WebGPU on any adapter, software included (tests, tablet checks).
 - `auto`: WebGPU on a hardware adapter with core features, else WebGL 2.
 
-A WebGPU start that fails, or a lost WebGPU device, goes on with WebGL 2 for the rest of the session without a notice. The `?perf=1` overlay and `<html data-render-backend>` name the live backend.
+A WebGPU start that fails, or a lost WebGPU device, goes on with WebGL 2 for the rest of the session without a notice; the console says why. The `?perf=1` overlay and `<html data-render-backend>` name the live backend, and the overlay and `<html data-render-fallback>` say why it is WebGL 2 although WebGPU was asked for (`unavailable`, `failed` or `lost`; `auto` declining an adapter is no fallback). An unknown `?backend=` value warns and gives the default.
 
 WebGPU becomes the default (`DEFAULT_BACKEND_REQUEST` in `src/render/gpu-backend.ts` to `auto`) once it passes this gate on a core hardware adapter:
 
-- Desktop: headed real-GPU Chromium holds at least 60 fps on High (`pnpm perf:tablet --throttle 1 --backend auto`).
+- Desktop: headed real-GPU Chromium passes every High cell (`pnpm perf:tablet --throttle 1 --preset high --backend auto`).
 - Tablet: `pnpm perf:tablet --throttle 6` still passes on WebGL 2, and the physical tablet check passes on both backends.
 - Look: `scripts/shoot-views.mjs` top-down shots on WebGPU differ from WebGL 2 at edges only.
 

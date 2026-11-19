@@ -84,7 +84,17 @@ export function parseOverlay(text: string): Reading | null {
 }
 
 export const isSoftwareGl = (renderer: string): boolean =>
-  renderer === 'no WebGL2' || /SwiftShader|llvmpipe|softpipe/i.test(renderer);
+  renderer === 'no WebGL2' || /SwiftShader|llvmpipe|softpipe|\(fallback\)/i.test(renderer);
+
+/** The backend an overlay line was drawn on: its first word. */
+export const drawnBackend = (gl: string): string => gl.trim().split(/\s/)[0] ?? '';
+
+/** `auto` is the WebGPU gate (docs/perf.md), so a cell that fell back to WebGL 2 fails it. */
+export function backendProblem(requested: Backend | null, gl: string): string | null {
+  if (requested === null) return null;
+  const wanted = requested === 'auto' ? 'webgpu' : requested;
+  return drawnBackend(gl) === wanted ? null : `drawn on ${gl.trim()}, not ${wanted}`;
+}
 
 /** Problems that make a single overlay reading untrustworthy. */
 export function readingProblems(r: Reading): string[] {
