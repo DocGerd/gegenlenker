@@ -150,14 +150,15 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   await page.addInitScript(() => {
     new MutationObserver((records) => {
       for (const r of records) {
-        if (
-          r.target instanceof Element &&
-          r.target.getAttribute(r.attributeName ?? '') === 'failed'
-        )
+        // oldValue catches a value replaced before this callback runs
+        const now =
+          r.target instanceof Element ? r.target.getAttribute(r.attributeName ?? '') : null;
+        if (now === 'failed' || r.oldValue === 'failed')
           sessionStorage.setItem('texture-failed', r.attributeName ?? '');
       }
     }).observe(document, {
       attributes: true,
+      attributeOldValue: true,
       subtree: true,
       attributeFilter: ['data-ground-texture', 'data-sky-hdri'],
     });
