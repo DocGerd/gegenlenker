@@ -4,8 +4,6 @@ import { en } from '../src/i18n/en';
 import {
   bareScreenshot,
   distinctColours,
-  GROUND_LOAD,
-  HIGH_SCREENSHOT_POLL,
   MIN_DRAWN_COLOURS,
   settle,
   shoot,
@@ -102,9 +100,9 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await startDrive(page);
   const html = page.locator('html');
   await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
-  await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/, GROUND_LOAD);
+  await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
   // a loss during a load would warn and spend a retry
-  await expect(html).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
+  await expect(html).toHaveAttribute('data-sky-hdri', 'on');
   await page.evaluate(() => {
     const seen: (string | null)[] = [];
     Object.assign(window, { pbrSeen: seen });
@@ -132,7 +130,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   const pane = await page.locator('[data-hud="topDown"]').boundingBox();
   if (pane === null) throw new Error('no top-down pane');
   await expect
-    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)), HIGH_SCREENSHOT_POLL)
+    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)))
     .toBeGreaterThan(MIN_DRAWN_COLOURS);
 
   const speed = page.locator('[data-hud="speed"]');

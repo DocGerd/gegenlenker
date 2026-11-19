@@ -19,17 +19,6 @@ const HIDE_ID = 'pinned-shoot-bare';
  * caught by a colour count: its anti-aliased glyphs give more colours than that view.
  */
 export const MIN_DRAWN_COLOURS = 40;
-/** For a poll that screenshots the canvas: software GL (CI) takes a few seconds to draw the first frame. */
-export const SCREENSHOT_POLL = { timeout: 10_000 } as const;
-/**
- * For a poll that screenshots a High pane: one screenshot waits for a frame or two of the
- * multisampled PBR scene, each of which takes seconds on software GL, so a single iteration can
- * outlast `SCREENSHOT_POLL`.
- */
-export const HIGH_SCREENSHOT_POLL = { timeout: 30_000 } as const;
-/** For a ground texture load on a fresh renderer: fetch, transcode and shader build, slow on software GL (CI). */
-export const GROUND_LOAD = { timeout: 20_000 } as const;
-
 /** Set once the renderer is ready and removed on a loss, so a settle after a loss waits for the new one. */
 const BACKEND_READY = (v: string): boolean => v !== '';
 

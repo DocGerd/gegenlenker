@@ -1,5 +1,4 @@
 import { defineConfig, devices } from '@playwright/test';
-import { OFFLINE_SPECS } from './e2e/offline-specs';
 import { previewPort } from './e2e/preview-port';
 
 const port = previewPort(import.meta.dirname);
@@ -16,7 +15,9 @@ export default defineConfig({
   projects: [
     {
       name: 'offline',
-      testMatch: OFFLINE_SPECS,
+      testMatch: /\.spec\.ts$/,
+      // High first-load markers on software GL outlast the 5 s default.
+      expect: { timeout: 30_000 },
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },
