@@ -31,6 +31,11 @@ describe('data fingerprint', () => {
     expect(resolveRun({ ...ids }).fingerprint).toBe(base);
   });
 
+  // Changes only with the data or SIM_REVISION; an accidental key reorder in the hashed constants would show here.
+  it('is pinned for one combination', () => {
+    expect(base).toBe('9e337d5e');
+  });
+
   it('differs per vehicle pair, exercise and layout', () => {
     const others = [
       { ...ids, trailerId: 'hueffermann-hpa-24-81-l' },

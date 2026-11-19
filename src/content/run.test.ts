@@ -65,17 +65,6 @@ function pinned(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' | 'reverse
     false,
     0,
   );
-  if (process.env.DBG)
-    console.log(
-      JSON.stringify([
-        final.step,
-        final.contacts,
-        final.jackknifes,
-        final.directionChanges,
-        final.truck,
-        result,
-      ]),
-    );
   return { SIM_REVISION, digest: fnv(JSON.stringify([final, result])) };
 }
 
