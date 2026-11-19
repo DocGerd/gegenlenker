@@ -4,10 +4,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TRAILER_IDS, TRUCK_IDS } from '../../src/contracts/vehicle';
-import { bodyShellParams } from '../../src/render/body-dims';
-import { trailerShellParams } from '../../src/render/trailer-dims';
-import { trailerById, truckById } from '../../src/vehicles/registry';
-import { ROOT } from './glb-build';
+import type { bodyShellParams } from '../../src/render/body-dims';
+import type { cabShellParams } from '../../src/render/cab-dims';
+import type {
+  bodyLampParams,
+  cabLampParams,
+  trailerLampParams,
+} from '../../src/render/lamp-layout';
+import type { trailerShellParams } from '../../src/render/trailer-dims';
+import { assetByKey, ROOT } from './glb-build';
 
 /*
  * Runs the shell scripts' geometry checks outside Blender: `bpy` is a stub that raises `Reached`
@@ -49,17 +54,39 @@ function runScript(name: string, params: object): string {
 
 const run = (params: object): string => runScript('trailer_shell.py', params);
 
+type TrailerParams = ReturnType<typeof trailerShellParams> & ReturnType<typeof trailerLampParams>;
+type BodyParams = ReturnType<typeof bodyShellParams> & ReturnType<typeof bodyLampParams>;
+type CabParams = ReturnType<typeof cabShellParams> & ReturnType<typeof cabLampParams>;
+const trailerParams = (id: string): TrailerParams =>
+  assetByKey(`${id}-trailer`).build() as unknown as TrailerParams;
+const bodyParams = (id: string): BodyParams =>
+  assetByKey(`${id}-body`).build() as unknown as BodyParams;
+const cabParams = (id: string): CabParams =>
+  assetByKey(`${id}-cab`).build() as unknown as CabParams;
+/** The lens list with lens `id` moved by dz. */
+const raise = <L extends { id: string; box: readonly (readonly number[])[] }>(
+  lenses: readonly L[],
+  id: string,
+  dz: number,
+): L[] =>
+  lenses.map((l) =>
+    l.id === id ? { ...l, box: [l.box[0], l.box[1], (l.box[2] ?? []).map((z) => z + dz)] } : l,
+  );
+
 const krone = JSON.parse(
   readFileSync(join(ROOT, 'tools/blender/params/krone-azw-18.trailer.json'), 'utf8'),
-) as ReturnType<typeof trailerShellParams>;
+) as TrailerParams;
 
 describe.skipIf(!python)('trailer_shell.py geometry checks', () => {
   it.each(TRAILER_IDS)('pass the params of %s', (id) => {
-    expect(run(trailerShellParams(trailerById(id)))).toBe('passes');
+    expect(run(trailerParams(id))).toBe('passes');
   });
 
   it('refuse a face below the underside that crosses the underrun guard, even when it is wider than the guard', () => {
-    const wide = { ...krone, track: 2.5, rearAxleXs: [-1.6] };
+    // a shorter side guard keeps clear of the wider dolly tyres' swing
+    const [start] = krone.lafette?.guardSpan ?? [0];
+    const lafette = krone.lafette && { ...krone.lafette, guardSpan: [start, start + 1] as const };
+    const wide = { ...krone, lafette, track: 2.5, rearAxleXs: [-1.6] };
     expect(run(wide)).toMatch(/underrun guard/);
   });
 
@@ -69,15 +96,21 @@ describe.skipIf(!python)('trailer_shell.py geometry checks', () => {
   });
 
   it('refuse a low-loader whose tail lamps rise above the lamp carrier', () => {
-    const params = trailerShellParams(trailerById('hueffermann-hpa-24-81-l'));
+    const params = trailerParams('hueffermann-hpa-24-81-l');
     if (params.lowLoader === undefined) throw new Error('the Hüffermann has no low-loader deck');
     const short = { ...params, lowLoader: { ...params.lowLoader, carrierTop: 0.7 } };
-    expect(run(short)).toMatch(/tail lamp has no surface/);
+    expect(run(short)).toMatch(/lamp tail-\d-\w+ has no surface/);
+  });
+
+  it('refuse a lafette marker lens off the side guard', () => {
+    expect(run({ ...krone, lenses: raise(krone.lenses, 'side-marker-0-left', 0.3) })).toMatch(
+      /lamp side-marker-0-left has no surface/,
+    );
   });
 });
 
 describe.skipIf(!python)('trailer_shell.py low-loader checks', () => {
-  const params = trailerShellParams(trailerById('hueffermann-hpa-24-81-l'));
+  const params = trailerParams('hueffermann-hpa-24-81-l');
   const deck = params.lowLoader;
   if (deck === undefined) throw new Error('the Hüffermann has no low-loader deck');
 
@@ -94,15 +127,15 @@ describe.skipIf(!python)('trailer_shell.py low-loader checks', () => {
 
 describe.skipIf(!python)('body_shell.py geometry checks', () => {
   const body = (params: object): string => runScript('body_shell.py', params);
-  const arocs = bodyShellParams(truckById('arocs-1835-ak'));
+  const arocs = bodyParams('arocs-1835-ak');
 
   it.each(TRUCK_IDS)('pass the params of %s', (id) => {
-    expect(body(bodyShellParams(truckById(id)))).toBe('passes');
+    expect(body(bodyParams(id))).toBe('passes');
   });
 
   it('refuse a tail lamp above the faces at the rear', () => {
-    const high = { ...arocs, tailLamp: { ...arocs.tailLamp, sill: 0.4 } };
-    expect(body(high)).toMatch(/tail lamp has no surface/);
+    const high = { ...arocs, mounts: raise(arocs.mounts, 'tail-0-left', 0.4) };
+    expect(body(high)).toMatch(/lamp tail-0-left has no surface/);
   });
 
   it('refuse a side marking that runs past the faces it sits on', () => {
@@ -119,5 +152,19 @@ describe.skipIf(!python)('body_shell.py geometry checks', () => {
     if (arocs.tipper === undefined) throw new Error('the Arocs has no tipper');
     const high = { ...arocs, tipper: { ...arocs.tipper, stripe: [1.85, 1.95] } };
     expect(body(high)).toMatch(/stripe does not fit/);
+  });
+});
+
+describe.skipIf(!python)('cab_shell.py geometry checks', () => {
+  const cab = (params: object): string => runScript('cab_shell.py', params);
+  const arocs = cabParams('arocs-1835-ak');
+
+  it.each(TRUCK_IDS)('pass the params of %s', (id) => {
+    expect(cab(cabParams(id))).toBe('passes');
+  });
+
+  it('refuse a headlamp below the bumper', () => {
+    const low = { ...arocs, lenses: raise(arocs.lenses, 'headlamp-2-right', -0.3) };
+    expect(cab(low)).toMatch(/lamp headlamp-2-right has no surface/);
   });
 });

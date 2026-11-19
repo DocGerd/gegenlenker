@@ -1,6 +1,6 @@
 {
   "id": "man-le-18-280",
-  "schema": 2,
+  "schema": 3,
   "style": "crew",
   "width": 2.49,
   "frontX": 5.22,
@@ -21,20 +21,137 @@
     "sideGlassLength": 0.814,
     "grilleWidth": 1.245,
     "grilleSill": 0.144,
-    "grilleHeight": 0.54,
-    "headlampInset": 0.125,
-    "headlampWidth": 0.398,
-    "lampSill": 0.18,
-    "lampHeight": 0.396
+    "grilleHeight": 0.54
   },
   "hues": {
     "body": "#00387b",
     "glass": "#293133",
     "grille": "#101214",
-    "lamp": "#f4f4ee",
     "white": "#f6f6f6",
     "beacon": "#1f6fe5",
     "black": "#101214",
     "silver": "#a5a5a5"
-  }
+  },
+  "lenses": [
+    {
+      "id": "headlamp-0-left",
+      "box": [
+        [5.25, 5.27],
+        [1.0404, 1.12],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-1-left",
+      "box": [
+        [5.25, 5.27],
+        [0.9807, 1.0404],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-2-left",
+      "box": [
+        [5.25, 5.27],
+        [0.722, 0.9807],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-0-right",
+      "box": [
+        [5.25, 5.27],
+        [-1.12, -1.0404],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-1-right",
+      "box": [
+        [5.25, 5.27],
+        [-1.0404, -0.9807],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-2-right",
+      "box": [
+        [5.25, 5.27],
+        [-0.9807, -0.722],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "end-outline-front-left",
+      "box": [
+        [5.22, 5.27],
+        [1.035, 1.115],
+        [2.721, 2.771]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "side-indicator-left",
+      "box": [
+        [3.47, 3.55],
+        [1.245, 1.295],
+        [1.35, 1.4]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "end-outline-front-right",
+      "box": [
+        [5.22, 5.27],
+        [-1.115, -1.035],
+        [2.721, 2.771]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "side-indicator-right",
+      "box": [
+        [3.47, 3.55],
+        [-1.295, -1.245],
+        [1.35, 1.4]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-cab-left",
+      "box": [
+        [2.32, 2.52],
+        [1.245, 1.295],
+        [1.15, 1.25]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-cab-right",
+      "box": [
+        [2.32, 2.52],
+        [-1.295, -1.245],
+        [1.15, 1.25]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    }
+  ]
 }

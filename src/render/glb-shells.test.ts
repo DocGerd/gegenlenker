@@ -154,7 +154,7 @@ describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
 
   it.each(['cab', 'body'] as const)('rejects the %s shell under the other name', async (kind) => {
     const other = kind === 'cab' ? 'body' : 'cab';
-    await expect(parseShell(glb(`${id}-${kind}`), other)).rejects.toThrow(`expected "${other}"`);
+    await expect(parseShell(glb(`${id}-${kind}`), other)).rejects.toThrow(`expected [${other}]`);
   });
 });
 

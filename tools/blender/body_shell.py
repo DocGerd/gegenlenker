@@ -12,8 +12,9 @@ headboard, a tailgate hung from a top hinge bar, on a black subframe) and "tarp"
 sides under a tarpaulin).
 
 The shell stays inside the procedural body's footprint and out of the bands the procedural detail
-owns: the yellow side marking and amber markers at the floor height, and the tail lamps on the rear
-face. Both need a face of the shell to sit on.
+owns: the yellow side marking and amber markers at the floor height, and the lamps on the rear face.
+The marking and the detail's lamps (`mounts`, src/render/lamp-layout.ts) need a face of the shell to
+sit on.
 
 Tested Blender version: 5.3.0 (bpy.app.version_string is printed and recorded in the manifest).
 """
@@ -218,7 +219,7 @@ def covered(intervals, lo, hi):
 
 def check_bands(p, shape):
     """Nothing may share a face with what the procedural detail draws, nor leave the body; the
-    side marking and the tail lamps each keep a face to sit on."""
+    side marking and the detail's lamps each keep a face to sit on."""
     hw = p["width"] / 2
     mark = p["marking"]
     lo, hi = mark["zLow"], mark["zHigh"]
@@ -235,14 +236,7 @@ def check_bands(p, shape):
         spans = [x for x, (y0, y1), (z0, z1) in faces if abs(y0 - side * hw) < EPS and abs(y1 - side * hw) < EPS and z0 <= lo + EPS and z1 >= hi - EPS]
         if not covered(spans, rear + mark["endMargin"], front - mark["endMargin"]):
             raise ValueError("the side marking has no face to sit on")
-    lamp = p["tailLamp"]
-    z_low = p["frameTop"] + lamp["sill"]
-    z_high = z_low + lamp["height"]
-    for side in (-1, 1):
-        want = mirror(side, hw - lamp["inset"] - lamp["width"], hw - lamp["inset"])
-        heights = [z for (x0, x1), (y0, y1), z in faces if abs(x0 - rear) < EPS and abs(x1 - rear) < EPS and y0 <= want[0] + EPS and y1 >= want[1] - EPS]
-        if not covered(heights, z_low, z_high):
-            raise ValueError("a tail lamp has no surface to sit on")
+    COMMON["check_seated"](shape, p["mounts"])
 
 
 def main():

@@ -28,6 +28,7 @@ import {
 } from './seams';
 import {
   EYE_BLOCK,
+  LAFETTE,
   lowLoaderDeck,
   PLATE_RADIUS,
   SWING_MARGIN,
@@ -51,8 +52,6 @@ const MIN_VERTICES = { trailer: 600, dolly: 250 } as const;
 /** Meshopt quantisation moves positions by a couple of millimetres. */
 const TOLERANCE = 5e-3;
 const COLOUR_TOLERANCE = 1 / 255;
-/** Height above the deck of the lamp carrier, a bare chassis' tallest part (trailer_shell.py LAMP_BAR). */
-const LAMP_BAR_HEIGHT = 0.4;
 
 /** Plan distance from (tx, 0) to the segment p-q, in three space (x, z). */
 function planDistance(tx: number, p: Vector3, q: Vector3): number {
@@ -71,7 +70,7 @@ describe.each(TRAILER_IDS)('trailer shell asset of %s', (id) => {
   it('keeps the trailer inside its footprint and fills it', async () => {
     const { mesh } = (await load(id)).trailer;
     const box = new Box3().setFromObject(mesh);
-    const top = params.lowLoader?.rampTop ?? f.deck + LAMP_BAR_HEIGHT;
+    const top = params.lowLoader?.rampTop ?? f.deck + LAFETTE.lampBar.height;
     expect(mesh.geometry.getAttribute('position').count).toBeGreaterThanOrEqual(
       MIN_VERTICES.trailer,
     );
@@ -352,7 +351,7 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
         shellDeck: deck,
       });
       if (shellGeometry === null) throw new Error('a low-loader has shell detail');
-      const heights = (hue: number, xMax: number): number[] => {
+      const heights = (hue: number, xMax: number, reach = Infinity): number[] => {
         const wanted = new Color(hue);
         const colours = shellGeometry.getAttribute('color');
         const positions = shellGeometry.getAttribute('position');
@@ -362,12 +361,18 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
             Math.abs(colours.getX(i) - wanted.r) < COLOUR_TOLERANCE &&
             Math.abs(colours.getY(i) - wanted.g) < COLOUR_TOLERANCE &&
             Math.abs(colours.getZ(i) - wanted.b) < COLOUR_TOLERANCE;
-          if (same && positions.getX(i) <= xMax) out.push(positions.getY(i));
+          const inside = positions.getX(i) <= xMax && Math.abs(positions.getZ(i)) <= reach + 1e-6;
+          if (same && inside) out.push(positions.getY(i));
         }
         return out;
       };
       const sill = spec.tailLamp.sill.value / 1000;
-      const lamp = heights(REALISM_HUES.tailLamp, Infinity);
+      // the clusters, without the end-outline markers outboard of them
+      const lamp = heights(
+        REALISM_HUES.tailLamp,
+        Infinity,
+        f.hw - spec.tailLamp.inset.value / 1000,
+      );
       expect(lamp.length).toBeGreaterThan(0);
       expect(Math.min(...lamp)).toBeCloseTo(deck.rearDeck + sill, 3);
       expect(Math.max(...lamp)).toBeCloseTo(
@@ -585,12 +590,19 @@ describe('parseTrailerShell', () => {
   it('accepts exactly a trailer and a dolly', async () => {
     const shell = await parseTrailerShell(glbOf(['dolly', 'trailer']));
     expect([shell.trailer.mesh.name, shell.dolly.mesh.name]).toEqual(['trailer', 'dolly']);
+    expect([shell.trailer.lens, shell.dolly.lens]).toEqual([null, null]);
+  });
+
+  it('accepts a lens mesh for the trailer', async () => {
+    const shell = await parseTrailerShell(glbOf(['dolly', 'trailer', 'trailer-lens']));
+    expect(shell.trailer.lens?.name).toBe('trailer-lens');
   });
 
   it.each([
     ['only a trailer', ['trailer']],
     ['only a dolly', ['dolly']],
     ['an extra mesh', ['trailer', 'dolly', 'extra']],
+    ['a lens twice', ['trailer', 'dolly', 'trailer-lens', 'trailer-lens']],
     ['another asset', ['cab']],
   ])('rejects a glb with %s', async (_label, names) => {
     await expect(parseTrailerShell(glbOf(names))).rejects.toThrow('expected [dolly, trailer]');

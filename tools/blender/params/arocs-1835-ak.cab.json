@@ -1,6 +1,6 @@
 {
   "id": "arocs-1835-ak",
-  "schema": 2,
+  "schema": 3,
   "style": "day",
   "width": 2.5,
   "frontX": 5.35,
@@ -21,20 +21,117 @@
     "sideGlassLength": 0.814,
     "grilleWidth": 1.25,
     "grilleSill": 0.144,
-    "grilleHeight": 0.54,
-    "headlampInset": 0.125,
-    "headlampWidth": 0.4,
-    "lampSill": 0.18,
-    "lampHeight": 0.396
+    "grilleHeight": 0.54
   },
   "hues": {
     "body": "#00387b",
     "glass": "#293133",
     "grille": "#101214",
-    "lamp": "#f4f4ee",
     "white": "#f6f6f6",
     "beacon": "#1f6fe5",
     "black": "#101214",
     "silver": "#a5a5a5"
-  }
+  },
+  "lenses": [
+    {
+      "id": "headlamp-0-left",
+      "box": [
+        [5.38, 5.4],
+        [1.045, 1.125],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-1-left",
+      "box": [
+        [5.38, 5.4],
+        [0.985, 1.045],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-2-left",
+      "box": [
+        [5.38, 5.4],
+        [0.725, 0.985],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-0-right",
+      "box": [
+        [5.38, 5.4],
+        [-1.125, -1.045],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-1-right",
+      "box": [
+        [5.38, 5.4],
+        [-1.045, -0.985],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "headlamp-2-right",
+      "box": [
+        [5.38, 5.4],
+        [-0.985, -0.725],
+        [0.85, 1.05]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "end-outline-front-left",
+      "box": [
+        [5.35, 5.4],
+        [1.04, 1.12],
+        [2.721, 2.771]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "side-indicator-left",
+      "box": [
+        [3.6, 3.68],
+        [1.25, 1.3],
+        [1.35, 1.4]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "end-outline-front-right",
+      "box": [
+        [5.35, 5.4],
+        [-1.12, -1.04],
+        [2.721, 2.771]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "side-indicator-right",
+      "box": [
+        [3.6, 3.68],
+        [-1.3, -1.25],
+        [1.35, 1.4]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    }
+  ]
 }

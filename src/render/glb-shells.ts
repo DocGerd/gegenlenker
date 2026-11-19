@@ -9,8 +9,9 @@ import manCabUrl from './assets/man-le-18-280-cab.glb?url';
 import { AIDS_LAYER } from './seams';
 
 /*
- * Blender shells (tools/blender, issues #68 and #133): one vertex-coloured mesh per rigid group,
- * shown in the perspective views only. The top-down view keeps the procedural token meshes, moved
+ * Blender shells (tools/blender, issues #68 and #133): one vertex-coloured mesh per rigid group, and
+ * a `<group>-lens` mesh with its lamp lenses where the shell carries any (lamp-layout.ts), shown in
+ * the perspective views only. The top-down view keeps the procedural token meshes, moved
  * onto AIDS_LAYER while a shell is in place. Colours are linear in the glb, like `tint()`.
  */
 
@@ -31,8 +32,8 @@ export const TRAILER_SHELL_URLS = {
   'krone-azw-18-trailer': kroneUrl,
 } as const satisfies Record<`${TrailerId}-trailer`, string>;
 
-/** The mesh prototype carrying the glTF node transform; visuals share its geometry. */
-export type Shell = { readonly mesh: Mesh };
+/** Mesh prototypes carrying the glTF node transforms; visuals share their geometry. */
+export type Shell = { readonly mesh: Mesh; readonly lens: Mesh | null };
 
 /** A trailer asset holds two rigid groups: the body, and the dolly with its drawbar. */
 export type TrailerShell = { readonly trailer: Shell; readonly dolly: Shell };
@@ -56,28 +57,42 @@ async function parseMeshes(data: ArrayBuffer): Promise<Mesh[]> {
   return meshes;
 }
 
-/** Decodes one shell; `kind` is the node name the Blender script gives it, so a swapped URL fails. */
-export async function parseShell(data: ArrayBuffer, kind: ShellKind): Promise<Shell> {
-  const meshes = await parseMeshes(data);
-  const [mesh] = meshes;
-  if (mesh === undefined || meshes.length !== 1) {
-    throw new Error(`shell has ${meshes.length} meshes, expected one`);
+const lensName = (group: string): string => `${group}-lens`;
+
+/** The meshes of `groups`, each with its lens mesh when there is one; anything else is refused. */
+function groupMeshes(meshes: readonly Mesh[], groups: readonly string[]): Map<string, Shell> {
+  const known = groups.flatMap((g) => [g, lensName(g)]);
+  const names = meshes.map((m) => m.name).sort();
+  const unique = new Set(names).size === names.length;
+  if (
+    !unique ||
+    !names.every((n) => known.includes(n)) ||
+    !groups.every((g) => names.includes(g))
+  ) {
+    throw new Error(
+      `shell has meshes [${names.join(', ')}], expected [${[...groups].sort().join(', ')}] and their lenses`,
+    );
   }
-  if (mesh.name !== kind) throw new Error(`shell is "${mesh.name}", expected "${kind}"`);
-  return { mesh };
+  const byName = (name: string): Mesh | null => meshes.find((m) => m.name === name) ?? null;
+  return new Map(
+    groups.map((g) => [g, { mesh: byName(g) as Mesh, lens: byName(lensName(g)) }] as const),
+  );
 }
 
-/** Decodes a trailer asset: exactly the meshes `trailer` and `dolly`. */
+/** Decodes one shell; `kind` is the node name the Blender script gives it, so a swapped URL fails. */
+export async function parseShell(data: ArrayBuffer, kind: ShellKind): Promise<Shell> {
+  const shell = groupMeshes(await parseMeshes(data), [kind]).get(kind);
+  if (shell === undefined) throw new Error(`shell lacks "${kind}"`);
+  return shell;
+}
+
+/** Decodes a trailer asset: the meshes `trailer` and `dolly`, and their lenses. */
 export async function parseTrailerShell(data: ArrayBuffer): Promise<TrailerShell> {
-  const meshes = await parseMeshes(data);
-  const names = meshes.map((m) => m.name).sort();
-  if (names.join() !== 'dolly,trailer') {
-    throw new Error(`trailer shell has meshes [${names.join(', ')}], expected [dolly, trailer]`);
-  }
+  const groups = groupMeshes(await parseMeshes(data), ['trailer', 'dolly']);
   const find = (name: string): Shell => {
-    const mesh = meshes.find((m) => m.name === name);
-    if (mesh === undefined) throw new Error(`trailer shell lacks "${name}"`);
-    return { mesh };
+    const shell = groups.get(name);
+    if (shell === undefined) throw new Error(`trailer shell lacks "${name}"`);
+    return shell;
   };
   return { trailer: find('trailer'), dolly: find('dolly') };
 }
@@ -271,10 +286,14 @@ export function applyShell(
     onChange(next);
   };
   try {
-    const mesh = new Mesh(shell.mesh.geometry, material);
-    shell.mesh.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
-    mesh.layers.set(swap.layer);
-    added = [mesh, ...(swap.add ?? [])];
+    const place = (prototype: Mesh): Mesh => {
+      const mesh = new Mesh(prototype.geometry, material);
+      prototype.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
+      mesh.layers.set(swap.layer);
+      return mesh;
+    };
+    const lens = shell.lens === null ? [] : [place(shell.lens)];
+    added = [place(shell.mesh), ...lens, ...(swap.add ?? [])];
     setEnabled(enabled);
   } catch (error) {
     setEnabled(false);
