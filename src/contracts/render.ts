@@ -118,7 +118,10 @@ export type RenderFrame = {
   /** Absent means not yet passed. */
   readonly waypointVisited?: boolean;
 };
+/** The GPU API the renderer draws through. */
+export type GraphicsBackend = 'webgpu' | 'webgl2';
 export type RenderStats = {
+  readonly backend: GraphicsBackend;
   readonly fps: number;
   readonly frameP95Ms: number;
   readonly resolutionScale: number;
@@ -126,8 +129,23 @@ export type RenderStats = {
   readonly glRenderer: string;
   readonly contextLost: boolean;
 };
+/** Why `SceneRenderer.init` rejected, when it is no bug: no GPU context could be made, or a later `init` or `dispose` came first. */
+export class GraphicsStartError extends Error {
+  readonly reason: 'unavailable' | 'superseded';
+  constructor(reason: 'unavailable' | 'superseded', options?: ErrorOptions) {
+    super(reason === 'unavailable' ? 'no GPU context could be created' : 'superseded', options);
+    this.name = 'GraphicsStartError';
+    this.reason = reason;
+  }
+}
 export interface SceneRenderer {
-  init(canvas: HTMLCanvasElement): void; // throws when WebGL 2 is unavailable
+  /**
+   * Rejects with a `GraphicsStartError` when no GPU context can be made on `canvas` or a later call
+   * superseded this one, otherwise with the failure. After a loss, call again with a fresh canvas: the scene is kept.
+   */
+  init(canvas: HTMLCanvasElement): Promise<void>;
+  /** `listener` runs when the GPU renderer is lost for good; returns the unsubscribe. */
+  onLost(listener: () => void): () => void;
   setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec): void;
   /** Applies at once, to the current scene and to every later one. */
   setQuality(preset: GraphicsPreset): void;

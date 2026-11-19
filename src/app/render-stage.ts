@@ -1,59 +1,139 @@
-import type { GraphicsPreset, SceneRenderer } from '../contracts/render';
+import { GraphicsStartError, type GraphicsPreset, type SceneRenderer } from '../contracts/render';
 import { createSceneRenderer } from '../render';
 import { currentSettings } from './settings';
 import { showNotice } from './notice';
 
-// One renderer and canvas for the whole session: a fresh WebGL context per run would hit the browser's context limit.
-let shared: { readonly canvas: HTMLCanvasElement; readonly renderer: SceneRenderer } | null = null;
+/** Losses within `RECREATE_WINDOW_MS` of each other that still get a fresh renderer; one more asks for a reload. */
+const MAX_RECREATES = 3;
+const RECREATE_WINDOW_MS = 60_000;
 
-function acquireRenderer(): NonNullable<typeof shared> {
-  if (shared !== null) return shared;
+type Shared = {
+  /** Holds the current canvas; a loss swaps in a new one, so listeners go here. */
+  readonly surface: HTMLElement;
+  readonly renderer: SceneRenderer;
+  /** Settles when the current canvas's GPU renderer can draw; replaced on a loss. */
+  ready: Promise<void>;
+  /** Whether a GPU renderer ever started: a later failure is a loss, not a missing API. */
+  started: boolean;
+  /** Mounted stages, told when `ready` is replaced. */
+  readonly lost: Set<() => void>;
+};
+
+// One renderer for the whole session: a fresh GPU context per run would hit the browser's context limit.
+let shared: Shared | null = null;
+
+function startOnFreshCanvas(s: Shared): Promise<void> {
   const canvas = document.createElement('canvas');
-  canvas.className = 'drive-canvas';
+  s.surface.replaceChildren(canvas);
+  return s.renderer.init(canvas);
+}
+
+const superseded = (error: unknown): boolean =>
+  error instanceof GraphicsStartError && error.reason === 'superseded';
+
+function setReady(s: Shared, next: Promise<void>): void {
+  s.ready = next;
+  // Handled here because no stage may be mounted when it settles.
+  next.then(
+    () => {
+      s.started = true;
+    },
+    (error: unknown) => {
+      if (!superseded(error)) console.error('Graphics could not start', error);
+    },
+  );
+}
+
+/** A hidden page may lose the context again, so a fresh one waits until it is shown. */
+function whenVisible(): Promise<void> {
+  if (document.visibilityState === 'visible') return Promise.resolve();
+  return new Promise((resolve) => {
+    const shown = (): void => {
+      if (document.visibilityState !== 'visible') return;
+      document.removeEventListener('visibilitychange', shown);
+      resolve();
+    };
+    document.addEventListener('visibilitychange', shown);
+  });
+}
+
+function acquireRenderer(): Shared {
+  if (shared !== null) return shared;
+  const surface = document.createElement('div');
+  surface.className = 'drive-surface';
   const renderer = createSceneRenderer();
-  try {
-    renderer.init(canvas);
-  } catch (error) {
-    renderer.dispose();
-    throw error;
-  }
-  shared = { canvas, renderer };
-  return shared;
+  const s: Shared = {
+    surface,
+    renderer,
+    ready: Promise.resolve(),
+    started: false,
+    lost: new Set(),
+  };
+  setReady(s, startOnFreshCanvas(s));
+  let recent = 0;
+  let lastLoss = -Infinity;
+  renderer.onLost(() => {
+    // Browsers drop the contexts of hidden pages; only losses while shown count towards giving up.
+    const hidden = document.visibilityState === 'hidden';
+    if (!hidden) {
+      const now = performance.now();
+      recent = now - lastLoss > RECREATE_WINDOW_MS ? 1 : recent + 1;
+      lastLoss = now;
+    }
+    console.warn(`Graphics context lost${hidden ? ' while hidden' : ''}; starting afresh`);
+    setReady(
+      s,
+      recent > MAX_RECREATES
+        ? Promise.reject(new Error('graphics lost too often'))
+        : whenVisible().then(() => startOnFreshCanvas(s)),
+    );
+    for (const listener of [...s.lost]) listener();
+  });
+  shared = s;
+  return s;
+}
+
+/** Drops a renderer that never started, so the next stage tries again. */
+function forget(s: Shared): void {
+  if (shared !== s) return;
+  shared = null;
+  s.renderer.dispose();
 }
 
 export type StageHooks = {
   readonly resized: (width: number, height: number) => void;
   /** `seconds` since the previous frame; 0 on the first frame after a pause. */
   readonly frame: (seconds: number) => void;
+  /** The renderer came back on a fresh canvas after a loss; redraw. */
   readonly restored: () => void;
+  /** The stage stopped for good behind a notice: release what must not outlive the drawing. */
+  readonly halted?: () => void;
 };
 
 export type RenderStage = {
   readonly renderer: SceneRenderer;
   /** The preset the renderer was set to: read it for anything that must follow the renderer's quality. */
   readonly graphics: GraphicsPreset;
-  readonly canvas: HTMLCanvasElement;
+  /** Fills the host and holds the canvas, which a loss replaces: bind input here. */
+  readonly surface: HTMLElement;
   start(hooks: StageHooks): void;
   dispose(): void;
 };
 
-/** Puts the shared canvas into `host`; null after showing a notice in `stage` when WebGL 2 is unavailable. */
+/**
+ * Puts the shared renderer's surface into `host`. Frames start once its GPU renderer is ready; if it
+ * cannot start, a notice in `stage` offers `onBack`, and a loss it cannot recover from offers a reload.
+ */
 export function mountRenderStage(
   stage: HTMLElement,
   host: HTMLElement,
   onBack: () => void,
-): RenderStage | null {
-  let gl: NonNullable<typeof shared>;
-  try {
-    gl = acquireRenderer();
-  } catch {
-    showNotice(stage, 'noWebgl', { label: 'back', run: onBack });
-    return null;
-  }
-  const { canvas, renderer } = gl;
+): RenderStage {
+  const s = acquireRenderer();
+  const { surface, renderer } = s;
   const { graphics } = currentSettings();
   renderer.setQuality(graphics);
-  host.append(canvas);
+  host.append(surface);
 
   const abort = new AbortController();
   const { signal } = abort;
@@ -61,6 +141,7 @@ export function mountRenderStage(
   let raf = 0;
   let last = -1;
   let notice: HTMLElement | null = null;
+  let ready = false;
 
   const loop = (now: number): void => {
     raf = requestAnimationFrame(loop);
@@ -69,7 +150,7 @@ export function mountRenderStage(
     hooks?.frame(seconds);
   };
   const resume = (): void => {
-    if (raf !== 0 || hooks === null || notice !== null) return;
+    if (raf !== 0 || hooks === null || notice !== null || !ready) return;
     if (document.visibilityState === 'hidden') return;
     last = -1;
     raf = requestAnimationFrame(loop);
@@ -85,31 +166,47 @@ export function mountRenderStage(
     renderer.resize(width, height);
     hooks?.resized(width, height);
   };
-  const lose = (): void => {
-    pause();
-    notice ??= showNotice(stage, 'contextLost', { label: 'reload', run: () => location.reload() });
-  };
   const observer = new ResizeObserver(relayout);
 
-  // The renderer's own listeners run first (registered in init), so stats() already reflects the event.
-  canvas.addEventListener(
-    'webglcontextlost',
-    () => {
-      if (renderer.stats().contextLost) lose();
-    },
-    { signal },
-  );
-  canvas.addEventListener(
-    'webglcontextrestored',
-    () => {
-      if (renderer.stats().contextLost) return;
-      notice?.remove();
-      notice = null;
-      hooks?.restored();
-      resume();
-    },
-    { signal },
-  );
+  const halt = (show: () => HTMLElement): void => {
+    if (notice !== null) return;
+    notice = show();
+    hooks?.halted?.();
+  };
+  const track = (pending: Promise<void>, recovering: boolean): void => {
+    ready = false;
+    pause();
+    pending.then(
+      () => {
+        if (signal.aborted || pending !== s.ready) return;
+        ready = true;
+        if (recovering) hooks?.restored();
+        resume();
+      },
+      (error: unknown) => {
+        if (signal.aborted || pending !== s.ready || superseded(error)) return;
+        const reload = { label: 'reload', run: () => location.reload() } as const;
+        const back = { label: 'back', run: onBack } as const;
+        if (s.started) {
+          halt(() => showNotice(stage, 'contextLost', reload));
+          return;
+        }
+        forget(s);
+        halt(() =>
+          error instanceof GraphicsStartError && error.reason === 'unavailable'
+            ? showNotice(stage, 'noWebgl', back)
+            : showNotice(stage, 'graphicsFailed', reload, back),
+        );
+      },
+    );
+  };
+  const onLost = (): void => {
+    track(s.ready, true);
+  };
+  s.lost.add(onLost);
+  signal.addEventListener('abort', () => s.lost.delete(onLost));
+  track(s.ready, false);
+
   document.addEventListener(
     'visibilitychange',
     () => {
@@ -123,14 +220,13 @@ export function mountRenderStage(
   return {
     renderer,
     graphics,
-    canvas,
+    surface,
     start(next) {
       hooks = next;
+      if (notice !== null) next.halted?.();
       observer.observe(host);
       relayout();
-      // The shared context may have been lost while no stage was showing.
-      if (renderer.stats().contextLost) lose();
-      else resume();
+      resume();
     },
     dispose() {
       abort.abort();
@@ -138,7 +234,7 @@ export function mountRenderStage(
       pause();
       hooks = null;
       notice?.remove();
-      canvas.remove();
+      surface.remove();
     },
   };
 }

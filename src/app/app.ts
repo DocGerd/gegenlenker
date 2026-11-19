@@ -17,8 +17,8 @@ import {
   storeLastRun,
   storeResult,
 } from './storage';
+import { probeGraphics } from './graphics-check';
 import { applyTheme } from './theme';
-import { webgl2Supported } from './webgl-check';
 
 export function startApp(root: HTMLElement): void {
   const settings = loadSettings(readText(SETTINGS_KEY), detectLanguage(navigator.languages));
@@ -94,10 +94,14 @@ export function startApp(root: HTMLElement): void {
 
   // Loaded on demand so the menu paints without parsing three.js.
   const drive = (run: RunConfig): void => {
-    if (!webgl2Supported()) {
-      noWebgl();
-      return;
-    }
+    probeGraphics()
+      .then((backend) => {
+        if (backend === null) noWebgl();
+        else loadDrive(run);
+      })
+      .catch((error: unknown) => loadFailed(error, () => drive(run)));
+  };
+  const loadDrive = (run: RunConfig): void => {
     import('./drive')
       .then((m) => {
         let back: (() => void) | null = null;
@@ -119,10 +123,14 @@ export function startApp(root: HTMLElement): void {
       .catch((error: unknown) => loadFailed(error, () => drive(run)));
   };
   const replay = (log: InputLog, onExit: () => void): void => {
-    if (!webgl2Supported()) {
-      noWebgl();
-      return;
-    }
+    probeGraphics()
+      .then((backend) => {
+        if (backend === null) noWebgl();
+        else loadReplay(log, onExit);
+      })
+      .catch((error: unknown) => loadFailed(error, () => replay(log, onExit)));
+  };
+  const loadReplay = (log: InputLog, onExit: () => void): void => {
     import('./replay-view')
       .then((m) => {
         let exit: (() => void) | null = null;

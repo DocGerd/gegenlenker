@@ -11,6 +11,15 @@ const renderer = (): WebGLRenderer =>
   });
 const texture = (): Texture => new DataTexture(new Uint8Array(4), 1, 1);
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+const shaderError = (gl: WebGLRenderer, fragment: string): void => {
+  const context = {
+    getShaderSource: (shader: unknown) => shader,
+    getShaderInfoLog: () => 'log',
+    getProgramInfoLog: () => 'log',
+  } as unknown as WebGLRenderingContext;
+  const hook = gl.debug.onShaderError as ShaderErrorHook;
+  hook(...([context, {}, 'vertex', fragment] as unknown as Parameters<ShaderErrorHook>));
+};
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -41,15 +50,23 @@ describe('ground textures', () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the first renderer', async () => {
+  it('moves the shader watch to a renderer that replaces a lost one, keeping the loaded texture', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const load = vi.fn(() => Promise.resolve(texture()));
     const textures = startGroundTextures(load);
+    const revert = vi.fn();
+    textures.onLoaded(() => undefined, revert);
     const first = renderer();
     textures.attach(first);
-    textures.attach(renderer());
     textures.setEnabled(true);
     await settle();
-    expect(load).toHaveBeenCalledWith(first);
+    const next = renderer();
+    textures.attach(next);
+    await settle();
+    expect(load).toHaveBeenCalledOnce();
+    expect(first.debug.onShaderError).toBeNull();
+    shaderError(next, `vec3 ${GROUND_SHADER_MARKER};`);
+    expect(revert).toHaveBeenCalledOnce();
   });
 
   it('hands the loaded texture to early and late subscribers, but not to a cancelled one', async () => {
@@ -143,16 +160,6 @@ describe('ground textures', () => {
   });
 
   describe('shader compile failure', () => {
-    const shaderError = (gl: WebGLRenderer, fragment: string): void => {
-      const context = {
-        getShaderSource: (shader: unknown) => shader,
-        getShaderInfoLog: () => 'log',
-        getProgramInfoLog: () => 'log',
-      } as unknown as WebGLRenderingContext;
-      const hook = gl.debug.onShaderError as ShaderErrorHook;
-      hook(...([context, {}, 'vertex', fragment] as unknown as Parameters<ShaderErrorHook>));
-    };
-
     it('reverts the subscribers once, warns, and stops offering the texture', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       vi.spyOn(console, 'error').mockImplementation(() => undefined);

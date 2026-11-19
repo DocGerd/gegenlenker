@@ -191,9 +191,12 @@
   -webkit-user-select: none;
 }
 
-.drive-canvas {
+.drive-surface {
   position: absolute;
   inset: 0;
+}
+
+.drive-surface > canvas {
   display: block;
   width: 100%;
   height: 100%;

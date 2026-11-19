@@ -175,15 +175,13 @@ export function vehicleShaderCompiles(gl: WebGLRenderer, envMap: Texture): boole
 
 /** The sky the vehicles reflect, shared by every visual of one renderer. */
 export interface VehicleEnvironment {
-  /** Where maps are generated; a different renderer replaces the previous one and drops its map. */
+  /** Where maps are generated; a different renderer (after a loss) replaces the previous one and drops its map and any failure. */
   attach(gl: WebGLRenderer): void;
   /**
    * The reflection map for `palette`, generated and shader-checked on first use; null without a
-   * renderer, while its context is lost, or after a failure (retried only after `invalidate`).
+   * renderer, while its context is lost, or after a failure (retried only on a new renderer).
    */
   texture(palette: ScenePalette): Texture | null;
-  /** Drops the map and a recorded failure; call when the GPU resources are gone (context restored). */
-  invalidate(): void;
   /** A visual reports whether it currently wears the reflective material, for the state. */
   reportApplied(owner: object, on: boolean): void;
   dispose(): void;
@@ -271,7 +269,6 @@ export function createVehicleEnvironment(
       }
       return target?.texture ?? null;
     },
-    invalidate,
     reportApplied(owner, on) {
       if (on) wearing.add(owner);
       else wearing.delete(owner);

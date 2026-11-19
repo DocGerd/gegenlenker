@@ -4,7 +4,7 @@ import type { GraphicsPreset } from '../contracts/render';
 export type QualityFlags = {
   /** Upper bound of the device pixel ratio the canvas renders at. */
   readonly pixelRatioCap: number;
-  /** Requested mirror render-target samples, further capped by the context; 0 disables MSAA. */
+  /** Requested mirror render-target samples, mapped to 0 or 4 (`mirrorSamples`); 0 disables MSAA. */
   readonly mirrorMsaa: number;
   readonly skyline: boolean;
   /** Perspective yard props; off shows the plain obstacle tokens in the perspective views too. */

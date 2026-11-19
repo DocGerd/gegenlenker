@@ -3,6 +3,7 @@ import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
   DEFAULT_GRAPHICS,
   DEFAULT_TOP_DOWN_VIEW,
+  GraphicsStartError,
   type GraphicsPreset,
   type Rect,
   type RenderFrame,
@@ -82,6 +83,16 @@ function setAidsLayer(object: Object3D): void {
   object.traverse((o) => o.layers.set(AIDS_LAYER));
 }
 
+/** Settles once the GPU renderer can draw; rejects when it cannot start. */
+const startGpu = (canvas: HTMLCanvasElement): Promise<WebGLRenderer> =>
+  new Promise((resolve, reject) => {
+    try {
+      resolve(new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }));
+    } catch (error) {
+      reject(new GraphicsStartError('unavailable', { cause: error }));
+    }
+  });
+
 /** `warmUp` holds the resolution governor off while something heavy (a shell, the ground texture) attaches. */
 export function createThreeSceneRenderer(
   parts: RendererParts,
@@ -113,16 +124,13 @@ export function createThreeSceneRenderer(
   let chaseShown = false;
   const lead = { x: 0, y: 0 };
   let leadAt = -1;
+  /** Bumped by every `init` and by `dispose`, so a superseded start drops its renderer. */
+  let generation = 0;
+  const lostListeners = new Set<() => void>();
 
-  const onLost = (event: Event): void => {
-    event.preventDefault();
+  const onLost = (): void => {
     contextLost = true;
-  };
-  const onRestored = (): void => {
-    contextLost = false;
-    resetTiming();
-    parts.onContextRestored?.();
-    if (built !== null) applyQuality(built);
+    for (const listener of [...lostListeners]) listener();
   };
   const onVisibility = (): void => {
     if (document.visibilityState === 'visible') resetTiming();
@@ -213,6 +221,18 @@ export function createThreeSceneRenderer(
     topDownRect = rect;
   }
 
+  function releaseGpu(): void {
+    if (canvas !== null) {
+      canvas.removeEventListener('webglcontextlost', onLost);
+      // three's loss handler asks the browser to restore this context; a 0x0 canvas keeps that cheap.
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    renderer?.dispose();
+    renderer = null;
+    canvas = null;
+  }
+
   function viewRect(gl: WebGLRenderer, rect: Rect): void {
     const y = cssHeight - rect.y - rect.height;
     gl.setViewport(rect.x, y, rect.width, rect.height);
@@ -220,24 +240,39 @@ export function createThreeSceneRenderer(
   }
 
   return {
-    init(target) {
+    async init(target) {
+      releaseGpu();
+      const mine = ++generation;
+      const next = await startGpu(target);
+      if (mine !== generation) {
+        next.dispose();
+        target.width = 0;
+        target.height = 0;
+        throw new GraphicsStartError('superseded');
+      }
+      renderer = next;
       canvas = target;
-      renderer = new WebGLRenderer({
-        canvas: target,
-        antialias: true,
-        powerPreference: 'high-performance',
-      });
-      renderer.autoClear = false;
-      parts.onRenderer?.(renderer);
-      renderer.info.autoReset = false;
-      const gl = renderer.getContext();
+      contextLost = false;
+      next.autoClear = false;
+      next.info.autoReset = false;
+      const gl = next.getContext();
       const ext = gl.getExtension('WEBGL_debug_renderer_info');
       const name: unknown = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : undefined;
       glRenderer = typeof name === 'string' && name !== '' ? name : 'unknown';
       target.addEventListener('webglcontextlost', onLost);
-      target.addEventListener('webglcontextrestored', onRestored);
       document.addEventListener('visibilitychange', onVisibility);
+      resetTiming();
+      parts.onRenderer?.(next);
       applySize();
+      if (built !== null) applyQuality(built);
+      timer.warmUp();
+    },
+
+    onLost(listener) {
+      lostListeners.add(listener);
+      return () => {
+        lostListeners.delete(listener);
+      };
     },
 
     setScene(nextLayout, truck, trailer) {
@@ -280,9 +315,8 @@ export function createThreeSceneRenderer(
       if (next === quality) return;
       if (next.pixelRatioCap !== quality.pixelRatioCap) appliedRatio = 0;
       quality = next;
-      const maxSamples = renderer?.capabilities.maxSamples ?? 0;
-      mirrorLeft.setSamples(quality.mirrorMsaa, maxSamples);
-      mirrorRight.setSamples(quality.mirrorMsaa, maxSamples);
+      mirrorLeft.setSamples(quality.mirrorMsaa);
+      mirrorRight.setSamples(quality.mirrorMsaa);
       if (built !== null) {
         applyQuality(built);
         timer.warmUp();
@@ -342,8 +376,9 @@ export function createThreeSceneRenderer(
         );
       }
 
+      // One clear for every pane: they tile the canvas, and the sky dome covers each perspective one.
       gl.setRenderTarget(null);
-      gl.setClearColor(sky);
+      gl.setClearColor(b.palette.backdrop);
       gl.clear();
       gl.setScissorTest(true);
 
@@ -368,13 +403,9 @@ export function createThreeSceneRenderer(
           },
           frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW,
         );
-        gl.setClearColor(sky);
-        gl.clear();
         gl.render(b.scene, chaseCamera);
       } else {
         placeTopDown(frame, topDown, b);
-        gl.setClearColor(b.palette.backdrop);
-        gl.clear();
         gl.render(b.scene, topDownCamera);
       }
 
@@ -404,6 +435,7 @@ export function createThreeSceneRenderer(
 
     stats(): RenderStats {
       return {
+        backend: 'webgl2',
         fps: timer.fps(),
         frameP95Ms: timer.p95Ms(),
         resolutionScale: timer.scale(),
@@ -418,12 +450,10 @@ export function createThreeSceneRenderer(
       interior.dispose();
       mirrorLeft.dispose();
       mirrorRight.dispose();
-      canvas?.removeEventListener('webglcontextlost', onLost);
-      canvas?.removeEventListener('webglcontextrestored', onRestored);
+      generation++;
+      releaseGpu();
+      lostListeners.clear();
       document.removeEventListener('visibilitychange', onVisibility);
-      renderer?.dispose();
-      renderer = null;
-      canvas = null;
     },
   };
 }

@@ -99,7 +99,7 @@ function readOptions() {
   return { truck: truckById(truckId), trailer: trailerById(trailerId), fold };
 }
 
-export function startProbe(root: HTMLElement): void {
+export async function startProbe(root: HTMLElement): Promise<void> {
   const { truck, trailer, fold } = readOptions();
   const truckAnchor = truckAnchors(truck);
   const trailerAnchor = trailerAnchors(trailer);
@@ -116,7 +116,7 @@ export function startProbe(root: HTMLElement): void {
   root.append(canvas);
 
   const renderer = createSceneRenderer();
-  renderer.init(canvas);
+  await renderer.init(canvas);
   renderer.setScene(layout, truck, trailer);
 
   let width = 0;

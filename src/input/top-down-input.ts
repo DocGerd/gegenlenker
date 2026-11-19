@@ -38,10 +38,7 @@ const MAX_POINTERS = 2;
  * Pans and zooms the top-down pane of the shared canvas: drag, pinch, wheel and keys.
  * Controls and the HUD's buttons sit above the canvas, so their gestures never reach it.
  */
-export function createTopDownInput(
-  canvas: HTMLCanvasElement,
-  opts: TopDownInputOptions,
-): TopDownInput {
+export function createTopDownInput(surface: HTMLElement, opts: TopDownInputOptions): TopDownInput {
   const abort = new AbortController();
   const { signal } = abort;
   let mode = opts.mode;
@@ -59,7 +56,7 @@ export function createTopDownInput(
   };
   /** Pane-local position of a mouse event, or null outside the pane. */
   const inPane = (e: { clientX: number; clientY: number }): Point | null => {
-    const box = canvas.getBoundingClientRect();
+    const box = surface.getBoundingClientRect();
     const r = opts.getRect();
     const x = e.clientX - box.left - r.x;
     const y = e.clientY - box.top - r.y;
@@ -69,26 +66,26 @@ export function createTopDownInput(
   };
   const centre = (ctx: ViewContext): Point => ({ x: ctx.width / 2, y: ctx.height / 2 });
 
-  canvas.addEventListener(
+  surface.addEventListener(
     'pointerdown',
     (e) => {
       if (pointers.size >= MAX_POINTERS || (e.pointerType === 'mouse' && e.button !== 0)) return;
       const p = inPane(e);
       if (p === null) return;
       pointers.set(e.pointerId, p);
-      canvas.setPointerCapture(e.pointerId);
+      surface.setPointerCapture(e.pointerId);
       e.preventDefault();
     },
     { signal },
   );
 
-  canvas.addEventListener(
+  surface.addEventListener(
     'pointermove',
     (e) => {
       const before = pointers.get(e.pointerId);
       if (before === undefined) return;
       const rect = opts.getRect();
-      const box = canvas.getBoundingClientRect();
+      const box = surface.getBoundingClientRect();
       const now = { x: e.clientX - box.left - rect.x, y: e.clientY - box.top - rect.y };
       const ctx = context();
       const others = [...pointers].filter(([id]) => id !== e.pointerId);
@@ -108,10 +105,10 @@ export function createTopDownInput(
     pointers.delete(e.pointerId);
   };
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
-    canvas.addEventListener(type, release, { signal });
+    surface.addEventListener(type, release, { signal });
   }
 
-  canvas.addEventListener(
+  surface.addEventListener(
     'wheel',
     (e) => {
       const p = inPane(e);

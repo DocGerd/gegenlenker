@@ -134,7 +134,6 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   map.className = 'replay-map';
   stage.append(map);
   const view = mountRenderStage(stage, map, exit);
-  if (view === null) return exit;
   cleanups.push(() => view.dispose());
   const { renderer } = view;
   renderer.setScene(layout, truck, trailer);
@@ -253,7 +252,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     predicted: NO_PREDICTION,
   };
 
-  const viewInput = createTopDownInput(view.canvas, {
+  const viewInput = createTopDownInput(view.surface, {
     mode: 'yard',
     getRect: () => frame.views.topDown,
     onChange(next) {
