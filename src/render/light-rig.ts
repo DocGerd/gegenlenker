@@ -9,7 +9,7 @@ import {
 } from 'three';
 import type { ScenePalette } from '../contracts/render';
 import { HDRI_LIGHT } from './hdri-light';
-import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER } from './seams';
+import { AIDS_LAYER, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
 import { neutralSky } from './sky';
 
 export const SUN_ELEVATION = (50 * Math.PI) / 180;
@@ -177,7 +177,7 @@ export function createLightRig(palette: ScenePalette): LightRig {
   sun.position.copy(perspectiveSunDirection().multiplyScalar(SUN_DISTANCE));
   const probe = new LightProbe(light.sh, 1);
   for (const l of [sun, probe]) {
-    l.layers.set(SKY_LAYER);
+    l.layers.set(PERSPECTIVE_LAYER);
     l.visible = false;
   }
 

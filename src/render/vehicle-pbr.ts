@@ -270,7 +270,7 @@ export function generateSkyMap(
   // only High captures, and it lights the perspective views with the split rig
   sky.setGround(domeGround(palette, true));
   sky.setHdri(hdri);
-  // the dome sits on SKY_LAYER for the game cameras; the capture camera sees layer 0 only
+  // the dome sits on PERSPECTIVE_LAYER for the game cameras; the capture camera sees layer 0 only
   sky.mesh.layers.set(0);
   const scene = new Scene();
   scene.add(sky.mesh);
