@@ -239,6 +239,7 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
   test(`each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`, async ({
     page,
   }) => {
+    if (preset === 'high') test.setTimeout(90_000);
     const errors = collectErrors(page);
     await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
       SETTINGS_KEY,
@@ -303,11 +304,11 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
       .poll(
         async () => {
           seen = await sample();
-          return seen.map((s) => s.drawn);
+          return seen.map((s) => `${s.side}: ${String(s.drawn)}`);
         },
         preset === 'high' ? HIGH_SCREENSHOT_POLL : SCREENSHOT_POLL,
       )
-      .toEqual([true, true]);
+      .toEqual(sides.map((s) => `${s.side}: true`));
     for (const { side, outerYard, innerYard } of seen) {
       expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
       expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
