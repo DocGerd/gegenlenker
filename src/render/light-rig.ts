@@ -61,15 +61,57 @@ export type PerspectiveLight = {
   readonly hazeAway: Color;
 };
 
-/**
- * The HDRI's sun/sky split at the legacy rig's horizontal irradiance, so layer-0 tokens, which are
- * not tone-mapped, stay as bright and as neutral as before, and below 1 in the 8-bit intermediate.
- */
-export function perspectiveLight(palette: ScenePalette): PerspectiveLight {
-  const { sun, skySh, horizonToward, horizonAway } = HDRI_LIGHT;
-  const total = legacyIrradiance(palette);
+/** Fibonacci-sphere directions the peak irradiance is searched over. */
+const PEAK_SAMPLES = 4096;
+/** Share of the 8-bit top the brightest normal may reach; covers the gaps between the samples. */
+const PEAK_HEADROOM = 0.99;
+
+/** Highest channel of the irradiance over all normals. */
+function peakIrradiance(
+  sh: SphericalHarmonics3,
+  sun: Vector3,
+  sunColor: Color,
+  sunIntensity: number,
+): number {
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const normal = new Vector3();
+  const e = new Vector3();
+  let peak = 0;
+  for (let i = 0; i < PEAK_SAMPLES; i++) {
+    const y = 1 - (2 * (i + 0.5)) / PEAK_SAMPLES;
+    const r = Math.sqrt(1 - y * y);
+    normal.set(r * Math.cos(golden * i), y, r * Math.sin(golden * i));
+    sh.getIrradianceAt(normal, e);
+    const direct = Math.max(0, normal.dot(sun)) * sunIntensity;
+    peak = Math.max(
+      peak,
+      e.x + sunColor.r * direct,
+      e.y + sunColor.g * direct,
+      e.z + sunColor.b * direct,
+    );
+  }
+  return peak;
+}
+
+type Rgb = readonly [number, number, number];
+
+/** The generated bake, widened so a malformed one fails here instead of as a black or NaN light. */
+function bakedSh(skySh: readonly Rgb[]): SphericalHarmonics3 {
+  if (skySh.length !== 9) throw new Error('HDRI_LIGHT.skySh needs nine coefficients');
   const sh = new SphericalHarmonics3();
   skySh.forEach(([r, g, b], i) => sh.coefficients[i]?.set(r, g, b));
+  return sh;
+}
+
+/**
+ * The HDRI's sun/sky split at the legacy rig's horizontal irradiance, lowered as a whole where a
+ * normal between the sun and the zenith would take a white token past 1: layer-0 tokens are not
+ * tone-mapped, so the rig itself keeps them inside the 8-bit intermediate.
+ */
+export function perspectiveLight(palette: ScenePalette): PerspectiveLight {
+  const { sun, horizonToward, horizonAway } = HDRI_LIGHT;
+  const total = legacyIrradiance(palette);
+  const sh = bakedSh(HDRI_LIGHT.skySh);
   const up = sh.getIrradianceAt(new Vector3(0, 1, 0), new Vector3());
   const sunUp = sun.irradiance * Math.sin(sun.elevation);
   const [sr, sg, sb] = sun.colour;
@@ -78,6 +120,9 @@ export function perspectiveLight(palette: ScenePalette): PerspectiveLight {
     total / (up.y + sg * sunUp),
     total / (up.z + sb * sunUp),
   );
+  if (![scale.r, scale.g, scale.b].every((v) => Number.isFinite(v) && v > 0)) {
+    throw new Error('HDRI_LIGHT gives no usable light');
+  }
   const gain = new Vector3(scale.r, scale.g, scale.b);
   for (const c of sh.coefficients) c.multiply(gain);
   // a uniform radiance below the horizon only reaches band 0 and the y term of band 1
@@ -87,10 +132,17 @@ export function perspectiveLight(palette: ScenePalette): PerspectiveLight {
   sh.coefficients[1]?.addScaledVector(bounceVector, -SH_Y10 * Math.PI);
   const sunColor = new Color(...sun.colour).multiply(scale);
   const sunLuminance = 0.2126 * sunColor.r + 0.7152 * sunColor.g + 0.0722 * sunColor.b;
+  sunColor.multiplyScalar(1 / sunLuminance);
+  const sunIntensity = sun.irradiance * sunLuminance;
+
+  const peak = peakIrradiance(sh, perspectiveSunDirection(), sunColor, sunIntensity);
+  const cap = Math.min(1, (PEAK_HEADROOM * Math.PI) / peak);
+  scale.multiplyScalar(cap);
+  sh.scale(cap);
   return {
     scale,
-    sunColor: sunColor.multiplyScalar(1 / sunLuminance),
-    sunIntensity: sun.irradiance * sunLuminance,
+    sunColor,
+    sunIntensity: sunIntensity * cap,
     sh,
     hazeToward: new Color(...horizonToward).multiply(scale),
     hazeAway: new Color(...horizonAway).multiply(scale),

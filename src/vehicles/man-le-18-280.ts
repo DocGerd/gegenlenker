@@ -2,6 +2,9 @@ import type { TruckSpec } from '../contracts/vehicle';
 import { SOURCES, estimate, sourced } from './sources';
 
 const typical = 'typical for the vehicle class, no source found';
+const inBumper = "in the bumper, chosen inside UN R48 6.2.4.2's 1,200 mm; no source found";
+const onFloor =
+  "on the floor's rear face, chosen inside UN R48 6.4.4.2's 1,200 mm; no source found";
 
 export const manLe18280: TruckSpec = {
   id: 'man-le-18-280',
@@ -41,15 +44,18 @@ export const manLe18280: TruckSpec = {
     grilleHeight: estimate(540, typical),
     headlampInset: estimate(125, typical),
     headlampWidth: estimate(398, typical),
-    lampSill: estimate(180, typical),
-    lampHeight: estimate(396, typical),
+    lampSill: estimate(-250, inBumper),
+    lampHeight: estimate(200, inBumper),
   },
   bumperInset: estimate(100, typical),
   tailLamp: {
     inset: estimate(100, typical),
-    width: estimate(274, typical),
-    sill: estimate(20, typical),
-    height: estimate(160, typical),
+    width: estimate(
+      420,
+      'chambers for indicator, tail and stop, reversing and fog; no source found',
+    ),
+    sill: estimate(15, onFloor),
+    height: estimate(80, onFloor),
   },
   mudflap: {
     gap: estimate(100, typical),

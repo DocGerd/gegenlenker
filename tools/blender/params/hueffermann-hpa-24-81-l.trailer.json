@@ -1,6 +1,6 @@
 {
   "id": "hueffermann-hpa-24-81-l",
-  "schema": 2,
+  "schema": 3,
   "kind": "low-loader",
   "width": 2.55,
   "rearX": -2.22,
@@ -24,7 +24,7 @@
     "endMargin": 0.1
   },
   "guard": { "depth": 0.05, "inset": 0.1 },
-  "tailLamp": { "inset": 0.405, "width": 0.54, "sill": 0.1, "height": 0.2 },
+  "tailLamp": { "inset": 0.25, "width": 0.54, "sill": 0.1, "height": 0.2 },
   "dolly": {
     "eyeX": 2.6,
     "eyeZ": 0.9,
@@ -51,5 +51,229 @@
     "frontDeck": 0.85,
     "rampTop": 2.25
   },
-  "hues": { "base": "#00387b", "frame": "#00214a", "black": "#101214", "silver": "#a5a5a5" }
+  "hues": { "base": "#00387b", "frame": "#00214a", "black": "#101214", "silver": "#a5a5a5" },
+  "lenses": [],
+  "brackets": [],
+  "mounts": [
+    {
+      "id": "end-outline-front-left",
+      "box": [
+        [6.5, 6.55],
+        [1.23, 1.27],
+        [0.625, 0.675]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "front-position-left",
+      "box": [
+        [6.5, 6.55],
+        [1.18, 1.22],
+        [0.625, 0.675]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "end-outline-front-right",
+      "box": [
+        [6.5, 6.55],
+        [-1.27, -1.23],
+        [0.625, 0.675]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "front-position-right",
+      "box": [
+        [6.5, 6.55],
+        [-1.22, -1.18],
+        [0.625, 0.675]
+      ],
+      "facing": "front",
+      "hue": "#f4f4ee"
+    },
+    {
+      "id": "side-marker-0-left",
+      "box": [
+        [-2.02, -1.82],
+        [1.275, 1.325],
+        [0.446316, 0.546316]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-1-left",
+      "box": [
+        [0.686667, 0.886667],
+        [1.275, 1.325],
+        [0.6, 0.7]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-2-left",
+      "box": [
+        [3.393333, 3.593333],
+        [1.275, 1.325],
+        [0.6, 0.7]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-3-left",
+      "box": [
+        [6.1, 6.3],
+        [1.275, 1.325],
+        [0.6, 0.7]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-0-right",
+      "box": [
+        [-2.02, -1.82],
+        [-1.325, -1.275],
+        [0.446316, 0.546316]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-1-right",
+      "box": [
+        [0.686667, 0.886667],
+        [-1.325, -1.275],
+        [0.6, 0.7]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-2-right",
+      "box": [
+        [3.393333, 3.593333],
+        [-1.325, -1.275],
+        [0.6, 0.7]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-3-right",
+      "box": [
+        [6.1, 6.3],
+        [-1.325, -1.275],
+        [0.6, 0.7]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "tail-0-left",
+      "box": [
+        [-2.27, -2.22],
+        [0.89, 1.025],
+        [0.6, 0.8]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-1-left",
+      "box": [
+        [-2.27, -2.22],
+        [0.755, 0.89],
+        [0.6, 0.8]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-2-left",
+      "box": [
+        [-2.27, -2.22],
+        [0.593, 0.755],
+        [0.6, 0.8]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-3-left",
+      "box": [
+        [-2.27, -2.22],
+        [0.485, 0.593],
+        [0.6, 0.8]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-0-right",
+      "box": [
+        [-2.27, -2.22],
+        [-1.025, -0.89],
+        [0.6, 0.8]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-1-right",
+      "box": [
+        [-2.27, -2.22],
+        [-0.89, -0.755],
+        [0.6, 0.8]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-2-right",
+      "box": [
+        [-2.27, -2.22],
+        [-0.755, -0.593],
+        [0.6, 0.8]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-3-right",
+      "box": [
+        [-2.27, -2.22],
+        [-0.593, -0.485],
+        [0.6, 0.8]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "end-outline-rear-left",
+      "box": [
+        [-2.27, -2.22],
+        [1.22, 1.27],
+        [0.86, 0.91]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "end-outline-rear-right",
+      "box": [
+        [-2.27, -2.22],
+        [-1.27, -1.22],
+        [0.86, 0.91]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    }
+  ]
 }

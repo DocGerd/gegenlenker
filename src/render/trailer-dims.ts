@@ -113,6 +113,33 @@ export function lowLoaderDeck(spec: TrailerSpec) {
 
 export type LowLoaderDeck = ReturnType<typeof lowLoaderDeck>;
 
+/** The lafette shell's rear lamp bar and white side guard, which carries the side marking. */
+export const LAFETTE = {
+  lampBar: { depth: 0.06, height: 0.4 }, // above the deck
+  guardBars: [
+    [0.58, 0.68],
+    [0.78, 0.88],
+  ],
+  guardY: [0.08, 0.03], // inner and outer inset from the half width
+  startGap: 0.15, // ahead of the rear tyres
+  endGap: 0.4, // behind the deck front
+  markRelief: [0.01, 0.02], // contour strip and marker lamps off the guard's outer face
+} as const;
+
+/** Plan radius about the turntable of the dolly tyres' corners, which sweep as the body turns. */
+export function swingRadius(spec: TrailerSpec): number {
+  const f = trailerFrame(spec);
+  return Math.hypot(Math.abs(f.a.frontAxle.x) + f.radius, f.track / 2 + TRAILER_WHEEL_WIDTH / 2);
+}
+
+/** Where the lafette's side guard runs: from the rear tyres to clear of the dolly tyres' swing. */
+export function lafetteGuard(spec: TrailerSpec) {
+  const { a, radius } = trailerFrame(spec);
+  const start = Math.max(...a.rearAxles.map((axle) => axle.x)) + radius + LAFETTE.startGap;
+  const end = Math.min(a.frontX - LAFETTE.endGap, a.turntable.x - swingRadius(spec) - SWING_MARGIN);
+  return { span: [round(start), round(end)] as const };
+}
+
 const HUES = {
   'low-loader': {
     base: hex(REALISM_HUES.thwBlue),
@@ -126,7 +153,6 @@ const HUES = {
     silver: hex(REALISM_HUES.whiteAluminium),
     yellow: hex(REALISM_HUES.signalYellow),
     contour: hex(REALISM_HUES.contourSide),
-    marker: hex(REALISM_HUES.sideMarker),
   },
 } as const;
 
@@ -136,7 +162,7 @@ export function trailerShellParams(spec: TrailerSpec, look: TrailerLook = TRAILE
   const { a } = f;
   return {
     id: spec.id,
-    schema: 2,
+    schema: 3,
     kind: look.kind,
     width: metres(spec.width),
     rearX: round(a.rearX),
@@ -185,6 +211,9 @@ export function trailerShellParams(spec: TrailerSpec, look: TrailerLook = TRAILE
       axleX: round(a.frontAxle.x),
     },
     ...(look.kind === 'low-loader' ? { lowLoader: lowLoaderDeck(spec) } : {}),
+    ...(look.kind === 'lafette'
+      ? { lafette: { ...LAFETTE, guardSpan: lafetteGuard(spec).span } }
+      : {}),
     hues: HUES[look.kind],
   };
 }
