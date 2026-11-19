@@ -3,7 +3,7 @@ import { SKY_LAYER } from './seams';
 import { createAtlasTexture } from './skyline-atlas';
 import { skylineGeometry } from './skyline-geometry';
 import { skylineBuildings } from './skyline-layout';
-import { Color, Mesh } from 'three';
+import { BoxGeometry, Color, DataTexture, Float32BufferAttribute, Mesh } from 'three';
 import { attribute, max, mix, output, uniform, vec4 } from 'three/tsl';
 import { MeshLambertNodeMaterial, type Node } from 'three/webgpu';
 import {
@@ -62,17 +62,23 @@ export function createSkyline(bounds: Rect2, haze: Color): Skyline {
   };
 }
 
-/** A graded skyline, for the grade's shader check. */
+/**
+ * The graded skyline material on a box with the same attributes and a 1 × 1 map, for the grade's
+ * shader check: the same program without building the skyline and its atlas on every new renderer.
+ */
 export function skylineGradeSample(): GradeSample {
-  const skyline = createSkyline(
-    { minX: -40, minY: -40, maxX: 40, maxY: 40 },
-    new Color(REALISM_HUES.skyHaze),
-  );
-  skyline.setGraded(true);
+  const geometry = new BoxGeometry();
+  geometry.setAttribute('haze', new Float32BufferAttribute(new Float32Array(24), 1));
+  const map = new DataTexture(new Uint8Array(4), 1, 1);
+  map.needsUpdate = true;
+  const material = new MeshLambertNodeMaterial({ map });
+  setGraded(material, true, plainHaze(new Color(REALISM_HUES.skyHaze)), gradedHaze());
   return {
-    mesh: skyline.mesh,
+    mesh: new Mesh(geometry, material),
     dispose: () => {
-      skyline.dispose();
+      geometry.dispose();
+      map.dispose();
+      material.dispose();
     },
   };
 }
