@@ -8,7 +8,6 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
-  MeshStandardMaterial,
   type Object3D,
   type Texture,
 } from 'three';
@@ -68,7 +67,12 @@ import {
   type PlateSpot,
 } from './vehicle-detail';
 import { box, merge, WHEEL_SEGMENTS, wheelGeometry } from './vehicle-geometry';
-import { createVehicleMaterial, replaceMaterial, type VehicleEnvironment } from './vehicle-pbr';
+import {
+  createVehicleMaterial,
+  replaceMaterial,
+  type VehicleEnvironment,
+  type VehicleNodeMaterial,
+} from './vehicle-pbr';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
 export const SHADOW_NAME = 'blob-shadow';
@@ -129,7 +133,8 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const textures: Texture[] = [];
   const detailMeshes: Mesh[] = [];
   let detailMaterial: MeshLambertMaterial | null = null;
-  let pbrMaterial: MeshStandardMaterial | null = null;
+  let pbrMaterial: VehicleNodeMaterial | null = null;
+  let pbrRoot: Object3D | null = null;
   const pbrToken = {};
   let pbrWanted = false;
   let pbrOn = false;
@@ -137,6 +142,33 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
     return material;
+  };
+  // the map is checked asynchronously: wear it once it is ready, and drop it when it goes
+  const stopWatching = env?.onChange(() => {
+    if (pbrRoot !== null) setPbr(pbrRoot);
+  });
+  /**
+   * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
+   * has taken out of it; without `on` it repeats the last request, for shells that attach later.
+   */
+  const setPbr = (root: Object3D, on = pbrWanted): void => {
+    pbrRoot = root;
+    pbrWanted = on;
+    const map = on ? (env?.texture(palette) ?? null) : null;
+    if (map !== null) {
+      pbrMaterial ??= track(createVehicleMaterial(map));
+      pbrMaterial.envMap = map;
+    } else if (pbrMaterial !== null) {
+      pbrMaterial.envMap = null;
+    }
+    pbrOn = map !== null;
+    env?.reportApplied(pbrToken, pbrOn);
+    if (detailMaterial === null || pbrMaterial === null) return;
+    replaceMaterial(
+      [root, ...detailMeshes],
+      [detailMaterial, pbrMaterial],
+      pbrOn ? pbrMaterial : detailMaterial,
+    );
   };
   return {
     material(color: number): MeshLambertMaterial {
@@ -158,28 +190,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
       return pbrOn && pbrMaterial !== null ? pbrMaterial : detailMaterial;
     },
-    /**
-     * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
-     * has taken out of it; without `on` it repeats the last request, for shells that attach later.
-     */
-    setPbr(root: Object3D, on = pbrWanted): void {
-      pbrWanted = on;
-      const map = on ? (env?.texture(palette) ?? null) : null;
-      if (map !== null) {
-        pbrMaterial ??= track(createVehicleMaterial(map));
-        pbrMaterial.envMap = map;
-      } else if (pbrMaterial !== null) {
-        pbrMaterial.envMap = null;
-      }
-      pbrOn = map !== null;
-      env?.reportApplied(pbrToken, pbrOn);
-      if (detailMaterial === null || pbrMaterial === null) return;
-      replaceMaterial(
-        [root, ...detailMeshes],
-        [detailMaterial, pbrMaterial],
-        pbrOn ? pbrMaterial : detailMaterial,
-      );
-    },
+    setPbr,
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
       const mesh = this.detail(geometry);
@@ -218,6 +229,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       return mesh;
     },
     dispose(): void {
+      stopWatching?.();
       env?.reportApplied(pbrToken, false);
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());

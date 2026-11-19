@@ -1,18 +1,19 @@
-import { Scene, type WebGLRenderer, type WebGLRenderTarget } from 'three';
+import { type RenderTarget, Scene } from 'three';
+import type { WebGPURenderer } from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { createMirror, mirrorSamples } from './mirror';
 
 /** Records the render targets a mirror binds; the fake accepts what three's renderer would. */
-function fakeRenderer(): { gl: WebGLRenderer; bound: WebGLRenderTarget[] } {
-  const bound: WebGLRenderTarget[] = [];
+function fakeRenderer(): { gl: WebGPURenderer; bound: RenderTarget[] } {
+  const bound: RenderTarget[] = [];
   const gl = {
-    setRenderTarget: (target: WebGLRenderTarget | null) => {
+    setRenderTarget: (target: RenderTarget | null) => {
       if (target !== null) bound.push(target);
     },
     setClearColor: () => undefined,
     clear: () => undefined,
     render: () => undefined,
-  } as unknown as WebGLRenderer;
+  } as unknown as WebGPURenderer;
   return { gl, bound };
 }
 
@@ -28,7 +29,7 @@ describe('mirror samples', () => {
     mirror.capture(gl, scene, 64, 32, 0);
     const first = bound[0];
     expect(first?.samples).toBe(4);
-    const dispose = vi.spyOn(first as WebGLRenderTarget, 'dispose');
+    const dispose = vi.spyOn(first as RenderTarget, 'dispose');
 
     mirror.setSamples(4);
     mirror.setSamples(8);

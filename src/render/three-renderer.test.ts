@@ -1,4 +1,5 @@
-import { Group, type WebGLRenderer } from 'three';
+import { Group } from 'three';
+import type { WebGPURenderer } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
@@ -11,24 +12,26 @@ import { createThreeSceneRenderer } from './three-renderer';
 const made = vi.hoisted(() => [] as { dispose: () => void }[]);
 const fail = vi.hoisted(() => ({ next: false }));
 
-vi.mock('three', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('three')>();
-  class FakeWebGLRenderer {
+vi.mock('three/webgpu', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('three/webgpu')>();
+  class FakeWebGPURenderer {
     autoClear = true;
     info = { autoReset: true };
-    dispose = vi.fn();
+    onDeviceLost = (): void => undefined;
+    dispose = vi.fn(() => Promise.resolve());
     constructor() {
-      if (fail.next) {
-        fail.next = false;
-        throw new Error('Error creating WebGL context.');
-      }
       made.push(this);
+    }
+    init(): Promise<void> {
+      if (!fail.next) return Promise.resolve();
+      fail.next = false;
+      return Promise.reject(new Error('Error creating WebGL context.'));
     }
     getContext() {
       return { getExtension: () => null };
     }
   }
-  return { ...actual, WebGLRenderer: FakeWebGLRenderer };
+  return { ...actual, WebGPURenderer: FakeWebGPURenderer };
 });
 
 vi.mock('./palette', async (importOriginal) => {
@@ -42,7 +45,7 @@ vi.mock('./palette', async (importOriginal) => {
 
 const layout = resolveLayout(layouts.depot, null);
 
-function stubParts(onRenderer?: (gl: WebGLRenderer) => void): {
+function stubParts(onRenderer?: (gpu: WebGPURenderer) => void): {
   applied: QualityFlags[][];
   renderer: ReturnType<typeof create>;
 } {

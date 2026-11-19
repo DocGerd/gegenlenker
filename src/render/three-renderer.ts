@@ -1,4 +1,5 @@
-import { OrthographicCamera, Scene, Vector3, WebGLRenderer, type Object3D } from 'three';
+import { OrthographicCamera, Scene, Vector3, type Object3D } from 'three';
+import { WebGPURenderer } from 'three/webgpu';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
   DEFAULT_GRAPHICS,
@@ -83,15 +84,37 @@ function setAidsLayer(object: Object3D): void {
   object.traverse((o) => o.layers.set(AIDS_LAYER));
 }
 
-/** Settles once the GPU renderer can draw; rejects when it cannot start. */
-const startGpu = (canvas: HTMLCanvasElement): Promise<WebGLRenderer> =>
-  new Promise((resolve, reject) => {
-    try {
-      resolve(new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }));
-    } catch (error) {
-      reject(new GraphicsStartError('unavailable', { cause: error }));
-    }
+/** Settles once the GPU renderer can draw; rejects when it cannot start. Forced onto WebGL 2 until the WebGPU backend is enabled. */
+/** `dispose` waits for a pending `init`, so a start that failed rejects again here: nothing new to report. */
+function release(gpu: WebGPURenderer, failedStart = false): void {
+  gpu.dispose().catch((error: unknown) => {
+    if (!failedStart) console.warn('Could not release the GPU renderer', error);
   });
+}
+
+async function startGpu(canvas: HTMLCanvasElement): Promise<WebGPURenderer> {
+  let gpu: WebGPURenderer | null = null;
+  try {
+    gpu = new WebGPURenderer({
+      canvas,
+      antialias: true,
+      powerPreference: 'high-performance',
+      forceWebGL: true,
+    });
+    await gpu.init();
+    return gpu;
+  } catch (error) {
+    if (gpu !== null) release(gpu, true);
+    throw new GraphicsStartError('unavailable', { cause: error });
+  }
+}
+
+function describeGpu(gpu: WebGPURenderer): string {
+  const gl = gpu.getContext() as WebGL2RenderingContext;
+  const ext = gl.getExtension('WEBGL_debug_renderer_info');
+  const name: unknown = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : undefined;
+  return typeof name === 'string' && name !== '' ? name : 'unknown';
+}
 
 /** `warmUp` holds the resolution governor off while something heavy (a shell, the ground texture) attaches. */
 export function createThreeSceneRenderer(
@@ -111,7 +134,7 @@ export function createThreeSceneRenderer(
   const mirrorPosition = new Vector3();
   const projected = new Vector3();
 
-  let renderer: WebGLRenderer | null = null;
+  let renderer: WebGPURenderer | null = null;
   let canvas: HTMLCanvasElement | null = null;
   let built: Built | null = null;
   let cssWidth = 0;
@@ -129,6 +152,7 @@ export function createThreeSceneRenderer(
   const lostListeners = new Set<() => void>();
 
   const onLost = (): void => {
+    if (contextLost) return;
     contextLost = true;
     for (const listener of [...lostListeners]) listener();
   };
@@ -223,20 +247,19 @@ export function createThreeSceneRenderer(
 
   function releaseGpu(): void {
     if (canvas !== null) {
-      canvas.removeEventListener('webglcontextlost', onLost);
       // three's loss handler asks the browser to restore this context; a 0x0 canvas keeps that cheap.
       canvas.width = 0;
       canvas.height = 0;
     }
-    renderer?.dispose();
+    if (renderer !== null) release(renderer);
     renderer = null;
     canvas = null;
   }
 
-  function viewRect(gl: WebGLRenderer, rect: Rect): void {
-    const y = cssHeight - rect.y - rect.height;
-    gl.setViewport(rect.x, y, rect.width, rect.height);
-    gl.setScissor(rect.x, y, rect.width, rect.height);
+  /** WebGPURenderer's viewport origin is the top left, as the CSS rects'. */
+  function viewRect(gl: WebGPURenderer, rect: Rect): void {
+    gl.setViewport(rect.x, rect.y, rect.width, rect.height);
+    gl.setScissor(rect.x, rect.y, rect.width, rect.height);
   }
 
   return {
@@ -245,7 +268,7 @@ export function createThreeSceneRenderer(
       const mine = ++generation;
       const next = await startGpu(target);
       if (mine !== generation) {
-        next.dispose();
+        release(next);
         target.width = 0;
         target.height = 0;
         throw new GraphicsStartError('superseded');
@@ -255,11 +278,11 @@ export function createThreeSceneRenderer(
       contextLost = false;
       next.autoClear = false;
       next.info.autoReset = false;
-      const gl = next.getContext();
-      const ext = gl.getExtension('WEBGL_debug_renderer_info');
-      const name: unknown = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : undefined;
-      glRenderer = typeof name === 'string' && name !== '' ? name : 'unknown';
-      target.addEventListener('webglcontextlost', onLost);
+      glRenderer = describeGpu(next);
+      // replaces three's handler, which logs an error; the app reports the loss instead
+      next.onDeviceLost = () => {
+        if (renderer === next) onLost();
+      };
       document.addEventListener('visibilitychange', onVisibility);
       resetTiming();
       parts.onRenderer?.(next);
@@ -409,10 +432,11 @@ export function createThreeSceneRenderer(
         gl.render(b.scene, topDownCamera);
       }
 
-      if (leftRect !== null) mirrorLeft.composite(gl, leftRect, cssHeight);
-      if (rightRect !== null) mirrorRight.composite(gl, rightRect, cssHeight);
+      if (leftRect !== null) mirrorLeft.composite(gl, leftRect);
+      if (rightRect !== null) mirrorRight.composite(gl, rightRect);
       gl.setScissorTest(false);
-      drawCalls = gl.info.render.calls;
+      // includes one output pass per canvas render: the frame is drawn into an intermediate target
+      drawCalls = gl.info.render.drawCalls;
     },
 
     project(x, y) {

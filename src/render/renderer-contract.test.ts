@@ -13,24 +13,35 @@ import { computeViewports } from './viewports';
 
 const draws = vi.hoisted(() => ({ count: 0 }));
 
-vi.mock('three', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('three')>();
+vi.mock('three/webgpu', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('three/webgpu')>();
   // Called with `new`; any method not listed is a no-op, and `then` stays absent so a promise
-  // does not take the renderer for a thenable.
-  function FakeWebGLRenderer(): object {
+  // does not take the renderer for a thenable. Like three's WebGL 2 backend, it reports a lost
+  // context of its canvas through `onDeviceLost` until disposed.
+  function FakeWebGPURenderer({ canvas }: { canvas: HTMLCanvasElement }): object {
     const own: Record<PropertyKey, unknown> = {
-      info: { autoReset: true, reset: () => undefined, render: { calls: 0 } },
+      info: { autoReset: true, reset: () => undefined, render: { drawCalls: 0 } },
       getContext: () => ({ getExtension: () => null }),
+      init: () => Promise.resolve(),
+      onDeviceLost: () => undefined,
       render: () => {
         draws.count++;
       },
+    };
+    const lost = (): void => {
+      (own['onDeviceLost'] as () => void)();
+    };
+    canvas.addEventListener('webglcontextlost', lost);
+    own['dispose'] = () => {
+      canvas.removeEventListener('webglcontextlost', lost);
+      return Promise.resolve();
     };
     return new Proxy(own, {
       get: (target, key) =>
         key in target || key === 'then' ? target[key] : (target[key] = () => undefined),
     });
   }
-  return { ...actual, WebGLRenderer: FakeWebGLRenderer };
+  return { ...actual, WebGPURenderer: FakeWebGPURenderer };
 });
 
 vi.mock('./palette', async (importOriginal) => {
