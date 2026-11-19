@@ -314,11 +314,11 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
       const d = deferred(await load(id));
       const visual = proceduralTrailer(spec, palette, d.shells);
       const { trailer } = partsOf(visual);
-      const sky = (): Mesh[] =>
+      const perspective = (): Mesh[] =>
         meshesOf(trailer).filter((m) => m.layers.mask === 1 << PERSPECTIVE_LAYER);
-      const before = sky();
+      const before = perspective();
       d.apply();
-      const after = sky();
+      const after = perspective();
       const added = after.filter((m) => !before.includes(m));
       const removed = before.filter((m) => !after.includes(m));
       expect(removed).toHaveLength(1);

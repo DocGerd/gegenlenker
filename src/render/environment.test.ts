@@ -55,7 +55,6 @@ const camera = (ids: readonly number[]): Layers => {
 const cameras = {
   cockpit: camera(COCKPIT_LAYERS),
   mirror: createMirror().camera.layers,
-  chase: camera(CHASE_LAYERS),
   topDown: camera(TOP_DOWN_LAYERS),
 };
 
@@ -114,7 +113,7 @@ describe('environment quality wiring', () => {
     expect(layout).toBeDefined();
     if (layout === undefined) return;
     const env = proceduralEnvironment(layout, palette);
-    const perspective = [cameras.cockpit, cameras.mirror, cameras.chase];
+    const perspective = [cameras.cockpit, cameras.mirror, camera(CHASE_LAYERS)];
     for (const flags of [QUALITY_FLAGS.high, QUALITY_FLAGS.low]) {
       env.setQuality(flags);
       const lights = lightsOf(env.object);
