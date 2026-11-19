@@ -23,7 +23,7 @@ import {
   CHASE_LAYERS,
   COCKPIT_LAYERS,
   enableLayers,
-  SKY_LAYER,
+  PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
 } from './seams';
 import {
@@ -295,7 +295,7 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
       const added = meshesOf(group).filter((m) => !(before[index] ?? []).some(([b]) => b === m));
       expect(added.length).toBeGreaterThan(0);
       for (const mesh of added) {
-        expect(mesh.layers.mask).toBe(1 << SKY_LAYER);
+        expect(mesh.layers.mask).toBe(1 << PERSPECTIVE_LAYER);
         expect(sees.cockpit.test(mesh.layers)).toBe(true);
         expect(sees.chase.test(mesh.layers)).toBe(true);
         expect(sees.mirror.test(mesh.layers)).toBe(true);
@@ -314,10 +314,11 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
       const d = deferred(await load(id));
       const visual = proceduralTrailer(spec, palette, d.shells);
       const { trailer } = partsOf(visual);
-      const sky = (): Mesh[] => meshesOf(trailer).filter((m) => m.layers.mask === 1 << SKY_LAYER);
-      const before = sky();
+      const perspective = (): Mesh[] =>
+        meshesOf(trailer).filter((m) => m.layers.mask === 1 << PERSPECTIVE_LAYER);
+      const before = perspective();
       d.apply();
-      const after = sky();
+      const after = perspective();
       const added = after.filter((m) => !before.includes(m));
       const removed = before.filter((m) => !after.includes(m));
       expect(removed).toHaveLength(1);

@@ -11,7 +11,7 @@ export const DEFAULT_LAYER = 0;
 export const AIDS_LAYER = 1; // seen by the top-down camera only
 /** Far plane of the cockpit, mirror and chase cameras. */
 export const CAMERA_FAR = 400;
-export const SKY_LAYER = 2; // seen by the perspective cameras only
+export const PERSPECTIVE_LAYER = 2; // seen by the perspective cameras only
 export const CAB_LAYER = 3; // seen by the mirrors and the chase camera: the cockpit eye sits inside the cab
 /** Dash pattern (m) of the forward corridor; the Aids legend draws the same. */
 export const AID_DASH_ON = 0.6;
@@ -27,9 +27,9 @@ export const AID_STROKE = {
   casing: 0.06,
 } as const;
 export const INTERIOR_LAYER = 4; // seen by the cockpit camera only: the cab interior around the driver's eye
-export const COCKPIT_LAYERS = [SKY_LAYER, INTERIOR_LAYER];
-export const MIRROR_LAYERS = [SKY_LAYER, CAB_LAYER];
-export const CHASE_LAYERS = [SKY_LAYER, CAB_LAYER];
+export const COCKPIT_LAYERS = [PERSPECTIVE_LAYER, INTERIOR_LAYER];
+export const MIRROR_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
+export const CHASE_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
 export const TOP_DOWN_LAYERS = [AIDS_LAYER];
 const lostRenderers = new WeakSet<WebGPURenderer>();
 /** For the loss handler, which replaces three's and so its private loss flag. */

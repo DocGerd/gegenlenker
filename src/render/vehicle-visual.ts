@@ -42,7 +42,7 @@ import { lampState } from './lamp-state';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
-import { CAB_LAYER, SKY_LAYER, type VehicleVisual } from './seams';
+import { CAB_LAYER, PERSPECTIVE_LAYER, type VehicleVisual } from './seams';
 import {
   ARM_HEIGHT,
   ARM_WIDTH,
@@ -192,7 +192,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     /** Perspective-only detail: vertex colours in one shared material, off the top-down camera. */
     detail(geometry: BufferGeometry): Mesh {
       const mesh = this.mesh(geometry, this.detailMaterial());
-      mesh.layers.set(SKY_LAYER);
+      mesh.layers.set(PERSPECTIVE_LAYER);
       detailMeshes.push(mesh);
       return mesh;
     },
@@ -236,7 +236,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       );
       const mesh = this.mesh(geometry, shadowMaterial);
       mesh.name = SHADOW_NAME;
-      mesh.layers.set(SKY_LAYER);
+      mesh.layers.set(PERSPECTIVE_LAYER);
       return mesh;
     },
     plate(spot: PlateSpot): Mesh {
@@ -250,7 +250,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       plateMaterials.push(material);
       setGraded(material, gradeOn);
       const mesh = this.mesh(plateGeometry(spot), material);
-      mesh.layers.set(SKY_LAYER);
+      mesh.layers.set(PERSPECTIVE_LAYER);
       return mesh;
     },
     dispose(): void {
@@ -447,7 +447,7 @@ export function proceduralTruck(
         toAids: [bodyBox],
         remove: shortened === null ? [] : [detailMesh],
         add: shortened === null ? [] : [shortened],
-        layer: SKY_LAYER,
+        layer: PERSPECTIVE_LAYER,
       },
       {
         material: res.detailMaterial(),
@@ -721,14 +721,14 @@ export function proceduralTrailer(
         toAids: [bodyMesh, frameMesh],
         remove: bare === null ? [] : [detailMesh],
         add: bare === null ? [] : [bare],
-        layer: SKY_LAYER,
+        layer: PERSPECTIVE_LAYER,
       },
       { material, enabled: false },
     );
     const onDolly = applyShell(
       dolly,
       shell.dolly,
-      { toAids: [dollyChassisMesh], remove: [], layer: SKY_LAYER },
+      { toAids: [dollyChassisMesh], remove: [], layer: PERSPECTIVE_LAYER },
       { material, enabled: false },
     );
     applied = { trailer: onBody, dolly: onDolly };
