@@ -53,13 +53,13 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       enabled: false,
     }),
   };
-  // Read by the offline e2e: the transcoded format while the textured ground is drawn, else absent.
+  // Read by the offline e2e: the transcoded format while the textured ground is drawn, `failed` once given up on, else absent.
   let groundState: string | null = null;
   const groundTextures = startGroundTextures(undefined, (state) => {
     if (state === null) delete document.documentElement.dataset['groundTexture'];
     else {
       document.documentElement.dataset['groundTexture'] = state;
-      if (state !== groundState) warmUp();
+      if (state !== 'failed' && state !== groundState) warmUp();
     }
     groundState = state;
   });
@@ -73,13 +73,13 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     }
     pbrState = state;
   });
-  // Read by the offline e2e: `on` while the HDRI sky is drawn, else absent.
+  // Read by the offline e2e: `on` while the HDRI sky is drawn, `failed` once given up on, else absent.
   let skyState: string | null = null;
   const skyTexture = startSkyTexture(undefined, (state) => {
     if (state === null) delete document.documentElement.dataset['skyHdri'];
     else {
       document.documentElement.dataset['skyHdri'] = state;
-      if (state !== skyState) warmUp();
+      if (state !== 'failed' && state !== skyState) warmUp();
     }
     skyState = state;
   });

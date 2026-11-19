@@ -1,7 +1,7 @@
 import { Color, PerspectiveCamera, RepeatWrapping, Scene, Vector3, type Texture } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import skyUrl from './assets/sky.ktx2?url';
-import { loadKtx2, startTextureAsset, type GroundTextures } from './ground-texture';
+import { loadKtx2, startTextureAsset, TEXTURE_FAILED, type GroundTextures } from './ground-texture';
 import { gpuLost } from './seams';
 import { createSky, SKY_SHADER_MARKER } from './sky';
 
@@ -45,7 +45,7 @@ export async function loadSkyTexture(renderer: WebGPURenderer): Promise<Texture>
   return map;
 }
 
-/** `onApplied` receives `on` while some sky draws the texture and null otherwise; the e2e reads it. */
+/** `onApplied` receives `on` while some sky draws the texture, `failed` once given up on, else null; the e2e reads it. */
 export function startSkyTexture(
   load: (renderer: WebGPURenderer) => Promise<Texture> = loadSkyTexture,
   onApplied: (state: string | null) => void = () => undefined,
@@ -53,7 +53,7 @@ export function startSkyTexture(
   return startTextureAsset({
     load,
     onApplied: (state) => {
-      onApplied(state === null ? null : 'on');
+      onApplied(state === null || state === TEXTURE_FAILED ? state : 'on');
     },
     label: 'Sky texture',
     fallback: 'the analytic sky',

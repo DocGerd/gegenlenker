@@ -34,6 +34,11 @@ import { gpuLost } from './seams';
 
 const ANISOTROPY = 8; // three clamps this to what the GPU offers
 const MAX_ATTEMPTS = 2;
+/** A queued KTX2 load that takes longer is abandoned, so one stalled fetch cannot block the next texture. */
+export const KTX2_LOAD_TIMEOUT_MS = 60_000;
+
+/** What `onApplied` receives once the texture is given up on: attempts spent or its shader rejected. */
+export const TEXTURE_FAILED = 'failed';
 
 const TARGET_NAMES = new Map<number, string>([
   [RGBA_ASTC_4x4_Format, 'astc'],
@@ -87,21 +92,42 @@ let ktx2Queue: Promise<unknown> = Promise.resolve();
 
 /**
  * Loads `url` transcoded to `renderer`'s compressed formats, with the transcoder served locally.
- * One load at a time: three warns about concurrent KTX2Loaders, each with its own workers.
+ * One load at a time: three warns about concurrent KTX2Loaders, each with its own workers. A load
+ * past `KTX2_LOAD_TIMEOUT_MS` rejects and frees the queue; a texture arriving late is disposed.
  */
 export function loadKtx2(renderer: WebGPURenderer, url: string): Promise<Texture> {
   const run = async (): Promise<Texture> => {
-    const { KTX2Loader } = await import('three/addons/loaders/KTX2Loader.js');
-    const loader = new KTX2Loader(
-      new LoadingManager().setURLModifier((u) => transcoderUrls(u, url)),
-    )
+    const manager = new LoadingManager().setURLModifier((u) => transcoderUrls(u, url));
+    const timedOutError = (): Error => new Error(`KTX2 load of ${url} timed out`);
+    let timedOut = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        // the fetches end; a transcode already under way finishes and is disposed below
+        manager.abort();
+        reject(timedOutError());
+      }, KTX2_LOAD_TIMEOUT_MS);
+    });
+    const load = (async (): Promise<Texture> => {
+      const { KTX2Loader } = await import('three/addons/loaders/KTX2Loader.js');
+      if (timedOut) throw timedOutError();
       // an empty path would fetch the transcoder from a CDN; the URL modifier replaces what is fetched
-      .setTranscoderPath(import.meta.env.BASE_URL)
-      .detectSupport(renderer);
+      const loader = new KTX2Loader(manager).setTranscoderPath(import.meta.env.BASE_URL);
+      try {
+        const texture = await loader.detectSupport(renderer).loadAsync(url);
+        if (timedOut) texture.dispose();
+        return texture;
+      } finally {
+        loader.dispose();
+      }
+    })();
     try {
-      return await loader.loadAsync(url);
+      return await Promise.race([load, timeout]);
     } finally {
-      loader.dispose();
+      clearTimeout(timer);
+      // the abandoned load's late failure has no one left to hear it
+      load.catch(() => undefined);
     }
   };
   const next = ktx2Queue.then(run, run);
@@ -161,7 +187,8 @@ type Subscriber = {
 
 /**
  * A failed load warns and leaves the token ground. `onApplied` receives `describeGroundTexture`
- * while some subscriber draws the texture and `null` otherwise; the offline e2e reads it.
+ * while some subscriber draws the texture, `TEXTURE_FAILED` once the texture is given up on while
+ * enabled, and `null` otherwise; the offline e2e reads it.
  */
 export function startGroundTextures(
   load: (renderer: WebGPURenderer) => Promise<Texture> = loadGroundTexture,
@@ -201,6 +228,7 @@ export function startTextureAsset({
   let attempts = 0;
   let loaded: Texture | null = null;
   let rejected = false;
+  let exhausted = false;
   let disposed = false;
   let applied = 0;
   let restoreShaderErrors: (() => void) | null = null;
@@ -215,7 +243,8 @@ export function startTextureAsset({
   };
 
   const publish = (): void => {
-    onApplied(applied > 0 && loaded !== null ? describeGroundTexture(loaded) : null);
+    if (enabled && (rejected || exhausted)) onApplied(TEXTURE_FAILED);
+    else onApplied(applied > 0 && loaded !== null ? describeGroundTexture(loaded) : null);
   };
 
   const reject = (): void => {
@@ -275,6 +304,10 @@ export function startTextureAsset({
           `${label} load failed (attempt ${attempts} of ${MAX_ATTEMPTS}); keeping ${fallback}`,
           error,
         );
+        if (attempts >= MAX_ATTEMPTS && !disposed) {
+          exhausted = true;
+          publish();
+        }
       });
   };
 
@@ -287,9 +320,9 @@ export function startTextureAsset({
       start();
     },
     setEnabled(on) {
-      if (!on) return;
-      enabled = true;
-      start();
+      enabled = on;
+      if (on) start();
+      if (rejected || exhausted) publish();
     },
     onLoaded(apply, revert) {
       const subscriber: Subscriber = { apply, revert };
@@ -311,6 +344,7 @@ export function startTextureAsset({
     },
     dispose() {
       disposed = true;
+      enabled = false;
       subscribers.clear();
       restoreShaderErrors?.();
       loaded?.dispose();
