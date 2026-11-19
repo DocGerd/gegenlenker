@@ -38,6 +38,10 @@ export function markLost(gpu: WebGPURenderer): void {
 /** Whether `gpu` lost its device or WebGL context. */
 export function gpuLost(gpu: WebGPURenderer): boolean {
   if (lostRenderers.has(gpu)) return true;
+  // asking WebGPU for its context would take the canvas
+  if ((gpu.backend as { isWebGPUBackend?: boolean } | undefined)?.isWebGPUBackend === true) {
+    return false;
+  }
   const context = gpu.getContext() as { isContextLost?: () => boolean } | null;
   return context?.isContextLost?.() === true;
 }

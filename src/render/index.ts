@@ -24,9 +24,7 @@ export const interiorAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].cockpitInterior;
 
 /** `backend` defaults to the page's `?backend=`. */
-export function createSceneRenderer(
-  backend: BackendRequest = readBackendRequest(location.search),
-): SceneRenderer {
+export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   // The attach callbacks may fire before the renderer exists; a call made then is replayed once it does.
   const warm: { target: (() => void) | null; pending: boolean } = { target: null, pending: false };
   const warmUp = (): void => {
@@ -75,7 +73,7 @@ export function createSceneRenderer(
     pbrState = state;
   });
   const renderer = createThreeSceneRenderer({
-    gpuDevice: () => requestGpuDevice(backend),
+    gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
     onRenderer: (gpu) => {
       groundTextures.attach(gpu);
       vehicleEnvironment.attach(gpu);

@@ -139,7 +139,6 @@ async function startGpu(
     await own.init();
   } catch (error) {
     if (gpu !== null) release(gpu, device, true);
-    // the WebGPU context is taken on the first frame, so the canvas is still free for WebGL 2
     if (device === null && !hasWebgl2(canvas)) {
       throw new GraphicsStartError('unavailable', { cause: error });
     }
@@ -336,6 +335,7 @@ export function createThreeSceneRenderer(
         console.warn('WebGPU did not start; drawing with WebGL 2', error);
       }
     }
+    // three takes the WebGPU canvas context only once started, so a failed start leaves it to WebGL 2
     return { gpu: await startGpu(target, lost, null), device: null };
   }
 
