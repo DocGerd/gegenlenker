@@ -15,7 +15,7 @@ import {
 } from './yard-goods';
 
 /*
- * Perspective-only yard detail in realism hues, on SKY_LAYER: the top-down view draws the plain token
+ * Perspective-only yard detail in realism hues, on PERSPECTIVE_LAYER: the top-down view draws the plain token
  * copy of these obstacles instead. Everything stays inside the obstacle's OBB, apart from thin relief
  * (seals, bumpers, signs, boom, floodlights, hoops), so a prop never looks bigger than it collides.
  * Loose goods stand only on a ramp top or on the plot behind the yard edge, where nothing can drive.

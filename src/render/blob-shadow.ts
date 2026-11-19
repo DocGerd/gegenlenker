@@ -3,7 +3,7 @@ import { merge } from './vehicle-geometry';
 
 /*
  * Soft contact shadows as vertex-alpha fans on the ground plane: no textures, lights or extra passes.
- * Footprints are in the owning body frame (x forward, y left); a mesh using them goes on SKY_LAYER.
+ * Footprints are in the owning body frame (x forward, y left); a mesh using them goes on PERSPECTIVE_LAYER.
  */
 
 const RINGS = [

@@ -27,7 +27,7 @@ import {
   CHASE_LAYERS,
   COCKPIT_LAYERS,
   enableLayers,
-  SKY_LAYER,
+  PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
 } from './seams';
 import { proceduralTruck } from './vehicle-visual';
@@ -267,7 +267,7 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     applyAll(d);
 
     const added = meshesOf(group).filter((m) => !before.some(([b]) => b === m));
-    const shell = added.find((m) => m.layers.mask === 1 << SKY_LAYER);
+    const shell = added.find((m) => m.layers.mask === 1 << PERSPECTIVE_LAYER);
     expect(shell).toBeDefined();
     const layers = shell?.layers ?? new Layers();
     expect(sees.cockpit.test(layers)).toBe(true);
