@@ -10,7 +10,7 @@ import {
 import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { CAB_GAP, CONTOUR_STRIP as STRIP, MARKING_END_MARGIN as END_MARGIN } from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
-import { tint } from './environment';
+import { tint } from './tint';
 import { DARK_SLOT, slotOf, withSlot } from './lamp-lens';
 import {
   type LampLayout,
