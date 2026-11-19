@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
+import { SCREENSHOT_POLL } from './pinned-shoot';
 
 type Size = { width: number; height: number };
 
@@ -98,79 +99,61 @@ async function hudReady(page: Page): Promise<void> {
   await expect(page.locator('.ctl-lever')).toBeVisible();
 }
 
-for (const { locale, messages } of locales) {
-  for (const size of sizes) {
-    const at = `${locale} ${size.width}x${size.height}`;
+/** The mirrors, controls, panels and gauge labels do not collide or clip. */
+async function expectMirrorsClearControls(page: Page, size: Size): Promise<void> {
+  const mirrors = page.locator('.hud-mirror:not([hidden])');
+  const controls = page.locator(
+    '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+  );
 
-    test(`mirrors clear the controls at ${at}`, async ({ browser }) => {
-      const context = await browser.newContext({ locale, viewport: size });
-      const page = await context.newPage();
-      await page.goto('./');
-      await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
+  const mirrorBoxes = await boxes(mirrors);
+  const controlBoxes = await boxes(controls);
+  expect(controlBoxes.length).toBeGreaterThan(0);
 
-      await hudReady(page);
-      const mirrors = page.locator('.hud-mirror:not([hidden])');
-      const controls = page.locator(
-        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
-      );
-
-      const mirrorBoxes = await boxes(mirrors);
-      const controlBoxes = await boxes(controls);
-      expect(controlBoxes.length).toBeGreaterThan(0);
-
-      for (const m of mirrorBoxes) {
-        for (const c of controlBoxes) {
-          expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
-        }
-      }
-
-      // Balanced is the default preset, so the housings are drawn: the arms stay clear too.
-      await expect(page.locator('.hud[data-interior]')).toHaveCount(1);
-      const [leftBox, rightBox] = mirrorBoxes;
-      const [leftArm, rightArm] = await armReach(mirrors);
-      if (leftBox === undefined || rightBox === undefined) throw new Error('two mirrors');
-      if (leftArm === undefined || rightArm === undefined) throw new Error('two arms');
-      expect(Math.min(leftArm, rightArm), 'arms are drawn').toBeGreaterThan(0);
-      const armed = [
-        { ...leftBox, left: leftBox.left - leftArm },
-        { ...rightBox, right: rightBox.right + rightArm },
-      ];
-      for (const m of armed) {
-        expect(m.left, 'arm on screen').toBeGreaterThanOrEqual(0);
-        expect(m.right, 'arm on screen').toBeLessThanOrEqual(size.width);
-        for (const c of controlBoxes) {
-          expect(overlaps(m, c), `${c.name} overlaps a mirror housing`).toBe(false);
-        }
-      }
-
-      const panels = await boxes(
-        page.locator('.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action'),
-      );
-      expect(panels.length).toBeGreaterThan(0);
-      for (const panel of panels) {
-        for (const c of controlBoxes) {
-          expect(overlaps(panel, c), `${panel.name} overlaps ${c.name}`).toBe(false);
-        }
-      }
-
-      const clipped = await page
-        .locator('.hud-gauge .hud-label')
-        .evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth).length);
-      expect(clipped, 'a gauge label is wider than its gauge').toBe(0);
-      await context.close();
-    });
-
-    test(`the cockpit view has no blank band at ${at}`, async ({ browser }) => {
-      const context = await browser.newContext({ locale, viewport: size });
-      const page = await context.newPage();
-      await page.goto('./');
-      await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
-      await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
-      await page.waitForTimeout(500);
-      expect(await blankRows(page, Math.round(size.width * 0.3))).toBe(0);
-      await context.close();
-    });
+  for (const m of mirrorBoxes) {
+    for (const c of controlBoxes) {
+      expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
+    }
   }
+
+  // Balanced is the default preset, so the housings are drawn: the arms stay clear too.
+  await expect(page.locator('.hud[data-interior]')).toHaveCount(1);
+  const [leftBox, rightBox] = mirrorBoxes;
+  const [leftArm, rightArm] = await armReach(mirrors);
+  if (leftBox === undefined || rightBox === undefined) throw new Error('two mirrors');
+  if (leftArm === undefined || rightArm === undefined) throw new Error('two arms');
+  expect(Math.min(leftArm, rightArm), 'arms are drawn').toBeGreaterThan(0);
+  const armed = [
+    { ...leftBox, left: leftBox.left - leftArm },
+    { ...rightBox, right: rightBox.right + rightArm },
+  ];
+  for (const m of armed) {
+    expect(m.left, 'arm on screen').toBeGreaterThanOrEqual(0);
+    expect(m.right, 'arm on screen').toBeLessThanOrEqual(size.width);
+    for (const c of controlBoxes) {
+      expect(overlaps(m, c), `${c.name} overlaps a mirror housing`).toBe(false);
+    }
+  }
+
+  const panels = await boxes(
+    page.locator('.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action'),
+  );
+  expect(panels.length).toBeGreaterThan(0);
+  for (const panel of panels) {
+    for (const c of controlBoxes) {
+      expect(overlaps(panel, c), `${panel.name} overlaps ${c.name}`).toBe(false);
+    }
+  }
+
+  const clipped = await page
+    .locator('.hud-gauge .hud-label')
+    .evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth).length);
+  expect(clipped, 'a gauge label is wider than its gauge').toBe(0);
+}
+
+/** The cockpit pane is drawn from the first row down, once a frame has landed. */
+async function expectNoBlankBand(page: Page, size: Size): Promise<void> {
+  await expect.poll(() => blankRows(page, Math.round(size.width * 0.3)), SCREENSHOT_POLL).toBe(0);
 }
 
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
@@ -317,77 +300,86 @@ async function startStraightReverse(page: Page, label: string): Promise<void> {
   await hudReady(page);
 }
 
+/** At the smallest and largest share the divider clears the cockpit and the panels, or is hidden. */
+async function expectDividerClears(page: Page, size: Size): Promise<void> {
+  await expect(handle(page)).toHaveCount(1);
+  await expect(handle(page)).toHaveAttribute('aria-valuemin', /^\d+$/);
+  await expect(handle(page)).toHaveAttribute('aria-valuemax', /^\d+$/);
+  const min = Number(await handle(page).getAttribute('aria-valuemin'));
+  const max = Number(await handle(page).getAttribute('aria-valuemax'));
+  // Where the panels or the cockpit leave the split no room, there is no divider.
+  if (min === max) {
+    await expect(splitBar(page)).toHaveAttribute('hidden', '');
+    await expect(handle(page)).toBeHidden();
+    return;
+  }
+  expect(min).toBeLessThan(max);
+  await expect(splitBar(page)).not.toHaveAttribute('hidden', '');
+  await expect(handle(page)).toBeVisible();
+
+  for (const key of ['Home', 'End']) {
+    await handle(page).focus();
+    await page.keyboard.press(key);
+    await expect(handle(page)).toHaveAttribute('aria-valuenow', String(key === 'Home' ? min : max));
+    await settled(page);
+
+    const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
+    const controls = await boxes(
+      page.locator(
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+      ),
+    );
+    const panels = await boxes(
+      page.locator(
+        '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle',
+      ),
+    );
+    const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
+    expect(mirrors).toHaveLength(2);
+    expect(divider).toHaveLength(2);
+    for (const m of mirrors) {
+      for (const c of [...controls, ...divider]) {
+        expect(overlaps(m, c), `${c.name} overlaps a mirror at ${key}`).toBe(false);
+      }
+    }
+    for (const d of divider) {
+      for (const c of [...controls, ...panels]) {
+        expect(overlaps(d, c), `${d.name} overlaps ${c.name} at ${key}`).toBe(false);
+      }
+      expect(d.left, `${d.name} on screen`).toBeGreaterThanOrEqual(0);
+      expect(d.top, `${d.name} on screen`).toBeGreaterThanOrEqual(0);
+      expect(d.right, `${d.name} on screen`).toBeLessThanOrEqual(size.width);
+      expect(d.bottom, `${d.name} on screen`).toBeLessThanOrEqual(size.height);
+    }
+    for (const p of panels) {
+      for (const c of controls) {
+        expect(overlaps(p, c), `${p.name} overlaps ${c.name} at ${key}`).toBe(false);
+      }
+    }
+  }
+}
+
 for (const { locale, messages } of locales) {
   for (const size of splitSizes) {
     const at = `${locale} ${size.width}x${size.height}`;
 
-    test(`the divider at its smallest and largest share clears the cockpit and the panels at ${at}`, async ({
-      browser,
-    }) => {
+    test(`the layout holds at ${at}`, async ({ browser }) => {
       const context = await browser.newContext({ locale, viewport: size });
-      const page = await context.newPage();
-      await startStraightReverse(page, messages.exerciseStraightReverse);
-
-      await expect(handle(page)).toHaveCount(1);
-      await expect(handle(page)).toHaveAttribute('aria-valuemin', /^\d+$/);
-      await expect(handle(page)).toHaveAttribute('aria-valuemax', /^\d+$/);
-      const min = Number(await handle(page).getAttribute('aria-valuemin'));
-      const max = Number(await handle(page).getAttribute('aria-valuemax'));
-      // Where the panels or the cockpit leave the split no room, there is no divider.
-      if (min === max) {
-        await expect(splitBar(page)).toHaveAttribute('hidden', '');
-        await expect(handle(page)).toBeHidden();
+      try {
+        const page = await context.newPage();
+        await startStraightReverse(page, messages.exerciseStraightReverse);
+        // The short landscape size only has the divider check.
+        if (sizes.includes(size)) {
+          await test.step('mirrors clear the controls', () =>
+            expectMirrorsClearControls(page, size));
+          await test.step('the cockpit view has no blank band', () =>
+            expectNoBlankBand(page, size));
+        }
+        await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
+          expectDividerClears(page, size));
+      } finally {
         await context.close();
-        return;
       }
-      expect(min).toBeLessThan(max);
-      await expect(splitBar(page)).not.toHaveAttribute('hidden', '');
-      await expect(handle(page)).toBeVisible();
-
-      for (const key of ['Home', 'End']) {
-        await handle(page).focus();
-        await page.keyboard.press(key);
-        await expect(handle(page)).toHaveAttribute(
-          'aria-valuenow',
-          String(key === 'Home' ? min : max),
-        );
-        await settled(page);
-
-        const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
-        const controls = await boxes(
-          page.locator(
-            '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
-          ),
-        );
-        const panels = await boxes(
-          page.locator(
-            '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle',
-          ),
-        );
-        const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
-        expect(mirrors).toHaveLength(2);
-        expect(divider).toHaveLength(2);
-        for (const m of mirrors) {
-          for (const c of [...controls, ...divider]) {
-            expect(overlaps(m, c), `${c.name} overlaps a mirror at ${key}`).toBe(false);
-          }
-        }
-        for (const d of divider) {
-          for (const c of [...controls, ...panels]) {
-            expect(overlaps(d, c), `${d.name} overlaps ${c.name} at ${key}`).toBe(false);
-          }
-          expect(d.left, `${d.name} on screen`).toBeGreaterThanOrEqual(0);
-          expect(d.top, `${d.name} on screen`).toBeGreaterThanOrEqual(0);
-          expect(d.right, `${d.name} on screen`).toBeLessThanOrEqual(size.width);
-          expect(d.bottom, `${d.name} on screen`).toBeLessThanOrEqual(size.height);
-        }
-        for (const p of panels) {
-          for (const c of controls) {
-            expect(overlaps(p, c), `${p.name} overlaps ${c.name} at ${key}`).toBe(false);
-          }
-        }
-      }
-      await context.close();
     });
   }
 }
