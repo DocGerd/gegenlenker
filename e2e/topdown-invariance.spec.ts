@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { en } from '../src/i18n/en';
-import { distinctColours, shoot, startPinnedDrive, type Preset } from './pinned-shoot';
+import {
+  distinctColours,
+  MIN_DRAWN_COLOURS,
+  shoot,
+  startPinnedDrive,
+  type Preset,
+} from './pinned-shoot';
 
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
-/** A drawn yard has far more; a blank or half-built pane has a handful. */
-const MIN_COLOURS = 50;
 
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
 test('the top-down view is the same at every graphics preset', async ({ context }, testInfo) => {
@@ -25,7 +29,7 @@ test('the top-down view is the same at every graphics preset', async ({ context 
         const png = await shoot(page, shot);
         const name = `${exercise} ${preset} ${shot}`;
         await testInfo.attach(`${name}.png`, { body: png, contentType: 'image/png' });
-        expect(await distinctColours(page, png), name).toBeGreaterThan(MIN_COLOURS);
+        expect(await distinctColours(page, png), name).toBeGreaterThan(MIN_DRAWN_COLOURS);
         hashes[shot]?.push(createHash('sha256').update(png).digest('hex'));
       }
       await page.close();

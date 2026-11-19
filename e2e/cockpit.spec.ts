@@ -3,6 +3,7 @@ import { en } from '../src/i18n/en';
 import { COCKPIT_FOV } from '../src/render/cockpit-camera';
 import { interiorLayout, pillarSpan } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
+import { SCREENSHOT_POLL } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 /** Unlit vertex colours come out of the canvas as the hue itself. */
@@ -43,15 +44,24 @@ async function boxOf(page: Page, selector: string) {
 }
 
 /** The sRGB pixels of the bare cockpit canvas (HUD and controls hidden) at the given offsets from the cockpit's top-left. */
-async function cockpitPixels(page: Page, at: readonly (readonly [number, number])[]) {
-  const cockpit = await boxOf(page, '.hud-cockpit');
+function cockpitPixels(page: Page, at: readonly (readonly [number, number])[]) {
+  return panePixels(page, '.hud-cockpit', at);
+}
+
+/** The sRGB pixels of the bare canvas under `selector`'s box, at offsets from its top-left. */
+async function panePixels(
+  page: Page,
+  selector: string,
+  at: readonly (readonly [number, number])[],
+) {
+  const pane = await boxOf(page, selector);
   await page.evaluate(() => {
     const style = document.createElement('style');
     style.id = 'bare-canvas';
     style.textContent = '.hud, .ctl, [class^="ctl-"] { visibility: hidden !important }';
     document.head.append(style);
   });
-  const shot = (await page.screenshot({ clip: cockpit })).toString('base64');
+  const shot = (await page.screenshot({ clip: pane })).toString('base64');
   await page.evaluate(() => {
     document.getElementById('bare-canvas')?.remove();
   });
@@ -123,7 +133,7 @@ test('the cockpit interior follows the graphics preset on the shared renderer', 
         near(pillarLeft, PILLAR),
         near(pillarRight, PILLAR),
       ];
-    })
+    }, SCREENSHOT_POLL)
     .toEqual([true, true, true, true]);
 
   await page.getByRole('button', { name: en.finish }).click();
@@ -140,7 +150,7 @@ test('the cockpit interior follows the graphics preset on the shared renderer', 
     .poll(async () => {
       const [top, bottom] = await cockpitPixels(page, [points.header, points.dash]);
       return [isSky(top), isGround(bottom)];
-    })
+    }, SCREENSHOT_POLL)
     .toEqual([true, true]);
   const [header, dash, pillarLeft, pillarRight] = await cockpitPixels(page, [
     points.header,
@@ -152,5 +162,33 @@ test('the cockpit interior follows the graphics preset on the shared renderer', 
   expect(near(dash, DASH)).toBe(false);
   expect(near(pillarLeft, PILLAR)).toBe(false);
   expect(near(pillarRight, PILLAR)).toBe(false);
+  expect(errors).toEqual([]);
+});
+
+test('each mirror shows the sky at the top and the ground at the bottom', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
+    SETTINGS_KEY,
+    JSON.stringify({ version: 1, graphics: 'low' }),
+  ] as const);
+  await page.goto('./');
+  await drive(page);
+  for (const side of ['mirrorLeft', 'mirrorRight']) {
+    const selector = `[data-hud="${side}"]`;
+    const box = await boxOf(page, selector);
+    const x = Math.round(box.width / 2);
+    await expect
+      .poll(
+        async () => {
+          const [top, bottom] = await panePixels(page, selector, [
+            [x, 2],
+            [x, Math.round(box.height) - 3],
+          ]);
+          return [isSky(top), isGround(bottom)];
+        },
+        { message: side, ...SCREENSHOT_POLL },
+      )
+      .toEqual([true, true]);
+  }
   expect(errors).toEqual([]);
 });

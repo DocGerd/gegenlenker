@@ -173,6 +173,8 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/);
   const target = await marker.getAttribute('data-ground-texture');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
+  // CI has no WebGPU adapter; the WebGL 2 backend is what devices without one get
+  await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
   await expect
     .poll(async () => {
       const { runtime } = await cached();

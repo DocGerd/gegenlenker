@@ -1,7 +1,15 @@
 import { createHash } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 import { en } from '../src/i18n/en';
-import { bareScreenshot, distinctColours, settle, shoot, startPinnedDrive } from './pinned-shoot';
+import {
+  bareScreenshot,
+  distinctColours,
+  MIN_DRAWN_COLOURS,
+  SCREENSHOT_POLL,
+  settle,
+  shoot,
+  startPinnedDrive,
+} from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const LOST = 'Graphics context lost; starting afresh';
@@ -80,8 +88,8 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   const pane = await page.locator('[data-hud="topDown"]').boundingBox();
   if (pane === null) throw new Error('no top-down pane');
   await expect
-    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)))
-    .toBeGreaterThan(50);
+    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)), SCREENSHOT_POLL)
+    .toBeGreaterThan(MIN_DRAWN_COLOURS);
 
   const speed = page.locator('[data-hud="speed"]');
   await page.keyboard.press('4');
@@ -102,7 +110,7 @@ test('the cockpit looks the same after a loss as before it', async ({ page }) =>
   await startPinnedDrive(page, 'high', en.exerciseStraightReverse);
   const hash = async (): Promise<string> => {
     const png = await shoot(page, 'cockpit');
-    expect(await distinctColours(page, png)).toBeGreaterThan(50);
+    expect(await distinctColours(page, png)).toBeGreaterThan(MIN_DRAWN_COLOURS);
     return createHash('sha256').update(png).digest('hex');
   };
   const before = await hash();
