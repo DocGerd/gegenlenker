@@ -22,7 +22,7 @@ export function mountPerfOverlay(root: HTMLElement, stats: () => RenderStats): (
     const s = stats();
     el.textContent =
       `${s.fps.toFixed(0)} fps  p95 ${s.frameP95Ms.toFixed(1)} ms  scale ${s.resolutionScale.toFixed(2)}  calls ${s.drawCalls}` +
-      `\n${s.backend}  ${s.glRenderer}${s.contextLost ? '  CONTEXT LOST' : ''}`;
+      `\n${s.backend}${s.webgpuFallback === null ? '' : ` (WebGPU ${s.webgpuFallback})`}  ${s.glRenderer}${s.contextLost ? '  CONTEXT LOST' : ''}`;
   };
   refresh();
   const timer = window.setInterval(refresh, REFRESH_MS);
