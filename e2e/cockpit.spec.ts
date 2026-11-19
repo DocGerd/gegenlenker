@@ -3,15 +3,16 @@ import { en } from '../src/i18n/en';
 import { COCKPIT_FOV } from '../src/render/cockpit-camera';
 import { interiorLayout, pillarSpan } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
-import { SCREENSHOT_POLL } from './pinned-shoot';
+import { SCREENSHOT_POLL, throughIntermediate } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
-/** Unlit vertex colours come out of the canvas as the hue, rounded by the 8-bit linear intermediate (most for near-black). */
-const TOLERANCE = 4;
+/** What is left of an unlit vertex colour's distance from the hue once the 8-bit intermediate's rounding is applied to the hue. */
+const TOLERANCE = 3;
 /** How much paler (red channel) the horizon haze is than the sky near the header. */
 const HAZE_STEP = 10;
 
-const rgb = (hex: number): readonly number[] => [hex >> 16, (hex >> 8) & 0xff, hex & 0xff];
+const rgb = (hex: number): readonly number[] =>
+  throughIntermediate([hex >> 16, (hex >> 8) & 0xff, hex & 0xff]);
 const HEADLINER = rgb(REALISM_HUES.headliner);
 const DASH = rgb(REALISM_HUES.chevronBlack);
 const PILLAR = rgb(REALISM_HUES.anthracite);
