@@ -516,9 +516,10 @@ export function proceduralEnvironment(
     group.add(mesh);
   }
   for (const piece of yardProps(layout)) detail.add(piece.x, piece.y, piece.geometry);
-  // perspective-only, so the grade can go on it without touching the layer-0 tokens
+  // graded props wear their own copy, so the grade never reaches the layer-0 tokens
   const propMaterial = new MeshLambertNodeMaterial({ vertexColors: true });
-  const props = detail.meshes(propMaterial, geometries);
+  setGraded(propMaterial, true);
+  const props = detail.meshes(solid, geometries);
   for (const mesh of props) {
     mesh.layers.set(SKY_LAYER);
     group.add(mesh);
@@ -650,7 +651,7 @@ export function proceduralEnvironment(
       GRADE.fogDensity.value = flags.aerialPerspective ? FOG_DENSITY : 0;
       hdriOn = flags.hdriSky;
       syncSky();
-      setGraded(propMaterial, graded);
+      for (const mesh of props) mesh.material = graded ? propMaterial : solid;
       if (texturedGroundMaterial !== null) setGraded(texturedGroundMaterial, graded);
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;

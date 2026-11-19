@@ -48,6 +48,8 @@ describe('quality flags', () => {
       ...QUALITY_FLAGS.balanced,
       groundTexture: true,
       pbr: true,
+      perspectiveLighting: true,
+      aerialPerspective: true,
       hdriSky: true,
     });
   });

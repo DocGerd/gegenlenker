@@ -35,8 +35,8 @@ const BALANCED: QualityFlags = {
   cockpitInterior: true,
   groundTexture: false,
   pbr: false,
-  perspectiveLighting: true,
-  aerialPerspective: true,
+  perspectiveLighting: false,
+  aerialPerspective: false,
   hdriSky: false,
 };
 
@@ -57,5 +57,12 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     hdriSky: false,
   },
   balanced: BALANCED,
-  high: { ...BALANCED, groundTexture: true, pbr: true, hdriSky: true },
+  high: {
+    ...BALANCED,
+    groundTexture: true,
+    pbr: true,
+    perspectiveLighting: true,
+    aerialPerspective: true,
+    hdriSky: true,
+  },
 };
