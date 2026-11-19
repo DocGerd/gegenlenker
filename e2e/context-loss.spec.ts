@@ -15,12 +15,27 @@ import {
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const LOST = 'Graphics context lost; starting afresh';
 
-/** Console warnings, errors and page errors; headless Chromium denies the wake lock, which is not about graphics. */
+/**
+ * ANGLE's software GL warns that it split a render pass while High starts up; a performance hint of
+ * the driver CI runs on, not a fault of the app.
+ */
+const DRIVER_PERFORMANCE_HINT =
+  /GL Driver Message \(OpenGL, Performance, [^)]*\): Running out of reserved outsideRenderPass queueSerial/;
+
+/**
+ * Console warnings, errors and page errors; headless Chromium denies the wake lock, which is not
+ * about graphics.
+ */
 function collectProblems(page: Page): string[] {
   const problems: string[] = [];
   page.on('console', (m) => {
-    if ((m.type() === 'error' || m.type() === 'warning') && !m.text().includes('Wake Lock')) {
-      problems.push(m.text());
+    const text = m.text();
+    if (
+      (m.type() === 'error' || m.type() === 'warning') &&
+      !text.includes('Wake Lock') &&
+      !DRIVER_PERFORMANCE_HINT.test(text)
+    ) {
+      problems.push(text);
     }
   });
   page.on('pageerror', (e) => problems.push(e.message));
