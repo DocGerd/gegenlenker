@@ -8,6 +8,7 @@ export default tseslint.config(
   { ignores: ['dist', 'node_modules', '.remember', '.claude', '.superpowers'] },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
+  { linterOptions: { noInlineConfig: true } },
   {
     languageOptions: {
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
