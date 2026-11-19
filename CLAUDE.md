@@ -64,7 +64,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - MCP-run bpy scripts must not call `read_factory_settings`: it reloads preferences and disables the MCP add-on.
 - `tools/textures/` makes the KTX2 ground texture (`pnpm texture ground`); `tools/textures/ground-build.test.ts` fails when stale; it is runtime-cached at High, not precached.
 - A new glb/ktx2 in `src/render/assets` needs an `ASSET_REGISTRY` entry (`src/render/asset-registry.ts`) naming the `QualityFlags` key that draws it: runtime-cached when that flag is off by default, else precached; `src/pwa/config.test.ts` fails on an unlisted file.
-- `pnpm sky:texture` builds the High HDRI `sky.ktx2` from the source `.hdr` (not committed; URL and SHA-256 in `tools/assets/sources.ts`; `docs/asset-credits.md` is generated from it by `pnpm credits`); `tools/textures/sky-build.test.ts` fails when stale.
+- `pnpm texture sky` builds the High HDRI `sky.ktx2` from the source `.hdr` (not committed; URL and SHA-256 in `tools/assets/sources.ts`; `docs/asset-credits.md` is generated from it by `pnpm credits`); `tools/textures/sky-build.test.ts` fails when stale.
 
 ## Tests
 

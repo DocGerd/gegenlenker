@@ -48,7 +48,7 @@ export const ASSET_SOURCES: Readonly<Record<string, AssetSource>> = {
       },
     ],
     rebuild:
-      '`pnpm sky:texture` (`tools/textures/sky-build.ts`) writes both outputs from the 4k `.hdr`, which is not committed: download it to the git-ignored path above, or pass its path. The build checks its SHA-256 and records its input hashes in both outputs; `tools/textures/sky-build.test.ts` fails when they are stale.',
+      '`pnpm texture sky` (`tools/textures/sky-pixels.ts`) writes both outputs from the 4k `.hdr`, which is not committed: download it to the git-ignored path above. The build checks its SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` and `tools/textures/sky-build.test.ts` fail when they are stale.',
   },
 };
 
