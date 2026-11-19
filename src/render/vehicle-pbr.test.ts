@@ -14,6 +14,7 @@ import {
   LightingContextNode,
   LightingModel,
   LightsNode,
+  MeshLambertNodeMaterial,
   PhysicalLightingModel,
   type WebGPURenderer,
 } from 'three/webgpu';
@@ -134,7 +135,7 @@ describe('role hues', () => {
     ];
     for (const visual of visuals) {
       const detail = meshes(visual.object).filter(
-        (m) => m.material instanceof MeshLambertMaterial && m.material.vertexColors,
+        (m) => m.material instanceof MeshLambertNodeMaterial && m.material.vertexColors,
       );
       for (const mesh of detail) {
         const onCab = mesh.layers.isEnabled(CAB_LAYER);
@@ -482,7 +483,7 @@ describe('reflective shells', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { visual, procedural } = await truckWithShells(id, fixed(new Texture()), 'balanced');
     const detail = [...procedural].filter(
-      ([, m]) => m instanceof MeshLambertMaterial && m.vertexColors,
+      ([, m]) => m instanceof MeshLambertNodeMaterial && m.vertexColors,
     );
     expect(detail.length).toBeGreaterThan(0);
 
@@ -539,7 +540,7 @@ describe.each(TRAILER_IDS)('reflective trailer shell of %s', (id) => {
     };
     const visual = proceduralTrailer(trailerById(id), palette, shells, fixed(new Texture()));
     const detail = meshes(visual.object).filter(
-      (m) => m.material instanceof MeshLambertMaterial && m.material.vertexColors,
+      (m) => m.material instanceof MeshLambertNodeMaterial && m.material.vertexColors,
     );
     attach();
     visual.setQuality(QUALITY_FLAGS.high);

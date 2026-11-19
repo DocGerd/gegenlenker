@@ -11,6 +11,7 @@ import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/ve
 import { CAB_GAP, CONTOUR_STRIP as STRIP, MARKING_END_MARGIN as END_MARGIN } from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
 import { tint } from './environment';
+import { DARK_SLOT, slotOf, withSlot } from './lamp-lens';
 import {
   type LampLayout,
   type LampPart,
@@ -57,8 +58,9 @@ const lateral = (side: number, from: number, to: number): Range =>
   side > 0 ? [from, to] : [-to, -from];
 
 type Sink = {
-  add(geometry: BufferGeometry, hue: number): void;
-  box(x: Range, y: Range, z: Range, hue: number): void;
+  /** `slot` picks the lamp lens emission (lamp-lens.ts); everything else stays dark. */
+  add(geometry: BufferGeometry, hue: number, slot?: number): void;
+  box(x: Range, y: Range, z: Range, hue: number, slot?: number): void;
 };
 
 /** Which build a part belongs to: both, only the procedural one, or only the one shown with a shell. */
@@ -67,10 +69,10 @@ type Only = 'procedural' | 'shell' | null;
 function collector() {
   const parts: { readonly geometry: BufferGeometry; readonly only: Only }[] = [];
   const sink = (only: Only): Sink => {
-    const add = (geometry: BufferGeometry, hue: number): void => {
-      parts.push({ geometry: tint(geometry, new Color(hue)), only });
+    const add = (geometry: BufferGeometry, hue: number, slot = DARK_SLOT): void => {
+      parts.push({ geometry: withSlot(tint(geometry, new Color(hue)), slot), only });
     };
-    return { add, box: (x, y, z, hue) => add(box(x, y, z), hue) };
+    return { add, box: (x, y, z, hue, slot) => add(box(x, y, z), hue, slot) };
   };
   const build = (skip: Only): BufferGeometry =>
     merge(parts.filter((part) => part.only !== skip).map((part) => part.geometry));
@@ -171,7 +173,7 @@ function lamps(c: Sink, layout: LampLayout, parts: readonly LampPart[], withShel
   const mine = (l: { part: LampPart; shell: boolean }): boolean =>
     parts.includes(l.part) && !(withShell && l.shell);
   for (const b of layout.brackets.filter(mine)) c.box(...b.box, HUE.chevronBlack);
-  for (const l of layout.lamps.filter(mine)) c.box(...l.box, l.hue);
+  for (const l of layout.lamps.filter(mine)) c.box(...l.box, l.hue, slotOf(l.fns));
 }
 
 export type TruckDetailParams = {
@@ -413,15 +415,18 @@ export function trailerDetail(p: TrailerDetailParams): {
   };
 }
 
+/** The dolly's rims, and its lamps of `layout`. */
 export function dollyDetail(
   radius: number,
   width: number,
   frontAxleX: number,
   track: number,
+  layout?: LampLayout,
 ): BufferGeometry {
   const c = collector();
   for (const side of [-1, 1])
     wheelFaces(c, radius, width, [frontAxleX, (side * track) / 2, radius]);
+  if (layout !== undefined) lamps(c, layout, ['dolly'], false);
   return c.build();
 }
 
