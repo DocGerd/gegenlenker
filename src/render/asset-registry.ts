@@ -2,9 +2,13 @@ import type { QualityFlags } from './quality';
 
 export type AssetKind = 'glb' | 'ktx2';
 
+type BooleanFlag = {
+  [K in keyof QualityFlags]: QualityFlags[K] extends boolean ? K : never;
+}[keyof QualityFlags];
+
 /** The quality flag that draws each binary in `src/render/assets`, keyed by file stem. */
 export const ASSET_REGISTRY: Readonly<
-  Record<string, { readonly kind: AssetKind; readonly flag: keyof QualityFlags }>
+  Record<string, { readonly kind: AssetKind; readonly flag: BooleanFlag }>
 > = {
   'arocs-1835-ak-cab': { kind: 'glb', flag: 'cabGlb' },
   'man-le-18-280-cab': { kind: 'glb', flag: 'cabGlb' },

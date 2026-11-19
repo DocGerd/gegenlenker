@@ -85,7 +85,7 @@ describe('asset registry', () => {
   });
 
   it('runtime-caches the textures the default preset does not draw, with their transcoder', () => {
-    expect(ignored.sort()).toEqual([
+    expect([...ignored].sort()).toEqual([
       '**/basis_transcoder-*.js',
       '**/basis_transcoder-*.wasm',
       '**/ground-*.ktx2',
