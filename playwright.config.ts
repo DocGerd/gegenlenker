@@ -16,8 +16,9 @@ export default defineConfig({
     {
       name: 'offline',
       testMatch: /\.spec\.ts$/,
-      // High first-load markers on software GL outlast the 5 s default.
+      // High first-load markers on software GL outlast the 5 s default; a test fits several waits.
       expect: { timeout: 30_000 },
+      timeout: 90_000,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 800 },

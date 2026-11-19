@@ -234,7 +234,6 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
   test(`each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`, async ({
     page,
   }) => {
-    if (preset === 'high') test.setTimeout(90_000);
     const errors = collectErrors(page);
     await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
       SETTINGS_KEY,

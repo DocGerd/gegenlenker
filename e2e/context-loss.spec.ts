@@ -88,7 +88,6 @@ async function startDrive(page: Page): Promise<void> {
 }
 
 test('a lost GPU context comes back on a fresh canvas and the drive goes on', async ({ page }) => {
-  test.setTimeout(90_000);
   const problems = collectProblems(page);
   await page.addInitScript(
     ([key, value]) => {
@@ -148,7 +147,6 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
 });
 
 test('the cockpit looks the same after a loss as before it', async ({ page }) => {
-  test.setTimeout(90_000);
   const problems = collectProblems(page);
   await watchFailedTextures(page);
   await startPinnedDrive(page, 'high', en.exerciseStraightReverse);

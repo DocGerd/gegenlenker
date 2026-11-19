@@ -19,6 +19,7 @@ const HIDE_ID = 'pinned-shoot-bare';
  * caught by a colour count: its anti-aliased glyphs give more colours than that view.
  */
 export const MIN_DRAWN_COLOURS = 40;
+
 /** Set once the renderer is ready and removed on a loss, so a settle after a loss waits for the new one. */
 const BACKEND_READY = (v: string): boolean => v !== '';
 
