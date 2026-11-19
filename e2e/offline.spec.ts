@@ -199,6 +199,7 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   const target = await marker.getAttribute('data-ground-texture');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(marker).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
+  await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
   // WebGL 2 stays the default until WebGPU passes its gate (docs/perf.md)
   await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
   await expect
@@ -221,6 +222,7 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   await expect(page.locator('[data-view="follow"]')).toBeVisible();
   await expect(marker).not.toHaveAttribute('data-vehicle-pbr', /.*/);
   await expect(marker).not.toHaveAttribute('data-sky-hdri', /.*/);
+  await expect(marker).not.toHaveAttribute('data-perspective-grade', /.*/);
 
   offline = true;
   await context.setOffline(true);
@@ -229,9 +231,12 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   await expect(marker).toHaveAttribute('data-ground-texture', target ?? '', GROUND_LOAD);
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(marker).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
-  expect(warnings.filter((w) => /Ground texture|Sky texture|Vehicle reflection/.test(w))).toEqual(
-    [],
-  );
+  await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
+  expect(
+    warnings.filter((w) =>
+      /Ground texture|Sky texture|Vehicle reflection|Perspective grade/.test(w),
+    ),
+  ).toEqual([]);
   expect(errors).toEqual([]);
   expect(three).toEqual([]);
   expect(foreign).toEqual([]);

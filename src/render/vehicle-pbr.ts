@@ -22,6 +22,7 @@ import {
 } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
 import { createSceneSky } from './environment';
+import { buildSerially } from './grade';
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
@@ -170,10 +171,11 @@ export function replaceMaterial(
  * material whose node graph throws for a plain one and only logs it, so the built shader must carry
  * the marker.
  */
-export async function vehicleShaderCompiles(
-  gpu: WebGPURenderer,
-  envMap: Texture,
-): Promise<boolean> {
+export function vehicleShaderCompiles(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+  return buildSerially(gpu, () => buildVehicleShader(gpu, envMap));
+}
+
+async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
   const material = createVehicleMaterial(envMap, createLampEmission());
   const geometry = withSlot(new BoxGeometry());
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));

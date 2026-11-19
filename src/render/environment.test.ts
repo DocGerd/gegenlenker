@@ -1,4 +1,15 @@
-import { DataTexture, Layers, type Object3D, type Texture } from 'three';
+import {
+  Color,
+  DataTexture,
+  DirectionalLight,
+  HemisphereLight,
+  Layers,
+  LightProbe,
+  Mesh,
+  type Light,
+  type Object3D,
+  type Texture,
+} from 'three';
 import { MeshLambertNodeMaterial } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exercises, layouts } from '../content/registry';
@@ -10,13 +21,23 @@ import { createGroundMaterial } from './ground-material';
 import type { GroundTextures } from './ground-texture';
 import { GROUND_SURFACES } from './ground-texture-spec';
 import { KEYS } from './palette';
+import { FOG_DENSITY, GRADE } from './grade';
+import { perspectiveLight } from './light-rig';
 import { QUALITY_FLAGS } from './quality';
+import { REALISM_HUES } from './realism-hues';
 vi.mock('./ground-material', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./ground-material')>();
   return { createGroundMaterial: vi.fn(actual.createGroundMaterial) };
 });
 
-import { COCKPIT_LAYERS, DEFAULT_LAYER, enableLayers, TOP_DOWN_LAYERS } from './seams';
+import {
+  AIDS_LAYER,
+  COCKPIT_LAYERS,
+  DEFAULT_LAYER,
+  enableLayers,
+  SKY_LAYER,
+  TOP_DOWN_LAYERS,
+} from './seams';
 import { RESTYLED_KINDS } from './yard-props';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -76,6 +97,79 @@ describe('environment quality', () => {
     env.dispose();
   });
 });
+
+describe('environment quality wiring', () => {
+  const lightsOf = (root: Object3D): Light[] => {
+    const out: Light[] = [];
+    root.traverse((o) => {
+      if ('isLight' in o) out.push(o as Light);
+    });
+    return out;
+  };
+  const only = (layer: number): number => 1 << layer;
+
+  it('follows the flags through high, balanced, low and high again', () => {
+    expect(layout).toBeDefined();
+    if (layout === undefined) return;
+    const sky = fakeTextures();
+    const env = proceduralEnvironment(layout, palette, undefined, sky.textures);
+    sky.deliver();
+    const lights = lightsOf(env.object);
+    const [legacySun, legacyAmbient, hdriSun, probe] = lights;
+    expect(legacySun).toBeInstanceOf(DirectionalLight);
+    expect(legacyAmbient).toBeInstanceOf(HemisphereLight);
+    expect(hdriSun).toBeInstanceOf(DirectionalLight);
+    expect(probe).toBeInstanceOf(LightProbe);
+    const props = [...seen(env.object, cameras.cockpit)]
+      .filter((m): m is Mesh => m instanceof Mesh)
+      .filter((m) => m.layers.mask === only(SKY_LAYER) && !isNodeMaterial(m));
+    expect(props.length).toBeGreaterThan(0);
+    const tokenMaterial = props[0]?.material;
+    const wears = (): unknown[] => [...new Set(props.map((m) => m.material))];
+    const hazeToward = (): number => GRADE.hazeToward.value.getHex();
+    const sunHaze = perspectiveLight(palette).hazeToward.getHex();
+    const plainHaze = new Color(REALISM_HUES.skyHaze).getHex();
+
+    const expectGraded = (on: boolean, label: string): void => {
+      for (const l of [legacySun, legacyAmbient]) {
+        expect(l?.layers.mask, label).toBe(only(on ? AIDS_LAYER : DEFAULT_LAYER));
+      }
+      for (const l of [hdriSun, probe]) expect(l?.visible, label).toBe(on);
+      if (on) {
+        const [material, ...rest] = wears();
+        expect(rest, label).toEqual([]);
+        expect(material, label).not.toBe(tokenMaterial);
+        expect(isNodeMaterial(props[0]), label).toBe(true);
+      } else {
+        expect(wears(), label).toEqual([tokenMaterial]);
+      }
+    };
+
+    for (const [label, flags] of [
+      ['high', QUALITY_FLAGS.high],
+      ['balanced', QUALITY_FLAGS.balanced],
+      ['low', QUALITY_FLAGS.low],
+      ['high again', QUALITY_FLAGS.high],
+    ] as const) {
+      env.setQuality(flags);
+      expectGraded(flags.perspectiveLighting, label);
+      expect(GRADE.fogDensity.value, label).toBe(flags.aerialPerspective ? FOG_DENSITY : 0);
+      expect(hazeToward(), label).toBe(flags.hdriSky ? sunHaze : plainHaze);
+    }
+
+    // the uniforms are shared: building and disposing another environment leaves them as they were
+    const other = proceduralEnvironment(layout, palette, undefined, sky.textures);
+    other.dispose();
+    expect(GRADE.fogDensity.value).toBe(FOG_DENSITY);
+    expect(hazeToward()).toBe(sunHaze);
+    env.dispose();
+  });
+});
+
+const isNodeMaterial = (mesh: Object3D | undefined): boolean =>
+  mesh !== undefined &&
+  'material' in mesh &&
+  (mesh.material as { isNodeMaterial?: boolean }).isNodeMaterial === true;
 
 /** Delivers the texture on demand, standing in for the KTX2 load. */
 function fakeTextures() {

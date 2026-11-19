@@ -5,6 +5,7 @@ import { TRAILER_IDS, TRUCK_IDS, type Param } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { KEYS } from './palette';
+import { QUALITY_FLAGS } from './quality';
 import { createMirror } from './mirror';
 import {
   AIDS_LAYER,
@@ -226,5 +227,38 @@ describe('blob shadows', () => {
       );
       expectCovers(trailer, a.rearX, a.frontX, spec.width.value / 2000);
     }
+  });
+});
+
+describe('number plate grade', () => {
+  const plates = (root: Object3D): Mesh[] =>
+    meshes(root).filter((m) => {
+      const material = m.material as Material & { vertexColors?: boolean; isNodeMaterial?: true };
+      return (
+        m.layers.mask === 1 << SKY_LAYER &&
+        material.isNodeMaterial === true &&
+        !material.vertexColors
+      );
+    });
+
+  it.each([
+    ['truck', () => proceduralTruck(truckById(TRUCK_IDS[0]), palette)],
+    ['trailer', () => proceduralTrailer(trailerById(TRAILER_IDS[0]), palette)],
+  ] as const)('grades the %s plate on High only', (_kind, build) => {
+    const visual = build();
+    const found = plates(visual.object);
+    expect(found.length).toBeGreaterThan(0);
+    const graded = (): boolean[] =>
+      found.map((m) => (m.material as unknown as { outputNode: unknown }).outputNode !== null);
+    for (const [flags, on] of [
+      [QUALITY_FLAGS.high, true],
+      [QUALITY_FLAGS.balanced, false],
+      [QUALITY_FLAGS.low, false],
+      [QUALITY_FLAGS.high, true],
+    ] as const) {
+      visual.setQuality(flags);
+      expect(graded().every((g) => g === on)).toBe(true);
+    }
+    visual.dispose();
   });
 });

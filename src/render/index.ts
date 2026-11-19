@@ -8,10 +8,12 @@ import {
   startShells,
   TRAILER_SHELL_URLS,
 } from './glb-shells';
+import { createGradeCheck, precompileGrade } from './grade';
 import { startGroundTextures } from './ground-texture';
 import { readBackendRequest, requestGpuDevice, type BackendRequest } from './gpu-backend';
 import { QUALITY_FLAGS } from './quality';
 import { startSkyTexture } from './sky-texture';
+import { skylineGradeSample } from './skyline';
 import { createThreeSceneRenderer } from './three-renderer';
 import { createVehicleEnvironment } from './vehicle-pbr';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
@@ -92,12 +94,24 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       vehicleEnvironment.setSky(null);
     },
   );
+  // Read by the offline e2e: `on` once the perspective grade compiled while the preset grades, `failed` if it fell back.
+  const gradeCheck = createGradeCheck(
+    (state) => {
+      if (state === null) delete document.documentElement.dataset['perspectiveGrade'];
+      else {
+        document.documentElement.dataset['perspectiveGrade'] = state;
+        if (state !== 'failed') warmUp();
+      }
+    },
+    (gpu) => precompileGrade(gpu, [skylineGradeSample]),
+  );
   const renderer = createThreeSceneRenderer({
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
     onRenderer: (gpu) => {
       groundTextures.attach(gpu);
       skyTexture.attach(gpu);
       vehicleEnvironment.attach(gpu);
+      gradeCheck.attach(gpu);
     },
     truck: (spec, palette) => proceduralTruck(spec, palette, shells, vehicleEnvironment),
     trailer: (spec, palette) =>
@@ -133,6 +147,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       shells.trailer.setEnabled(flags.vehicleGlb);
       groundTextures.setEnabled(flags.groundTexture);
       skyTexture.setEnabled(flags.hdriSky);
+      gradeCheck.setWanted(flags.perspectiveLighting);
       renderer.setQuality(preset);
     },
     dispose() {
@@ -141,6 +156,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       groundTextures.dispose();
       skyTexture.dispose();
       vehicleEnvironment.dispose();
+      gradeCheck.dispose();
     },
   };
 }
