@@ -49,6 +49,7 @@ export type TextureAsset = {
   inputsSha256(root: string): string;
   /** Throws when a source that is not committed is missing. */
   pixels(root: string): TexturePixels;
+  /** Ids in `ASSET_SOURCES` of the third-party files the pixels come from. */
   readonly sources: readonly string[];
   /** Set when a separate generator writes the ktx2 and a baked constant together. */
   readonly bake?: {
@@ -76,7 +77,7 @@ export const TEXTURE_ASSETS: Readonly<Record<string, TextureAsset>> = {
     encoding: { name: 'linear-uastc-mips', options: GROUND_ENCODER },
     inputsSha256: groundInputsSha256,
     pixels: () => generateGroundTexture(),
-    sources: GROUND_FILES.sources,
+    sources: [],
   },
   sky: {
     key: 'sky',
@@ -89,7 +90,7 @@ export const TEXTURE_ASSETS: Readonly<Record<string, TextureAsset>> = {
       if (!existsSync(hdr)) throw new Error(`${SKY_HDR.path} is missing: download ${SKY_HDR.url}`);
       return skyPixels(parseRadianceHdr(new Uint8Array(readFileSync(hdr))));
     },
-    sources: [...SKY_FILES.sources],
+    sources: ['kloofendal-sky'],
     bake: { file: SKY_FILES.bake, script: 'tools/textures/sky-build.ts', bakedSha256 },
   },
 };

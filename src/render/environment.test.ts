@@ -8,7 +8,6 @@ import {
   Mesh,
   type Light,
   type Object3D,
-  type Texture,
 } from 'three';
 import { MeshLambertNodeMaterial } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -19,7 +18,7 @@ import { createMirror } from './mirror';
 import { proceduralEnvironment } from './environment';
 import { texturedGroundGeometry } from './ground-geometry';
 import { createGroundMaterial } from './ground-material';
-import type { GroundTextures } from './ground-texture';
+import type { TextureMaps, TextureSet } from './texture-set';
 import { GROUND_SURFACES } from './ground-texture-spec';
 import { KEYS } from './palette';
 import { FOG_DENSITY, GRADE } from './grade';
@@ -297,10 +296,13 @@ const isNodeMaterial = (mesh: Object3D | undefined): boolean =>
 
 /** Delivers the texture on demand, standing in for the KTX2 load. */
 function fakeTextures() {
-  const waiting = new Map<(texture: Texture) => void, (() => void) | undefined>();
+  const waiting = new Map<
+    (maps: TextureMaps<'detail' | 'sky'>) => void,
+    (() => void) | undefined
+  >();
   const cancel = vi.fn();
   const applied: boolean[] = [];
-  const textures: GroundTextures = {
+  const textures: TextureSet<'detail' | 'sky'> = {
     attach: () => undefined,
     setEnabled: () => undefined,
     onLoaded(apply, revert) {
@@ -318,7 +320,10 @@ function fakeTextures() {
     cancel,
     applied,
     deliver: () => {
-      for (const apply of waiting.keys()) apply(new DataTexture(new Uint8Array(4), 1, 1));
+      for (const apply of waiting.keys()) {
+        const texture = new DataTexture(new Uint8Array(4), 1, 1);
+        apply({ detail: texture, sky: texture });
+      }
     },
     reject: () => {
       for (const revert of waiting.values()) revert?.();
