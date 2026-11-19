@@ -48,8 +48,9 @@ jobs:
 
   # Software GL (SwiftShader) renders the half-float frame target slowly, so the suite runs in
   # shards; per test, not per file, so the long layout spec spreads too.
-  # Skipped on push to main: the ruleset requires an up-to-date PR, so the merged tree is the
-  # tree its PR already ran e2e on. `workflow_dispatch` still runs it.
+  # Skipped on push to main: the ruleset's strict required status checks (no bypass) make the
+  # merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
+  # still runs it.
   e2e:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
@@ -117,7 +118,7 @@ jobs:
 
   # The required status check. `always()` keeps it running when a dependency
   # fails, so it fails instead of being skipped (a skipped check can pass).
-  # Every need must succeed; e2e alone may be skipped, and only on push.
+  # Required: every need succeeds; on push only, e2e may be skipped.
   check:
     needs: [lint, unit, e2e]
     if: always()
@@ -128,8 +129,8 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
         run: |
-          echo "$NEEDS" | jq -c 'map_values(.result)'
-          echo "$NEEDS" | jq -e --arg event "$EVENT" '
+          printf '%s' "$NEEDS" | jq -c 'map_values(.result)'
+          printf '%s' "$NEEDS" | jq -e --arg event "$EVENT" '
             length > 0 and all(to_entries[];
               .value.result == "success"
               or (.key == "e2e" and $event == "push" and .value.result == "skipped"))'
