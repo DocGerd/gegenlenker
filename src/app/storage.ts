@@ -1,5 +1,5 @@
-import { exerciseById, layouts } from '../content/registry';
-import { resolveLayout } from '../content/resolve-layout';
+import { exerciseById } from '../content/registry';
+import { resolveRun } from '../content/run';
 import type { BestResults, InputLog, RunResult } from '../contracts/exercise';
 import {
   parseBestResults,
@@ -7,11 +7,7 @@ import {
   serializeBestResults,
   type ResultIds,
 } from '../scoring/best';
-import { STOPPED_SPEED, WAYPOINT_RADIUS } from '../scoring/score';
-import { dataFingerprint } from '../sim/fingerprint';
 import { MAX_REPLAY_STEPS, parseInputLog, serializeInputLog, type RunIds } from '../sim/replay';
-import { trailerById, truckById } from '../vehicles/registry';
-import { resolveCombination } from '../vehicles/resolve';
 
 export const SETTINGS_KEY = 'gegenlenker.settings.v1';
 export const BEST_KEY = 'gegenlenker.best.v2';
@@ -71,15 +67,7 @@ function runFingerprint(ids: RunIds): string {
   const key = `${ids.layoutId}/${ids.exerciseId}/${ids.truckId}/${ids.trailerId}`;
   let fingerprint = fingerprints.get(key);
   if (fingerprint === undefined) {
-    const layout = layouts[ids.layoutId];
-    const exercise = ids.exerciseId === null ? null : exerciseById(ids.exerciseId);
-    fingerprint = dataFingerprint({
-      params: resolveCombination(truckById(ids.truckId), trailerById(ids.trailerId)),
-      obstacles: resolveLayout(layout, exercise).obstacles,
-      start: exercise?.start ?? layout.start,
-      exercise,
-      scoring: { WAYPOINT_RADIUS, STOPPED_SPEED },
-    });
+    fingerprint = resolveRun(ids).fingerprint;
     fingerprints.set(key, fingerprint);
   }
   return fingerprint;

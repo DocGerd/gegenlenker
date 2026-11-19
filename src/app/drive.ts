@@ -1,5 +1,4 @@
-import { layouts } from '../content/registry';
-import { resolveLayout } from '../content/resolve-layout';
+import { resolveRun } from '../content/run';
 import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
 import type { LayoutId } from '../contracts/layout';
 import {
@@ -22,14 +21,12 @@ import { computeViewports, orientationOf, topDownSplit } from '../render/viewpor
 import { holdWakeLock } from '../pwa/wake-lock';
 import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
-import { createContactQuery } from '../sim/collision';
 import { bodyFootprints } from '../sim/geometry';
 import { CONTACT_WARN_DISTANCE, DT } from '../sim/constants';
 import { contactAhead, NO_PREDICTION, predictCombination } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
-import { resolveCombination } from '../vehicles/resolve';
 import { measureChrome } from './chrome';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { showPauseSheet } from './pause-sheet';
@@ -71,17 +68,15 @@ export function startDrive(
   settings: Settings,
   { onExit, onRestart, onLeave }: DriveHandlers,
 ): () => void {
+  const { params, layout, exercise, start, contacts } = resolveRun({
+    layoutId: run.layoutId,
+    exerciseId: run.exercise?.id ?? null,
+    truckId: run.truckId,
+    trailerId: run.trailerId,
+  });
   const truck = truckById(run.truckId);
   const trailer = trailerById(run.trailerId);
-  const params = resolveCombination(truck, trailer);
-  const layout = resolveLayout(layouts[run.layoutId], run.exercise);
-  const exercise = run.exercise;
-  const contacts = createContactQuery(layout.obstacles);
-  const sim = createSimulation(
-    params,
-    { truck: exercise?.start ?? layouts[run.layoutId].start },
-    contacts,
-  );
+  const sim = createSimulation(params, { truck: start }, contacts);
   const recorder = createInputRecorder();
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
