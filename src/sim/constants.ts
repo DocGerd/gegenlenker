@@ -10,3 +10,21 @@ export const PREDICT_DISTANCE = 30;
 /** A predicted contact nearer than this (m) raises the first warning stage. */
 export const CONTACT_WARN_DISTANCE = 3;
 export const EVENT_CLEAR_DISTANCE = 0.5;
+/** Minimum penetration depth (m) that counts as overlap; flush contact is not a contact. */
+export const OVERLAP_EPSILON = 1e-6;
+
+/**
+ * Hashed whole into the data fingerprint; order is part of the fingerprint. A literal, as namespace key
+ * order differs between bundle and test runner. Display constants (`PREDICT_*`, `CONTACT_WARN_DISTANCE`,
+ * `MAX_STEPS_PER_FRAME`) are left out on purpose.
+ */
+export const SIM_CONSTANTS = {
+  DT,
+  V_MAX,
+  ACCEL,
+  DECEL,
+  BRAKE_DECEL,
+  DRAWBAR_WIDTH,
+  EVENT_CLEAR_DISTANCE,
+  OVERLAP_EPSILON,
+} as const;

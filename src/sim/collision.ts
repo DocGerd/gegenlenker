@@ -1,8 +1,6 @@
 import type { Obstacle } from '../contracts/layout';
 import type { BodyFootprint, ContactQuery, Obb, Vec2 } from '../contracts/sim';
-
-/** Minimum penetration depth (m) that counts as overlap; flush contact is not a contact. */
-export const OVERLAP_EPSILON = 1e-6;
+import { OVERLAP_EPSILON } from './constants';
 
 const radius = (obb: Obb): number => Math.hypot(obb.halfLength, obb.halfWidth);
 

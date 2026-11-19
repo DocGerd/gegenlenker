@@ -8,6 +8,9 @@ export const WAYPOINT_RADIUS = 3; // m, truck rear axle to waypoint
 
 export const STOPPED_SPEED = 0.05; // m/s
 
+/** Hashed whole into the data fingerprint; order is part of the fingerprint. */
+export const SCORING_THRESHOLDS = { WAYPOINT_RADIUS, STOPPED_SPEED } as const;
+
 export function targetError(s: SimSnapshot, zone: TargetZone): { position: number; angle: number } {
   return {
     position: Math.hypot(s.trailerRear.x - zone.pose.x, s.trailerRear.y - zone.pose.y),
