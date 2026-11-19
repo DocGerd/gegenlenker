@@ -5,13 +5,22 @@ import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { GraphicsStartError, type ScenePalette } from '../contracts/render';
 import { trailerById, truckById } from '../vehicles/registry';
+import type { GpuOffer } from './gpu-backend';
 import type { QualityFlags } from './quality';
 import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
 
-type Made = { dispose: () => void; onDeviceLost: () => void; webgpu: boolean };
+type Made = {
+  dispose: () => void;
+  onDeviceLost: () => void;
+  onError: (info: string) => void;
+  webgpu: boolean;
+};
+/** How a start given a device goes wrong: init rejects, three falls back to WebGL by itself, or the device is lost during init or just after it. */
+type WebgpuFault = 'reject' | 'self-fallback' | 'lose-in-init' | 'lose-after-init';
 const made = vi.hoisted(() => [] as Made[]);
-const fail = vi.hoisted(() => ({ next: false, webgpu: false }));
+const fail = vi.hoisted(() => ({ next: false, webgpu: null as WebgpuFault | null }));
+const threeOnError = vi.hoisted(() => vi.fn());
 
 vi.mock('three/webgpu', async (importOriginal) => {
   const actual = await importOriginal<typeof import('three/webgpu')>();
@@ -20,15 +29,28 @@ vi.mock('three/webgpu', async (importOriginal) => {
     backend: { isWebGLBackend: boolean };
     info = { autoReset: true };
     onDeviceLost = (): void => undefined;
+    onError = threeOnError;
     dispose = vi.fn(() => Promise.resolve());
     readonly webgpu: boolean;
     constructor({ device }: { device?: unknown }) {
       this.webgpu = device !== undefined;
-      this.backend = { isWebGLBackend: !this.webgpu };
+      this.backend = { isWebGLBackend: !this.webgpu || fail.webgpu === 'self-fallback' };
       made.push(this);
     }
     init(): Promise<void> {
-      if (this.webgpu && fail.webgpu) return Promise.reject(new Error('pipeline failed'));
+      if (this.webgpu && fail.webgpu === 'reject')
+        return Promise.reject(new Error('pipeline failed'));
+      if (this.webgpu && fail.webgpu === 'lose-in-init') this.onDeviceLost();
+      if (this.webgpu && fail.webgpu === 'lose-after-init') {
+        // after the start's own await on this promise, before init names the renderer
+        const done = Promise.resolve();
+        void done.then(() => {
+          queueMicrotask(() => {
+            this.onDeviceLost();
+          });
+        });
+        return done;
+      }
       if (!fail.next) return Promise.resolve();
       fail.next = false;
       return Promise.reject(new Error('Error creating WebGL context.'));
@@ -53,7 +75,7 @@ const layout = resolveLayout(layouts.depot, null);
 
 function stubParts(
   onRenderer?: (gpu: WebGPURenderer) => void,
-  gpuDevice?: () => Promise<GPUDevice | null>,
+  gpuDevice?: () => Promise<GpuOffer>,
 ): {
   applied: QualityFlags[][];
   renderer: ReturnType<typeof create>;
@@ -111,7 +133,7 @@ describe('renderer start', () => {
   afterEach(() => {
     vi.clearAllMocks();
     made.length = 0;
-    fail.webgpu = false;
+    fail.webgpu = null;
   });
 
   it('hands the renderer to the parts and re-applies the quality only once init resolves', async () => {
@@ -184,30 +206,54 @@ describe('renderer start', () => {
       const next = vi.fn(() => {
         const device = { adapterInfo, destroy: vi.fn() };
         made.push(device);
-        return Promise.resolve(device as unknown as GPUDevice);
+        return Promise.resolve({ device: device as unknown as GPUDevice, fallback: null });
       });
       return { made, next };
     };
+    const quiet = () => vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     it('draws through the device it is given and names its adapter', async () => {
       const { next } = devices();
       const { renderer } = stubParts(undefined, next);
       await renderer.init(canvas());
-      expect(renderer.stats()).toMatchObject({ backend: 'webgpu', glRenderer: 'nvidia ada' });
+      expect(renderer.stats()).toMatchObject({
+        backend: 'webgpu',
+        webgpuFallback: null,
+        glRenderer: 'nvidia ada',
+      });
     });
 
-    it('goes on with WebGL 2 when WebGPU does not start, and does not try it again', async () => {
-      fail.webgpu = true;
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    it.each([
+      ['reject', [true, false]],
+      ['lose-in-init', [true, false]],
+      ['self-fallback', [true]],
+    ] as const)(
+      'goes on with WebGL 2 when WebGPU does not start (%s), and does not try it again',
+      async (fault, starts) => {
+        fail.webgpu = fault;
+        const warn = quiet();
+        const { made: given, next } = devices();
+        const { renderer } = stubParts(undefined, next);
+        await renderer.init(canvas());
+        expect(made.map((m) => m.webgpu)).toEqual(starts);
+        expect(renderer.stats()).toMatchObject({ backend: 'webgl2', webgpuFallback: 'failed' });
+        await vi.waitFor(() => {
+          expect(given[0]?.destroy).toHaveBeenCalled();
+        });
+        await renderer.init(canvas());
+        expect(next).toHaveBeenCalledOnce();
+        warn.mockRestore();
+      },
+    );
+
+    it('drops a device that arrives after a later init or dispose', async () => {
       const { made: given, next } = devices();
       const { renderer } = stubParts(undefined, next);
-      await renderer.init(canvas());
-      expect(renderer.stats().backend).toBe('webgl2');
-      expect(given[0]?.destroy).toHaveBeenCalled();
-      await renderer.init(canvas());
-      expect(next).toHaveBeenCalledOnce();
-      expect(warn).toHaveBeenCalledOnce();
-      warn.mockRestore();
+      const first = renderer.init(canvas());
+      renderer.dispose();
+      await expect(first).rejects.toEqual(superseded);
+      expect(given[0]?.destroy).toHaveBeenCalledOnce();
+      expect(made).toEqual([]);
     });
 
     it('starts again on WebGL 2 after the WebGPU device is lost', async () => {
@@ -220,14 +266,51 @@ describe('renderer start', () => {
       expect(lost).toHaveBeenCalledOnce();
       expect(renderer.stats().contextLost).toBe(true);
       await renderer.init(canvas());
-      expect(renderer.stats().backend).toBe('webgl2');
+      expect(renderer.stats()).toMatchObject({ backend: 'webgl2', webgpuFallback: 'lost' });
       expect(next).toHaveBeenCalledOnce();
     });
 
-    it('stays on WebGL 2 when no device is offered', async () => {
-      const { renderer } = stubParts(undefined, () => Promise.resolve(null));
+    it('counts a WebGPU loss that lands before init names the renderer', async () => {
+      fail.webgpu = 'lose-after-init';
+      const { next } = devices();
+      const { renderer } = stubParts(undefined, next);
+      const lost = vi.fn();
+      renderer.onLost(lost);
+      await renderer.init(canvas());
+      expect(lost).toHaveBeenCalledOnce();
+      fail.webgpu = null;
+      await renderer.init(canvas());
+      expect(renderer.stats()).toMatchObject({ backend: 'webgl2', webgpuFallback: 'lost' });
+      expect(next).toHaveBeenCalledOnce();
+    });
+
+    it('skips WebGPU on the next start after an uncaptured WebGPU error, still logged by three', async () => {
+      const { next } = devices();
+      const { renderer } = stubParts(undefined, next);
+      await renderer.init(canvas());
+      made[0]?.onError('validation');
+      expect(threeOnError).toHaveBeenCalledWith('validation');
+      made[0]?.onDeviceLost();
+      await renderer.init(canvas());
+      expect(next).toHaveBeenCalledOnce();
+    });
+
+    it('asks for WebGPU again after a WebGL 2 loss', async () => {
+      const next = vi.fn(() => Promise.resolve<GpuOffer>({ device: null, fallback: null }));
+      const { renderer } = stubParts(undefined, next);
+      await renderer.init(canvas());
+      made[0]?.onDeviceLost();
+      await renderer.init(canvas());
+      expect(next).toHaveBeenCalledTimes(2);
+    });
+
+    it('stays on WebGL 2 when no device is offered, and says why', async () => {
+      const { renderer } = stubParts(undefined, () =>
+        Promise.resolve({ device: null, fallback: 'unavailable' }),
+      );
       await renderer.init(canvas());
       expect(made.map((m) => m.webgpu)).toEqual([false]);
+      expect(renderer.stats().webgpuFallback).toBe('unavailable');
     });
   });
 });

@@ -28,7 +28,7 @@ export async function probeGraphics(): Promise<GraphicsBackend | null> {
     if (webgl2Supported()) probe = Promise.resolve('webgl2');
     else {
       // without WebGL 2 only an opted-in WebGPU can draw
-      const device = await requestGpuDevice(readBackendRequest(location.search));
+      const { device } = await requestGpuDevice(readBackendRequest(location.search));
       if (device === null) return null;
       device.destroy();
       probe = Promise.resolve('webgpu');

@@ -120,8 +120,15 @@ export type RenderFrame = {
 };
 /** The GPU API the renderer draws through. */
 export type GraphicsBackend = 'webgpu' | 'webgl2';
+/**
+ * Why WebGL 2 draws although WebGPU was asked for: no WebGPU device (`unavailable`), WebGPU did
+ * not start or three fell back by itself (`failed`), or the WebGPU device was lost (`lost`).
+ */
+export type WebgpuFallback = 'unavailable' | 'failed' | 'lost';
 export type RenderStats = {
   readonly backend: GraphicsBackend;
+  /** Null on WebGPU, or when WebGL 2 was asked for or `auto` declined the adapter. */
+  readonly webgpuFallback: WebgpuFallback | null;
   readonly fps: number;
   readonly frameP95Ms: number;
   readonly resolutionScale: number;

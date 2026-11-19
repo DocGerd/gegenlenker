@@ -4,6 +4,7 @@ import type { ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
+import type { GpuOffer } from './gpu-backend';
 import type { QualityFlags } from './quality';
 /** three.js default layer: every camera sees it. */
 export const DEFAULT_LAYER = 0;
@@ -68,8 +69,8 @@ export interface AidsLayer {
 export type RendererParts = {
   /** Called each time a GPU renderer is ready, again after a loss with the new one; parts move to the latest. */
   readonly onRenderer?: (renderer: WebGPURenderer) => void;
-  /** A device to start WebGPU on, or null for WebGL 2; absent means WebGL 2. */
-  readonly gpuDevice?: () => Promise<GPUDevice | null>;
+  /** A device to start WebGPU on, or none for WebGL 2; absent means WebGL 2. */
+  readonly gpuDevice?: () => Promise<GpuOffer>;
   readonly truck: (spec: TruckSpec, palette: ScenePalette) => VehicleVisual;
   readonly trailer: (spec: TrailerSpec, palette: ScenePalette) => VehicleVisual;
   readonly environment: (layout: ResolvedLayout, palette: ScenePalette) => Environment;

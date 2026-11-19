@@ -84,10 +84,14 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     environment: (layout, palette) => proceduralEnvironment(layout, palette, groundTextures),
     aids: proceduralAids,
   });
-  // Read by the e2e: the GPU API of the live renderer, absent while there is none.
-  renderer.onLost(() => {
-    delete document.documentElement.dataset['renderBackend'];
-  });
+  // Read by the e2e: the GPU API of the live renderer and why it is not WebGPU when that was asked
+  // for, absent while there is no renderer.
+  const marker = document.documentElement.dataset;
+  const unmark = (): void => {
+    delete marker['renderBackend'];
+    delete marker['renderFallback'];
+  };
+  renderer.onLost(unmark);
   const { warmUp: warmTarget, ...sceneRenderer } = renderer;
   warm.target = warmTarget;
   if (warm.pending) warmTarget();
@@ -95,7 +99,10 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     ...sceneRenderer,
     async init(canvas) {
       await renderer.init(canvas);
-      document.documentElement.dataset['renderBackend'] = renderer.stats().backend;
+      const { backend: drawn, webgpuFallback } = renderer.stats();
+      marker['renderBackend'] = drawn;
+      if (webgpuFallback === null) delete marker['renderFallback'];
+      else marker['renderFallback'] = webgpuFallback;
     },
     setQuality(preset) {
       const flags = QUALITY_FLAGS[preset];
@@ -106,7 +113,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       renderer.setQuality(preset);
     },
     dispose() {
-      delete document.documentElement.dataset['renderBackend'];
+      unmark();
       renderer.dispose();
       groundTextures.dispose();
       vehicleEnvironment.dispose();

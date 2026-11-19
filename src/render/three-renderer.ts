@@ -12,6 +12,7 @@ import {
   type RenderStats,
   type SceneRenderer,
   type ScenePalette,
+  type WebgpuFallback,
 } from '../contracts/render';
 import type { TrailerSpec, TruckAnchors, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
@@ -98,7 +99,8 @@ function release(gpu: WebGPURenderer, device: GPUDevice | null, failedStart = fa
     .catch((error: unknown) => {
       if (!failedStart) console.warn('Could not release the GPU renderer', error);
     })
-    .finally(() => device?.destroy());
+    .finally(() => device?.destroy())
+    .catch((error: unknown) => console.warn('Could not release the GPU device', error));
 }
 
 function hasWebgl2(canvas: HTMLCanvasElement): boolean {
@@ -112,11 +114,13 @@ function hasWebgl2(canvas: HTMLCanvasElement): boolean {
 /**
  * Settles once the GPU renderer can draw: on WebGPU through `device`, else on WebGL 2. Rejects when
  * it cannot start, as unavailable only when WebGL 2 failed for want of a context. `onLost` replaces
- * three's loss handler, which only logs; a loss during `init` rejects instead.
+ * three's loss handler, which only logs; a loss during `init` rejects instead. `onError` hears
+ * WebGPU's uncaptured errors before three logs them.
  */
 async function startGpu(
   canvas: HTMLCanvasElement,
   onLost: (gpu: WebGPURenderer) => void,
+  onError: () => void,
   device: GPUDevice | null,
 ): Promise<WebGPURenderer> {
   let gpu: WebGPURenderer | null = null;
@@ -135,6 +139,11 @@ async function startGpu(
       markLost(own);
       if (loss.started) onLost(own);
       else loss.early = true;
+    };
+    const report = own.onError;
+    own.onError = (info) => {
+      onError();
+      report.call(own, info);
     };
     await own.init();
   } catch (error) {
@@ -183,8 +192,8 @@ export function createThreeSceneRenderer(
   let renderer: WebGPURenderer | null = null;
   /** The device the WebGPU backend draws through; null on WebGL 2. */
   let device: GPUDevice | null = null;
-  /** Set once WebGPU failed to start or was lost: later starts go straight to WebGL 2. */
-  let webgpuFailed = false;
+  /** Why WebGPU is not drawing although asked for; once set, later starts go straight to WebGL 2. */
+  let fallback: WebgpuFallback | null = null;
   let canvas: HTMLCanvasElement | null = null;
   let built: Built | null = null;
   let cssWidth = 0;
@@ -314,29 +323,39 @@ export function createThreeSceneRenderer(
     mine: number,
   ): Promise<{ gpu: WebGPURenderer; device: GPUDevice | null }> {
     const lost = (gpu: WebGPURenderer): void => {
-      if (renderer !== gpu) return;
-      if (backendOf(gpu) === 'webgpu') webgpuFailed = true;
-      onLost();
+      // also when the loss came before `renderer` named `gpu`, so the restart skips WebGPU
+      if (backendOf(gpu) === 'webgpu') fallback = 'lost';
+      if (renderer === gpu) onLost();
     };
-    const wanted = webgpuFailed ? null : ((await parts.gpuDevice?.()) ?? null);
+    const failed = (): void => {
+      fallback = 'failed';
+    };
+    let wanted: GPUDevice | null = null;
+    if (fallback === null && parts.gpuDevice !== undefined) {
+      const offer = await parts.gpuDevice();
+      wanted = offer.device;
+      fallback = offer.fallback;
+    }
     if (wanted !== null) {
       if (mine !== generation) {
         wanted.destroy();
         throw new GraphicsStartError('superseded');
       }
       try {
-        const gpu = await startGpu(target, lost, wanted);
-        // three may have fallen back to WebGL 2 by itself
+        const gpu = await startGpu(target, lost, failed, wanted);
         if (backendOf(gpu) === 'webgpu') return { gpu, device: wanted };
+        // three fell back to WebGL 2 by itself, and said so
+        failed();
         wanted.destroy();
         return { gpu, device: null };
       } catch (error) {
-        webgpuFailed = true;
+        failed();
         console.warn('WebGPU did not start; drawing with WebGL 2', error);
       }
     }
-    // three takes the WebGPU canvas context only once started, so a failed start leaves it to WebGL 2
-    return { gpu: await startGpu(target, lost, null), device: null };
+    // three takes the WebGPU canvas context on the first frame, which a failed start never drew
+    // (webgpu-canvas.test.ts), so the canvas is still free for WebGL 2
+    return { gpu: await startGpu(target, lost, failed, null), device: null };
   }
 
   /** WebGPURenderer's viewport origin is the top left, as the CSS rects'. */
@@ -543,6 +562,7 @@ export function createThreeSceneRenderer(
     stats(): RenderStats {
       return {
         backend,
+        webgpuFallback: backend === 'webgl2' ? fallback : null,
         fps: timer.fps(),
         frameP95Ms: timer.p95Ms(),
         resolutionScale: timer.scale(),
