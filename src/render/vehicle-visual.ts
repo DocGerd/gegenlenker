@@ -34,6 +34,9 @@ import {
   type TrailerShell,
   type TruckShells,
 } from './glb-shells';
+import { trailerLamps, truckLamps } from './lamp-layout';
+import { createDetailMaterial, createLampEmission, slotShell } from './lamp-lens';
+import { lampState } from './lamp-state';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
@@ -132,7 +135,8 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const materials: Material[] = [];
   const textures: Texture[] = [];
   const detailMeshes: Mesh[] = [];
-  let detailMaterial: MeshLambertMaterial | null = null;
+  const lamps = createLampEmission();
+  let detailMaterial: Material | null = null;
   let pbrMaterial: VehicleNodeMaterial | null = null;
   let pbrRoot: Object3D | null = null;
   const pbrToken = {};
@@ -156,7 +160,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     pbrWanted = on;
     const map = on ? (env?.texture(palette) ?? null) : null;
     if (map !== null) {
-      pbrMaterial ??= track(createVehicleMaterial(map));
+      pbrMaterial ??= track(createVehicleMaterial(map, lamps));
       pbrMaterial.envMap = map;
     } else if (pbrMaterial !== null) {
       pbrMaterial.envMap = null;
@@ -187,10 +191,12 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     },
     /** The material of every `detail` mesh; shells use it too, so a swap adds no state change. */
     detailMaterial(): Material {
-      detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
+      detailMaterial ??= track(createDetailMaterial(lamps));
       return pbrOn && pbrMaterial !== null ? pbrMaterial : detailMaterial;
     },
     setPbr,
+    /** The lamp lenses of the detail and the shells, switched per snapshot. */
+    lamps,
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
       const mesh = this.detail(geometry);
@@ -390,6 +396,10 @@ export function proceduralTruck(
   const bodyOn = (): boolean => (linked ? cabGlb && vehicleGlb : vehicleGlb);
 
   const attachCab = (shell: Shell): void => {
+    slotShell(
+      shell,
+      truckLamps(spec, look.cab.length).lamps.filter((l) => l.part === 'cab'),
+    );
     cabShell = applyShell(
       group,
       shell,
@@ -403,6 +413,7 @@ export function proceduralTruck(
     res.setPbr(group);
   };
   const attachBody = (shell: Shell): void => {
+    slotShell(shell, []);
     // the marking is part of the detail mesh, so the shortened one replaces the whole mesh
     const shortened = linked
       ? res.detail(
@@ -455,6 +466,7 @@ export function proceduralTruck(
       placePose(group, snapshot.truck);
       pivotRight.rotation.y = snapshot.roadWheelAngle;
       pivotLeft.rotation.y = snapshot.roadWheelAngle;
+      res.lamps.update(lampState(snapshot));
     },
     setQuality(flags) {
       cabGlb = flags.cabGlb;
@@ -578,7 +590,13 @@ export function proceduralTrailer(
     frontX: a.frontX,
   });
 
-  const dollyRims = dollyDetail(radius, TRAILER_WHEEL_WIDTH, a.frontAxle.x, track);
+  const dollyRims = dollyDetail(
+    radius,
+    TRAILER_WHEEL_WIDTH,
+    a.frontAxle.x,
+    track,
+    trailerLamps(spec, 'procedural'),
+  );
   const trailerRig = trailerDetail({
     spec,
     halfWidth: hw,
@@ -666,6 +684,12 @@ export function proceduralTrailer(
     shells?.attached(key, on);
   };
   const attach = (shell: TrailerShell): void => {
+    const shellLamps = trailerLamps(spec, 'shell').lamps;
+    slotShell(
+      shell.trailer,
+      shellLamps.filter((l) => l.shell && l.part === 'trailer'),
+    );
+    slotShell(shell.dolly, []);
     const material = res.detailMaterial();
     // a bare chassis drops the swap body's marking; a low-loader's detail follows its deck
     const bare = trailerRig.shellGeometry === null ? null : res.detail(trailerRig.shellGeometry);
@@ -698,6 +722,7 @@ export function proceduralTrailer(
     update(snapshot) {
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
+      res.lamps.update(lampState(snapshot));
     },
     setQuality(flags) {
       vehicleGlb = flags.vehicleGlb;

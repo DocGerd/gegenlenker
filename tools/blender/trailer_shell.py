@@ -6,9 +6,10 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
   OUT_PATH     where the raw .glb is written
   EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ...}; the run aborts on a mismatch
 
-Two vertex-coloured meshes, as two nodes (shell_common.py):
-  "trailer"  in the trailer body frame, origin at the effective rear axle, +X forward
-  "dolly"    in the dolly frame, origin at the turntable centre, +X forward (towards the drawbar eye)
+Vertex-coloured meshes, one node each (shell_common.py):
+  "trailer"       in the trailer body frame, origin at the effective rear axle, +X forward
+  "dolly"         in the dolly frame, origin at the turntable centre, +X forward (towards the drawbar eye)
+  "trailer-lens"  the shell's own lamp lenses (`lenses`, src/render/lamp-layout.ts), when it has any
 Livery is colours only: no lettering, emblems or maker logos. Kinds: "low-loader" (a machine
 transporter for a wheel loader: a THW-blue deck with four wheel troughs, a raised front section and a
 grated rear section sloping down to tall aluminium ladder ramps folded upright behind it, on dark-blue
@@ -17,7 +18,7 @@ side members, crossmembers and beams, with lashing points and a rear lamp carrie
 silver toolbox, yellow locating stops).
 
 The shell stays inside the procedural trailer's footprint and clear of what the procedural detail
-owns: the tail lamps on the rear face (they sit on the ramps or a lamp carrier), the underrun guard,
+owns: the lamps (`mounts`, which need a face of the shell: the ramps, a lamp carrier), the underrun guard,
 and the side marking on the deck slab's sides (the shell never passes the half width). Nothing
 below the underside enters the swing of the dolly's tyres about the turntable.
 
@@ -56,27 +57,17 @@ STRINGER = 0.08  # ramp side rails
 RUNG = (0.04, 0.18)  # ramp rung height and pitch
 RAMP_CAP = 0.06
 HINGE = (0.12, 0.04, 0.08)  # hinge block width, reach below and above the rear deck
-# lafette
+# lafette; the lamp bar and side guard come from params["lafette"]
 CROSS_WIDTH = 0.12
 CROSS_DEPTH = 0.14
 CROSS_PITCH = 1.0
-LAMP_BAR = (0.06, 0.4)  # depth and height of the lamp carrier above the deck
 STOP = (0.12, 0.3)  # footprint and height of a locating stop
 STOP_OFFSETS = (0.15, 0.45)
-GUARD_BARS = ((0.58, 0.68), (0.78, 0.88))
-GUARD_Y = (0.08, 0.03)  # inner and outer inset of the side guard from the half width
-GUARD_START_GAP = 0.15  # in front of the rear wheel
-GUARD_END_GAP = 0.4  # behind the deck front
-MARK_RELIEF = (0.01, 0.02)  # contour strip and marker lamps stand this far off the guard's outer face
 STAY = (0.06, 0.2)  # width and reach inboard
 TOOLBOX = ((1.3, 2.5), (0.6, 1.15), 0.4)  # x, y, height below the frame
 # dolly
 SEGMENTS = 16
 TUBE_SEGMENTS = 8
-
-
-def rear_axle_front(p):
-    return max(p["rearAxleXs"]) + p["wheelRadius"]
 
 
 def swing_radius(p):
@@ -231,23 +222,14 @@ def ramps(p, shape, silver, black):
 
 
 def side_marking(p, shape, side, outer, span, hues):
-    """ECE R48 side contour and marker lamps on the guard's top bar, which stands in for the swap body's."""
-    mark = p["marking"]
+    """ECE R48 side contour on the guard's top bar, which stands in for the swap body's; its marker lamps are lenses."""
+    mark, guard = p["marking"], p["lafette"]
     x0, x1 = span[0] + mark["endMargin"], span[1] - mark["endMargin"]
-    z_mid = sum(GUARD_BARS[-1]) / 2
+    z_mid = sum(guard["guardBars"][-1]) / 2
     strip = (z_mid - mark["strip"] / 2, z_mid + mark["strip"] / 2)
-    lamp = (z_mid - mark["markerHeight"] / 2, z_mid + mark["markerHeight"] / 2)
-    relief_strip, relief_lamp = MARK_RELIEF
-
-    def across(relief):
-        return (outer, outer + relief) if side > 0 else (-outer - relief, -outer)
-
-    shape.box((x0, x1), across(relief_strip), strip, hues["contour"])
-    count = max(2, math.ceil((x1 - x0) / mark["spacing"]) + 1)
-    length = mark["markerLength"]
-    for i in range(count):
-        x = x0 + length + (x1 - x0 - 2 * length) * i / (count - 1)
-        shape.box((x - length / 2, x + length / 2), across(relief_lamp), lamp, hues["marker"])
+    relief = guard["markRelief"][0]
+    across = (outer, outer + relief) if side > 0 else (-outer - relief, -outer)
+    shape.box((x0, x1), across, strip, hues["contour"])
 
 
 def deck_lafette(p, shape, hues):
@@ -266,8 +248,9 @@ def deck_lafette(p, shape, hues):
     for i in range(count + 1):
         x = rear + span * i / count
         shape.box((x, x + CROSS_WIDTH), (-reach, reach), (deck - CROSS_DEPTH, deck), base)
-    bar_depth, bar_height = LAMP_BAR
-    shape.box((rear, rear + bar_depth), (-hw, hw), (deck, deck + bar_height), base)
+    guard = p["lafette"]
+    bar = guard["lampBar"]
+    shape.box((rear, rear + bar["depth"]), (-hw, hw), (deck, deck + bar["height"]), base)
     size, height = STOP
     for side in (-1, 1):
         y = (hw - 0.2 - size / 2, hw - 0.2 + size / 2)
@@ -276,19 +259,21 @@ def deck_lafette(p, shape, hues):
         for offset in STOP_OFFSETS:
             for x in (rear + offset, front - offset - size):
                 shape.box((x, x + size), y, (deck, deck + height), yellow)
-    start = rear_axle_front(p) + GUARD_START_GAP
-    end = min(front - GUARD_END_GAP, p["dolly"]["turntableX"] - swing_radius(p) - p["swingMargin"])
+    start, end = guard["guardSpan"]
+    bars = guard["guardBars"]
     stay_w, stay_reach = STAY
     for side in (-1, 1):
-        inner, outer = hw - GUARD_Y[0], hw - GUARD_Y[1]
+        inner, outer = hw - guard["guardY"][0], hw - guard["guardY"][1]
         y = (inner, outer) if side > 0 else (-outer, -inner)
-        for z in GUARD_BARS:
+        for z in bars:
             shape.box((start, end), y, z, white)
         reach_y = (outer - stay_reach, outer + 0.01)
         stay_y = reach_y if side > 0 else (-reach_y[1], -reach_y[0])
         for x in (start + 0.03, (start + end) / 2, end - stay_w - 0.03):
-            shape.box((x, x + stay_w), stay_y, (GUARD_BARS[0][0] + 0.02, deck - CROSS_DEPTH), base)
+            shape.box((x, x + stay_w), stay_y, (bars[0][0] + 0.02, deck - CROSS_DEPTH), base)
         side_marking(p, shape, side, outer, (start, end), hues)
+    for x, y, z in p["brackets"]:
+        shape.box(x, y, z, base)
     (x0, x1), (y0, y1), drop = TOOLBOX
     shape.box((x0, x1), (y0, y1), (z0 - drop, z0), silver)
     shape.box((1.85, 1.95), (y1, y1 + 0.02), (z0 - drop + 0.1, z0 - drop + 0.2), base)
@@ -369,8 +354,7 @@ def check_marking(p, shape):
 
 def check_trailer(p, shape):
     hw = p["width"] / 2
-    lamp, guard = p["tailLamp"], p["guard"]
-    inner, outer = hw - lamp["inset"] - lamp["width"], hw - lamp["inset"]
+    guard = p["guard"]
     half_guard = hw - guard["inset"]
     for (x0, x1), (y0, y1), (z0, z1) in shape.extents():
         if x0 < p["rearX"] - EPS:
@@ -386,17 +370,11 @@ def check_trailer(p, shape):
             raise ValueError("a face below the underside enters the dolly wheels' swing")
     if p["kind"] == "low-loader":
         check_marking(p, shape)
-    # the tail lamps stand on the lamp carrier, at the rear deck's height
-    base = p["lowLoader"]["rearDeck"] if p["kind"] == "low-loader" else p["deck"]
-    z_low, z_high = base + lamp["sill"], base + lamp["sill"] + lamp["height"]
-    carriers = []
-    for (x0, x1), (y0, y1), (z0, z1) in shape.extents():
-        if abs(x0 - p["rearX"]) < EPS and abs(x1 - p["rearX"]) < EPS and z0 <= z_low + EPS and z1 >= z_high - EPS:
-            carriers.append((y0, y1))
-    for side in (-1, 1):
-        want = (inner, outer) if side > 0 else (-outer, -inner)
-        if not any(y0 <= want[0] + EPS and y1 >= want[1] - EPS for y0, y1 in carriers):
-            raise ValueError("a tail lamp has no surface to sit on")
+    else:
+        start, end = p["lafette"]["guardSpan"]
+        if not max(p["rearAxleXs"]) + p["wheelRadius"] < start < end:
+            raise ValueError("the side guard reaches the rear tyres")
+    COMMON["check_seated"](shape, p["mounts"] + p["lenses"])
 
 
 def check_dolly(p, shape):
@@ -423,7 +401,10 @@ def main():
     tow = Shape()
     dolly(params, tow, hues)
     check_dolly(params, tow)
-    return COMMON["export"](OUT_PATH, "trailer-shell", hashes, [("trailer", body), ("dolly", tow)])
+    objects = [("trailer", body), ("dolly", tow)]
+    if params["lenses"]:
+        objects.append(("trailer-lens", COMMON["lens_shape"](params["lenses"])))
+    return COMMON["export"](OUT_PATH, "trailer-shell", hashes, objects)
 
 
 RESULT = main()

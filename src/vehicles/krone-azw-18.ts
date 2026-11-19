@@ -30,7 +30,10 @@ export const kroneAzw18: TrailerSpec = {
   tailLamp: {
     inset: estimate(150, typical),
     width: estimate(360, typical),
-    sill: estimate(100, typical),
+    sill: estimate(
+      -480,
+      "below the frame, chosen inside UN R48 6.4.4.2's 1,200 mm; no source found",
+    ),
     height: estimate(200, typical),
   },
   mudflap: {
