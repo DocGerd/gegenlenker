@@ -153,6 +153,7 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 
 /** The cockpit pane is drawn from the first row down, once a frame has landed. */
 async function expectNoBlankBand(page: Page, size: Size): Promise<void> {
+  await settled(page);
   await expect.poll(() => blankRows(page, Math.round(size.width * 0.3)), SCREENSHOT_POLL).toBe(0);
 }
 
@@ -283,7 +284,8 @@ const handle = (page: Page) => page.locator('[data-hud="splitHandle"]');
 const splitBar = (page: Page) => page.locator('[data-hud="split"]');
 
 /** A short landscape screen: no panel row fits above the divider. */
-const splitSizes = [...sizes, { width: 844, height: 390 }];
+const shortLandscape = { width: 844, height: 390 };
+const splitSizes = [...sizes, shortLandscape];
 
 /** Two animation frames: the legend's resize observer re-lays out after the first one. */
 const settled = (page: Page) =>
@@ -364,17 +366,19 @@ for (const { locale, messages } of locales) {
     const at = `${locale} ${size.width}x${size.height}`;
 
     test(`the layout holds at ${at}`, async ({ browser }) => {
+      test.slow();
       const context = await browser.newContext({ locale, viewport: size });
       try {
         const page = await context.newPage();
         await startStraightReverse(page, messages.exerciseStraightReverse);
         // The short landscape size only has the divider check.
-        if (sizes.includes(size)) {
+        if (size !== shortLandscape) {
           await test.step('mirrors clear the controls', () =>
             expectMirrorsClearControls(page, size));
           await test.step('the cockpit view has no blank band', () =>
             expectNoBlankBand(page, size));
         }
+        // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
           expectDividerClears(page, size));
       } finally {
