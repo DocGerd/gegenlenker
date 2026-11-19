@@ -507,11 +507,13 @@ async function main(): Promise<boolean> {
   return ok;
 }
 
-try {
-  process.exitCode = (await main()) ? 0 : 1;
-} catch (e) {
-  console.error(message(e));
-  process.exitCode = 2;
-} finally {
-  await cleanup();
+if (import.meta.main) {
+  try {
+    process.exitCode = (await main()) ? 0 : 1;
+  } catch (e) {
+    console.error(message(e));
+    process.exitCode = 2;
+  } finally {
+    await cleanup();
+  }
 }
