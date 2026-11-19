@@ -197,13 +197,15 @@ export async function precompileGrade(
   const { debug } = gpu;
   const previous = debug.onShaderError;
   const rejected: { log: string | null } = { log: null };
+  // another asset may have chained its own hook behind this one: pass through once the check is over
+  let active = true;
   const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
     const info = [
       context.getShaderInfoLog(vertex),
       context.getShaderInfoLog(fragment),
       context.getProgramInfoLog(program),
     ];
-    if (context.getShaderSource(fragment)?.includes(GRADE_SHADER_MARKER) === true) {
+    if (active && context.getShaderSource(fragment)?.includes(GRADE_SHADER_MARKER) === true) {
       rejected.log = info.join(' ');
     } else if (previous !== null) previous(context, program, vertex, fragment);
     else console.error('Shader error', ...info);
@@ -228,6 +230,7 @@ export async function precompileGrade(
       throw new Error(`a graded shader failed to compile: ${rejected.log}`);
     }
   } finally {
+    active = false;
     if (debug.onShaderError === watcher) debug.onShaderError = previous;
     for (const sample of samples) sample.dispose();
   }
