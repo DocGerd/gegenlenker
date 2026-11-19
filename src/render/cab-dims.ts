@@ -25,7 +25,7 @@ export function cabShellParams(spec: TruckSpec, look: TruckLook = TRUCK_LOOKS[sp
   const anchors = truckAnchors(spec);
   return {
     id: spec.id,
-    schema: 2,
+    schema: 3,
     style: look.cab.style,
     width: metres(spec.width),
     frontX: round(anchors.frontX),
@@ -47,16 +47,11 @@ export function cabShellParams(spec: TruckSpec, look: TruckLook = TRUCK_LOOKS[sp
       grilleWidth: metres(cab.grilleWidth),
       grilleSill: metres(cab.grilleSill),
       grilleHeight: metres(cab.grilleHeight),
-      headlampInset: metres(cab.headlampInset),
-      headlampWidth: metres(cab.headlampWidth),
-      lampSill: metres(cab.lampSill),
-      lampHeight: metres(cab.lampHeight),
     },
     hues: {
       body: hex(REALISM_HUES.thwBlue),
       glass: hex(REALISM_HUES.anthracite),
       grille: hex(REALISM_HUES.chevronBlack),
-      lamp: hex(REALISM_HUES.plateWhite),
       white: hex(REALISM_HUES.liveryWhite),
       beacon: hex(REALISM_HUES.beaconBlue),
       black: hex(REALISM_HUES.chevronBlack),

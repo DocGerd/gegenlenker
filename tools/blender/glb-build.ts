@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../../src/contracts/vehicle';
 import { bodyShellParams } from '../../src/render/body-dims';
 import { cabShellParams } from '../../src/render/cab-dims';
+import { bodyLampParams, cabLampParams, trailerLampParams } from '../../src/render/lamp-layout';
+import { TRUCK_LOOKS } from '../../src/render/livery';
 import { trailerShellParams } from '../../src/render/trailer-dims';
 import { trailerById, truckById } from '../../src/vehicles/registry';
 
@@ -52,10 +54,21 @@ const asset = (vehicleId: TruckId | TrailerId, kind: AssetKind, build: () => Jso
 
 export const ASSETS: readonly Asset[] = [
   ...TRUCK_IDS.flatMap((id) => [
-    asset(id, 'cab', () => cabShellParams(truckById(id))),
-    asset(id, 'body', () => bodyShellParams(truckById(id))),
+    asset(id, 'cab', () => ({
+      ...cabShellParams(truckById(id)),
+      ...cabLampParams(truckById(id), TRUCK_LOOKS[id].cab.length),
+    })),
+    asset(id, 'body', () => ({
+      ...bodyShellParams(truckById(id)),
+      ...bodyLampParams(truckById(id), TRUCK_LOOKS[id].cab.length),
+    })),
   ]),
-  ...TRAILER_IDS.map((id) => asset(id, 'trailer', () => trailerShellParams(trailerById(id)))),
+  ...TRAILER_IDS.map((id) =>
+    asset(id, 'trailer', () => ({
+      ...trailerShellParams(trailerById(id)),
+      ...trailerLampParams(trailerById(id)),
+    })),
+  ),
 ];
 
 export function assetByKey(key: string): Asset {

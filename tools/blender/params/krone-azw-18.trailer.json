@@ -1,6 +1,6 @@
 {
   "id": "krone-azw-18",
-  "schema": 2,
+  "schema": 3,
   "kind": "lafette",
   "width": 2.55,
   "rearX": -1.675,
@@ -24,7 +24,7 @@
     "endMargin": 0.1
   },
   "guard": { "depth": 0.05, "inset": 0.1 },
-  "tailLamp": { "inset": 0.15, "width": 0.36, "sill": 0.1, "height": 0.2 },
+  "tailLamp": { "inset": 0.15, "width": 0.36, "sill": -0.48, "height": 0.2 },
   "dolly": {
     "eyeX": 2.2,
     "eyeZ": 0.9,
@@ -40,12 +40,119 @@
     "postHalf": 0.15,
     "axleX": 0
   },
+  "lafette": {
+    "lampBar": { "depth": 0.06, "height": 0.4 },
+    "guardBars": [
+      [0.58, 0.68],
+      [0.78, 0.88]
+    ],
+    "guardY": [0.08, 0.03],
+    "startGap": 0.15,
+    "endGap": 0.4,
+    "markRelief": [0.01, 0.02],
+    "guardSpan": [0.65, 3.79764]
+  },
   "hues": {
     "base": "#101214",
     "white": "#f6f6f6",
     "silver": "#a5a5a5",
     "yellow": "#f9a800",
-    "contour": "#f2c200",
-    "marker": "#ffb000"
-  }
+    "contour": "#f2c200"
+  },
+  "lenses": [
+    {
+      "id": "side-marker-0-left",
+      "box": [
+        [0.85, 1.05],
+        [1.245, 1.265],
+        [0.78, 0.88]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-1-left",
+      "box": [
+        [3.39764, 3.59764],
+        [1.245, 1.265],
+        [0.78, 0.88]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-0-right",
+      "box": [
+        [0.85, 1.05],
+        [-1.265, -1.245],
+        [0.78, 0.88]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-1-right",
+      "box": [
+        [3.39764, 3.59764],
+        [-1.265, -1.245],
+        [0.78, 0.88]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-rear-left",
+      "box": [
+        [-1.565, -1.365],
+        [1.275, 1.295],
+        [1.29, 1.39]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-rear-right",
+      "box": [
+        [-1.565, -1.365],
+        [-1.295, -1.275],
+        [1.29, 1.39]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    }
+  ],
+  "brackets": [
+    [
+      [-1.615, -1.315],
+      [1.175, 1.275],
+      [1.28, 1.4]
+    ],
+    [
+      [-1.615, -1.315],
+      [-1.275, -1.175],
+      [1.28, 1.4]
+    ]
+  ],
+  "mounts": [
+    {
+      "id": "end-outline-rear-left",
+      "box": [
+        [-1.725, -1.675],
+        [1.175, 1.255],
+        [1.61, 1.66]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "end-outline-rear-right",
+      "box": [
+        [-1.725, -1.675],
+        [-1.255, -1.175],
+        [1.61, 1.66]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    }
+  ]
 }

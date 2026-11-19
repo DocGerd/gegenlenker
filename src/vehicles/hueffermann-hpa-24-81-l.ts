@@ -29,7 +29,10 @@ export const hueffermannHpa2481L: TrailerSpec = {
     strutWidth: estimate(100, typical),
   },
   tailLamp: {
-    inset: estimate(405, 'on the loading ramps, no source found'),
+    inset: estimate(
+      250,
+      "on the loading ramps, chosen inside UN R48 6.10.4.1's 400 mm; no source found",
+    ),
     width: estimate(540, 'on the loading ramps, no source found'),
     sill: estimate(100, typical),
     height: estimate(200, typical),

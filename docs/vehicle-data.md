@@ -42,13 +42,13 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | cab.grilleHeight | 540 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.headlampInset | 125 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.headlampWidth | 398 mm | typical for the vehicle class, no source found |
-| MAN LE 18.280 | cab.lampSill | 180 mm | typical for the vehicle class, no source found |
-| MAN LE 18.280 | cab.lampHeight | 396 mm | typical for the vehicle class, no source found |
+| MAN LE 18.280 | cab.lampSill | -250 mm | in the bumper, chosen inside UN R48 6.2.4.2's 1,200 mm; no source found |
+| MAN LE 18.280 | cab.lampHeight | 200 mm | in the bumper, chosen inside UN R48 6.2.4.2's 1,200 mm; no source found |
 | MAN LE 18.280 | bumperInset | 100 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | tailLamp.inset | 100 mm | typical for the vehicle class, no source found |
-| MAN LE 18.280 | tailLamp.width | 274 mm | typical for the vehicle class, no source found |
-| MAN LE 18.280 | tailLamp.sill | 20 mm | typical for the vehicle class, no source found |
-| MAN LE 18.280 | tailLamp.height | 160 mm | typical for the vehicle class, no source found |
+| MAN LE 18.280 | tailLamp.width | 420 mm | chambers for indicator, tail and stop, reversing and fog; no source found |
+| MAN LE 18.280 | tailLamp.sill | 15 mm | on the floor's rear face, chosen inside UN R48 6.4.4.2's 1,200 mm; no source found |
+| MAN LE 18.280 | tailLamp.height | 80 mm | on the floor's rear face, chosen inside UN R48 6.4.4.2's 1,200 mm; no source found |
 | MAN LE 18.280 | mudflap.gap | 100 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | mudflap.clearance | 125 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | mudflap.height | 825 mm | typical for the vehicle class, no source found |
@@ -76,13 +76,13 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Mercedes-Benz Arocs 1835 AK | cab.grilleHeight | 540 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.headlampInset | 125 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.headlampWidth | 400 mm | typical for the vehicle class, no source found |
-| Mercedes-Benz Arocs 1835 AK | cab.lampSill | 180 mm | typical for the vehicle class, no source found |
-| Mercedes-Benz Arocs 1835 AK | cab.lampHeight | 396 mm | typical for the vehicle class, no source found |
+| Mercedes-Benz Arocs 1835 AK | cab.lampSill | -250 mm | in the bumper, chosen inside UN R48 6.2.4.2's 1,200 mm; no source found |
+| Mercedes-Benz Arocs 1835 AK | cab.lampHeight | 200 mm | in the bumper, chosen inside UN R48 6.2.4.2's 1,200 mm; no source found |
 | Mercedes-Benz Arocs 1835 AK | bumperInset | 100 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | tailLamp.inset | 100 mm | typical for the vehicle class, no source found |
-| Mercedes-Benz Arocs 1835 AK | tailLamp.width | 275 mm | typical for the vehicle class, no source found |
-| Mercedes-Benz Arocs 1835 AK | tailLamp.sill | 20 mm | typical for the vehicle class, no source found |
-| Mercedes-Benz Arocs 1835 AK | tailLamp.height | 160 mm | typical for the vehicle class, no source found |
+| Mercedes-Benz Arocs 1835 AK | tailLamp.width | 420 mm | chambers for indicator, tail and stop, reversing and fog; no source found |
+| Mercedes-Benz Arocs 1835 AK | tailLamp.sill | 15 mm | on the floor's rear face, chosen inside UN R48 6.4.4.2's 1,200 mm; no source found |
+| Mercedes-Benz Arocs 1835 AK | tailLamp.height | 80 mm | on the floor's rear face, chosen inside UN R48 6.4.4.2's 1,200 mm; no source found |
 | Mercedes-Benz Arocs 1835 AK | mudflap.gap | 100 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | mudflap.clearance | 125 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | mudflap.height | 825 mm | typical for the vehicle class, no source found |
@@ -101,7 +101,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Krone AZW 18 | underrunGuard.strutWidth | 100 mm | typical for the vehicle class, no source found |
 | Krone AZW 18 | tailLamp.inset | 150 mm | typical for the vehicle class, no source found |
 | Krone AZW 18 | tailLamp.width | 360 mm | typical for the vehicle class, no source found |
-| Krone AZW 18 | tailLamp.sill | 100 mm | typical for the vehicle class, no source found |
+| Krone AZW 18 | tailLamp.sill | -480 mm | below the frame, chosen inside UN R48 6.4.4.2's 1,200 mm; no source found |
 | Krone AZW 18 | tailLamp.height | 200 mm | typical for the vehicle class, no source found |
 | Krone AZW 18 | mudflap.gap | 100 mm | typical for the vehicle class, no source found |
 | Krone AZW 18 | mudflap.clearance | 125 mm | typical for the vehicle class, no source found |
@@ -122,7 +122,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Hüffermann HPA 24.81 L | underrunGuard.height | 250 mm | typical for the vehicle class, no source found |
 | Hüffermann HPA 24.81 L | underrunGuard.strutOffset | 640 mm | typical for the vehicle class, no source found |
 | Hüffermann HPA 24.81 L | underrunGuard.strutWidth | 100 mm | typical for the vehicle class, no source found |
-| Hüffermann HPA 24.81 L | tailLamp.inset | 405 mm | on the loading ramps, no source found |
+| Hüffermann HPA 24.81 L | tailLamp.inset | 250 mm | on the loading ramps, chosen inside UN R48 6.10.4.1's 400 mm; no source found |
 | Hüffermann HPA 24.81 L | tailLamp.width | 540 mm | on the loading ramps, no source found |
 | Hüffermann HPA 24.81 L | tailLamp.sill | 100 mm | typical for the vehicle class, no source found |
 | Hüffermann HPA 24.81 L | tailLamp.height | 200 mm | typical for the vehicle class, no source found |

@@ -23,6 +23,7 @@ import {
 import type { ScenePalette } from '../contracts/render';
 import { createSceneSky } from './environment';
 import { setGraded, type GradeSample } from './grade';
+import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
 
@@ -129,18 +130,24 @@ export class VehicleNodeMaterial extends MeshStandardNodeMaterial {
   }
 }
 
-/** The one reflective material every perspective-only vehicle mesh shares, so a swap adds no draw call. */
-export const createVehicleMaterial = (envMap: Texture): VehicleNodeMaterial =>
-  new VehicleNodeMaterial(envMap);
+/**
+ * The one reflective material every perspective-only vehicle mesh shares, so a swap adds no draw
+ * call; it lights the lenses from `lamps` like the detail material does.
+ */
+export function createVehicleMaterial(envMap: Texture, lamps: LampEmission): VehicleNodeMaterial {
+  const material = new VehicleNodeMaterial(envMap);
+  material.emissiveNode = lamps.node;
+  return material;
+}
 
 /** The graded reflective material on an empty reflection map, for the grade's shader check. */
 export function vehicleGradeSample(gpu: WebGPURenderer): GradeSample {
   const generator = new PMREMGenerator(gpu);
   const map = generator.fromScene(new Scene(), 0, MAP_NEAR, MAP_FAR, { size: 16 });
   generator.dispose();
-  const material = createVehicleMaterial(map.texture);
+  const material = createVehicleMaterial(map.texture, createLampEmission());
   setGraded(material, true);
-  const geometry = new BoxGeometry();
+  const geometry = withSlot(new BoxGeometry());
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   return {
     mesh: new Mesh(geometry, material),
@@ -187,8 +194,8 @@ export async function vehicleShaderCompiles(
   gpu: WebGPURenderer,
   envMap: Texture,
 ): Promise<boolean> {
-  const material = createVehicleMaterial(envMap);
-  const geometry = new BoxGeometry();
+  const material = createVehicleMaterial(envMap, createLampEmission());
+  const geometry = withSlot(new BoxGeometry());
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   const mesh = new Mesh(geometry, material);
   const scene = new Scene();
