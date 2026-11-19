@@ -29,7 +29,7 @@ import { box, merge, wheelGeometry } from './vehicle-geometry';
 /*
  * Perspective-only detail, built from the dimensions the visuals already derive from vehicle Params.
  * Everything stands a few centimetres proud of the face it sits on, so no two coplanar faces compete
- * in the depth buffer. The meshes go on SKY_LAYER: the top-down view never sees them.
+ * in the depth buffer. The meshes go on PERSPECTIVE_LAYER: the top-down view never sees them.
  * The cab front (glass, grille, lamps, bumper) is built apart: its back faces would block the cockpit eye.
  */
 

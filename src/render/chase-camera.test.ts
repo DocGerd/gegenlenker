@@ -25,7 +25,7 @@ import {
 import { bodyToThree } from './coords';
 import { parseShell } from './glb-shells';
 import { KEYS } from './palette';
-import { AIDS_LAYER, CAB_LAYER, CAMERA_FAR, DEFAULT_LAYER, SKY_LAYER } from './seams';
+import { AIDS_LAYER, CAB_LAYER, CAMERA_FAR, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
 import { proceduralTruck } from './vehicle-visual';
 
 // Landscape-screen pane, one with the HUD's free rect cut down to a corner, a square one and a wide strip.
@@ -72,7 +72,7 @@ describe('chase camera layers', () => {
   it('sees the cab, the perspective detail and the default layer, but no top-down aids', () => {
     const { layers } = createChaseCamera();
     expect(layers.test(layersOf(CAB_LAYER))).toBe(true);
-    expect(layers.test(layersOf(SKY_LAYER))).toBe(true);
+    expect(layers.test(layersOf(PERSPECTIVE_LAYER))).toBe(true);
     expect(layers.test(layersOf(DEFAULT_LAYER))).toBe(true);
     expect(layers.test(layersOf(AIDS_LAYER))).toBe(false);
   });

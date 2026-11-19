@@ -19,7 +19,7 @@ import {
 } from './light-rig';
 import { domeGround } from './environment';
 import { KEYS } from './palette';
-import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER } from './seams';
+import { AIDS_LAYER, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
 
 // the scene tokens are theme-independent
 const css = readFileSync(new URL('../styles/tokens.css', import.meta.url), 'utf8');
@@ -103,7 +103,7 @@ describe('light rig', () => {
   it('lights everything with the legacy rig until split', () => {
     const { legacy, hdri } = lights(createLightRig(scene));
     expect(legacy.every(only(DEFAULT_LAYER))).toBe(true);
-    expect(hdri.every((l) => only(SKY_LAYER)(l) && !l.visible)).toBe(true);
+    expect(hdri.every((l) => only(PERSPECTIVE_LAYER)(l) && !l.visible)).toBe(true);
   });
 
   it('gives the top-down view the legacy rig and the perspective views the HDRI rig when split', () => {
@@ -111,7 +111,7 @@ describe('light rig', () => {
     const { legacy, hdri } = lights(rig);
     rig.setSplit(true);
     expect(legacy.every(only(AIDS_LAYER))).toBe(true);
-    expect(hdri.every((l) => only(SKY_LAYER)(l) && l.visible)).toBe(true);
+    expect(hdri.every((l) => only(PERSPECTIVE_LAYER)(l) && l.visible)).toBe(true);
     rig.setSplit(false);
     expect(legacy.every(only(DEFAULT_LAYER))).toBe(true);
     expect(hdri.every((l) => !l.visible)).toBe(true);
