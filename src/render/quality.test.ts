@@ -46,6 +46,7 @@ describe('quality flags', () => {
     for (const key of changed) expect(classified, key).toContain(key);
     for (const key of classified)
       expect(QUALITY_FLAGS.high[key as keyof QualityFlags], key).toBe(true);
+    expect(DOWNLOADS).toEqual(expect.arrayContaining(['groundTexture', 'hdriSky']));
     for (const key of DOWNLOADS) expect(QUALITY_FLAGS.balanced[key], key).toBe(false);
   });
 
