@@ -166,8 +166,9 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
 
   it.each(PAIRS)('place the $fn pair ($paragraph)', (rule) => {
     if ((rule.truckOnly && v.trailer) || (rule.trailerOnly && !v.trailer)) {
-      // a trailer's flashing side markers carry its side indicators
+      // an O4 has no category 5 or 6 pair (6.5.3 B); its flashing side markers are checked below
       if (rule.fn !== 'side-indicator') expect(withFn(v, rule.fn)).toHaveLength(0);
+      else expect(withFn(v, rule.fn).every((l) => l.fns.includes('side-marker'))).toBe(true);
       return;
     }
     const lamps = pair(v, rule.fn);
@@ -231,6 +232,8 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     const foremost = markers[markers.length - 1];
     if (rearmost === undefined || foremost === undefined) throw new Error('no markers');
     expect(v.front - foremost.box[0][0], 'foremost').toBeLessThanOrEqual(3 + EPS);
+    // a trailer's length runs to the drawbar eye (2.15.2), so the dolly's markers keep that reach
+    if (v.trailer) expect(foremost.part, 'foremost').toBe('dolly');
     expect(rearmost.box[0][1] - v.rear, 'rearmost').toBeLessThanOrEqual(1 + EPS);
     markers.slice(1).forEach((l, i) => {
       const prev = markers[i] as Lamp;
@@ -242,13 +245,28 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     );
   });
 
+  // 6.5.3.1(c): an O4 needs three category 5 lamps per side unless at least three amber side
+  // markers flash with the indicators, which 6.18.7 permits; (b) asks the same of an N3 over 9 m.
   it('flash at least three amber side markers per side on a trailer, for want of cat 5 lamps (6.5.3.1)', () => {
-    if (!v.trailer) return;
+    if (!v.trailer) {
+      expect(v.front - v.rear).toBeLessThanOrEqual(9);
+      return;
+    }
     for (const side of [1, -1]) {
       const flashing = v.lamps.filter(
         (l) => l.side === side && l.fns.includes('side-marker') && l.fns.includes('side-indicator'),
       );
       expect(flashing.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('pair every lamp with its mirror image across the centreline', () => {
+    const mirrored = (l: Lamp): string =>
+      JSON.stringify([l.fns, l.part, l.box[0], [-l.box[1][1], -l.box[1][0]], l.box[2]]);
+    const key = (l: Lamp): string => JSON.stringify([l.fns, l.part, l.box[0], l.box[1], l.box[2]]);
+    const lamps = new Set(v.lamps.map(key));
+    for (const l of v.lamps.filter((l) => l.side !== 0)) {
+      expect(lamps.has(mirrored(l)), l.id).toBe(true);
     }
   });
 

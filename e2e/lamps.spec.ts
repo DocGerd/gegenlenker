@@ -8,7 +8,8 @@ const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
 
 // The stop lamps light by day; lamp lenses are perspective-only. Reverse would also move the
-// prediction aid, so the brake alone switches a lamp here.
+// prediction aid, so the brake alone switches a lamp here. No camera sees the stop lamps, so
+// src/render/lamp-lens.test.ts checks that they light.
 test('lighting the stop lamps leaves the top-down view unchanged at every preset', async ({
   context,
 }) => {
@@ -23,6 +24,9 @@ test('lighting the stop lamps leaves the top-down view unchanged at every preset
     page.on('pageerror', (e) => errors.push(e.message));
     const three = collectThreeProblems(page);
     await startPinnedDrive(page, preset, en.exerciseStraightReverse);
+    if (preset !== 'low') {
+      await expect(page.locator('html')).toHaveAttribute('data-vehicle-shells', /^\S+ \S+ \S+$/);
+    }
     const before = [hash(await shoot(page, 'follow')), hash(await shoot(page, 'yard'))];
     await page.keyboard.down('Space');
     await settle(page, preset);

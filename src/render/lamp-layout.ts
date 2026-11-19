@@ -388,7 +388,8 @@ export function trailerSideRun(spec: TrailerSpec, variant: LampVariant): SideRun
 
 /**
  * Trailer lamps in `variant`: the procedural trailer, or its shell (a lafette or a low-loader deck).
- * Amber side markers flash with the indicators, which R48 6.5.3.1 accepts instead of cat 5 lamps.
+ * Amber side markers flash with the indicators (R48 6.18.7), which 6.5.3.1(c) accepts instead of an
+ * O4's three category 5 lamps per side.
  */
 export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayout {
   const f = trailerFrame(spec);
