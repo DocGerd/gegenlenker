@@ -79,17 +79,30 @@ export async function startPinnedDrive(
   await settle(page, preset);
 }
 
+/** Whether `preset`'s attachments are in place, read from `<html>`; a shot before they land would differ. */
+export async function attachmentsReady(page: Page, preset: Preset): Promise<boolean> {
+  return (await attachments(page, preset)).ready;
+}
+
+async function attachments(
+  page: Page,
+  preset: Preset,
+): Promise<{ ready: boolean; values: (string | null)[] }> {
+  const want = READY[preset];
+  const values = await page.evaluate((names) => {
+    const html = document.documentElement;
+    return names.map((n) => html.getAttribute(n));
+  }, Object.keys(want));
+  return { ready: Object.values(want).every((ok, j) => ok(values[j] ?? '')), values };
+}
+
 /** Steps the pinned clock until `preset`'s attachments are in place, then settles. */
 export async function settle(page: Page, preset: Preset): Promise<void> {
-  const want = READY[preset];
   for (let i = 0; ; i++) {
     await step(page, 1);
-    const ready = await page.evaluate((names) => {
-      const html = document.documentElement;
-      return names.map((n) => html.getAttribute(n));
-    }, Object.keys(want));
-    if (Object.values(want).every((ok, j) => ok(ready[j] ?? ''))) break;
-    if (i >= READY_STEPS) throw new Error(`${preset} not ready: ${JSON.stringify(ready)}`);
+    const { ready, values } = await attachments(page, preset);
+    if (ready) break;
+    if (i >= READY_STEPS) throw new Error(`${preset} not ready: ${JSON.stringify(values)}`);
     await page.waitForTimeout(25);
   }
   await step(page, SETTLE_FRAMES);

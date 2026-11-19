@@ -3,7 +3,13 @@ import { en } from '../src/i18n/en';
 import { COCKPIT_FOV } from '../src/render/cockpit-camera';
 import { interiorLayout, pillarSpan } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
-import { SCREENSHOT_POLL, throughIntermediate } from './pinned-shoot';
+import {
+  attachmentsReady,
+  GROUND_LOAD,
+  SCREENSHOT_POLL,
+  throughIntermediate,
+  type Preset,
+} from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 /** What is left of an unlit vertex colour's distance from the hue once the 8-bit intermediate's rounding is applied to the hue. */
@@ -57,7 +63,13 @@ async function panePixels(
   selector: string,
   at: readonly (readonly [number, number])[],
 ) {
-  const pane = await boxOf(page, selector);
+  return pixelsAt(page, await boxOf(page, selector), at);
+}
+
+type Box = { x: number; y: number; width: number; height: number };
+
+/** The sRGB pixels of the bare canvas inside `pane`, at offsets from its top-left. */
+async function pixelsAt(page: Page, pane: Box, at: readonly (readonly [number, number])[]) {
   await page.evaluate(() => {
     const style = document.createElement('style');
     style.id = 'bare-canvas';
@@ -208,8 +220,21 @@ function edgePoints(width: number, height: number, side: 'left' | 'right') {
 const yardShare = (pixels: (number[] | undefined)[]): number =>
   pixels.filter(isYard).length / pixels.length;
 
+/** Probe points of one mirror: sky above ground at its centre column, then the edge columns. */
+function mirrorPoints(box: Box) {
+  const x = Math.round(box.width / 2);
+  return {
+    centre: [
+      [x, 2],
+      [x, Math.round(box.height) - 3],
+    ] as const,
+    left: edgePoints(box.width, box.height, 'left'),
+    right: edgePoints(box.width, box.height, 'right'),
+  };
+}
+
 // Balanced and High render the mirror through a multisampled target, Low through a plain one.
-for (const preset of ['low', 'balanced', 'high']) {
+for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Preset[]) {
   test(`each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`, async ({
     page,
   }) => {
@@ -220,34 +245,66 @@ for (const preset of ['low', 'balanced', 'high']) {
     ] as const);
     await page.goto('./');
     await drive(page);
+    await expect.poll(() => attachmentsReady(page, preset), GROUND_LOAD).toBe(true);
+
     // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
     // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.
-    for (const [side, inner] of [
-      ['mirrorLeft', 'right'],
-      ['mirrorRight', 'left'],
-    ] as const) {
-      const selector = `[data-hud="${side}"]`;
-      const box = await boxOf(page, selector);
-      const x = Math.round(box.width / 2);
-      const outer = inner === 'right' ? 'left' : 'right';
-      await expect
-        .poll(
-          async () => {
-            const [top, bottom] = await panePixels(page, selector, [
-              [x, 2],
-              [x, Math.round(box.height) - 3],
-            ]);
-            return [isSky(top) && !isSky(bottom), isGround(bottom)];
-          },
-          { message: side, ...SCREENSHOT_POLL },
-        )
-        .toEqual([true, true]);
-      const outerYard = yardShare(
-        await panePixels(page, selector, edgePoints(box.width, box.height, outer)),
+    const sides = [
+      { side: 'mirrorLeft', inner: 'right', outer: 'left' },
+      { side: 'mirrorRight', inner: 'left', outer: 'right' },
+    ] as const;
+    const boxes = await Promise.all(sides.map((s) => boxOf(page, `[data-hud="${s.side}"]`)));
+    // One screenshot covers both mirrors: a frame is slow on software GL, so one per probe adds up.
+    const left = Math.min(...boxes.map((b) => b.x));
+    const top = Math.min(...boxes.map((b) => b.y));
+    const area = {
+      x: left,
+      y: top,
+      width: Math.max(...boxes.map((b) => b.x + b.width)) - left,
+      height: Math.max(...boxes.map((b) => b.y + b.height)) - top,
+    };
+    const sample = async () => {
+      const probes = boxes.map((box) => {
+        const dx = Math.round(box.x - area.x);
+        const dy = Math.round(box.y - area.y);
+        const shift = (pts: readonly (readonly [number, number])[]) =>
+          pts.map(([x, y]) => [x + dx, y + dy] as const);
+        const points = mirrorPoints(box);
+        return {
+          centre: shift(points.centre),
+          left: shift(points.left),
+          right: shift(points.right),
+        };
+      });
+      const pixels = await pixelsAt(
+        page,
+        area,
+        probes.flatMap((p) => [...p.centre, ...p.left, ...p.right]),
       );
-      const innerYard = yardShare(
-        await panePixels(page, selector, edgePoints(box.width, box.height, inner)),
-      );
+      let at = 0;
+      const take = (n: number) => pixels.slice(at, (at += n));
+      return sides.map(({ side, inner, outer }, i) => {
+        const probe = probes[i];
+        if (probe === undefined) throw new Error(`no probe for ${side}`);
+        const [top, bottom] = take(probe.centre.length);
+        const edges = { left: take(probe.left.length), right: take(probe.right.length) };
+        return {
+          side,
+          // Sky above and ground below first: only a drawn frame can pass, so absence at the edge means something.
+          drawn: isSky(top) && !isSky(bottom) && isGround(bottom),
+          outerYard: yardShare(edges[outer]),
+          innerYard: yardShare(edges[inner]),
+        };
+      });
+    };
+    let seen: Awaited<ReturnType<typeof sample>> = [];
+    await expect
+      .poll(async () => {
+        seen = await sample();
+        return seen.map((s) => s.drawn);
+      }, SCREENSHOT_POLL)
+      .toEqual([true, true]);
+    for (const { side, outerYard, innerYard } of seen) {
       expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
       expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
     }
