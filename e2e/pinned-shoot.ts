@@ -13,11 +13,12 @@ const SETTLE_FRAMES = 30;
 const READY_STEPS = 2000;
 const HIDE_ID = 'pinned-shoot-bare';
 /**
- * A drawn pane has more distinct colours than this; a blank pane has one. Just below the flat
- * top-down view at the start, the sparsest drawn pane. A text notice is not caught by a colour
- * count: its anti-aliased glyphs give more colours than that view.
+ * A drawn pane has more distinct colours than this; a blank pane has one. Below the flat top-down
+ * view at the start, the sparsest drawn pane, with a margin for Chromium's new headless mode
+ * (`scripts/shoot-views.mjs --backend webgpu`), which draws it with fewer. A text notice is not
+ * caught by a colour count: its anti-aliased glyphs give more colours than that view.
  */
-export const MIN_DRAWN_COLOURS = 45;
+export const MIN_DRAWN_COLOURS = 40;
 /** For a poll that screenshots the canvas: software GL (CI) takes a few seconds to draw the first frame. */
 export const SCREENSHOT_POLL = { timeout: 10_000 } as const;
 /** For a ground texture load on a fresh renderer: fetch, transcode and shader build, slow on software GL (CI). */
@@ -57,12 +58,14 @@ async function step(page: Page, frames: number): Promise<void> {
 
 /**
  * Opens a standstill drive of `exercise` on `preset` with `performance.now`, timers and rAF frozen,
- * so the resolution governor and the sim only move when stepped. Call on a fresh page.
+ * so the resolution governor and the sim only move when stepped. Call on a fresh page; `search` is
+ * the app URL's query (`?backend=webgpu`).
  */
 export async function startPinnedDrive(
   page: Page,
   preset: Preset,
   exercise: string,
+  search = '',
 ): Promise<void> {
   await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
     SETTINGS_KEY,
@@ -70,7 +73,7 @@ export async function startPinnedDrive(
   ] as const);
   await page.clock.install({ time: 0 });
   await page.clock.pauseAt(1000);
-  await page.goto('./');
+  await page.goto(`./${search}`);
   await page.getByRole('button', { name: new RegExp(`^${exercise}`) }).click();
   await page.locator('.hud-mirror:not([hidden])').nth(1).waitFor();
   await settle(page, preset);
