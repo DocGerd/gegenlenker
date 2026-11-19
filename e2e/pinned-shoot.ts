@@ -58,11 +58,10 @@ async function step(page: Page, frames: number): Promise<void> {
 }
 
 /**
- * Runs in the page. ANGLE folds a multisample resolve into the render pass that drew the target while
- * that pass is still open, and otherwise resolves the scissored region with a separate command;
- * SwiftShader rounds the two differently on partly covered pixels, and GPU-process timing decides
- * which one a frame gets (#203). A pixel readback first closes the pass, so every resolve takes the
- * same path.
+ * Runs in the page. ANGLE resolves a multisample target inside its render pass while that pass is
+ * open and with a separate command once it has closed; SwiftShader rounds the two differently and
+ * GPU-process timing picks one per frame (#203). A readback before each blit closes the pass.
+ * Marks `<html>` with `data-resolve-pinned` once a readback succeeds.
  */
 function pinResolvePath(): void {
   const proto = WebGL2RenderingContext.prototype;
@@ -71,6 +70,7 @@ function pinResolvePath(): void {
   if (blit === undefined) throw new Error('no blitFramebuffer to pin');
   const targets = new WeakMap<WebGL2RenderingContext, WebGLFramebuffer>();
   const pixel = new Uint8Array(4);
+  let pinned = false;
   const target = (gl: WebGL2RenderingContext): WebGLFramebuffer => {
     const known = targets.get(gl);
     // a restored context no longer knows the old framebuffer
@@ -98,6 +98,10 @@ function pinResolvePath(): void {
       this.bindFramebuffer(this.READ_FRAMEBUFFER, target(this));
       this.bindBuffer(this.PIXEL_PACK_BUFFER, null);
       this.readPixels(0, 0, 1, 1, this.RGBA, this.UNSIGNED_BYTE, pixel);
+      if (!pinned && this.getError() === this.NO_ERROR) {
+        pinned = true;
+        document.documentElement.dataset['resolvePinned'] = '';
+      }
       this.bindBuffer(this.PIXEL_PACK_BUFFER, pack);
       this.bindFramebuffer(this.READ_FRAMEBUFFER, read);
     }
@@ -107,8 +111,8 @@ function pinResolvePath(): void {
 
 /**
  * Opens a standstill drive of `exercise` on `preset` with `performance.now`, timers and rAF frozen,
- * so the resolution governor and the sim only move when stepped, and the multisample resolve on
- * one path. Call on a fresh page; `search` is the app URL's query (`?backend=webgpu`).
+ * so the resolution governor and the sim only move when stepped, and pins the multisample resolve
+ * to one path. Call on a fresh page; `search` is the app URL's query (`?backend=webgpu`).
  */
 export async function startPinnedDrive(
   page: Page,
@@ -127,6 +131,12 @@ export async function startPinnedDrive(
   await page.getByRole('button', { name: new RegExp(`^${exercise}`) }).click();
   await page.locator('.hud-mirror:not([hidden])').nth(1).waitFor();
   await settle(page, preset);
+  const [backend, pinned] = await page.evaluate(() => {
+    const html = document.documentElement;
+    return [html.getAttribute('data-render-backend'), html.getAttribute('data-resolve-pinned')];
+  });
+  if (backend === 'webgl2' && pinned === null)
+    throw new Error('the multisample resolve is not pinned');
 }
 
 /** `search` with `?framing=1`, which exposes the drawn vehicle's screen box as `data-vehicle-box`. */
