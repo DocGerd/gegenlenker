@@ -261,7 +261,8 @@ export function truckLamps(spec: TruckSpec, cabLength = CAB_LENGTH): LampLayout 
     HEADLAMP_CHAMBERS,
     hw - metres(cab.headlampInset),
     metres(cab.headlampWidth),
-    { ...cabLamp, hue: HUE.plateWhite },
+    // clear lenses over silver reflectors, apart from the white bumper
+    { ...cabLamp, hue: HUE.whiteAluminium },
     [front + RELIEF, front + RELIEF + FRONT_LENS_DEPTH],
     lampZ,
   );

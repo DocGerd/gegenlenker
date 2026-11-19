@@ -41,7 +41,7 @@
         [0.85, 1.05]
       ],
       "facing": "front",
-      "hue": "#f4f4ee"
+      "hue": "#a5a5a5"
     },
     {
       "id": "headlamp-1-left",
@@ -51,7 +51,7 @@
         [0.85, 1.05]
       ],
       "facing": "front",
-      "hue": "#f4f4ee"
+      "hue": "#a5a5a5"
     },
     {
       "id": "headlamp-2-left",
@@ -61,7 +61,7 @@
         [0.85, 1.05]
       ],
       "facing": "front",
-      "hue": "#f4f4ee"
+      "hue": "#a5a5a5"
     },
     {
       "id": "headlamp-0-right",
@@ -71,7 +71,7 @@
         [0.85, 1.05]
       ],
       "facing": "front",
-      "hue": "#f4f4ee"
+      "hue": "#a5a5a5"
     },
     {
       "id": "headlamp-1-right",
@@ -81,7 +81,7 @@
         [0.85, 1.05]
       ],
       "facing": "front",
-      "hue": "#f4f4ee"
+      "hue": "#a5a5a5"
     },
     {
       "id": "headlamp-2-right",
@@ -91,7 +91,7 @@
         [0.85, 1.05]
       ],
       "facing": "front",
-      "hue": "#f4f4ee"
+      "hue": "#a5a5a5"
     },
     {
       "id": "end-outline-front-left",
