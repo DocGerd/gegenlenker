@@ -36,7 +36,7 @@ describe('runtime-cached texture assets', () => {
   const cached = (file: string): boolean =>
     pattern instanceof RegExp && pattern.test(`/gegenlenker/${file}`);
   const hashed = (glob: string): string =>
-    `assets/${glob.replace('**/', '').replace('*', 'AbC12_x')}`;
+    `assets/${glob.replace('**/', '').replaceAll('*', 'AbC12_x')}`;
 
   it('ignores some files, and every ignored file is runtime-cached once fetched', () => {
     expect(ignored.length).toBeGreaterThan(0);
