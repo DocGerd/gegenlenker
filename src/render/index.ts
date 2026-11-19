@@ -9,6 +9,7 @@ import {
   TRAILER_SHELL_URLS,
 } from './glb-shells';
 import { startGroundTextures } from './ground-texture';
+import { readBackendRequest, requestGpuDevice, type BackendRequest } from './gpu-backend';
 import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
 import { createVehicleEnvironment } from './vehicle-pbr';
@@ -22,7 +23,10 @@ export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
 export const interiorAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].cockpitInterior;
 
-export function createSceneRenderer(): SceneRenderer {
+/** `backend` defaults to the page's `?backend=`. */
+export function createSceneRenderer(
+  backend: BackendRequest = readBackendRequest(location.search),
+): SceneRenderer {
   // The attach callbacks may fire before the renderer exists; a call made then is replayed once it does.
   const warm: { target: (() => void) | null; pending: boolean } = { target: null, pending: false };
   const warmUp = (): void => {
@@ -71,6 +75,7 @@ export function createSceneRenderer(): SceneRenderer {
     pbrState = state;
   });
   const renderer = createThreeSceneRenderer({
+    gpuDevice: () => requestGpuDevice(backend),
     onRenderer: (gpu) => {
       groundTextures.attach(gpu);
       vehicleEnvironment.attach(gpu);

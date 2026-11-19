@@ -9,21 +9,26 @@ import type { QualityFlags } from './quality';
 import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
 
-const made = vi.hoisted(() => [] as { dispose: () => void }[]);
-const fail = vi.hoisted(() => ({ next: false }));
+type Made = { dispose: () => void; onDeviceLost: () => void; webgpu: boolean };
+const made = vi.hoisted(() => [] as Made[]);
+const fail = vi.hoisted(() => ({ next: false, webgpu: false }));
 
 vi.mock('three/webgpu', async (importOriginal) => {
   const actual = await importOriginal<typeof import('three/webgpu')>();
   class FakeWebGPURenderer {
     autoClear = true;
-    backend = { isWebGLBackend: true };
+    backend: { isWebGLBackend: boolean };
     info = { autoReset: true };
     onDeviceLost = (): void => undefined;
     dispose = vi.fn(() => Promise.resolve());
-    constructor() {
+    readonly webgpu: boolean;
+    constructor({ device }: { device?: unknown }) {
+      this.webgpu = device !== undefined;
+      this.backend = { isWebGLBackend: !this.webgpu };
       made.push(this);
     }
     init(): Promise<void> {
+      if (this.webgpu && fail.webgpu) return Promise.reject(new Error('pipeline failed'));
       if (!fail.next) return Promise.resolve();
       fail.next = false;
       return Promise.reject(new Error('Error creating WebGL context.'));
@@ -46,7 +51,10 @@ vi.mock('./palette', async (importOriginal) => {
 
 const layout = resolveLayout(layouts.depot, null);
 
-function stubParts(onRenderer?: (gpu: WebGPURenderer) => void): {
+function stubParts(
+  onRenderer?: (gpu: WebGPURenderer) => void,
+  gpuDevice?: () => Promise<GPUDevice | null>,
+): {
   applied: QualityFlags[][];
   renderer: ReturnType<typeof create>;
 } {
@@ -65,6 +73,7 @@ function stubParts(onRenderer?: (gpu: WebGPURenderer) => void): {
   const create = () =>
     createThreeSceneRenderer({
       ...(onRenderer === undefined ? {} : { onRenderer }),
+      ...(gpuDevice === undefined ? {} : { gpuDevice }),
       truck: () => part({}),
       trailer: () => part({}),
       environment: () => part({}),
@@ -102,6 +111,7 @@ describe('renderer start', () => {
   afterEach(() => {
     vi.clearAllMocks();
     made.length = 0;
+    fail.webgpu = false;
   });
 
   it('hands the renderer to the parts and re-applies the quality only once init resolves', async () => {
@@ -160,5 +170,64 @@ describe('renderer start', () => {
     await renderer.init(old);
     await renderer.init(canvas());
     expect([old.width, old.height]).toEqual([0, 0]);
+  });
+
+  describe('backend', () => {
+    const adapterInfo = {
+      vendor: 'nvidia',
+      architecture: 'ada',
+      description: '',
+      isFallbackAdapter: false,
+    } as GPUAdapterInfo;
+    const devices = () => {
+      const made: { destroy: () => void }[] = [];
+      const next = vi.fn(() => {
+        const device = { adapterInfo, destroy: vi.fn() };
+        made.push(device);
+        return Promise.resolve(device as unknown as GPUDevice);
+      });
+      return { made, next };
+    };
+
+    it('draws through the device it is given and names its adapter', async () => {
+      const { next } = devices();
+      const { renderer } = stubParts(undefined, next);
+      await renderer.init(canvas());
+      expect(renderer.stats()).toMatchObject({ backend: 'webgpu', glRenderer: 'nvidia ada' });
+    });
+
+    it('goes on with WebGL 2 when WebGPU does not start, and does not try it again', async () => {
+      fail.webgpu = true;
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const { made: given, next } = devices();
+      const { renderer } = stubParts(undefined, next);
+      await renderer.init(canvas());
+      expect(renderer.stats().backend).toBe('webgl2');
+      expect(given[0]?.destroy).toHaveBeenCalled();
+      await renderer.init(canvas());
+      expect(next).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledOnce();
+      warn.mockRestore();
+    });
+
+    it('starts again on WebGL 2 after the WebGPU device is lost', async () => {
+      const { next } = devices();
+      const { renderer } = stubParts(undefined, next);
+      const lost = vi.fn();
+      renderer.onLost(lost);
+      await renderer.init(canvas());
+      made[0]?.onDeviceLost();
+      expect(lost).toHaveBeenCalledOnce();
+      expect(renderer.stats().contextLost).toBe(true);
+      await renderer.init(canvas());
+      expect(renderer.stats().backend).toBe('webgl2');
+      expect(next).toHaveBeenCalledOnce();
+    });
+
+    it('stays on WebGL 2 when no device is offered', async () => {
+      const { renderer } = stubParts(undefined, () => Promise.resolve(null));
+      await renderer.init(canvas());
+      expect(made.map((m) => m.webgpu)).toEqual([false]);
+    });
   });
 });

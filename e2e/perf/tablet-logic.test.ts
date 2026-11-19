@@ -100,7 +100,7 @@ describe('verdicts', () => {
 describe('parseOptions', () => {
   it('defaults to the full matrix', () => {
     const o = parseOptions([]);
-    expect(o).toMatchObject({ throttle: 4, runs: 1, perf: true, functional: false });
+    expect(o).toMatchObject({ throttle: 4, runs: 1, perf: true, functional: false, backend: null });
     expect(o.presets).toHaveLength(3);
     expect(o.pairs).toHaveLength(4);
   });
@@ -113,6 +113,7 @@ describe('parseOptions', () => {
     expect(() => parseOptions(['--throttle', '0'])).toThrow('--throttle');
     expect(() => parseOptions(['--runs', '1.5'])).toThrow('--runs');
     expect(() => parseOptions(['--preset', 'ultra'])).toThrow('--preset');
+    expect(() => parseOptions(['--backend', 'vulkan'])).toThrow('--backend');
     expect(() => parseOptions(['--bogus'])).toThrow();
   });
 

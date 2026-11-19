@@ -25,3 +25,26 @@ test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ pa
   await page.getByRole('button', { name: en.back }).click();
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
 });
+
+test('a WebGPU request without a WebGPU adapter drives on WebGL 2 without a notice', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'gpu', {
+      configurable: true,
+      value: { requestAdapter: () => Promise.resolve(null) },
+    });
+  });
+  const problems: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.text().startsWith('THREE.')) problems.push(m.text());
+  });
+  page.on('pageerror', (e) => problems.push(e.message));
+
+  await page.goto('./?backend=webgpu');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-render-backend', 'webgl2');
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
+  await expect(page.locator('.app-notice')).toHaveCount(0);
+  expect(problems).toEqual([]);
+});

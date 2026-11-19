@@ -30,8 +30,14 @@ export const COCKPIT_LAYERS = [SKY_LAYER, INTERIOR_LAYER];
 export const MIRROR_LAYERS = [SKY_LAYER, CAB_LAYER];
 export const CHASE_LAYERS = [SKY_LAYER, CAB_LAYER];
 export const TOP_DOWN_LAYERS = [AIDS_LAYER];
-/** Whether `gpu`'s WebGL context is lost; three keeps its own loss flag private. */
+const lostRenderers = new WeakSet<WebGPURenderer>();
+/** For the loss handler, which replaces three's and so its private loss flag. */
+export function markLost(gpu: WebGPURenderer): void {
+  lostRenderers.add(gpu);
+}
+/** Whether `gpu` lost its device or WebGL context. */
 export function gpuLost(gpu: WebGPURenderer): boolean {
+  if (lostRenderers.has(gpu)) return true;
   const context = gpu.getContext() as { isContextLost?: () => boolean } | null;
   return context?.isContextLost?.() === true;
 }
@@ -58,6 +64,8 @@ export interface AidsLayer {
 export type RendererParts = {
   /** Called each time a GPU renderer is ready, again after a loss with the new one; parts move to the latest. */
   readonly onRenderer?: (renderer: WebGPURenderer) => void;
+  /** A device to start WebGPU on, or null for WebGL 2; absent means WebGL 2. */
+  readonly gpuDevice?: () => Promise<GPUDevice | null>;
   readonly truck: (spec: TruckSpec, palette: ScenePalette) => VehicleVisual;
   readonly trailer: (spec: TrailerSpec, palette: ScenePalette) => VehicleVisual;
   readonly environment: (layout: ResolvedLayout, palette: ScenePalette) => Environment;

@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import {
+  type Backend,
   type Check,
   type Options,
   type Pair,
@@ -50,7 +51,8 @@ const USAGE = `Usage: pnpm perf:tablet [options]
   --functional       also run the function checks
   --no-perf          skip the fps matrix (needs --functional)
   --allow-software   do not abort on a software GL renderer (results are not valid)
-  --skip-build       reuse the existing dist/ (must be built with BASE_PATH=${BASE_PATH})`;
+  --skip-build       reuse the existing dist/ (must be built with BASE_PATH=${BASE_PATH})
+  --backend <name>   webgl2 | webgpu | auto: the app's ?backend= (default: the app's default)`;
 
 const wsl = existsSync(WSL_LIB);
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -136,13 +138,16 @@ async function startPreview(skipBuild: boolean): Promise<string> {
   throw new Error('pnpm preview did not come up');
 }
 
-function launch(): Promise<Browser> {
+function launch(backend: Backend | null): Promise<Browser> {
   // On WSL the GPU needs the d3d12 Mesa driver and ANGLE on desktop GL; elsewhere Chromium picks its default.
   const args = ['--ignore-gpu-blocklist', '--enable-gpu'];
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
+  if (backend === 'webgpu' || backend === 'auto') args.push('--enable-unsafe-webgpu');
   if (wsl) {
     args.push('--use-gl=angle', '--use-angle=gl');
+    // WSL has no hardware Vulkan driver: Dawn's OpenGL ES backend is its only hardware adapter.
+    if (backend === 'webgpu' || backend === 'auto') args.push('--use-webgpu-adapter=opengles');
     env['GALLIUM_DRIVER'] = 'd3d12';
     env['LD_LIBRARY_PATH'] = [WSL_LIB, env['LD_LIBRARY_PATH']].filter(Boolean).join(':');
   }
@@ -228,7 +233,7 @@ async function measure(
   try {
     const cdp = await context.newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: opts.throttle });
-    await page.goto(`${base}?perf=1`);
+    await page.goto(`${base}?perf=1${opts.backend === null ? '' : `&backend=${opts.backend}`}`);
     await page.locator(START_BUTTON).first().click();
     await page.locator('.hud-mirror:not([hidden])').first().waitFor({ timeout: 60_000 });
     // Four-view layout, then drive forward.
@@ -270,6 +275,9 @@ async function measure(
     if (!final) throw new Error('perf overlay produced no samples');
     errors.push(...failed.map((f) => `request failed: ${f}`));
     errors.push(...samples.flatMap(readingProblems));
+    if (opts.backend !== null && opts.backend !== 'auto' && !final.gl.startsWith(opts.backend)) {
+      errors.push(`drawn on ${final.gl.trim()}, not ${opts.backend}`);
+    }
     return {
       reading: {
         fps: median(samples.map((s) => s.fps)),
@@ -477,7 +485,7 @@ async function main(): Promise<boolean> {
     return true;
   }
   const base = await startPreview(opts.skipBuild);
-  const browser = await launch();
+  const browser = await launch(opts.backend);
   teardowns.push(() => browser.close());
   const probe = await browser.newPage();
   const renderer = await glRenderer(probe);

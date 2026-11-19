@@ -180,7 +180,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/, GROUND_LOAD);
   const target = await marker.getAttribute('data-ground-texture');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
-  // The renderer is forced onto its WebGL 2 backend until the WebGPU backend is enabled
+  // WebGL 2 stays the default until WebGPU passes its gate (docs/perf.md)
   await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
   await expect
     .poll(async () => {
