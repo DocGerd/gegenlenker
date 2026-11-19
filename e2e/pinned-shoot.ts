@@ -10,8 +10,8 @@ const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const FRAME_MS = 16;
 /** Frames stepped after the scene is ready, so every lazily built resource is in place. */
 const SETTLE_FRAMES = 30;
-/** Wall-clock bound on one `settle`, below every spec's test timeout, so a preset that never readies fails by name. */
-const SETTLE_DEADLINE_MS = 60_000;
+/** Wall-clock bound on each phase of `settle`, so a preset that never readies fails by name, not by the test timeout. */
+const SETTLE_DEADLINE_MS = 30_000;
 /** Consecutive frames the framing input must hold before a shot, so a late chrome measurement cannot move it. */
 const STABLE_FRAMES = 5;
 const HIDE_ID = 'pinned-shoot-bare';
@@ -119,13 +119,15 @@ export function renderScale(page: Page): Promise<number> {
   return page.evaluate(() => {
     const canvas = document.querySelector('canvas');
     if (canvas === null) throw new Error('no canvas');
-    return Math.round((canvas.width / canvas.clientWidth) * 1000) / 1000;
+    const scale = canvas.width / canvas.clientWidth;
+    if (!Number.isFinite(scale)) throw new Error('canvas has no size');
+    return Math.round(scale * 1000) / 1000;
   });
 }
 
 /** The vehicle's screen box without the sim step, and the render scale, so it reads the same while the sim stands still; null until drawn. */
 async function framingBox(page: Page): Promise<string | null> {
-  const raw = await page.locator('.drive').getAttribute('data-vehicle-box');
+  const raw = await page.locator('.drive').getAttribute('data-vehicle-box', { timeout: 5_000 });
   if (raw === null) return null;
   const { left, top, right, bottom } = JSON.parse(raw) as Record<string, number>;
   return JSON.stringify([left, top, right, bottom, await renderScale(page)]);
@@ -134,31 +136,33 @@ async function framingBox(page: Page): Promise<string | null> {
 /**
  * Steps the pinned clock until `preset`'s attachments are in place, fonts are loaded and the follow
  * framing (derived from the measured HUD chrome) has held for several frames, then settles. Throws
- * `<preset> not ready: [...]` after `deadlineMs` of wall-clock time.
+ * `<preset> not ready: [...]` when a phase outlasts `deadlineMs` of wall-clock time. Needs a drawn top-down pane (not the chase view).
  */
 export async function settle(
   page: Page,
   preset: Preset,
   deadlineMs = SETTLE_DEADLINE_MS,
 ): Promise<void> {
-  const deadline = Date.now() + deadlineMs;
-  const notReady = (values: unknown[]): Error =>
-    new Error(`${preset} not ready: ${JSON.stringify(values)}`);
+  const notReady = (what: unknown): Error =>
+    new Error(`${preset} not ready: ${JSON.stringify(what)}`);
+  const attachDeadline = Date.now() + deadlineMs;
   for (;;) {
     await step(page, 1);
     const { ready, values } = await attachments(page, preset);
     if (ready) break;
-    if (Date.now() > deadline) throw notReady(values);
+    if (Date.now() > attachDeadline) throw notReady(values);
     await page.waitForTimeout(25);
   }
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  const framingDeadline = Date.now() + deadlineMs;
   let last: string | null = null;
   for (let stable = 0; stable < STABLE_FRAMES;) {
     await step(page, 1);
     const box = await framingBox(page);
     stable = box !== null && box === last ? stable + 1 : 0;
     last = box;
-    if (stable < STABLE_FRAMES && Date.now() > deadline) throw notReady([box]);
+    if (stable < STABLE_FRAMES && Date.now() > framingDeadline)
+      throw notReady(['framing unstable', box]);
   }
   await step(page, SETTLE_FRAMES);
 }
