@@ -1,4 +1,5 @@
 import type { GraphicsPreset, SceneRenderer } from '../contracts/render';
+import type { Texture } from 'three';
 import { proceduralAids } from './aids';
 import { proceduralEnvironment } from './environment';
 import {
@@ -8,9 +9,12 @@ import {
   startShells,
   TRAILER_SHELL_URLS,
 } from './glb-shells';
+import { createGradeCheck, precompileGrade } from './grade';
 import { startGroundTextures } from './ground-texture';
 import { readBackendRequest, requestGpuDevice, type BackendRequest } from './gpu-backend';
 import { QUALITY_FLAGS } from './quality';
+import { startSkyTexture } from './sky-texture';
+import { skylineGradeSample } from './skyline';
 import { createThreeSceneRenderer } from './three-renderer';
 import { createVehicleEnvironment } from './vehicle-pbr';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
@@ -52,13 +56,13 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       enabled: false,
     }),
   };
-  // Read by the offline e2e: the transcoded format while the textured ground is drawn, else absent.
+  // Read by the offline e2e: the transcoded format while the textured ground is drawn, `failed` once given up on, else absent.
   let groundState: string | null = null;
   const groundTextures = startGroundTextures(undefined, (state) => {
     if (state === null) delete document.documentElement.dataset['groundTexture'];
     else {
       document.documentElement.dataset['groundTexture'] = state;
-      if (state !== groundState) warmUp();
+      if (state !== 'failed' && state !== groundState) warmUp();
     }
     groundState = state;
   });
@@ -72,16 +76,59 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     }
     pbrState = state;
   });
+  // Read by the offline e2e: `on` while the HDRI sky is drawn, `failed` once given up on, else absent.
+  let skyState: string | null = null;
+  const skyTexture = startSkyTexture(undefined, (state) => {
+    if (state === null) delete document.documentElement.dataset['skyHdri'];
+    else {
+      document.documentElement.dataset['skyHdri'] = state;
+      if (state !== 'failed' && state !== skyState) warmUp();
+    }
+    skyState = state;
+  });
+  // The vehicles reflect the HDRI sky once it has loaded; pbr and the HDRI are both High-only. The
+  // capture is untoned, so without the grade they reflect the analytic sky instead.
+  let skyMap: Texture | null = null;
+  let gradeFailed = false;
+  const syncReflection = (): void => {
+    vehicleEnvironment.setSky(gradeFailed ? null : skyMap);
+  };
+  skyTexture.onLoaded(
+    (map) => {
+      skyMap = map;
+      syncReflection();
+    },
+    () => {
+      skyMap = null;
+      syncReflection();
+    },
+  );
+  // Read by the offline e2e: `on` once the perspective grade compiled while the preset grades, `failed` if it fell back.
+  const gradeCheck = createGradeCheck(
+    (state) => {
+      gradeFailed = state === 'failed';
+      syncReflection();
+      if (state === null) delete document.documentElement.dataset['perspectiveGrade'];
+      else {
+        document.documentElement.dataset['perspectiveGrade'] = state;
+        if (state !== 'failed') warmUp();
+      }
+    },
+    (gpu) => precompileGrade(gpu, [skylineGradeSample]),
+  );
   const renderer = createThreeSceneRenderer({
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
     onRenderer: (gpu) => {
       groundTextures.attach(gpu);
+      skyTexture.attach(gpu);
       vehicleEnvironment.attach(gpu);
+      gradeCheck.attach(gpu);
     },
     truck: (spec, palette) => proceduralTruck(spec, palette, shells, vehicleEnvironment),
     trailer: (spec, palette) =>
       proceduralTrailer(spec, palette, shells.trailer, vehicleEnvironment),
-    environment: (layout, palette) => proceduralEnvironment(layout, palette, groundTextures),
+    environment: (layout, palette) =>
+      proceduralEnvironment(layout, palette, groundTextures, skyTexture),
     aids: proceduralAids,
   });
   // Read by the e2e: the GPU API of the live renderer and why it is not WebGPU when that was asked
@@ -110,13 +157,17 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       shells.body.setEnabled(flags.vehicleGlb);
       shells.trailer.setEnabled(flags.vehicleGlb);
       groundTextures.setEnabled(flags.groundTexture);
+      skyTexture.setEnabled(flags.hdriSky);
+      gradeCheck.setWanted(flags.perspectiveLighting);
       renderer.setQuality(preset);
     },
     dispose() {
       unmark();
       renderer.dispose();
       groundTextures.dispose();
+      skyTexture.dispose();
       vehicleEnvironment.dispose();
+      gradeCheck.dispose();
     },
   };
 }

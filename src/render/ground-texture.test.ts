@@ -3,9 +3,12 @@ import { WebGPURenderer } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   describeGroundTexture,
+  KTX2_LOAD_TIMEOUT_MS,
   loadGroundTexture,
+  loadKtx2,
   precompileGround,
   startGroundTextures,
+  TEXTURE_FAILED,
   transcoderUrls,
 } from './ground-texture';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
@@ -28,9 +31,21 @@ const shaderError = (gl: WebGPURenderer, fragment: string): void => {
   hook(...([context, {}, 'vertex', fragment] as unknown as Parameters<ShaderErrorHook>));
 };
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+  loaderTexture.manual = false;
+  loaderTexture.resolvers = [];
+  loaderTexture.disposed = 0;
+});
 
-const loaderTexture = vi.hoisted(() => ({ next: null as Texture | null }));
+const loaderTexture = vi.hoisted(() => ({
+  next: null as Texture | null,
+  /** When set, loads stay pending until a test resolves them, in call order. */
+  manual: false,
+  resolvers: [] as ((texture: Texture) => void)[],
+  disposed: 0,
+}));
 vi.mock('three/addons/loaders/KTX2Loader.js', () => ({
   KTX2Loader: class {
     setTranscoderPath() {
@@ -40,10 +55,13 @@ vi.mock('three/addons/loaders/KTX2Loader.js', () => ({
       return this;
     }
     loadAsync() {
-      return Promise.resolve(loaderTexture.next);
+      if (!loaderTexture.manual) return Promise.resolve(loaderTexture.next);
+      return new Promise<Texture>((resolve) => {
+        loaderTexture.resolvers.push(resolve);
+      });
     }
     dispose() {
-      return undefined;
+      loaderTexture.disposed++;
     }
   },
 }));
@@ -78,6 +96,49 @@ describe('ground precompile', () => {
     loaderTexture.next = loaded;
     await expect(loadGroundTexture(building(null))).rejects.toThrow();
     expect(disposed).toHaveBeenCalledOnce();
+  });
+});
+
+describe('KTX2 load queue', () => {
+  it('abandons a stalled load, runs the next one, and frees a texture that arrives late', async () => {
+    vi.useFakeTimers();
+    loaderTexture.manual = true;
+    const gl = renderer();
+    const stalled = loadKtx2(gl, 'stalled.ktx2');
+    const timedOut = expect(stalled).rejects.toThrow(/timed out/);
+    const following = loadKtx2(gl, 'following.ktx2');
+    await vi.advanceTimersByTimeAsync(KTX2_LOAD_TIMEOUT_MS);
+    await timedOut;
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(loaderTexture.resolvers).toHaveLength(2);
+    const fresh = texture();
+    loaderTexture.resolvers[1]?.(fresh);
+    await expect(following).resolves.toBe(fresh);
+    expect(loaderTexture.disposed).toBe(1);
+
+    const late = texture();
+    const lateDisposed = vi.fn();
+    late.addEventListener('dispose', lateDisposed);
+    loaderTexture.resolvers[0]?.(late);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lateDisposed).toHaveBeenCalledOnce();
+    expect(loaderTexture.disposed).toBe(2);
+  });
+
+  it('keeps a load that finishes in time, and leaves no timer behind', async () => {
+    vi.useFakeTimers();
+    loaderTexture.manual = true;
+    const loading = loadKtx2(renderer(), 'quick.ktx2');
+    await vi.advanceTimersByTimeAsync(0);
+    const loaded = texture();
+    const disposed = vi.fn();
+    loaded.addEventListener('dispose', disposed);
+    loaderTexture.resolvers[0]?.(loaded);
+    await expect(loading).resolves.toBe(loaded);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(KTX2_LOAD_TIMEOUT_MS);
+    expect(disposed).not.toHaveBeenCalled();
   });
 });
 
@@ -182,6 +243,48 @@ describe('ground textures', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  it('reports failed once the last attempt is spent, while enabled, and not before', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const states: (string | null)[] = [];
+    const textures = startGroundTextures(
+      () => Promise.reject(new Error('offline')),
+      (state) => states.push(state),
+    );
+    textures.attach(renderer());
+    textures.setEnabled(true);
+    await settle();
+    expect(states).toEqual([]);
+    textures.setEnabled(true);
+    await settle();
+    expect(states).toEqual([TEXTURE_FAILED]);
+    textures.setEnabled(false);
+    expect(states.at(-1)).toBeNull();
+    textures.setEnabled(true);
+    expect(states.at(-1)).toBe(TEXTURE_FAILED);
+    textures.dispose();
+    expect(states.at(-1)).toBeNull();
+  });
+
+  it('does not report failed when the retry succeeds', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const states: (string | null)[] = [];
+    const load = vi
+      .fn<() => Promise<Texture>>()
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(texture());
+    const textures = startGroundTextures(load, (state) => states.push(state));
+    textures.onLoaded(() => {
+      textures.reportApplied(true);
+    });
+    textures.attach(renderer());
+    textures.setEnabled(true);
+    await settle();
+    textures.setEnabled(true);
+    await settle();
+    expect(states).not.toContain(TEXTURE_FAILED);
+    expect(states.at(-1)).toBe('ktx2:rgba');
+  });
+
   it('keeps delivering when a subscriber throws, and warns', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const textures = startGroundTextures(() => Promise.resolve(texture()));
@@ -238,6 +341,26 @@ describe('ground textures', () => {
       textures.onLoaded(late);
       await settle();
       expect(late).not.toHaveBeenCalled();
+    });
+
+    it('reports failed after the reject, once, and not a texture state again', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const gl = renderer();
+      const states: (string | null)[] = [];
+      const textures = startGroundTextures(
+        () => Promise.resolve(texture()),
+        (state) => states.push(state),
+      );
+      textures.onLoaded(() => {
+        textures.reportApplied(true);
+      });
+      textures.attach(gl);
+      textures.setEnabled(true);
+      await settle();
+      shaderError(gl, `vec3 ${GROUND_SHADER_MARKER};`);
+      textures.reportApplied(false);
+      expect(states).toEqual(['ktx2:rgba', TEXTURE_FAILED, TEXTURE_FAILED]);
     });
 
     it('frees a texture whose shader was rejected while it loaded, and applies nothing', async () => {

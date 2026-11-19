@@ -23,6 +23,7 @@ import type { ScenePalette } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import { trailerById, truckById } from '../vehicles/registry';
 import { parseShell, parseTrailerShell, type ShellKind, startShells } from './glb-shells';
+import { GRADE_SHADER_MARKER, setGradeDisabled } from './grade';
 import { KEYS } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import { REALISM_HUES } from './realism-hues';
@@ -66,6 +67,7 @@ const environment = (texture: () => Texture | null): VehicleEnvironment => ({
   texture,
   onChange: () => () => undefined,
   reportApplied: () => undefined,
+  setSky: () => undefined,
   dispose: () => undefined,
 });
 const fixed = (texture: Texture | null): VehicleEnvironment => environment(() => texture);
@@ -137,6 +139,7 @@ describe('role hues', () => {
       const detail = meshes(visual.object).filter(
         (m) => m.material instanceof MeshLambertNodeMaterial && m.material.vertexColors,
       );
+      expect(detail.length).toBeGreaterThan(0);
       for (const mesh of detail) {
         const onCab = mesh.layers.isEnabled(CAB_LAYER);
         if (!onCab) expect(glassVertices(mesh)).toBe(0);
@@ -548,6 +551,7 @@ describe.each(TRAILER_IDS)('reflective trailer shell of %s', (id) => {
     visual.setQuality(QUALITY_FLAGS.balanced);
     expect(standardOf(visual.object)).toHaveLength(0);
     visual.setQuality(QUALITY_FLAGS.high);
+    expect(detail.length).toBeGreaterThan(0);
     for (const mesh of detail) expect(mesh.material).toBeInstanceOf(VehicleNodeMaterial);
     for (const m of meshes(visual.object)) {
       if (m.material instanceof VehicleNodeMaterial)
@@ -573,12 +577,35 @@ describe('vehicle shader check', () => {
     } as unknown as WebGL2RenderingContext;
     hook?.(...([context, {}, 'vertex', fragment] as unknown as Parameters<Hook>));
   };
-  const built = `float ${VEHICLE_SHADER_MARKER};`;
+  const built = `float ${VEHICLE_SHADER_MARKER}; float ${GRADE_SHADER_MARKER};`;
+  const ungraded = `float ${VEHICLE_SHADER_MARKER};`;
 
-  it('passes a shader that built with the marker, and restores the hook', async () => {
+  it('passes a shader that built with the markers, and restores the hook', async () => {
     const g = gpu(() => Promise.resolve(built));
     expect(await vehicleShaderCompiles(g, new Texture())).toBe(true);
     expect(g.debug.onShaderError).toBeNull();
+  });
+
+  it('checks the graded variant unless the grade is off', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(
+      await vehicleShaderCompiles(
+        gpu(() => Promise.resolve(ungraded)),
+        new Texture(),
+      ),
+    ).toBe(false);
+    setGradeDisabled(true);
+    try {
+      expect(
+        await vehicleShaderCompiles(
+          gpu(() => Promise.resolve(ungraded)),
+          new Texture(),
+        ),
+      ).toBe(true);
+    } finally {
+      setGradeDisabled(false);
+      warn.mockRestore();
+    }
   });
 
   it.each([

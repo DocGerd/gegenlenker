@@ -23,6 +23,7 @@ import groundUrl from './assets/ground.ktx2?url';
 import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
 import { createGroundMaterial } from './ground-material';
+import { buildSerially } from './grade';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
 import { gpuLost } from './seams';
 
@@ -34,6 +35,11 @@ import { gpuLost } from './seams';
 
 const ANISOTROPY = 8; // three clamps this to what the GPU offers
 const MAX_ATTEMPTS = 2;
+/** A queued KTX2 load that takes longer is abandoned, so one stalled fetch cannot block the next texture. */
+export const KTX2_LOAD_TIMEOUT_MS = 60_000;
+
+/** What `onApplied` receives once the texture is given up on: attempts spent or its shader rejected. */
+export const TEXTURE_FAILED = 'failed';
 
 const TARGET_NAMES = new Map<number, string>([
   [RGBA_ASTC_4x4_Format, 'astc'],
@@ -76,11 +82,59 @@ export interface GroundTextures {
 }
 
 /** KTX2Loader fetches fixed file names next to `transcoderPath`; they are served as hashed app assets instead. */
-export function transcoderUrls(url: string): string {
+export function transcoderUrls(url: string, expected = groundUrl): string {
   if (url.endsWith('basis_transcoder.js')) return transcoderJsUrl;
   if (url.endsWith('basis_transcoder.wasm')) return transcoderWasmUrl;
-  if (url !== groundUrl) console.warn('Ground texture: unexpected request through the loader', url);
+  if (url !== expected) console.warn('KTX2 texture: unexpected request through the loader', url);
   return url;
+}
+
+let ktx2Queue: Promise<unknown> = Promise.resolve();
+
+/**
+ * Loads `url` transcoded to `renderer`'s compressed formats, with the transcoder served locally.
+ * One load at a time: three warns about concurrent KTX2Loaders, each with its own workers. A load
+ * past `KTX2_LOAD_TIMEOUT_MS` rejects and frees the queue; a texture arriving late is disposed.
+ */
+export function loadKtx2(renderer: WebGPURenderer, url: string): Promise<Texture> {
+  const run = async (): Promise<Texture> => {
+    const manager = new LoadingManager().setURLModifier((u) => transcoderUrls(u, url));
+    const timedOutError = (): Error => new Error(`KTX2 load of ${url} timed out`);
+    let timedOut = false;
+    const abandoned = (): boolean => timedOut;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        // the fetches end; a transcode already under way finishes and is disposed below
+        manager.abort();
+        reject(timedOutError());
+      }, KTX2_LOAD_TIMEOUT_MS);
+    });
+    const load = (async (): Promise<Texture> => {
+      const { KTX2Loader } = await import('three/addons/loaders/KTX2Loader.js');
+      if (abandoned()) throw timedOutError();
+      // an empty path would fetch the transcoder from a CDN; the URL modifier replaces what is fetched
+      const loader = new KTX2Loader(manager).setTranscoderPath(import.meta.env.BASE_URL);
+      try {
+        const texture = await loader.detectSupport(renderer).loadAsync(url);
+        if (abandoned()) texture.dispose();
+        return texture;
+      } finally {
+        loader.dispose();
+      }
+    })();
+    try {
+      return await Promise.race([load, timeout]);
+    } finally {
+      clearTimeout(timer);
+      // the abandoned load's late failure has no one left to hear it
+      load.catch(() => undefined);
+    }
+  };
+  const next = ktx2Queue.then(run, run);
+  ktx2Queue = next.catch(() => undefined);
+  return next;
 }
 
 /**
@@ -99,10 +153,8 @@ export async function precompileGround(renderer: WebGPURenderer, texture: Textur
   const scene = new Scene();
   scene.add(mesh);
   try {
-    const { fragmentShader } = await renderer.debug.getShaderAsync(
-      scene,
-      new PerspectiveCamera(),
-      mesh,
+    const { fragmentShader } = await buildSerially(renderer, () =>
+      renderer.debug.getShaderAsync(scene, new PerspectiveCamera(), mesh),
     );
     if (fragmentShader?.includes(GROUND_SHADER_MARKER) !== true) {
       throw new Error('the ground shader did not build');
@@ -116,25 +168,16 @@ export async function precompileGround(renderer: WebGPURenderer, texture: Textur
 }
 
 export async function loadGroundTexture(renderer: WebGPURenderer): Promise<Texture> {
-  const { KTX2Loader } = await import('three/addons/loaders/KTX2Loader.js');
-  const loader = new KTX2Loader(new LoadingManager().setURLModifier(transcoderUrls))
-    // an empty path would fetch the transcoder from a CDN; the URL modifier replaces what is fetched
-    .setTranscoderPath(import.meta.env.BASE_URL)
-    .detectSupport(renderer);
+  const texture = await loadKtx2(renderer, groundUrl);
+  texture.wrapS = texture.wrapT = RepeatWrapping;
+  texture.anisotropy = ANISOTROPY;
   try {
-    const texture = await loader.loadAsync(groundUrl);
-    texture.wrapS = texture.wrapT = RepeatWrapping;
-    texture.anisotropy = ANISOTROPY;
-    try {
-      await precompileGround(renderer, texture);
-    } catch (error) {
-      texture.dispose();
-      throw error;
-    }
-    return texture;
-  } finally {
-    loader.dispose();
+    await precompileGround(renderer, texture);
+  } catch (error) {
+    texture.dispose();
+    throw error;
   }
+  return texture;
 }
 
 type Subscriber = {
@@ -144,18 +187,48 @@ type Subscriber = {
 
 /**
  * A failed load warns and leaves the token ground. `onApplied` receives `describeGroundTexture`
- * while some subscriber draws the texture and `null` otherwise; the offline e2e reads it.
+ * while some subscriber draws the texture, `TEXTURE_FAILED` once the texture is given up on while
+ * enabled, and `null` otherwise; the offline e2e reads it.
  */
 export function startGroundTextures(
   load: (renderer: WebGPURenderer) => Promise<Texture> = loadGroundTexture,
   onApplied: (state: string | null) => void = () => undefined,
 ): GroundTextures {
+  return startTextureAsset({
+    load,
+    onApplied,
+    label: 'Ground texture',
+    fallback: 'the token ground',
+    marker: GROUND_SHADER_MARKER,
+  });
+}
+
+export type TextureAssetOptions = {
+  readonly load: (renderer: WebGPURenderer) => Promise<Texture>;
+  readonly onApplied: (state: string | null) => void;
+  /** Starts the warnings, e.g. `Ground texture`. */
+  readonly label: string;
+  /** What stays drawn when the texture is not, for the warnings. */
+  readonly fallback: string;
+  /** Names the texture's shader, so its compile error reverts every subscriber. */
+  readonly marker: string;
+};
+
+/** The load, retry, shader-error and subscriber handling of one runtime-cached KTX2 texture. */
+export function startTextureAsset({
+  load,
+  onApplied,
+  label,
+  fallback,
+  marker,
+}: TextureAssetOptions): GroundTextures {
   let renderer: WebGPURenderer | null = null;
   let enabled = false;
   let loading = false;
   let attempts = 0;
   let loaded: Texture | null = null;
   let rejected = false;
+  let exhausted = false;
   let disposed = false;
   let applied = 0;
   let restoreShaderErrors: (() => void) | null = null;
@@ -165,18 +238,19 @@ export function startGroundTextures(
     try {
       run();
     } catch (error) {
-      console.warn(`Ground texture ${what} failed; keeping the token ground`, error);
+      console.warn(`${label} ${what} failed; keeping ${fallback}`, error);
     }
   };
 
   const publish = (): void => {
-    onApplied(applied > 0 && loaded !== null ? describeGroundTexture(loaded) : null);
+    if (enabled && (rejected || exhausted)) onApplied(TEXTURE_FAILED);
+    else onApplied(applied > 0 && loaded !== null ? describeGroundTexture(loaded) : null);
   };
 
   const reject = (): void => {
     if (rejected) return;
     rejected = true;
-    console.warn('Ground texture shader failed to compile; keeping the token ground');
+    console.warn(`${label} shader failed to compile; keeping ${fallback}`);
     for (const subscriber of subscribers) {
       if (subscriber.revert !== undefined) guarded('revert', subscriber.revert);
     }
@@ -189,7 +263,7 @@ export function startGroundTextures(
   const watchShaderErrors = (gl: WebGPURenderer): void => {
     const previous = gl.debug.onShaderError;
     const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
-      if (context.getShaderSource(fragment)?.includes(GROUND_SHADER_MARKER) === true) reject();
+      if (context.getShaderSource(fragment)?.includes(marker) === true) reject();
       if (previous !== null) previous(context, program, vertex, fragment);
       else
         console.error(
@@ -227,9 +301,13 @@ export function startGroundTextures(
       .catch((error: unknown) => {
         loading = false;
         console.warn(
-          `Ground texture load failed (attempt ${attempts} of ${MAX_ATTEMPTS}); keeping the token ground`,
+          `${label} load failed (attempt ${attempts} of ${MAX_ATTEMPTS}); keeping ${fallback}`,
           error,
         );
+        if (attempts >= MAX_ATTEMPTS && !disposed) {
+          exhausted = true;
+          publish();
+        }
       });
   };
 
@@ -242,9 +320,9 @@ export function startGroundTextures(
       start();
     },
     setEnabled(on) {
-      if (!on) return;
-      enabled = true;
-      start();
+      enabled = on;
+      if (on) start();
+      if (rejected || exhausted) publish();
     },
     onLoaded(apply, revert) {
       const subscriber: Subscriber = { apply, revert };
@@ -266,6 +344,7 @@ export function startGroundTextures(
     },
     dispose() {
       disposed = true;
+      enabled = false;
       subscribers.clear();
       restoreShaderErrors?.();
       loaded?.dispose();

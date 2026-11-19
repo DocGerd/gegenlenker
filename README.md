@@ -30,6 +30,7 @@ pnpm verify     # lint, format, typecheck, unit and e2e tests
 - [Brand](docs/brand/BRAND.md)
 - [Wording glossary](docs/glossary.md)
 - [Engine choice ADR](docs/decisions/0001-engine-choice.md)
+- [Asset credits](docs/asset-credits.md): source and licence of each third-party asset
 - [Changelog](CHANGELOG.md); [changelog fragments](changelog.d/README.md)
 - [Security policy](SECURITY.md)
 

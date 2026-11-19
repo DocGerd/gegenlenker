@@ -15,12 +15,27 @@ import {
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const LOST = 'Graphics context lost; starting afresh';
 
-/** Console warnings, errors and page errors; headless Chromium denies the wake lock, which is not about graphics. */
+/**
+ * ANGLE's software GL warns that it split a render pass while High starts up; a performance hint of
+ * the driver CI runs on, not a fault of the app.
+ */
+const DRIVER_PERFORMANCE_HINT =
+  /GL Driver Message \(OpenGL, Performance, [^)]*\): Running out of reserved outsideRenderPass queueSerial/;
+
+/**
+ * Console warnings, errors and page errors; headless Chromium denies the wake lock, which is not
+ * about graphics.
+ */
 function collectProblems(page: Page): string[] {
   const problems: string[] = [];
   page.on('console', (m) => {
-    if ((m.type() === 'error' || m.type() === 'warning') && !m.text().includes('Wake Lock')) {
-      problems.push(m.text());
+    const text = m.text();
+    if (
+      (m.type() === 'error' || m.type() === 'warning') &&
+      !text.includes('Wake Lock') &&
+      !DRIVER_PERFORMANCE_HINT.test(text)
+    ) {
+      problems.push(text);
     }
   });
   page.on('pageerror', (e) => problems.push(e.message));
@@ -45,6 +60,30 @@ async function loseAndReplace(page: Page): Promise<void> {
   await expect.poll(() => lost.evaluate((c) => c.isConnected)).toBe(false);
 }
 
+/** Records a given-up texture: sessionStorage outlives reloads, the attribute does not. */
+async function watchFailedTextures(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    new MutationObserver((records) => {
+      for (const r of records) {
+        // oldValue catches a value replaced before this callback runs
+        const now =
+          r.target instanceof Element ? r.target.getAttribute(r.attributeName ?? '') : null;
+        if (now === 'failed' || r.oldValue === 'failed')
+          sessionStorage.setItem('texture-failed', r.attributeName ?? '');
+      }
+    }).observe(document, {
+      attributes: true,
+      attributeOldValue: true,
+      subtree: true,
+      attributeFilter: ['data-ground-texture', 'data-sky-hdri'],
+    });
+  });
+}
+
+async function expectNoFailedTexture(page: Page): Promise<void> {
+  expect(await page.evaluate(() => sessionStorage.getItem('texture-failed'))).toBeNull();
+}
+
 async function startDrive(page: Page): Promise<void> {
   await page.goto('./');
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
@@ -59,10 +98,13 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
     },
     [SETTINGS_KEY, JSON.stringify({ version: 1, graphics: 'high' })] as const,
   );
+  await watchFailedTextures(page);
   await startDrive(page);
   const html = page.locator('html');
   await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/, GROUND_LOAD);
+  // a loss during a load would warn and spend a retry
+  await expect(html).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
   await page.evaluate(() => {
     const seen: (string | null)[] = [];
     Object.assign(window, { pbrSeen: seen });
@@ -104,11 +146,13 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await expect(page.locator('[data-hud="resetView"]')).toBeEnabled();
 
   expect(problems).toEqual([LOST]);
+  await expectNoFailedTexture(page);
 });
 
 test('the cockpit looks the same after a loss as before it', async ({ page }) => {
   test.setTimeout(90_000);
   const problems = collectProblems(page);
+  await watchFailedTextures(page);
   await startPinnedDrive(page, 'high', en.exerciseStraightReverse);
   const hash = async (): Promise<string> => {
     const png = await shoot(page, 'cockpit');
@@ -121,6 +165,7 @@ test('the cockpit looks the same after a loss as before it', async ({ page }) =>
   await settle(page, 'high');
   expect(await hash()).toBe(before);
   expect(problems).toEqual([LOST]);
+  await expectNoFailedTexture(page);
 });
 
 test('losses in quick succession end at the reload notice', async ({ page }) => {

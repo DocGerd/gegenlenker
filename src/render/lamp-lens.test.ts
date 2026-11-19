@@ -208,6 +208,7 @@ const env = {
   texture: () => new Texture(),
   onChange: () => () => undefined,
   reportApplied: () => undefined,
+  setSky: () => undefined,
   dispose: () => undefined,
 };
 

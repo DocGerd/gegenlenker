@@ -119,7 +119,7 @@ test('zooms and pans the top-down view without disturbing the controls', async (
   expect(three).toEqual([]);
 });
 
-test('High graphics caches the ground texture and transcoder on first use and applies them offline', async ({
+test('High graphics caches the ground and sky textures and transcoder on first use and applies them offline', async ({
   page,
   context,
   baseURL,
@@ -146,6 +146,23 @@ test('High graphics caches the ground texture and transcoder on first use and ap
       JSON.stringify({ version: 1, graphics: 'high' }),
     );
   });
+  // Records a given-up texture: sessionStorage outlives the reloads, the attribute is gone by then.
+  await page.addInitScript(() => {
+    new MutationObserver((records) => {
+      for (const r of records) {
+        // oldValue catches a value replaced before this callback runs
+        const now =
+          r.target instanceof Element ? r.target.getAttribute(r.attributeName ?? '') : null;
+        if (now === 'failed' || r.oldValue === 'failed')
+          sessionStorage.setItem('texture-failed', r.attributeName ?? '');
+      }
+    }).observe(document, {
+      attributes: true,
+      attributeOldValue: true,
+      subtree: true,
+      attributeFilter: ['data-ground-texture', 'data-sky-hdri'],
+    });
+  });
 
   await page.goto('./');
   await page.evaluate(async () => {
@@ -166,6 +183,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
     });
   const files = [
     /ground-[\w-]+\.ktx2$/,
+    /sky-[\w-]+\.ktx2$/,
     /basis_transcoder-[\w-]+\.js$/,
     /basis_transcoder-[\w-]+\.wasm$/,
   ];
@@ -180,6 +198,8 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/, GROUND_LOAD);
   const target = await marker.getAttribute('data-ground-texture');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
+  await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
   // WebGL 2 stays the default until WebGPU passes its gate (docs/perf.md)
   await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
   await expect
@@ -187,7 +207,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
       const { runtime } = await cached();
       return files.map((file) => matching(runtime, file).length);
     })
-    .toEqual([1, 1, 1]);
+    .toEqual([1, 1, 1, 1]);
 
   // The marker follows the preset: Balanced draws no reflections, so it is gone.
   await page.getByRole('button', { name: en.finish }).click();
@@ -201,6 +221,8 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
   await expect(page.locator('[data-view="follow"]')).toBeVisible();
   await expect(marker).not.toHaveAttribute('data-vehicle-pbr', /.*/);
+  await expect(marker).not.toHaveAttribute('data-sky-hdri', /.*/);
+  await expect(marker).not.toHaveAttribute('data-perspective-grade', /.*/);
 
   offline = true;
   await context.setOffline(true);
@@ -208,8 +230,15 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
   await expect(marker).toHaveAttribute('data-ground-texture', target ?? '', GROUND_LOAD);
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
-  expect(warnings.filter((w) => /Ground texture|Vehicle reflection/.test(w))).toEqual([]);
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
+  await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
+  expect(
+    warnings.filter((w) =>
+      /Ground texture|Sky texture|Vehicle reflection|Perspective grade/.test(w),
+    ),
+  ).toEqual([]);
   expect(errors).toEqual([]);
   expect(three).toEqual([]);
   expect(foreign).toEqual([]);
+  expect(await page.evaluate(() => sessionStorage.getItem('texture-failed'))).toBeNull();
 });

@@ -11,6 +11,7 @@ import {
   type Object3D,
   type Texture,
 } from 'three';
+import { MeshLambertNodeMaterial } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
@@ -34,6 +35,7 @@ import {
   type TrailerShell,
   type TruckShells,
 } from './glb-shells';
+import { setGraded } from './grade';
 import { trailerLamps, truckLamps } from './lamp-layout';
 import { createDetailMaterial, createLampEmission, slotShell } from './lamp-lens';
 import { lampState } from './lamp-state';
@@ -136,7 +138,9 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const textures: Texture[] = [];
   const detailMeshes: Mesh[] = [];
   const lamps = createLampEmission();
-  let detailMaterial: Material | null = null;
+  let detailMaterial: MeshLambertNodeMaterial | null = null;
+  const plateMaterials: MeshLambertNodeMaterial[] = [];
+  let gradeOn = false;
   let pbrMaterial: VehicleNodeMaterial | null = null;
   let pbrRoot: Object3D | null = null;
   const pbrToken = {};
@@ -160,7 +164,10 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     pbrWanted = on;
     const map = on ? (env?.texture(palette) ?? null) : null;
     if (map !== null) {
-      pbrMaterial ??= track(createVehicleMaterial(map, lamps));
+      if (pbrMaterial === null) {
+        pbrMaterial = track(createVehicleMaterial(map, lamps));
+        setGraded(pbrMaterial, gradeOn);
+      }
       pbrMaterial.envMap = map;
     } else if (pbrMaterial !== null) {
       pbrMaterial.envMap = null;
@@ -191,10 +198,20 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     },
     /** The material of every `detail` mesh; shells use it too, so a swap adds no state change. */
     detailMaterial(): Material {
-      detailMaterial ??= track(createDetailMaterial(lamps));
+      if (detailMaterial === null) {
+        detailMaterial = track(createDetailMaterial(lamps));
+        setGraded(detailMaterial, gradeOn);
+      }
       return pbrOn && pbrMaterial !== null ? pbrMaterial : detailMaterial;
     },
     setPbr,
+    /** The perspective grade (`grade.ts`) on the perspective-only detail, plate and reflective materials. */
+    setGrade(on: boolean): void {
+      gradeOn = on;
+      for (const material of plateMaterials) setGraded(material, on);
+      if (detailMaterial !== null) setGraded(detailMaterial, on);
+      if (pbrMaterial !== null) setGraded(pbrMaterial, on);
+    },
     /** The lamp lenses of the detail and the shells, switched per snapshot. */
     lamps,
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
@@ -226,10 +243,12 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       const texture = plateTexture();
       if (texture !== null) textures.push(texture);
       const material = track(
-        new MeshLambertMaterial(
+        new MeshLambertNodeMaterial(
           texture === null ? { color: REALISM_HUES.plateWhite } : { map: texture },
         ),
       );
+      plateMaterials.push(material);
+      setGraded(material, gradeOn);
       const mesh = this.mesh(plateGeometry(spot), material);
       mesh.layers.set(SKY_LAYER);
       return mesh;
@@ -473,6 +492,7 @@ export function proceduralTruck(
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
+      res.setGrade(flags.perspectiveLighting);
       res.setPbr(group, flags.pbr);
     },
     dispose() {
@@ -727,6 +747,7 @@ export function proceduralTrailer(
     setQuality(flags) {
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
+      res.setGrade(flags.perspectiveLighting);
       res.setPbr(group, flags.pbr);
     },
     dispose() {

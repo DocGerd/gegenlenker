@@ -205,9 +205,12 @@ test('the Balanced cockpit sky is blue near the top and fades to haze towards th
   expect(errors).toEqual([]);
 });
 
-/** Bright and not blue: yard ground, where `isGround` alone would also take the sky. */
+/**
+ * Bright and not blue: yard ground, where `isGround` alone would also take the sky. High's light
+ * rig is lowered so no white clips, which leaves its lit yard darker than on the other presets.
+ */
 const isYard = (p: number[] | undefined): boolean =>
-  p !== undefined && !isSky(p) && p.reduce((a, b) => a + b, 0) > 500;
+  p !== undefined && !isSky(p) && p.reduce((a, b) => a + b, 0) > 450;
 
 /** Probe points in the lower half of a mirror, on three columns hugging its left or right edge. */
 function edgePoints(width: number, height: number, side: 'left' | 'right') {
@@ -224,11 +227,10 @@ const yardShare = (pixels: (number[] | undefined)[]): number =>
 /** Probe points of one mirror: sky above ground at its centre column, then the edge columns. */
 function mirrorPoints(box: Box) {
   const x = Math.round(box.width / 2);
+  // several columns along the top: on High a cloud of the HDRI sky may cover one
+  const top = [0.2, 0.35, 0.5, 0.65, 0.8].map((f) => [Math.round(box.width * f), 2] as const);
   return {
-    centre: [
-      [x, 2],
-      [x, Math.round(box.height) - 3],
-    ] as const,
+    centre: [...top, [x, Math.round(box.height) - 3] as const],
     left: edgePoints(box.width, box.height, 'left'),
     right: edgePoints(box.width, box.height, 'right'),
   };
@@ -288,12 +290,13 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
       return sides.map(({ side, inner, outer }, i) => {
         const probe = probes[i];
         if (probe === undefined) throw new Error(`no probe for ${side}`);
-        const [top, bottom] = take(probe.centre.length);
+        const centre = take(probe.centre.length);
+        const bottom = centre.at(-1);
         const edges = { left: take(probe.left.length), right: take(probe.right.length) };
         return {
           side,
           // Sky above and ground below first: only a drawn frame can pass, so absence at the edge means something.
-          drawn: isSky(top) && !isSky(bottom) && isGround(bottom),
+          drawn: centre.slice(0, -1).some(isSky) && !isSky(bottom) && isGround(bottom),
           outerYard: yardShare(edges[outer]),
           innerYard: yardShare(edges[inner]),
         };

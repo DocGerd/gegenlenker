@@ -23,8 +23,24 @@ const icons = [
 /** Workbox skips larger files when precaching; the default, pinned so the cab glb test can import it. */
 export const MAX_PRECACHE_FILE_BYTES = 2 * 1024 * 1024;
 
-/** The hashed ground texture and its Basis transcoder; `globIgnores` below spells the same files as globs. */
-const GROUND_ASSETS = /\/(?:ground-[\w-]+\.ktx2|basis_transcoder-[\w-]+\.(?:js|wasm))$/;
+/** The High-only textures and their Basis transcoder as `[stem, extensions]` of the hashed `stem-<hash>.ext`. */
+const RUNTIME_ASSETS = [
+  ['ground', ['ktx2']],
+  ['sky', ['ktx2']],
+  ['basis_transcoder', ['js', 'wasm']],
+] as const;
+
+/** Both are built from `RUNTIME_ASSETS`: precache skips these files, the service worker caches them on first use. */
+const RUNTIME_ASSET_GLOBS = RUNTIME_ASSETS.flatMap(([stem, extensions]) =>
+  extensions.map((extension) => `**/${stem}-*.${extension}`),
+);
+export const RUNTIME_ASSET_URLS = new RegExp(
+  `/(?:${RUNTIME_ASSETS.map(([stem, extensions]) => `${stem}-[\\w-]+\\.(?:${extensions.join('|')})`).join('|')})$`,
+);
+
+export const PRECACHE_GLOBS = [
+  '**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}',
+];
 
 export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOptions> {
   return {
@@ -45,17 +61,17 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
       icons,
     },
     workbox: {
-      globPatterns: ['**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}'],
-      globIgnores: ['**/ground-*.ktx2', '**/basis_transcoder-*'],
+      globPatterns: PRECACHE_GLOBS,
+      globIgnores: RUNTIME_ASSET_GLOBS,
       runtimeCaching: [
         {
-          // Only High draws the ground texture, so the other presets do not pay for it on install.
-          urlPattern: GROUND_ASSETS,
+          // Only High draws these textures, so the other presets do not pay for them on install.
+          urlPattern: RUNTIME_ASSET_URLS,
           handler: 'CacheFirst',
           options: {
             cacheName: 'ground-texture',
             cacheableResponse: { statuses: [200] },
-            expiration: { maxEntries: 6 },
+            expiration: { maxEntries: 12 },
           },
         },
       ],

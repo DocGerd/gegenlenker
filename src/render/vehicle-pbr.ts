@@ -21,7 +21,8 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
-import { createSceneSky } from './environment';
+import { createSceneSky, domeGround } from './environment';
+import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
@@ -170,11 +171,15 @@ export function replaceMaterial(
  * material whose node graph throws for a plain one and only logs it, so the built shader must carry
  * the marker.
  */
-export async function vehicleShaderCompiles(
-  gpu: WebGPURenderer,
-  envMap: Texture,
-): Promise<boolean> {
+export function vehicleShaderCompiles(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+  return buildSerially(gpu, () => buildVehicleShader(gpu, envMap));
+}
+
+async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
   const material = createVehicleMaterial(envMap, createLampEmission());
+  // only High reflects, and High grades: check the graded variant the vehicles wear
+  const graded = !gradeDisabled();
+  setGraded(material, graded);
   const geometry = withSlot(new BoxGeometry());
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   const mesh = new Mesh(geometry, material);
@@ -205,7 +210,8 @@ export async function vehicleShaderCompiles(
   debug.onShaderError = watcher;
   try {
     const { fragmentShader } = await gpu.debug.getShaderAsync(scene, new PerspectiveCamera(), mesh);
-    if (fragmentShader?.includes(VEHICLE_SHADER_MARKER) !== true) {
+    const markers = graded ? [VEHICLE_SHADER_MARKER, GRADE_SHADER_MARKER] : [VEHICLE_SHADER_MARKER];
+    if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
       console.warn('Vehicle reflection shader failed to build');
       return false;
     }
@@ -234,6 +240,11 @@ export interface VehicleEnvironment {
   onChange(listener: () => void): () => void;
   /** A visual reports whether it currently wears the reflective material, for the state. */
   reportApplied(owner: object, on: boolean): void;
+  /**
+   * The HDRI sky texture the map is captured from, or null for the analytic sky. The current map
+   * stays until the new one has passed its check.
+   */
+  setSky(map: Texture | null): void;
   dispose(): void;
 }
 
@@ -241,12 +252,24 @@ export interface VehicleEnvironment {
 export type VehicleEnvironmentState = 'on' | 'failed' | null;
 
 export interface VehicleEnvironmentParts {
-  readonly generate: (gpu: WebGPURenderer, palette: ScenePalette) => RenderTarget;
+  readonly generate: (
+    gpu: WebGPURenderer,
+    palette: ScenePalette,
+    sky: Texture | null,
+  ) => RenderTarget;
   readonly compiles: (gpu: WebGPURenderer, map: Texture) => Promise<boolean>;
 }
 
-export function generateSkyMap(gpu: WebGPURenderer, palette: ScenePalette): RenderTarget {
-  const sky = createSceneSky(palette);
+export function generateSkyMap(
+  gpu: WebGPURenderer,
+  palette: ScenePalette,
+  hdri: Texture | null = null,
+): RenderTarget {
+  // untoned: the reflective material tone-maps what it reflects
+  const sky = createSceneSky(palette, false);
+  // only High captures, and it lights the perspective views with the split rig
+  sky.setGround(domeGround(palette, true));
+  sky.setHdri(hdri);
   // the dome sits on SKY_LAYER for the game cameras; the capture camera sees layer 0 only
   sky.mesh.layers.set(0);
   const scene = new Scene();
@@ -269,6 +292,9 @@ export function createVehicleEnvironment(
 ): VehicleEnvironment {
   let renderer: WebGPURenderer | null = null;
   let target: RenderTarget | null = null;
+  let skyMap: Texture | null = null;
+  /** The sky `target` was captured from. */
+  let targetSky: Texture | null = null;
   /** The map being checked; a newer request (palette, renderer) drops it. */
   let pending: RenderTarget | null = null;
   let key = '';
@@ -296,7 +322,7 @@ export function createVehicleEnvironment(
     publish();
     console.warn('Vehicle reflections failed; keeping the plain shading', error);
   };
-  const check = (gpu: WebGPURenderer, made: RenderTarget): void => {
+  const check = (gpu: WebGPURenderer, made: RenderTarget, sky: Texture | null): void => {
     pending = made;
     compiles(gpu, made.texture).then(
       (ok) => {
@@ -312,7 +338,9 @@ export function createVehicleEnvironment(
           fail(new Error('the reflective shader did not compile'));
           return;
         }
+        target?.dispose();
         target = made;
+        targetSky = sky;
         publish();
         changed();
       },
@@ -342,9 +370,9 @@ export function createVehicleEnvironment(
         key = next;
         failed = false;
       }
-      if (target === null && pending === null && !failed) {
+      if ((target === null || targetSky !== skyMap) && pending === null && !failed) {
         try {
-          check(renderer, generate(renderer, palette));
+          check(renderer, generate(renderer, palette, skyMap), skyMap);
         } catch (error) {
           fail(error);
         }
@@ -361,6 +389,13 @@ export function createVehicleEnvironment(
       if (on) wearing.add(owner);
       else wearing.delete(owner);
       publish();
+    },
+    setSky(map) {
+      if (map === skyMap) return;
+      skyMap = map;
+      pending?.dispose();
+      pending = null;
+      changed();
     },
     dispose() {
       release();
