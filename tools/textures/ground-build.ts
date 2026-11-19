@@ -1,8 +1,4 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-export const ROOT = join(import.meta.dirname, '../..');
+import { lfText, ROOT, sha256 } from '../assets/provenance';
 
 export const GROUND_FILES = {
   /** Everything the pixels depend on; hashed into the manifest and the ktx2 itself. */
@@ -28,38 +24,11 @@ export const ENCODER_OPTIONS = {
   isKTX2File: true,
 } as const;
 
-export const KV_INPUTS = 'gegenlenker.inputsSha256';
-
-export type GroundManifest = {
-  readonly inputsSha256: string;
-  readonly pixelsSha256: string;
-  readonly encoderVersion: string;
-  readonly width: number;
-  readonly height: number;
-  readonly mipLevels: number;
-  readonly ktx2Sha256: string;
-  readonly ktx2Bytes: number;
-};
-
-export const sha256 = (data: string | Uint8Array): string =>
-  createHash('sha256').update(data).digest('hex');
-
-const lf = (file: string, root: string): string =>
-  readFileSync(join(root, file), 'utf8').replaceAll('\r\n', '\n');
-
-/** Source files (LF-normalised, since line endings differ per checkout) plus the encoder settings. */
+/** Source files (LF-normalised) plus the encoder settings. */
 export const inputsSha256 = (root = ROOT): string =>
   sha256(
     JSON.stringify([
-      ...GROUND_FILES.sources.map((file) => [file, lf(file, root)]),
+      ...GROUND_FILES.sources.map((file) => [file, lfText(root, file)]),
       ENCODER_OPTIONS,
     ]),
   );
-
-export const ktx2Sha256 = (root = ROOT): string =>
-  sha256(readFileSync(join(root, GROUND_FILES.ktx2)));
-
-export function encoderVersion(root = ROOT): string {
-  const file = join(root, 'node_modules/ktx2-encoder/package.json');
-  return (JSON.parse(readFileSync(file, 'utf8')) as { version: string }).version;
-}
