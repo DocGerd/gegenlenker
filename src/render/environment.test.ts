@@ -293,7 +293,7 @@ describe('environment lit aids', () => {
       [true, 0x00ff00],
       [false, 0xff0000],
     ] as const) {
-      env.update(frame(visited));
+      env.update(frame(visited), { x: 0, y: 0, radius: 10 });
       expect((copy.material as unknown as { color: Color }).color.getHex(), String(visited)).toBe(
         hex,
       );
