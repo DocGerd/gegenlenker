@@ -135,6 +135,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const textures: Texture[] = [];
   const detailMeshes: Mesh[] = [];
   let detailMaterial: MeshLambertNodeMaterial | null = null;
+  const plateMaterials: MeshLambertNodeMaterial[] = [];
   let gradeOn = false;
   let pbrMaterial: VehicleNodeMaterial | null = null;
   let pbrRoot: Object3D | null = null;
@@ -200,9 +201,10 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       return pbrOn && pbrMaterial !== null ? pbrMaterial : detailMaterial;
     },
     setPbr,
-    /** The perspective grade (`grade.ts`) on the perspective-only detail and reflective materials. */
+    /** The perspective grade (`grade.ts`) on the perspective-only detail, plate and reflective materials. */
     setGrade(on: boolean): void {
       gradeOn = on;
+      for (const material of plateMaterials) setGraded(material, on);
       if (detailMaterial !== null) setGraded(detailMaterial, on);
       if (pbrMaterial !== null) setGraded(pbrMaterial, on);
     },
@@ -235,10 +237,12 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       const texture = plateTexture();
       if (texture !== null) textures.push(texture);
       const material = track(
-        new MeshLambertMaterial(
+        new MeshLambertNodeMaterial(
           texture === null ? { color: REALISM_HUES.plateWhite } : { map: texture },
         ),
       );
+      plateMaterials.push(material);
+      setGraded(material, gradeOn);
       const mesh = this.mesh(plateGeometry(spot), material);
       mesh.layers.set(SKY_LAYER);
       return mesh;
