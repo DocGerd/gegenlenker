@@ -1,7 +1,7 @@
 import { Camera, Color, Vector3, type BufferGeometry } from 'three';
 import { describe, expect, it } from 'vitest';
 import { BOUNDS } from '../content/street';
-import { AIDS_LAYER, CAMERA_FAR, SKY_LAYER } from './seams';
+import { AIDS_LAYER, CAMERA_FAR, PERSPECTIVE_LAYER } from './seams';
 import { createSkyline } from './skyline';
 import { buildingGeometry, buildingParts, SINK, skylineGeometry } from './skyline-geometry';
 import { CLEARANCE, REACH, skylineBuildings, type Building } from './skyline-layout';
@@ -146,7 +146,7 @@ describe('skyline', () => {
   it('is seen by the perspective cameras only', () => {
     const skyline = createSkyline(BOUNDS, new Color(0xdcebf2));
     const perspective = new Camera();
-    perspective.layers.enable(SKY_LAYER);
+    perspective.layers.enable(PERSPECTIVE_LAYER);
     const topDown = new Camera();
     topDown.layers.enable(AIDS_LAYER);
     expect(skyline.mesh.layers.test(perspective.layers)).toBe(true);

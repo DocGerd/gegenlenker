@@ -1,6 +1,6 @@
 import { HDRI_LIGHT } from './hdri-light';
 import { GRADE, toneMap } from './grade';
-import { SKY_LAYER } from './seams';
+import { PERSPECTIVE_LAYER } from './seams';
 import { BackSide, Color, Mesh, SphereGeometry, type Texture, Vector3 } from 'three';
 import {
   asin,
@@ -116,7 +116,7 @@ export function createSky(
     toneMapped: false,
   });
   // Anchored to the camera (view rotation only, depth at the far plane), so it needs no per-frame
-  // update and serves the cockpit and both mirrors. It is on SKY_LAYER, which the top-down camera skips.
+  // update and serves the cockpit and both mirrors. It is on PERSPECTIVE_LAYER, which the top-down camera skips.
   const clip = cameraProjectionMatrix.mul(
     vec4(cameraViewMatrix.mul(vec4(positionLocal, 0)).xyz, 1),
   );
@@ -162,7 +162,7 @@ export function createSky(
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;
   mesh.renderOrder = 1; // after the opaque scene, so occluded fragments fail the depth test
-  mesh.layers.set(SKY_LAYER);
+  mesh.layers.set(PERSPECTIVE_LAYER);
   return {
     mesh,
     setHdri(map) {

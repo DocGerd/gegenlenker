@@ -1,5 +1,5 @@
 import type { Rect2 } from '../contracts/layout';
-import { SKY_LAYER } from './seams';
+import { PERSPECTIVE_LAYER } from './seams';
 import { createAtlasTexture } from './skyline-atlas';
 import { skylineGeometry } from './skyline-geometry';
 import { skylineBuildings } from './skyline-layout';
@@ -48,7 +48,7 @@ export function createSkyline(bounds: Rect2, haze: Color): Skyline {
   const grade = gradedHaze();
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;
-  mesh.layers.set(SKY_LAYER);
+  mesh.layers.set(PERSPECTIVE_LAYER);
   return {
     mesh,
     setGraded: (on) => {
