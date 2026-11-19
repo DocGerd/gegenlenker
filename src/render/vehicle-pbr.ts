@@ -22,7 +22,7 @@ import {
 } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
 import { createSceneSky } from './environment';
-import { buildSerially, setGraded, type GradeSample } from './grade';
+import { buildSerially } from './grade';
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
@@ -138,25 +138,6 @@ export function createVehicleMaterial(envMap: Texture, lamps: LampEmission): Veh
   const material = new VehicleNodeMaterial(envMap);
   material.emissiveNode = lamps.node;
   return material;
-}
-
-/** The graded reflective material on an empty reflection map, for the grade's shader check. */
-export function vehicleGradeSample(gpu: WebGPURenderer): GradeSample {
-  const generator = new PMREMGenerator(gpu);
-  const map = generator.fromScene(new Scene(), 0, MAP_NEAR, MAP_FAR, { size: 16 });
-  generator.dispose();
-  const material = createVehicleMaterial(map.texture, createLampEmission());
-  setGraded(material, true);
-  const geometry = withSlot(new BoxGeometry());
-  geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
-  return {
-    mesh: new Mesh(geometry, material),
-    dispose: () => {
-      map.dispose();
-      geometry.dispose();
-      material.dispose();
-    },
-  };
 }
 
 const topDownLayers = new Layers();

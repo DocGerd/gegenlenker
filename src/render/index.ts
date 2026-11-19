@@ -15,7 +15,7 @@ import { QUALITY_FLAGS } from './quality';
 import { startSkyTexture } from './sky-texture';
 import { skylineGradeSample } from './skyline';
 import { createThreeSceneRenderer } from './three-renderer';
-import { createVehicleEnvironment, vehicleGradeSample } from './vehicle-pbr';
+import { createVehicleEnvironment } from './vehicle-pbr';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
 /** Whether the preset offers the outside view. */
@@ -103,7 +103,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
         if (state !== 'failed') warmUp();
       }
     },
-    (gpu) => precompileGrade(gpu, [skylineGradeSample, () => vehicleGradeSample(gpu)]),
+    (gpu) => precompileGrade(gpu, [skylineGradeSample]),
   );
   const renderer = createThreeSceneRenderer({
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
