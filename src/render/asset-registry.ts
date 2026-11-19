@@ -2,7 +2,7 @@ import type { QualityFlags } from './quality';
 
 export type AssetKind = 'glb' | 'ktx2';
 
-type BooleanFlag = {
+export type BooleanFlag = {
   [K in keyof QualityFlags]: QualityFlags[K] extends boolean ? K : never;
 }[keyof QualityFlags];
 
@@ -19,3 +19,35 @@ export const ASSET_REGISTRY: Readonly<
   ground: { kind: 'ktx2', flag: 'groundTexture' },
   sky: { kind: 'ktx2', flag: 'hdriSky' },
 };
+
+/** An asynchronous attachment that publishes its state on `<html>` for the e2e specs. */
+export type Attachment = {
+  /** The attribute on `<html>`. */
+  readonly marker: string;
+  /** The quality flags that must all be on for the attachment to be drawn. */
+  readonly flags: readonly BooleanFlag[];
+  /** Whether the marker's value says the attachment is in place. */
+  readonly ready: (value: string) => boolean;
+};
+
+export const ATTACHMENTS = {
+  shells: {
+    marker: 'data-vehicle-shells',
+    flags: ['cabGlb', 'vehicleGlb'],
+    ready: (v) => v.split(' ').length === 3,
+  },
+  ground: {
+    marker: 'data-ground-texture',
+    flags: ['groundTexture'],
+    ready: (v) => v.startsWith('ktx2:'),
+  },
+  pbr: { marker: 'data-vehicle-pbr', flags: ['pbr'], ready: (v) => v === 'on' },
+  sky: { marker: 'data-sky-hdri', flags: ['hdriSky'], ready: (v) => v === 'on' },
+  grade: {
+    marker: 'data-perspective-grade',
+    flags: ['perspectiveLighting'],
+    ready: (v) => v === 'on',
+  },
+} as const satisfies Readonly<Record<string, Attachment>>;
+
+export type AttachmentKey = keyof typeof ATTACHMENTS;

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -19,5 +20,27 @@ describe('Node-run .ts entries', () => {
     process.exitCode = undefined;
     await import(/* @vite-ignore */ resolve(ROOT, entry));
     expect(process.exitCode).toBeUndefined();
+  });
+});
+
+describe('e2e/pinned-shoot.ts under plain Node', () => {
+  // Vitest and Playwright resolve extensionless imports; scripts/shoot-views.mjs does not.
+  it('imports through type stripping', () => {
+    const out = execFileSync(
+      process.execPath,
+      [
+        '--input-type=module',
+        '-e',
+        "import('./e2e/pinned-shoot.ts').then((m) => console.log(Object.keys(m.readyMarkers('high')).length))",
+      ],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 30_000,
+        killSignal: 'SIGKILL',
+      },
+    );
+    expect(Number(out.trim())).toBeGreaterThan(1);
   });
 });

@@ -72,11 +72,21 @@ function seen(root: Object3D, layers: Layers): Set<Object3D> {
 
 const only = (a: Set<Object3D>, b: Set<Object3D>): Object3D[] => [...a].filter((m) => !b.has(m));
 
+const isMesh = (object: Object3D): object is Mesh => object instanceof Mesh;
+const asMesh = (object: Object3D): Mesh => {
+  if (!isMesh(object)) throw new Error('not a mesh');
+  return object;
+};
+const materialOf = (mesh: Object3D): { polygonOffset?: boolean } =>
+  asMesh(mesh).material as { polygonOffset?: boolean };
+const isMarking = (mesh: Object3D): boolean => materialOf(mesh).polygonOffset === true;
+
 describe('environment quality', () => {
   it('shows the obstacle tokens to every camera on low, in place of the hidden props', () => {
     expect(layout).toBeDefined();
     if (layout === undefined) return;
     const env = proceduralEnvironment(layout, palette);
+    env.setQuality(QUALITY_FLAGS.balanced);
     const balanced = Object.fromEntries(
       Object.entries(cameras).map(([k, c]) => [k, seen(env.object, c)]),
     );
@@ -96,6 +106,100 @@ describe('environment quality', () => {
       expect(seen(env.object, cameras[view as keyof typeof cameras]), view).toEqual(meshes);
     }
     env.dispose();
+  });
+});
+
+describe('environment lit markings', () => {
+  const build = (): ReturnType<typeof proceduralEnvironment> | null =>
+    layout === undefined ? null : proceduralEnvironment(layout, palette);
+  const topDown = (env: { object: Object3D }): Map<Object3D, unknown> =>
+    new Map([...seen(env.object, cameras.topDown)].map((m) => [m, asMesh(m).material]));
+
+  it('leaves the top-down meshes and materials as on low, at every preset', () => {
+    const env = build();
+    if (env === null) return;
+    env.setQuality(QUALITY_FLAGS.low);
+    const low = topDown(env);
+    for (const preset of ['balanced', 'high'] as const) {
+      env.setQuality(QUALITY_FLAGS[preset]);
+      expect(topDown(env), preset).toEqual(low);
+    }
+    env.dispose();
+  });
+
+  it('swaps each marking for a lit copy in perspective only, keeping the polygon offset', () => {
+    const env = build();
+    if (env === null) return;
+    env.setQuality({ ...QUALITY_FLAGS.balanced, litMarkings: false });
+    const off = Object.fromEntries(
+      Object.entries(cameras).map(([k, c]) => [k, seen(env.object, c)]),
+    );
+    env.setQuality(QUALITY_FLAGS.balanced);
+    for (const view of ['cockpit', 'mirror'] as const) {
+      const now = seen(env.object, cameras[view]);
+      const gone = only(off[view] ?? new Set(), now);
+      const added = only(now, off[view] ?? new Set());
+      expect(gone.length, view).toBeGreaterThan(0);
+      expect(added, view).toHaveLength(gone.length);
+      for (const copy of added.map(asMesh)) {
+        expect(isNodeMaterial(copy), view).toBe(true);
+        expect(copy.material, view).toMatchObject({
+          vertexColors: true,
+          polygonOffset: true,
+          polygonOffsetFactor: -2,
+          polygonOffsetUnits: -2,
+        });
+        expect(copy.receiveShadow, view).toBe(true);
+        expect(
+          gone.some((t) => asMesh(t).geometry === copy.geometry),
+          view,
+        ).toBe(true);
+      }
+      for (const token of gone) expect(seen(env.object, cameras.topDown).has(token)).toBe(true);
+    }
+    expect(seen(env.object, cameras.topDown)).toEqual(new Set([...(off['topDown'] ?? [])]));
+    env.dispose();
+  });
+
+  it('shares one material across the copies and grades it with the lighting', () => {
+    const env = build();
+    if (env === null) return;
+    const copies = (): Mesh[] =>
+      [...seen(env.object, cameras.cockpit)].filter(
+        (m): m is Mesh => m instanceof Mesh && isMarking(m) && isNodeMaterial(m),
+      );
+    for (const [label, flags] of [
+      ['high', QUALITY_FLAGS.high],
+      ['balanced', QUALITY_FLAGS.balanced],
+      ['low', QUALITY_FLAGS.low],
+      ['high again', QUALITY_FLAGS.high],
+    ] as const) {
+      env.setQuality(flags);
+      const shown = copies();
+      expect(shown.length > 0, label).toBe(flags.litMarkings);
+      expect(new Set(shown.map((m) => m.material)).size, label).toBe(flags.litMarkings ? 1 : 0);
+      const material = shown[0]?.material as { outputNode: unknown } | undefined;
+      if (material !== undefined) {
+        expect(material.outputNode !== null, label).toBe(flags.perspectiveLighting);
+      }
+    }
+    env.dispose();
+  });
+
+  it('frees the copy material and each shared geometry once', () => {
+    const env = build();
+    if (env === null) return;
+    env.setQuality(QUALITY_FLAGS.high);
+    const copies = [...seen(env.object, cameras.cockpit)].filter(
+      (m): m is Mesh => m instanceof Mesh && isMarking(m) && isNodeMaterial(m),
+    );
+    expect(copies.length).toBeGreaterThan(0);
+    const material = copies[0]?.material as { dispose(): void };
+    const disposeMaterial = vi.spyOn(material, 'dispose');
+    const geometries = copies.map((c) => vi.spyOn(c.geometry, 'dispose'));
+    env.dispose();
+    expect(disposeMaterial).toHaveBeenCalledOnce();
+    for (const g of geometries) expect(g).toHaveBeenCalledOnce();
   });
 });
 
@@ -229,6 +333,11 @@ function fakeTextures() {
 
 describe('environment ground texture', () => {
   afterEach(() => vi.restoreAllMocks());
+  // the markings swap separately (see 'environment lit markings'); keep them out of these set comparisons
+  const ground = {
+    high: { ...QUALITY_FLAGS.high, litMarkings: false },
+    balanced: { ...QUALITY_FLAGS.balanced, litMarkings: false },
+  };
 
   it('swaps the ground in perspective only, leaving top-down as it was, and reverses', () => {
     expect(layout).toBeDefined();
@@ -239,7 +348,7 @@ describe('environment ground texture', () => {
       Object.entries(cameras).map(([k, c]) => [k, seen(env.object, c)]),
     );
 
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setQuality(ground.high);
     deliver();
     const now = (k: keyof typeof cameras): Set<Object3D> => seen(env.object, cameras[k]);
     expect(now('topDown')).toEqual(before['topDown']);
@@ -251,11 +360,11 @@ describe('environment ground texture', () => {
       expect(now('topDown').has(gone[0] as Object3D)).toBe(true);
     }
 
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setQuality(ground.balanced);
     for (const [view, meshes] of Object.entries(before)) {
       expect(now(view as keyof typeof cameras), view).toEqual(meshes);
     }
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setQuality(ground.high);
     expect(now('cockpit').size).toBe(before['cockpit']?.size);
     expect(only(now('cockpit'), before['cockpit'] ?? new Set())).toHaveLength(1);
     env.dispose();
@@ -266,9 +375,9 @@ describe('environment ground texture', () => {
     const { textures, deliver } = fakeTextures();
     const env = proceduralEnvironment(layout, palette, textures);
     const before = seen(env.object, cameras.cockpit);
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setQuality(ground.high);
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setQuality(ground.balanced);
     deliver();
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
     env.dispose();
@@ -318,7 +427,7 @@ describe('environment ground texture', () => {
     const env = proceduralEnvironment(layout, palette, textures);
     const before = seen(env.object, cameras.cockpit);
     const children = env.object.children.length;
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setQuality(ground.high);
     deliver();
     expect(warn).toHaveBeenCalledOnce();
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
@@ -332,14 +441,14 @@ describe('environment ground texture', () => {
     const { textures, deliver, reject, applied } = fakeTextures();
     const env = proceduralEnvironment(layout, palette, textures);
     const before = seen(env.object, cameras.cockpit);
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setQuality(ground.high);
     deliver();
     expect(seen(env.object, cameras.cockpit)).not.toEqual(before);
     expect(applied).toEqual([true]);
     reject();
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
-    env.setQuality(QUALITY_FLAGS.balanced);
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setQuality(ground.balanced);
+    env.setQuality(ground.high);
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
     expect(applied).toEqual([true, false]);
     env.dispose();
@@ -349,10 +458,10 @@ describe('environment ground texture', () => {
     if (layout === undefined) return;
     const { textures, deliver, applied } = fakeTextures();
     const env = proceduralEnvironment(layout, palette, textures);
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setQuality(ground.high);
     deliver();
-    env.setQuality(QUALITY_FLAGS.balanced);
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setQuality(ground.balanced);
+    env.setQuality(ground.high);
     env.dispose();
     expect(applied).toEqual([true, false, true, false]);
   });

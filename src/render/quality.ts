@@ -15,6 +15,8 @@ export type QualityFlags = {
   /** Dashboard, pillars, header and visor around the cockpit view, and the mirror housings. */
   readonly cockpitInterior: boolean;
   readonly groundTexture: boolean;
+  /** Lit perspective copies of the ground markings; the top-down tokens stay flat. */
+  readonly litMarkings: boolean;
   readonly pbr: boolean;
   /** HDRI sun and sky light in the perspective views, tone-mapped in their perspective-only materials. */
   readonly perspectiveLighting: boolean;
@@ -33,6 +35,7 @@ const BALANCED: QualityFlags = {
   vehicleGlb: true,
   chaseView: true,
   cockpitInterior: true,
+  litMarkings: true,
   groundTexture: false,
   pbr: false,
   perspectiveLighting: false,
@@ -53,6 +56,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     vehicleGlb: false,
     chaseView: false,
     cockpitInterior: false,
+    litMarkings: false,
     groundTexture: false,
     pbr: false,
     perspectiveLighting: false,
