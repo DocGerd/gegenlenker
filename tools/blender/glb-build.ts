@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../../src/contracts/vehicle';
@@ -8,16 +7,14 @@ import { bodyLampParams, cabLampParams, trailerLampParams } from '../../src/rend
 import { TRUCK_LOOKS } from '../../src/render/livery';
 import { trailerShellParams } from '../../src/render/trailer-dims';
 import { trailerById, truckById } from '../../src/vehicles/registry';
+import { canonicalJson, fileSha256, type Json, ROOT, sha256 } from '../assets/provenance';
 
-export const ROOT = join(import.meta.dirname, '../..');
+export { canonicalJson, type Json, ROOT, sha256 };
 
 export const COMMON_SCRIPT = 'tools/blender/shell_common.py';
 export const OPTIMISE_SCRIPT = 'scripts/glb-optimise.mjs';
 
 export type AssetKind = 'cab' | 'body' | 'trailer';
-
-export type Json =
-  null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 
 export type Asset = {
   /** `<vehicle id>-<kind>`; names the glb and its manifest. */
@@ -89,26 +86,9 @@ export type GlbManifest = {
   readonly glbBytes: number;
 };
 
-export const sha256 = (data: string | Uint8Array): string =>
-  createHash('sha256').update(data).digest('hex');
-
-/** Line endings differ per checkout, so scripts are hashed LF-normalised. */
-const fileSha256 = (root: string, file: string): string =>
-  sha256(readFileSync(join(root, file), 'utf8').replaceAll('\r\n', '\n'));
-
 export const scriptSha256 = (a: Asset, root = ROOT): string => fileSha256(root, a.script);
 export const commonSha256 = (root = ROOT): string => fileSha256(root, COMMON_SCRIPT);
 export const optimiseSha256 = (root = ROOT): string => fileSha256(root, OPTIMISE_SCRIPT);
-
-/** Sorted keys, no whitespace: formatting and key order cannot change the hash. */
-export function canonicalJson(value: Json): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
 
 export const paramsSha256 = (a: Asset, root = ROOT): string =>
   sha256(canonicalJson(JSON.parse(readFileSync(join(root, a.params), 'utf8')) as Json));

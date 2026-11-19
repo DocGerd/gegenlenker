@@ -62,7 +62,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - After changing those scripts, `scripts/glb-optimise.mjs`, their params, `src/render/{cab,body,trailer}-dims.ts` or `livery.ts`, run `pnpm glb:params` and rebuild (optimise-only changes need just a re-optimise; editing `shell_common.py` changes `commonSha256` in every glb, so rebuild all assets); `tools/blender/glb-build.test.ts` checks every input hash in the glb. Params numbers are 0 or ≥ 1e-4 (Python and JS print smaller floats differently).
 - Livery is colours only (no lettering, emblems or maker logos). Look dimensions in `src/render/livery.ts` are perspective-only render estimates, not Params, so they stay out of `dataFingerprint`.
 - MCP-run bpy scripts must not call `read_factory_settings`: it reloads preferences and disables the MCP add-on.
-- `tools/textures/` makes the KTX2 ground texture (`pnpm ground:texture`); `tools/textures/ground-build.test.ts` fails when stale; it is runtime-cached at High, not precached.
+- `tools/textures/` makes the KTX2 ground texture (`pnpm texture ground`); `tools/textures/ground-build.test.ts` fails when stale; it is runtime-cached at High, not precached.
 - A new glb/ktx2 in `src/render/assets` needs an `ASSET_REGISTRY` entry (`src/render/asset-registry.ts`) naming the `QualityFlags` key that draws it: runtime-cached when that flag is off by default, else precached; `src/pwa/config.test.ts` fails on an unlisted file.
 - `pnpm sky:texture` builds the High HDRI `sky.ktx2` from the source `.hdr` (not committed; URL and SHA-256 in `docs/asset-credits.md`); `tools/textures/sky-build.test.ts` fails when stale.
 
