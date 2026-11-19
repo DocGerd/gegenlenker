@@ -230,14 +230,19 @@ for (const preset of ['low', 'balanced', 'high']) {
       const box = await boxOf(page, selector);
       const x = Math.round(box.width / 2);
       const outer = inner === 'right' ? 'left' : 'right';
+      // several columns: on High a cloud of the HDRI sky may cover one
+      const topRow = [0.2, 0.35, 0.5, 0.65, 0.8].map(
+        (f) => [Math.round(box.width * f), 2] as const,
+      );
       await expect
         .poll(
           async () => {
-            const [top, bottom] = await panePixels(page, selector, [
-              [x, 2],
+            const pixels = await panePixels(page, selector, [
+              ...topRow,
               [x, Math.round(box.height) - 3],
             ]);
-            return [isSky(top) && !isSky(bottom), isGround(bottom)];
+            const bottom = pixels.at(-1);
+            return [pixels.slice(0, -1).some(isSky) && !isSky(bottom), isGround(bottom)];
           },
           { message: side, ...SCREENSHOT_POLL },
         )
