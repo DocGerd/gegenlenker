@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "preview:stop": "node scripts/preview-stop.mjs",
     "shoot": "node scripts/shoot.mjs",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "format": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path \"$(git rev-parse --git-path info/exclude)\"",
     "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path \"$(git rev-parse --git-path info/exclude)\"",
     "typecheck": "tsc --noEmit",
