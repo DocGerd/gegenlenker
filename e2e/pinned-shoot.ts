@@ -9,7 +9,7 @@ const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const FRAME_MS = 16;
 /** Frames stepped after the scene is ready, so every lazily built resource is in place. */
 const SETTLE_FRAMES = 30;
-const READY_STEPS = 400;
+const READY_STEPS = 2000;
 const HIDE_ID = 'pinned-shoot-bare';
 
 /** Each preset's asynchronous attachments, read from `<html>`; a shot before they land would differ. */
@@ -79,14 +79,23 @@ export async function shoot(page: Page, shot: Shot): Promise<Buffer> {
   }
   const box = await page.locator(BOX[shot]).boundingBox();
   if (box === null) throw new Error(`no box for ${shot}`);
+  return bareScreenshot(page, box, () => step(page, 1));
+}
+
+/** `clip` with the HUD and controls hidden, so only the canvas shows; `settle` runs once they are. */
+export async function bareScreenshot(
+  page: Page,
+  clip: { x: number; y: number; width: number; height: number },
+  settle: () => Promise<void> = () => Promise.resolve(),
+): Promise<Buffer> {
   await page.evaluate((id) => {
     const style = document.createElement('style');
     style.id = id;
     style.textContent = '.hud, .ctl, [class^="ctl-"] { visibility: hidden !important }';
     document.head.append(style);
   }, HIDE_ID);
-  await step(page, 1);
-  const png = await page.screenshot({ clip: box });
+  await settle();
+  const png = await page.screenshot({ clip });
   await page.evaluate((id) => document.getElementById(id)?.remove(), HIDE_ID);
   return png;
 }

@@ -122,7 +122,7 @@ export const en = {
   offlineSetupFailed: 'Offline use could not be set up.',
   dismiss: 'Dismiss',
   noWebgl: 'This device cannot show WebGL 2 graphics.',
-  contextLost: 'Graphics interrupted. The run continues when they return, or reload.',
+  contextLost: 'The graphics stopped and could not restart. Reload to continue.',
   loadFailed: 'Could not load. Check the connection and try again.',
   langDe: 'Deutsch',
   langEn: 'English',

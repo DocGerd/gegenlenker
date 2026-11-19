@@ -3,8 +3,9 @@ import { createSceneRenderer } from '../render';
 import { currentSettings } from './settings';
 import { showNotice } from './notice';
 
-/** Fresh GPU renderers after a loss per session; past this the stage asks for a reload. */
+/** Losses within `RECREATE_WINDOW_MS` of each other that still get a fresh renderer; one more asks for a reload. */
 const MAX_RECREATES = 3;
+const RECREATE_WINDOW_MS = 60_000;
 
 type Shared = {
   /** Holds the current canvas; a loss swaps in a new one, so listeners go here. */
@@ -21,12 +22,29 @@ type Shared = {
 // One renderer for the whole session: a fresh GPU context per run would hit the browser's context limit.
 let shared: Shared | null = null;
 
-function startOnFreshCanvas(s: Shared): void {
+function startOnFreshCanvas(s: Shared): Promise<void> {
   const canvas = document.createElement('canvas');
   s.surface.replaceChildren(canvas);
-  s.ready = s.renderer.init(canvas);
+  return s.renderer.init(canvas);
+}
+
+function setReady(s: Shared, next: Promise<void>): void {
+  s.ready = next;
   // A loss may happen while no stage is mounted to handle the outcome.
-  s.ready.catch(() => undefined);
+  next.catch(() => undefined);
+}
+
+/** A hidden page may lose the context again, so a fresh one waits until it is shown. */
+function whenVisible(): Promise<void> {
+  if (document.visibilityState === 'visible') return Promise.resolve();
+  return new Promise((resolve) => {
+    const shown = (): void => {
+      if (document.visibilityState !== 'visible') return;
+      document.removeEventListener('visibilitychange', shown);
+      resolve();
+    };
+    document.addEventListener('visibilitychange', shown);
+  });
 }
 
 function acquireRenderer(): Shared {
@@ -41,15 +59,19 @@ function acquireRenderer(): Shared {
     started: false,
     lost: new Set(),
   };
-  startOnFreshCanvas(s);
-  let recreated = 0;
+  setReady(s, startOnFreshCanvas(s));
+  let recent = 0;
+  let lastLoss = -Infinity;
   renderer.onLost(() => {
-    recreated++;
-    if (recreated <= MAX_RECREATES) startOnFreshCanvas(s);
-    else {
-      s.ready = Promise.reject(new Error('graphics lost too often'));
-      s.ready.catch(() => undefined);
-    }
+    const now = performance.now();
+    recent = now - lastLoss > RECREATE_WINDOW_MS ? 1 : recent + 1;
+    lastLoss = now;
+    setReady(
+      s,
+      recent > MAX_RECREATES
+        ? Promise.reject(new Error('graphics lost too often'))
+        : whenVisible().then(() => startOnFreshCanvas(s)),
+    );
     for (const listener of [...s.lost]) listener();
   });
   shared = s;

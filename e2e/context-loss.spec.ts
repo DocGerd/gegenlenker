@@ -1,8 +1,19 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { en } from '../src/i18n/en';
-import { distinctColours } from './pinned-shoot';
+import { bareScreenshot, distinctColours } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
+
+/** Loses the current canvas's context; resolves with a handle to that canvas. */
+async function loseContext(page: Page) {
+  const canvas = page.locator('.drive-surface > canvas');
+  const handle = await canvas.evaluateHandle((c) => c);
+  await canvas.evaluate((c) => {
+    if (!(c instanceof HTMLCanvasElement)) throw new Error('no canvas');
+    c.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();
+  });
+  return handle;
+}
 
 test('a lost GPU context comes back on a fresh canvas and the drive goes on', async ({ page }) => {
   const problems: string[] = [];
@@ -23,14 +34,9 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
 
-  const canvas = page.locator('.drive-surface > canvas');
-  const lost = await canvas.evaluateHandle((c) => c);
-  await canvas.evaluate((c) => {
-    if (!(c instanceof HTMLCanvasElement)) throw new Error('no canvas');
-    c.getContext('webgl2')?.getExtension('WEBGL_lose_context')?.loseContext();
-  });
+  const lost = await loseContext(page);
   await expect.poll(() => lost.evaluate((c) => c.isConnected)).toBe(false);
-  await expect(canvas).toHaveCount(1);
+  await expect(page.locator('.drive-surface > canvas')).toHaveCount(1);
   await expect(page.getByText(en.contextLost)).toHaveCount(0);
   await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
@@ -38,7 +44,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   const pane = await page.locator('[data-hud="topDown"]').boundingBox();
   if (pane === null) throw new Error('no top-down pane');
   await expect
-    .poll(async () => distinctColours(page, await page.screenshot({ clip: pane })))
+    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)))
     .toBeGreaterThan(50);
 
   const speed = page.locator('[data-hud="speed"]');
@@ -53,4 +59,16 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
 
   // Headless Chromium denies the wake lock; that warning is not about graphics.
   expect(problems.filter((p) => !p.includes('Wake Lock'))).toEqual([]);
+});
+
+test('losses in quick succession end at the reload notice', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-render-backend', 'webgl2');
+  for (let i = 0; i < 3; i++) {
+    const lost = await loseContext(page);
+    await expect.poll(() => lost.evaluate((c) => c.isConnected)).toBe(false);
+  }
+  await loseContext(page);
+  await expect(page.getByText(en.contextLost)).toBeVisible();
 });
