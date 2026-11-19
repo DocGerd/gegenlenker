@@ -4,49 +4,43 @@
  * overlay per graphics preset and vehicle pair, and runs function checks. See docs/perf.md.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { parseArgs } from 'node:util';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import {
+  type Check,
+  type Options,
+  type Pair,
+  type Preset,
+  type Reading,
+  type Run,
+  MIN_FPS,
+  cellVerdict,
+  checksOk,
+  isIgnorableFailure,
+  isSoftwareGl,
+  median,
+  parseOptions,
+  parseOverlay,
+  readingProblems,
+} from './tablet-logic.ts';
 
 // Mirrors SETTINGS_KEY in src/app/storage.ts.
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const BASE_PATH = '/gegenlenker/';
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 13; SM-T870) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-const PRESETS = ['low', 'balanced', 'high'] as const;
-const PAIRS = [
-  ['man-le-18-280', 'krone-azw-18'],
-  ['man-le-18-280', 'hueffermann-hpa-24-81-l'],
-  ['arocs-1835-ak', 'krone-azw-18'],
-  ['arocs-1835-ak', 'hueffermann-hpa-24-81-l'],
-] as const;
-const MIN_FPS = 58;
-const SOFTWARE_GL = /SwiftShader|llvmpipe|Software/i;
 const WSL_LIB = '/usr/lib/wsl/lib';
 const WAKE_LOCK_KEY = '__tabletWakeLock';
 const START_BUTTON = '[data-menu="yards"] button';
+const SETTLE_MS = 3_000;
+const SETTLE_DEADLINE_MS = 35_000;
+const SERVICE_WORKER_TIMEOUT_MS = 15_000;
 
-type Preset = (typeof PRESETS)[number];
-type Pair = (typeof PAIRS)[number];
-type Reading = { fps: number; p95: number; scale: number; calls: number; gl: string };
-type Cell = { preset: Preset; pair: Pair; runs: Reading[]; errors: string[]; passed: number };
-type Check = { name: string; status: 'pass' | 'fail' | 'skip'; detail: string };
+type Cell = { preset: Preset; pair: Pair; runs: Run[] };
 type WakeLockLog = { requests: number; supported: boolean };
-
-const { values } = parseArgs({
-  options: {
-    throttle: { type: 'string', default: '4' },
-    preset: { type: 'string', default: 'all' },
-    runs: { type: 'string', default: '1' },
-    quick: { type: 'boolean', default: false },
-    functional: { type: 'boolean', default: false },
-    'no-perf': { type: 'boolean', default: false },
-    'allow-software': { type: 'boolean', default: false },
-    'skip-build': { type: 'boolean', default: false },
-    help: { type: 'boolean', default: false },
-  },
-});
 
 const USAGE = `Usage: pnpm perf:tablet [options]
   --throttle <n>     CPU slowdown factor (default 4)
@@ -54,30 +48,33 @@ const USAGE = `Usage: pnpm perf:tablet [options]
   --runs <n>         repeats per preset and vehicle pair (default 1)
   --quick            first vehicle pair only
   --functional       also run the function checks
-  --no-perf          skip the fps matrix (use with --functional)
+  --no-perf          skip the fps matrix (needs --functional)
   --allow-software   do not abort on a software GL renderer (results are not valid)
   --skip-build       reuse the existing dist/ (must be built with BASE_PATH=${BASE_PATH})`;
 
-if (values.help) {
-  console.log(USAGE);
-  process.exit(0);
-}
-
-const positive = (name: string, raw: string): number => {
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1) throw new Error(`--${name} must be an integer >= 1`);
-  return value;
-};
-const throttle = positive('throttle', values.throttle);
-const runs = positive('runs', values.runs);
-const presets = PRESETS.filter((p) => values.preset === 'all' || values.preset === p);
-if (presets.length === 0) throw new Error(`--preset must be one of ${PRESETS.join(', ')}, all`);
-const pairs = values.quick ? PAIRS.slice(0, 1) : PAIRS;
 const wsl = existsSync(WSL_LIB);
-
-const median = (xs: number[]): number =>
-  [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)] ?? 0;
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+let teardowns: (() => Promise<void> | void)[] = [];
+async function cleanup(): Promise<void> {
+  const pending = teardowns.reverse();
+  teardowns = [];
+  for (const fn of pending) {
+    try {
+      await fn();
+    } catch (e) {
+      console.error(`cleanup: ${message(e)}`);
+    }
+  }
+}
+for (const [signal, code] of [
+  ['SIGINT', 130],
+  ['SIGTERM', 143],
+] as const) {
+  process.once(signal, () => {
+    void cleanup().finally(() => process.exit(code));
+  });
+}
 
 async function freePort(): Promise<number> {
   const server = createServer();
@@ -88,18 +85,43 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
-async function startPreview(): Promise<{ base: string; server: ChildProcess }> {
+/** `pnpm` spawns vite as a child, so signal the whole process group; it may already be gone. */
+function stopPreview(server: ChildProcess): void {
+  if (server.pid === undefined) return;
+  try {
+    process.kill(-server.pid);
+  } catch (e) {
+    if (!(e instanceof Error && 'code' in e && e.code === 'ESRCH')) throw e;
+  }
+}
+
+async function startPreview(skipBuild: boolean): Promise<string> {
   const env = { ...process.env, BASE_PATH };
-  if (!values['skip-build']) {
-    const build = spawnSync('pnpm', ['build'], { env, stdio: ['ignore', 'inherit', 'inherit'] });
+  let outDir = 'dist';
+  if (!skipBuild) {
+    outDir = mkdtempSync(join(tmpdir(), 'gegenlenker-tablet-'));
+    teardowns.push(() => {
+      rmSync(outDir, { recursive: true, force: true });
+    });
+    const build = spawnSync('pnpm', ['build', '--outDir', outDir], {
+      env,
+      stdio: ['ignore', 'inherit', 'inherit'],
+    });
     if (build.status !== 0) throw new Error('pnpm build failed');
   }
   const port = await freePort();
   const server = spawn(
     'pnpm',
-    ['preview', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
+    ['preview', '--outDir', outDir, '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
     { env, stdio: ['ignore', 'ignore', 'inherit'], detached: true },
   );
+  teardowns.push(() => {
+    stopPreview(server);
+  });
+  // Safety net for exits that skip the async cleanup (uncaught errors).
+  process.once('exit', () => {
+    stopPreview(server);
+  });
   const base = `http://127.0.0.1:${String(port)}${BASE_PATH}`;
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
@@ -108,16 +130,10 @@ async function startPreview(): Promise<{ base: string; server: ChildProcess }> {
       (r) => r.ok,
       () => false,
     );
-    if (up) return { base, server };
+    if (up) return base;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  stopPreview(server);
   throw new Error('pnpm preview did not come up');
-}
-
-/** `pnpm` spawns vite as a child, so signal the whole process group. */
-function stopPreview(server: ChildProcess): void {
-  if (server.pid !== undefined) process.kill(-server.pid);
 }
 
 function launch(): Promise<Browser> {
@@ -130,13 +146,21 @@ function launch(): Promise<Browser> {
     env['GALLIUM_DRIVER'] = 'd3d12';
     env['LD_LIBRARY_PATH'] = [WSL_LIB, env['LD_LIBRARY_PATH']].filter(Boolean).join(':');
   }
-  return chromium.launch({ headless: false, args, env, timeout: 60_000 });
+  // Our own signal handlers close the browser together with the preview.
+  return chromium.launch({
+    headless: false,
+    args,
+    env,
+    timeout: 60_000,
+    handleSIGINT: false,
+    handleSIGTERM: false,
+    handleSIGHUP: false,
+  });
 }
 
-async function tabletContext(
-  browser: Browser,
-  settings: Record<string, string>,
-): Promise<{ context: BrowserContext; page: Page; errors: string[] }> {
+type Fixture = { context: BrowserContext; page: Page; errors: string[]; failed: string[] };
+
+async function tabletContext(browser: Browser, settings: Record<string, string>): Promise<Fixture> {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 800 },
     deviceScaleFactor: 2,
@@ -154,11 +178,16 @@ async function tabletContext(
   );
   const page = await context.newPage();
   const errors: string[] = [];
+  const failed: string[] = [];
   page.on('console', (m) => {
-    if (m.type() === 'error' && !/net::ERR_/.test(m.text())) errors.push(`console: ${m.text()}`);
+    if (m.type() === 'error') errors.push(`console: ${m.text()}`);
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  return { context, page, errors };
+  page.on('requestfailed', (r) => {
+    const failure = r.failure()?.errorText ?? 'failed';
+    if (!isIgnorableFailure(r.url(), failure)) failed.push(`${failure} ${r.url()}`);
+  });
+  return { context, page, errors, failed };
 }
 
 function glRenderer(page: Page): Promise<string> {
@@ -181,27 +210,24 @@ async function readOverlay(page: Page): Promise<Reading | null> {
         .map((e) => e.textContent)
         .find((t) => t.includes(' fps')) ?? '',
   );
-  const m = /(\d+) fps\s+p95 ([\d.]+) ms\s+scale ([\d.]+)\s+calls (\d+)\n(.*)/.exec(text);
-  const [, fps, p95, scale, calls, gl] = m ?? [];
-  return fps && p95 && scale && calls && gl
-    ? { fps: +fps, p95: +p95, scale: +scale, calls: +calls, gl }
-    : null;
+  return parseOverlay(text);
 }
 
 async function measure(
   browser: Browser,
   base: string,
+  opts: Options,
   preset: Preset,
   [truckId, trailerId]: Pair,
-): Promise<{ reading: Reading; errors: string[] }> {
-  const { context, page, errors } = await tabletContext(browser, {
+): Promise<Run> {
+  const { context, page, errors, failed } = await tabletContext(browser, {
     graphics: preset,
     truckId,
     trailerId,
   });
   try {
     const cdp = await context.newCDPSession(page);
-    await cdp.send('Emulation.setCPUThrottlingRate', { rate: throttle });
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: opts.throttle });
     await page.goto(`${base}?perf=1`);
     await page.locator(START_BUTTON).first().click();
     await page.locator('.hud-mirror:not([hidden])').first().waitFor({ timeout: 60_000 });
@@ -209,21 +235,31 @@ async function measure(
     await page.keyboard.press('4');
     await page.keyboard.press('w');
     await page.keyboard.press('w');
+    await page
+      .waitForFunction(
+        () => parseFloat(document.querySelector('[data-hud="speed"]')?.textContent ?? '') > 0,
+        null,
+        { timeout: 15_000 },
+      )
+      .catch(() => {
+        throw new Error('the vehicle did not move after the key presses');
+      });
     await page.waitForFunction(
       () => [...document.querySelectorAll('.mono')].some((e) => e.textContent.includes(' fps')),
       null,
       { timeout: 30_000 },
     );
-    // The governor may still step the resolution down: wait until the scale holds for 3 s.
+    // The governor may still step the resolution down: wait until the scale holds.
     let last = await readOverlay(page);
     let since = Date.now();
-    const deadline = Date.now() + 35_000;
-    while (Date.now() < deadline && Date.now() - since < 3_000) {
+    const deadline = Date.now() + SETTLE_DEADLINE_MS;
+    while (Date.now() < deadline && Date.now() - since < SETTLE_MS) {
       await page.waitForTimeout(250);
       const next = await readOverlay(page);
       if (next && last && next.scale !== last.scale) since = Date.now();
       last = next ?? last;
     }
+    if (Date.now() - since < SETTLE_MS) errors.push('resolution scale did not settle');
     const samples: Reading[] = [];
     for (const end = Date.now() + 12_000; Date.now() < end;) {
       await page.waitForTimeout(500);
@@ -232,6 +268,8 @@ async function measure(
     }
     const final = samples.at(-1);
     if (!final) throw new Error('perf overlay produced no samples');
+    errors.push(...failed.map((f) => `request failed: ${f}`));
+    errors.push(...samples.flatMap(readingProblems));
     return {
       reading: {
         fps: median(samples.map((s) => s.fps)),
@@ -240,44 +278,44 @@ async function measure(
         calls: median(samples.map((s) => s.calls)),
         gl: final.gl,
       },
-      errors,
+      errors: [...new Set(errors)],
     };
   } finally {
     await context.close();
   }
 }
 
-const meetsBar = (r: Reading): boolean => r.fps >= MIN_FPS && r.scale >= 1;
-
-async function perfMatrix(browser: Browser, base: string): Promise<Cell[]> {
+async function perfMatrix(browser: Browser, base: string, opts: Options): Promise<Cell[]> {
   const cells: Cell[] = [];
-  for (const preset of presets) {
-    for (const pair of pairs) {
-      const cell: Cell = { preset, pair, runs: [], errors: [], passed: 0 };
-      for (let i = 0; i < runs; i++) {
-        const { reading, errors } = await measure(browser, base, preset, pair);
-        cell.runs.push(reading);
-        cell.errors.push(...errors);
-        if (meetsBar(reading) && errors.length === 0) cell.passed++;
+  for (const preset of opts.presets) {
+    for (const pair of opts.pairs) {
+      const cell: Cell = { preset, pair, runs: [] };
+      for (let i = 0; i < opts.runs; i++) {
+        cell.runs.push(await measure(browser, base, opts, preset, pair));
       }
       cells.push(cell);
-      console.log(`${preset} ${pair.join(' + ')}: ${String(cell.passed)}/${String(runs)} passed`);
+      const { passed, total } = cellVerdict(cell.runs);
+      console.log(`${preset} ${pair.join(' + ')}: ${String(passed)}/${String(total)} passed`);
     }
   }
   return cells;
 }
 
-function printMatrix(cells: Cell[]): boolean {
-  const rows = cells.map((c) => [
-    c.preset,
-    c.pair.join(' + '),
-    String(Math.min(...c.runs.map((r) => r.fps))),
-    Math.max(...c.runs.map((r) => r.p95)).toFixed(1),
-    Math.min(...c.runs.map((r) => r.scale)).toFixed(2),
-    String(median(c.runs.map((r) => r.calls))),
-    `${String(c.passed)}/${String(c.runs.length)}`,
-    c.passed === c.runs.length ? 'ok' : 'FAIL',
-  ]);
+function printMatrix(cells: Cell[], opts: Options): boolean {
+  const rows = cells.map((c) => {
+    const readings = c.runs.map((r) => r.reading);
+    const { passed, total, ok } = cellVerdict(c.runs);
+    return [
+      c.preset,
+      c.pair.join(' + '),
+      String(Math.min(...readings.map((r) => r.fps))),
+      Math.max(...readings.map((r) => r.p95)).toFixed(1),
+      Math.min(...readings.map((r) => r.scale)).toFixed(2),
+      String(median(readings.map((r) => r.calls))),
+      `${String(passed)}/${String(total)}`,
+      ok ? 'ok' : 'FAIL',
+    ];
+  });
   const head = ['preset', 'vehicles', 'fps', 'p95 ms', 'scale', 'calls', 'passed', ''];
   const width = head.map((h, i) => Math.max(h.length, ...rows.map((r) => r[i]?.length ?? 0)));
   const line = (r: string[]): string =>
@@ -286,14 +324,14 @@ function printMatrix(cells: Cell[]): boolean {
       .join('  ')
       .trimEnd();
   console.log(
-    `\nthrottle ${String(throttle)}x; bar: >= ${String(MIN_FPS)} fps at scale 1.00, no console errors (worst run per cell)`,
+    `\nthrottle ${String(opts.throttle)}x; bar: >= ${String(MIN_FPS)} fps at scale 1.00, no errors (worst run per cell)`,
   );
   console.log([line(head), ...rows.map(line)].join('\n'));
-  for (const c of cells) for (const e of new Set(c.errors)) console.log(`${c.preset}: ${e}`);
-  return cells.every((c) => c.passed === c.runs.length);
+  for (const c of cells) {
+    for (const e of new Set(c.runs.flatMap((r) => r.errors))) console.log(`${c.preset}: ${e}`);
+  }
+  return cells.every((c) => cellVerdict(c.runs).ok);
 }
-
-type Fixture = { context: BrowserContext; page: Page; errors: string[] };
 
 /** A fresh tablet context on the menu; `init` runs in the page before the app. */
 async function menuContext(
@@ -307,15 +345,25 @@ async function menuContext(
   return fixture;
 }
 
-async function checkOffline({ context, page, errors }: Fixture): Promise<string> {
-  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+async function checkOffline({ context, page }: Fixture): Promise<string> {
+  await page.evaluate(
+    (ms) =>
+      Promise.race([
+        navigator.serviceWorker.ready.then(() => undefined),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => {
+            reject(new Error('service worker not ready'));
+          }, ms);
+        }),
+      ]),
+    SERVICE_WORKER_TIMEOUT_MS,
+  );
   await page.reload();
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
   await context.setOffline(true);
   await page.reload();
   await startDrive(page);
   if ((await page.locator('canvas').count()) === 0) throw new Error('no canvas while offline');
-  if (errors.length > 0) throw new Error(errors.join('; '));
   return 'service worker controls the page; menu and drive load offline';
 }
 
@@ -406,6 +454,8 @@ async function functionalChecks(browser: Browser, base: string): Promise<Check[]
     const fixture = await menuContext(browser, base, init);
     try {
       const detail = await run(fixture);
+      const problems = [...fixture.errors, ...fixture.failed.map((f) => `request failed: ${f}`)];
+      if (problems.length > 0) throw new Error([...new Set(problems)].join('; '));
       checks.push({ name, status: detail.startsWith('skip:') ? 'skip' : 'pass', detail });
     } catch (e) {
       checks.push({ name, status: 'fail', detail: message(e) });
@@ -421,33 +471,30 @@ async function functionalChecks(browser: Browser, base: string): Promise<Check[]
 }
 
 async function main(): Promise<boolean> {
-  const { base, server } = await startPreview();
-  let browser: Browser | undefined;
-  try {
-    browser = await launch();
-    const probe = await browser.newPage();
-    const renderer = await glRenderer(probe);
-    await probe.close();
-    console.log(`GL renderer: ${renderer}`);
-    if (SOFTWARE_GL.test(renderer) || renderer === 'no WebGL2') {
-      if (!values['allow-software']) {
-        throw new Error(
-          `no hardware GL (${renderer}): results would be invalid; --allow-software overrides`,
-        );
-      }
-      console.warn('warning: software GL, results are not valid');
-    }
-    let ok = true;
-    if (!values['no-perf']) ok = printMatrix(await perfMatrix(browser, base));
-    if (values.functional) {
-      const checks = await functionalChecks(browser, base);
-      ok = checks.every((c) => c.status !== 'fail') && ok;
-    }
-    return ok;
-  } finally {
-    await browser?.close();
-    stopPreview(server);
+  const opts = parseOptions(process.argv.slice(2));
+  if (opts.help) {
+    console.log(USAGE);
+    return true;
   }
+  const base = await startPreview(opts.skipBuild);
+  const browser = await launch();
+  teardowns.push(() => browser.close());
+  const probe = await browser.newPage();
+  const renderer = await glRenderer(probe);
+  await probe.close();
+  console.log(`GL renderer: ${renderer}`);
+  if (isSoftwareGl(renderer)) {
+    if (!opts.allowSoftware) {
+      throw new Error(
+        `no hardware GL (${renderer}): results would be invalid; --allow-software overrides`,
+      );
+    }
+    console.warn('warning: software GL, results are not valid');
+  }
+  let ok = true;
+  if (opts.perf) ok = printMatrix(await perfMatrix(browser, base, opts), opts);
+  if (opts.functional) ok = checksOk(await functionalChecks(browser, base)) && ok;
+  return ok;
 }
 
 try {
@@ -455,4 +502,6 @@ try {
 } catch (e) {
   console.error(message(e));
   process.exitCode = 2;
+} finally {
+  await cleanup();
 }
