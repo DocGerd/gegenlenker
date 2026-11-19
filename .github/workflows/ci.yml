@@ -137,7 +137,10 @@ jobs:
 
   build-pages:
     needs: check
+    # Implicit `success()` also counts skipped ancestors (e2e on push), so test the result itself;
+    # `deploy` does the same.
     if: >-
+      !cancelled() && needs.check.result == 'success' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/main'
     # Job level, so a skipped run never cancels a pending deploy.
@@ -166,6 +169,7 @@ jobs:
 
   deploy:
     needs: build-pages
+    if: ${{ !cancelled() && needs.build-pages.result == 'success' }}
     concurrency:
       group: pages
       cancel-in-progress: false
