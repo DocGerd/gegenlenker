@@ -33,8 +33,10 @@ import {
   ROLE_TOLERANCE,
   type VehicleEnvironment,
   type VehicleEnvironmentState,
+  VEHICLE_SHADER_MARKER,
   VehicleLightingModel,
   VehicleNodeMaterial,
+  vehicleShaderCompiles,
 } from './vehicle-pbr';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
@@ -235,7 +237,7 @@ describe('vehicle environment', () => {
 
   it.each([
     ['does not compile', () => Promise.resolve(false)],
-    ['cannot be built', () => Promise.reject(new Error('node build'))],
+    ['check rejects', () => Promise.reject(new Error('pipeline'))],
   ])('discards the map when the shader %s', async (_, compiles) => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const made = target();
@@ -306,6 +308,25 @@ describe('vehicle environment', () => {
     expect(failing.env.texture(palette)).toBeNull();
     failing.env.attach(renderer());
     expect(await ready(failing.env)).not.toBeNull();
+  });
+
+  it('drops a check that settled on a lost context without failing, and checks again on the next renderer', async () => {
+    const lost = { value: false };
+    const made = target();
+    const { env, states } = setup({
+      generate: () => made,
+      compiles: () => {
+        lost.value = true;
+        return Promise.resolve(true);
+      },
+    });
+    env.attach(renderer(lost));
+    expect(await ready(env)).toBeNull();
+    expect(disposed(made)).toHaveBeenCalledOnce();
+    expect(states).not.toContain('failed');
+    lost.value = false;
+    env.attach(renderer());
+    expect(await ready(env)).not.toBeNull();
   });
 
   it('generates nothing while the context is lost', async () => {
@@ -531,5 +552,49 @@ describe.each(TRAILER_IDS)('reflective trailer shell of %s', (id) => {
       if (m.material instanceof VehicleNodeMaterial)
         expect(m.layers.isEnabled(AIDS_LAYER)).toBe(false);
     }
+  });
+});
+
+describe('vehicle shader check', () => {
+  type Hook = NonNullable<WebGPURenderer['debug']['onShaderError']>;
+  const gpu = (build: (hook: Hook | null) => Promise<string | null>) => {
+    const debug: { onShaderError: Hook | null; getShaderAsync: () => Promise<object> } = {
+      onShaderError: null,
+      getShaderAsync: async () => ({ fragmentShader: await build(debug.onShaderError) }),
+    };
+    return { debug } as unknown as WebGPURenderer;
+  };
+  const report = (hook: Hook | null, fragment: string): void => {
+    const context = {
+      getShaderSource: (shader: unknown) => shader,
+      getShaderInfoLog: () => 'log',
+      getProgramInfoLog: () => 'log',
+    } as unknown as WebGL2RenderingContext;
+    hook?.(...([context, {}, 'vertex', fragment] as unknown as Parameters<Hook>));
+  };
+  const built = `float ${VEHICLE_SHADER_MARKER};`;
+
+  it('passes a shader that built with the marker, and restores the hook', async () => {
+    const g = gpu(() => Promise.resolve(built));
+    expect(await vehicleShaderCompiles(g, new Texture())).toBe(true);
+    expect(g.debug.onShaderError).toBeNull();
+  });
+
+  it.each([
+    ['three swapped in a plain material', () => Promise.resolve('void main() {}')],
+    [
+      'its GLSL fails',
+      (hook: Hook | null) => {
+        report(hook, built);
+        return Promise.resolve(built);
+      },
+    ],
+    ['the build rejects', () => Promise.reject(new Error('pipeline'))],
+  ])('fails when %s', async (_, build) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const g = gpu(build);
+    expect(await vehicleShaderCompiles(g, new Texture())).toBe(false);
+    expect(warn).toHaveBeenCalled();
+    expect(g.debug.onShaderError).toBeNull();
   });
 });

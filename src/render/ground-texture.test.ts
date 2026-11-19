@@ -1,7 +1,13 @@
 import { DataTexture, RGBA_BPTC_Format, type Texture } from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { describeGroundTexture, startGroundTextures, transcoderUrls } from './ground-texture';
+import {
+  describeGroundTexture,
+  loadGroundTexture,
+  precompileGround,
+  startGroundTextures,
+  transcoderUrls,
+} from './ground-texture';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
 
 type ShaderErrorHook = NonNullable<WebGPURenderer['debug']['onShaderError']>;
@@ -23,6 +29,57 @@ const shaderError = (gl: WebGPURenderer, fragment: string): void => {
 };
 
 afterEach(() => vi.restoreAllMocks());
+
+const loaderTexture = vi.hoisted(() => ({ next: null as Texture | null }));
+vi.mock('three/addons/loaders/KTX2Loader.js', () => ({
+  KTX2Loader: class {
+    setTranscoderPath() {
+      return this;
+    }
+    detectSupport() {
+      return this;
+    }
+    loadAsync() {
+      return Promise.resolve(loaderTexture.next);
+    }
+    dispose() {
+      return undefined;
+    }
+  },
+}));
+
+/** A renderer whose ground build yields `fragment`, on a context that is `lost` or not. */
+const building = (fragment: string | null, lost = false): WebGPURenderer =>
+  Object.assign(renderer(), {
+    debug: {
+      onShaderError: null,
+      getShaderAsync: () => Promise.resolve({ fragmentShader: fragment }),
+    },
+    getContext: () => ({ isContextLost: () => lost }),
+  });
+const marked = `vec3 ${GROUND_SHADER_MARKER};`;
+
+describe('ground precompile', () => {
+  it('passes a build that carries the marker', async () => {
+    await expect(precompileGround(building(marked), texture())).resolves.toBeUndefined();
+  });
+
+  it.each([
+    ['three swapped in a plain material', building('void main() {}')],
+    ['the context is lost', building(marked, true)],
+  ])('rejects when %s', async (_, gl) => {
+    await expect(precompileGround(gl, texture())).rejects.toThrow();
+  });
+
+  it('frees the loaded texture and rethrows when the precompile fails', async () => {
+    const loaded = texture();
+    const disposed = vi.fn();
+    loaded.addEventListener('dispose', disposed);
+    loaderTexture.next = loaded;
+    await expect(loadGroundTexture(building(null))).rejects.toThrow();
+    expect(disposed).toHaveBeenCalledOnce();
+  });
+});
 
 describe('ground textures', () => {
   it('downloads nothing until a renderer is attached and a preset wants the texture', async () => {

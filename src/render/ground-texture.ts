@@ -24,6 +24,7 @@ import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?u
 import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
 import { createGroundMaterial } from './ground-material';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
+import { gpuLost } from './seams';
 
 /*
  * The authored ground detail map (tools/textures, issue #69): a KTX2 file transcoded on the device
@@ -84,7 +85,8 @@ export function transcoderUrls(url: string): string {
 
 /**
  * Builds the ground material for `texture` before any ground wears it, so a node or pipeline error
- * rejects here instead of in a frame; a GLSL error also reaches the shader watch.
+ * rejects here instead of in a frame; a GLSL error also reaches the shader watch. three swaps a
+ * material whose node graph throws for a plain one and only logs it, hence the marker check.
  */
 export async function precompileGround(renderer: WebGPURenderer, texture: Texture): Promise<void> {
   const geometry = new PlaneGeometry();
@@ -93,10 +95,20 @@ export async function precompileGround(renderer: WebGPURenderer, texture: Textur
     .setAttribute('color', new Float32BufferAttribute(new Float32Array(vertices * 3), 3))
     .setAttribute('groundSelect', new Float32BufferAttribute(new Float32Array(vertices * 3), 3));
   const material = createGroundMaterial(texture);
+  const mesh = new Mesh(geometry, material);
   const scene = new Scene();
-  scene.add(new Mesh(geometry, material));
+  scene.add(mesh);
   try {
-    await renderer.compileAsync(scene, new PerspectiveCamera());
+    const { fragmentShader } = await renderer.debug.getShaderAsync(
+      scene,
+      new PerspectiveCamera(),
+      mesh,
+    );
+    if (fragmentShader?.includes(GROUND_SHADER_MARKER) !== true) {
+      throw new Error('the ground shader did not build');
+    }
+    // a compile on a lost context passes vacuously
+    if (gpuLost(renderer)) throw new Error('the GPU context was lost');
   } finally {
     material.dispose();
     geometry.dispose();

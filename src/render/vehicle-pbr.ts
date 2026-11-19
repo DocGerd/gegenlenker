@@ -58,7 +58,7 @@ export const ROLE_HUES = {
 } as const;
 
 /** Named in the generated shader, so a shader error can be traced to this material. */
-const VEHICLE_SHADER_MARKER = 'vehicleGlass';
+export const VEHICLE_SHADER_MARKER = 'vehicleGlass';
 
 type LightingContext = {
   readonly iblIrradiance: Node<'vec3'>;
@@ -158,7 +158,11 @@ export function replaceMaterial(
   }
 }
 
-/** Builds the reflective material once on `gpu` and resolves whether it compiled. */
+/**
+ * Builds the reflective material once on `gpu` and resolves whether it compiled. three swaps a
+ * material whose node graph throws for a plain one and only logs it, so the built shader must carry
+ * the marker.
+ */
 export async function vehicleShaderCompiles(
   gpu: WebGPURenderer,
   envMap: Texture,
@@ -166,8 +170,9 @@ export async function vehicleShaderCompiles(
   const material = createVehicleMaterial(envMap);
   const geometry = new BoxGeometry();
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
+  const mesh = new Mesh(geometry, material);
   const scene = new Scene();
-  scene.add(new Mesh(geometry, material));
+  scene.add(mesh);
   const { debug } = gpu;
   const previous = debug.onShaderError;
   let accepted = true;
@@ -182,11 +187,21 @@ export async function vehicleShaderCompiles(
         context.getProgramInfoLog(program),
       );
     } else if (previous !== null) previous(context, program, vertex, fragment);
-    else console.error('Shader error', context.getProgramInfoLog(program));
+    else
+      console.error(
+        'Shader error',
+        context.getShaderInfoLog(vertex),
+        context.getShaderInfoLog(fragment),
+        context.getProgramInfoLog(program),
+      );
   };
   debug.onShaderError = watcher;
   try {
-    await gpu.compileAsync(scene, new PerspectiveCamera());
+    const { fragmentShader } = await gpu.debug.getShaderAsync(scene, new PerspectiveCamera(), mesh);
+    if (fragmentShader?.includes(VEHICLE_SHADER_MARKER) !== true) {
+      console.warn('Vehicle reflection shader failed to build');
+      return false;
+    }
     return accepted;
   } catch (error) {
     console.warn('Vehicle reflection shader failed', error);
@@ -280,6 +295,11 @@ export function createVehicleEnvironment(
       (ok) => {
         if (pending !== made) return;
         pending = null;
+        // a compile on a lost context passes vacuously; the renderer that replaces it checks again
+        if (gpuLost(gpu)) {
+          made.dispose();
+          return;
+        }
         if (!ok) {
           made.dispose();
           fail(new Error('the reflective shader did not compile'));
