@@ -9,6 +9,7 @@ import {
   TRAILER_SHELL_URLS,
 } from './glb-shells';
 import { startGroundTextures } from './ground-texture';
+import { readBackendRequest, requestGpuDevice, type BackendRequest } from './gpu-backend';
 import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
 import { createVehicleEnvironment } from './vehicle-pbr';
@@ -22,7 +23,8 @@ export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
 export const interiorAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].cockpitInterior;
 
-export function createSceneRenderer(): SceneRenderer {
+/** `backend` defaults to the page's `?backend=`. */
+export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   // The attach callbacks may fire before the renderer exists; a call made then is replayed once it does.
   const warm: { target: (() => void) | null; pending: boolean } = { target: null, pending: false };
   const warmUp = (): void => {
@@ -71,6 +73,7 @@ export function createSceneRenderer(): SceneRenderer {
     pbrState = state;
   });
   const renderer = createThreeSceneRenderer({
+    gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
     onRenderer: (gpu) => {
       groundTextures.attach(gpu);
       vehicleEnvironment.attach(gpu);
@@ -81,10 +84,14 @@ export function createSceneRenderer(): SceneRenderer {
     environment: (layout, palette) => proceduralEnvironment(layout, palette, groundTextures),
     aids: proceduralAids,
   });
-  // Read by the e2e: the GPU API of the live renderer, absent while there is none.
-  renderer.onLost(() => {
-    delete document.documentElement.dataset['renderBackend'];
-  });
+  // Read by the e2e: the GPU API of the live renderer and why it is not WebGPU when that was asked
+  // for, absent while there is no renderer.
+  const marker = document.documentElement.dataset;
+  const unmark = (): void => {
+    delete marker['renderBackend'];
+    delete marker['renderFallback'];
+  };
+  renderer.onLost(unmark);
   const { warmUp: warmTarget, ...sceneRenderer } = renderer;
   warm.target = warmTarget;
   if (warm.pending) warmTarget();
@@ -92,7 +99,10 @@ export function createSceneRenderer(): SceneRenderer {
     ...sceneRenderer,
     async init(canvas) {
       await renderer.init(canvas);
-      document.documentElement.dataset['renderBackend'] = renderer.stats().backend;
+      const { backend: drawn, webgpuFallback } = renderer.stats();
+      marker['renderBackend'] = drawn;
+      if (webgpuFallback === null) delete marker['renderFallback'];
+      else marker['renderFallback'] = webgpuFallback;
     },
     setQuality(preset) {
       const flags = QUALITY_FLAGS[preset];
@@ -103,7 +113,7 @@ export function createSceneRenderer(): SceneRenderer {
       renderer.setQuality(preset);
     },
     dispose() {
-      delete document.documentElement.dataset['renderBackend'];
+      unmark();
       renderer.dispose();
       groundTextures.dispose();
       vehicleEnvironment.dispose();

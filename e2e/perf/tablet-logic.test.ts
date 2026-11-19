@@ -6,6 +6,7 @@ import {
   cellVerdict,
   checksOk,
   isIgnorableFailure,
+  backendProblem,
   isSoftwareGl,
   meetsBar,
   median,
@@ -55,6 +56,7 @@ describe('pass bar', () => {
     expect(isSoftwareGl('ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device))')).toBe(true);
     expect(isSoftwareGl('llvmpipe (LLVM 15.0.7, 256 bits)')).toBe(true);
     expect(isSoftwareGl('no WebGL2')).toBe(true);
+    expect(isSoftwareGl('webgpu  Google swiftshader (fallback)')).toBe(true);
     expect(isSoftwareGl('ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D12)')).toBe(false);
   });
 
@@ -64,6 +66,19 @@ describe('pass bar', () => {
       'WebGL context lost',
     ]);
     expect(readingProblems(reading({ gl: 'llvmpipe' }))).toHaveLength(1);
+  });
+});
+
+describe('backendProblem', () => {
+  it('fails a cell drawn on another backend, and auto unless it drew on WebGPU', () => {
+    const gpu = 'webgpu  nvidia ada';
+    const gl = 'webgl2 (WebGPU failed)  ANGLE (NVIDIA)';
+    expect(backendProblem(null, gl)).toBeNull();
+    expect(backendProblem('webgl2', gl)).toBeNull();
+    expect(backendProblem('webgpu', gpu)).toBeNull();
+    expect(backendProblem('auto', gpu)).toBeNull();
+    expect(backendProblem('auto', gl)).toMatch(/not webgpu$/);
+    expect(backendProblem('webgl2', gpu)).toMatch(/not webgl2$/);
   });
 });
 
@@ -100,7 +115,7 @@ describe('verdicts', () => {
 describe('parseOptions', () => {
   it('defaults to the full matrix', () => {
     const o = parseOptions([]);
-    expect(o).toMatchObject({ throttle: 4, runs: 1, perf: true, functional: false });
+    expect(o).toMatchObject({ throttle: 4, runs: 1, perf: true, functional: false, backend: null });
     expect(o.presets).toHaveLength(3);
     expect(o.pairs).toHaveLength(4);
   });
@@ -113,6 +128,7 @@ describe('parseOptions', () => {
     expect(() => parseOptions(['--throttle', '0'])).toThrow('--throttle');
     expect(() => parseOptions(['--runs', '1.5'])).toThrow('--runs');
     expect(() => parseOptions(['--preset', 'ultra'])).toThrow('--preset');
+    expect(() => parseOptions(['--backend', 'vulkan'])).toThrow('--backend');
     expect(() => parseOptions(['--bogus'])).toThrow();
   });
 

@@ -8,8 +8,10 @@ export const PAIRS = [
   ['arocs-1835-ak', 'hueffermann-hpa-24-81-l'],
 ] as const;
 export const MIN_FPS = 58;
+export const BACKENDS = ['webgl2', 'webgpu', 'auto'] as const;
 
 export type Preset = (typeof PRESETS)[number];
+export type Backend = (typeof BACKENDS)[number];
 export type Pair = (typeof PAIRS)[number];
 export type Reading = { fps: number; p95: number; scale: number; calls: number; gl: string };
 export type Run = { reading: Reading; errors: string[] };
@@ -25,6 +27,8 @@ export type Options = {
   perf: boolean;
   allowSoftware: boolean;
   skipBuild: boolean;
+  /** The app's `?backend=`; absent leaves the app's default. */
+  backend: Backend | null;
 };
 
 const positive = (name: string, raw: string): number => {
@@ -45,11 +49,14 @@ export function parseOptions(argv: readonly string[]): Options {
       'no-perf': { type: 'boolean', default: false },
       'allow-software': { type: 'boolean', default: false },
       'skip-build': { type: 'boolean', default: false },
+      backend: { type: 'string' },
       help: { type: 'boolean', default: false },
     },
   });
   const presets = PRESETS.filter((p) => values.preset === 'all' || values.preset === p);
   if (presets.length === 0) throw new Error(`--preset must be one of ${PRESETS.join(', ')}, all`);
+  const backend = values.backend === undefined ? null : BACKENDS.find((b) => b === values.backend);
+  if (backend === undefined) throw new Error(`--backend must be one of ${BACKENDS.join(', ')}`);
   if (values['no-perf'] && !values.functional) {
     throw new Error('--no-perf needs --functional, otherwise nothing runs');
   }
@@ -63,6 +70,7 @@ export function parseOptions(argv: readonly string[]): Options {
     perf: !values['no-perf'],
     allowSoftware: values['allow-software'],
     skipBuild: values['skip-build'],
+    backend,
   };
 }
 
@@ -76,7 +84,17 @@ export function parseOverlay(text: string): Reading | null {
 }
 
 export const isSoftwareGl = (renderer: string): boolean =>
-  renderer === 'no WebGL2' || /SwiftShader|llvmpipe|softpipe/i.test(renderer);
+  renderer === 'no WebGL2' || /SwiftShader|llvmpipe|softpipe|\(fallback\)/i.test(renderer);
+
+/** The backend an overlay line was drawn on: its first word. */
+export const drawnBackend = (gl: string): string => gl.trim().split(/\s/)[0] ?? '';
+
+/** `auto` is the WebGPU gate (docs/perf.md), so a cell that fell back to WebGL 2 fails it. */
+export function backendProblem(requested: Backend | null, gl: string): string | null {
+  if (requested === null) return null;
+  const wanted = requested === 'auto' ? 'webgpu' : requested;
+  return drawnBackend(gl) === wanted ? null : `drawn on ${gl.trim()}, not ${wanted}`;
+}
 
 /** Problems that make a single overlay reading untrustworthy. */
 export function readingProblems(r: Reading): string[] {

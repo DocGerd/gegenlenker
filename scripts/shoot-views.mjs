@@ -1,6 +1,11 @@
 // Pinned-clock shots of every view per graphics preset, for before/after renderer comparisons.
-// Usage: node scripts/shoot-views.mjs --url <app url> --out <dir> [--compare <hashes.json>] [--diff <dir>]
+// Usage: node scripts/shoot-views.mjs --url <app url> --out <dir> [--backend webgl2|webgpu]
+//          [--compare <hashes.json>] [--diff <dir>]
+//          [--new-headless]
 //        node scripts/shoot-views.mjs --out <dir> --diff <dir>   (diff earlier shots only)
+// --backend webgpu draws on SwiftShader's WebGPU adapter (no GPU needed) in Chromium's new headless
+// mode. That mode wraps HUD text differently, which moves the top-down framing, so shoot the WebGL 2
+// side of a WebGPU diff with --new-headless.
 // Serve a build with BASE_PATH=/gegenlenker/ on a port other than the e2e one.
 // --diff compares each PNG in --out with its namesake in <dir> (the before shots); see diffShot.
 import console from 'node:console';
@@ -17,6 +22,7 @@ import {
   shoot,
   startPinnedDrive,
 } from '../e2e/pinned-shoot.ts';
+import { collectThreeProblems } from '../e2e/three-problems.ts';
 import { QUALITY_FLAGS } from '../src/render/quality.ts';
 
 const PRESETS = ['low', 'balanced', 'high'];
@@ -32,6 +38,18 @@ const MAX_EDGE_MORE = 0.55;
 const EXERCISE = 'Straight reverse';
 // Same GL as the e2e `offline` project, so hashes match what CI renders.
 const ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'];
+// Only the new headless mode presents SwiftShader WebGPU frames; other flag sets lose the device.
+const WEBGPU = {
+  channel: 'chromium',
+  args: [
+    '--enable-unsafe-webgpu',
+    '--enable-features=Vulkan',
+    '--use-vulkan=swiftshader',
+    '--use-webgpu-adapter=swiftshader',
+    '--use-angle=swiftshader',
+    '--ignore-gpu-blocklist',
+  ],
+};
 
 const { values } = parseArgs({
   options: {
@@ -39,8 +57,14 @@ const { values } = parseArgs({
     out: { type: 'string' },
     compare: { type: 'string' },
     diff: { type: 'string' },
+    backend: { type: 'string', default: 'webgl2' },
+    'new-headless': { type: 'boolean', default: false },
   },
 });
+if (values.backend !== 'webgl2' && values.backend !== 'webgpu') {
+  console.error('--backend must be webgl2 or webgpu');
+  process.exit(2);
+}
 if (values.out === undefined || (values.url === undefined && values.diff === undefined)) {
   console.error(
     'usage: node scripts/shoot-views.mjs --url <url> --out <dir> [--compare <json>] [--diff <dir>]',
@@ -49,7 +73,9 @@ if (values.out === undefined || (values.url === undefined && values.diff === und
 }
 mkdirSync(values.out, { recursive: true });
 
-const browser = await chromium.launch({ args: ARGS });
+const browser = await chromium.launch(
+  values.backend === 'webgpu' || values['new-headless'] ? WEBGPU : { args: ARGS },
+);
 const hashes = {};
 let failed = 0;
 try {
@@ -63,7 +89,12 @@ try {
         serviceWorkers: 'block',
       });
       const page = await context.newPage();
-      await startPinnedDrive(page, preset, EXERCISE);
+      const problems = collectThreeProblems(page);
+      page.on('pageerror', (e) => problems.push(e.message));
+      await startPinnedDrive(page, preset, EXERCISE, `?backend=${values.backend}`);
+      const backend = await page.locator('html').getAttribute('data-render-backend');
+      if (backend !== values.backend)
+        throw new Error(`${preset}: drawn on ${backend ?? 'nothing'}, not ${values.backend}`);
       const chase = await page.locator('[data-view="chase"]').isVisible();
       if (chase !== QUALITY_FLAGS[preset].chaseView)
         throw new Error(`${preset}: chase view ${chase ? 'shown' : 'hidden'} against its flag`);
@@ -80,9 +111,17 @@ try {
         writeFileSync(join(values.out, `${name}.png`), png);
         hashes[name] = createHash('sha256').update(png).digest('hex');
       }
+      if (problems.length > 0) throw new Error(`${preset}: ${problems.join('; ')}`);
       await context.close();
     }
     writeFileSync(join(values.out, 'hashes.json'), `${JSON.stringify(hashes, null, 2)}\n`);
+    for (const shot of TOP_DOWN) {
+      const seen = new Set(PRESETS.map((preset) => hashes[`${preset}-${shot}`]));
+      if (seen.size !== 1) {
+        console.log(`FAIL   ${shot}: the top-down view differs between presets`);
+        failed++;
+      }
+    }
   }
 
   if (values.diff !== undefined) {
@@ -151,4 +190,4 @@ if (values.url !== undefined && values.compare !== undefined) {
   for (const [name, hash] of Object.entries(hashes)) console.log(`${hash.slice(0, 16)} ${name}`);
 }
 // with --diff, only a top-down failure fails the run: the renderer change is expected to move hashes
-process.exit(values.diff !== undefined ? (failed === 0 ? 0 : 1) : differ === 0 ? 0 : 1);
+process.exit(failed === 0 && (values.diff !== undefined || differ === 0) ? 0 : 1);
