@@ -30,6 +30,7 @@ export const placeholderLayout: ResolvedLayout = {
     { kind: 'street', rect: { minX: -60, minY: -46, maxX: 60, maxY: -34 } },
   ],
   obstacles: [],
+  props: [],
   markings: [],
   target: null,
   tolerances: null,
