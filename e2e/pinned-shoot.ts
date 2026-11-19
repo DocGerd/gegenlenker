@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import type { ScenePaletteKey } from '../src/contracts/render';
 
 // Imported by scripts/shoot-views.mjs through Node's type stripping: type-only imports, no enums.
 
@@ -12,18 +13,26 @@ const SETTLE_FRAMES = 30;
 const READY_STEPS = 2000;
 const HIDE_ID = 'pinned-shoot-bare';
 /**
- * A drawn pane has more distinct colours than this; a blank pane or a notice has a handful. Kept
- * well below the flat top-down view at the start, the sparsest drawn pane.
+ * A drawn pane has more distinct colours than this; a blank pane has one. Just below the flat
+ * top-down view at the start, the sparsest drawn pane. A text notice is not caught by a colour
+ * count: its anti-aliased glyphs give more colours than that view.
  */
-export const MIN_DRAWN_COLOURS = 30;
-/** For a poll that screenshots the canvas: software GL (CI) delivers the shot seconds late. */
-export const SCREENSHOT_POLL = { timeout: 20_000 } as const;
+export const MIN_DRAWN_COLOURS = 45;
+/** For a poll that screenshots the canvas: software GL (CI) takes a few seconds to draw the first frame. */
+export const SCREENSHOT_POLL = { timeout: 10_000 } as const;
+
+/** Set once the renderer is ready and removed on a loss, so a settle after a loss waits for the new one. */
+const BACKEND_READY = (v: string): boolean => v !== '';
 
 /** Each preset's asynchronous attachments, read from `<html>`; a shot before they land would differ. */
 const READY: Readonly<Record<Preset, Readonly<Record<string, (value: string) => boolean>>>> = {
-  low: {},
-  balanced: { 'data-vehicle-shells': (v) => v.split(' ').length === 3 },
+  low: { 'data-render-backend': BACKEND_READY },
+  balanced: {
+    'data-render-backend': BACKEND_READY,
+    'data-vehicle-shells': (v) => v.split(' ').length === 3,
+  },
   high: {
+    'data-render-backend': BACKEND_READY,
     'data-vehicle-shells': (v) => v.split(' ').length === 3,
     'data-ground-texture': (v) => v.startsWith('ktx2:'),
     'data-vehicle-pbr': (v) => v === 'on',
@@ -106,10 +115,12 @@ export async function bareScreenshot(
     style.textContent = '.hud, .ctl, [class^="ctl-"] { visibility: hidden !important }';
     document.head.append(style);
   }, HIDE_ID);
-  await settle();
-  const png = await page.screenshot({ clip });
-  await page.evaluate((id) => document.getElementById(id)?.remove(), HIDE_ID);
-  return png;
+  try {
+    await settle();
+    return await page.screenshot({ clip });
+  } finally {
+    await page.evaluate((id) => document.getElementById(id)?.remove(), HIDE_ID);
+  }
 }
 
 /** Distinct RGB values in a PNG, so a blank or not-yet-drawn pane cannot pass as a match. */
@@ -131,6 +142,41 @@ export function distinctColours(page: Page, png: Buffer): Promise<number> {
     }
     return seen.size;
   }, png.toString('base64'));
+}
+
+/** Share of a PNG's pixels within `tolerance` per channel of the page's `--scene-<token>` colour. */
+export function tokenShare(
+  page: Page,
+  png: Buffer,
+  token: ScenePaletteKey,
+  tolerance: number,
+): Promise<number> {
+  return page.evaluate(
+    async ([data, name, tol]) => {
+      const hex = getComputedStyle(document.documentElement)
+        .getPropertyValue(`--scene-${name}`)
+        .trim();
+      const want = /^#([0-9a-f]{6})$/i.exec(hex)?.[1];
+      if (want === undefined) throw new Error(`no scene token ${name}`);
+      const rgb = [0, 2, 4].map((i) => parseInt(want.slice(i, i + 2), 16));
+      const img = new Image();
+      img.src = `data:image/png;base64,${data}`;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx === null) throw new Error('no 2d context');
+      ctx.drawImage(img, 0, 0);
+      const px = ctx.getImageData(0, 0, img.width, img.height).data;
+      let near = 0;
+      for (let i = 0; i < px.length; i += 4) {
+        if (rgb.every((c, k) => Math.abs((px[i + k] ?? 0) - c) <= tol)) near++;
+      }
+      return near / (img.width * img.height);
+    },
+    [png.toString('base64'), token, tolerance] as const,
+  );
 }
 
 export type ShotDiff = {
