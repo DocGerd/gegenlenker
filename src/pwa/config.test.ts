@@ -1,7 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { matchesGlob, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { pwaOptions } from './config';
+import { ASSET_REGISTRY } from '../render/asset-registry';
+import { MAX_PRECACHE_FILE_BYTES, pwaOptions } from './config';
 
 const colors = { themeColor: '#ffffff', backgroundColor: '#ffffff' };
 const manifest = pwaOptions('/gegenlenker/', colors).manifest;
@@ -69,5 +70,37 @@ describe('runtime-cached texture assets', () => {
   it('keeps room for every cached file twice over, so a rehash does not evict a live entry', () => {
     const maxEntries = runtime?.options?.expiration?.maxEntries ?? 0;
     expect(maxEntries).toBeGreaterThanOrEqual(ignored.length * 2);
+  });
+});
+
+describe('asset registry', () => {
+  const assetsDir = resolve(import.meta.dirname, '../render/assets');
+  const binaries = readdirSync(assetsDir).filter((file) => /\.(glb|ktx2)$/.test(file));
+  const { workbox } = pwaOptions('/gegenlenker/', colors);
+  const ignored = workbox?.globIgnores ?? [];
+
+  it('lists every glb and ktx2 in src/render/assets, and nothing else', () => {
+    const stems = binaries.map((file) => file.replace(/\.[^.]+$/, '')).sort();
+    expect(Object.keys(ASSET_REGISTRY).sort()).toEqual(stems);
+  });
+
+  it('runtime-caches the textures the default preset does not draw, with their transcoder', () => {
+    expect(ignored.sort()).toEqual([
+      '**/basis_transcoder-*.js',
+      '**/basis_transcoder-*.wasm',
+      '**/ground-*.ktx2',
+      '**/sky-*.ktx2',
+    ]);
+  });
+
+  it('keeps every precached file within the precache size limit', () => {
+    for (const file of binaries) {
+      const stem = file.replace(/\.[^.]+$/, '');
+      const hashed = `assets/${stem}-AbC12_x${file.slice(stem.length)}`;
+      if (ignored.some((glob) => matchesGlob(hashed, glob))) continue;
+      expect(statSync(resolve(assetsDir, file)).size, file).toBeLessThanOrEqual(
+        MAX_PRECACHE_FILE_BYTES,
+      );
+    }
   });
 });
