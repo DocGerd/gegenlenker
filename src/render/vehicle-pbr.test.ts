@@ -27,7 +27,7 @@ import { GRADE_SHADER_MARKER, setGradeDisabled } from './grade';
 import { KEYS } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import { REALISM_HUES } from './realism-hues';
-import { AIDS_LAYER, CAB_LAYER, SKY_LAYER } from './seams';
+import { AIDS_LAYER, CAB_LAYER, PERSPECTIVE_LAYER } from './seams';
 import {
   createVehicleEnvironment,
   replaceMaterial,
@@ -364,7 +364,7 @@ describe('replaceMaterial', () => {
     const from = new MeshLambertMaterial();
     const to = new MeshBasicMaterial();
     const hidden = new Mesh(undefined, from);
-    hidden.layers.set(SKY_LAYER);
+    hidden.layers.set(PERSPECTIVE_LAYER);
     const seen = new Mesh(undefined, from);
     seen.layers.set(AIDS_LAYER);
     replaceMaterial([hidden, seen], [from], to);

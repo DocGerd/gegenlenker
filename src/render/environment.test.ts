@@ -32,10 +32,11 @@ vi.mock('./ground-material', async (importOriginal) => {
 
 import {
   AIDS_LAYER,
+  CHASE_LAYERS,
   COCKPIT_LAYERS,
   DEFAULT_LAYER,
   enableLayers,
-  SKY_LAYER,
+  PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
 } from './seams';
 import { RESTYLED_KINDS } from './yard-props';
@@ -108,6 +109,24 @@ describe('environment quality wiring', () => {
   };
   const only = (layer: number): number => 1 << layer;
 
+  it('keeps every light on the top-down layer or on a layer every perspective camera sees', () => {
+    expect(layout).toBeDefined();
+    if (layout === undefined) return;
+    const env = proceduralEnvironment(layout, palette);
+    const perspective = [cameras.cockpit, cameras.mirror, camera(CHASE_LAYERS)];
+    for (const flags of [QUALITY_FLAGS.high, QUALITY_FLAGS.low]) {
+      env.setQuality(flags);
+      const lights = lightsOf(env.object);
+      expect(lights.length).toBeGreaterThan(0);
+      for (const l of lights) {
+        const aidsOnly = l.layers.mask === only(AIDS_LAYER);
+        const everywhere = perspective.every((c) => (c.mask & l.layers.mask) === l.layers.mask);
+        expect(aidsOnly || everywhere).toBe(true);
+      }
+    }
+    env.dispose();
+  });
+
   it('follows the flags through high, balanced, low and high again', () => {
     expect(layout).toBeDefined();
     if (layout === undefined) return;
@@ -122,7 +141,7 @@ describe('environment quality wiring', () => {
     expect(probe).toBeInstanceOf(LightProbe);
     const props = [...seen(env.object, cameras.cockpit)]
       .filter((m): m is Mesh => m instanceof Mesh)
-      .filter((m) => m.layers.mask === only(SKY_LAYER) && !isNodeMaterial(m));
+      .filter((m) => m.layers.mask === only(PERSPECTIVE_LAYER) && !isNodeMaterial(m));
     expect(props.length).toBeGreaterThan(0);
     const tokenMaterial = props[0]?.material;
     const wears = (): unknown[] => [...new Set(props.map((m) => m.material))];

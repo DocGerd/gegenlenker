@@ -37,7 +37,7 @@ import {
   sunPosition,
 } from './light-rig';
 import type { QualityFlags } from './quality';
-import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER, type Environment } from './seams';
+import { AIDS_LAYER, DEFAULT_LAYER, PERSPECTIVE_LAYER, type Environment } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSky, type Sky } from './sky';
 import { createSkyline } from './skyline';
@@ -487,7 +487,7 @@ export function proceduralEnvironment(
         material = createGroundMaterial(texture);
         setGraded(material, graded);
         const mesh = new Mesh(geometry, material);
-        mesh.layers.set(SKY_LAYER);
+        mesh.layers.set(PERSPECTIVE_LAYER);
         group.add(mesh);
         geometries.push(geometry);
         texturedGroundMaterial = material;
@@ -506,7 +506,7 @@ export function proceduralEnvironment(
   );
 
   // Restyled kinds keep a plain token copy for the top-down view only; the cockpit and mirrors draw
-  // the detail copy from yard-props on SKY_LAYER.
+  // the detail copy from yard-props on PERSPECTIVE_LAYER.
   const obstacles = new Chunks(layout.bounds);
   const topDownOnly = new Chunks(layout.bounds);
   const detail = new Chunks(layout.bounds);
@@ -528,7 +528,7 @@ export function proceduralEnvironment(
   setGraded(propMaterial, true);
   const props = detail.meshes(solid, geometries);
   for (const mesh of props) {
-    mesh.layers.set(SKY_LAYER);
+    mesh.layers.set(PERSPECTIVE_LAYER);
     group.add(mesh);
   }
 
