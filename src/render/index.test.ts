@@ -24,6 +24,14 @@ vi.mock('./ground-texture', () => ({
     return { attach: vi.fn(), setEnabled: vi.fn(), dispose: vi.fn() };
   },
 }));
+vi.mock('./sky-texture', () => ({
+  startSkyTexture: () => ({
+    attach: vi.fn(),
+    setEnabled: vi.fn(),
+    onLoaded: vi.fn(),
+    dispose: vi.fn(),
+  }),
+}));
 vi.mock('./vehicle-pbr', () => ({
   createVehicleEnvironment: (onState: (state: 'on' | 'failed' | null) => void) => {
     mocks.pbr = onState;

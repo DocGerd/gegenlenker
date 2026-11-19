@@ -16,6 +16,12 @@ export type QualityFlags = {
   readonly cockpitInterior: boolean;
   readonly groundTexture: boolean;
   readonly pbr: boolean;
+  /** HDRI sun and sky light in the perspective views, tone-mapped in their perspective-only materials. */
+  readonly perspectiveLighting: boolean;
+  /** Distance haze in the graded materials; needs `perspectiveLighting`. */
+  readonly aerialPerspective: boolean;
+  /** HDRI sky dome, also what the vehicles reflect; a download. */
+  readonly hdriSky: boolean;
 };
 
 const BALANCED: QualityFlags = {
@@ -29,6 +35,9 @@ const BALANCED: QualityFlags = {
   cockpitInterior: true,
   groundTexture: false,
   pbr: false,
+  perspectiveLighting: true,
+  aerialPerspective: true,
+  hdriSky: false,
 };
 
 export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
@@ -43,7 +52,10 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     cockpitInterior: false,
     groundTexture: false,
     pbr: false,
+    perspectiveLighting: false,
+    aerialPerspective: false,
+    hdriSky: false,
   },
   balanced: BALANCED,
-  high: { ...BALANCED, groundTexture: true, pbr: true },
+  high: { ...BALANCED, groundTexture: true, pbr: true, hdriSky: true },
 };

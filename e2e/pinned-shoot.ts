@@ -38,6 +38,7 @@ const READY: Readonly<Record<Preset, Readonly<Record<string, (value: string) => 
     'data-vehicle-shells': (v) => v.split(' ').length === 3,
     'data-ground-texture': (v) => v.startsWith('ktx2:'),
     'data-vehicle-pbr': (v) => v === 'on',
+    'data-sky-hdri': (v) => v === 'on',
   },
 };
 

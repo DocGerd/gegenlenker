@@ -10,6 +10,7 @@ import {
 } from './glb-shells';
 import { startGroundTextures } from './ground-texture';
 import { QUALITY_FLAGS } from './quality';
+import { startSkyTexture } from './sky-texture';
 import { createThreeSceneRenderer } from './three-renderer';
 import { createVehicleEnvironment } from './vehicle-pbr';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
@@ -70,15 +71,36 @@ export function createSceneRenderer(): SceneRenderer {
     }
     pbrState = state;
   });
+  // Read by the offline e2e: `on` while the HDRI sky is drawn, else absent.
+  let skyState: string | null = null;
+  const skyTexture = startSkyTexture(undefined, (state) => {
+    if (state === null) delete document.documentElement.dataset['skyHdri'];
+    else {
+      document.documentElement.dataset['skyHdri'] = state;
+      if (state !== skyState) warmUp();
+    }
+    skyState = state;
+  });
+  // the vehicles reflect the HDRI sky once it has loaded; pbr and the HDRI are both High-only
+  skyTexture.onLoaded(
+    (map) => {
+      vehicleEnvironment.setSky(map);
+    },
+    () => {
+      vehicleEnvironment.setSky(null);
+    },
+  );
   const renderer = createThreeSceneRenderer({
     onRenderer: (gpu) => {
       groundTextures.attach(gpu);
+      skyTexture.attach(gpu);
       vehicleEnvironment.attach(gpu);
     },
     truck: (spec, palette) => proceduralTruck(spec, palette, shells, vehicleEnvironment),
     trailer: (spec, palette) =>
       proceduralTrailer(spec, palette, shells.trailer, vehicleEnvironment),
-    environment: (layout, palette) => proceduralEnvironment(layout, palette, groundTextures),
+    environment: (layout, palette) =>
+      proceduralEnvironment(layout, palette, groundTextures, skyTexture),
     aids: proceduralAids,
   });
   // Read by the e2e: the GPU API of the live renderer, absent while there is none.
@@ -100,12 +122,14 @@ export function createSceneRenderer(): SceneRenderer {
       shells.body.setEnabled(flags.vehicleGlb);
       shells.trailer.setEnabled(flags.vehicleGlb);
       groundTextures.setEnabled(flags.groundTexture);
+      skyTexture.setEnabled(flags.hdriSky);
       renderer.setQuality(preset);
     },
     dispose() {
       delete document.documentElement.dataset['renderBackend'];
       renderer.dispose();
       groundTextures.dispose();
+      skyTexture.dispose();
       vehicleEnvironment.dispose();
     },
   };

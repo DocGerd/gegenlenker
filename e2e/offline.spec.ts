@@ -119,7 +119,7 @@ test('zooms and pans the top-down view without disturbing the controls', async (
   expect(three).toEqual([]);
 });
 
-test('High graphics caches the ground texture and transcoder on first use and applies them offline', async ({
+test('High graphics caches the ground and sky textures and transcoder on first use and applies them offline', async ({
   page,
   context,
   baseURL,
@@ -166,6 +166,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
     });
   const files = [
     /ground-[\w-]+\.ktx2$/,
+    /sky-[\w-]+\.ktx2$/,
     /basis_transcoder-[\w-]+\.js$/,
     /basis_transcoder-[\w-]+\.wasm$/,
   ];
@@ -180,6 +181,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/, GROUND_LOAD);
   const target = await marker.getAttribute('data-ground-texture');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
   // The renderer is forced onto its WebGL 2 backend until the WebGPU backend is enabled
   await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
   await expect
@@ -187,7 +189,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
       const { runtime } = await cached();
       return files.map((file) => matching(runtime, file).length);
     })
-    .toEqual([1, 1, 1]);
+    .toEqual([1, 1, 1, 1]);
 
   // The marker follows the preset: Balanced draws no reflections, so it is gone.
   await page.getByRole('button', { name: en.finish }).click();
@@ -201,6 +203,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
   await expect(page.locator('[data-view="follow"]')).toBeVisible();
   await expect(marker).not.toHaveAttribute('data-vehicle-pbr', /.*/);
+  await expect(marker).not.toHaveAttribute('data-sky-hdri', /.*/);
 
   offline = true;
   await context.setOffline(true);
@@ -208,7 +211,10 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
   await expect(marker).toHaveAttribute('data-ground-texture', target ?? '', GROUND_LOAD);
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
-  expect(warnings.filter((w) => /Ground texture|Vehicle reflection/.test(w))).toEqual([]);
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on', GROUND_LOAD);
+  expect(warnings.filter((w) => /Ground texture|Sky texture|Vehicle reflection/.test(w))).toEqual(
+    [],
+  );
   expect(errors).toEqual([]);
   expect(three).toEqual([]);
   expect(foreign).toEqual([]);

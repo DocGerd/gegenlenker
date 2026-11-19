@@ -3,21 +3,18 @@ import {
   BufferGeometry,
   Color,
   CylinderGeometry,
-  DirectionalLight,
   Group,
-  HemisphereLight,
   Mesh,
   MeshBasicMaterial,
   Float32BufferAttribute,
   MeshLambertMaterial,
   PlaneGeometry,
   RingGeometry,
-  Vector3,
   type Material,
   type Texture,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import type { MeshLambertNodeMaterial } from 'three/webgpu';
+import { MeshLambertNodeMaterial } from 'three/webgpu';
 import type { Tolerances } from '../contracts/exercise';
 import type {
   Marking,
@@ -28,13 +25,21 @@ import type {
   SurfaceKind,
 } from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
+import { FOG_DENSITY, GRADE, setGraded } from './grade';
 import { createGroundMaterial } from './ground-material';
 import { GROUND_SURFACES } from './ground-texture-spec';
 import type { GroundTextures } from './ground-texture';
+import {
+  createLightRig,
+  legacyIrradiance,
+  perspectiveLight,
+  perspectiveSunDirection,
+  sunPosition,
+} from './light-rig';
 import type { QualityFlags } from './quality';
 import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER, type Environment } from './seams';
 import { REALISM_HUES } from './realism-hues';
-import { createSky, neutralSky, type Sky } from './sky';
+import { createSky, type Sky } from './sky';
 import { createSkyline } from './skyline';
 import { tint } from './tint';
 import { isOnYard, RESTYLED_KINDS, yardProps } from './yard-props';
@@ -72,10 +77,6 @@ const CONE_TOP_RATIO = 0.25;
 const CONE_RADIUS_RATIO = 0.8; // of the smaller footprint half-extent
 const BOX_TOP_FACE_FIRST_VERTEX = 8; // BoxGeometry orders +x, -x, +y, ...: four vertices per face
 const BOX_FACE_VERTICES = 4;
-const SUN_ELEVATION = (50 * Math.PI) / 180;
-const SUN_DISTANCE = 100;
-const SUN_INTENSITY = 2.4;
-const HEMISPHERE_INTENSITY = 1.4;
 
 /** Flat rectangle in the ground plane; x forward, y left (Three z = −y). */
 export function rectGeometry(
@@ -415,28 +416,20 @@ export function texturedGroundGeometry(
   return merged;
 }
 
-/** The sun's position relative to the origin: south-west, where world (−, −) is Three (−x, +z). */
-export function sunPosition(): Vector3 {
-  const horizontal = Math.cos(SUN_ELEVATION) * SUN_DISTANCE;
-  return new Vector3(
-    -horizontal / Math.SQRT2,
-    Math.sin(SUN_ELEVATION) * SUN_DISTANCE,
-    horizontal / Math.SQRT2,
-  );
-}
-
-/** The dome the perspective views show; the vehicle reflections are captured from the same one. */
-export function createSceneSky(palette: ScenePalette): Sky {
-  const ambient = neutralSky(palette.sky);
+/**
+ * The dome the perspective views show; the vehicle reflections are captured from the same one,
+ * with `tone` off, since the material reading the capture tone-maps it.
+ */
+export function createSceneSky(palette: ScenePalette, tone = true): Sky {
   // Radiance of an upward-facing Lambert surface, so the dome below the horizon matches the ground.
-  const lit =
-    (HEMISPHERE_INTENSITY * ambient.r + SUN_INTENSITY * Math.sin(SUN_ELEVATION)) / Math.PI;
+  const lit = legacyIrradiance(palette) / Math.PI;
   return createSky(
     new Color(palette.sky),
     new Color(palette.verge).multiplyScalar(Math.min(1, lit)),
     new Color(REALISM_HUES.skyHaze),
     new Color(REALISM_HUES.sunHalo),
     sunPosition(),
+    { ...perspectiveLight(palette), sun: perspectiveSunDirection(), tone },
   );
 }
 
@@ -444,6 +437,7 @@ export function proceduralEnvironment(
   layout: ResolvedLayout,
   palette: ScenePalette,
   groundTextures?: GroundTextures,
+  skyTexture?: GroundTextures,
 ): Environment {
   const group = new Group();
   const geometries: BufferGeometry[] = [];
@@ -484,6 +478,7 @@ export function proceduralEnvironment(
       try {
         geometry = texturedGroundGeometry(layout, palette);
         material = createGroundMaterial(texture);
+        setGraded(material, graded);
         const mesh = new Mesh(geometry, material);
         mesh.layers.set(SKY_LAYER);
         group.add(mesh);
@@ -521,7 +516,9 @@ export function proceduralEnvironment(
     group.add(mesh);
   }
   for (const piece of yardProps(layout)) detail.add(piece.x, piece.y, piece.geometry);
-  const props = detail.meshes(solid, geometries);
+  // perspective-only, so the grade can go on it without touching the layer-0 tokens
+  const propMaterial = new MeshLambertNodeMaterial({ vertexColors: true });
+  const props = detail.meshes(propMaterial, geometries);
   for (const mesh of props) {
     mesh.layers.set(SKY_LAYER);
     group.add(mesh);
@@ -603,15 +600,39 @@ export function proceduralEnvironment(
     material.color.copy(gate.pending);
   }
 
-  const sun = new DirectionalLight(0xffffff, SUN_INTENSITY);
-  sun.position.copy(sunPosition());
-  const ambient = neutralSky(palette.sky);
-  group.add(sun, new HemisphereLight(ambient, palette.verge, HEMISPHERE_INTENSITY));
-
+  const rig = createLightRig(palette);
+  group.add(rig.object);
+  const light = perspectiveLight(palette);
+  const sunDirection = perspectiveSunDirection();
   const haze = new Color(REALISM_HUES.skyHaze);
   const sky = createSceneSky(palette);
   const skyline = createSkyline(layout.bounds, haze);
   group.add(sky.mesh, skyline.mesh);
+
+  let graded = false;
+  let hdriOn = false;
+  let hdriMap: Texture | null = null;
+  let hdriReported = false;
+  const syncSky = (): void => {
+    const on = hdriOn && hdriMap !== null;
+    sky.setHdri(on ? hdriMap : null);
+    GRADE.hazeToward.value.copy(on ? light.hazeToward : haze);
+    GRADE.hazeAway.value.copy(on ? light.hazeAway : haze);
+    if (on !== hdriReported) {
+      hdriReported = on;
+      skyTexture?.reportApplied(on);
+    }
+  };
+  const cancelSkyTexture = skyTexture?.onLoaded(
+    (map: Texture) => {
+      hdriMap = map;
+      syncSky();
+    },
+    () => {
+      hdriMap = null;
+      syncSky();
+    },
+  );
 
   return {
     object: group,
@@ -622,6 +643,16 @@ export function proceduralEnvironment(
       }
     },
     setQuality(flags: QualityFlags): void {
+      graded = flags.perspectiveLighting;
+      rig.setSplit(graded);
+      sky.setSun(graded ? sunDirection : sunPosition());
+      GRADE.sunDirection.value.copy(sunDirection);
+      GRADE.fogDensity.value = flags.aerialPerspective ? FOG_DENSITY : 0;
+      hdriOn = flags.hdriSky;
+      syncSky();
+      setGraded(propMaterial, graded);
+      if (texturedGroundMaterial !== null) setGraded(texturedGroundMaterial, graded);
+      skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
       groundTextureOn = flags.groundTexture;
       syncGround();
@@ -634,12 +665,17 @@ export function proceduralEnvironment(
     },
     dispose: () => {
       cancelGroundTexture?.();
+      cancelSkyTexture?.();
+      hdriMap = null;
+      hdriOn = false;
+      syncSky();
       groundDisabled = true;
       syncGround();
       texturedGroundMaterial?.dispose();
       geometries.forEach((g) => g.dispose());
       gate?.material.dispose();
       solid.dispose();
+      propMaterial.dispose();
       flat.dispose();
       sky.dispose();
       skyline.dispose();

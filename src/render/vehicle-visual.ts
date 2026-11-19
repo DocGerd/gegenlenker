@@ -11,6 +11,7 @@ import {
   type Object3D,
   type Texture,
 } from 'three';
+import { MeshLambertNodeMaterial } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
@@ -34,6 +35,7 @@ import {
   type TrailerShell,
   type TruckShells,
 } from './glb-shells';
+import { setGraded } from './grade';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
@@ -132,7 +134,8 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const materials: Material[] = [];
   const textures: Texture[] = [];
   const detailMeshes: Mesh[] = [];
-  let detailMaterial: MeshLambertMaterial | null = null;
+  let detailMaterial: MeshLambertNodeMaterial | null = null;
+  let gradeOn = false;
   let pbrMaterial: VehicleNodeMaterial | null = null;
   let pbrRoot: Object3D | null = null;
   const pbrToken = {};
@@ -156,7 +159,10 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     pbrWanted = on;
     const map = on ? (env?.texture(palette) ?? null) : null;
     if (map !== null) {
-      pbrMaterial ??= track(createVehicleMaterial(map));
+      if (pbrMaterial === null) {
+        pbrMaterial = track(createVehicleMaterial(map));
+        setGraded(pbrMaterial, gradeOn);
+      }
       pbrMaterial.envMap = map;
     } else if (pbrMaterial !== null) {
       pbrMaterial.envMap = null;
@@ -187,10 +193,19 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     },
     /** The material of every `detail` mesh; shells use it too, so a swap adds no state change. */
     detailMaterial(): Material {
-      detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
+      if (detailMaterial === null) {
+        detailMaterial = track(new MeshLambertNodeMaterial({ vertexColors: true }));
+        setGraded(detailMaterial, gradeOn);
+      }
       return pbrOn && pbrMaterial !== null ? pbrMaterial : detailMaterial;
     },
     setPbr,
+    /** The perspective grade (`grade.ts`) on the perspective-only detail and reflective materials. */
+    setGrade(on: boolean): void {
+      gradeOn = on;
+      if (detailMaterial !== null) setGraded(detailMaterial, on);
+      if (pbrMaterial !== null) setGraded(pbrMaterial, on);
+    },
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
       const mesh = this.detail(geometry);
@@ -461,6 +476,7 @@ export function proceduralTruck(
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
+      res.setGrade(flags.perspectiveLighting);
       res.setPbr(group, flags.pbr);
     },
     dispose() {
@@ -702,6 +718,7 @@ export function proceduralTrailer(
     setQuality(flags) {
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
+      res.setGrade(flags.perspectiveLighting);
       res.setPbr(group, flags.pbr);
     },
     dispose() {

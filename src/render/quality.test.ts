@@ -11,7 +11,13 @@ const REALISM: readonly (keyof QualityFlags)[] = [
   'cockpitInterior',
   'groundTexture',
   'pbr',
+  'perspectiveLighting',
+  'aerialPerspective',
+  'hdriSky',
 ];
+
+/** Flags that download an asset: the tablet preset must not pay for them. */
+const DOWNLOADS: readonly (keyof QualityFlags)[] = ['groundTexture', 'hdriSky'];
 
 describe('quality flags', () => {
   it('defines every preset', () => {
@@ -42,6 +48,18 @@ describe('quality flags', () => {
       ...QUALITY_FLAGS.balanced,
       groundTexture: true,
       pbr: true,
+      hdriSky: true,
     });
+  });
+
+  it('downloads nothing extra on balanced', () => {
+    for (const key of DOWNLOADS) expect(QUALITY_FLAGS.balanced[key], key).toBe(false);
+  });
+
+  it('hazes only graded views', () => {
+    for (const preset of GRAPHICS_PRESETS) {
+      const flags = QUALITY_FLAGS[preset];
+      if (flags.aerialPerspective) expect(flags.perspectiveLighting, preset).toBe(true);
+    }
   });
 });
