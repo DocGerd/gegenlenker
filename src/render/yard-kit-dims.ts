@@ -7,8 +7,9 @@ const hex = (rgb: number): string => `#${rgb.toString(16).padStart(6, '0')}`;
 /**
  * Dimensions of the yard-kit pieces (`tools/blender/yard_kit.py`, `src/render/assets/yard-kit.glb`):
  * surroundings outside the drivable yard, seen from 45 m and more. Metres, in each node's frame:
- * +X along the piece, +Y out of its face (towards the viewer), +Z up; the origin is the centre of
- * the piece's footprint on its face line, at ground level. Render estimates, not vehicle Params.
+ * +X along the piece, +Y out of its face (towards the viewer), +Z up; the origin is at ground level
+ * on the face line, centred along X except for the fence panel and gate (first post at the origin).
+ * Each glb node's `bounds` extras hold its exact box. Render estimates, not vehicle Params.
  */
 export const YARD_KIT_DIMS = {
   hall: {
