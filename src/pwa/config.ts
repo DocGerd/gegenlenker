@@ -1,4 +1,7 @@
 import type { VitePWAOptions } from 'vite-plugin-pwa';
+import { DEFAULT_GRAPHICS } from '../contracts/render';
+import { ASSET_REGISTRY } from '../render/asset-registry';
+import { QUALITY_FLAGS } from '../render/quality';
 
 export type TokenTheme = 'light' | 'dark';
 
@@ -23,12 +26,20 @@ const icons = [
 /** Workbox skips larger files when precaching; the default, pinned so the cab glb test can import it. */
 export const MAX_PRECACHE_FILE_BYTES = 2 * 1024 * 1024;
 
-/** The High-only textures and their Basis transcoder as `[stem, extensions]` of the hashed `stem-<hash>.ext`. */
-const RUNTIME_ASSETS = [
-  ['ground', ['ktx2']],
-  ['sky', ['ktx2']],
-  ['basis_transcoder', ['js', 'wasm']],
-] as const;
+/** Assets the default preset does not draw, as `[stem, extensions]` of the hashed `stem-<hash>.ext`; the Basis transcoder is runtime-cached only while no KTX2 is precached. */
+const RUNTIME_ASSETS: readonly (readonly [string, readonly string[]])[] = (() => {
+  const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
+  const offByDefault = Object.entries(ASSET_REGISTRY).filter(([, { flag }]) => !defaults[flag]);
+  const assets: [string, readonly string[]][] = offByDefault.map(([stem, { kind }]) => [
+    stem,
+    [kind],
+  ]);
+  const ktx2 = Object.values(ASSET_REGISTRY).filter(({ kind }) => kind === 'ktx2');
+  if (ktx2.length > 0 && ktx2.every(({ flag }) => !defaults[flag])) {
+    assets.push(['basis_transcoder', ['js', 'wasm']]);
+  }
+  return assets;
+})();
 
 /** Both are built from `RUNTIME_ASSETS`: precache skips these files, the service worker caches them on first use. */
 const RUNTIME_ASSET_GLOBS = RUNTIME_ASSETS.flatMap(([stem, extensions]) =>
@@ -65,7 +76,7 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
       globIgnores: RUNTIME_ASSET_GLOBS,
       runtimeCaching: [
         {
-          // Only High draws these textures, so the other presets do not pay for them on install.
+          // Assets the default preset does not draw are cached on first use, not on install.
           urlPattern: RUNTIME_ASSET_URLS,
           handler: 'CacheFirst',
           options: {
