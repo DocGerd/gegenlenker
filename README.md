@@ -14,6 +14,7 @@ pnpm dev        # dev server
 pnpm test       # unit tests
 pnpm test:e2e   # Playwright offline check
 pnpm test:perf  # headed, hardware GL, local only
+pnpm perf:tablet  # emulated tablet on the real GPU, local only (docs/perf.md)
 pnpm build
 pnpm verify     # lint, format, typecheck, unit and e2e tests
 ```
@@ -28,6 +29,7 @@ pnpm verify     # lint, format, typecheck, unit and e2e tests
 - [Vehicle data](docs/vehicle-data.md): sources and the generated table of estimated parameters
 - [Brand](docs/brand/BRAND.md)
 - [Wording glossary](docs/glossary.md)
+- [Engine choice ADR](docs/decisions/0001-engine-choice.md)
 - [Changelog](CHANGELOG.md); [changelog fragments](changelog.d/README.md)
 - [Security policy](SECURITY.md)
 
