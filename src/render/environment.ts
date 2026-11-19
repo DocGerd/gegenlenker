@@ -130,21 +130,23 @@ export function proceduralEnvironment(
   for (const m of layout.markings) addMarking(m, markings, color);
   const markingTokens = markings.meshes(flat, geometries);
   for (const mesh of markingTokens) group.add(mesh);
-  // Perspective cameras draw these lit copies; the tokens keep the top-down view, unlit.
+  // Perspective cameras draw lit copies of every flat token; the tokens keep the top-down view, unlit.
   const litFlat = new MeshLambertNodeMaterial({
     vertexColors: true,
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
   });
-  const litMarkings = markingTokens.map((token) => {
-    const copy = new Mesh(token.geometry, litFlat);
+  const flatTokens: Mesh[] = [];
+  const flatCopies: Mesh[] = [];
+  const litCopy = (token: Mesh, material: MeshLambertNodeMaterial): void => {
+    const copy = new Mesh(token.geometry, material);
     copy.receiveShadow = true;
     group.add(copy);
-    return copy;
-  });
-  const markingSwap = tokenCopy(markingTokens);
-  markingSwap.setCopies(litMarkings);
+    flatTokens.push(token);
+    flatCopies.push(copy);
+  };
+  for (const token of markingTokens) litCopy(token, litFlat);
 
   let yardBand: Group | null = null;
   const { target } = layout;
@@ -157,7 +159,9 @@ export function proceduralEnvironment(
       color,
     );
     geometries.push(outline);
-    group.add(new Mesh(outline, flat));
+    const outlineToken = new Mesh(outline, flat);
+    group.add(outlineToken);
+    litCopy(outlineToken, litFlat);
 
     const { tolerances } = layout;
     if (tolerances !== null) {
@@ -182,7 +186,9 @@ export function proceduralEnvironment(
         geometries.push(casing, band);
         return [new Mesh(casing, flat), new Mesh(band, flat)];
       };
-      group.add(...addBand(BAND_STRIP, 0));
+      const bandTokens = addBand(BAND_STRIP, 0);
+      group.add(...bandTokens);
+      for (const token of bandTokens) litCopy(token, litFlat);
 
       // World-metre strokes shrink to under a pixel in the whole-yard view, so it gets a wider copy.
       const { yard } = layout;
@@ -200,7 +206,11 @@ export function proceduralEnvironment(
   }
 
   const { waypoint } = layout;
-  let gate: { material: MeshBasicMaterial; pending: Color; passed: Color } | null = null;
+  let gate: {
+    materials: readonly [MeshBasicMaterial, MeshLambertNodeMaterial];
+    pending: Color;
+    passed: Color;
+  } | null = null;
   if (waypoint !== null) {
     const half = GATE_STRIP / 2;
     const ring = new RingGeometry(waypoint.radius - half, waypoint.radius + half, GATE_SEGMENTS)
@@ -211,11 +221,24 @@ export function proceduralEnvironment(
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
     });
+    const litMaterial = new MeshLambertNodeMaterial({
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
     geometries.push(ring);
-    group.add(new Mesh(ring, material));
-    gate = { material, pending: new Color(palette.accent), passed: new Color(palette.marking) };
-    material.color.copy(gate.pending);
+    const gateToken = new Mesh(ring, material);
+    group.add(gateToken);
+    litCopy(gateToken, litMaterial);
+    gate = {
+      materials: [material, litMaterial],
+      pending: new Color(palette.accent),
+      passed: new Color(palette.marking),
+    };
+    for (const m of gate.materials) m.color.copy(gate.pending);
   }
+  const flatSwap = tokenCopy(flatTokens);
+  flatSwap.setCopies(flatCopies);
 
   const rig = createLightRig(palette);
   group.add(rig.object);
@@ -263,7 +286,8 @@ export function proceduralEnvironment(
       rig.fitShadow(focus);
       if (yardBand !== null) yardBand.visible = frame.topDown === 'yard';
       if (gate !== null) {
-        gate.material.color.copy(frame.waypointVisited === true ? gate.passed : gate.pending);
+        const next = frame.waypointVisited === true ? gate.passed : gate.pending;
+        for (const m of gate.materials) m.color.copy(next);
       }
     },
     setQuality(flags: QualityFlags): void {
@@ -278,11 +302,12 @@ export function proceduralEnvironment(
       for (const mesh of props) mesh.material = graded ? propMaterial : solid;
       if (texturedGroundMaterial !== null) setGraded(texturedGroundMaterial, graded);
       setGraded(litFlat, graded);
+      if (gate !== null) setGraded(gate.materials[1], graded);
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
-      markingSwap.set(flags.litMarkings);
+      flatSwap.set(flags.litMarkings);
     },
     dispose: () => {
       cancelGroundTexture?.();
@@ -294,7 +319,7 @@ export function proceduralEnvironment(
       groundSwap.disable();
       texturedGroundMaterial?.dispose();
       geometries.forEach((g) => g.dispose());
-      gate?.material.dispose();
+      gate?.materials.forEach((m) => m.dispose());
       solid.dispose();
       propMaterial.dispose();
       flat.dispose();

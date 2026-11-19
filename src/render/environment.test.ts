@@ -13,7 +13,7 @@ import { MeshLambertNodeMaterial } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
-import type { ScenePalette } from '../contracts/render';
+import type { RenderFrame, ScenePalette } from '../contracts/render';
 import { createMirror } from './mirror';
 import { proceduralEnvironment } from './environment';
 import { texturedGroundGeometry } from './ground-geometry';
@@ -200,6 +200,125 @@ describe('environment lit markings', () => {
     env.dispose();
     expect(disposeMaterial).toHaveBeenCalledOnce();
     for (const g of geometries) expect(g).toHaveBeenCalledOnce();
+  });
+});
+
+describe('environment lit aids', () => {
+  const slalom = exercises.find((e) => e.id === 'slalom');
+  const aidLayout = slalom === undefined ? null : resolveLayout(layouts[slalom.layout], slalom);
+  const aidPalette = { ...palette, accent: 0xff0000, marking: 0x00ff00 };
+  const perspectiveViews = {
+    cockpit: cameras.cockpit,
+    mirror: cameras.mirror,
+    chase: camera(CHASE_LAYERS),
+  };
+  const build = (): ReturnType<typeof proceduralEnvironment> => {
+    if (aidLayout === null) throw new Error('no slalom exercise');
+    return proceduralEnvironment(aidLayout, aidPalette);
+  };
+  const isFlat = (mesh: Object3D): boolean => isMarking(mesh) && !isNodeMaterial(mesh);
+  const isGate = (mesh: Object3D): boolean =>
+    isMarking(mesh) && !(asMesh(mesh).material as { vertexColors: boolean }).vertexColors;
+  const frame = (waypointVisited: boolean): RenderFrame =>
+    ({ topDown: 'follow', waypointVisited }) as RenderFrame;
+  const on = QUALITY_FLAGS.balanced;
+  const off = { ...on, litMarkings: false };
+
+  it('shows no flat mesh to a perspective camera while lit copies are on, aids included', () => {
+    const env = build();
+    env.setQuality(off);
+    for (const [view, c] of Object.entries(perspectiveViews)) {
+      expect([...seen(env.object, c)].filter(isFlat).some(isGate), view).toBe(true);
+    }
+    env.setQuality(on);
+    for (const [view, c] of Object.entries(perspectiveViews)) {
+      expect([...seen(env.object, c)].filter(isFlat), view).toEqual([]);
+    }
+    env.dispose();
+  });
+
+  it('swaps every flat token one for one in each perspective view, outline, band and gate too', () => {
+    const env = build();
+    const plain = layout === undefined ? null : proceduralEnvironment(layout, aidPalette);
+    env.setQuality(off);
+    plain?.setQuality(off);
+    const flat = (e: { object: Object3D }, c: Layers): Mesh[] =>
+      [...seen(e.object, c)].filter(isFlat).map(asMesh);
+    for (const [view, c] of Object.entries(perspectiveViews)) {
+      const before = flat(env, c);
+      // outline, casing, band and gate sit on top of the markings
+      expect(before.length - (plain === null ? 0 : flat(plain, c).length), view).toBe(4);
+      env.setQuality(on);
+      const copies = [...seen(env.object, c)].filter(isMesh).filter(isMarking);
+      expect(copies, view).toHaveLength(before.length);
+      for (const token of before) {
+        expect(
+          copies.filter((m) => m.geometry === token.geometry),
+          view,
+        ).toHaveLength(1);
+      }
+      env.setQuality(off);
+    }
+    env.dispose();
+    plain?.dispose();
+  });
+
+  it('keeps the top-down meshes and materials as on low, at every preset', () => {
+    const env = build();
+    const topDown = (): Map<Object3D, unknown> =>
+      new Map([...seen(env.object, cameras.topDown)].map((m) => [m, asMesh(m).material]));
+    env.setQuality(QUALITY_FLAGS.low);
+    const low = topDown();
+    for (const preset of ['balanced', 'high'] as const) {
+      env.setQuality(QUALITY_FLAGS[preset]);
+      expect(topDown(), preset).toEqual(low);
+    }
+    env.dispose();
+  });
+
+  it('colours the gate copy with its token as the gate is passed', () => {
+    const env = build();
+    env.setQuality(on);
+    const gate = (c: Layers): Mesh => {
+      const found = [...seen(env.object, c)].filter(isMesh).filter(isGate);
+      expect(found).toHaveLength(1);
+      return found[0] as Mesh;
+    };
+    const copy = gate(cameras.cockpit);
+    const token = gate(cameras.topDown);
+    expect(isNodeMaterial(copy)).toBe(true);
+    expect(copy.receiveShadow).toBe(true);
+    for (const [visited, hex] of [
+      [false, 0xff0000],
+      [true, 0x00ff00],
+      [false, 0xff0000],
+    ] as const) {
+      env.update(frame(visited));
+      expect((copy.material as unknown as { color: Color }).color.getHex(), String(visited)).toBe(
+        hex,
+      );
+      expect((token.material as unknown as { color: Color }).color.getHex(), String(visited)).toBe(
+        hex,
+      );
+    }
+    env.dispose();
+  });
+
+  it('grades the gate copy with the lighting and frees it once, sharing the ring geometry', () => {
+    const env = build();
+    env.setQuality(on);
+    const lit = [...seen(env.object, cameras.cockpit)].filter(isMesh).find(isGate);
+    expect(lit).toBeDefined();
+    if (lit === undefined) return;
+    const material = lit.material as unknown as { outputNode: unknown; dispose(): void };
+    expect(material.outputNode !== null).toBe(on.perspectiveLighting);
+    env.setQuality(QUALITY_FLAGS.high);
+    expect(material.outputNode !== null).toBe(true);
+    const disposeMaterial = vi.spyOn(material, 'dispose');
+    const disposeGeometry = vi.spyOn(lit.geometry, 'dispose');
+    env.dispose();
+    expect(disposeMaterial).toHaveBeenCalledOnce();
+    expect(disposeGeometry).toHaveBeenCalledOnce();
   });
 });
 
