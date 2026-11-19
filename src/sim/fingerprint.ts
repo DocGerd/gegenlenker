@@ -19,20 +19,14 @@ export type RunData = {
 
 /**
  * FNV-1a over what a run's path and score depend on, so stored runs from other data can be told apart.
- * Visual-only content (markings, surfaces, obstacle heights and kinds) is left out.
+ * Visual-only content (markings, surfaces, obstacle ids, heights and kinds) is left out; obstacle order
+ * is hashed, since the first contact in list order is the one reported.
  */
 export function dataFingerprint({ params, obstacles, start, exercise, scoring }: RunData): string {
   const text = JSON.stringify([
     SIM_REVISION,
     params,
-    obstacles.map(({ id, obb }) => [
-      id,
-      obb.cx,
-      obb.cy,
-      obb.halfLength,
-      obb.halfWidth,
-      obb.heading,
-    ]),
+    obstacles.map(({ obb }) => [obb.cx, obb.cy, obb.halfLength, obb.halfWidth, obb.heading]),
     start,
     exercise && [exercise.target, exercise.tolerances, exercise.waypoint],
     SIM_CONSTANTS,

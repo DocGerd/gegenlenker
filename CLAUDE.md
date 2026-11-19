@@ -54,7 +54,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - Every numeric vehicle dimension is a `Param` (`id`, `name`, `body` are not) with `status` `'sourced'` (`source` is an https URL from `src/vehicles/sources.ts`) or `'estimate'` (`source` is the basis).
 - Use `sourced()` or `estimate()`; never present an estimate as sourced. `sourced()` takes only a `SOURCES` URL.
 - Adding, changing, sourcing or removing an estimate means running `pnpm estimates` (rewrites the table in `docs/vehicle-data.md` between the `estimates:` markers); `src/vehicles/estimates.test.ts` fails otherwise.
-- Bump `SIM_REVISION` in `src/sim/fingerprint.ts` only for sim, collision or scoring logic changes; `dataFingerprint` already hashes vehicle params, obstacle ids and OBBs, start, exercise, sim constants and scoring thresholds: visual-only prop changes keep stored runs; adding or moving a collision prop invalidates them for that layout. `src/content/run.test.ts` pins `{ SIM_REVISION, digest }` per layout: an intended sim change updates the digest with the bump.
+- Bump `SIM_REVISION` in `src/sim/fingerprint.ts` only for sim, collision or scoring logic changes; `dataFingerprint` already hashes vehicle params, ordered obstacle OBBs (not ids), start, exercise, sim constants and scoring thresholds: visual-only prop changes keep stored runs; adding or moving a collision prop invalidates them for that layout. `src/content/run.test.ts` pins `{ SIM_REVISION, digest }` per layout: an intended sim change updates the digest with the bump.
 
 ## Blender assets
 
