@@ -1,5 +1,5 @@
 import { OrthographicCamera, Scene, UnsignedByteType, Vector3, type Object3D } from 'three';
-import { WebGPURenderer } from 'three/webgpu';
+import { Lighting, WebGPURenderer } from 'three/webgpu';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
   DEFAULT_GRAPHICS,
@@ -58,6 +58,12 @@ type Built = {
   /** Metres from the follow centre that bound the whole combination. */
   readonly radius: number;
 };
+
+/**
+ * three keeps one light list per scene and Lighting; the top-down view sees other lights than the
+ * perspective ones (light-rig.ts), so a list of its own keeps both, and every cache key, stable.
+ */
+const topDownLighting = new WeakMap<WebGPURenderer, Lighting>();
 
 /** `rect` in the pane's own px. */
 function relativeTo(pane: Rect, rect: Rect): Rect {
@@ -465,7 +471,18 @@ export function createThreeSceneRenderer(
         gl.render(b.scene, chaseCamera);
       } else {
         placeTopDown(frame, topDown, b);
-        gl.render(b.scene, topDownCamera);
+        const shared = gl.lighting;
+        let own = topDownLighting.get(gl);
+        if (own === undefined) {
+          own = new Lighting();
+          topDownLighting.set(gl, own);
+        }
+        gl.lighting = own;
+        try {
+          gl.render(b.scene, topDownCamera);
+        } finally {
+          gl.lighting = shared;
+        }
       }
 
       if (leftRect !== null) mirrorLeft.composite(gl, leftRect);
