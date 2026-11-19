@@ -26,6 +26,7 @@ test('lighting the stop lamps leaves the top-down view unchanged at every preset
     const before = [hash(await shoot(page, 'follow')), hash(await shoot(page, 'yard'))];
     await page.keyboard.down('Space');
     await settle(page, preset);
+    await expect(page.locator('[data-ctl="stop"]')).toHaveAttribute('data-active', '');
     const after = [hash(await shoot(page, 'follow')), hash(await shoot(page, 'yard'))];
     await page.keyboard.up('Space');
     expect(after, preset).toEqual(before);

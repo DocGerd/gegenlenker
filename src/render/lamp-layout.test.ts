@@ -252,7 +252,7 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     }
   });
 
-  it('light the trailer plate site from just above it (6.8)', () => {
+  it('give a trailer, and only a trailer, a rear plate lamp (6.8)', () => {
     const plate = withFn(v, 'rear-plate');
     expect(plate).toHaveLength(v.trailer ? 1 : 0);
   });
