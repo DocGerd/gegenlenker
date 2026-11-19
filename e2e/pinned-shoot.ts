@@ -21,6 +21,12 @@ const HIDE_ID = 'pinned-shoot-bare';
 export const MIN_DRAWN_COLOURS = 40;
 /** For a poll that screenshots the canvas: software GL (CI) takes a few seconds to draw the first frame. */
 export const SCREENSHOT_POLL = { timeout: 10_000 } as const;
+/**
+ * For a poll that screenshots a High pane: one screenshot waits for a frame or two of the
+ * multisampled PBR scene, each of which takes seconds on software GL, so a single iteration can
+ * outlast `SCREENSHOT_POLL`.
+ */
+export const HIGH_SCREENSHOT_POLL = { timeout: 30_000 } as const;
 /** For a ground texture load on a fresh renderer: fetch, transcode and shader build, slow on software GL (CI). */
 export const GROUND_LOAD = { timeout: 20_000 } as const;
 
@@ -79,17 +85,30 @@ export async function startPinnedDrive(
   await settle(page, preset);
 }
 
+/** Whether `preset`'s attachments are in place, read from `<html>`; a shot before they land would differ. */
+export async function attachmentsReady(page: Page, preset: Preset): Promise<boolean> {
+  return (await attachments(page, preset)).ready;
+}
+
+async function attachments(
+  page: Page,
+  preset: Preset,
+): Promise<{ ready: boolean; values: (string | null)[] }> {
+  const want = READY[preset];
+  const values = await page.evaluate((names) => {
+    const html = document.documentElement;
+    return names.map((n) => html.getAttribute(n));
+  }, Object.keys(want));
+  return { ready: Object.values(want).every((ok, j) => ok(values[j] ?? '')), values };
+}
+
 /** Steps the pinned clock until `preset`'s attachments are in place, then settles. */
 export async function settle(page: Page, preset: Preset): Promise<void> {
-  const want = READY[preset];
   for (let i = 0; ; i++) {
     await step(page, 1);
-    const ready = await page.evaluate((names) => {
-      const html = document.documentElement;
-      return names.map((n) => html.getAttribute(n));
-    }, Object.keys(want));
-    if (Object.values(want).every((ok, j) => ok(ready[j] ?? ''))) break;
-    if (i >= READY_STEPS) throw new Error(`${preset} not ready: ${JSON.stringify(ready)}`);
+    const { ready, values } = await attachments(page, preset);
+    if (ready) break;
+    if (i >= READY_STEPS) throw new Error(`${preset} not ready: ${JSON.stringify(values)}`);
     await page.waitForTimeout(25);
   }
   await step(page, SETTLE_FRAMES);
