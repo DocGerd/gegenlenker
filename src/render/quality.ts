@@ -40,6 +40,9 @@ const BALANCED: QualityFlags = {
   hdriSky: false,
 };
 
+/** Most draw calls a frame may spend, mirrors included: the requirement for High. */
+export const DRAW_CALL_BUDGET = 300;
+
 export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
   low: {
     pixelRatioCap: 1,
