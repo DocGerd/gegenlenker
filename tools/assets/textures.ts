@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { HDRI_LIGHT } from '../../src/render/hdri-light';
 import {
   ENCODER_OPTIONS as GROUND_ENCODER,
@@ -7,14 +5,13 @@ import {
   inputsSha256 as groundInputsSha256,
 } from '../textures/ground-build';
 import { generateGroundTexture } from '../textures/ground-texture';
-import { parseRadianceHdr } from '../textures/hdri-light';
 import {
   ENCODER_OPTIONS as SKY_ENCODER,
+  ENCODING_NAME as SKY_ENCODING,
   inputsSha256 as skyInputsSha256,
   SKY_FILES,
-  SKY_HDR,
-  skyPixels,
 } from '../textures/sky-build';
+import { hdriLightModule, readSkyImage, skyPixels } from '../textures/sky-pixels';
 import { canonicalJson, type Json, sha256 } from './provenance';
 
 export type TexturePixels = {
@@ -51,10 +48,11 @@ export type TextureAsset = {
   pixels(root: string): TexturePixels;
   /** Ids in `ASSET_SOURCES` of the third-party files the pixels come from. */
   readonly sources: readonly string[];
-  /** Set when a separate generator writes the ktx2 and a baked constant together. */
+  /** Set when a runtime constant is baked from the same sources as the ktx2. */
   readonly bake?: {
     readonly file: string;
-    readonly script: string;
+    /** The module text, given the ktx2 it is written beside. */
+    source(root: string, ktx2: Uint8Array): string;
     bakedSha256(): string;
   };
 };
@@ -82,15 +80,11 @@ export const TEXTURE_ASSETS: Readonly<Record<string, TextureAsset>> = {
   sky: {
     key: 'sky',
     ktx2: SKY_FILES.ktx2,
-    manifest: 'src/render/assets/sky.manifest.json',
-    encoding: { name: 'srgb-uastc-single-level', options: SKY_ENCODER },
+    manifest: SKY_FILES.manifest,
+    encoding: { name: SKY_ENCODING, options: SKY_ENCODER },
     inputsSha256: skyInputsSha256,
-    pixels: (root) => {
-      const hdr = join(root, SKY_HDR.path);
-      if (!existsSync(hdr)) throw new Error(`${SKY_HDR.path} is missing: download ${SKY_HDR.url}`);
-      return skyPixels(parseRadianceHdr(new Uint8Array(readFileSync(hdr))));
-    },
+    pixels: (root) => skyPixels(readSkyImage(root)),
     sources: ['kloofendal-sky'],
-    bake: { file: SKY_FILES.bake, script: 'tools/textures/sky-build.ts', bakedSha256 },
+    bake: { file: SKY_FILES.bake, source: hdriLightModule, bakedSha256 },
   },
 };

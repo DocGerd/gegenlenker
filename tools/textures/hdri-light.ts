@@ -1,4 +1,4 @@
-// Bakes the perspective light rig from the sky HDRI (`sky-build.ts` writes it): sun direction, colour
+// Bakes the perspective light rig from the sky HDRI (`sky-pixels.ts` writes it): sun direction, colour
 // and irradiance, the SH9 radiance of the sky with the sun clamped out, and the horizon colours. The
 // runtime scales everything to the scene's brightness.
 

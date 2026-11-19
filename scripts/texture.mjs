@@ -1,6 +1,5 @@
 // Usage: node scripts/texture.mjs <key|all>   (pnpm texture)
-// Builds a texture's ktx2 from its registered pixels (or runs its bake script) and writes its manifest.
-import { spawnSync } from 'node:child_process';
+// Builds a texture's ktx2 from its registered pixels, bakes its runtime constant if it has one, and writes its manifest.
 import console from 'node:console';
 import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -37,15 +36,12 @@ async function encode(asset) {
   });
   console.log = log;
   writeFileSync(join(root, asset.ktx2), ktx2);
+  if (asset.bake !== undefined) {
+    const file = join(root, asset.bake.file);
+    const source = asset.bake.source(root, ktx2);
+    writeFileSync(file, await format(source, { ...(await resolveConfig(file)), filepath: file }));
+  }
   return pixels;
-}
-
-function bake(asset) {
-  const run = spawnSync(process.execPath, [join(root, asset.bake.script)], {
-    cwd: root,
-    stdio: ['ignore', 'inherit', 'inherit'],
-  });
-  if (run.status !== 0) throw new Error(`${asset.bake.script} failed`);
 }
 
 async function record(asset, pixels = asset.pixels(root)) {
@@ -70,11 +66,11 @@ async function record(asset, pixels = asset.pixels(root)) {
 
 for (const key of keys) {
   const asset = TEXTURE_ASSETS[key];
-  if (asset.bake === undefined) {
-    await record(asset, await encode(asset));
-  } else {
-    bake(asset);
-    // the bake rewrote a module the registry hashes, so read it again
-    await record((await load('/tools/assets/textures.ts')).TEXTURE_ASSETS[key]);
-  }
+  const pixels = await encode(asset);
+  // a bake rewrote a module the registry reads, so read it again
+  const fresh =
+    asset.bake === undefined
+      ? asset
+      : (await load('/tools/assets/textures.ts')).TEXTURE_ASSETS[key];
+  await record(fresh, pixels);
 }
