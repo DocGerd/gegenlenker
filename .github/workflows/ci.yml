@@ -86,12 +86,17 @@ jobs:
         run: |
           mkdir -p ~/.cache/playwright-debs
           if compgen -G "$HOME/.cache/playwright-debs/*.deb" >/dev/null; then
-            sudo cp -n "$HOME"/.cache/playwright-debs/*.deb /var/cache/apt/archives/
+            sudo cp --update=none "$HOME"/.cache/playwright-debs/*.deb /var/cache/apt/archives/
           fi
       - run: pnpm exec playwright install --with-deps chromium
       - name: Collect .debs for the cache
         if: steps.debs.outputs.cache-hit != 'true'
-        run: cp -n /var/cache/apt/archives/*.deb ~/.cache/playwright-debs/
+        run: |
+          if compgen -G '/var/cache/apt/archives/*.deb' >/dev/null; then
+            cp --update=none /var/cache/apt/archives/*.deb ~/.cache/playwright-debs/
+          else
+            echo '::warning::no .debs to cache'
+          fi
       - run: pnpm test:e2e --fully-parallel --shard=${{ matrix.shard }}/3 --reporter=list,json
         env:
           PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/e2e-results-${{ matrix.shard }}.json
@@ -100,6 +105,7 @@ jobs:
         with:
           name: e2e-results-${{ matrix.shard }}
           path: ${{ runner.temp }}/e2e-results-${{ matrix.shard }}.json
+          overwrite: true
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
