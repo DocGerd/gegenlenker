@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-/** Warnings and errors three logs about itself (`THREE.TSL: ...` for a shader graph that failed to build). */
+/** A warning or error three logs about itself (`THREE.TSL: ...` for a shader graph that failed to build). */
 export function isThreeProblem(type: string, text: string): boolean {
   return (type === 'warning' || type === 'error') && text.startsWith('THREE.');
 }

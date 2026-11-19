@@ -9,7 +9,7 @@ test('Retry loads the drive screen once the failed chunk request can succeed', a
   allow,
 }) => {
   // The aborted chunk request logs a resource-load error and rejects the dynamic import.
-  allow(/net::ERR_FAILED|Failed to fetch dynamically imported module/);
+  allow(/net::ERR_FAILED|Failed to fetch dynamically imported module: .*\/assets\/drive-/);
   let offline = true;
   await page.route('**/assets/drive-*.js', async (route) => {
     if (offline) await route.abort();

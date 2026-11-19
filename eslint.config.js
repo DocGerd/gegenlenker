@@ -56,6 +56,7 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
+          patterns: [{ group: THREE, message: 'Only src/render imports Three.js' }],
           paths: [
             {
               name: '@playwright/test',
