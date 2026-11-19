@@ -51,6 +51,24 @@ export default tseslint.config(
     },
   },
   {
+    files: ['e2e/**/*.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [{ group: THREE, message: 'Only src/render imports Three.js' }],
+          paths: [
+            {
+              name: '@playwright/test',
+              importNames: ['test', 'expect'],
+              message: "Import test and expect from './fixtures' so the console guard applies",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: CORE,
     rules: {
       'no-restricted-imports': [

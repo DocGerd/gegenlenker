@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 
 test('the replay scrubber seeks both ways and speeds include half speed', async ({ page }) => {

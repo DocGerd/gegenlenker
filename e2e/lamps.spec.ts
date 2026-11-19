@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { type Preset, settle, shoot, startPinnedDrive } from './pinned-shoot';
 import { collectThreeProblems } from './three-problems';

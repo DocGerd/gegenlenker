@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 
 test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ page }) => {

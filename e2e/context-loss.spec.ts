@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import {
   bareScreenshot,
@@ -164,7 +165,8 @@ test('the cockpit looks the same after a loss as before it', async ({ page }) =>
   await expectNoFailedTexture(page);
 });
 
-test('losses in quick succession end at the reload notice', async ({ page }) => {
+test('losses in quick succession end at the reload notice', async ({ page, allow }) => {
+  allow(/Graphics could not start/);
   const problems = collectProblems(page);
   await startDrive(page);
   for (let i = 0; i < 3; i++) await loseAndReplace(page);
