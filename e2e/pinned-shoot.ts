@@ -58,9 +58,57 @@ async function step(page: Page, frames: number): Promise<void> {
 }
 
 /**
+ * Runs in the page. ANGLE folds a multisample resolve into the render pass that drew the target while
+ * that pass is still open, and otherwise resolves the scissored region with a separate command;
+ * SwiftShader rounds the two differently on partly covered pixels, and GPU-process timing decides
+ * which one a frame gets (#203). A pixel readback first closes the pass, so every resolve takes the
+ * same path.
+ */
+function pinResolvePath(): void {
+  const proto = WebGL2RenderingContext.prototype;
+  const blit = Object.getOwnPropertyDescriptor(proto, 'blitFramebuffer')?.value as
+    WebGL2RenderingContext['blitFramebuffer'] | undefined;
+  if (blit === undefined) throw new Error('no blitFramebuffer to pin');
+  const targets = new WeakMap<WebGL2RenderingContext, WebGLFramebuffer>();
+  const pixel = new Uint8Array(4);
+  const target = (gl: WebGL2RenderingContext): WebGLFramebuffer => {
+    const known = targets.get(gl);
+    // a restored context no longer knows the old framebuffer
+    if (known !== undefined && gl.isFramebuffer(known)) return known;
+    const texture = gl.createTexture();
+    const framebuffer = gl.createFramebuffer();
+    const boundTexture = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
+    const boundDraw = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1, 1);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, boundDraw);
+    gl.bindTexture(gl.TEXTURE_2D, boundTexture);
+    targets.set(gl, framebuffer);
+    return framebuffer;
+  };
+  proto.blitFramebuffer = function (
+    this: WebGL2RenderingContext,
+    ...args: Parameters<WebGL2RenderingContext['blitFramebuffer']>
+  ): void {
+    if (!this.isContextLost()) {
+      const read = this.getParameter(this.READ_FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
+      const pack = this.getParameter(this.PIXEL_PACK_BUFFER_BINDING) as WebGLBuffer | null;
+      this.bindFramebuffer(this.READ_FRAMEBUFFER, target(this));
+      this.bindBuffer(this.PIXEL_PACK_BUFFER, null);
+      this.readPixels(0, 0, 1, 1, this.RGBA, this.UNSIGNED_BYTE, pixel);
+      this.bindBuffer(this.PIXEL_PACK_BUFFER, pack);
+      this.bindFramebuffer(this.READ_FRAMEBUFFER, read);
+    }
+    blit.apply(this, args);
+  };
+}
+
+/**
  * Opens a standstill drive of `exercise` on `preset` with `performance.now`, timers and rAF frozen,
- * so the resolution governor and the sim only move when stepped. Call on a fresh page; `search` is
- * the app URL's query (`?backend=webgpu`).
+ * so the resolution governor and the sim only move when stepped, and the multisample resolve on
+ * one path. Call on a fresh page; `search` is the app URL's query (`?backend=webgpu`).
  */
 export async function startPinnedDrive(
   page: Page,
@@ -68,6 +116,7 @@ export async function startPinnedDrive(
   exercise: string,
   search = '',
 ): Promise<void> {
+  await page.addInitScript(pinResolvePath);
   await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
     SETTINGS_KEY,
     JSON.stringify({ version: 1, graphics: preset, topDown: 'follow' }),
