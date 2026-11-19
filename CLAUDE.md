@@ -13,11 +13,15 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - Build: `BASE_PATH=/gegenlenker/ pnpm build`
 - Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); it runs only specs listed in `OFFLINE_SPECS` (`e2e/offline-specs.ts`); `tools/e2e-specs.test.ts` fails on an unregistered spec.
 - Parallel worktrees: e2e previews on a port derived from the checkout path (printed as `e2e preview port: N`), so no lock is needed; `E2E_PORT=<n>` overrides a clash (`--strictPort` fails loudly); a killed run can orphan a preview on that port (`ss -ltnp`); ad-hoc preview servers need another port and `BASE_PATH=/gegenlenker/`.
+- CI e2e is a 3-shard matrix (`--shard=n/3`) on ~4-core runners; reproduce CI-only slowness locally with `taskset -c 0-3`.
 - Local-only ignores go in `.git/info/exclude` as unanchored patterns (`dir/`, not `/dir/`); the format scripts pass it to Prettier.
 
 ## Layering
 
 - Only `src/render` imports `three`; `.ts` files are checked by `no-restricted-imports` in `eslint.config.js`, `dev/` harnesses are exempt.
+- The renderer is `three/webgpu` (WebGL2 backend by default, `?backend=webgpu|auto|webgl2` in `src/render/gpu-backend.ts`): custom shading is TSL node materials only (`onBeforeCompile` is ignored, `ShaderMaterial` rejected). Three swallows TSL build errors and falls back to a plain material, so verify with `getShaderAsync`.
+- Viewport origin is top-left; render-target readback is upside down. `drawCalls` counts output passes.
+- The intermediate buffer is 8-bit linear + MSAA and renderer-wide: never make it per-preset (breaks top-down invariance). Compare unlit hues in e2e through `throughIntermediate` (`e2e/pinned-shoot.ts`, which also owns `MIN_DRAWN_COLOURS` and the poll/wait timeouts).
 - `src/{contracts,vehicles,sim,scoring,content}` also import none of `render/app/hud/input/pwa/i18n` and use none of `window`, `document`, `navigator`, `localStorage`, `performance`, `requestAnimationFrame` (same config).
 - Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome, skyline) go on `SKY_LAYER`; cab-front parts on `CAB_LAYER` (mirrors and the chase view; the cockpit eye is inside the cab); before calling a cab or body change visible, check its frustum (`src/render/shell-visibility.test.ts`). Cameras enable layers via `enableLayers` with `COCKPIT_LAYERS`/`MIRROR_LAYERS`/`CHASE_LAYERS`/`TOP_DOWN_LAYERS` (`src/render/seams.ts`).
 - Perspective scenery must stay inside `CAMERA_FAR` (`src/render/seams.ts`); `src/render/skyline.test.ts` pins it.
@@ -58,6 +62,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - Livery is colours only (no lettering, emblems or maker logos). Look dimensions in `src/render/livery.ts` are perspective-only render estimates, not Params, so they stay out of `dataFingerprint`.
 - MCP-run bpy scripts must not call `read_factory_settings`: it reloads preferences and disables the MCP add-on.
 - `tools/textures/` makes the KTX2 ground texture (`pnpm ground:texture`); `tools/textures/ground-build.test.ts` fails when stale; it is runtime-cached at High, not precached.
+- `pnpm sky:texture` builds the High HDRI `sky.ktx2` from the source `.hdr` (not committed; URL and SHA-256 in `docs/asset-credits.md`); `tools/textures/sky-build.test.ts` fails when stale.
 
 ## Tests
 
@@ -70,6 +75,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 
 - Open https://docgerd.github.io/gegenlenker/?perf=1 and start a drive (`src/app/drive.ts` mounts the overlay only there); it shows fps, p95 frame ms, resolution scale, draw calls, GL renderer.
 - Pass: at least 58 fps at resolution scale 1.00.
+- Emulated locally: `pnpm perf:tablet [--throttle 6] [--functional]` (`e2e/perf/tablet-emulation.ts`, `docs/perf.md`; headed Chromium on a real GPU, aborts on SwiftShader/llvmpipe, exits non-zero below 58 fps at scale 1.00); host load makes it inconclusive, and a physical-tablet check still decides.
 - `?probe` mounts `src/render/probe.ts`, which `pnpm test:perf` (`e2e/perf/four-views.perf.ts`; headed, local only, not CI) uses; that spec owns the automated thresholds and skips on software GL (SwiftShader, llvmpipe), so only a real GPU measures fps.
 - Also check: two-thumb touch (wheel and lever at once), Android back gesture (history handling in `src/app/app.ts`), offline install, mirror sides.
 
@@ -79,6 +85,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Plain `playwright screenshot` can show a blank canvas under `.hud-band` (software compositing); e2e passes GPU-compositing SwiftShader args in `playwright.config.ts`. Read the canvas back before calling a blank region an app bug.
 - Compare before/after by hash only at standstill with `performance.now`/rAF pinned in the shoot script: the resolution governor and the sim both step on wall-clock time, so other shots differ run to run.
 - Headless screenshots run on software GL and passed a see-through skyline; perspective realism changes need an owner device check before calling them done.
+- `node scripts/shoot-views.mjs --diff` compares pinned shots per view; `?perf=1` fps is meaningless on SwiftShader.
 
 ## Workflow
 
