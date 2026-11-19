@@ -49,8 +49,9 @@ export const RUNTIME_ASSET_URLS = new RegExp(
   `/(?:${RUNTIME_ASSETS.map(([stem, extensions]) => `${stem}-[\\w-]+\\.(?:${extensions.join('|')})`).join('|')})$`,
 );
 
-/** Twice the runtime-cached files, so a rehash does not evict a live entry: the cache is all-or-nothing per texture set. */
-const RUNTIME_CACHE_ENTRIES = RUNTIME_ASSET_GLOBS.length * 2;
+/** `cleanupOutdatedCaches` leaves the runtime cache alone, so a rehash leaves a stale set until LRU evicts it: room for the live set plus one stale set, never below the original fixed size. */
+export const RUNTIME_CACHE_MIN_ENTRIES = 12;
+const RUNTIME_CACHE_ENTRIES = Math.max(RUNTIME_CACHE_MIN_ENTRIES, RUNTIME_ASSET_GLOBS.length * 2);
 
 export const PRECACHE_GLOBS = [
   '**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}',

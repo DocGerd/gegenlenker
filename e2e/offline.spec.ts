@@ -1,6 +1,8 @@
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { ASSET_REGISTRY } from '../src/render/asset-registry';
+import { QUALITY_FLAGS } from '../src/render/quality';
+import { DEFAULT_GRAPHICS } from '../src/contracts/render';
 import { RUNTIME_ASSETS } from '../src/pwa/config';
 import { collectThreeProblems } from './three-problems';
 import { expectNoFailedAttachment, watchFailedAttachments } from './attachment-markers';
@@ -49,9 +51,11 @@ test('loads from the subpath and drives an exercise offline', async ({
     }
     return urls;
   });
+  const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
   const shells = Object.entries(ASSET_REGISTRY)
-    .filter(([, { kind }]) => kind === 'glb')
+    .filter(([, { kind, flag }]) => kind === 'glb' && defaults[flag])
     .map(([stem]) => stem);
+  expect(shells.length).toBeGreaterThan(0);
   for (const key of shells) {
     const shell = new RegExp(`${key}-[\\w-]+\\.glb$`);
     expect(
@@ -168,6 +172,16 @@ test('High graphics caches the ground and sky textures and transcoder on first u
     });
   const files = RUNTIME_ASSETS.flatMap(([stem, extensions]) =>
     extensions.map((extension) => new RegExp(`${stem}-[\\w-]+\\.${extension}$`)),
+  );
+  expect(files.map(String).sort()).toEqual(
+    [
+      /basis_transcoder-[\w-]+\.js$/,
+      /basis_transcoder-[\w-]+\.wasm$/,
+      /ground-[\w-]+\.ktx2$/,
+      /sky-[\w-]+\.ktx2$/,
+    ]
+      .map(String)
+      .sort(),
   );
   const matching = (urls: string[], file: RegExp): string[] => urls.filter((url) => file.test(url));
 
