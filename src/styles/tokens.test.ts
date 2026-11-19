@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { LAYOUT_IDS } from '../contracts/layout';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
-import { isOnYard, obstaclePaletteKey } from '../render/environment';
+import { isOnYard } from '../render/yard-props';
+import { obstaclePaletteKey } from '../render/yard-tokens';
 import { KEYS } from '../render/palette';
 import { REALISM_HUES } from '../render/realism-hues';
 
