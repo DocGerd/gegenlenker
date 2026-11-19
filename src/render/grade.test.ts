@@ -3,6 +3,7 @@ import { MeshLambertNodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import { output, vec4 } from 'three/tsl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  buildSerially,
   createGradeCheck,
   GRADE_SHADER_MARKER,
   precompileGrade,
@@ -138,6 +139,27 @@ const gpu = (
   };
   return { debug, backend: {}, getContext: () => null } as unknown as WebGPURenderer;
 };
+
+describe('buildSerially', () => {
+  it('starts a build only after the earlier ones settled, even when one rejects', async () => {
+    const g = gpu(null);
+    const log: string[] = [];
+    const build =
+      (name: string, fail = false) =>
+      async (): Promise<string> => {
+        log.push(`start ${name}`);
+        await new Promise((resolve) => setTimeout(resolve));
+        log.push(`end ${name}`);
+        if (fail) throw new Error(name);
+        return name;
+      };
+    const first = buildSerially(g, build('a', true));
+    const second = buildSerially(g, build('b'));
+    await expect(first).rejects.toThrow('a');
+    await expect(second).resolves.toBe('b');
+    expect(log).toEqual(['start a', 'end a', 'start b', 'end b']);
+  });
+});
 
 describe('precompileGrade', () => {
   const built = `vec3 ${GRADE_SHADER_MARKER};`;

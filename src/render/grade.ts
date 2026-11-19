@@ -167,6 +167,21 @@ export function setGradeDisabled(off: boolean): void {
   for (const [material, entry] of entries) sync(material, entry);
 }
 
+const compiling = new WeakMap<WebGPURenderer, Promise<unknown>>();
+
+/**
+ * Runs `build` after every earlier one on `gpu` has settled. three's `compileAsync` keeps one
+ * precompilation state per renderer, so two overlapping shader builds break each other.
+ */
+export function buildSerially<T>(gpu: WebGPURenderer, build: () => Promise<T>): Promise<T> {
+  const turn = (compiling.get(gpu) ?? Promise.resolve()).then(build);
+  compiling.set(
+    gpu,
+    turn.catch(() => undefined),
+  );
+  return turn;
+}
+
 /** A mesh the grade check compiles, and what releases it. */
 export type GradeSample = { readonly mesh: Mesh; dispose(): void };
 
@@ -189,9 +204,16 @@ function lambertSample(): GradeSample {
  * carries the grade marker. three swaps a material whose node graph throws for a plain one and
  * only logs it, and the WebGL 2 backend reports GLSL errors through a hook only.
  */
-export async function precompileGrade(
+export function precompileGrade(
   gpu: WebGPURenderer,
   extra: readonly (() => GradeSample)[] = [],
+): Promise<void> {
+  return buildSerially(gpu, () => buildGrade(gpu, extra));
+}
+
+async function buildGrade(
+  gpu: WebGPURenderer,
+  extra: readonly (() => GradeSample)[],
 ): Promise<void> {
   const samples: GradeSample[] = [];
   const { debug } = gpu;
