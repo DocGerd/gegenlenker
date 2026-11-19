@@ -16,6 +16,7 @@ vi.mock('three/webgpu', async (importOriginal) => {
   const actual = await importOriginal<typeof import('three/webgpu')>();
   class FakeWebGPURenderer {
     autoClear = true;
+    backend = { isWebGLBackend: true };
     info = { autoReset: true };
     onDeviceLost = (): void => undefined;
     dispose = vi.fn(() => Promise.resolve());
@@ -142,6 +143,15 @@ describe('renderer start', () => {
     const error: unknown = await renderer.init(canvas()).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(GraphicsStartError);
     expect(error).toMatchObject({ reason: 'unavailable' });
+  });
+
+  it('passes the failure on when the canvas has a WebGL 2 context, so it is no missing API', async () => {
+    fail.next = true;
+    const { renderer } = stubParts();
+    const target = Object.assign(canvas(), { getContext: () => ({}) });
+    const error: unknown = await renderer.init(target).catch((e: unknown) => e);
+    expect(error).not.toBeInstanceOf(GraphicsStartError);
+    expect(error).toMatchObject({ message: 'Error creating WebGL context.' });
   });
 
   it('shrinks a canvas it lets go of, so a restored context there holds no backing store', async () => {
