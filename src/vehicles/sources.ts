@@ -8,7 +8,7 @@ export const SOURCES = {
   H: 'https://www.thw-hamburg-nord.de/kfz/90793.htm',
 } as const;
 
-export const sourced = (value: number, src: string): Param => ({
+export const sourced = (value: number, src: (typeof SOURCES)[keyof typeof SOURCES]): Param => ({
   value,
   status: 'sourced',
   source: src,

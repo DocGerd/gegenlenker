@@ -21,7 +21,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
-import { createSceneSky, domeGround } from './environment';
+import { createSceneSky, domeGround } from './scene-sky';
 import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
