@@ -138,6 +138,7 @@ describe('role hues', () => {
       const detail = meshes(visual.object).filter(
         (m) => m.material instanceof MeshLambertNodeMaterial && m.material.vertexColors,
       );
+      expect(detail.length).toBeGreaterThan(0);
       for (const mesh of detail) {
         const onCab = mesh.layers.isEnabled(CAB_LAYER);
         if (!onCab) expect(glassVertices(mesh)).toBe(0);
@@ -549,6 +550,7 @@ describe.each(TRAILER_IDS)('reflective trailer shell of %s', (id) => {
     visual.setQuality(QUALITY_FLAGS.balanced);
     expect(standardOf(visual.object)).toHaveLength(0);
     visual.setQuality(QUALITY_FLAGS.high);
+    expect(detail.length).toBeGreaterThan(0);
     for (const mesh of detail) expect(mesh.material).toBeInstanceOf(VehicleNodeMaterial);
     for (const m of meshes(visual.object)) {
       if (m.material instanceof VehicleNodeMaterial)
