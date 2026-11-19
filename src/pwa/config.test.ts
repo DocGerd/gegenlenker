@@ -1,7 +1,9 @@
 import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { matchesGlob, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_GRAPHICS } from '../contracts/render';
 import { ASSET_REGISTRY } from '../render/asset-registry';
+import { QUALITY_FLAGS } from '../render/quality';
 import { MAX_PRECACHE_FILE_BYTES, pwaOptions } from './config';
 
 const colors = { themeColor: '#ffffff', backgroundColor: '#ffffff' };
@@ -67,8 +69,11 @@ describe('runtime-cached texture assets', () => {
     expect(precache).toContain('ktx2');
   });
 
-  it('keeps room for every cached file twice over, so a rehash does not evict a live entry', () => {
+  it('keeps room for every runtime-cached asset twice over, so a rehash does not evict a live entry', () => {
     const maxEntries = runtime?.options?.expiration?.maxEntries ?? 0;
+    const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
+    const offByDefault = Object.values(ASSET_REGISTRY).filter(({ flag }) => !defaults[flag]);
+    expect(maxEntries).toBeGreaterThanOrEqual(offByDefault.length * 2);
     expect(maxEntries).toBeGreaterThanOrEqual(ignored.length * 2);
   });
 });
