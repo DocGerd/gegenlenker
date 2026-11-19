@@ -18,7 +18,7 @@ export type MudflapSpec = {
 export type TailLampSpec = {
   readonly inset: Param; // outer edge to body side
   readonly width: Param;
-  readonly sill: Param; // lower edge above the reference face
+  readonly sill: Param; // lower edge from the reference face, negative below it
   readonly height: Param;
 };
 export type TruckBody = 'platform' | 'tipper';
@@ -59,11 +59,11 @@ export type TruckSpec = {
     readonly grilleHeight: Param;
     readonly headlampInset: Param; // outer edge to cab side
     readonly headlampWidth: Param;
-    readonly lampSill: Param;
+    readonly lampSill: Param; // from the frame top, negative below it
     readonly lampHeight: Param;
   };
   readonly bumperInset: Param; // bumper end to cab side
-  readonly tailLamp: TailLampSpec; // sill above the frame top
+  readonly tailLamp: TailLampSpec; // sill from the frame top
   readonly mudflap: MudflapSpec;
 };
 export type TrailerSpec = {
@@ -90,7 +90,7 @@ export type TrailerSpec = {
     readonly strutOffset: Param; // centreline to inner strut edge
     readonly strutWidth: Param;
   };
-  readonly tailLamp: TailLampSpec; // sill above the deck
+  readonly tailLamp: TailLampSpec; // sill from the deck
   readonly mudflap: MudflapSpec;
 };
 /** Metres and radians; distances positive; steerRate in steer units (−1…1) per second. */

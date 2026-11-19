@@ -53,7 +53,7 @@ export function bodyShellParams(spec: TruckSpec, look: TruckLook = TRUCK_LOOKS[s
   const anchors = truckAnchors(spec);
   return {
     id: spec.id,
-    schema: 3,
+    schema: 4,
     kind: look.body.kind,
     width: metres(spec.width),
     rearX: round(anchors.rearX),

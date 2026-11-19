@@ -1,6 +1,6 @@
 {
   "id": "arocs-1835-ak",
-  "schema": 3,
+  "schema": 4,
   "kind": "tipper",
   "width": 2.5,
   "rearX": -1.435,
@@ -15,7 +15,169 @@
   "wheelRadius": 0.5,
   "rail": { "halfGap": 0.45, "width": 0.2 },
   "marking": { "zLow": 1.15, "zHigh": 1.25, "endMargin": 0.1 },
-  "tailLamp": { "inset": 0.1, "width": 0.275, "sill": 0.02, "height": 0.16 },
+  "tailLamp": { "inset": 0.1, "width": 0.42, "sill": 0.015, "height": 0.08 },
   "tipper": { "wallTop": 1.9, "headboardTop": 2.4, "stripe": [1.72, 1.86] },
-  "hues": { "body": "#00387b", "white": "#f6f6f6", "black": "#101214" }
+  "hues": { "body": "#00387b", "white": "#f6f6f6", "black": "#101214" },
+  "mounts": [
+    {
+      "id": "side-marker-0-left",
+      "box": [
+        [-1.235, -1.035],
+        [1.25, 1.3],
+        [1.15, 1.25]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-1-left",
+      "box": [
+        [0.7075, 0.9075],
+        [1.25, 1.3],
+        [1.15, 1.25]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-2-left",
+      "box": [
+        [2.65, 2.85],
+        [1.25, 1.3],
+        [1.15, 1.25]
+      ],
+      "facing": "left",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-0-right",
+      "box": [
+        [-1.235, -1.035],
+        [-1.3, -1.25],
+        [1.15, 1.25]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-1-right",
+      "box": [
+        [0.7075, 0.9075],
+        [-1.3, -1.25],
+        [1.15, 1.25]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "side-marker-2-right",
+      "box": [
+        [2.65, 2.85],
+        [-1.3, -1.25],
+        [1.15, 1.25]
+      ],
+      "facing": "right",
+      "hue": "#ffb000"
+    },
+    {
+      "id": "tail-0-left",
+      "box": [
+        [-1.485, -1.435],
+        [1.045, 1.15],
+        [1.115, 1.195]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-1-left",
+      "box": [
+        [-1.485, -1.435],
+        [0.94, 1.045],
+        [1.115, 1.195]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-2-left",
+      "box": [
+        [-1.485, -1.435],
+        [0.814, 0.94],
+        [1.115, 1.195]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-3-left",
+      "box": [
+        [-1.485, -1.435],
+        [0.73, 0.814],
+        [1.115, 1.195]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-0-right",
+      "box": [
+        [-1.485, -1.435],
+        [-1.15, -1.045],
+        [1.115, 1.195]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-1-right",
+      "box": [
+        [-1.485, -1.435],
+        [-1.045, -0.94],
+        [1.115, 1.195]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-2-right",
+      "box": [
+        [-1.485, -1.435],
+        [-0.94, -0.814],
+        [1.115, 1.195]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "tail-3-right",
+      "box": [
+        [-1.485, -1.435],
+        [-0.814, -0.73],
+        [1.115, 1.195]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "end-outline-rear-left",
+      "box": [
+        [-1.485, -1.435],
+        [1.11, 1.19],
+        [1.22, 1.27]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    },
+    {
+      "id": "end-outline-rear-right",
+      "box": [
+        [-1.485, -1.435],
+        [-1.19, -1.11],
+        [1.22, 1.27]
+      ],
+      "facing": "rear",
+      "hue": "#c8102e"
+    }
+  ]
 }
