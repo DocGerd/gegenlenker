@@ -23,6 +23,7 @@ import groundUrl from './assets/ground.ktx2?url';
 import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
 import { createGroundMaterial } from './ground-material';
+import { buildSerially } from './grade';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
 import { gpuLost } from './seams';
 
@@ -152,10 +153,8 @@ export async function precompileGround(renderer: WebGPURenderer, texture: Textur
   const scene = new Scene();
   scene.add(mesh);
   try {
-    const { fragmentShader } = await renderer.debug.getShaderAsync(
-      scene,
-      new PerspectiveCamera(),
-      mesh,
+    const { fragmentShader } = await buildSerially(renderer, () =>
+      renderer.debug.getShaderAsync(scene, new PerspectiveCamera(), mesh),
     );
     if (fragmentShader?.includes(GROUND_SHADER_MARKER) !== true) {
       throw new Error('the ground shader did not build');

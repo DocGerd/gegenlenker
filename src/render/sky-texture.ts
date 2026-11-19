@@ -2,6 +2,7 @@ import { Color, PerspectiveCamera, RepeatWrapping, Scene, Vector3, type Texture 
 import type { WebGPURenderer } from 'three/webgpu';
 import skyUrl from './assets/sky.ktx2?url';
 import { loadKtx2, startTextureAsset, TEXTURE_FAILED, type GroundTextures } from './ground-texture';
+import { buildSerially } from './grade';
 import { gpuLost } from './seams';
 import { createSky, SKY_SHADER_MARKER } from './sky';
 
@@ -19,10 +20,8 @@ export async function precompileSky(renderer: WebGPURenderer, map: Texture): Pro
   const scene = new Scene();
   scene.add(sky.mesh);
   try {
-    const { fragmentShader } = await renderer.debug.getShaderAsync(
-      scene,
-      new PerspectiveCamera(),
-      sky.mesh,
+    const { fragmentShader } = await buildSerially(renderer, () =>
+      renderer.debug.getShaderAsync(scene, new PerspectiveCamera(), sky.mesh),
     );
     if (fragmentShader?.includes(SKY_SHADER_MARKER) !== true) {
       throw new Error('the sky shader did not build');
