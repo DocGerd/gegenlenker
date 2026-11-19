@@ -22,6 +22,7 @@ import {
 } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
 import { createSceneSky } from './environment';
+import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
 
@@ -128,9 +129,15 @@ export class VehicleNodeMaterial extends MeshStandardNodeMaterial {
   }
 }
 
-/** The one reflective material every perspective-only vehicle mesh shares, so a swap adds no draw call. */
-export const createVehicleMaterial = (envMap: Texture): VehicleNodeMaterial =>
-  new VehicleNodeMaterial(envMap);
+/**
+ * The one reflective material every perspective-only vehicle mesh shares, so a swap adds no draw
+ * call; it lights the lenses from `lamps` like the detail material does.
+ */
+export function createVehicleMaterial(envMap: Texture, lamps: LampEmission): VehicleNodeMaterial {
+  const material = new VehicleNodeMaterial(envMap);
+  material.emissiveNode = lamps.node;
+  return material;
+}
 
 const topDownLayers = new Layers();
 enableLayers(topDownLayers, TOP_DOWN_LAYERS);
@@ -167,8 +174,8 @@ export async function vehicleShaderCompiles(
   gpu: WebGPURenderer,
   envMap: Texture,
 ): Promise<boolean> {
-  const material = createVehicleMaterial(envMap);
-  const geometry = new BoxGeometry();
+  const material = createVehicleMaterial(envMap, createLampEmission());
+  const geometry = withSlot(new BoxGeometry());
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   const mesh = new Mesh(geometry, material);
   const scene = new Scene();

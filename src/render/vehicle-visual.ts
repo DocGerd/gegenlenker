@@ -160,10 +160,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     pbrWanted = on;
     const map = on ? (env?.texture(palette) ?? null) : null;
     if (map !== null) {
-      if (pbrMaterial === null) {
-        pbrMaterial = track(createVehicleMaterial(map));
-        pbrMaterial.emissiveNode = lamps.node;
-      }
+      pbrMaterial ??= track(createVehicleMaterial(map, lamps));
       pbrMaterial.envMap = map;
     } else if (pbrMaterial !== null) {
       pbrMaterial.envMap = null;

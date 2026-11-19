@@ -11,20 +11,20 @@ const at = (time: number, change: Partial<ControlVector> = {}) => ({
 describe('lampState', () => {
   it('lights the reversing lamps in R only, and the stop lamps while braking, by day too', () => {
     for (const gear of ['P', 'N', 'D'] as const)
-      expect(lampState(at(0, { gear })).reversing).toBe(0);
-    expect(lampState(at(0, { gear: 'R' })).reversing).toBe(1);
-    expect(lampState(at(0)).stop).toBe(0);
-    expect(lampState(at(0, { brake: true })).stop).toBe(1);
+      expect(lampState(at(0, { gear })).levels.reversing).toBe(0);
+    expect(lampState(at(0, { gear: 'R' })).levels.reversing).toBe(1);
+    expect(lampState(at(0)).levels.stop).toBe(0);
+    expect(lampState(at(0, { brake: true })).levels.stop).toBe(1);
   });
 
   it('keeps everything else dark by day', () => {
-    const levels = lampState(at(1.3, { gear: 'R', brake: true }), DAY);
+    const { levels } = lampState(at(1.3, { gear: 'R', brake: true }), DAY);
     const lit = Object.entries(levels).filter(([, level]) => level > 0);
     expect(lit.map(([fn]) => fn).sort()).toEqual(['reversing', 'stop']);
   });
 
   it('lights position lamps, markers and dipped beam at night, the fog lamp never', () => {
-    const levels = lampState(at(0), { night: true, hazard: false });
+    const { levels } = lampState(at(0), { night: true, hazard: false });
     for (const fn of [
       'dipped-beam',
       'front-position',
@@ -42,8 +42,8 @@ describe('lampState', () => {
     expect(60 / FLASH_PERIOD).toBeGreaterThanOrEqual(60);
     expect(60 / FLASH_PERIOD).toBeLessThanOrEqual(120);
     const hazard = { night: false, hazard: true };
-    const on = lampState(at(FLASH_PERIOD * 3 + 0.01), hazard);
-    const off = lampState(at(FLASH_PERIOD * 3 + FLASH_PERIOD * 0.75), hazard);
+    const on = lampState(at(FLASH_PERIOD * 3 + 0.01), hazard).levels;
+    const off = lampState(at(FLASH_PERIOD * 3 + FLASH_PERIOD * 0.75), hazard).levels;
     for (const fn of ['front-indicator', 'side-indicator', 'rear-indicator'] as const) {
       expect([on[fn], off[fn]]).toEqual([1, 0]);
     }
@@ -55,5 +55,16 @@ describe('lampState', () => {
     expect(
       lensLevel(lampState(at(0), { night: true, hazard: false }), ['rear-position', 'stop']),
     ).toBeLessThan(1);
+  });
+
+  it('flashes a side marker that carries an indicator with the hazards at night, and keeps the others steady', () => {
+    const night = { night: true, hazard: true };
+    const on = lampState(at(0.01), night);
+    const off = lampState(at(FLASH_PERIOD * 0.75), night);
+    const combined = ['side-marker', 'side-indicator'] as const;
+    expect([lensLevel(on, combined), lensLevel(off, combined)]).toEqual([1, 0]);
+    expect([lensLevel(on, ['side-marker']), lensLevel(off, ['side-marker'])]).toEqual([1, 1]);
+    expect(lensLevel(off, ['rear-position', 'stop'])).toBeGreaterThan(0);
+    expect(lensLevel(lampState(at(0), { night: true, hazard: false }), combined)).toBe(1);
   });
 });
