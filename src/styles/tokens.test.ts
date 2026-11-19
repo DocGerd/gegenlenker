@@ -118,19 +118,6 @@ function oklch(hex: string): [l: number, c: number, h: number] {
 
 // Bare hex: the colour-literal lint rule is for UI code, and this is the reference data.
 const bundle: Record<string, [light: string, dark?: string | false]> = {
-  '--color-bg': ['fbfbfc', '0d0e10'],
-  '--color-surface': ['ffffff', '15171a'],
-  '--color-surface-subtle': ['f4f5f7', '141619'],
-  '--color-surface-muted': ['eef0f2', '1b1e22'],
-  '--color-divider': ['e6e9ec', '202428'],
-  '--color-border': ['80878f', '656b72'],
-  '--color-text': ['14161a', 'eceef1'],
-  '--color-text-secondary': ['3b4046', 'c2c7cd'],
-  '--color-text-muted': ['5e646b', '969ca4'],
-  '--color-accent': ['0f7c72', '01afa1'],
-  '--color-success': ['2e7d46', '5fbe7c'],
-  '--color-warning': ['9a6b1a', 'd6a23e'],
-  '--color-danger': ['bc4438', 'e0726a'],
   '--font-sans': ["'Geist', system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"],
   '--font-mono': ["'Geist Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace"],
   '--text-2xs': ['11px'],
