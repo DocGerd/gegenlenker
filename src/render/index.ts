@@ -13,6 +13,7 @@ import {
 import { createGradeCheck, precompileGrade } from './grade';
 import { startGroundTextures } from './ground-texture';
 import { readBackendRequest, requestGpuDevice, type BackendRequest } from './gpu-backend';
+import { ATTACHMENTS, type AttachmentKey } from './asset-registry';
 import { QUALITY_FLAGS } from './quality';
 import { startSkyTexture } from './sky-texture';
 import { skylineGradeSample } from './skyline';
@@ -36,53 +37,41 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     if (warm.target === null) warm.pending = true;
     else warm.target();
   };
-  // Positive signal for the offline e2e: the shells now attached to a vehicle, sorted and
-  // space-separated; absent when none is. Each group loads on the first preset that wants it.
+  // The attachment markers on `<html>` (`ATTACHMENTS`) are read by the e2e: the state while drawn,
+  // `failed` once given up on, absent otherwise. A new state other than `failed` warms up.
+  const publishState = (key: AttachmentKey): ((state: string | null) => void) => {
+    const { marker } = ATTACHMENTS[key];
+    let last: string | null = null;
+    return (state) => {
+      const root = document.documentElement;
+      if (state === null) root.removeAttribute(marker);
+      else {
+        root.setAttribute(marker, state);
+        if (state !== 'failed' && state !== last) warmUp();
+      }
+      last = state;
+    };
+  };
+  // The shells now attached to a vehicle, sorted and space-separated. Each group loads on the first
+  // preset that wants it.
   const attached = new Set<string>();
+  const publishShells = publishState('shells');
   const onAttached = (key: string, on: boolean): void => {
-    if (on) {
-      attached.add(key);
-      warmUp();
-    } else attached.delete(key);
-    const { dataset } = document.documentElement;
-    if (attached.size > 0) dataset['vehicleShells'] = [...attached].sort().join(' ');
-    else delete dataset['vehicleShells'];
+    if (on) attached.add(key);
+    else attached.delete(key);
+    publishShells(attached.size > 0 ? [...attached].sort().join(' ') : null);
   };
   const shells = {
     cab: startShells(CAB_SHELL_URLS, { onAttached, enabled: false }),
     body: startShells(BODY_SHELL_URLS, { onAttached, enabled: false }),
     trailer: startGlbAsset(TRAILER_SHELL_URLS, trailerShellFrom, { onAttached, enabled: false }),
   };
-  // Read by the offline e2e: the transcoded format while the textured ground is drawn, `failed` once given up on, else absent.
-  let groundState: string | null = null;
-  const groundTextures = startGroundTextures(undefined, (state) => {
-    if (state === null) delete document.documentElement.dataset['groundTexture'];
-    else {
-      document.documentElement.dataset['groundTexture'] = state;
-      if (state !== 'failed' && state !== groundState) warmUp();
-    }
-    groundState = state;
-  });
-  // Read by the offline e2e: `on` once the vehicle reflections are built, `failed` if they fell back.
-  let pbrState: string | null = null;
-  const vehicleEnvironment = createVehicleEnvironment((state) => {
-    if (state === null) delete document.documentElement.dataset['vehiclePbr'];
-    else {
-      document.documentElement.dataset['vehiclePbr'] = state;
-      if (state !== 'failed' && state !== pbrState) warmUp();
-    }
-    pbrState = state;
-  });
-  // Read by the offline e2e: `on` while the HDRI sky is drawn, `failed` once given up on, else absent.
-  let skyState: string | null = null;
-  const skyTexture = startSkyTexture(undefined, (state) => {
-    if (state === null) delete document.documentElement.dataset['skyHdri'];
-    else {
-      document.documentElement.dataset['skyHdri'] = state;
-      if (state !== 'failed' && state !== skyState) warmUp();
-    }
-    skyState = state;
-  });
+  // The ground state is the transcoded format while the textured ground is drawn.
+  const groundTextures = startGroundTextures(undefined, publishState('ground'));
+  // `on` once the vehicle reflections are built, `failed` if they fell back.
+  const vehicleEnvironment = createVehicleEnvironment(publishState('pbr'));
+  // `on` while the HDRI sky is drawn.
+  const skyTexture = startSkyTexture(undefined, publishState('sky'));
   // The vehicles reflect the HDRI sky once it has loaded; pbr and the HDRI are both High-only. The
   // capture is untoned, so without the grade they reflect the analytic sky instead.
   let skyMap: Texture | null = null;
@@ -100,16 +89,13 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       syncReflection();
     },
   );
-  // Read by the offline e2e: `on` once the perspective grade compiled while the preset grades, `failed` if it fell back.
+  // `on` once the perspective grade compiled while the preset grades, `failed` if it fell back.
+  const publishGrade = publishState('grade');
   const gradeCheck = createGradeCheck(
     (state) => {
       gradeFailed = state === 'failed';
       syncReflection();
-      if (state === null) delete document.documentElement.dataset['perspectiveGrade'];
-      else {
-        document.documentElement.dataset['perspectiveGrade'] = state;
-        if (state !== 'failed') warmUp();
-      }
+      publishGrade(state);
     },
     (gpu) => precompileGrade(gpu, [skylineGradeSample]),
   );

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   pbr: null as ((state: 'on' | 'failed' | null) => void) | null,
   sky: null as ((state: string | null) => void) | null,
   grade: null as ((state: 'on' | 'failed' | null) => void) | null,
+  onAttached: null as ((key: string, on: boolean) => void) | null,
   skyAttach: vi.fn(),
   skySetEnabled: vi.fn(),
   skyOnLoaded: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('./glb-shells', () => ({
     return { setEnabled: vi.fn() };
   },
   startShells: (_urls: unknown, options: { onAttached: (key: string, on: boolean) => void }) => {
+    mocks.onAttached = options.onAttached;
     if (mocks.syncAttach) options.onAttached('cab', true);
     return { setEnabled: vi.fn() };
   },
@@ -89,6 +91,10 @@ vi.mock('./vehicle-visual', () => ({ proceduralTruck: vi.fn(), proceduralTrailer
 
 const { createSceneRenderer } = await import('./index');
 const { QUALITY_FLAGS } = await import('./quality');
+const { ATTACHMENTS } = await import('./asset-registry');
+
+const attribute = (name: string): string | undefined =>
+  (document.documentElement as unknown as { attributes: Map<string, string> }).attributes.get(name);
 
 describe('scene renderer attach hooks', () => {
   beforeEach(() => {
@@ -104,7 +110,15 @@ describe('scene renderer attach hooks', () => {
     ])
       mock.mockClear();
     mocks.syncAttach = false;
-    vi.stubGlobal('document', { documentElement: { dataset: {} } });
+    const attributes = new Map<string, string>();
+    vi.stubGlobal('document', {
+      documentElement: {
+        dataset: {},
+        attributes,
+        setAttribute: (name: string, value: string) => attributes.set(name, value),
+        removeAttribute: (name: string) => attributes.delete(name),
+      },
+    });
   });
 
   it('survives attach callbacks that fire before the renderer exists, and still warms up', () => {
@@ -182,21 +196,34 @@ describe('scene renderer attach hooks', () => {
 
   it('publishes the sky state, warming up for a new drawn one but not for failed', () => {
     createSceneRenderer();
-    const { dataset } = document.documentElement;
+    const marker = (): string | undefined => attribute(ATTACHMENTS.sky.marker);
     mocks.sky?.('on');
-    expect(dataset['skyHdri']).toBe('on');
+    expect(marker()).toBe('on');
     expect(mocks.warmUp).toHaveBeenCalledTimes(1);
     mocks.sky?.('failed');
-    expect(dataset['skyHdri']).toBe('failed');
+    expect(marker()).toBe('failed');
     expect(mocks.warmUp).toHaveBeenCalledTimes(1);
     mocks.sky?.(null);
-    expect(dataset['skyHdri']).toBeUndefined();
+    expect(marker()).toBeUndefined();
   });
 
   it('publishes a failed ground texture without warming up', () => {
     createSceneRenderer();
     mocks.ground?.('failed');
-    expect(document.documentElement.dataset['groundTexture']).toBe('failed');
+    expect(attribute(ATTACHMENTS.ground.marker)).toBe('failed');
     expect(mocks.warmUp).not.toHaveBeenCalled();
+  });
+
+  it('publishes the attached shells sorted, warming up for each new set', () => {
+    createSceneRenderer();
+    const marker = (): string | undefined => attribute(ATTACHMENTS.shells.marker);
+    mocks.onAttached?.('man-cab', true);
+    mocks.onAttached?.('krone-trailer', true);
+    expect(marker()).toBe('krone-trailer man-cab');
+    expect(mocks.warmUp).toHaveBeenCalledTimes(2);
+    mocks.onAttached?.('man-cab', false);
+    expect(marker()).toBe('krone-trailer');
+    mocks.onAttached?.('krone-trailer', false);
+    expect(marker()).toBeUndefined();
   });
 });
