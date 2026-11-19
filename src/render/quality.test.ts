@@ -19,6 +19,13 @@ const REALISM: readonly (keyof QualityFlags)[] = [
 /** Flags whose asset is a download: the tablet preset must not pay for them. A new one is added here. */
 const DOWNLOADS: readonly (keyof QualityFlags)[] = ['groundTexture', 'hdriSky'];
 
+/** Flags High adds over Balanced that cost compute only: each new High-only flag is classified here or in DOWNLOADS. */
+const COMPUTE_ONLY: readonly (keyof QualityFlags)[] = [
+  'pbr',
+  'perspectiveLighting',
+  'aerialPerspective',
+];
+
 describe('quality flags', () => {
   it('defines every preset', () => {
     expect(Object.keys(QUALITY_FLAGS).sort()).toEqual([...GRAPHICS_PRESETS].sort());
@@ -55,6 +62,10 @@ describe('quality flags', () => {
   });
 
   it('downloads nothing extra on balanced', () => {
+    const highOnly = (Object.keys(QUALITY_FLAGS.high) as (keyof QualityFlags)[]).filter(
+      (key) => QUALITY_FLAGS.high[key] === true && QUALITY_FLAGS.balanced[key] === false,
+    );
+    for (const key of highOnly) expect([...DOWNLOADS, ...COMPUTE_ONLY], key).toContain(key);
     expect(DOWNLOADS).toEqual(expect.arrayContaining(['groundTexture', 'hdriSky']));
     for (const key of DOWNLOADS) expect(QUALITY_FLAGS.balanced[key], key).toBe(false);
   });
