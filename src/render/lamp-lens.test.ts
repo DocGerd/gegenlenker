@@ -4,8 +4,11 @@ import { join } from 'node:path';
 import { AttributeNode, MeshLambertNodeMaterial, type Node, UniformArrayNode } from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
+import type { SimSnapshot } from '../contracts/sim';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
+import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
+import { resolveCombination } from '../vehicles/resolve';
 import { parseShell, parseTrailerShell, type Shell, type Shells } from './glb-shells';
 import {
   bodyLampParams,
@@ -241,11 +244,18 @@ function lampMeshes(root: Object3D): Mesh[] {
 }
 
 /** Every mesh that draws lenses: one valid slot per vertex, lenses off the top-down view, the layout's slots lit. */
-function expectSlots(root: Object3D, layout: readonly Lamp[], dark: readonly Mesh[]): void {
+function expectSlots(
+  root: Object3D,
+  layout: readonly Lamp[],
+  dark: readonly Mesh[],
+  pbr: boolean,
+): void {
   const meshes = lampMeshes(root);
   expect(meshes.length).toBeGreaterThan(0);
+  expect(meshes.some((m) => m.material instanceof VehicleNodeMaterial)).toBe(pbr);
   const shown = new Set<number>();
   const node = (meshes[0]?.material as MeshLambertNodeMaterial).emissiveNode;
+  expect(node).not.toBeNull();
   for (const mesh of meshes) {
     expect((mesh.material as MeshLambertNodeMaterial).emissiveNode).toBe(node);
     const slots = slotsOf(mesh);
@@ -264,6 +274,38 @@ function expectSlots(root: Object3D, layout: readonly Lamp[], dark: readonly Mes
   for (const mesh of dark) expect(new Set(slotsOf(mesh))).toEqual(new Set([DARK_SLOT]));
 }
 
+/** The slots a visual's lamp emission lights, read from the uniform array its lens meshes draw with. */
+function litSlots(root: Object3D): number[] {
+  const [mesh] = lampMeshes(root);
+  const node = (mesh?.material as MeshLambertNodeMaterial | undefined)?.emissiveNode ?? null;
+  if (node === null) throw new Error('no lamp emission');
+  const arrays: Color[][] = [];
+  const walk = (n: Node): void => {
+    if (n instanceof UniformArrayNode) arrays.push(n.array as Color[]);
+    for (const child of n.getChildren()) walk(child);
+  };
+  walk(node);
+  const [emission] = arrays;
+  if (emission === undefined || arrays.length !== 1) throw new Error('no one uniform array');
+  return emission.flatMap((c, slot) => (c.r + c.g + c.b > 0 ? [slot] : []));
+}
+
+const STOP_AND_REVERSE = [slotOf(['rear-position', 'stop']), slotOf(['reversing'])];
+
+/** A standstill snapshot of the combination with the brake held in R, and one in D without it. */
+function snapshots(truck: TruckId, trailer: TrailerId): [SimSnapshot, SimSnapshot] {
+  const sim = createSimulation(
+    resolveCombination(truckById(truck), trailerById(trailer)),
+    { truck: { x: 0, y: 0, heading: 0 } },
+    () => null,
+  );
+  const snapshot = sim.snapshot();
+  return [
+    { ...snapshot, control: { ...snapshot.control, brake: true, gear: 'R' } },
+    { ...snapshot, control: { ...snapshot.control, brake: false, gear: 'D' } },
+  ];
+}
+
 const shellMeshes = (root: Object3D, shells: readonly Shell[]): Mesh[] => {
   const out: Mesh[] = [];
   root.traverse((o) => {
@@ -277,11 +319,21 @@ describe.each(TRUCK_IDS)('lamp slots of the %s truck', (id) => {
   const spec = truckById(id);
   const lamps = truckLamps(spec).lamps;
 
+  it('light the stop and reversing lamps from the snapshot', () => {
+    const visual = proceduralTruck(spec, palette, undefined, env);
+    const [braking, driving] = snapshots(id, TRAILER_IDS[0]);
+    visual.update(braking);
+    expect(litSlots(visual.object)).toEqual(STOP_AND_REVERSE);
+    visual.update(driving);
+    expect(litSlots(visual.object)).toEqual([]);
+    visual.dispose();
+  });
+
   it('carry the layout without shells', () => {
     const visual = proceduralTruck(spec, palette, undefined, env);
     for (const preset of ['balanced', 'high'] as const) {
       visual.setQuality(QUALITY_FLAGS[preset]);
-      expectSlots(visual.object, lamps, []);
+      expectSlots(visual.object, lamps, [], preset === 'high');
     }
     visual.dispose();
   });
@@ -299,7 +351,7 @@ describe.each(TRUCK_IDS)('lamp slots of the %s truck', (id) => {
       visual.setQuality(QUALITY_FLAGS[preset]);
       const dark = shellMeshes(visual.object, [cab, body]);
       expect(dark).toHaveLength(2);
-      expectSlots(visual.object, lamps, dark);
+      expectSlots(visual.object, lamps, dark, preset === 'high');
     }
     visual.dispose();
   });
@@ -308,11 +360,21 @@ describe.each(TRUCK_IDS)('lamp slots of the %s truck', (id) => {
 describe.each(TRAILER_IDS)('lamp slots of the %s trailer', (id) => {
   const spec = trailerById(id);
 
+  it('light the stop and reversing lamps from the snapshot', () => {
+    const visual = proceduralTrailer(spec, palette, undefined, env);
+    const [braking, driving] = snapshots(TRUCK_IDS[0], id);
+    visual.update(braking);
+    expect(litSlots(visual.object)).toEqual(STOP_AND_REVERSE);
+    visual.update(driving);
+    expect(litSlots(visual.object)).toEqual([]);
+    visual.dispose();
+  });
+
   it('carry the layout without shells', () => {
     const visual = proceduralTrailer(spec, palette, undefined, env);
     for (const preset of ['balanced', 'high'] as const) {
       visual.setQuality(QUALITY_FLAGS[preset]);
-      expectSlots(visual.object, trailerLamps(spec, 'procedural').lamps, []);
+      expectSlots(visual.object, trailerLamps(spec, 'procedural').lamps, [], preset === 'high');
     }
     visual.dispose();
   });
@@ -326,7 +388,7 @@ describe.each(TRAILER_IDS)('lamp slots of the %s trailer', (id) => {
       visual.setQuality(QUALITY_FLAGS[preset]);
       const dark = shellMeshes(visual.object, [shell.trailer, shell.dolly]);
       expect(dark).toHaveLength(2);
-      expectSlots(visual.object, trailerLamps(spec, 'shell').lamps, dark);
+      expectSlots(visual.object, trailerLamps(spec, 'shell').lamps, dark, preset === 'high');
     }
     visual.dispose();
   });
