@@ -3,6 +3,25 @@ import tseslint from 'typescript-eslint';
 
 const CORE = ['src/{contracts,vehicles,sim,scoring,content}/**'];
 const THREE = ['three', 'three/*'];
+const DOM_GLOBALS = [
+  'window',
+  'document',
+  'navigator',
+  'localStorage',
+  'performance',
+  'requestAnimationFrame',
+];
+const NONDETERMINISTIC_GLOBALS = [
+  'globalThis',
+  'self',
+  'location',
+  'matchMedia',
+  'fetch',
+  'sessionStorage',
+  'indexedDB',
+  'setTimeout',
+  'setInterval',
+];
 
 export default tseslint.config(
   { ignores: ['dist', 'node_modules', '.remember', '.claude', '.superpowers'] },
@@ -57,30 +76,14 @@ export default tseslint.config(
           ],
         },
       ],
-      'no-restricted-globals': [
-        'error',
-        'window',
-        'document',
-        'navigator',
-        'localStorage',
-        'performance',
-        'requestAnimationFrame',
-        'globalThis',
-        'self',
-        'location',
-        'matchMedia',
-        'fetch',
-        'sessionStorage',
-        'indexedDB',
-        'setTimeout',
-        'setInterval',
-      ],
+      'no-restricted-globals': ['error', ...DOM_GLOBALS],
     },
   },
   {
     files: CORE,
     ignores: ['**/*.test.ts'],
     rules: {
+      'no-restricted-globals': ['error', ...DOM_GLOBALS, ...NONDETERMINISTIC_GLOBALS],
       'no-restricted-properties': [
         'error',
         { object: 'Math', property: 'random', message: 'Core modules are deterministic' },
@@ -91,7 +94,7 @@ export default tseslint.config(
         { selector: 'ImportExpression', message: 'Core modules import statically' },
         { selector: 'MetaProperty', message: 'Core modules do not read module metadata' },
         {
-          selector: "NewExpression[callee.name='Date']",
+          selector: ":matches(NewExpression, CallExpression)[callee.name='Date']",
           message: 'Core modules are deterministic',
         },
       ],

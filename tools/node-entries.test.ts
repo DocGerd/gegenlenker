@@ -1,8 +1,23 @@
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Entries that package.json runs with plain Node import cleanly and do nothing unless run.
+const ROOT = join(import.meta.dirname, '..');
+const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
+  scripts: Record<string, string>;
+};
+const entries = Object.values(pkg.scripts)
+  .map((cmd) => /^node (\S+\.ts)(?:\s|$)/.exec(cmd)?.[1])
+  .filter((path): path is string => path !== undefined);
+
 describe('Node-run .ts entries', () => {
-  it.each(['../e2e/perf/tablet-emulation', './textures/sky-build'])('%s', async (entry) => {
-    expect(await import(entry)).toBeDefined();
+  it('are found', () => {
+    expect(entries.length).toBeGreaterThan(0);
+  });
+
+  it.each(entries)('%s runs nothing when imported', async (entry) => {
+    process.exitCode = undefined;
+    await import(/* @vite-ignore */ resolve(ROOT, entry));
+    expect(process.exitCode).toBeUndefined();
   });
 });
