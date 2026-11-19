@@ -37,6 +37,7 @@ async function encode(asset) {
   });
   console.log = log;
   writeFileSync(join(root, asset.ktx2), ktx2);
+  return pixels;
 }
 
 function bake(asset) {
@@ -47,10 +48,9 @@ function bake(asset) {
   if (run.status !== 0) throw new Error(`${asset.bake.script} failed`);
 }
 
-async function record(asset) {
+async function record(asset, pixels = asset.pixels(root)) {
   const bytes = new Uint8Array(readFileSync(join(root, asset.ktx2)));
   const { pixelWidth, pixelHeight, levelCount } = read(bytes);
-  const pixels = asset.pixels(root);
   const manifest = {
     inputsSha256: asset.inputsSha256(root),
     pixelsSha256: sha256(pixels.rgba),
@@ -71,8 +71,7 @@ async function record(asset) {
 for (const key of keys) {
   const asset = TEXTURE_ASSETS[key];
   if (asset.bake === undefined) {
-    await encode(asset);
-    await record(asset);
+    await record(asset, await encode(asset));
   } else {
     bake(asset);
     // the bake rewrote a module the registry hashes, so read it again

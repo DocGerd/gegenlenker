@@ -67,9 +67,9 @@ describe('texture registry', () => {
   });
 
   it('keeps the committed HDRI light as baked, whether or not the .hdr is present', () => {
-    const manifest = JSON.parse(
-      readFileSync(join(ROOT, TEXTURE_ASSETS.sky?.manifest ?? ''), 'utf8'),
-    ) as TextureManifest;
+    const sky = TEXTURE_ASSETS.sky;
+    if (sky === undefined) throw new Error('no sky texture is registered');
+    const manifest = JSON.parse(readFileSync(join(ROOT, sky.manifest), 'utf8')) as TextureManifest;
     expect(bakedSha256(HDRI_LIGHT)).toBe(manifest.bakedSha256);
   });
 });
