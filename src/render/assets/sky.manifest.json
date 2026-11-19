@@ -1,0 +1,11 @@
+{
+  "inputsSha256": "bd65af549519e3a3a699a68a3d8e0fdb18667f752d07adc95cdb1c53b1418bca",
+  "pixelsSha256": "8f55976a3aad17a350c0861d41829373a837de036031424fe8b7472a58cfac59",
+  "encoderVersion": "0.6.0",
+  "width": 4096,
+  "height": 1024,
+  "mipLevels": 1,
+  "ktx2Sha256": "c41de345fdd861627a3057ae9106ccc7e73d9f72275ed2d8ebdee01d5fb8f8bc",
+  "ktx2Bytes": 1885388,
+  "bakedSha256": "b3e4594f37d832a530788bf404b5f9eabfa1a263ce70483ff502bd57c0b7b746"
+}

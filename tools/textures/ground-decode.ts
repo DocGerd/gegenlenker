@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { runInNewContext } from 'node:vm';
 import { join } from 'node:path';
-import { ROOT } from './ground-build';
+import { ROOT } from '../assets/provenance';
 
 const TRANSCODER_DIR = 'node_modules/three/examples/jsm/libs/basis';
 /** KTX2Loader.TranscoderFormat.RGBA32: UASTC decoded to uncompressed pixels. */
