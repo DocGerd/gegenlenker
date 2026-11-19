@@ -2,8 +2,11 @@ import { createHash } from 'node:crypto';
 import { expect, test } from '@playwright/test';
 import { en } from '../src/i18n/en';
 import {
+  diffShot,
   distinctColours,
+  renderScale,
   MIN_DRAWN_COLOURS,
+  settle,
   shoot,
   startPinnedDrive,
   tokenShare,
@@ -13,6 +16,7 @@ import {
 import { collectThreeProblems } from './three-problems';
 import type { ScenePaletteKey } from '../src/contracts/render';
 
+const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 
 /**
@@ -27,12 +31,15 @@ const TOKEN_TOLERANCE: Readonly<Partial<Record<ScenePaletteKey, number>>> = {
   verge: 6,
   body: 7,
 };
-/** Share of the pane a token's flat region must fill, so a stray pixel cannot pass. */
-const MIN_TOKEN_SHARE = 0.003;
-/** The tokens each shot draws as large flat regions. */
-const TOKENS: Readonly<Partial<Record<Shot, readonly ScenePaletteKey[]>>> = {
-  follow: ['yard', 'body'],
-  yard: ['backdrop', 'yard', 'street', 'verge'],
+/**
+ * Share of the pane each shot's token must fill, set per shot and token so a change that moves most
+ * of the pane off its tokens fails even while a small region still matches.
+ */
+const MIN_TOKEN_SHARE: Readonly<
+  Partial<Record<Shot, Readonly<Partial<Record<ScenePaletteKey, number>>>>>
+> = {
+  follow: { yard: 0.5, body: 0.005 },
+  yard: { backdrop: 0.5, yard: 0.04, street: 0.008, verge: 0.1 },
 };
 
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
@@ -40,9 +47,11 @@ test('the top-down view is the same at every graphics preset', async ({ context 
   test.setTimeout(240_000);
   const errors: string[] = [];
   const threeProblems: string[] = [];
+  const mismatches: string[] = [];
+  const scales: string[] = [];
   // One exercise per yard, so each yard's restyled props are covered.
   for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
-    const hashes: Record<string, string[]> = { follow: [], yard: [] };
+    const shots = { follow: new Map<Preset, Buffer>(), yard: new Map<Preset, Buffer>() };
     for (const preset of PRESETS) {
       const page = await context.newPage();
       page.on('console', (m) => {
@@ -51,24 +60,55 @@ test('the top-down view is the same at every graphics preset', async ({ context 
       page.on('pageerror', (e) => errors.push(e.message));
       const three = collectThreeProblems(page);
       await startPinnedDrive(page, preset, exercise);
+      scales.push(`${exercise} ${preset} before ${await renderScale(page)}`);
       for (const shot of ['follow', 'yard'] as const) {
         const png = await shoot(page, shot);
         const name = `${exercise} ${preset} ${shot}`;
         await testInfo.attach(`${name}.png`, { body: png, contentType: 'image/png' });
         expect(await distinctColours(page, png), name).toBeGreaterThan(MIN_DRAWN_COLOURS);
-        for (const token of TOKENS[shot] ?? []) {
+        for (const [token, min] of Object.entries(MIN_TOKEN_SHARE[shot] ?? {}) as [
+          ScenePaletteKey,
+          number,
+        ][]) {
           const share = await tokenShare(page, png, token, TOKEN_TOLERANCE[token] ?? 0);
-          expect(share, `${name}: ${token}`).toBeGreaterThan(MIN_TOKEN_SHARE);
+          expect(share, `${name}: ${token}`).toBeGreaterThan(min);
         }
-        hashes[shot]?.push(createHash('sha256').update(png).digest('hex'));
+        shots[shot].set(preset, png);
       }
+      scales.push(`${exercise} ${preset} after ${await renderScale(page)}`);
       threeProblems.push(...three);
       await page.close();
     }
-    for (const [shot, list] of Object.entries(hashes)) {
-      expect(new Set(list).size, `${exercise} ${shot} differs between presets`).toBe(1);
+    const scratch = await context.newPage();
+    for (const [shot, byPreset] of Object.entries(shots)) {
+      const [first, ...rest] = PRESETS;
+      const base = first === undefined ? undefined : byPreset.get(first);
+      if (first === undefined || base === undefined) throw new Error(`no ${shot} shot`);
+      for (const preset of rest) {
+        const png = byPreset.get(preset);
+        if (png === undefined) throw new Error(`no ${shot} shot at ${preset}`);
+        if (sha(png) === sha(base)) continue;
+        const pair = `${exercise} ${shot}: ${first} vs ${preset}`;
+        const diff = await diffShot(scratch, base, png);
+        if (diff === null) {
+          mismatches.push(`${pair} differ in size`);
+          continue;
+        }
+        const { heatmap, ...counts } = diff;
+        await testInfo.attach(`${pair} diff.png`, { body: heatmap, contentType: 'image/png' });
+        mismatches.push(`${pair} ${JSON.stringify(counts)}`);
+      }
     }
+    await scratch.close();
   }
+  await testInfo.attach('render scales', { body: scales.join('\n'), contentType: 'text/plain' });
+  expect(new Set(scales.map((v) => v.split(' ').at(-1))).size, scales.join('; ')).toBe(1);
+  expect(mismatches, 'top-down shots differ between presets').toEqual([]);
   expect(errors).toEqual([]);
   expect(threeProblems).toEqual([]);
+});
+
+test('settle names the preset whose attachments never land', async ({ page }) => {
+  await startPinnedDrive(page, 'low', en.exerciseStraightReverse);
+  await expect(settle(page, 'high', 1_000)).rejects.toThrow(/^high not ready: \[/);
 });
