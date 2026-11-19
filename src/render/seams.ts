@@ -1,4 +1,5 @@
-import type { Layers, Object3D, WebGLRenderer } from 'three';
+import type { Layers, Object3D } from 'three';
+import type { WebGPURenderer } from 'three/webgpu';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
@@ -29,6 +30,11 @@ export const COCKPIT_LAYERS = [SKY_LAYER, INTERIOR_LAYER];
 export const MIRROR_LAYERS = [SKY_LAYER, CAB_LAYER];
 export const CHASE_LAYERS = [SKY_LAYER, CAB_LAYER];
 export const TOP_DOWN_LAYERS = [AIDS_LAYER];
+/** Whether `gpu`'s WebGL context is lost; three keeps its own loss flag private. */
+export function gpuLost(gpu: WebGPURenderer): boolean {
+  const context = gpu.getContext() as { isContextLost?: () => boolean } | null;
+  return context?.isContextLost?.() === true;
+}
 export function enableLayers(layers: Layers, ids: readonly number[]): void {
   for (const id of ids) layers.enable(id);
 }
@@ -51,7 +57,7 @@ export interface AidsLayer {
 }
 export type RendererParts = {
   /** Called each time a GPU renderer is ready, again after a loss with the new one; parts move to the latest. */
-  readonly onRenderer?: (renderer: WebGLRenderer) => void;
+  readonly onRenderer?: (renderer: WebGPURenderer) => void;
   readonly truck: (spec: TruckSpec, palette: ScenePalette) => VehicleVisual;
   readonly trailer: (spec: TrailerSpec, palette: ScenePalette) => VehicleVisual;
   readonly environment: (layout: ResolvedLayout, palette: ScenePalette) => Environment;

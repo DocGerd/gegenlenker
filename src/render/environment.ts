@@ -12,13 +12,12 @@ import {
   MeshLambertMaterial,
   PlaneGeometry,
   RingGeometry,
-  ShaderLib,
   Vector3,
   type Material,
   type Texture,
-  type WebGLProgramParametersWithUniforms,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { MeshLambertNodeMaterial } from 'three/webgpu';
 import type { Tolerances } from '../contracts/exercise';
 import type {
   Marking,
@@ -29,8 +28,8 @@ import type {
   SurfaceKind,
 } from '../contracts/layout';
 import type { RenderFrame, ScenePalette, ScenePaletteKey } from '../contracts/render';
-import { GROUND_TEXTURE_MEAN } from './ground-texture-pixels';
-import { GROUND_SHADER_MARKER, GROUND_SURFACES } from './ground-texture-spec';
+import { createGroundMaterial } from './ground-material';
+import { GROUND_SURFACES } from './ground-texture-spec';
 import type { GroundTextures } from './ground-texture';
 import type { QualityFlags } from './quality';
 import { AIDS_LAYER, DEFAULT_LAYER, SKY_LAYER, type Environment } from './seams';
@@ -416,50 +415,6 @@ export function texturedGroundGeometry(
   return merged;
 }
 
-/** Replaces `anchor` once; throws when three's shader no longer contains it, so a patch never half-applies. */
-function inject(source: string, anchor: string, replacement: string): string {
-  if (!source.includes(anchor)) throw new Error(`Ground shader: ${anchor} not found`);
-  return source.replace(anchor, replacement);
-}
-
-/**
- * Lambert shading with the ground map read per vertex-selected channel, scaled so the surface keeps
- * its token brightness on average (the sky below the horizon is matched to it). Bright surfaces
- * would exceed their token with a bright texel, so the product is clamped to 1.
- */
-export function groundShader(
-  shader: Pick<WebGLProgramParametersWithUniforms, 'vertexShader' | 'fragmentShader'>,
-): void {
-  const gain = (1 / GROUND_TEXTURE_MEAN).toFixed(6);
-  const vertexShader = inject(
-    inject(
-      shader.vertexShader,
-      '#include <common>',
-      '#include <common>\nattribute vec3 groundSelect;\nvarying vec3 vGroundSelect;',
-    ),
-    '#include <begin_vertex>',
-    '#include <begin_vertex>\nvGroundSelect = groundSelect;',
-  );
-  const fragmentShader = inject(
-    inject(
-      shader.fragmentShader,
-      '#include <common>',
-      '#include <common>\nvarying vec3 vGroundSelect;',
-    ),
-    '#include <map_fragment>',
-    `#ifdef USE_MAP
-        vec3 ${GROUND_SHADER_MARKER} = texture2D( map, vMapUv ).rgb;
-        float groundWeight = vGroundSelect.x + vGroundSelect.y + vGroundSelect.z;
-        diffuseColor.rgb = min(
-          diffuseColor.rgb * mix( 1.0, dot( ${GROUND_SHADER_MARKER}, vGroundSelect ) * ${gain}, groundWeight ),
-          vec3( 1.0 )
-        );
-      #endif`,
-  );
-  shader.vertexShader = vertexShader;
-  shader.fragmentShader = fragmentShader;
-}
-
 /** The sun's position relative to the origin: south-west, where world (−, −) is Three (−x, +z). */
 export function sunPosition(): Vector3 {
   const horizontal = Math.cos(SUN_ELEVATION) * SUN_DISTANCE;
@@ -509,7 +464,7 @@ export function proceduralEnvironment(
 
   // High: perspective cameras draw this textured copy of the ground instead, top-down keeps the tokens.
   let texturedGround: Mesh | null = null;
-  let texturedGroundMaterial: MeshLambertMaterial | null = null;
+  let texturedGroundMaterial: MeshLambertNodeMaterial | null = null;
   let groundTextureOn = false;
   let groundDisabled = false;
   let groundReported = false;
@@ -525,17 +480,10 @@ export function proceduralEnvironment(
   const cancelGroundTexture = groundTextures?.onLoaded(
     (texture: Texture) => {
       let geometry: BufferGeometry | null = null;
-      let material: MeshLambertMaterial | null = null;
+      let material: MeshLambertNodeMaterial | null = null;
       try {
-        // the patch runs at first render, where a throw would escape; prove it applies to this three
-        groundShader({
-          vertexShader: ShaderLib.lambert.vertexShader,
-          fragmentShader: ShaderLib.lambert.fragmentShader,
-        });
         geometry = texturedGroundGeometry(layout, palette);
-        material = new MeshLambertMaterial({ vertexColors: true, map: texture });
-        material.onBeforeCompile = groundShader;
-        material.customProgramCacheKey = () => 'ground-detail';
+        material = createGroundMaterial(texture);
         const mesh = new Mesh(geometry, material);
         mesh.layers.set(SKY_LAYER);
         group.add(mesh);

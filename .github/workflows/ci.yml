@@ -46,9 +46,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
+  # Software GL (SwiftShader) renders the half-float frame target slowly, so the suite runs in
+  # shards; per test, not per file, so the long layout spec spreads too.
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -70,11 +76,11 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
           restore-keys: playwright-${{ runner.os }}-
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      - run: pnpm test:e2e --fully-parallel --shard=${{ matrix.shard }}/3
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: test-results
+          name: test-results-${{ matrix.shard }}
           path: test-results/
 
   # The required status check. `always()` keeps it running when a dependency

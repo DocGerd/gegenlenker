@@ -2,7 +2,12 @@ import { Group } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
-import type { RenderFrame, SceneRenderer, ScenePalette } from '../contracts/render';
+import {
+  GraphicsStartError,
+  type RenderFrame,
+  type SceneRenderer,
+  type ScenePalette,
+} from '../contracts/render';
 import { createContactQuery } from '../sim/collision';
 import { NO_PREDICTION } from '../sim/predict';
 import { createSimulation } from '../sim/simulation';
@@ -11,26 +16,42 @@ import { trailerById, truckById } from '../vehicles/registry';
 import { createThreeSceneRenderer } from './three-renderer';
 import { computeViewports } from './viewports';
 
-const draws = vi.hoisted(() => ({ count: 0 }));
+const draws = vi.hoisted(() => ({ count: 0, viewports: [] as number[][], loseInInit: false }));
 
-vi.mock('three', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('three')>();
+vi.mock('three/webgpu', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('three/webgpu')>();
   // Called with `new`; any method not listed is a no-op, and `then` stays absent so a promise
-  // does not take the renderer for a thenable.
-  function FakeWebGLRenderer(): object {
+  // does not take the renderer for a thenable. Like three's WebGL 2 backend, it reports a lost
+  // context of its canvas through `onDeviceLost` until disposed.
+  function FakeWebGPURenderer({ canvas }: { canvas: HTMLCanvasElement }): object {
     const own: Record<PropertyKey, unknown> = {
-      info: { autoReset: true, reset: () => undefined, render: { calls: 0 } },
+      info: { autoReset: true, reset: () => undefined, render: { drawCalls: 0 } },
+      backend: { isWebGLBackend: true },
       getContext: () => ({ getExtension: () => null }),
+      init: () => {
+        if (draws.loseInInit) (own['onDeviceLost'] as () => void)();
+        return Promise.resolve();
+      },
+      onDeviceLost: () => undefined,
       render: () => {
         draws.count++;
       },
+      setViewport: (...rect: number[]) => draws.viewports.push(rect),
+    };
+    const lost = (): void => {
+      (own['onDeviceLost'] as () => void)();
+    };
+    canvas.addEventListener('webglcontextlost', lost);
+    own['dispose'] = () => {
+      canvas.removeEventListener('webglcontextlost', lost);
+      return Promise.resolve();
     };
     return new Proxy(own, {
       get: (target, key) =>
         key in target || key === 'then' ? target[key] : (target[key] = () => undefined),
     });
   }
-  return { ...actual, WebGLRenderer: FakeWebGLRenderer };
+  return { ...actual, WebGPURenderer: FakeWebGPURenderer };
 });
 
 vi.mock('./palette', async (importOriginal) => {
@@ -125,6 +146,7 @@ describe.each([['three', three]] as const)('SceneRenderer contract: %s', (_, h) 
     const unsubscribe = renderer.onLost(dropped);
     unsubscribe();
     h.lose(canvas);
+    h.lose(canvas);
     expect(renderer.stats().contextLost).toBe(true);
     expect(kept).toHaveBeenCalledOnce();
     expect(dropped).not.toHaveBeenCalled();
@@ -151,6 +173,31 @@ describe.each([['three', three]] as const)('SceneRenderer contract: %s', (_, h) 
     expect(lost).toHaveBeenCalledOnce();
     h.lose(fresh);
     expect(lost).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects a start that lost its context, and starts afresh on the next canvas', async () => {
+    const renderer = h.create();
+    const lost = vi.fn();
+    renderer.onLost(lost);
+    draws.loseInInit = true;
+    const error: unknown = await renderer.init(h.canvas()).catch((e: unknown) => e);
+    draws.loseInInit = false;
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(GraphicsStartError);
+    expect(lost).not.toHaveBeenCalled();
+    await renderer.init(h.canvas());
+    expect(renderer.stats()).toMatchObject({ contextLost: false, backend: 'webgl2' });
+  });
+
+  it('sets each pane viewport from its CSS rect, origin top left', async () => {
+    const { renderer } = await started();
+    draws.viewports.length = 0;
+    renderer.render(frame);
+    const { cockpit, topDown } = frame.views;
+    for (const rect of [cockpit, topDown]) {
+      if (rect === null) continue;
+      expect(draws.viewports).toContainEqual([rect.x, rect.y, rect.width, rect.height]);
+    }
   });
 
   it('can be disposed twice and draws nothing after', async () => {

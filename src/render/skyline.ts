@@ -3,32 +3,17 @@ import { SKY_LAYER } from './seams';
 import { createAtlasTexture } from './skyline-atlas';
 import { skylineGeometry } from './skyline-geometry';
 import { skylineBuildings } from './skyline-layout';
-import { Color, Mesh, MeshLambertMaterial } from 'three';
+import { Color, Mesh } from 'three';
+import { attribute, mix, output, uniform, vec4 } from 'three/tsl';
+import { MeshLambertNodeMaterial } from 'three/webgpu';
 
 /**
  * Lambert with a per-vertex haze share mixed towards the haze colour after lighting, so a distant
  * building fades as a whole instead of showing a vertical gradient.
  */
-function hazeMaterial(haze: Color): MeshLambertMaterial {
-  const material = new MeshLambertMaterial({ map: createAtlasTexture() });
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms['hazeColor'] = { value: haze };
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        '#include <common>\nattribute float haze;\nvarying float vHaze;',
-      )
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHaze = haze;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        '#include <common>\nuniform vec3 hazeColor;\nvarying float vHaze;',
-      )
-      .replace(
-        '#include <opaque_fragment>',
-        '#include <opaque_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, hazeColor, vHaze);',
-      );
-  };
+function hazeMaterial(haze: Color): MeshLambertNodeMaterial {
+  const material = new MeshLambertNodeMaterial({ map: createAtlasTexture() });
+  material.outputNode = vec4(mix(output.rgb, uniform(haze), attribute('haze', 'float')), output.a);
   return material;
 }
 
