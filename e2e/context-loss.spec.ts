@@ -4,6 +4,7 @@ import { en } from '../src/i18n/en';
 import {
   bareScreenshot,
   distinctColours,
+  GROUND_LOAD,
   MIN_DRAWN_COLOURS,
   SCREENSHOT_POLL,
   settle,
@@ -60,7 +61,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await startDrive(page);
   const html = page.locator('html');
   await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
-  await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
+  await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/, GROUND_LOAD);
   await page.evaluate(() => {
     const seen: (string | null)[] = [];
     Object.assign(window, { pbrSeen: seen });
