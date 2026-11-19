@@ -37,9 +37,10 @@ WebGPU becomes the default (`DEFAULT_BACKEND_REQUEST` in `src/render/gpu-backend
 
 WSL offers no core hardware adapter, so the gate is unmet there; Chrome on Windows (D3D12) or Android (Vulkan) can run it.
 
-`node scripts/shoot-views.mjs --url <url> --out <dir> --backend webgpu` is the local WebGPU check (not CI: CI's Chromium has no WebGPU adapter, so CI e2e covers the fallback). It draws every view on SwiftShader's WebGPU adapter in Chromium's new headless mode and fails when the app does not run on WebGPU, logs a three.js problem or a page error, or draws the top-down view differently per preset. To compare with WebGL 2, shoot that side with `--new-headless` (the new headless mode wraps HUD text differently, which moves the top-down framing) and diff with `--diff`.
+`pnpm shoot --out <dir> --backend webgpu` (`scripts/shoot.mjs`: builds, serves on a free port, shoots, always stops its own server; it takes the `shoot-views.mjs` arguments except `--url`) is the local WebGPU check (not CI: CI's Chromium has no WebGPU adapter, so CI e2e covers the fallback). It draws every view on SwiftShader's WebGPU adapter in Chromium's new headless mode and fails when the app does not run on WebGPU, logs a three.js problem or a page error, or draws the top-down view differently per preset. To compare with WebGL 2, shoot that side with `--new-headless` (the new headless mode wraps HUD text differently, which moves the top-down framing) and diff with `--diff`.
 
 ## Other tools
 
+- `pnpm preview:stop [--port <n>]` stops the listener on this checkout's e2e preview port (the one `pnpm test:e2e` prints) or the given port, and nothing else; use it instead of `pkill -f` on an orphaned preview.
 - `pnpm test:perf` runs `e2e/perf/four-views.perf.ts` against the `?probe` page (see `src/render/probe.ts`) and owns the automated thresholds for the four-view layout.
 - The manual check on a physical tablet is in `CLAUDE.md` ("Tablet perf check").
