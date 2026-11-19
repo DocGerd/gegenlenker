@@ -45,6 +45,29 @@ async function loseAndReplace(page: Page): Promise<void> {
   await expect.poll(() => lost.evaluate((c) => c.isConnected)).toBe(false);
 }
 
+/** Records a given-up texture: sessionStorage outlives reloads, the attribute does not. */
+async function watchFailedTextures(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    new MutationObserver((records) => {
+      for (const r of records) {
+        if (
+          r.target instanceof Element &&
+          r.target.getAttribute(r.attributeName ?? '') === 'failed'
+        )
+          sessionStorage.setItem('texture-failed', r.attributeName ?? '');
+      }
+    }).observe(document, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ['data-ground-texture', 'data-sky-hdri'],
+    });
+  });
+}
+
+async function expectNoFailedTexture(page: Page): Promise<void> {
+  expect(await page.evaluate(() => sessionStorage.getItem('texture-failed'))).toBeNull();
+}
+
 async function startDrive(page: Page): Promise<void> {
   await page.goto('./');
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
@@ -58,6 +81,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
     },
     [SETTINGS_KEY, JSON.stringify({ version: 1, graphics: 'high' })] as const,
   );
+  await watchFailedTextures(page);
   await startDrive(page);
   const html = page.locator('html');
   await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
@@ -105,11 +129,13 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await expect(page.locator('[data-hud="resetView"]')).toBeEnabled();
 
   expect(problems).toEqual([LOST]);
+  await expectNoFailedTexture(page);
 });
 
 test('the cockpit looks the same after a loss as before it', async ({ page }) => {
   test.setTimeout(90_000);
   const problems = collectProblems(page);
+  await watchFailedTextures(page);
   await startPinnedDrive(page, 'high', en.exerciseStraightReverse);
   const hash = async (): Promise<string> => {
     const png = await shoot(page, 'cockpit');
@@ -122,6 +148,7 @@ test('the cockpit looks the same after a loss as before it', async ({ page }) =>
   await settle(page, 'high');
   expect(await hash()).toBe(before);
   expect(problems).toEqual([LOST]);
+  await expectNoFailedTexture(page);
 });
 
 test('losses in quick succession end at the reload notice', async ({ page }) => {

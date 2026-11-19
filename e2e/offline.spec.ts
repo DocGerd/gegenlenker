@@ -146,6 +146,22 @@ test('High graphics caches the ground and sky textures and transcoder on first u
       JSON.stringify({ version: 1, graphics: 'high' }),
     );
   });
+  // Records a given-up texture: sessionStorage outlives the reloads, the attribute is gone by then.
+  await page.addInitScript(() => {
+    new MutationObserver((records) => {
+      for (const r of records) {
+        if (
+          r.target instanceof Element &&
+          r.target.getAttribute(r.attributeName ?? '') === 'failed'
+        )
+          sessionStorage.setItem('texture-failed', r.attributeName ?? '');
+      }
+    }).observe(document, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ['data-ground-texture', 'data-sky-hdri'],
+    });
+  });
 
   await page.goto('./');
   await page.evaluate(async () => {
@@ -218,4 +234,5 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   expect(errors).toEqual([]);
   expect(three).toEqual([]);
   expect(foreign).toEqual([]);
+  expect(await page.evaluate(() => sessionStorage.getItem('texture-failed'))).toBeNull();
 });
