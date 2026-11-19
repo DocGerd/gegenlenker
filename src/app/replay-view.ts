@@ -1,5 +1,4 @@
-import { exerciseById, layouts } from '../content/registry';
-import { resolveLayout } from '../content/resolve-layout';
+import { resolveRun } from '../content/run';
 import type { InputLog } from '../contracts/exercise';
 import type { AidFlags, RenderFrame, TopDownMode } from '../contracts/render';
 import type { Simulation, SimSnapshot } from '../contracts/sim';
@@ -10,13 +9,11 @@ import type { MessageKey } from '../i18n/en';
 import { computeViewports } from '../render/viewports';
 import { createEventScanner, runStartStep, type ReplayEventKind } from '../scoring/replay-events';
 import { createRunTracker, runSeconds, type RunTracker } from '../scoring/score';
-import { createContactQuery } from '../sim/collision';
 import { DT } from '../sim/constants';
 import { NO_PREDICTION } from '../sim/predict';
 import { createReplayCursor, type ReplayCursor } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
-import { resolveCombination } from '../vehicles/resolve';
 import { mountRenderStage } from './render-stage';
 import './results.css';
 import { isReplayable } from './storage';
@@ -82,17 +79,8 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     onExit();
     return () => undefined;
   }
-  const truck = truckById(log.truckId);
-  const trailer = trailerById(log.trailerId);
-  const params = resolveCombination(truck, trailer);
-  const exercise = log.exerciseId === null ? null : exerciseById(log.exerciseId);
-  const layout = resolveLayout(layouts[log.layoutId], exercise);
-  const makeSim = (): Simulation =>
-    createSimulation(
-      params,
-      { truck: exercise?.start ?? layouts[log.layoutId].start },
-      createContactQuery(layout.obstacles),
-    );
+  const { params, layout, exercise, start, contacts } = resolveRun(log);
+  const makeSim = (): Simulation => createSimulation(params, { truck: start }, contacts);
 
   // Scrubbing back rebuilds the run from step 0 across frames; the sim is deterministic, so it lands on the played state.
   let tracker: RunTracker | null = null;
@@ -136,7 +124,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   const view = mountRenderStage(stage, map, exit);
   cleanups.push(() => view.dispose());
   const { renderer } = view;
-  renderer.setScene(layout, truck, trailer);
+  renderer.setScene(layout, truckById(log.truckId), trailerById(log.trailerId));
 
   let playing = true;
   let speed = DEFAULT_SPEED;
