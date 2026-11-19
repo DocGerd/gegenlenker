@@ -16,7 +16,7 @@ const REALISM: readonly (keyof QualityFlags)[] = [
   'hdriSky',
 ];
 
-/** Flags that download an asset: the tablet preset must not pay for them. */
+/** Flags whose asset is a download: the tablet preset must not pay for them. A new one is added here. */
 const DOWNLOADS: readonly (keyof QualityFlags)[] = ['groundTexture', 'hdriSky'];
 
 describe('quality flags', () => {
@@ -55,13 +55,24 @@ describe('quality flags', () => {
   });
 
   it('downloads nothing extra on balanced', () => {
+    expect(DOWNLOADS).toEqual(expect.arrayContaining(['groundTexture', 'hdriSky']));
     for (const key of DOWNLOADS) expect(QUALITY_FLAGS.balanced[key], key).toBe(false);
   });
 
-  it('hazes only graded views', () => {
+  it('hazes only graded views, on High', () => {
+    expect(QUALITY_FLAGS.high.aerialPerspective).toBe(true);
     for (const preset of GRAPHICS_PRESETS) {
       const flags = QUALITY_FLAGS[preset];
       if (flags.aerialPerspective) expect(flags.perspectiveLighting, preset).toBe(true);
+    }
+    expect(GRAPHICS_PRESETS.filter((p) => QUALITY_FLAGS[p].aerialPerspective)).toEqual(['high']);
+  });
+
+  it('tone-maps every reflection: pbr with the HDRI sky needs the grade', () => {
+    // the reflection capture is untoned; only the graded reflective material maps it
+    for (const preset of GRAPHICS_PRESETS) {
+      const flags = QUALITY_FLAGS[preset];
+      if (flags.pbr && flags.hdriSky) expect(flags.perspectiveLighting, preset).toBe(true);
     }
   });
 });
