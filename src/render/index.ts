@@ -23,12 +23,20 @@ export const interiorAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].cockpitInterior;
 
 export function createSceneRenderer(): SceneRenderer {
+  // The attach callbacks may fire before the renderer exists; a call made then is replayed once it does.
+  const warm: { target: (() => void) | null; pending: boolean } = { target: null, pending: false };
+  const warmUp = (): void => {
+    if (warm.target === null) warm.pending = true;
+    else warm.target();
+  };
   // Positive signal for the offline e2e: the shells now attached to a vehicle, sorted and
   // space-separated; absent when none is. Each group loads on the first preset that wants it.
   const attached = new Set<string>();
   const onAttached = (key: string, on: boolean): void => {
-    if (on) attached.add(key);
-    else attached.delete(key);
+    if (on) {
+      attached.add(key);
+      warmUp();
+    } else attached.delete(key);
     const { dataset } = document.documentElement;
     if (attached.size > 0) dataset['vehicleShells'] = [...attached].sort().join(' ');
     else delete dataset['vehicleShells'];
@@ -43,14 +51,24 @@ export function createSceneRenderer(): SceneRenderer {
     }),
   };
   // Read by the offline e2e: the transcoded format while the textured ground is drawn, else absent.
+  let groundState: string | null = null;
   const groundTextures = startGroundTextures(undefined, (state) => {
     if (state === null) delete document.documentElement.dataset['groundTexture'];
-    else document.documentElement.dataset['groundTexture'] = state;
+    else {
+      document.documentElement.dataset['groundTexture'] = state;
+      if (state !== groundState) warmUp();
+    }
+    groundState = state;
   });
   // Read by the offline e2e: `on` once the vehicle reflections are built, `failed` if they fell back.
+  let pbrState: string | null = null;
   const vehicleEnvironment = createVehicleEnvironment((state) => {
     if (state === null) delete document.documentElement.dataset['vehiclePbr'];
-    else document.documentElement.dataset['vehiclePbr'] = state;
+    else {
+      document.documentElement.dataset['vehiclePbr'] = state;
+      if (state !== 'failed' && state !== pbrState) warmUp();
+    }
+    pbrState = state;
   });
   const renderer = createThreeSceneRenderer({
     onRenderer: (gl) => {
@@ -66,8 +84,11 @@ export function createSceneRenderer(): SceneRenderer {
     environment: (layout, palette) => proceduralEnvironment(layout, palette, groundTextures),
     aids: proceduralAids,
   });
+  const { warmUp: warmTarget, ...sceneRenderer } = renderer;
+  warm.target = warmTarget;
+  if (warm.pending) warmTarget();
   return {
-    ...renderer,
+    ...sceneRenderer,
     setQuality(preset) {
       const flags = QUALITY_FLAGS[preset];
       shells.cab.setEnabled(flags.cabGlb);
