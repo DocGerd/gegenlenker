@@ -206,7 +206,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await context.setOffline(true);
   await page.reload();
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
-  await expect(marker).toHaveAttribute('data-ground-texture', target ?? '');
+  await expect(marker).toHaveAttribute('data-ground-texture', target ?? '', GROUND_LOAD);
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
   expect(warnings.filter((w) => /Ground texture|Vehicle reflection/.test(w))).toEqual([]);
   expect(errors).toEqual([]);
