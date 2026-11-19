@@ -4,9 +4,9 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
   PARAMS_PATH  path of tools/blender/params/<id>.body.json
   PARAMS_JSON  the same JSON as text; wins over PARAMS_PATH (for hosts that cannot read the path)
   OUT_PATH     where the raw .glb is written
-  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ...}; the run aborts on a mismatch
+  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ..., "lampCommonSha256": ...}; the run aborts on a mismatch
 
-One vertex-coloured mesh, "body", in the sim body frame (shell_common.py). Livery is colours only: no
+One vertex-coloured mesh, "body", in the sim body frame (blender_common.py). Livery is colours only: no
 lettering, emblems or maker logos. Kinds: "tipper" (three-way tipper body: low drop sides, a taller
 headboard, a tailgate hung from a top hinge bar, on a black subframe) and "tarp" (flatbed with drop
 sides under a tarpaulin).
@@ -22,8 +22,11 @@ Tested Blender version: 5.3.0 (bpy.app.version_string is printed and recorded in
 import os
 import runpy
 
-COMMON_FILE = os.path.join(os.path.dirname(__file__), "shell_common.py")
+HERE = os.path.dirname(__file__)
+COMMON_FILE = os.path.join(HERE, "blender_common.py")
+LAMP_FILE = os.path.join(HERE, "lamp_common.py")
 COMMON = runpy.run_path(COMMON_FILE)
+LAMP = runpy.run_path(LAMP_FILE)
 Shape = COMMON["Shape"]
 srgb = COMMON["srgb_to_linear"]
 
@@ -236,14 +239,16 @@ def check_bands(p, shape):
         spans = [x for x, (y0, y1), (z0, z1) in faces if abs(y0 - side * hw) < EPS and abs(y1 - side * hw) < EPS and z0 <= lo + EPS and z1 >= hi - EPS]
         if not covered(spans, rear + mark["endMargin"], front - mark["endMargin"]):
             raise ValueError("the side marking has no face to sit on")
-    COMMON["check_seated"](shape, p["mounts"])
+    LAMP["check_seated"](shape, p["mounts"])
 
 
 def main():
     params = COMMON["load_params"](globals())
     if params["kind"] not in ("tipper", "tarp"):
         raise ValueError("unknown body kind " + repr(params["kind"]))
-    hashes = COMMON["provenance"](__file__, COMMON_FILE, params)
+    hashes = COMMON["provenance"](
+        __file__, {"commonSha256": COMMON_FILE, "lampCommonSha256": LAMP_FILE}, params
+    )
     COMMON["check_expected"](hashes, globals().get("EXPECTED_SHA256"))
     hues = {key: srgb(value) for key, value in sorted(params["hues"].items())}
 

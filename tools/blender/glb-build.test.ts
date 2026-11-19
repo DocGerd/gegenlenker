@@ -1,24 +1,39 @@
 import { readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TRAILER_IDS, TRUCK_IDS } from '../../src/contracts/vehicle';
 import { MAX_PRECACHE_FILE_BYTES } from '../../src/pwa/config';
 import {
   ASSETS,
   canonicalJson,
-  commonSha256,
   glbSceneExtras,
   glbSha256,
   type GlbManifest,
   type Json,
   optimiseSha256,
-  paramsSha256,
   ROOT,
-  scriptSha256,
+  runHashes,
   unsafeNumbers,
 } from './glb-build';
 
 const read = (file: string): unknown => JSON.parse(readFileSync(join(ROOT, file), 'utf8'));
+
+/** Helper files a Python script loads with `runpy.run_path(os.path.join(..., "x.py"))`, nested loads included. */
+function loadedHelpers(entry: string): string[] {
+  const found = new Set<string>();
+  const visit = (file: string): void => {
+    const source = readFileSync(join(ROOT, file), 'utf8');
+    for (const [, name] of source.matchAll(/os\.path\.join\([^)]*"(\w+\.py)"\)/g)) {
+      const helper = join(dirname(file), name ?? '');
+      if (!found.has(helper)) {
+        found.add(helper);
+        visit(helper);
+      }
+    }
+  };
+  visit(entry);
+  return [...found].sort();
+}
 
 /** Red means stale inputs: rerun `pnpm glb:params`, the Blender script, `pnpm glb:optimise`, `pnpm glb:manifest`. */
 describe.each(ASSETS)('glb shell build: $key', (asset) => {
@@ -33,28 +48,25 @@ describe.each(ASSETS)('glb shell build: $key', (asset) => {
   });
 
   it('hashes the scripts, params and glb recorded in the manifest', () => {
+    const { blenderVersion, gltfTransformVersion, ...recorded } = manifest;
+    expect(blenderVersion).not.toBe('');
+    expect(gltfTransformVersion).not.toBe('');
     expect({
-      scriptSha256: scriptSha256(asset),
-      commonSha256: commonSha256(),
-      paramsSha256: paramsSha256(asset),
+      ...runHashes(asset),
       glbSha256: glbSha256(asset),
       glbBytes: statSync(join(ROOT, asset.glb)).size,
-    }).toEqual({
-      scriptSha256: manifest.scriptSha256,
-      commonSha256: manifest.commonSha256,
-      paramsSha256: manifest.paramsSha256,
-      glbSha256: manifest.glbSha256,
-      glbBytes: manifest.glbBytes,
-    });
+    }).toEqual(recorded);
   });
 
   it('was built and optimised by the current scripts from the current params', () => {
     expect(glbSceneExtras(asset)).toEqual({
-      commonSha256: commonSha256(),
+      ...runHashes(asset),
       optimiseSha256: optimiseSha256(),
-      paramsSha256: paramsSha256(asset),
-      scriptSha256: scriptSha256(asset),
     });
+  });
+
+  it('records the hash of every helper file its script loads', () => {
+    expect(loadedHelpers(asset.script)).toEqual(Object.values(asset.helpers).sort());
   });
 
   it('fits the Workbox precache limit', () => {

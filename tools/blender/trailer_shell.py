@@ -4,9 +4,9 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
   PARAMS_PATH  path of tools/blender/params/<id>.trailer.json
   PARAMS_JSON  the same JSON as text; wins over PARAMS_PATH (for hosts that cannot read the path)
   OUT_PATH     where the raw .glb is written
-  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ...}; the run aborts on a mismatch
+  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ..., "lampCommonSha256": ...}; the run aborts on a mismatch
 
-Vertex-coloured meshes, one node each (shell_common.py):
+Vertex-coloured meshes, one node each (blender_common.py):
   "trailer"       in the trailer body frame, origin at the effective rear axle, +X forward
   "dolly"         in the dolly frame, origin at the turntable centre, +X forward (towards the drawbar eye)
   "trailer-lens"  the shell's own lamp lenses (`lenses`, src/render/lamp-layout.ts), when it has any
@@ -29,8 +29,11 @@ import math
 import os
 import runpy
 
-COMMON_FILE = os.path.join(os.path.dirname(__file__), "shell_common.py")
+HERE = os.path.dirname(__file__)
+COMMON_FILE = os.path.join(HERE, "blender_common.py")
+LAMP_FILE = os.path.join(HERE, "lamp_common.py")
 COMMON = runpy.run_path(COMMON_FILE)
+LAMP = runpy.run_path(LAMP_FILE)
 Shape = COMMON["Shape"]
 srgb = COMMON["srgb_to_linear"]
 
@@ -374,7 +377,7 @@ def check_trailer(p, shape):
         start, end = p["lafette"]["guardSpan"]
         if not max(p["rearAxleXs"]) + p["wheelRadius"] < start < end:
             raise ValueError("the side guard reaches the rear tyres")
-    COMMON["check_seated"](shape, p["mounts"] + p["lenses"])
+    LAMP["check_seated"](shape, p["mounts"] + p["lenses"])
 
 
 def check_dolly(p, shape):
@@ -388,7 +391,9 @@ def main():
     params = COMMON["load_params"](globals())
     if params["kind"] not in ("low-loader", "lafette"):
         raise ValueError("unknown trailer kind " + repr(params["kind"]))
-    hashes = COMMON["provenance"](__file__, COMMON_FILE, params)
+    hashes = COMMON["provenance"](
+        __file__, {"commonSha256": COMMON_FILE, "lampCommonSha256": LAMP_FILE}, params
+    )
     COMMON["check_expected"](hashes, globals().get("EXPECTED_SHA256"))
     hues = {key: srgb(value) for key, value in sorted(params["hues"].items())}
 
@@ -403,7 +408,7 @@ def main():
     check_dolly(params, tow)
     objects = [("trailer", body), ("dolly", tow)]
     if params["lenses"]:
-        objects.append(("trailer-lens", COMMON["lens_shape"](params["lenses"])))
+        objects.append(("trailer-lens", LAMP["lens_shape"](params["lenses"])))
     return COMMON["export"](OUT_PATH, "trailer-shell", hashes, objects)
 
 

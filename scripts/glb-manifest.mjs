@@ -24,9 +24,7 @@ for (const asset of module.ASSETS) {
   const recorded = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
   const unchanged = recorded?.glbSha256 === glbSha256;
   const manifest = {
-    scriptSha256: module.scriptSha256(asset, root),
-    commonSha256: module.commonSha256(root),
-    paramsSha256: module.paramsSha256(asset, root),
+    ...module.runHashes(asset, root),
     blenderVersion: unchanged ? recorded.blenderVersion : blenderVersion,
     gltfTransformVersion: VERSION,
     glbSha256,
