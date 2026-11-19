@@ -37,6 +37,9 @@ export function mirrorPose(
   return pose.heading + Math.PI + (side === 'left' ? -MIRROR_YAW : MIRROR_YAW);
 }
 
+/** WebGPU takes 1 or 4 samples and WebGL 2 guarantees at least 4, so any request maps to 0 or 4. */
+export const mirrorSamples = (requested: number): number => (requested >= 4 ? 4 : 0);
+
 /** One mirror: the scene is rendered unflipped into a target, then drawn with u → 1 − u. */
 export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsaa) {
   const camera = new PerspectiveCamera(FOV, 1, NEAR, CAMERA_FAR);
@@ -52,7 +55,7 @@ export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsa
   const quadCamera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
   let target: WebGLRenderTarget | null = null;
-  let samples = requestedSamples;
+  let samples = mirrorSamples(requestedSamples);
 
   return {
     camera,
@@ -62,9 +65,9 @@ export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsa
       camera.rotation.set(PITCH, facing - Math.PI / 2, 0);
     },
     /** Takes effect on the next capture: the target is rebuilt because its samples are fixed at creation. */
-    setSamples(next: number, maxSamples: number): void {
-      samples = next;
-      if (target === null || target.samples === Math.min(next, maxSamples)) return;
+    setSamples(requested: number): void {
+      samples = mirrorSamples(requested);
+      if (target === null || target.samples === samples) return;
       target.dispose();
       target = null;
       material.map = null;
@@ -79,10 +82,7 @@ export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsa
       const w = Math.max(1, Math.round(widthPx));
       const h = Math.max(1, Math.round(heightPx));
       if (target === null) {
-        // samples are capped by the context (gl.MAX_SAMPLES); 0 disables MSAA
-        target = new WebGLRenderTarget(w, h, {
-          samples: Math.min(samples, renderer.capabilities.maxSamples),
-        });
+        target = new WebGLRenderTarget(w, h, { samples });
         material.map = target.texture;
         material.needsUpdate = true;
       } else if (target.width !== w || target.height !== h) {

@@ -163,7 +163,6 @@ export function startDrive(
   };
 
   const view = mountRenderStage(stage, stage, () => exit(false));
-  if (view === null) return () => exit(false);
   cleanups.push(() => view.dispose());
   cleanups.push(holdWakeLock());
   const onEscape = (e: KeyboardEvent): void => {
@@ -199,7 +198,7 @@ export function startDrive(
   });
   cleanups.push(() => controls.dispose());
   // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
-  const viewInput = createTopDownInput(view.canvas, {
+  const viewInput = createTopDownInput(view.surface, {
     mode: topDown,
     getRect: () => frame.views.topDown,
     onChange(next) {

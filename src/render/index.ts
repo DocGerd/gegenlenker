@@ -75,9 +75,6 @@ export function createSceneRenderer(): SceneRenderer {
       groundTextures.attach(gl);
       vehicleEnvironment.attach(gl);
     },
-    onContextRestored: () => {
-      vehicleEnvironment.invalidate();
-    },
     truck: (spec, palette) => proceduralTruck(spec, palette, shells, vehicleEnvironment),
     trailer: (spec, palette) =>
       proceduralTrailer(spec, palette, shells.trailer, vehicleEnvironment),
@@ -89,6 +86,11 @@ export function createSceneRenderer(): SceneRenderer {
   if (warm.pending) warmTarget();
   return {
     ...sceneRenderer,
+    async init(canvas) {
+      await renderer.init(canvas);
+      // Read by the e2e: the GPU API in use.
+      document.documentElement.dataset['renderBackend'] = renderer.stats().backend;
+    },
     setQuality(preset) {
       const flags = QUALITY_FLAGS[preset];
       shells.cab.setEnabled(flags.cabGlb);
@@ -98,6 +100,7 @@ export function createSceneRenderer(): SceneRenderer {
       renderer.setQuality(preset);
     },
     dispose() {
+      delete document.documentElement.dataset['renderBackend'];
       renderer.dispose();
       groundTextures.dispose();
       vehicleEnvironment.dispose();

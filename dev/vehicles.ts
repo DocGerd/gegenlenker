@@ -92,7 +92,7 @@ const renderer = createThreeSceneRenderer({
   truck: proceduralTruck,
   trailer: proceduralTrailer,
 });
-renderer.init(canvas);
+await renderer.init(canvas);
 renderer.setScene(placeholderLayout, truck, trailer);
 
 let width = 0;

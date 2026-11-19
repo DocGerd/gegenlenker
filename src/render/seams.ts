@@ -50,10 +50,8 @@ export interface AidsLayer {
   dispose(): void;
 }
 export type RendererParts = {
-  /** Called once the WebGL renderer exists, for parts that need its capabilities; parts keep the first renderer they see. */
+  /** Called each time a GPU renderer is ready, again after a loss with the new one; parts move to the latest. */
   readonly onRenderer?: (renderer: WebGLRenderer) => void;
-  /** Called when the GPU resources are gone and rebuilt, before the quality is applied again. */
-  readonly onContextRestored?: () => void;
   readonly truck: (spec: TruckSpec, palette: ScenePalette) => VehicleVisual;
   readonly trailer: (spec: TrailerSpec, palette: ScenePalette) => VehicleVisual;
   readonly environment: (layout: ResolvedLayout, palette: ScenePalette) => Environment;

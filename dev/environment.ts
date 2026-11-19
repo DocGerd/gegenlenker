@@ -131,7 +131,7 @@ canvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;display:bl
 stage.append(canvas);
 
 const renderer = createSceneRenderer();
-renderer.init(canvas);
+await renderer.init(canvas);
 renderer.setScene(resolved, truck, trailer);
 
 let width = 0;

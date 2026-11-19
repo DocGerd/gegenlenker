@@ -118,7 +118,10 @@ export type RenderFrame = {
   /** Absent means not yet passed. */
   readonly waypointVisited?: boolean;
 };
+/** The GPU API the renderer draws through. */
+export type GraphicsBackend = 'webgpu' | 'webgl2';
 export type RenderStats = {
+  readonly backend: GraphicsBackend;
   readonly fps: number;
   readonly frameP95Ms: number;
   readonly resolutionScale: number;
@@ -127,7 +130,10 @@ export type RenderStats = {
   readonly contextLost: boolean;
 };
 export interface SceneRenderer {
-  init(canvas: HTMLCanvasElement): void; // throws when WebGL 2 is unavailable
+  /** Rejects when no GPU renderer can start on `canvas`. After a loss, call again with a fresh canvas: the scene is kept. */
+  init(canvas: HTMLCanvasElement): Promise<void>;
+  /** `listener` runs when the GPU renderer is lost for good; returns the unsubscribe. */
+  onLost(listener: () => void): () => void;
   setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec): void;
   /** Applies at once, to the current scene and to every later one. */
   setQuality(preset: GraphicsPreset): void;

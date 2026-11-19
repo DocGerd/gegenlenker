@@ -46,7 +46,10 @@ export const describeGroundTexture = (texture: Texture): string =>
   `ktx2:${TARGET_NAMES.get(texture.format) ?? `format-${texture.format}`}`;
 
 export interface GroundTextures {
-  /** The renderer whose compressed-format support picks the transcoding target; the first one wins. */
+  /**
+   * The renderer whose compressed-format support picks the transcoding target, and whose shader
+   * errors are watched; a later one (after a loss) replaces it and keeps a loaded texture.
+   */
   attach(renderer: WebGLRenderer): void;
   /**
    * Starts the load on the first call with `true` once a renderer is attached; nothing is downloaded
@@ -187,7 +190,8 @@ export function startGroundTextures(
 
   return {
     attach(next) {
-      if (renderer !== null || disposed) return;
+      if (renderer === next || disposed) return;
+      restoreShaderErrors?.();
       renderer = next;
       watchShaderErrors(next);
       start();

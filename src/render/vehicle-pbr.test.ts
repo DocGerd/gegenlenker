@@ -56,7 +56,6 @@ const standardOf = (root: Object3D): MeshStandardMaterial[] =>
 const environment = (texture: () => Texture | null): VehicleEnvironment => ({
   attach: () => undefined,
   texture,
-  invalidate: () => undefined,
   reportApplied: () => undefined,
   dispose: () => undefined,
 });
@@ -223,13 +222,13 @@ describe('vehicle environment', () => {
     expect(states.at(-1)).toBeNull();
   });
 
-  it('retries after invalidate and drops the map it held', () => {
+  it('drops the map and a failure when a new renderer replaces a lost one', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const made = target();
     const { env, states, generate } = setup({ generate: () => made });
     env.attach(renderer());
     env.texture(palette);
-    env.invalidate();
+    env.attach(renderer());
     expect(disposed(made)).toHaveBeenCalledOnce();
     expect(states.at(-1)).toBeNull();
     env.texture(palette);
@@ -245,7 +244,7 @@ describe('vehicle environment', () => {
     });
     failing.env.attach(renderer());
     expect(failing.env.texture(palette)).toBeNull();
-    failing.env.invalidate();
+    failing.env.attach(renderer());
     expect(failing.env.texture(palette)).not.toBeNull();
   });
 
