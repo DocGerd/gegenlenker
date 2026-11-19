@@ -1,8 +1,10 @@
 import { readdirSync, statSync, readFileSync } from 'node:fs';
 import { matchesGlob, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_GRAPHICS } from '../contracts/render';
 import { ASSET_REGISTRY } from '../render/asset-registry';
-import { MAX_PRECACHE_FILE_BYTES, pwaOptions } from './config';
+import { QUALITY_FLAGS } from '../render/quality';
+import { MAX_PRECACHE_FILE_BYTES, RUNTIME_CACHE_MIN_ENTRIES, pwaOptions } from './config';
 
 const colors = { themeColor: '#ffffff', backgroundColor: '#ffffff' };
 const manifest = pwaOptions('/gegenlenker/', colors).manifest;
@@ -67,9 +69,14 @@ describe('runtime-cached texture assets', () => {
     expect(precache).toContain('ktx2');
   });
 
-  it('keeps room for every cached file twice over, so a rehash does not evict a live entry', () => {
+  it('keeps room for the live set plus one stale hashed set, never below the original size', () => {
     const maxEntries = runtime?.options?.expiration?.maxEntries ?? 0;
-    expect(maxEntries).toBeGreaterThanOrEqual(ignored.length * 2);
+    const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
+    const textures = Object.values(ASSET_REGISTRY).filter(({ flag }) => !defaults[flag]);
+    const liveFiles = textures.length + (textures.length > 0 ? 2 : 0);
+    expect(liveFiles).toBeGreaterThan(0);
+    expect(maxEntries).toBeGreaterThanOrEqual(liveFiles * 2);
+    expect(maxEntries).toBeGreaterThanOrEqual(RUNTIME_CACHE_MIN_ENTRIES);
   });
 });
 

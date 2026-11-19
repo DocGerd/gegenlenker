@@ -27,7 +27,7 @@ const icons = [
 export const MAX_PRECACHE_FILE_BYTES = 2 * 1024 * 1024;
 
 /** Assets the default preset does not draw, as `[stem, extensions]` of the hashed `stem-<hash>.ext`; the Basis transcoder is runtime-cached only while no KTX2 is precached. */
-const RUNTIME_ASSETS: readonly (readonly [string, readonly string[]])[] = (() => {
+export const RUNTIME_ASSETS: readonly (readonly [string, readonly string[]])[] = (() => {
   const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
   const offByDefault = Object.entries(ASSET_REGISTRY).filter(([, { flag }]) => !defaults[flag]);
   const assets: [string, readonly string[]][] = offByDefault.map(([stem, { kind }]) => [
@@ -48,6 +48,10 @@ const RUNTIME_ASSET_GLOBS = RUNTIME_ASSETS.flatMap(([stem, extensions]) =>
 export const RUNTIME_ASSET_URLS = new RegExp(
   `/(?:${RUNTIME_ASSETS.map(([stem, extensions]) => `${stem}-[\\w-]+\\.(?:${extensions.join('|')})`).join('|')})$`,
 );
+
+/** `cleanupOutdatedCaches` leaves the runtime cache alone, so a rehash leaves a stale set until LRU evicts it: room for the live set plus one stale set, never below the original fixed size. */
+export const RUNTIME_CACHE_MIN_ENTRIES = 12;
+const RUNTIME_CACHE_ENTRIES = Math.max(RUNTIME_CACHE_MIN_ENTRIES, RUNTIME_ASSET_GLOBS.length * 2);
 
 export const PRECACHE_GLOBS = [
   '**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}',
@@ -82,7 +86,7 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
           options: {
             cacheName: 'ground-texture',
             cacheableResponse: { statuses: [200] },
-            expiration: { maxEntries: 12 },
+            expiration: { maxEntries: RUNTIME_CACHE_ENTRIES },
           },
         },
       ],

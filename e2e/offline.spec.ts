@@ -1,5 +1,9 @@
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
+import { ASSET_REGISTRY } from '../src/render/asset-registry';
+import { QUALITY_FLAGS } from '../src/render/quality';
+import { DEFAULT_GRAPHICS } from '../src/contracts/render';
+import { RUNTIME_ASSETS } from '../src/pwa/config';
 import { collectThreeProblems } from './three-problems';
 import { expectNoFailedAttachment, watchFailedAttachments } from './attachment-markers';
 
@@ -47,10 +51,11 @@ test('loads from the subpath and drives an exercise offline', async ({
     }
     return urls;
   });
-  const shells = [
-    ...['arocs-1835-ak', 'man-le-18-280'].flatMap((truck) => [`${truck}-cab`, `${truck}-body`]),
-    ...['krone-azw-18', 'hueffermann-hpa-24-81-l'].map((trailer) => `${trailer}-trailer`),
-  ];
+  const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
+  const shells = Object.entries(ASSET_REGISTRY)
+    .filter(([, { kind, flag }]) => kind === 'glb' && defaults[flag])
+    .map(([stem]) => stem);
+  expect(shells.length).toBeGreaterThan(0);
   for (const key of shells) {
     const shell = new RegExp(`${key}-[\\w-]+\\.glb$`);
     expect(
@@ -165,12 +170,19 @@ test('High graphics caches the ground and sky textures and transcoder on first u
       }
       return urls;
     });
-  const files = [
-    /ground-[\w-]+\.ktx2$/,
-    /sky-[\w-]+\.ktx2$/,
-    /basis_transcoder-[\w-]+\.js$/,
-    /basis_transcoder-[\w-]+\.wasm$/,
-  ];
+  const files = RUNTIME_ASSETS.flatMap(([stem, extensions]) =>
+    extensions.map((extension) => new RegExp(`${stem}-[\\w-]+\\.${extension}$`)),
+  );
+  expect(files.map(String).sort()).toEqual(
+    [
+      /basis_transcoder-[\w-]+\.js$/,
+      /basis_transcoder-[\w-]+\.wasm$/,
+      /ground-[\w-]+\.ktx2$/,
+      /sky-[\w-]+\.ktx2$/,
+    ]
+      .map(String)
+      .sort(),
+  );
   const matching = (urls: string[], file: RegExp): string[] => urls.filter((url) => file.test(url));
 
   // Installing does not download them: only High draws the texture, so the other presets skip the cost.
@@ -191,7 +203,7 @@ test('High graphics caches the ground and sky textures and transcoder on first u
       const { runtime } = await cached();
       return files.map((file) => matching(runtime, file).length);
     })
-    .toEqual([1, 1, 1, 1]);
+    .toEqual(files.map(() => 1));
 
   // The marker follows the preset: Balanced draws no reflections, so it is gone.
   await page.getByRole('button', { name: en.finish }).click();
