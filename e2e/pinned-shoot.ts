@@ -1,7 +1,10 @@
 import type { Page } from '@playwright/test';
 import type { ScenePaletteKey } from '../src/contracts/render';
+import { ATTACHMENTS, type Attachment } from '../src/render/asset-registry.ts';
+import { QUALITY_FLAGS } from '../src/render/quality.ts';
 
-// Imported by scripts/shoot-views.mjs through Node's type stripping: type-only imports, no enums.
+// Imported by scripts/shoot-views.mjs through Node's type stripping: no enums, and runtime imports
+// carry their `.ts` extension and reach only modules that import nothing at runtime.
 
 export type Preset = 'low' | 'balanced' | 'high';
 export type Shot = 'cockpit' | 'mirrorLeft' | 'mirrorRight' | 'follow' | 'yard' | 'chase';
@@ -26,22 +29,17 @@ export const MIN_DRAWN_COLOURS = 40;
 /** Set once the renderer is ready and removed on a loss, so a settle after a loss waits for the new one. */
 const BACKEND_READY = (v: string): boolean => v !== '';
 
-/** Each preset's asynchronous attachments, read from `<html>`; a shot before they land would differ. */
-const READY: Readonly<Record<Preset, Readonly<Record<string, (value: string) => boolean>>>> = {
-  low: { 'data-render-backend': BACKEND_READY },
-  balanced: {
+/** The `<html>` markers whose values say `preset`'s asynchronous attachments are in place; a shot before they land would differ. */
+export function readyMarkers(preset: Preset): Readonly<Record<string, (value: string) => boolean>> {
+  const flags = QUALITY_FLAGS[preset];
+  const drawn = Object.values<Attachment>(ATTACHMENTS).filter((a) =>
+    a.flags.every((f) => flags[f]),
+  );
+  return {
     'data-render-backend': BACKEND_READY,
-    'data-vehicle-shells': (v) => v.split(' ').length === 3,
-  },
-  high: {
-    'data-render-backend': BACKEND_READY,
-    'data-vehicle-shells': (v) => v.split(' ').length === 3,
-    'data-ground-texture': (v) => v.startsWith('ktx2:'),
-    'data-vehicle-pbr': (v) => v === 'on',
-    'data-sky-hdri': (v) => v === 'on',
-    'data-perspective-grade': (v) => v === 'on',
-  },
-};
+    ...Object.fromEntries(drawn.map((a) => [a.marker, a.ready])),
+  };
+}
 
 const BOX: Readonly<Record<Shot, string>> = {
   cockpit: '[data-hud="cockpit"]',
@@ -155,7 +153,7 @@ async function attachments(
   page: Page,
   preset: Preset,
 ): Promise<{ ready: boolean; values: (string | null)[] }> {
-  const want = READY[preset];
+  const want = readyMarkers(preset);
   const values = await page.evaluate((names) => {
     const html = document.documentElement;
     return names.map((n) => html.getAttribute(n));

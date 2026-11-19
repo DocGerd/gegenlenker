@@ -11,22 +11,16 @@ import {
   validHdriLight,
   type RadianceImage,
 } from './hdri-light';
-import { inputsSha256, KV_INPUTS, ROOT, sha256, SKY_FILES, SKY_HDR } from './sky-build';
+import { ROOT, sha256 } from '../assets/provenance';
+import { inputsSha256, SKY_FILES, SKY_HDR } from './sky-build';
 
 const ktx2 = new Uint8Array(readFileSync(join(ROOT, SKY_FILES.ktx2)));
 const container = read(ktx2);
 const hdrPath = join(ROOT, SKY_HDR.path);
 const hdrPresent = existsSync(hdrPath);
 
-/** Red means stale inputs: rerun `pnpm sky:texture` and commit sky.ktx2 and hdri-light.ts. */
+/** Red means stale inputs: rerun `pnpm texture sky` and commit sky.ktx2, hdri-light.ts and the manifest. */
 describe('sky texture build', () => {
-  it('was encoded from the current build inputs', () => {
-    const recorded = container.keyValue[KV_INPUTS];
-    expect(new TextDecoder().decode(recorded as Uint8Array).replace(/\0$/, '')).toBe(
-      inputsSha256(),
-    );
-  });
-
   it('baked the light from the same inputs and the sky texture that ships', () => {
     expect({
       inputsSha256: HDRI_LIGHT.inputsSha256,

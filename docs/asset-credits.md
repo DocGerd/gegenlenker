@@ -21,6 +21,6 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/sky.ktx2`: the upper hemisphere only, at 4096 × 1024. Texels brighter than 20× the median luminance are scaled down to it, and each channel is stored as x / (1 + x) in sRGB, encoded as UASTC KTX2 with a single level (no mipmaps).
   - `src/render/hdri-light.ts`: baked from the same `.hdr`. It holds the sun direction and irradiance, the SH9 sky radiance with the sun clamped out, and the horizon colours.
-- **Rebuild:** `pnpm sky:texture` (`tools/textures/sky-build.ts`) writes both outputs from the 4k `.hdr`, which is not committed: download it to the git-ignored path above, or pass its path. The build checks its SHA-256 and records its input hashes in both outputs; `tools/textures/sky-build.test.ts` fails when they are stale.
+- **Rebuild:** `pnpm texture sky` (`tools/textures/sky-pixels.ts`) writes both outputs from the 4k `.hdr`, which is not committed: download it to the git-ignored path above. The build checks its SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` and `tools/textures/sky-build.test.ts` fail when they are stale.
 
 <!-- credits:end -->
