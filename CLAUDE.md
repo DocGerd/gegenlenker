@@ -11,8 +11,8 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - Typecheck: `pnpm typecheck`
 - Unit tests: `pnpm test`; single test: `pnpm exec vitest run <file> -t '<name>'`
 - Build: `BASE_PATH=/gegenlenker/ pnpm build`
-- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); every `e2e/**/*.spec.ts` runs in the `offline` project, whose `expect.timeout` and `timeout` live in `playwright.config.ts` (no per-call timeout constants).
-- Parallel worktrees: e2e previews on a port derived from the checkout path (printed as `e2e preview port: N`), so no lock is needed; `E2E_PORT=<n>` overrides a clash (`--strictPort` fails loudly); a killed run can orphan a preview: `pnpm preview:stop [--port n]` stops only this checkout's, never `pkill -f`. `pnpm shoot --out <dir> [shoot-views args]` builds, serves on a free port, shoots and tears down (rebuilds `dist/`: not beside `pnpm test:e2e`).
+- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); every `e2e/**/*.spec.ts` runs in the `offline` project; default `expect.timeout` and `timeout` live in `playwright.config.ts`.
+- Parallel worktrees: e2e previews on a port derived from the checkout path (printed as `e2e preview port: N`), so no lock is needed; `E2E_PORT=<n>` overrides a clash (`--strictPort` fails loudly); a killed run can orphan a preview: `pnpm preview:stop` stops only this checkout's preview (`--port n` stops whatever listens there), never `pkill -f`. `pnpm shoot --out <dir> [shoot-views args]` builds, serves on a free port, shoots and tears down (rebuilds `dist/`: not beside `pnpm test:e2e`).
 - Parallel PRs: the up-to-date ruleset serialises merges (each merge restarts everyone's CI); merge one at a time. The top-down invariance gate still flakes Low vs other presets on edge pixels (#203): rerun before debugging a PR.
 - CI e2e is a 3-shard matrix (`--shard=n/3`) on ~4-core runners; reproduce CI-only slowness locally with `taskset -c 0-3`.
 - Local-only ignores go in `.git/info/exclude` as unanchored patterns (`dir/`, not `/dir/`); the format scripts pass it to Prettier.
@@ -22,7 +22,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - Only `src/render` imports `three`; `.ts` files are checked by `no-restricted-imports` in `eslint.config.js`, `dev/` harnesses are exempt.
 - The renderer is `three/webgpu` (WebGL2 backend by default, `?backend=webgpu|auto|webgl2` in `src/render/gpu-backend.ts`): custom shading is TSL node materials only (`onBeforeCompile` is ignored, `ShaderMaterial` rejected). Three swallows TSL build errors and falls back to a plain material, so verify with `getShaderAsync`.
 - Viewport origin is top-left; render-target readback is upside down. `drawCalls` counts output passes.
-- The intermediate buffer is 8-bit linear + MSAA and renderer-wide: never make it per-preset (breaks top-down invariance). Compare unlit hues in e2e through `throughIntermediate` (`e2e/pinned-shoot.ts`, which also owns `MIN_DRAWN_COLOURS`).
+- The intermediate buffer is 8-bit linear + MSAA and renderer-wide: never make it per-preset (breaks top-down invariance). Compare unlit hues in e2e through `throughIntermediate` (`e2e/pinned-shoot.ts`, which also owns `MIN_DRAWN_COLOURS` and the settle deadline).
 - `src/{contracts,vehicles,sim,scoring,content}` also import none of `render/app/hud/input/pwa/i18n` and use none of `window`, `document`, `navigator`, `localStorage`, `performance`, `requestAnimationFrame` (same config). Core lint also bans dynamic `import()`, `import.meta`, `Date`/`Date.now`, `Math.random`, `fetch`, `setTimeout`, `globalThis` (tests exempt from the syntax rules).
 - Top-down-only drawing: put meshes on `AIDS_LAYER` (`layers.set`); only `topDownCamera` enables it. Cockpit/mirror-only meshes (sky dome, skyline) and perspective lights go on `PERSPECTIVE_LAYER` (a light is AIDS-only or seen by every perspective camera; `environment.test.ts`); cab-front parts on `CAB_LAYER` (mirrors and the chase view; the cockpit eye is inside the cab); before calling a cab or body change visible, check its frustum (`src/render/shell-visibility.test.ts`). Cameras enable layers via `enableLayers` with `COCKPIT_LAYERS`/`MIRROR_LAYERS`/`CHASE_LAYERS`/`TOP_DOWN_LAYERS` (`src/render/seams.ts`).
 - Perspective scenery must stay inside `CAMERA_FAR` (`src/render/seams.ts`); `src/render/skyline.test.ts` pins it.
@@ -87,7 +87,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Plain `playwright screenshot` can show a blank canvas under `.hud-band` (software compositing); e2e passes GPU-compositing SwiftShader args in `playwright.config.ts`. Read the canvas back before calling a blank region an app bug.
 - Compare before/after by hash only at standstill with `performance.now`/rAF pinned in the shoot script: the resolution governor and the sim both step on wall-clock time, so other shots differ run to run.
 - Headless screenshots run on software GL and passed a see-through skyline; perspective realism changes need an owner device check before calling them done.
-- `pnpm shoot --out <dir> --diff` (wraps `scripts/shoot-views.mjs`) compares pinned shots per view; `?perf=1` fps is meaningless on SwiftShader.
+- `node scripts/shoot-views.mjs --diff <before-dir>` compares pinned shots per view (`pnpm shoot --out <dir>` takes them); `?perf=1` fps is meaningless on SwiftShader.
 
 ## Workflow
 
