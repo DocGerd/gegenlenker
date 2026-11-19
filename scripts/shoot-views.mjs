@@ -17,13 +17,18 @@ import {
   shoot,
   startPinnedDrive,
 } from '../e2e/pinned-shoot.ts';
+import { QUALITY_FLAGS } from '../src/render/quality.ts';
 
 const PRESETS = ['low', 'balanced', 'high'];
 const SHOTS = ['cockpit', 'mirrorLeft', 'mirrorRight', 'follow', 'yard', 'chase'];
 /** Views whose flat regions must survive a renderer change; the perspective ones are judged by eye. */
 const TOP_DOWN = new Set(['follow', 'yard']);
-/** Share of flat pixels allowed to move by one step (rounding of the same colour). */
-const MAX_FLAT_OFF_BY_ONE = 0.005;
+/** Largest step a flat pixel may move: the 8-bit linear intermediate rounds sRGB tokens, dark ones by more. */
+const MAX_FLAT_DELTA = 2;
+/** Share of flat pixels allowed to move by more than one step (the dark tokens). */
+const MAX_FLAT_MORE = 0.009;
+/** Share of edge pixels allowed to move by more than one step: antialiasing differs between renderers. */
+const MAX_EDGE_MORE = 0.55;
 const EXERCISE = 'Straight reverse';
 // Same GL as the e2e `offline` project, so hashes match what CI renders.
 const ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'];
@@ -60,6 +65,8 @@ try {
       const page = await context.newPage();
       await startPinnedDrive(page, preset, EXERCISE);
       const chase = await page.locator('[data-view="chase"]').isVisible();
+      if (chase !== QUALITY_FLAGS[preset].chaseView)
+        throw new Error(`${preset}: chase view ${chase ? 'shown' : 'hidden'} against its flag`);
       for (const shot of SHOTS) {
         const name = `${preset}-${shot}`;
         if (shot === 'chase' && !chase) {
@@ -83,6 +90,7 @@ try {
     const heatmaps = join(values.out, 'diff');
     mkdirSync(heatmaps, { recursive: true });
     const names = readdirSync(values.out).filter((f) => f.endsWith('.png'));
+    let compared = 0;
     for (const file of names.sort()) {
       const name = file.slice(0, -'.png'.length);
       const beforeFile = join(values.diff, file);
@@ -90,26 +98,40 @@ try {
         console.log(`new    ${name}`);
         continue;
       }
-      const r = await diffShot(
-        page,
-        readFileSync(beforeFile),
-        readFileSync(join(values.out, file)),
-      );
+      const before = readFileSync(beforeFile);
+      const after = readFileSync(join(values.out, file));
+      const drawn = [await distinctColours(page, before), await distinctColours(page, after)];
+      if (drawn.some((colours) => colours <= MIN_DRAWN_COLOURS)) {
+        console.log(`BLANK  ${name}: ${drawn.join(' / ')} colours before / after`);
+        failed++;
+        continue;
+      }
+      const r = await diffShot(page, before, after);
       if (r === null) {
         console.log(`SIZE   ${name}`);
         failed++;
         continue;
       }
+      compared++;
       writeFileSync(join(heatmaps, file), r.heatmap);
       const topDown = TOP_DOWN.has(name.split('-')[1]);
-      const ok = r.flatMore === 0 && r.flatOne <= MAX_FLAT_OFF_BY_ONE * r.flat && r.maxFlat <= 1;
+      const edges = r.pixels - r.flat;
+      const ok =
+        r.flat > 0 &&
+        r.maxFlat <= MAX_FLAT_DELTA &&
+        r.flatMore <= MAX_FLAT_MORE * r.flat &&
+        r.edgeMore <= MAX_EDGE_MORE * edges;
       const verdict = !topDown ? 'look  ' : ok ? 'pass  ' : 'FAIL  ';
       if (topDown && !ok) failed++;
       const pct = (n, of) => `${((100 * n) / of).toFixed(2)}%`;
       console.log(
         `${verdict} ${name}: flat ${pct(r.flat, r.pixels)} of px, identical ${pct(r.flatSame, r.flat)}, ` +
-          `±1 ${r.flatOne}, >1 ${r.flatMore} (max ${r.maxFlat}); edge px >1: ${r.edgeMore}`,
+          `±1 ${r.flatOne}, >1 ${r.flatMore} (max ${r.maxFlat}); edge px >1: ${r.edgeMore} (${pct(r.edgeMore, edges)})`,
       );
+    }
+    if (compared === 0) {
+      console.log(`no shot of ${values.out} has a counterpart in ${values.diff}`);
+      failed++;
     }
     await page.close();
   }
