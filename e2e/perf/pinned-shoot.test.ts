@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { describe, expect, it } from 'vitest';
-import { settle } from '../pinned-shoot';
+import { readyMarkers, settle } from '../pinned-shoot';
 
 /** A page whose framing box is `boxes[i]` on the i-th read (the last one repeats) and whose attachments are ready. */
 function fakePage(
@@ -54,5 +54,37 @@ describe('settle', () => {
   it('names the preset and the phase when the box never appears', async () => {
     const { page } = fakePage([null]);
     await expect(settle(page, 'low', 20)).rejects.toThrow(/^low not ready: \["framing unstable"/);
+  });
+});
+
+describe('readyMarkers', () => {
+  const ready = (preset: 'low' | 'balanced' | 'high', values: Record<string, string>): boolean =>
+    Object.entries(readyMarkers(preset)).every(([marker, ok]) => ok(values[marker] ?? ''));
+  const shells = 'a b c';
+  const all = {
+    'data-render-backend': 'webgl2',
+    'data-vehicle-shells': shells,
+    'data-ground-texture': 'ktx2:bc7',
+    'data-vehicle-pbr': 'on',
+    'data-sky-hdri': 'on',
+    'data-perspective-grade': 'on',
+  };
+
+  it('waits for the backend alone on Low, plus the shells on Balanced, plus the High layers on High', () => {
+    expect(Object.keys(readyMarkers('low'))).toEqual(['data-render-backend']);
+    expect(Object.keys(readyMarkers('balanced'))).toEqual([
+      'data-render-backend',
+      'data-vehicle-shells',
+    ]);
+    expect(Object.keys(readyMarkers('high')).sort()).toEqual(Object.keys(all).sort());
+  });
+
+  it('accepts a loaded preset and rejects one that lacks a marker or has a partial one', () => {
+    for (const preset of ['low', 'balanced', 'high'] as const)
+      expect(ready(preset, all)).toBe(true);
+    expect(ready('low', {})).toBe(false);
+    expect(ready('balanced', { ...all, 'data-vehicle-shells': 'a b' })).toBe(false);
+    expect(ready('high', { ...all, 'data-ground-texture': 'failed' })).toBe(false);
+    expect(ready('high', { ...all, 'data-sky-hdri': '' })).toBe(false);
   });
 });
