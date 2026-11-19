@@ -100,6 +100,7 @@ export function loadKtx2(renderer: WebGPURenderer, url: string): Promise<Texture
     const manager = new LoadingManager().setURLModifier((u) => transcoderUrls(u, url));
     const timedOutError = (): Error => new Error(`KTX2 load of ${url} timed out`);
     let timedOut = false;
+    const abandoned = (): boolean => timedOut;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
@@ -111,12 +112,12 @@ export function loadKtx2(renderer: WebGPURenderer, url: string): Promise<Texture
     });
     const load = (async (): Promise<Texture> => {
       const { KTX2Loader } = await import('three/addons/loaders/KTX2Loader.js');
-      if (timedOut) throw timedOutError();
+      if (abandoned()) throw timedOutError();
       // an empty path would fetch the transcoder from a CDN; the URL modifier replaces what is fetched
       const loader = new KTX2Loader(manager).setTranscoderPath(import.meta.env.BASE_URL);
       try {
         const texture = await loader.detectSupport(renderer).loadAsync(url);
-        if (timedOut) texture.dispose();
+        if (abandoned()) texture.dispose();
         return texture;
       } finally {
         loader.dispose();
