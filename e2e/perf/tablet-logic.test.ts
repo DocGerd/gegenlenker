@@ -20,18 +20,21 @@ const reading = (over: Partial<Reading> = {}): Reading => ({
   p95: 16.7,
   scale: 1,
   calls: 80,
+  shadow: 0,
   gl: 'ANGLE (NVIDIA, D3D12)',
   ...over,
 });
 
 describe('parseOverlay', () => {
   it('reads the two-line overlay text', () => {
-    const text = '59 fps  p95 17.2 ms  scale 0.85  calls 142\nANGLE (NVIDIA, D3D12)  CONTEXT LOST';
+    const text =
+      '59 fps  p95 17.2 ms  scale 0.85  calls 142  shadow 1\nANGLE (NVIDIA, D3D12)  CONTEXT LOST';
     expect(parseOverlay(text)).toEqual({
       fps: 59,
       p95: 17.2,
       scale: 0.85,
       calls: 142,
+      shadow: 1,
       gl: 'ANGLE (NVIDIA, D3D12)  CONTEXT LOST',
     });
   });

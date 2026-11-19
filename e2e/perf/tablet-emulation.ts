@@ -285,6 +285,7 @@ async function measure(
         p95: Math.max(...samples.map((s) => s.p95)),
         scale: final.scale,
         calls: median(samples.map((s) => s.calls)),
+        shadow: median(samples.map((s) => s.shadow)),
         gl: final.gl,
       },
       errors: [...new Set(errors)],

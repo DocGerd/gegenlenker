@@ -231,6 +231,19 @@ describe('environment quality wiring', () => {
     env.dispose();
   });
 
+  it('lets no light the top-down camera sees cast, at any flags', () => {
+    expect(layout).toBeDefined();
+    if (layout === undefined) return;
+    const env = proceduralEnvironment(layout, palette);
+    for (const flags of Object.values(QUALITY_FLAGS)) {
+      env.setQuality(flags);
+      for (const l of lightsOf(env.object)) {
+        if (cameras.topDown.test(l.layers)) expect(l.castShadow).toBe(false);
+      }
+    }
+    env.dispose();
+  });
+
   it('follows the flags through high, balanced, low and high again', () => {
     expect(layout).toBeDefined();
     if (layout === undefined) return;

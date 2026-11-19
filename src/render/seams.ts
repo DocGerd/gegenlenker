@@ -27,6 +27,10 @@ export const AID_STROKE = {
   casing: 0.06,
 } as const;
 export const INTERIOR_LAYER = 4; // seen by the cockpit camera only: the cab interior around the driver's eye
+/** What the sun's shadow camera draws: no aids, and not the cockpit-only interior. */
+export const SHADOW_CASTER_LAYERS = [DEFAULT_LAYER, PERSPECTIVE_LAYER, CAB_LAYER];
+/** The sim-plane point and radius (m) the sun shadow follows. */
+export type ShadowFocus = { readonly x: number; readonly y: number; readonly radius: number };
 export const COCKPIT_LAYERS = [PERSPECTIVE_LAYER, INTERIOR_LAYER];
 export const MIRROR_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
 export const CHASE_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
@@ -57,7 +61,7 @@ export interface VehicleVisual {
 }
 export interface Environment {
   readonly object: Object3D; // ground, markings, obstacles, lights
-  update(frame: RenderFrame): void;
+  update(frame: RenderFrame, focus: ShadowFocus): void;
   setQuality(flags: QualityFlags): void;
   dispose(): void;
 }

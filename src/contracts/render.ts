@@ -133,6 +133,8 @@ export type RenderStats = {
   readonly frameP95Ms: number;
   readonly resolutionScale: number;
   readonly drawCalls: number;
+  /** Sun shadow map renders in the last frame. */
+  readonly shadowPasses: number;
   readonly glRenderer: string;
   readonly contextLost: boolean;
 };

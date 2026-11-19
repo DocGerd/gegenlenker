@@ -13,7 +13,14 @@ export const BACKENDS = ['webgl2', 'webgpu', 'auto'] as const;
 export type Preset = (typeof PRESETS)[number];
 export type Backend = (typeof BACKENDS)[number];
 export type Pair = (typeof PAIRS)[number];
-export type Reading = { fps: number; p95: number; scale: number; calls: number; gl: string };
+export type Reading = {
+  fps: number;
+  p95: number;
+  scale: number;
+  calls: number;
+  shadow: number;
+  gl: string;
+};
 export type Run = { reading: Reading; errors: string[] };
 export type Check = { name: string; status: 'pass' | 'fail' | 'skip'; detail: string };
 
@@ -76,10 +83,12 @@ export function parseOptions(argv: readonly string[]): Options {
 
 /** Parses the `?perf=1` overlay text written by `src/render/perf-overlay.ts`. */
 export function parseOverlay(text: string): Reading | null {
-  const m = /(\d+) fps\s+p95 ([\d.]+) ms\s+scale ([\d.]+)\s+calls (\d+)\n(.*)/.exec(text);
-  const [, fps, p95, scale, calls, gl] = m ?? [];
-  return fps && p95 && scale && calls && gl
-    ? { fps: +fps, p95: +p95, scale: +scale, calls: +calls, gl }
+  const m = /(\d+) fps\s+p95 ([\d.]+) ms\s+scale ([\d.]+)\s+calls (\d+)\s+shadow (\d+)\n(.*)/.exec(
+    text,
+  );
+  const [, fps, p95, scale, calls, shadow, gl] = m ?? [];
+  return fps && p95 && scale && calls && shadow && gl
+    ? { fps: +fps, p95: +p95, scale: +scale, calls: +calls, shadow: +shadow, gl }
     : null;
 }
 
