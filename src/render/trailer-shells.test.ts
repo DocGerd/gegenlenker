@@ -321,7 +321,8 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
       const added = after.filter((m) => !before.includes(m));
       const removed = before.filter((m) => !after.includes(m));
       expect(removed).toHaveLength(1);
-      expect(added).toHaveLength(2);
+      // the shell and the new detail, and the lafette's lens mesh
+      expect(added).toHaveLength(isBox ? 3 : 2);
       if (isBox) {
         const vertices = (m: Mesh): number => m.geometry.getAttribute('position').count;
         const bare = added.find((m) => vertices(m) < vertices(removed[0] ?? m));
