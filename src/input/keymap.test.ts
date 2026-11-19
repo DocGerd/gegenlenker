@@ -13,8 +13,14 @@ const US_CODES: Record<string, readonly string[]> = {
   '0': ['Digit0', 'Numpad0'],
 };
 
+const physicalCodes = (value: string): readonly string[] => {
+  const codes = US_CODES[value];
+  if (codes === undefined) throw new Error(`add the US physical codes of key "${value}"`);
+  return codes;
+};
+
 const codesOf = (b: (typeof BINDINGS)[number]): string[] =>
-  b.match.by === 'code' ? [...b.match.values] : b.match.values.flatMap((v) => US_CODES[v] ?? [v]);
+  b.match.by === 'code' ? [...b.match.values] : b.match.values.flatMap(physicalCodes);
 
 /** Scopes active together: all while driving, view and app in a replay. */
 const LIVE: readonly (readonly Scope[])[] = [
