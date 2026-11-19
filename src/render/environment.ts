@@ -127,7 +127,23 @@ export function proceduralEnvironment(
   const markings = new Chunks(layout.bounds);
   color.set(palette.marking);
   for (const m of layout.markings) addMarking(m, markings, color);
-  for (const mesh of markings.meshes(flat, geometries)) group.add(mesh);
+  const markingTokens = markings.meshes(flat, geometries);
+  for (const mesh of markingTokens) group.add(mesh);
+  // Perspective cameras draw these lit copies; the tokens keep the top-down view, unlit.
+  const litFlat = new MeshLambertNodeMaterial({
+    vertexColors: true,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  });
+  const litMarkings = markingTokens.map((token) => {
+    const copy = new Mesh(token.geometry, litFlat);
+    copy.receiveShadow = true;
+    group.add(copy);
+    return copy;
+  });
+  const markingSwap = tokenCopy(markingTokens);
+  markingSwap.setCopies(litMarkings);
 
   let yardBand: Group | null = null;
   const { target } = layout;
@@ -259,10 +275,12 @@ export function proceduralEnvironment(
       syncSky();
       for (const mesh of props) mesh.material = graded ? propMaterial : solid;
       if (texturedGroundMaterial !== null) setGraded(texturedGroundMaterial, graded);
+      setGraded(litFlat, graded);
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
+      markingSwap.set(flags.litMarkings);
     },
     dispose: () => {
       cancelGroundTexture?.();
@@ -278,6 +296,7 @@ export function proceduralEnvironment(
       solid.dispose();
       propMaterial.dispose();
       flat.dispose();
+      litFlat.dispose();
       sky.dispose();
       skyline.dispose();
     },
