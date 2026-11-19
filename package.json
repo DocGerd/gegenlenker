@@ -18,6 +18,7 @@
     "test": "vitest run",
     "test:e2e": "playwright test --project offline",
     "test:perf": "playwright test --project perf",
+    "perf:tablet": "node e2e/perf/tablet-emulation.ts",
     "icons": "node scripts/icons.mjs",
     "estimates": "node scripts/estimates.mjs",
     "glb:params": "node scripts/glb-params.mjs",
