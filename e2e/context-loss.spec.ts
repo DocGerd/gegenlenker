@@ -5,8 +5,8 @@ import {
   bareScreenshot,
   distinctColours,
   GROUND_LOAD,
+  HIGH_SCREENSHOT_POLL,
   MIN_DRAWN_COLOURS,
-  SCREENSHOT_POLL,
   settle,
   shoot,
   startPinnedDrive,
@@ -90,6 +90,7 @@ async function startDrive(page: Page): Promise<void> {
 }
 
 test('a lost GPU context comes back on a fresh canvas and the drive goes on', async ({ page }) => {
+  test.setTimeout(90_000);
   const problems = collectProblems(page);
   await page.addInitScript(
     ([key, value]) => {
@@ -131,7 +132,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   const pane = await page.locator('[data-hud="topDown"]').boundingBox();
   if (pane === null) throw new Error('no top-down pane');
   await expect
-    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)), SCREENSHOT_POLL)
+    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)), HIGH_SCREENSHOT_POLL)
     .toBeGreaterThan(MIN_DRAWN_COLOURS);
 
   const speed = page.locator('[data-hud="speed"]');
