@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { settle } from '../pinned-shoot';
 
 /** A page whose framing box is `boxes[i]` on the i-th read (the last one repeats) and whose attachments are ready. */
-function fakePage(boxes: readonly (string | null)[]): { page: Page; reads: () => number } {
+function fakePage(
+  boxes: readonly (string | null)[],
+  chase = 0,
+): { page: Page; reads: () => number } {
   let reads = 0;
   const page = {
     clock: { runFor: () => Promise.resolve() },
@@ -14,7 +17,8 @@ function fakePage(boxes: readonly (string | null)[]): { page: Page; reads: () =>
       if (src.includes('querySelector')) return Promise.resolve(1);
       return Promise.resolve((arg as string[]).map(() => 'webgl2'));
     },
-    locator: () => ({
+    locator: (selector: string) => ({
+      count: () => Promise.resolve(selector.includes('chase') ? chase : 0),
       getAttribute: () => {
         const box = boxes[Math.min(reads++, boxes.length - 1)] ?? null;
         return Promise.resolve(box);
@@ -39,6 +43,12 @@ describe('settle', () => {
     const { page, reads } = fakePage([same, same, same, same, moved, moved]);
     await settle(page, 'low', 1_000);
     expect(reads()).toBe(10);
+  });
+
+  it('does not wait for a box in the chase view, which projects none', async () => {
+    const { page, reads } = fakePage([null], 1);
+    await settle(page, 'low', 1_000);
+    expect(reads()).toBe(0);
   });
 
   it('names the preset and the phase when the box never appears', async () => {

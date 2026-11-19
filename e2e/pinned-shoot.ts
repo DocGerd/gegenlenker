@@ -125,8 +125,14 @@ export function renderScale(page: Page): Promise<number> {
   });
 }
 
-/** The vehicle's screen box without the sim step, and the render scale, so it reads the same while the sim stands still; null until drawn. */
+/**
+ * The vehicle's screen box without the sim step, and the render scale, so it reads the same while the
+ * sim stands still; null until drawn. The chase view projects no box, so there it is the scale alone.
+ */
 async function framingBox(page: Page): Promise<string | null> {
+  if ((await page.locator('[data-view="chase"][aria-pressed="true"]').count()) > 0) {
+    return JSON.stringify([await renderScale(page)]);
+  }
   const raw = await page.locator('.drive').getAttribute('data-vehicle-box', { timeout: 5_000 });
   if (raw === null) return null;
   const { left, top, right, bottom } = JSON.parse(raw) as Record<string, number>;
@@ -136,7 +142,7 @@ async function framingBox(page: Page): Promise<string | null> {
 /**
  * Steps the pinned clock until `preset`'s attachments are in place, fonts are loaded and the follow
  * framing (derived from the measured HUD chrome) has held for several frames, then settles. Throws
- * `<preset> not ready: [...]` when a phase outlasts `deadlineMs` of wall-clock time. Needs a drawn top-down pane (not the chase view).
+ * `<preset> not ready: [...]` when a phase outlasts `deadlineMs` of wall-clock time.
  */
 export async function settle(
   page: Page,
