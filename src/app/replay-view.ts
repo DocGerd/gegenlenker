@@ -2,6 +2,7 @@ import { resolveRun } from '../content/run';
 import type { InputLog } from '../contracts/exercise';
 import type { AidFlags, RenderFrame, TopDownMode } from '../contracts/render';
 import type { Simulation, SimSnapshot } from '../contracts/sim';
+import { isAction } from '../input/keymap';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
 import { formatNumber, formatSeconds, t } from '../i18n/i18n';
@@ -214,7 +215,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   stage.append(bar);
   playButton.focus();
   const onEscape = (e: KeyboardEvent): void => {
-    if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
+    if (!isAction('escape', e) || e.repeat || e.defaultPrevented) return;
     e.preventDefault();
     exit();
   };

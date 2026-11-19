@@ -13,6 +13,7 @@ import type { GoalState } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
+import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
 import { aidSwatch } from './aid-swatches';
 import { createGauge, type Gauge } from './gauges';
 import './hud.css';
@@ -121,10 +122,13 @@ const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
   ['aids', 'panelAids'],
   ['gauges', 'panelGauges'],
 ];
-const VIEW_KEYS: Record<string, TopDownMode> = { f: 'follow', y: 'yard', o: 'chase' };
+const VIEW_OF: Partial<Record<Action, TopDownMode>> = {
+  viewFollow: 'follow',
+  viewYard: 'yard',
+  viewChase: 'chase',
+};
 /** Aids drawn in the top-down view only; the outside view shows none of them. */
 const TOP_DOWN_AIDS: readonly (keyof AidFlags)[] = ['path', 'tracks', 'ghost'];
-const GEAR_NAMES: readonly Gear[] = ['P', 'R', 'N', 'D'];
 const MS_TO_KMH = 3.6;
 /**
  * Cockpit widths below which the legend drops to one column: it must fit right of the wheel and
@@ -145,7 +149,6 @@ const SPLIT_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM14 5v14" /></svg>';
 /** Key steps move the divider by this share of the screen. */
 const SPLIT_STEP = 0.02;
-const SPLIT_RESET_CODE = 'KeyL';
 const percent = (share: number): number => Math.round(share * 100);
 
 const button = (attr: string, value: string, key: MessageKey): string =>
@@ -155,6 +158,15 @@ const button = (attr: string, value: string, key: MessageKey): string =>
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
   `<button type="button" class="hud-toggle" data-aid="${aid}" aria-describedby="aid-meaning-${aid}" data-i18n="${key}"></button>`;
 
+const legendRow = ({ term, desc, viewOnly }: LegendRow): string => {
+  const cls = viewOnly ? 'mono hud-legend-view' : 'mono';
+  const dt =
+    typeof term === 'string'
+      ? `<dt class="${cls}">${term}</dt>`
+      : `<dt class="${cls}" data-i18n="${term.key}"></dt>`;
+  return `${dt}<dd${viewOnly ? ' class="hud-legend-view"' : ''} data-i18n="${desc}"></dd>`;
+};
+
 const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
@@ -162,19 +174,7 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl>
-        <dt class="mono">A / D · ← / →</dt><dd data-i18n="steer"></dd>
-        <dt class="mono">C</dt><dd data-i18n="resetSteer"></dd>
-        <dt class="mono">W / S · ↑ / ↓</dt><dd data-i18n="speed"></dd>
-        <dt class="mono" data-i18n="keySpace"></dt><dd data-i18n="brake"></dd>
-        <dt class="mono">1–4 = ${GEAR_NAMES.join(' / ')}</dt><dd data-i18n="gear"></dd>
-        <dt class="mono hud-legend-view" data-i18n="keyEsc"></dt><dd class="hud-legend-view" data-i18n="pause"></dd>
-        <dt class="mono hud-legend-view">${chase ? 'F / Y / O' : 'F / Y'}</dt><dd class="hud-legend-view" data-i18n="${chase ? 'viewSwitch' : 'viewSwitchNoOutside'}"></dd>
-        <dt class="mono hud-legend-view" data-i18n="keyWheel"></dt><dd class="hud-legend-view" data-i18n="steer"></dd>
-        <dt class="mono hud-legend-view" data-i18n="keyLever"></dt><dd class="hud-legend-view" data-i18n="speed"></dd>
-        <dt class="mono hud-legend-view">+ / −</dt><dd class="hud-legend-view" data-i18n="zoom"></dd>
-        <dt class="mono hud-legend-view" data-i18n="keyScroll"></dt><dd class="hud-legend-view" data-i18n="zoom"></dd>
-        <dt class="mono hud-legend-view" data-i18n="keyDrag"></dt><dd class="hud-legend-view" data-i18n="panView"></dd>
-        <dt class="mono hud-legend-view">0 / L</dt><dd class="hud-legend-view" data-i18n="resetViewAndSize"></dd>
+        ${legendRows(chase).map(legendRow).join('')}
       </dl>
     </div>
     <div class="hud-band">
@@ -558,9 +558,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   window.addEventListener(
     'keydown',
     (e) => {
-      const mode = VIEW_KEYS[e.key.toLowerCase()];
+      const viewAction = actionFor('view', e);
+      const mode = viewAction === undefined ? undefined : VIEW_OF[viewAction];
       if (
-        e.code === SPLIT_RESET_CODE &&
+        isAction('splitReset', e) &&
         !split.hidden &&
         !splitReset.disabled &&
         !e.defaultPrevented &&

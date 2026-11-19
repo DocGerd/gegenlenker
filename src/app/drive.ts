@@ -12,6 +12,7 @@ import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
 import { t } from '../i18n/i18n';
 import { createControls } from '../input/controls';
+import { isAction } from '../input/keymap';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
 import { chaseViewAvailable, interiorAvailable } from '../render';
@@ -167,7 +168,7 @@ export function startDrive(
   cleanups.push(halt);
   live.push(resume, holdWakeLock());
   const onEscape = (e: KeyboardEvent): void => {
-    if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
+    if (!isAction('escape', e) || e.repeat || e.defaultPrevented) return;
     e.preventDefault();
     togglePause();
   };
