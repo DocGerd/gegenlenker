@@ -76,7 +76,7 @@ async function fetchData(url: string): Promise<ArrayBuffer> {
   return response.arrayBuffer();
 }
 
-/** Fetches and decodes a glb into its meshes, which keep the materials the file names. */
+/** Fetches and decodes a glb into its meshes, each checked for the `require`d attributes. */
 export async function loadGlb(url: string, { require }: GlbOptions = {}): Promise<Mesh[]> {
   return parseMeshes(await fetchData(url), require);
 }
