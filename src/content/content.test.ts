@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EXERCISE_IDS } from '../contracts/exercise';
 import type { ExerciseId } from '../contracts/exercise';
 import { colliderId, LAYOUT_IDS } from '../contracts/layout';
+import { KIT_FOOTPRINTS } from './kit';
 import type { Obstacle } from '../contracts/layout';
 import type { ControlVector, Pose2, Simulation, SimSnapshot, Vec2 } from '../contracts/sim';
 import { createContactQuery, obbOverlap, SELF_OBSTACLE_ID } from '../sim/collision';
@@ -267,6 +268,49 @@ describe.each(Object.values(layouts))('$id props', (layout) => {
     }
   });
 
+  it('collide as their kit piece stands: one box over its footprint, a gate or panel as a fence', () => {
+    const kit = layout.props.filter((p) => p.asset === 'kit');
+    expect(kit.length).toBeGreaterThan(0);
+    for (const { id, colliders, kit: placed } of kit) {
+      expect(placed, id).toBeDefined();
+      if (placed === undefined) continue;
+      const [only, ...rest] = colliders;
+      expect(rest, id).toEqual([]);
+      expect(only?.obb, id).toEqual(placed.footprint);
+      expect(only?.height, id).toBe(KIT_FOOTPRINTS[placed.piece].height);
+      expect(only?.kind, id).toBe(placed.piece.startsWith('fence-') ? 'fence' : 'furniture');
+    }
+  });
+
+  it('keep the furniture clear of everything else and of every exercise target', () => {
+    const furniture = layout.props.filter((p) => p.colliders.some((c) => c.kind === 'furniture'));
+    expect(furniture.length).toBeGreaterThanOrEqual(6);
+    for (const exercise of [null, ...exercises.filter((e) => e.layout === layout.id)]) {
+      const { obstacles } = resolveLayout(layout, exercise);
+      const target =
+        exercise === null
+          ? []
+          : [
+              {
+                cx: exercise.target.pose.x,
+                cy: exercise.target.pose.y,
+                halfLength: exercise.target.length / 2,
+                halfWidth: exercise.target.width / 2,
+                heading: exercise.target.pose.heading,
+              },
+            ];
+      for (const prop of furniture) {
+        const own = new Set(prop.colliders.map((_, i) => colliderId(prop.id, i)));
+        for (const { id, obb } of obstacles.filter((o) => own.has(o.id))) {
+          for (const other of obstacles.filter((o) => !own.has(o.id))) {
+            expect(obbOverlap(obb, other.obb), `${id} on ${other.id}`).toBe(false);
+          }
+          for (const zone of target) expect(obbOverlap(obb, zone), `${id} in target`).toBe(false);
+        }
+      }
+    }
+  });
+
   it('resolve after the street and loose obstacles, before the exercise ones', () => {
     for (const exercise of [null, ...exercises.filter((e) => e.layout === layout.id)]) {
       const resolved = resolveLayout(layout, exercise);
@@ -402,13 +446,32 @@ describe.each(Object.values(layouts))('$id decor', (layout) => {
 
   // The pavement strip beside the entrance is 2.35 m wide: a vehicle half a width past it is shut
   // out, and the fill must leak into the surroundings just short of that.
-  it('is shut out of the surroundings by 0.14 m and no more', () => {
+  it('is shut out of the pavement strip by 0.14 m and no more', () => {
     const strip = layout.street.pavement - 0.15;
     expect(2 * HALF_WIDTH).toBeGreaterThan(strip);
     expect(2 * HALF_WIDTH - strip).toBeLessThan(0.15);
     const seeds = [layout.start, entrance, carriageway];
-    expect(reach.reached(-5, 30), 'at the narrowest vehicle').toBe(false);
-    expect(floodReach(resolved, seeds, strip / 2 - 0.005).reached(-5, 30)).toBe(true);
+    const stripMiddle = layout.street.kerbY + 0.15 + strip / 2;
+    for (const x of [-5, 105]) {
+      expect(reach.reached(x, stripMiddle), `${x} at the narrowest vehicle`).toBe(false);
+      expect(floodReach(resolved, seeds, strip / 2 - 0.005).reached(x, stripMiddle), `${x}`).toBe(
+        true,
+      );
+    }
+  });
+
+  // The fences along the plots are colliders: not even a vehicle that fits the strip gets behind them.
+  it('keeps the side plots shut behind their fences', () => {
+    const seeds = [layout.start, entrance, carriageway];
+    const strip = layout.street.pavement - 0.15;
+    const slim = floodReach(resolved, seeds, strip / 2 - 0.005);
+    for (const x of [-5, 105]) expect(slim.reached(x, 30), `${x}`).toBe(false);
+    const open = floodReach(
+      { ...resolved, obstacles: resolved.obstacles.filter((o) => o.id.split('-')[0] !== 'kit') },
+      seeds,
+      strip / 2 - 0.005,
+    );
+    for (const x of [-5, 105]) expect(open.reached(x, 30), `${x} without the kit props`).toBe(true);
   });
 
   // A body reaches half its width past the cells its centre can reach, so the footprint is grown by that.

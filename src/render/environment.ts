@@ -195,6 +195,7 @@ export function proceduralEnvironment(
   const obstacles = new Chunks(layout.bounds);
   const topDownOnly = new Chunks(layout.bounds);
   const detail = new Chunks(layout.bounds);
+  const standIns = new Chunks(layout.bounds);
   const { yard } = layout;
   for (const o of layout.obstacles) {
     const { cx, cy } = o.obb;
@@ -207,7 +208,9 @@ export function proceduralEnvironment(
   }
   const tokens = topDownOnly.meshes(solid, geometries);
   for (const mesh of tokens) group.add(mesh);
-  for (const piece of yardProps(layout)) detail.add(piece.x, piece.y, piece.geometry);
+  for (const piece of yardProps(layout)) {
+    (piece.kitStandIn === true ? standIns : detail).add(piece.x, piece.y, piece.geometry);
+  }
   // graded props wear their own copy, so the grade never reaches the layer-0 tokens
   const propMaterial = new MeshLambertNodeMaterial({ vertexColors: true });
   setGraded(propMaterial, true);
@@ -216,6 +219,15 @@ export function proceduralEnvironment(
     castAndReceive(mesh);
     group.add(mesh);
   }
+  // The kit's stand-ins give way to the kit's own drawing, so exactly one of them is seen.
+  const standInGroup = new Group();
+  const standInMeshes = standIns.meshes(solid, geometries);
+  for (const mesh of standInMeshes) {
+    castAndReceive(mesh);
+    standInGroup.add(mesh);
+  }
+  group.add(standInGroup);
+  props.push(...standInMeshes);
   // Without the props the obstacles must still show in perspective, so the tokens go to every camera.
   const propSwap = tokenCopy(tokens);
   propSwap.set(true); // detail on until the first setQuality
@@ -350,7 +362,9 @@ export function proceduralEnvironment(
   const legacyGround = domeGround(palette, false);
   const splitGround = domeGround(palette, true);
   const skyline = createSkyline(layout.bounds, haze);
-  const kit = createYardKitLayer(layout, palette, yardKit);
+  const kit = createYardKitLayer(layout, palette, yardKit, (drawn) => {
+    standInGroup.visible = !drawn;
+  });
   group.add(sky.mesh, skyline.mesh, kit.object);
 
   let graded = false;

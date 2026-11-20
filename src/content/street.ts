@@ -1,5 +1,6 @@
 import type {
   Fixture,
+  KitPiece,
   Marking,
   Obstacle,
   ObstacleKind,
@@ -10,6 +11,7 @@ import type {
   Surface,
 } from '../contracts/layout';
 import type { Obb } from '../contracts/sim';
+import { KIT_FOOTPRINTS, kitBackedTo, kitFootprint } from './kit';
 import { arrow, solidLine } from './markings';
 
 const KERB_WIDTH = 0.15;
@@ -122,6 +124,19 @@ export class PropBuilder {
       ...(fixture === undefined ? {} : { fixture }),
     });
   }
+
+  /** A kit piece that collides as one `kind` box over its own footprint, standing at `(x, y)`. */
+  addKit(piece: KitPiece, kind: ObstacleKind, x: number, y: number, heading: number): void {
+    const n = (this.counts.get('kit') ?? 0) + 1;
+    this.counts.set('kit', n);
+    const footprint = kitFootprint(piece, x, y, heading);
+    this.items.push({
+      id: `kit-${n}`,
+      asset: 'kit',
+      colliders: [{ kind, obb: footprint, height: KIT_FOOTPRINTS[piece].height }],
+      kit: { piece, footprint },
+    });
+  }
 }
 
 /** Boundary boxes just inside the yard edge, open at the street entrance. */
@@ -194,6 +209,54 @@ export function addGate(p: PropBuilder, { entrance }: StreetSpec): void {
       BARRIER.height,
     );
   });
+}
+
+const BACK_GAP = 0.05; // between a piece's back and the wall it stands against
+const SIGN = { inset: 0.5, y: 0.6 }; // beside each jamb, on the yard side of the edge wall
+
+/** Salt bin against the gatehouse and a sign post by each jamb of the entrance, facing the street. */
+export function addEntranceFurniture(p: PropBuilder, { entrance }: StreetSpec): void {
+  const { gap, length, width, y } = GATEHOUSE;
+  const [saltX, saltY] = kitBackedTo(
+    'salt-bin',
+    entrance.toX + gap + length / 2,
+    y + width / 2,
+    0,
+    BACK_GAP,
+  );
+  p.addKit('salt-bin', 'furniture', saltX, saltY, 0);
+  for (const x of [entrance.fromX - SIGN.inset, entrance.toX + SIGN.inset]) {
+    p.addKit('sign-post', 'furniture', x, SIGN.y, Math.PI);
+  }
+}
+
+/** Per side plot: a gate, then `pairs` of two panels each followed by a gate; it stops `wallGap` short of the yard wall. */
+const FENCE_RUN = { gate: 4, panel: 2.5, pairs: 4, wallGap: 0.2 };
+
+/**
+ * Fence with gates along the street edge of both side plots, flush against the pavement. The pieces
+ * collide like the yard's own edge; the plots behind them are not part of a run.
+ */
+export function addPlotFences(p: PropBuilder, { kerbY, pavement }: StreetSpec): void {
+  const { gate, panel, pairs, wallGap } = FENCE_RUN;
+  const run = gate + pairs * (2 * panel + gate);
+  const { min, max } = KIT_FOOTPRINTS['fence-gate'];
+  // origins of the first gate: the west run ends, the east run starts, `wallGap` off the yard wall
+  const starts = [YARD.minX - wallGap - run + gate - max[0], YARD.maxX + wallGap - min[0]];
+  for (const start of starts) {
+    let x = start;
+    const lay = (piece: 'fence-gate' | 'fence-panel', advance: number): void => {
+      const [ox, oy] = kitBackedTo(piece, x, kerbY + pavement, 0);
+      p.addKit(piece, 'fence', ox, oy, 0);
+      x += advance;
+    };
+    lay('fence-gate', gate);
+    for (let i = 0; i < pairs; i++) {
+      lay('fence-panel', panel);
+      lay('fence-panel', panel);
+      lay('fence-gate', gate);
+    }
+  }
 }
 
 /** Stop line across the yard exit with an arrow pointing out. A kerbed street carries no edge lines. */

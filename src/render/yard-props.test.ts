@@ -16,7 +16,7 @@ import { cornerHoops, decorPieces, RESTYLED_KINDS, yardProps } from './yard-prop
 const TOLERANCE = 0.05;
 const MAX_RELIEF = 0.16; // thin relief only, as for seals and dock lights
 const FLOAT32 = 1e-4;
-const FILLS_FOOTPRINT: readonly ObstacleKind[] = ['parked', 'gatehouse', 'bollard'];
+const FILLS_FOOTPRINT: readonly ObstacleKind[] = ['parked', 'gatehouse', 'bollard', 'furniture'];
 const FILLS_AXES: readonly ObstacleKind[] = ['kerb', 'wall', 'ramp', 'cone'];
 
 const cases = [
@@ -54,13 +54,16 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
     const boxes = yardProps(resolved).map((p) => new Box3().setFromObject(new Mesh(p.geometry)));
     const solid = resolved.obstacles.filter((o) => FILLS_FOOTPRINT.includes(o.kind));
     for (const { id, obb } of solid) {
-      const { cx, cy, halfLength, halfWidth } = obb;
+      const { cx, cy, heading } = obb;
+      const [c, s] = [Math.abs(Math.cos(heading)), Math.abs(Math.sin(heading))];
+      const halfX = c * obb.halfLength + s * obb.halfWidth;
+      const halfY = s * obb.halfLength + c * obb.halfWidth;
       const covers = boxes.some(
         (b) =>
-          Math.abs(b.min.x - (cx - halfLength)) < TOLERANCE &&
-          Math.abs(b.max.x - (cx + halfLength)) < TOLERANCE &&
-          Math.abs(b.min.z + (cy + halfWidth)) < TOLERANCE &&
-          Math.abs(b.max.z + (cy - halfWidth)) < TOLERANCE,
+          Math.abs(b.min.x - (cx - halfX)) < TOLERANCE &&
+          Math.abs(b.max.x - (cx + halfX)) < TOLERANCE &&
+          Math.abs(b.min.z + (cy + halfY)) < TOLERANCE &&
+          Math.abs(b.max.z + (cy - halfY)) < TOLERANCE,
       );
       expect(covers, id).toBe(true);
     }
@@ -191,6 +194,22 @@ describe('hall props', () => {
     const own = (prop: Prop): number => yardProps(withProps([prop])).length - plot;
     expect(own(a)).toBeGreaterThan(0);
     expect(yardProps(withProps([a, b])).length - plot).toBe(own(a) + own(b));
+  });
+});
+
+describe('kit props', () => {
+  it('stand in until the kit draws them: one flagged piece set per prop, nothing else flagged', () => {
+    for (const { resolved } of cases) {
+      const kitProps = resolved.props.filter((p) => p.asset === 'kit');
+      expect(kitProps.length).toBeGreaterThan(0);
+      const flagged = yardProps(resolved).filter((p) => p.kitStandIn === true);
+      const bare = yardProps({
+        ...resolved,
+        props: resolved.props.filter((p) => p.asset !== 'kit'),
+      });
+      expect(flagged.length).toBeGreaterThanOrEqual(kitProps.length);
+      expect(bare.some((p) => p.kitStandIn === true)).toBe(false);
+    }
   });
 });
 
