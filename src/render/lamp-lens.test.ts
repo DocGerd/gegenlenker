@@ -37,6 +37,7 @@ import {
 import { lampState } from './lamp-state';
 import { TRUCK_LOOKS } from './livery';
 import { KEYS } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { enableLayers, TOP_DOWN_LAYERS } from './seams';
 import { VehicleNodeMaterial } from './vehicle-pbr';
@@ -333,7 +334,7 @@ describe.each(TRUCK_IDS)('lamp slots of the %s truck', (id) => {
   it('carry the layout without shells', () => {
     const visual = proceduralTruck(spec, palette, undefined, env);
     for (const preset of ['balanced', 'high'] as const) {
-      visual.setQuality(QUALITY_FLAGS[preset]);
+      visual.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
       expectSlots(visual.object, lamps, [], preset === 'high');
     }
     visual.dispose();
@@ -349,7 +350,7 @@ describe.each(TRUCK_IDS)('lamp slots of the %s truck', (id) => {
     cabs.deliver();
     bodies.deliver();
     for (const preset of ['balanced', 'high'] as const) {
-      visual.setQuality(QUALITY_FLAGS[preset]);
+      visual.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
       const dark = shellMeshes(visual.object, [cab, body]);
       expect(dark).toHaveLength(2);
       expectSlots(visual.object, lamps, dark, preset === 'high');
@@ -374,7 +375,7 @@ describe.each(TRAILER_IDS)('lamp slots of the %s trailer', (id) => {
   it('carry the layout without shells', () => {
     const visual = proceduralTrailer(spec, palette, undefined, env);
     for (const preset of ['balanced', 'high'] as const) {
-      visual.setQuality(QUALITY_FLAGS[preset]);
+      visual.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
       expectSlots(visual.object, trailerLamps(spec, 'procedural').lamps, [], preset === 'high');
     }
     visual.dispose();
@@ -386,7 +387,7 @@ describe.each(TRAILER_IDS)('lamp slots of the %s trailer', (id) => {
     const visual = proceduralTrailer(spec, palette, loaded.shells, env);
     loaded.deliver();
     for (const preset of ['balanced', 'high'] as const) {
-      visual.setQuality(QUALITY_FLAGS[preset]);
+      visual.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
       const dark = shellMeshes(visual.object, [shell.trailer, shell.dolly]);
       expect(dark).toHaveLength(2);
       expectSlots(visual.object, trailerLamps(spec, 'shell').lamps, dark, preset === 'high');

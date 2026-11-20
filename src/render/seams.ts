@@ -5,6 +5,7 @@ import type { Rect, RenderFrame, ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import type { GpuOffer } from './gpu-backend';
+import type { Look } from './look';
 import type { QualityFlags } from './quality';
 /** three.js default layer: every camera sees it. */
 export const DEFAULT_LAYER = 0;
@@ -56,13 +57,13 @@ export function enableLayers(layers: Layers, ids: readonly number[]): void {
 export interface VehicleVisual {
   readonly object: Object3D;
   update(snapshot: SimSnapshot): void;
-  setQuality(flags: QualityFlags): void;
+  setLook(look: Look): void;
   dispose(): void;
 }
 export interface Environment {
   readonly object: Object3D; // ground, markings, obstacles, lights
   update(frame: RenderFrame, focus: ShadowFocus): void;
-  setQuality(flags: QualityFlags): void;
+  setLook(look: Look): void;
   dispose(): void;
 }
 export interface AidsLayer {

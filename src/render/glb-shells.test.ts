@@ -20,6 +20,7 @@ import {
 import { TRUCK_LOOKS } from './livery';
 import { createMirror } from './mirror';
 import { KEYS } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS, type QualityFlags } from './quality';
 import {
   AIDS_LAYER,
@@ -339,11 +340,11 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const shown = maskOf(group);
     expect(shown).not.toEqual(procedural);
 
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(maskOf(group)).toEqual(procedural);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(maskOf(group)).toEqual(shown);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(maskOf(group)).toEqual(procedural);
   });
 
@@ -352,15 +353,15 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const visual = proceduralTruck(spec, palette, d.shells);
     const group = visual.object;
     const procedural = maskOf(group);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     applyAll(d);
     expect(maskOf(group)).toEqual(procedural);
     expect(d.attached).toEqual([]);
 
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(group.children.length).toBeGreaterThan(procedural.length - 1);
     expect(maskOf(group)).not.toEqual(procedural);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(maskOf(group)).toEqual(procedural);
   });
 
@@ -369,9 +370,9 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const d = deferred(await loadBoth(id));
     const visual = proceduralTruck(spec, palette, d.shells);
     applyAll(d);
-    visual.setQuality(QUALITY_FLAGS.low);
-    visual.setQuality(QUALITY_FLAGS.balanced);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     visual.dispose();
     expect(error).not.toHaveBeenCalled();
     error.mockRestore();
@@ -386,10 +387,10 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
       const visual = proceduralTruck(spec, palette, d.shells);
       const group = visual.object;
       const procedural = maskOf(group);
-      visual.setQuality(flags(true, false));
+      visual.setLook(lookFor(flags(true, false), 'day'));
       applyAll(d);
       const cabOnly = maskOf(group);
-      visual.setQuality(flags(false, true));
+      visual.setLook(lookFor(flags(false, true), 'day'));
       const bodyOnly = maskOf(group);
       if (linked) {
         expect(cabOnly).toEqual(procedural);
@@ -399,9 +400,9 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
         expect(bodyOnly).not.toEqual(procedural);
         expect(bodyOnly).not.toEqual(cabOnly);
       }
-      visual.setQuality(flags(false, false));
+      visual.setLook(lookFor(flags(false, false), 'day'));
       expect(maskOf(group)).toEqual(procedural);
-      visual.setQuality(flags(true, true));
+      visual.setLook(lookFor(flags(true, true), 'day'));
       expect(group.children.length).toBeGreaterThan(procedural.length);
     },
   );
@@ -409,21 +410,21 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
   it('reports a shell when it attaches, not when it merely loads, and clears it on detach and dispose', async () => {
     const d = deferred(await loadBoth(id));
     const visual = proceduralTruck(spec, palette, d.shells);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     applyAll(d);
     expect(d.attached).toEqual([]);
 
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(d.attached).toEqual([
       [`${id}-cab`, true],
       [`${id}-body`, true],
     ]);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(d.attached.slice(2)).toEqual([
       [`${id}-cab`, false],
       [`${id}-body`, false],
     ]);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     visual.dispose();
     expect(d.attached.slice(6)).toEqual([
       [`${id}-cab`, false],
