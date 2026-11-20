@@ -175,9 +175,15 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   );
   expect(files.map(String).sort()).toEqual(
     [
+      /asphalt-albedo-[\w-]+\.ktx2$/,
+      /asphalt-packed-[\w-]+\.ktx2$/,
       /basis_transcoder-[\w-]+\.js$/,
       /basis_transcoder-[\w-]+\.wasm$/,
+      /concrete-albedo-[\w-]+\.ktx2$/,
+      /concrete-packed-[\w-]+\.ktx2$/,
       /ground-[\w-]+\.ktx2$/,
+      /pavers-albedo-[\w-]+\.ktx2$/,
+      /pavers-packed-[\w-]+\.ktx2$/,
       /sky-[\w-]+\.ktx2$/,
     ]
       .map(String)
@@ -193,6 +199,7 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   const marker = page.locator('html');
   await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/);
   const target = await marker.getAttribute('data-ground-texture');
+  await expect(marker).toHaveAttribute('data-ground-pbr', /^ktx2:[a-z0-9-]+$/);
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
   await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
@@ -216,6 +223,7 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   // the menu now also offers the replay of the run just finished
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
   await expect(page.locator('[data-view="follow"]')).toBeVisible();
+  await expect(marker).not.toHaveAttribute('data-ground-pbr', /.*/);
   await expect(marker).not.toHaveAttribute('data-vehicle-pbr', /.*/);
   await expect(marker).not.toHaveAttribute('data-sky-hdri', /.*/);
   await expect(marker).not.toHaveAttribute('data-perspective-grade', /.*/);
@@ -225,12 +233,13 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   await page.reload();
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
   await expect(marker).toHaveAttribute('data-ground-texture', target ?? '');
+  await expect(marker).toHaveAttribute('data-ground-pbr', /^ktx2:[a-z0-9-]+$/);
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
   await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
   expect(
     warnings.filter((w) =>
-      /Ground texture|Sky texture|Vehicle reflection|Perspective grade/.test(w),
+      /Ground texture|PBR ground|Sky texture|Vehicle reflection|Perspective grade/.test(w),
     ),
   ).toEqual([]);
   expect(errors).toEqual([]);

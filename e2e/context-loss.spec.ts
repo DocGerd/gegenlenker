@@ -78,6 +78,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   const html = page.locator('html');
   await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
+  await expect(html).toHaveAttribute('data-ground-pbr', /^ktx2:/);
   // a loss during a load would warn and spend a retry
   await expect(html).toHaveAttribute('data-sky-hdri', 'on');
   await page.evaluate(() => {

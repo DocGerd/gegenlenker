@@ -6,13 +6,24 @@ import {
 } from '../textures/ground-build';
 import { generateGroundTexture } from '../textures/ground-texture';
 import {
+  PBR_ENCODINGS,
+  PBR_MAPS,
+  PBR_SOURCE_IDS,
+  pbrInputsSha256,
+  pbrPixels,
+  pbrSourcesPresent,
+} from '../textures/pbr-build';
+import {
   ENCODER_OPTIONS as SKY_ENCODER,
   ENCODING_NAME as SKY_ENCODING,
   inputsSha256 as skyInputsSha256,
   SKY_FILES,
 } from '../textures/sky-build';
 import { hdriLightModule, readSkyImage, skyPixels } from '../textures/sky-pixels';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { canonicalJson, type Json, sha256 } from './provenance';
+import { SKY_HDR } from '../textures/sky-build';
 
 export type TexturePixels = {
   readonly width: number;
@@ -46,6 +57,8 @@ export type TextureAsset = {
   inputsSha256(root: string): string;
   /** Throws when a source that is not committed is missing. */
   pixels(root: string): TexturePixels;
+  /** Whether the sources that are not committed are on disk, so `pixels` can run. */
+  available(root: string): boolean;
   /** Ids in `ASSET_SOURCES` of the third-party files the pixels come from. */
   readonly sources: readonly string[];
   /** Set when a runtime constant is baked from the same sources as the ktx2. */
@@ -67,6 +80,22 @@ export function bakedSha256(light: Readonly<Record<string, unknown>> = HDRI_LIGH
   return sha256(canonicalJson(data as Json));
 }
 
+const PBR_ASSETS: Readonly<Record<string, TextureAsset>> = Object.fromEntries(
+  PBR_MAPS.map(({ key, surface, role }) => [
+    key,
+    {
+      key,
+      ktx2: `src/render/assets/${key}.ktx2`,
+      manifest: `src/render/assets/${key}.manifest.json`,
+      encoding: PBR_ENCODINGS[role],
+      inputsSha256: (root) => pbrInputsSha256(surface, role, root),
+      pixels: (root) => pbrPixels(surface, role, root),
+      available: (root) => pbrSourcesPresent(surface, role, root),
+      sources: [PBR_SOURCE_IDS[surface]],
+    } satisfies TextureAsset,
+  ]),
+);
+
 export const TEXTURE_ASSETS: Readonly<Record<string, TextureAsset>> = {
   ground: {
     key: 'ground',
@@ -75,6 +104,7 @@ export const TEXTURE_ASSETS: Readonly<Record<string, TextureAsset>> = {
     encoding: { name: 'linear-uastc-mips', options: GROUND_ENCODER },
     inputsSha256: groundInputsSha256,
     pixels: () => generateGroundTexture(),
+    available: () => true,
     sources: [],
   },
   sky: {
@@ -84,7 +114,9 @@ export const TEXTURE_ASSETS: Readonly<Record<string, TextureAsset>> = {
     encoding: { name: SKY_ENCODING, options: SKY_ENCODER },
     inputsSha256: skyInputsSha256,
     pixels: (root) => skyPixels(readSkyImage(root)),
+    available: (root) => existsSync(join(root, SKY_HDR.path)),
     sources: ['kloofendal-sky'],
     bake: { file: SKY_FILES.bake, source: hdriLightModule, bakedSha256 },
   },
+  ...PBR_ASSETS,
 };

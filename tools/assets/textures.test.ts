@@ -1,10 +1,9 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { read } from 'ktx-parse';
 import { describe, expect, it } from 'vitest';
 import { HDRI_LIGHT } from '../../src/render/hdri-light';
 import { ASSET_REGISTRY } from '../../src/render/asset-registry';
-import { SKY_HDR } from '../textures/sky-build';
 import { encoderVersion, KV_INPUTS, readKv, ROOT, sha256 } from './provenance';
 import { bakedSha256, TEXTURE_ASSETS, type TextureManifest } from './textures';
 
@@ -42,8 +41,8 @@ describe.each(assets)('texture $key', (asset) => {
     });
   });
 
-  it.skipIf(!existsSync(join(ROOT, SKY_HDR.path)) && asset.key === 'sky')(
-    'generates the pixels its manifest records (skipped without the uncommitted sky .hdr)',
+  it.skipIf(!asset.available(ROOT))(
+    'generates the pixels its manifest records (skipped without its uncommitted sources, see docs/asset-credits.md)',
     () => {
       expect(sha256(asset.pixels(ROOT).rgba)).toBe(manifest.pixelsSha256);
     },

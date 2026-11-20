@@ -15,6 +15,8 @@ export type QualityFlags = {
   /** Dashboard, pillars, header and visor around the cockpit view, and the mirror housings. */
   readonly cockpitInterior: boolean;
   readonly groundTexture: boolean;
+  /** Photoscanned PBR yard, street and pavement ground with slab joints; a download, and needs `groundTexture`. */
+  readonly groundPbr: boolean;
   /** Lit perspective copies of the ground markings; the top-down tokens stay flat. */
   readonly litMarkings: boolean;
   readonly pbr: boolean;
@@ -37,6 +39,7 @@ const BALANCED: QualityFlags = {
   cockpitInterior: true,
   litMarkings: true,
   groundTexture: false,
+  groundPbr: false,
   pbr: false,
   perspectiveLighting: false,
   aerialPerspective: false,
@@ -58,6 +61,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     cockpitInterior: false,
     litMarkings: false,
     groundTexture: false,
+    groundPbr: false,
     pbr: false,
     perspectiveLighting: false,
     aerialPerspective: false,
@@ -67,6 +71,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
   high: {
     ...BALANCED,
     groundTexture: true,
+    groundPbr: true,
     pbr: true,
     perspectiveLighting: true,
     aerialPerspective: true,
