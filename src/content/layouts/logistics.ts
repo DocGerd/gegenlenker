@@ -1,12 +1,14 @@
 import type { Layout, Marking } from '../../contracts/layout';
 import { numberMarkings, solidLine } from '../markings';
+import { plotDecor } from '../plot';
 import {
-  addBollard,
+  addBollardProp,
   addGate,
   addLamps,
   addYardEdge,
   BOUNDS,
   ObstacleBuilder,
+  PropBuilder,
   STREET,
   YARD,
 } from '../street';
@@ -30,20 +32,29 @@ const DOCK_NUMBER_OFFSET = 1.5; // below the ramp edge
 const PARKING_LINE_WIDTH = 0.12;
 const PARKING_LINE_OVERHANG = 0.75; // beyond the trailer ends
 
-function build(): Layout['obstacles'] {
+function obstacles(): Layout['obstacles'] {
   const b = new ObstacleBuilder('');
   addYardEdge(b, 'wall', WALL_THICKNESS, WALL_HEIGHT, STREET.entrance);
-  b.addRect('hall', HALL, HALL_HEIGHT);
-  b.addRect('ramp', RAMP, RAMP_HEIGHT);
-  for (const x of TRAILER_X) {
-    b.addBox('parked', x, TRAILER_Y, TRAILER.width, TRAILER.length, 0, TRAILER.height);
-  }
-  addLamps(b, STREET);
-  addGate(b, STREET);
-  for (const x of [RAMP.minX - RAMP_BOLLARD_OFFSET, RAMP.maxX + RAMP_BOLLARD_OFFSET]) {
-    addBollard(b, x, RAMP.minY + RAMP_BOLLARD_OFFSET / 2);
-  }
   return b.obstacles;
+}
+
+function props(): Layout['props'] {
+  const p = new PropBuilder();
+  p.add('hall', (b) => {
+    b.addRect('hall', HALL, HALL_HEIGHT);
+    b.addRect('ramp', RAMP, RAMP_HEIGHT);
+  });
+  for (const x of TRAILER_X) {
+    p.add('parked', (b) =>
+      b.addBox('parked', x, TRAILER_Y, TRAILER.width, TRAILER.length, 0, TRAILER.height),
+    );
+  }
+  addLamps(p, STREET);
+  addGate(p, STREET);
+  for (const x of [RAMP.minX - RAMP_BOLLARD_OFFSET, RAMP.maxX + RAMP_BOLLARD_OFFSET]) {
+    addBollardProp(p, x, RAMP.minY + RAMP_BOLLARD_OFFSET / 2);
+  }
+  return p.props;
 }
 
 function bayLines(): Marking[] {
@@ -82,6 +93,8 @@ export const logistics: Layout = {
   yard: YARD,
   street: STREET,
   start: { x: 30, y: 20, heading: 0 },
-  obstacles: build(),
+  obstacles: obstacles(),
+  props: props(),
+  decor: plotDecor(YARD),
   markings: [...bayLines(), ...parkingLines()],
 };

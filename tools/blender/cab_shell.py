@@ -4,9 +4,9 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
   PARAMS_PATH  path of tools/blender/params/<id>.cab.json
   PARAMS_JSON  the same JSON as text; wins over PARAMS_PATH (for hosts that cannot read the path)
   OUT_PATH     where the raw .glb is written
-  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ...}; the run aborts on a mismatch
+  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ..., "lampCommonSha256": ...}; the run aborts on a mismatch
 
-Two vertex-coloured meshes in the sim body frame (shell_common.py): "cab", and "cab-lens" with the
+Two vertex-coloured meshes in the sim body frame (blender_common.py): "cab", and "cab-lens" with the
 lamp lenses of `lenses` (src/render/lamp-layout.ts). Livery is colours only: no lettering, emblems or
 maker logos. Styles: "day" (short day cab) and "crew" (double cab with a second
 side window row, a roof rack and a front tow coupling).
@@ -17,8 +17,11 @@ Tested Blender version: 5.3.0 (bpy.app.version_string is printed and recorded in
 import os
 import runpy
 
-COMMON_FILE = os.path.join(os.path.dirname(__file__), "shell_common.py")
+HERE = os.path.dirname(__file__)
+COMMON_FILE = os.path.join(HERE, "blender_common.py")
+LAMP_FILE = os.path.join(HERE, "lamp_common.py")
 COMMON = runpy.run_path(COMMON_FILE)
+LAMP = runpy.run_path(LAMP_FILE)
 Shape = COMMON["Shape"]
 srgb = COMMON["srgb_to_linear"]
 
@@ -188,7 +191,7 @@ def check_envelope(p, shape):
 
 def check_lenses(p, shape, lens):
     """Each lens sits on a face of the cab and stays behind the plate's face."""
-    COMMON["check_seated"](shape, p["lenses"])
+    LAMP["check_seated"](shape, p["lenses"])
     for (x0, x1), _, _ in lens.extents():
         if x1 > p["frontX"] + p["plateRelief"] - EPS:
             raise ValueError("a lamp lens reaches the plate's face")
@@ -202,7 +205,9 @@ def main():
         raise ValueError("the bumper face must stay behind the plate")
     if params["style"] not in ("day", "crew"):
         raise ValueError("unknown cab style " + repr(params["style"]))
-    hashes = COMMON["provenance"](__file__, COMMON_FILE, params)
+    hashes = COMMON["provenance"](
+        __file__, {"commonSha256": COMMON_FILE, "lampCommonSha256": LAMP_FILE}, params
+    )
     COMMON["check_expected"](hashes, globals().get("EXPECTED_SHA256"))
     hues = {key: srgb(value) for key, value in sorted(params["hues"].items())}
 
@@ -214,7 +219,7 @@ def main():
     if params["style"] == "crew":
         tow_coupling(params, shape, hues)
     check_envelope(params, shape)
-    lens = COMMON["lens_shape"](params["lenses"])
+    lens = LAMP["lens_shape"](params["lenses"])
     check_lenses(params, shape, lens)
     return COMMON["export"](OUT_PATH, "cab-shell", hashes, [("cab", shape), ("cab-lens", lens)])
 

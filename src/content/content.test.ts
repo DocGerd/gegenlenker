@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISE_IDS } from '../contracts/exercise';
 import type { ExerciseId } from '../contracts/exercise';
-import { LAYOUT_IDS } from '../contracts/layout';
+import { colliderId, LAYOUT_IDS } from '../contracts/layout';
 import type { Obstacle } from '../contracts/layout';
 import type { ControlVector, Pose2, Simulation, SimSnapshot, Vec2 } from '../contracts/sim';
-import { createContactQuery, obbOverlap } from '../sim/collision';
+import { createContactQuery, obbOverlap, SELF_OBSTACLE_ID } from '../sim/collision';
 import { wrapAngle } from '../sim/angle';
 import { bodyFootprints } from '../sim/geometry';
 import { createSimulation } from '../sim/simulation';
@@ -76,9 +76,11 @@ function driveBy(sim: Simulation, gear: 'D' | 'R'): SimSnapshot {
 }
 
 describe.each(cases)('$name', ({ resolved, start, exercise }) => {
-  it('has unique obstacle ids', () => {
+  // dataFingerprint hashes the ordered OBBs without ids: sound only while contacts are counted by unique ids.
+  it('has unique obstacle ids, none the self id', () => {
     const ids = resolved.obstacles.map((o) => o.id);
     expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).not.toContain(SELF_OBSTACLE_ID);
   });
 
   it.each(pairs)(
@@ -252,6 +254,95 @@ it('slalom cannot be driven in a straight line', () => {
     }
   }
   expect(free).toEqual([]);
+});
+
+describe.each(Object.values(layouts))('$id props', (layout) => {
+  it('have unique slash-free ids, colliders, and a fixture exactly on lamps', () => {
+    const ids = layout.props.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const prop of layout.props) {
+      expect(prop.id, prop.id).not.toContain('/');
+      expect(prop.colliders.length, prop.id).toBeGreaterThan(0);
+      expect(prop.fixture !== undefined, prop.id).toBe(prop.asset === 'lamp');
+    }
+  });
+
+  it('resolve after the street and loose obstacles, before the exercise ones', () => {
+    for (const exercise of [null, ...exercises.filter((e) => e.layout === layout.id)]) {
+      const resolved = resolveLayout(layout, exercise);
+      const loose = layout.obstacles.map((o) => o.id);
+      const colliders = layout.props.flatMap((p) => p.colliders.map((_, i) => colliderId(p.id, i)));
+      const ids = resolved.obstacles.map((o) => o.id);
+      const from = ids.indexOf(loose[0] ?? colliders[0] ?? '');
+      expect(ids.slice(from, from + loose.length + colliders.length)).toEqual([
+        ...loose,
+        ...colliders,
+      ]);
+      expect(ids.slice(0, from).every((id) => id.startsWith('street-'))).toBe(true);
+      expect(ids.slice(from + loose.length + colliders.length)).toEqual(
+        (exercise?.obstacles ?? []).map((o) => o.id),
+      );
+    }
+  });
+});
+
+const EDGE_STEP = 0.5;
+const EDGE_PROBE = 0.05; // inside the yard edge, within a boundary wall's thickness
+
+describe.each(Object.values(layouts))('$id decor', (layout) => {
+  const { surfaces, bounds } = resolveLayout(layout, null);
+
+  it('has unique ids', () => {
+    const ids = layout.decor.map((d) => d.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // Nothing outside the yard and street surfaces is drivable once the yard's north edge is closed
+  // along the decor's whole width and the decor lies beyond it, inside the yard's x range.
+  it('lies beyond a closed north edge, so no vehicle reaches it', () => {
+    const { yard, obstacles } = resolveLayout(layout, null);
+    for (const { id, footprint: f } of layout.decor) {
+      const c = Math.abs(Math.cos(f.heading));
+      const s = Math.abs(Math.sin(f.heading));
+      const halfX = c * f.halfLength + s * f.halfWidth;
+      const halfY = s * f.halfLength + c * f.halfWidth;
+      expect(f.cy - halfY, id).toBeGreaterThan(yard.maxY);
+      expect(f.cx - halfX, id).toBeGreaterThanOrEqual(yard.minX);
+      expect(f.cx + halfX, id).toBeLessThanOrEqual(yard.maxX);
+      const open: number[] = [];
+      for (let x = f.cx - halfX; x <= f.cx + halfX; x += EDGE_STEP) {
+        const probe = {
+          cx: x,
+          cy: yard.maxY - EDGE_PROBE,
+          halfLength: 0.01,
+          halfWidth: 0.01,
+          heading: 0,
+        };
+        if (!obstacles.some((o) => obbOverlap(probe, o.obb))) open.push(x);
+      }
+      expect(open, id).toEqual([]);
+    }
+  });
+
+  it('stands off the yard and street surfaces and inside the layout bounds', () => {
+    for (const { id, footprint: f } of layout.decor) {
+      const reach = Math.hypot(f.halfLength, f.halfWidth);
+      expect(f.cx - reach, id).toBeGreaterThan(bounds.minX);
+      expect(f.cx + reach, id).toBeLessThan(bounds.maxX);
+      expect(f.cy - reach, id).toBeGreaterThan(bounds.minY);
+      expect(f.cy + reach, id).toBeLessThan(bounds.maxY);
+      for (const { kind, rect } of surfaces) {
+        const surface = {
+          cx: (rect.minX + rect.maxX) / 2,
+          cy: (rect.minY + rect.maxY) / 2,
+          halfLength: (rect.maxX - rect.minX) / 2,
+          halfWidth: (rect.maxY - rect.minY) / 2,
+          heading: 0,
+        };
+        expect(obbOverlap(f, surface), `${id} on ${kind}`).toBe(false);
+      }
+    }
+  });
 });
 
 it('registers exactly the contract ids', () => {
