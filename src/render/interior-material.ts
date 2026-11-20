@@ -112,13 +112,34 @@ async function buildInteriorShader(gpu: WebGPURenderer, envMap: Texture): Promis
 
 export type InteriorVerdict = 'ok' | 'failed' | 'pending';
 
-/** Whether the lit interior compiles on the live renderer with the sky map it will wear. */
+/**
+ * What of a sky map can change the interior's program: three keys a material on its map's mapping,
+ * encoding, filters, format and size, not on which texture it is. Two maps with one key build one
+ * program, so the HDRI sky replacing the analytic one needs no new check.
+ */
+export function programKey(map: Texture): string {
+  const { width, height } = map.image as { width?: number; height?: number };
+  return [
+    map.mapping,
+    map.colorSpace,
+    map.minFilter,
+    map.magFilter,
+    map.format,
+    map.type,
+    map.channel,
+    map.isRenderTargetTexture,
+    width,
+    height,
+  ].join('/');
+}
+
+/** Whether the lit interior compiles on the live renderer with the kind of sky map it will wear. */
 export interface InteriorCheck {
   /** The renderer the checks run on; a different one drops every verdict. */
   attach(gpu: WebGPURenderer): void;
   /**
-   * `ok` once `map` built the interior shader, `failed` if it did not, `pending` while it is
-   * checked or without a renderer. The first ask for a map starts its check.
+   * `ok` once a map of `map`'s program built the interior shader, `failed` if it did not, `pending`
+   * while it is checked or without a renderer. The first ask for a program starts its check.
    */
   verdict(map: Texture): InteriorVerdict;
   /** `listener` runs when a verdict is settled; returns the unsubscribe. */
@@ -128,37 +149,39 @@ export interface InteriorCheck {
 
 export function createInteriorCheck(
   compiles: (gpu: WebGPURenderer, map: Texture) => Promise<boolean> = interiorShaderCompiles,
+  keyOf: (map: Texture) => string = programKey,
 ): InteriorCheck {
   let renderer: WebGPURenderer | null = null;
-  let verdicts = new WeakMap<Texture, InteriorVerdict>();
+  let verdicts = new Map<string, InteriorVerdict>();
   const listeners = new Set<() => void>();
-  const settle = (gpu: WebGPURenderer, map: Texture, ok: boolean): void => {
+  const settle = (gpu: WebGPURenderer, key: string, ok: boolean): void => {
     // a stale request, or a compile on a lost context, which passes vacuously
-    if (renderer !== gpu || verdicts.get(map) !== 'pending') return;
+    if (renderer !== gpu || verdicts.get(key) !== 'pending') return;
     if (gpuLost(gpu)) {
-      verdicts.delete(map);
+      verdicts.delete(key);
       return;
     }
-    verdicts.set(map, ok ? 'ok' : 'failed');
+    verdicts.set(key, ok ? 'ok' : 'failed');
     for (const listener of [...listeners]) listener();
   };
   return {
     attach(gpu) {
       if (gpu === renderer) return;
       renderer = gpu;
-      verdicts = new WeakMap();
+      verdicts = new Map();
     },
     verdict(map) {
       const gpu = renderer;
       if (gpu === null) return 'pending';
-      const known = verdicts.get(map);
+      const key = keyOf(map);
+      const known = verdicts.get(key);
       if (known !== undefined) return known;
-      verdicts.set(map, 'pending');
+      verdicts.set(key, 'pending');
       compiles(gpu, map).then(
-        (ok) => settle(gpu, map, ok),
+        (ok) => settle(gpu, key, ok),
         (error: unknown) => {
           console.warn('Interior shader failed', error);
-          settle(gpu, map, false);
+          settle(gpu, key, false);
         },
       );
       return 'pending';
@@ -171,7 +194,7 @@ export function createInteriorCheck(
     },
     dispose() {
       renderer = null;
-      verdicts = new WeakMap();
+      verdicts = new Map();
       listeners.clear();
     },
   };

@@ -198,10 +198,11 @@ describe.each(trucks)('lit interior of $id', (spec) => {
         },
       } as unknown as VehicleEnvironment;
       let state: InteriorVerdict = verdict ?? 'ok';
+      const perMap = new Map<Texture, InteriorVerdict>();
       const checkListeners = new Set<() => void>();
       const check: InteriorCheck = {
         attach: () => undefined,
-        verdict: () => state,
+        verdict: (m) => perMap.get(m) ?? state,
         onChange: (listener) => {
           checkListeners.add(listener);
           return () => checkListeners.delete(listener);
@@ -213,12 +214,13 @@ describe.each(trucks)('lit interior of $id', (spec) => {
         check,
         listeners,
         checkListeners,
-        deliver: () => {
-          ready = map;
+        deliver: (next: DataTexture = map) => {
+          ready = next;
           listeners.forEach((listener) => listener());
         },
-        settle: (next: InteriorVerdict) => {
-          state = next;
+        settle: (next: InteriorVerdict, only?: Texture) => {
+          if (only === undefined) state = next;
+          else perMap.set(only, next);
           checkListeners.forEach((listener) => listener());
         },
       };
@@ -245,6 +247,30 @@ describe.each(trucks)('lit interior of $id', (spec) => {
       expect(t.listeners.size + t.checkListeners.size).toBe(0);
     });
 
+    it('stays lit without a map while a new program is checked, and falls back only if it fails', async () => {
+      const other = new DataTexture(new Uint8Array(16), 2, 2);
+      const run = async (settleAs: InteriorVerdict) => {
+        const t = setup('ok');
+        const interior = createGlbInterior(spec, { env: t.env, palette, check: t.check });
+        interior.attach(await glb(spec.id));
+        interior.setLook(day(QUALITY_FLAGS.high));
+        t.deliver();
+        expect(mapOf(interior)).toBe(map);
+        t.settle('pending', other);
+        t.deliver(other);
+        expect(lit(interior), 'checking').toBe(true);
+        expect(mapOf(interior)).toBeNull();
+        expect(interior.meshes.every((m) => m.receiveShadow)).toBe(true);
+        t.settle(settleAs, other);
+        return interior;
+      };
+      const ok = await run('ok');
+      expect(mapOf(ok)).toBe(other);
+      const failed = await run('failed');
+      expect(lit(failed)).toBe(false);
+      expect(failed.meshes.every((m) => !m.receiveShadow)).toBe(true);
+    });
+
     it('falls back to the plain interior where the shader fails, leaving the grade and sun on', async () => {
       const t = setup('pending');
       const interior = createGlbInterior(spec, { env: t.env, palette, check: t.check });
@@ -266,9 +292,10 @@ describe.each(trucks)('lit interior of $id', (spec) => {
 describe('the interior check', () => {
   const gpu = (): WebGPURenderer => ({ getContext: () => null }) as unknown as WebGPURenderer;
   const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
-  const map = (): Texture => new DataTexture(new Uint8Array(4), 1, 1);
+  /** Maps of one size share a program. */
+  const map = (size = 1): Texture => new DataTexture(new Uint8Array(4 * size * size), size, size);
 
-  it('is pending without a renderer, then checks each map once on the attached one', async () => {
+  it('is pending without a renderer, then checks a program once on the attached one', async () => {
     const compiles = vi.fn(() => Promise.resolve(true));
     const check = createInteriorCheck(compiles);
     const a = map();
@@ -285,6 +312,11 @@ describe('the interior check', () => {
     expect(compiles).toHaveBeenCalledWith(first, a);
     expect(check.verdict(a)).toBe('ok');
     expect(changed).toHaveBeenCalledOnce();
+    // another map of the same program needs no check: the HDRI sky replacing the analytic one
+    expect(check.verdict(map())).toBe('ok');
+    expect(compiles).toHaveBeenCalledTimes(1);
+    expect(check.verdict(map(2))).toBe('pending');
+    expect(compiles).toHaveBeenCalledTimes(2);
   });
 
   it('fails a map whose shader did not build or threw, and drops every verdict with a new renderer', async () => {
@@ -296,7 +328,7 @@ describe('the interior check', () => {
       .mockResolvedValue(true);
     const check = createInteriorCheck(compiles);
     check.attach(gpu());
-    const [a, b] = [map(), map()];
+    const [a, b] = [map(1), map(2)];
     check.verdict(a);
     check.verdict(b);
     await settled();

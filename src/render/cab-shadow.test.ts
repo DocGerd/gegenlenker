@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { type BufferGeometry, type Mesh, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { trucks } from '../vehicles/registry';
-import { type CabOpenings, cabOpenings, cabShadowCaster, ROOF } from './cab-shadow';
+import { type CabOpenings, cabOpenings, cabShadowCaster, CORNER, ROOF } from './cab-shadow';
 import { cabShellParams } from './cab-dims';
 import { parseMeshes } from './glb-shells';
 import { interiorShellFrom } from './interior-glb';
@@ -125,6 +125,73 @@ describe.each(trucks)('the cab shadow caster of $id', (spec) => {
     expect(shadowedLit / lit).toBeLessThan(0.05);
   });
 
+  it('stays inside the skin, so the chamfered front corners stay lit and the yard shadow keeps its shape', async () => {
+    const p = cabShellParams(spec);
+    const hw = p.width / 2;
+    const rear = p.frontX - p.cabLength;
+    const z1 = p.cabHeight - ROOF;
+    const eps = 1e-4;
+    const standIn = cabShadowCaster(spec).getAttribute('position');
+    for (let i = 0; i < standIn.count; i++) {
+      const [x, h, y] = [standIn.getX(i), standIn.getY(i), -standIn.getZ(i)];
+      // the skin's front recedes with height over the roof band, and its chamfer with it
+      const recede = Math.min(Math.max(h - z1, 0), ROOF);
+      const limit = hw - Math.max(0, x - (p.frontX - CORNER - recede));
+      const label = `vertex ${i} (${x.toFixed(3)}, ${y.toFixed(3)}, ${h.toFixed(3)})`;
+      expect(h, label).toBeGreaterThanOrEqual(p.frameTop - eps);
+      expect(h, label).toBeLessThanOrEqual(p.cabHeight + eps);
+      expect(x, label).toBeGreaterThanOrEqual(rear - eps);
+      expect(x, label).toBeLessThanOrEqual(p.frontX - recede + eps);
+      expect(Math.abs(y), label).toBeLessThanOrEqual(limit + eps);
+    }
+
+    // sun-facing chamfer points of the skin are lit with the stand-in as without it
+    const skin = (await parseMeshes(bytesOf(`${spec.id}-cab`))).find((m) => m.name === 'cab');
+    if (skin === undefined) throw new Error('no cab skin');
+    skin.updateWorldMatrix(true, false);
+    const skinTriangles = triangles(skin.geometry, skin);
+    const added = triangles(cabShadowCaster(spec));
+    const shadowedBy = (set: Triangle[], from: Vector3, sun: Vector3): boolean =>
+      set.some((c) => normal(c).dot(sun) < 0 && hit(from, sun, c) !== null);
+    const corners = skinTriangles.filter((t) => {
+      const n = normal(t);
+      const centre = t[0].clone().add(t[1]).add(t[2]).divideScalar(3);
+      return (
+        Math.abs(n.y) < 1e-3 &&
+        Math.abs(n.x - Math.SQRT1_2) < 1e-3 &&
+        centre.x > p.frontX - 2 * CORNER &&
+        centre.y > 1.3 &&
+        centre.y < 2.7
+      );
+    });
+    expect(corners.length).toBeGreaterThan(0);
+    let facing = 0;
+    let lit = 0;
+    for (let k = 0; k < 32; k++) {
+      const sun = perspectiveSunDirection().applyAxisAngle(
+        new Vector3(0, 1, 0),
+        -(k / 32) * 2 * Math.PI,
+      );
+      for (const tri of corners) {
+        const n = normal(tri);
+        if (n.dot(sun) <= 0.05) continue;
+        facing++;
+        const from = tri[0]
+          .clone()
+          .add(tri[1])
+          .add(tri[2])
+          .divideScalar(3)
+          .addScaledVector(n, 1e-3);
+        // the skin's own fittings may shade a point; the stand-in must add nothing
+        if (shadowedBy(skinTriangles, from, sun)) continue;
+        lit++;
+        expect(shadowedBy(added, from, sun), `chamfer lit at heading ${k}`).toBe(false);
+      }
+    }
+    expect(facing).toBeGreaterThan(0);
+    expect(lit / facing).toBeGreaterThan(0.5);
+  });
+
   it('is hollow exactly at the glass and roof edge the cab asset draws', async () => {
     const p = cabShellParams(spec);
     const open = cabOpenings(spec);
@@ -155,5 +222,12 @@ describe.each(trucks)('the cab shadow caster of $id', (spec) => {
     const skin = vertices('cab');
     expect(skin.some((v) => near(v.x, p.frontX - ROOF) && near(v.y, p.cabHeight))).toBe(true);
     expect(skin.some((v) => near(v.x, p.frontX) && near(v.y, p.cabHeight - ROOF))).toBe(true);
+    // the vertical front edges are chamfered by CORNER
+    expect(skin.some((v) => near(v.x, p.frontX - CORNER) && near(Math.abs(v.z), p.width / 2))).toBe(
+      true,
+    );
+    expect(skin.some((v) => near(v.x, p.frontX) && near(Math.abs(v.z), p.width / 2 - CORNER))).toBe(
+      true,
+    );
   });
 });

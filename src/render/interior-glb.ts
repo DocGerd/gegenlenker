@@ -6,7 +6,11 @@ import { createCockpitInterior, type FlatInterior } from './cockpit-interior';
 import arocsUrl from './assets/arocs-1835-ak-interior.glb?url';
 import manUrl from './assets/man-le-18-280-interior.glb?url';
 import type { InteriorMeshName } from './interior-dims';
-import { type InteriorCheck, InteriorNodeMaterial } from './interior-material';
+import {
+  type InteriorCheck,
+  InteriorNodeMaterial,
+  type InteriorVerdict,
+} from './interior-material';
 import type { Look } from './look';
 import { INTERIOR_LAYER, type CockpitInterior } from './seams';
 import type { Shells } from './glb-shells';
@@ -107,19 +111,23 @@ export function createGlbInterior(
   const litMaterial = (): InteriorNodeMaterial => (lit ??= new InteriorNodeMaterial());
 
   /**
-   * Lit and sun-shadowed under perspective lighting once the sky map is ready and has built the lit
-   * shader; plain until then and wherever that fails, which leaves the grade and the sun to the rest.
+   * Lit and sun-shadowed under perspective lighting once the sky map is ready and its program has
+   * built the lit shader; plain until then and wherever that fails, which leaves the grade and the sun
+   * to the rest. A map of a program not checked yet leaves a lit interior lit, without a map, until
+   * the check settles.
    */
   const dress = (): void => {
     if (look === null) return;
     const on = look.flags.perspectiveLighting;
     const map = on && palette !== undefined ? (env?.texture(palette, look.mode) ?? null) : null;
+    const verdict: InteriorVerdict =
+      map === null ? (env === undefined ? 'ok' : 'pending') : (check?.verdict(map) ?? 'ok');
     const lightable = on && (env === undefined || map !== null);
-    useLit = lightable && (map === null || (check?.verdict(map) ?? 'ok') === 'ok');
+    useLit = lightable && (verdict === 'ok' || (verdict === 'pending' && useLit));
     if (useLit) {
       const material = litMaterial();
       setGraded(material, look.grade.on);
-      material.envMap = map;
+      material.envMap = verdict === 'ok' ? map : null;
     }
     for (const mesh of meshes) {
       mesh.material = current();

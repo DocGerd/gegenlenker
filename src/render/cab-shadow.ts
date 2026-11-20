@@ -45,7 +45,10 @@ export function cabOpenings(spec: TruckSpec): CabOpenings {
   return { windscreen: { y: [-windscreenHalf, windscreenHalf], z }, sides, sideZ: z };
 }
 
-/** The hollow cab, Three space, in the truck's frame. */
+/** The front vertical edges are chamfered by this much (cab_shell.py CORNER). */
+export const CORNER = 0.12;
+
+/** The hollow cab, Three space, in the truck's frame; every slab stays inside the skin. */
 export function cabShadowCaster(spec: TruckSpec): BufferGeometry {
   const p = cabShellParams(spec);
   const { windscreen, sides, sideZ } = cabOpenings(spec);
@@ -55,37 +58,47 @@ export function cabShadowCaster(spec: TruckSpec): BufferGeometry {
   const [z0, z2] = [p.frameTop, p.cabHeight];
   const [sill, top] = sideZ;
   const z1 = z2 - ROOF;
-  const slope = new BoxGeometry(ROOF * Math.SQRT2, SLAB, p.width)
+  /** Where the chamfer starts on the walls, and on the roof, whose front edge recedes by ROOF. */
+  const wallEnd = front - CORNER;
+  const roofEnd = wallEnd - ROOF;
+  const flat = hw - CORNER;
+  const inward = SLAB / (2 * Math.SQRT2);
+  const slope = new BoxGeometry(ROOF * Math.SQRT2, SLAB, 2 * flat)
     .rotateZ((3 * Math.PI) / 4)
     // the slab's outer face on the sloped skin, the rest inside it
-    .translate(
-      front - ROOF / 2 - SLAB / (2 * Math.SQRT2),
-      z1 + ROOF / 2 - SLAB / (2 * Math.SQRT2),
-      0,
-    );
+    .translate(front - ROOF / 2 - inward, z1 + ROOF / 2 - inward, 0);
+  // a wall slab along each chamfer, its outer face on the chamfer plane
+  const chamfer = (side: -1 | 1): BufferGeometry =>
+    new BoxGeometry(CORNER * Math.SQRT2, z1 - z0, SLAB)
+      .rotateY((-side * Math.PI) / 4)
+      .translate(front - CORNER / 2 - inward, (z0 + z1) / 2, -side * (hw - CORNER / 2 - inward));
   const parts: BufferGeometry[] = [
-    box([rear, front - ROOF], [-hw, hw], [z2 - SLAB, z2]),
+    box([rear, roofEnd], [-hw, hw], [z2 - SLAB, z2]),
+    box([roofEnd, front - ROOF], [-flat, flat], [z2 - SLAB, z2]),
     slope,
-    box([rear, front], [-hw, hw], [z0, z0 + SLAB]),
+    box([rear, wallEnd], [-hw, hw], [z0, z0 + SLAB]),
+    box([wallEnd, front], [-flat, flat], [z0, z0 + SLAB]),
     box([rear, rear + SLAB], [-hw, hw], [z0, z2]),
+    chamfer(-1),
+    chamfer(1),
     // front wall: below and above the windscreen, and the pillars beside it
-    box([front - SLAB, front], [-hw, hw], [z0, sill]),
-    box([front - SLAB, front], [-hw, hw], [top, z1]),
-    box([front - SLAB, front], [-hw, windscreen.y[0]], [sill, top]),
-    box([front - SLAB, front], [windscreen.y[1], hw], [sill, top]),
+    box([front - SLAB, front], [-flat, flat], [z0, sill]),
+    box([front - SLAB, front], [-flat, flat], [top, z1]),
+    box([front - SLAB, front], [-flat, windscreen.y[0]], [sill, top]),
+    box([front - SLAB, front], [windscreen.y[1], flat], [sill, top]),
   ];
   const side = (y: Range): void => {
     parts.push(
-      box([rear, front], y, [z0, sill]),
-      box([rear, front - ROOF], y, [top, z2]),
-      box([front - ROOF, front], y, [top, z1]),
+      box([rear, wallEnd], y, [z0, sill]),
+      box([rear, roofEnd], y, [top, z2]),
+      box([roofEnd, wallEnd], y, [top, z1]),
     );
     let from = rear;
     for (const [x0, x1] of sides) {
       parts.push(box([from, x0], y, [sill, top]));
       from = x1;
     }
-    parts.push(box([from, front], y, [sill, top]));
+    parts.push(box([from, wallEnd], y, [sill, top]));
   };
   side([hw - SLAB, hw]);
   side([-hw, -hw + SLAB]);
