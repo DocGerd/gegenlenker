@@ -20,6 +20,10 @@ const MIRROR_GAP = 8;
 const COCKPIT_LABEL = 32;
 /** Per side, so the area grows by its square. */
 const MIRROR_SCALE = 1.22;
+/** The opaque HUD band's share of the cockpit height; mirrors `--hud-band` in hud.css. */
+export const HUD_BAND_SHARE = 0.18;
+/** The band's top edge as NDC y of the cockpit view: nothing a trainee must see lies below it. */
+export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
 /** Smallest mirror height; where even this cannot clear the controls, it wins. */
 export const MIN_MIRROR_HEIGHT = 48;
 
