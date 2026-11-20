@@ -22,6 +22,7 @@ import paversPackedUrl from './assets/pavers-packed.ktx2?url';
 import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
 import { createGroundPbrMaterial, GROUND_PBR_MARKER } from './ground-pbr-material';
 import { PBR_SAMPLER_BUDGET, type PbrKey, SHADOW_SAMPLERS } from './ground-pbr-spec';
+import { createWornMarkingMaterial, MARK_BOX, MARKING_WEAR_MARKER } from './marking-wear';
 import { COCKPIT_LAYERS, enableLayers, gpuLost, PERSPECTIVE_LAYER } from './seams';
 import { prepareShadow } from './sun-shadow';
 import {
@@ -52,8 +53,9 @@ export function countSamplers(fragment: string): number {
  * Builds the PBR ground material for `maps` before any ground wears it, under the perspective
  * light rig and grade, lit by the sun with and without its shadow, so a node, pipeline or
  * sampler-count error rejects here instead of in a frame. Stand-ins replace the detail and mask
- * maps, which load or build separately. three swaps a material whose node graph throws for a plain
- * one and only logs it, hence the marker check.
+ * maps, which load or build separately. The worn marking material that rides on the PBR ground builds
+ * beside it, so a failure of either leaves the detail ground and the unworn markings. three swaps a
+ * material whose node graph throws for a plain one and only logs it, hence the marker check.
  */
 export async function precompileGroundPbr(
   renderer: WebGPURenderer,
@@ -63,7 +65,8 @@ export async function precompileGroundPbr(
   const vertices = geometry.getAttribute('position').count;
   geometry
     .setAttribute('color', new Float32BufferAttribute(new Float32Array(vertices * 3), 3))
-    .setAttribute('groundSelect', new Float32BufferAttribute(new Float32Array(vertices * 3), 3));
+    .setAttribute('groundSelect', new Float32BufferAttribute(new Float32Array(vertices * 3), 3))
+    .setAttribute(MARK_BOX, new Float32BufferAttribute(new Float32Array(vertices * 4), 4));
   const macro = new DataTexture(new Uint8Array(4), 1, 1);
   macro.needsUpdate = true;
   const mask = new DataTexture(new Uint8Array(2), 1, 1, RGFormat, UnsignedByteType);
@@ -79,7 +82,11 @@ export async function precompileGroundPbr(
   setGraded(material, graded);
   const mesh = new Mesh(geometry, material);
   mesh.receiveShadow = true;
-  const markers = graded ? [GROUND_PBR_MARKER, GRADE_SHADER_MARKER] : [GROUND_PBR_MARKER];
+  const wornMaterial = createWornMarkingMaterial();
+  setGraded(wornMaterial, graded);
+  const wornMesh = new Mesh(geometry, wornMaterial);
+  wornMesh.receiveShadow = true;
+  const gradeMarkers = graded ? [GRADE_SHADER_MARKER] : [];
   try {
     for (const shadow of [false, true]) {
       // the lights the perspective views draw it under: the HDRI sun and sky
@@ -89,16 +96,21 @@ export async function precompileGroundPbr(
       if (shadow) prepareShadow(sun);
       const lights = [sun, new LightProbe()];
       for (const light of lights) light.layers.set(PERSPECTIVE_LAYER);
-      scene.add(mesh, ...lights, sun.target);
+      scene.add(mesh, wornMesh, ...lights, sun.target);
       const camera = new PerspectiveCamera();
       enableLayers(camera.layers, COCKPIT_LAYERS);
-      const { fragmentShader } = await buildSerially(renderer, () =>
-        renderer.debug.getShaderAsync(scene, camera, mesh),
-      );
-      if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
-        throw new Error('the PBR ground shader did not build');
-      }
-      const samplers = countSamplers(fragmentShader ?? '');
+      const built = async (target: Mesh, marker: string): Promise<string> => {
+        const { fragmentShader } = await buildSerially(renderer, () =>
+          renderer.debug.getShaderAsync(scene, camera, target),
+        );
+        if (![marker, ...gradeMarkers].every((m) => fragmentShader?.includes(m) === true)) {
+          throw new Error(`the ${marker} shader did not build`);
+        }
+        return fragmentShader ?? '';
+      };
+      const fragmentShader = await built(mesh, GROUND_PBR_MARKER);
+      await built(wornMesh, MARKING_WEAR_MARKER);
+      const samplers = countSamplers(fragmentShader);
       if (samplers > PBR_SAMPLER_BUDGET + (shadow ? SHADOW_SAMPLERS : 0)) {
         throw new Error(`the PBR ground shader declares ${String(samplers)} samplers`);
       }
@@ -107,6 +119,7 @@ export async function precompileGroundPbr(
     if (gpuLost(renderer)) throw new Error('the GPU context was lost');
   } finally {
     material.dispose();
+    wornMaterial.dispose();
     geometry.dispose();
     macro.dispose();
     mask.dispose();

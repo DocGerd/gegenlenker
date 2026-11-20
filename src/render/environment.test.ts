@@ -26,6 +26,7 @@ import { GROUND_SURFACES } from './ground-texture-spec';
 import { KEYS } from './palette';
 import { FOG_DENSITY, GRADE } from './grade';
 import { perspectiveLight } from './light-rig';
+import { MARK_BOX } from './marking-wear';
 import { QUALITY_FLAGS } from './quality';
 import { REALISM_HUES } from './realism-hues';
 vi.mock('./ground-pbr-material', async (importOriginal) => {
@@ -814,5 +815,95 @@ describe('environment construction', () => {
     } finally {
       error.mockRestore();
     }
+  });
+});
+
+describe('environment worn markings', () => {
+  const slalom = exercises.find((e) => e.id === 'slalom');
+  const wornLayout = slalom === undefined ? null : resolveLayout(layouts[slalom.layout], slalom);
+
+  /** Perspective copies of the paint (`paint`) and of the aids, by their material. */
+  const copies = (env: { object: Object3D }): { paint: Set<unknown>; aids: Set<unknown> } => {
+    const lit = [...seen(env.object, cameras.cockpit)]
+      .filter(isMesh)
+      .filter((m) => isMarking(m) && isNodeMaterial(m));
+    const paint = lit.filter((m) => m.geometry.hasAttribute(MARK_BOX));
+    expect(paint.length).toBeGreaterThan(0);
+    return {
+      paint: new Set(paint.map((m) => m.material)),
+      aids: new Set(lit.filter((m) => !paint.includes(m)).map((m) => m.material)),
+    };
+  };
+  const setUp = (): NonNullable<ReturnType<typeof proceduralEnvironment>> & {
+    pbr: ReturnType<typeof fakePbrTextures>;
+  } => {
+    if (wornLayout === null) throw new Error('no slalom exercise');
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(
+      wornLayout,
+      palette,
+      detail.textures,
+      undefined,
+      pbr.textures,
+    );
+    detail.deliver();
+    pbr.deliver();
+    return Object.assign(env, { pbr });
+  };
+
+  it('wears the paint on High over the PBR ground and leaves the aids on the lit flat look', () => {
+    const env = setUp();
+    env.setQuality(QUALITY_FLAGS.balanced);
+    const { paint: plain, aids: plainAids } = copies(env);
+    expect([...plain][0]).toBeInstanceOf(MeshLambertNodeMaterial);
+    env.setQuality(QUALITY_FLAGS.high);
+    const { paint, aids } = copies(env);
+    expect(paint.size).toBe(1);
+    const [worn] = [...paint];
+    expect(worn).toBeInstanceOf(MeshLambertNodeMaterial);
+    expect(plain.has(worn)).toBe(false);
+    expect(aids).toEqual(plainAids);
+    env.dispose();
+  });
+
+  it('gives Balanced and Low nothing, and the same shared material back after High', () => {
+    const env = setUp();
+    env.setQuality(QUALITY_FLAGS.balanced);
+    const before = copies(env);
+    env.setQuality(QUALITY_FLAGS.high);
+    env.setQuality(QUALITY_FLAGS.balanced);
+    expect(copies(env)).toEqual(before);
+    env.dispose();
+  });
+
+  it('keeps the unworn markings when the PBR ground is off or rejected', () => {
+    const env = setUp();
+    env.setQuality(QUALITY_FLAGS.balanced);
+    const { paint: plain } = copies(env);
+    env.setQuality({ ...QUALITY_FLAGS.high, groundPbr: false });
+    expect(copies(env).paint).toEqual(plain);
+    env.setQuality(QUALITY_FLAGS.high);
+    expect(copies(env).paint).not.toEqual(plain);
+    env.pbr.reject();
+    expect(copies(env).paint).toEqual(plain);
+    env.dispose();
+  });
+
+  it('leaves the top-down tokens as on Low, and the quads carry their box', () => {
+    const env = setUp();
+    const tokens = (): Map<Object3D, unknown> =>
+      new Map([...seen(env.object, cameras.topDown)].map((m) => [m, asMesh(m).material]));
+    env.setQuality(QUALITY_FLAGS.low);
+    const low = tokens();
+    env.setQuality(QUALITY_FLAGS.high);
+    expect(tokens()).toEqual(low);
+    for (const m of low.keys()) {
+      const geometry = asMesh(m).geometry;
+      if (geometry.hasAttribute(MARK_BOX)) {
+        expect(geometry.getAttribute(MARK_BOX).count).toBe(geometry.getAttribute('position').count);
+      }
+    }
+    env.dispose();
   });
 });
