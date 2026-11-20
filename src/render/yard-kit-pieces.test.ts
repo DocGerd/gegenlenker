@@ -5,6 +5,7 @@ import type { KitDecor, KitPiece } from '../contracts/layout';
 import { KIT_FOOTPRINTS, kitFootprint } from '../content/kit';
 import { kitPiecesFrom, mergeKit, parseKitGlb, type KitPieces } from './yard-kit-pieces';
 import { YARD_KIT_NODES } from './yard-kit-dims';
+import { KIT_NORMAL_SCALE } from './yard-kit';
 
 /** Meshopt quantisation moves positions by a couple of millimetres. */
 const TOLERANCE = 5e-3;
@@ -100,5 +101,32 @@ describe('the yard kit glb', () => {
       expect(Math.hypot(normal.getX(i), normal.getY(i), normal.getZ(i))).toBeCloseTo(1, 3);
     }
     expect(Math.max(...index.array)).toBeLessThan(normal.count);
+  });
+
+  // three derives the bitangent along +v when a mesh has no tangents; on a wall that is world down
+  // (v runs down the atlas), against atlas B's OpenGL green, so the material negates Y.
+  it('runs v down a wall, which is why the normal map is flipped in Y', () => {
+    for (const piece of ['hall-wall-bay', 'office-bay'] as const) {
+      const faces = pieces
+        .get(piece)
+        ?.primitives.filter((p) => p.kind === 'atlas')
+        .flatMap((p) => {
+          const rows: { y: number; v: number }[] = [];
+          for (let i = 0; i < p.position.length / 3; i++) {
+            // the wall's own face: its normal points out of the piece's face, three -z
+            if ((p.normal[i * 3 + 2] ?? 0) < -0.99) {
+              rows.push({ y: p.position[i * 3 + 1] ?? 0, v: p.uv[i * 2 + 1] ?? 0 });
+            }
+          }
+          return rows;
+        });
+      if (faces === undefined || faces.length < 3) throw new Error(`${piece} has no wall face`);
+      const [my, mv] = [faces.reduce((a, f) => a + f.y, 0), faces.reduce((a, f) => a + f.v, 0)].map(
+        (sum) => sum / faces.length,
+      ) as [number, number];
+      const covariance = faces.reduce((a, f) => a + (f.y - my) * (f.v - mv), 0);
+      expect(covariance, piece).toBeLessThan(0);
+    }
+    expect(KIT_NORMAL_SCALE).toEqual([1, -1]);
   });
 });

@@ -10,7 +10,7 @@ import {
   Scene,
   type BufferGeometry,
 } from 'three';
-import { dot, float, max, normalMap, sqrt, texture, uv, vec3, vec4 } from 'three/tsl';
+import { dot, float, max, normalMap, sqrt, texture, uv, vec2, vec3, vec4 } from 'three/tsl';
 import { MeshStandardNodeMaterial, type Node, type WebGPURenderer } from 'three/webgpu';
 import { isKitDecor, type ResolvedLayout } from '../contracts/layout';
 import type { ScenePalette } from '../contracts/render';
@@ -22,7 +22,7 @@ import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './
 import type { QualityFlags } from './quality';
 import { COCKPIT_LAYERS, enableLayers, gpuLost, PERSPECTIVE_LAYER } from './seams';
 import { startShells, type Shells } from './glb-shells';
-import { startTextureSet, type TextureMaps, type TextureSet } from './texture-set';
+import { startTextureSet, TEXTURE_FAILED, type TextureMaps, type TextureSet } from './texture-set';
 import { VehicleLightingModel, type VehicleEnvironment } from './vehicle-pbr';
 import { mergeKit, parseKitGlb, type KitPieces } from './yard-kit-pieces';
 
@@ -37,7 +37,13 @@ import { mergeKit, parseKitGlb, type KitPieces } from './yard-kit-pieces';
 export const YARD_KIT_SHADER_MARKER = 'yardKit';
 
 const ANISOTROPY = 8; // three clamps this to what the GPU offers
+/**
+ * Atlas B holds OpenGL normals (green up the image), but the meshes have no tangents, so three takes
+ * the bitangent along +v, which runs down the image: Y is negated, as GLTFLoader does.
+ */
+export const KIT_NORMAL_SCALE = [1, -1] as const;
 const ALPHA_CUT = 0.5;
+const MAX_GLB_ATTEMPTS = 2;
 const LEAF_ROUGHNESS = 0.9;
 /** Share of the reflections and sun highlight a leaf keeps. */
 const LEAF_SPECULAR = 0.05;
@@ -76,7 +82,10 @@ export function createKitMaterials(maps: TextureMaps<KitTextureKey>): KitMateria
   atlas.aoNode = packed.a;
   const xy = packed.rg.mul(2).sub(1);
   const z = sqrt(max(float(0), float(1).sub(dot(xy, xy))));
-  atlas.normalNode = normalMap(vec3(packed.r, packed.g, z.mul(0.5).add(0.5))).toVar();
+  atlas.normalNode = normalMap(
+    vec3(packed.r, packed.g, z.mul(0.5).add(0.5)),
+    vec2(...KIT_NORMAL_SCALE),
+  ).toVar();
 
   const leaves = new KitNodeMaterial(float(LEAF_SPECULAR));
   const leaf = texture(maps.leaves, uv());
@@ -165,6 +174,12 @@ export function startYardKit(
   onApplied: (state: string | null) => void = () => undefined,
   load: GlbLoad = fetchPieces,
 ): YardKit {
+  // a glb that fails twice is given up on, like the atlases
+  let glbFailures = 0;
+  let glbFailed = false;
+  const publish = (state: string | null): void => {
+    onApplied(glbFailed ? TEXTURE_FAILED : state);
+  };
   const textures: TextureSet<KitTextureKey> = startTextureSet({
     urls: { atlasA: atlasAUrl, atlasB: atlasBUrl, leaves: leavesUrl },
     prepare: (key, map) => {
@@ -172,12 +187,31 @@ export function startYardKit(
     },
     precompile: precompileYardKit,
     describe: () => 'on',
-    onApplied,
+    onApplied: publish,
     label: 'Yard kit',
     fallback: 'the bare surroundings',
     marker: YARD_KIT_SHADER_MARKER,
   });
-  const glb: Shells<KitPieces> = startShells({ 'yard-kit': kitUrl }, { load, enabled: false });
+  const glb: Shells<KitPieces> = startShells(
+    { 'yard-kit': kitUrl },
+    {
+      enabled: false,
+      load: async (url) => {
+        try {
+          const pieces = await load(url);
+          glbFailures = 0;
+          glbFailed = false;
+          return pieces;
+        } catch (error) {
+          if (++glbFailures >= MAX_GLB_ATTEMPTS) {
+            glbFailed = true;
+            publish(null);
+          }
+          throw error;
+        }
+      },
+    },
+  );
   return {
     attach: (renderer) => {
       textures.attach(renderer);

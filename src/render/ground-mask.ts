@@ -7,7 +7,7 @@ import {
   UnsignedByteType,
 } from 'three';
 import type { Obb, Vec2 } from '../contracts/sim';
-import type { Rect2, ResolvedLayout } from '../contracts/layout';
+import { isKitDecor, type Rect2, type ResolvedLayout } from '../contracts/layout';
 
 /*
  * The CPU-authored mask the PBR ground reads for contact occlusion (R) and yard decals (G): zero is
@@ -137,7 +137,8 @@ export function groundMask(layout: ResolvedLayout): GroundMask {
     });
   };
   for (const o of layout.obstacles) contact(o.obb, o.height);
-  for (const d of layout.decor) contact(d.footprint, DECOR_HEIGHT);
+  // the kit's pieces are boxes around crowns and roofs, not ground contact
+  for (const d of layout.decor) if (!isKitDecor(d)) contact(d.footprint, DECOR_HEIGHT);
 
   const roads = layout.surfaces.filter((s) => s.kind !== 'pavement').map((s) => s.rect);
   const onRoad = (x: number, y: number): boolean => roads.some((rect) => inside(rect, x, y));
