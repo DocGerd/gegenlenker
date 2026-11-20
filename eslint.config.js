@@ -118,4 +118,17 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: ['src/app/whats-new*.ts'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        ...['innerHTML', 'outerHTML', 'insertAdjacentHTML'].map((property) => ({
+          property,
+          message: 'The changelog screen builds DOM from text only',
+        })),
+      ],
+    },
+  },
 );
