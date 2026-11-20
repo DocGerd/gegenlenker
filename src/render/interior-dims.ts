@@ -1,0 +1,353 @@
+import type { TruckSpec } from '../contracts/vehicle';
+import { truckAnchors } from '../vehicles/anchors';
+import { CAB_HEIGHT, cabShellParams, FRAME_TOP, hex, round } from './cab-dims';
+import { REALISM_HUES, type RealismHueKey } from './realism-hues';
+
+// No `three` import: scripts/glb-params.mjs loads this module under plain Node.
+
+/*
+ * The cab interior of `tools/blender/interior_shell.py`, derived here and only exported there. The
+ * parts are authored in the sim body frame (metres, +X forward, +Y left, +Z up), sized from the
+ * driver's eye so the cockpit view keeps its sight cone and mirror lines (cockpit-interior.test.ts).
+ * The cockpit camera's field of view, pitch and the cone are copies of the camera's and the
+ * overlay's own, pinned by interior-dims.test.ts: those modules import `three`.
+ */
+
+export const VIEW_FOV_DEG = 55;
+export const VIEW_PITCH_DEG = 6; // the camera looks this far below the horizon
+export const CLEAR_CONE_HALF_DEG = 12;
+
+export type Vec3 = readonly [number, number, number];
+export type Solid = {
+  readonly hue: RealismHueKey;
+  readonly verts: readonly Vec3[];
+  readonly faces: readonly (readonly number[])[];
+};
+export type InteriorMeshName = 'interior' | 'wheel' | 'pillar-left' | 'pillar-right';
+
+const rad = (deg: number): number => (deg * Math.PI) / 180;
+const TAN_V = Math.tan(rad(VIEW_FOV_DEG / 2));
+const PITCH = rad(VIEW_PITCH_DEG);
+
+/** Metres from the cab's side wall to its inner trim face; the door tops and walls are this thick. */
+export const DOOR_THICKNESS = 0.12;
+/** Metres the dash and header stand off the windscreen's inner face. */
+const GLASS_SETBACK = 0.06;
+/** The dash's rear edge: metres ahead of the eye along the view axis, and its NDC y beside and ahead of the driver. */
+export const DASH = { depth: 0.8, edge: -0.52, flank: 0.06, flankScale: 0.9 } as const;
+/** The instrument binnacle straight ahead of the driver, in metres across the view at `DASH.depth`. */
+export const HUMP = { halfWidth: 0.3, top: -0.475, drop: 0.12 } as const;
+/** The dash and hump stay this far (degrees) under the sight cone's lower edge. */
+export const CONE_MARGIN_DEG = 1.5;
+const DASH_BOTTOM = 1.6;
+
+/** The steering wheel as the cab's driver sees it, in the camera's frame: ahead, with the rim's top at `topNdc`. */
+export const WHEEL = {
+  depth: 0.5,
+  topNdc: -0.545,
+  radius: 0.21,
+  tubeRadius: 0.017,
+  tilt: rad(40),
+  segments: 20,
+} as const;
+
+export const HEADER = { bottomNdc: 0.86, depth: 0.9, thickness: 0.1 } as const;
+/** The door tops rise from the sill at the windscreen to this much above it at the driver's end. */
+export const DOOR_RISE = 0.4;
+const DOOR_TOP_OVER_SILL = 0.07;
+
+/** The pillar's unit slab, scaled at runtime like the flat overlay's: depth 1, width 1, height from -BLEED to BLEED. */
+export const PILLAR = { thickness: 0.08, bleed: 1.05, lean: 0.25 } as const;
+
+const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
+const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: Vec3, b: Vec3): Vec3 => [
+  a[1] * b[2] - a[2] * b[1],
+  a[2] * b[0] - a[0] * b[2],
+  a[0] * b[1] - a[1] * b[0],
+];
+const mean = (points: readonly Vec3[]): Vec3 =>
+  mul(
+    points.reduce<Vec3>((s, p) => add(s, p), [0, 0, 0]),
+    1 / points.length,
+  );
+
+/** The camera's axes in the body frame, at pitch `VIEW_PITCH_DEG` below the horizon. */
+const AXES = {
+  forward: [Math.cos(PITCH), 0, -Math.sin(PITCH)] as Vec3,
+  right: [0, -1, 0] as Vec3,
+  up: [Math.sin(PITCH), 0, Math.cos(PITCH)] as Vec3,
+};
+
+/** The point `depth` metres ahead of `eye` along the view axis, `across` to its right and `up` above it. */
+export function viewPoint(eye: Vec3, depth: number, across: number, up: number): Vec3 {
+  return add(eye, add(mul(AXES.forward, depth), add(mul(AXES.right, across), mul(AXES.up, up))));
+}
+
+/** `point` in the camera's frame: metres to its right, above and ahead along the view axis. */
+export function viewCoords(eye: Vec3, point: Vec3): { across: number; up: number; depth: number } {
+  const rel = sub(point, eye);
+  return { across: dot(rel, AXES.right), up: dot(rel, AXES.up), depth: dot(rel, AXES.forward) };
+}
+
+/** Metres above the view axis at `depth` for NDC y `ndc`. */
+const heightAt = (ndc: number, depth: number): number => ndc * TAN_V * depth;
+
+/** Reorders each face of a solid so that its normal points away from `inside`, or towards it when `towards`. */
+function orient(
+  verts: readonly Vec3[],
+  faces: readonly (readonly number[])[],
+  reference: Vec3,
+  towards: boolean,
+): number[][] {
+  return faces.map((face) => {
+    const points = face.map((i) => verts[i] as Vec3);
+    const normal = cross(
+      sub(points[1] as Vec3, points[0] as Vec3),
+      sub(points[2] as Vec3, points[0] as Vec3),
+    );
+    const outward = dot(normal, sub(mean(points), reference));
+    const flip = towards ? outward > 0 : outward < 0;
+    return flip ? [...face].reverse() : [...face];
+  });
+}
+
+const rounded = (v: Vec3): Vec3 => [round(v[0]), round(v[1]), round(v[2])];
+
+function solid(
+  hue: RealismHueKey,
+  verts: readonly Vec3[],
+  faces: readonly (readonly number[])[],
+): Solid {
+  return { hue, verts: verts.map(rounded), faces };
+}
+
+const CUBE_FACES = [
+  [0, 1, 2, 3],
+  [4, 5, 6, 7],
+  [0, 1, 5, 4],
+  [1, 2, 6, 5],
+  [2, 3, 7, 6],
+  [3, 0, 4, 7],
+];
+
+/** A hexahedron from its bottom ring and top ring, each a convex quad in the same order; faces point outward. */
+function hexahedron(hue: RealismHueKey, bottom: readonly Vec3[], top: readonly Vec3[]): Solid {
+  const verts = [...bottom, ...top];
+  return solid(hue, verts, orient(verts, CUBE_FACES, mean(verts), false));
+}
+
+function box(
+  hue: RealismHueKey,
+  x: readonly [number, number],
+  y: readonly [number, number],
+  z: readonly [number, number],
+): Solid {
+  const ring = (w: number): Vec3[] => [
+    [x[0], y[0], w],
+    [x[1], y[0], w],
+    [x[1], y[1], w],
+    [x[0], y[1], w],
+  ];
+  return hexahedron(hue, ring(z[0]), ring(z[1]));
+}
+
+/** A box centred at `centre` with half sizes along the orthonormal `axes`. */
+function orientedBox(
+  hue: RealismHueKey,
+  centre: Vec3,
+  axes: readonly [Vec3, Vec3, Vec3],
+  half: Vec3,
+): Solid {
+  const corner = (a: number, b: number, c: number): Vec3 =>
+    add(
+      centre,
+      add(mul(axes[0], a * half[0]), add(mul(axes[1], b * half[1]), mul(axes[2], c * half[2]))),
+    );
+  return hexahedron(
+    hue,
+    [corner(-1, -1, -1), corner(1, -1, -1), corner(1, 1, -1), corner(-1, 1, -1)],
+    [corner(-1, -1, 1), corner(1, -1, 1), corner(1, 1, 1), corner(-1, 1, 1)],
+  );
+}
+
+type Anchors = ReturnType<typeof anchorsOf>;
+
+function anchorsOf(spec: TruckSpec) {
+  const { eye, frontX } = truckAnchors(spec);
+  const cab = cabShellParams(spec);
+  const half = cab.width / 2;
+  const sill = FRAME_TOP + cab.cab.glassSill;
+  return {
+    eye: [eye.x, eye.y, eye.z] as Vec3,
+    glass: frontX - GLASS_SETBACK,
+    half,
+    inner: half - DOOR_THICKNESS,
+    sill,
+    glassTop: sill + cab.cab.glassHeight,
+  };
+}
+
+/** NDC y of the dash's rear edge at `across` metres to the right of the eye, binnacle included. */
+export function dashEdgeNdc(across: number): number {
+  const flank = DASH.edge + DASH.flank * (across / DASH.flankScale) ** 2;
+  const hump = HUMP.top - HUMP.drop * (Math.abs(across) / HUMP.halfWidth) ** 4;
+  return Math.max(flank, hump);
+}
+
+/** Lateral samples (metres right of the eye) from `left` to `right`: fine across the binnacle, coarser beside it. */
+function samples(left: number, right: number): number[] {
+  const found = new Set<number>([left, right]);
+  for (let a = -0.45; a <= 0.45 + 1e-9; a += 0.05) found.add(round(a));
+  for (let a = -1.2; a <= 2 + 1e-9; a += 0.2) if (a > left && a < right) found.add(round(a));
+  return [...found].filter((a) => a >= left && a <= right).sort((a, b) => a - b);
+}
+
+/** Height of the door tops: the sill, raised towards the driver but never above the eye. */
+const doorTop = (a: Anchors, x: number): number =>
+  Math.min(
+    a.sill +
+      DOOR_TOP_OVER_SILL +
+      (DOOR_RISE * Math.max(0, a.glass - x)) / Math.max(1e-6, a.glass - a.eye[0] + 0.2),
+    a.eye[2],
+  );
+
+function dash(a: Anchors): Solid[] {
+  const [ex, ey, ez] = a.eye;
+  const left = -(a.inner - ey);
+  const right = a.inner + ey;
+  const across = samples(left, right);
+  const rear = across.map((s) =>
+    viewPoint(a.eye, DASH.depth, s, heightAt(dashEdgeNdc(s), DASH.depth)),
+  );
+  // The front stays under the cone's lower edge, and the sill.
+  const front = a.glass - ex;
+  const coneFront =
+    ez - front * Math.tan(rad(CLEAR_CONE_HALF_DEG + VIEW_PITCH_DEG + CONE_MARGIN_DEG));
+  const frontZ = Math.min(a.sill, coneFront);
+  const top: Vec3[] = [];
+  const topFaces: number[][] = [];
+  const faceFaces: number[][] = [];
+  const face: Vec3[] = [];
+  rear.forEach((r, i) => {
+    top.push(r, [a.glass, r[1], frontZ]);
+    face.push(r, [r[0], r[1], DASH_BOTTOM]);
+    if (i === 0) return;
+    const k = 2 * i;
+    topFaces.push([k - 2, k - 1, k + 1], [k - 2, k + 1, k]);
+    faceFaces.push([k - 2, k - 1, k + 1], [k - 2, k + 1, k]);
+  });
+  return [
+    solid('anthracite', top, orient(top, topFaces, a.eye, true)),
+    solid('chevronBlack', face, orient(face, faceFaces, a.eye, true)),
+  ];
+}
+
+function doors(a: Anchors): Solid[] {
+  const [ex] = a.eye;
+  const back = ex - 0.2;
+  const bottom = 1.55;
+  return ([-1, 1] as const).map((side) => {
+    const y: [number, number] = side > 0 ? [a.inner, a.half] : [-a.half, -a.inner];
+    const ring = (x: number, z: number): Vec3[] => [
+      [x, y[0], z],
+      [x, y[1], z],
+    ];
+    const lo = (x: number): Vec3[] => ring(x, bottom);
+    const hi = (x: number): Vec3[] => ring(x, doorTop(a, x));
+    return hexahedron(
+      'anthracite',
+      [...lo(back), ...[...lo(a.glass)].reverse()],
+      [...hi(back), ...[...hi(a.glass)].reverse()],
+    );
+  });
+}
+
+/** The shade band over the windscreen; the front edge of its underside, the lowest the eye sees, is at `HEADER.bottomNdc`. */
+function header(a: Anchors): Solid[] {
+  const ceiling = CAB_HEIGHT - 0.1;
+  const edge = viewPoint(a.eye, HEADER.depth, 0, heightAt(HEADER.bottomNdc, HEADER.depth));
+  if (edge[2] >= ceiling) return [];
+  const front = Math.min(edge[0], a.glass);
+  return [
+    box('headliner', [front - HEADER.thickness, front], [-a.inner, a.inner], [edge[2], ceiling]),
+  ];
+}
+
+function wheel(a: Anchors): Solid[] {
+  const { depth, radius, tubeRadius, tilt, segments } = WHEEL;
+  // Rim top at `topNdc` at its own depth: hub height follows from the tilt.
+  const topDepth = depth + radius * Math.sin(tilt);
+  const topUp = heightAt(WHEEL.topNdc, topDepth);
+  const hub = viewPoint(a.eye, depth, 0, topUp - radius * Math.cos(tilt));
+  const right = AXES.right;
+  // In-plane "up" tilts away from the driver by `tilt`; the plane's normal faces the driver.
+  const planeUp = add(mul(AXES.up, Math.cos(tilt)), mul(AXES.forward, Math.sin(tilt)));
+  const normal = cross(right, planeUp);
+  const parts: Solid[] = [];
+  const mid = radius - tubeRadius;
+  const step = (2 * Math.PI) / segments;
+  const chord = mid * Math.tan(step / 2);
+  for (let i = 0; i < segments; i++) {
+    const angle = i * step;
+    const radial = add(mul(right, Math.cos(angle)), mul(planeUp, Math.sin(angle)));
+    const tangent = add(mul(right, -Math.sin(angle)), mul(planeUp, Math.cos(angle)));
+    parts.push(
+      orientedBox(
+        'anthracite',
+        add(hub, mul(radial, mid)),
+        [radial, tangent, normal],
+        [tubeRadius, chord + tubeRadius * 0.5, tubeRadius],
+      ),
+    );
+  }
+  for (const angle of [Math.PI / 2 + Math.PI / 3, Math.PI / 2 - Math.PI / 3, -Math.PI / 2]) {
+    const radial = add(mul(right, Math.cos(angle)), mul(planeUp, Math.sin(angle)));
+    const tangent = cross(normal, radial);
+    parts.push(
+      orientedBox(
+        'anthracite',
+        add(hub, mul(radial, mid / 2)),
+        [radial, tangent, normal],
+        [mid / 2, 0.012, 0.012],
+      ),
+    );
+  }
+  parts.push(orientedBox('chevronBlack', hub, [right, planeUp, normal], [0.05, 0.05, 0.03]));
+  return parts;
+}
+
+/** The pillar's slab in unit space: forward 1 to 1 + `thickness`, across ±0.5, up ±`bleed`; the top leans towards the view's centre. */
+function pillar(side: 'left' | 'right'): Solid[] {
+  const { thickness, bleed, lean } = PILLAR;
+  // Body +Y is left; the right pillar's top leans left, the left pillar's right.
+  const shift = side === 'right' ? lean : -lean;
+  const ring = (z: number, dy: number): Vec3[] => [
+    [1, -0.5 + dy, z],
+    [1 + thickness, -0.5 + dy, z],
+    [1 + thickness, 0.5 + dy, z],
+    [1, 0.5 + dy, z],
+  ];
+  return [hexahedron('anthracite', ring(-bleed, 0), ring(bleed, shift))];
+}
+
+export type InteriorShellParams = ReturnType<typeof interiorShellParams>;
+
+/** Inputs of `tools/blender/interior_shell.py`; see `InteriorMeshName` for the meshes it exports. */
+export function interiorShellParams(spec: TruckSpec) {
+  const a = anchorsOf(spec);
+  const meshes: Record<InteriorMeshName, Solid[]> = {
+    interior: [...dash(a), ...doors(a), ...header(a)],
+    wheel: wheel(a),
+    'pillar-left': pillar('left'),
+    'pillar-right': pillar('right'),
+  };
+  const hues = Object.fromEntries(
+    [...new Set(Object.values(meshes).flatMap((m) => m.map((s) => s.hue)))]
+      .sort()
+      .map((key) => [key, hex(REALISM_HUES[key])]),
+  );
+  return { id: spec.id, schema: 1, hues, meshes };
+}
