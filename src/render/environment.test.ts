@@ -683,13 +683,14 @@ describe('environment PBR ground', () => {
     pbr: { ...QUALITY_FLAGS.high, litMarkings: false },
     detail: { ...QUALITY_FLAGS.high, litMarkings: false, groundPbr: false },
   };
-  const groundMaterial = (env: { object: Object3D }): unknown => {
+  const groundMesh = (env: { object: Object3D }): Mesh => {
     const meshes = env.object.children.filter(
       (o): o is Mesh => 'geometry' in o && (o as Mesh).geometry.hasAttribute('groundSelect'),
     );
     expect(meshes).toHaveLength(1);
-    return meshes[0]?.material;
+    return meshes[0] as Mesh;
   };
+  const groundMaterial = (env: { object: Object3D }): unknown => groundMesh(env).material;
 
   it('puts the PBR material on the perspective ground copy over the detail one, and takes it off below High', () => {
     if (layout === undefined) return;
@@ -709,6 +710,22 @@ describe('environment PBR ground', () => {
     expect(pbr.applied).toEqual([true, false, true]);
     // the detail set is still the one reported as drawn
     expect(detail.applied).toEqual([true]);
+    env.dispose();
+  });
+
+  it('lets the detail and the PBR ground copies receive shadows', () => {
+    if (layout === undefined) return;
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    detail.deliver();
+    expect(groundMesh(env).material).toBeInstanceOf(MeshLambertNodeMaterial);
+    expect(groundMesh(env).receiveShadow).toBe(true);
+    pbr.deliver();
+    expect(groundMesh(env).material).toBeInstanceOf(MeshStandardNodeMaterial);
+    expect(groundMesh(env).receiveShadow).toBe(true);
+    expect(groundMesh(env).castShadow).toBe(false);
     env.dispose();
   });
 

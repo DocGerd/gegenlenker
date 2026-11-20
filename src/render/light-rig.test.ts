@@ -9,7 +9,8 @@ import {
   SphericalHarmonics3,
   Vector3,
 } from 'three';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setGradeDisabled } from './grade';
 import { shBasis } from '../../tools/textures/hdri-light';
 import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
 import {
@@ -138,6 +139,9 @@ describe('light rig', () => {
   });
 
   describe('sun shadow', () => {
+    afterEach(() => {
+      setGradeDisabled(false);
+    });
     const sees = (camera: Layers, layer: number): boolean => {
       const object = new Layers();
       object.set(layer);
@@ -170,6 +174,24 @@ describe('light rig', () => {
       rig.setShadow(false);
       rig.fitShadow(focus);
       expect(sun.shadow.needsUpdate).toBe(false);
+    });
+
+    it('stops casting while the grade check has failed, and resumes with it', () => {
+      const rig = createLightRig(scene);
+      const { sun } = lights(rig);
+      rig.setShadow(true);
+      rig.fitShadow(focus);
+      expect(sun.castShadow).toBe(true);
+      setGradeDisabled(true);
+      sun.shadow.needsUpdate = false;
+      rig.fitShadow(focus);
+      expect(sun.castShadow).toBe(false);
+      expect(sun.shadow.needsUpdate).toBe(false);
+      rig.setShadow(true);
+      expect(sun.castShadow).toBe(false);
+      setGradeDisabled(false);
+      rig.fitShadow(focus);
+      expect(sun.castShadow).toBe(true);
     });
 
     it('keeps the target in the graph so its matrix follows the fit', () => {

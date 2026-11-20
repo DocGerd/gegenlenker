@@ -10,11 +10,14 @@ import {
   type Material,
   type Object3D,
 } from 'three';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setGradeDisabled } from './grade';
 import type { ScenePalette } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type Param } from '../contracts/vehicle';
+import { createSimulation } from '../sim/simulation';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
+import { resolveCombination } from '../vehicles/resolve';
 import { KEYS } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import { applyShell } from './glb-shells';
@@ -275,7 +278,17 @@ describe('number plate grade', () => {
   });
 });
 
+const atRest = () =>
+  createSimulation(
+    resolveCombination(truckById(TRUCK_IDS[0]), trailerById(TRAILER_IDS[0])),
+    { truck: { x: 0, y: 0, heading: 0 } },
+    () => null,
+  ).snapshot();
+
 describe('sun shadow', () => {
+  afterEach(() => {
+    setGradeDisabled(false);
+  });
   const visuals = [
     ...TRUCK_IDS.map((id) => proceduralTruck(truckById(id), palette)),
     ...TRAILER_IDS.map((id) => proceduralTrailer(trailerById(id), palette)),
@@ -327,6 +340,19 @@ describe('sun shadow', () => {
       }
     },
   );
+
+  it('restores the blobs once a failed grade stops the sun casting', () => {
+    const visual = proceduralTruck(truckById(TRUCK_IDS[0]), palette);
+    visual.setQuality(QUALITY_FLAGS.high);
+    const opacity = (): number => (shadowsOf(visual.object)[0]?.material as Material).opacity;
+    expect(opacity()).toBeLessThan(1);
+    setGradeDisabled(true);
+    visual.update(atRest());
+    expect(opacity()).toBe(1);
+    setGradeDisabled(false);
+    visual.update(atRest());
+    expect(opacity()).toBeLessThan(1);
+  });
 
   it('lets a shell body cast, and its lenses only take shadow', () => {
     const body = new Mesh(new BoxGeometry());

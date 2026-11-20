@@ -35,7 +35,7 @@ import {
   type TrailerShell,
   type TruckShells,
 } from './glb-shells';
-import { setGraded } from './grade';
+import { gradeDisabled, setGraded } from './grade';
 import { trailerLamps, truckLamps } from './lamp-layout';
 import { createDetailMaterial, createLampEmission, slotShell } from './lamp-lens';
 import { lampState } from './lamp-state';
@@ -222,7 +222,14 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     /** The contact blobs pale while the sun's shadow draws the real one. */
     setSunShadow(on: boolean): void {
       sunShadowed = on;
-      if (shadowMaterial !== null) shadowMaterial.opacity = on ? BLOB_OPACITY_UNDER_SUN : 1;
+      this.syncBlobs();
+    },
+    /** Follows a grade failure, which also stops the sun casting; call each frame. */
+    syncBlobs(): void {
+      if (shadowMaterial !== null) shadowMaterial.opacity = this.blobOpacity();
+    },
+    blobOpacity(): number {
+      return sunShadowed && !gradeDisabled() ? BLOB_OPACITY_UNDER_SUN : 1;
     },
     /** The lamp lenses of the detail and the shells, switched per snapshot. */
     lamps,
@@ -246,7 +253,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
           polygonOffsetUnits: -4,
         }),
       );
-      shadowMaterial.opacity = sunShadowed ? BLOB_OPACITY_UNDER_SUN : 1;
+      shadowMaterial.opacity = this.blobOpacity();
       const mesh = this.mesh(geometry, shadowMaterial);
       mesh.castShadow = false;
       mesh.receiveShadow = false;
@@ -502,6 +509,7 @@ export function proceduralTruck(
       pivotRight.rotation.y = snapshot.roadWheelAngle;
       pivotLeft.rotation.y = snapshot.roadWheelAngle;
       res.lamps.update(lampState(snapshot));
+      res.syncBlobs();
     },
     setQuality(flags) {
       cabGlb = flags.cabGlb;
@@ -760,6 +768,7 @@ export function proceduralTrailer(
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
       res.lamps.update(lampState(snapshot));
+      res.syncBlobs();
     },
     setQuality(flags) {
       vehicleGlb = flags.vehicleGlb;
