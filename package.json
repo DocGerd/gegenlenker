@@ -23,6 +23,7 @@
     "perf:tablet": "node e2e/perf/tablet-emulation.ts",
     "icons": "node scripts/icons.mjs",
     "estimates": "node scripts/estimates.mjs",
+    "changelog": "node scripts/changelog.mjs",
     "credits": "node scripts/credits.mjs",
     "glb:params": "node scripts/glb-params.mjs",
     "glb:optimise": "node scripts/glb-optimise.mjs",
