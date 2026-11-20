@@ -78,7 +78,7 @@ function toResult(v: unknown): RunResult | null {
   const r = v as Record<string, unknown>;
   const { exerciseId, truckId, trailerId } = r;
   // Stored before lighting existed: drawn by day.
-  const lighting = r.lighting ?? DEFAULT_LIGHTING;
+  const lighting = 'lighting' in r ? r.lighting : DEFAULT_LIGHTING;
   if (
     !EXERCISE_IDS.some((id) => id === exerciseId) ||
     !TRUCK_IDS.some((id) => id === truckId) ||

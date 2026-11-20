@@ -189,6 +189,21 @@ describe('scoring', () => {
     ).toBe(true);
   });
 
+  it('carries the lighting the run was driven in', () => {
+    const r = runResult(
+      snap(INSIDE),
+      exercise(),
+      'man-le-18-280',
+      'krone-azw-18',
+      true,
+      true,
+      false,
+      0,
+      'night',
+    );
+    expect(r.lighting).toBe('night');
+  });
+
   it('measures the run time from the first driving input', () => {
     const r = runResult(
       snap({ time: 42.5 }),
@@ -387,6 +402,7 @@ describe('best results', () => {
     expect(parseBestResults(raw({ [KEY]: { ...stray, lighting: 'dusk' } }), fingerprint)).toEqual(
       {},
     );
+    expect(parseBestResults(raw({ [KEY]: { ...stray, lighting: null } }), fingerprint)).toEqual({});
   });
 
   it('wipes bests stored before aids were recorded', () => {

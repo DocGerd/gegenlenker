@@ -255,13 +255,11 @@ export function showMenu(
     const refreshBest = (): void => {
       const best = bestResults();
       const { truckId, trailerId } = pair();
+      const { lighting } = currentSettings();
       for (const { button, exercise } of exerciseButtons) {
         button.querySelectorAll('.menu-best').forEach((line) => line.remove());
         const lines = [false, true]
-          .map(
-            (assisted) =>
-              best[bestKey(exercise.id, truckId, trailerId, assisted, settings.lighting)],
-          )
+          .map((assisted) => best[bestKey(exercise.id, truckId, trailerId, assisted, lighting)])
           .filter((r) => r !== undefined)
           .map(bestLine);
         button.append(...(lines.length > 0 ? lines : [span('menu-best', t('noResult'))]));
