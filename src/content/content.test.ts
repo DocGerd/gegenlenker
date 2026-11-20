@@ -286,6 +286,65 @@ describe.each(Object.values(layouts))('$id props', (layout) => {
   });
 });
 
+const EDGE_STEP = 0.5;
+const EDGE_PROBE = 0.05; // inside the yard edge, within a boundary wall's thickness
+
+describe.each(Object.values(layouts))('$id decor', (layout) => {
+  const { surfaces, bounds } = resolveLayout(layout, null);
+
+  it('has unique ids', () => {
+    const ids = layout.decor.map((d) => d.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  // Nothing outside the yard and street surfaces is drivable once the yard's north edge is closed
+  // along the decor's whole width and the decor lies beyond it, inside the yard's x range.
+  it('lies beyond a closed north edge, so no vehicle reaches it', () => {
+    const { yard, obstacles } = resolveLayout(layout, null);
+    for (const { id, footprint: f } of layout.decor) {
+      const c = Math.abs(Math.cos(f.heading));
+      const s = Math.abs(Math.sin(f.heading));
+      const halfX = c * f.halfLength + s * f.halfWidth;
+      const halfY = s * f.halfLength + c * f.halfWidth;
+      expect(f.cy - halfY, id).toBeGreaterThan(yard.maxY);
+      expect(f.cx - halfX, id).toBeGreaterThanOrEqual(yard.minX);
+      expect(f.cx + halfX, id).toBeLessThanOrEqual(yard.maxX);
+      const open: number[] = [];
+      for (let x = f.cx - halfX; x <= f.cx + halfX; x += EDGE_STEP) {
+        const probe = {
+          cx: x,
+          cy: yard.maxY - EDGE_PROBE,
+          halfLength: 0.01,
+          halfWidth: 0.01,
+          heading: 0,
+        };
+        if (!obstacles.some((o) => obbOverlap(probe, o.obb))) open.push(x);
+      }
+      expect(open, id).toEqual([]);
+    }
+  });
+
+  it('stands off the yard and street surfaces and inside the layout bounds', () => {
+    for (const { id, footprint: f } of layout.decor) {
+      const reach = Math.hypot(f.halfLength, f.halfWidth);
+      expect(f.cx - reach, id).toBeGreaterThan(bounds.minX);
+      expect(f.cx + reach, id).toBeLessThan(bounds.maxX);
+      expect(f.cy - reach, id).toBeGreaterThan(bounds.minY);
+      expect(f.cy + reach, id).toBeLessThan(bounds.maxY);
+      for (const { kind, rect } of surfaces) {
+        const surface = {
+          cx: (rect.minX + rect.maxX) / 2,
+          cy: (rect.minY + rect.maxY) / 2,
+          halfLength: (rect.maxX - rect.minX) / 2,
+          halfWidth: (rect.maxY - rect.minY) / 2,
+          heading: 0,
+        };
+        expect(obbOverlap(f, surface), `${id} on ${kind}`).toBe(false);
+      }
+    }
+  });
+});
+
 it('registers exactly the contract ids', () => {
   expect(Object.keys(layouts).sort()).toEqual([...LAYOUT_IDS].sort());
   expect(exercises.map((e) => e.id)).toEqual([...EXERCISE_IDS]);

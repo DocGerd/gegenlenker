@@ -4,7 +4,7 @@ import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { Collider, Fixture, ObstacleKind, Prop, ResolvedLayout } from '../contracts/layout';
 import { OVERLAY } from './yard-concrete';
-import { cornerHoops, plotGoods, RESTYLED_KINDS, yardProps } from './yard-props';
+import { cornerHoops, decorPieces, RESTYLED_KINDS, yardProps } from './yard-props';
 
 const TOLERANCE = 0.05;
 const MAX_RELIEF = 0.16; // thin relief only, as for seals and dock lights
@@ -81,14 +81,18 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
     }
   });
 
-  it('keep loose plot goods behind the yard edge and inside the layout bounds', () => {
-    const { yard, bounds } = resolved;
-    for (const piece of plotGoods(yard)) {
-      const b = new Box3().setFromObject(new Mesh(piece.geometry));
-      expect(-b.max.z).toBeGreaterThan(yard.maxY);
-      expect(-b.min.z).toBeLessThan(bounds.maxY);
-      expect(b.min.x).toBeGreaterThan(bounds.minX);
-      expect(b.max.x).toBeLessThan(bounds.maxX);
+  it('draw decor within its footprint, apart from thin relief', () => {
+    for (const d of resolved.decor) {
+      const [piece] = decorPieces([d]);
+      const b = new Box3().setFromObject(new Mesh(piece?.geometry));
+      const { cx, cy, heading, halfLength, halfWidth } = d.footprint;
+      const [c, s] = [Math.abs(Math.cos(heading)), Math.abs(Math.sin(heading))];
+      const halfX = c * halfLength + s * halfWidth + TOLERANCE;
+      const halfY = s * halfLength + c * halfWidth + TOLERANCE;
+      expect(b.min.x, d.id).toBeGreaterThanOrEqual(cx - halfX);
+      expect(b.max.x, d.id).toBeLessThanOrEqual(cx + halfX);
+      expect(-b.max.z, d.id).toBeGreaterThanOrEqual(cy - halfY);
+      expect(-b.min.z, d.id).toBeLessThanOrEqual(cy + halfY);
     }
   });
 

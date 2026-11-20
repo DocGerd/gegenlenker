@@ -31,6 +31,7 @@ export const placeholderLayout: ResolvedLayout = {
   ],
   obstacles: [],
   props: [],
+  decor: [],
   markings: [],
   target: null,
   tolerances: null,
