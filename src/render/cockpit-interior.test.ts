@@ -44,7 +44,7 @@ import {
   type CockpitInterior,
   type RendererParts,
 } from './seams';
-import { computeViewports } from './viewports';
+import { bandTopNdc, computeViewports } from './viewports';
 
 const truck = truckById('man-le-18-280');
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -316,6 +316,17 @@ describe.each(ROUTES)('cockpit interior seam: $name', ({ make, mayCoverMirror })
               expect(hits(camera, parts, x, y), `${w}x${h} (${u}, ${v})`).toEqual([]);
             }
           }
+        }
+      }
+    });
+
+    it('has a dash above the HUD band at every x, so the opaque band never meets open cab', () => {
+      const y = bandTopNdc() + 0.02;
+      for (const [w, h] of windows) {
+        const { camera, interior } = shootRoute(w, h);
+        const parts = drawn(interior);
+        for (let x = -1; x <= 1; x += 0.125) {
+          expect(hits(camera, parts, x, y).length, `${w}x${h} x=${x}`).toBeGreaterThan(0);
         }
       }
     });
