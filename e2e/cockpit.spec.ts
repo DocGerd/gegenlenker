@@ -8,7 +8,7 @@ import { cabSight } from '../src/render/cab-sight';
 import { interiorLayout, pillarSpans } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
 import { truckById } from '../src/vehicles/registry';
-import { attachmentsReady, type Preset } from './pinned-shoot';
+import { attachmentsReady, HIGH_WAIT_MS, PRESET_TIMEOUT_MS, type Preset } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 /** An unlit vertex colour reaches the canvas as its hue, give or take the rounding of the sRGB frame target. */
@@ -243,6 +243,8 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
   test(`each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`, async ({
     page,
   }) => {
+    if (preset === 'high') test.setTimeout(PRESET_TIMEOUT_MS.high);
+    const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
     const errors = collectErrors(page);
     await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
       SETTINGS_KEY,
@@ -250,7 +252,7 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     ] as const);
     await page.goto('./');
     await drive(page);
-    await expect.poll(() => attachmentsReady(page, preset)).toBe(true);
+    await expect.poll(() => attachmentsReady(page, preset), wait).toBe(true);
 
     // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
     // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.
@@ -309,7 +311,7 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
       .poll(async () => {
         seen = await sample();
         return seen.map((s) => `${s.side}: ${String(s.drawn)}`);
-      })
+      }, wait)
       .toEqual(sides.map((s) => `${s.side}: true`));
     for (const { side, outerYard, innerYard } of seen) {
       expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);

@@ -181,6 +181,9 @@ async function startGpu(
   return gpu;
 }
 
+/** Whether a clear inside a pass honours the pane's scissor: WebGL 2's does, WebGPU's load op does not. */
+const scissoredClear = (backend: GraphicsBackend): boolean => backend === 'webgl2';
+
 const backendOf = (gpu: WebGPURenderer): GraphicsBackend =>
   (gpu.backend as { isWebGLBackend?: boolean }).isWebGLBackend === true ? 'webgl2' : 'webgpu';
 
@@ -535,11 +538,20 @@ export function createThreeSceneRenderer(
         );
       }
 
-      // The panes tile the canvas, so each clears its own rect as part of its pass (a clear of its own
-      // would resolve the whole multisample target once more); the sky dome covers each perspective one.
+      // The panes tile the canvas, so on WebGL 2 each clears its own rect as part of its pass: a clear
+      // of its own would resolve the whole multisample target once more, and the scissor keeps it to
+      // the pane. WebGPU turns an in-pass clear into a load op that ignores the scissor and would wipe
+      // the panes drawn before, so there one clear takes the whole target. The sky dome covers each
+      // perspective pane.
       gl.setRenderTarget(out.target);
       gl.setClearColor(b.palette.backdrop);
-      gl.autoClear = true;
+      const clearInPass = scissoredClear(backend);
+      if (clearInPass) {
+        gl.autoClear = true;
+      } else {
+        out.target.scissorTest = false;
+        gl.clear();
+      }
 
       if (cockpit !== null) {
         placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit);
