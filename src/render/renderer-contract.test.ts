@@ -81,9 +81,17 @@ const part = () => ({
   dispose: () => undefined,
 });
 
+const interior = () => ({ ...part(), frame: 'eye' as const, place: () => undefined });
+
 const three: Harness = {
   create: () =>
-    createThreeSceneRenderer({ truck: part, trailer: part, environment: part, aids: part }),
+    createThreeSceneRenderer({
+      truck: part,
+      trailer: part,
+      environment: part,
+      interior,
+      aids: part,
+    }),
   canvas: () => {
     const listeners = new Map<string, Set<() => void>>();
     return {
