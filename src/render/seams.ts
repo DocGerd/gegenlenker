@@ -1,7 +1,7 @@
-import type { Layers, Object3D } from 'three';
+import type { Layers, Object3D, PerspectiveCamera } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import type { ResolvedLayout } from '../contracts/layout';
-import type { RenderFrame, ScenePalette } from '../contracts/render';
+import type { Rect, RenderFrame, ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import type { GpuOffer } from './gpu-backend';
@@ -70,6 +70,29 @@ export interface AidsLayer {
   update(frame: RenderFrame): void;
   dispose(): void;
 }
+/** What a cockpit interior is placed against each cockpit frame; the rects are in CSS px. */
+export interface InteriorView {
+  readonly camera: PerspectiveCamera;
+  readonly cockpit: Rect;
+  readonly mirrorLeft: Rect | null;
+  readonly mirrorRight: Rect | null;
+}
+
+/** The cab around the driver's eye. Every drawn part is on `INTERIOR_LAYER` alone. */
+export interface CockpitInterior {
+  readonly object: Object3D;
+  /** `eye`: placed in world space from the camera; `truck`: a child of the truck's object, moving with it. */
+  readonly frame: 'eye' | 'truck';
+  /**
+   * Fixes the interior to `view` before each cockpit frame. The renderer has already updated the
+   * scene's world matrices (the scene does not update itself), so `place` sets the object's local
+   * transform and updates its own world matrices.
+   */
+  place(view: InteriorView): void;
+  setQuality(flags: QualityFlags): void;
+  dispose(): void;
+}
+
 export type RendererParts = {
   /** Called each time a GPU renderer is ready, again after a loss with the new one; parts move to the latest. */
   readonly onRenderer?: (renderer: WebGPURenderer) => void;
@@ -78,6 +101,7 @@ export type RendererParts = {
   readonly truck: (spec: TruckSpec, palette: ScenePalette) => VehicleVisual;
   readonly trailer: (spec: TrailerSpec, palette: ScenePalette) => VehicleVisual;
   readonly environment: (layout: ResolvedLayout, palette: ScenePalette) => Environment;
+  readonly interior: (truck: TruckSpec, palette: ScenePalette) => CockpitInterior;
   readonly aids: (
     truck: TruckSpec,
     trailer: TrailerSpec,

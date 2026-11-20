@@ -1,6 +1,7 @@
 import {
   BufferGeometry,
   Color,
+  type DataTexture,
   Group,
   Mesh,
   RingGeometry,
@@ -21,6 +22,7 @@ import {
 } from './ground-geometry';
 import { createGroundMaterial } from './ground-material';
 import type { GroundPbrTextures } from './ground-pbr';
+import { groundMask, groundMaskTexture } from './ground-mask';
 import { createGroundPbrMaterial } from './ground-pbr-material';
 import type { GroundTextures } from './ground-texture';
 import type { SkyTextures } from './sky-texture';
@@ -89,6 +91,8 @@ export function proceduralEnvironment(
   let detailMap: Texture | null = null;
   let pbrMaps: Parameters<typeof createGroundPbrMaterial>[0] | null = null;
   let pbrMaterial: MeshStandardNodeMaterial | null = null;
+  let maskTexture: DataTexture | null = null; // contact occlusion and decals, built with the PBR ground
+  let maskSize = { width: 0, height: 0 };
   let pbrWanted = false;
   let pbrReported = false;
   /** Whether the textured copy is the one drawn: the PBR ground is only drawn through it. */
@@ -97,10 +101,17 @@ export function proceduralEnvironment(
     if (texturedGround === null || texturedGroundMaterial === null) return;
     if (pbrMaterial === null && pbrMaps !== null && detailMap !== null) {
       try {
-        pbrMaterial = createGroundPbrMaterial(pbrMaps, detailMap, {
-          x: layout.bounds.minX,
-          y: layout.bounds.minY,
-        });
+        if (maskTexture === null) {
+          const mask = groundMask(layout);
+          maskTexture = groundMaskTexture(mask);
+          maskSize = { width: mask.width * mask.texel, height: mask.height * mask.texel };
+        }
+        pbrMaterial = createGroundPbrMaterial(
+          pbrMaps,
+          detailMap,
+          { x: layout.bounds.minX, y: layout.bounds.minY },
+          { texture: maskTexture, ...maskSize },
+        );
         setGraded(pbrMaterial, graded);
       } catch (error) {
         pbrMaps = null;
@@ -390,6 +401,7 @@ export function proceduralEnvironment(
       groundSwap.disable();
       texturedGroundMaterial?.dispose();
       pbrMaterial?.dispose();
+      maskTexture?.dispose();
       geometries.forEach((g) => g.dispose());
       gate?.materials.forEach((m) => m.dispose());
       solid.dispose();
