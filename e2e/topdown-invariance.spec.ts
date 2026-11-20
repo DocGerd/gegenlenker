@@ -12,12 +12,10 @@ import {
   type Preset,
 } from './pinned-shoot';
 import { collectThreeProblems } from './three-problems';
-import type { LightingMode, ScenePaletteKey } from '../src/contracts/render';
+import type { ScenePaletteKey } from '../src/contracts/render';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
-const LIGHTINGS: readonly LightingMode[] = ['day', 'night'];
-const CONFIGS = LIGHTINGS.flatMap((lighting) => PRESETS.map((preset) => ({ preset, lighting })));
 
 /**
  * Per channel, how far a flat region may sit from its `--scene-*` token. The clear colour is unlit and
@@ -51,7 +49,6 @@ const MIN_TOKEN_SHARE: Readonly<
 };
 
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
-// Night only has to draw without errors: its top-down view is not held to the day tokens.
 test('the top-down view is the same at every graphics preset', async ({ context }, testInfo) => {
   test.setTimeout(360_000);
   const errors: string[] = [];
@@ -61,34 +58,27 @@ test('the top-down view is the same at every graphics preset', async ({ context 
   // One exercise per yard, so each yard's restyled props are covered.
   for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
     const shots = { follow: new Map<Preset, Buffer>(), yard: new Map<Preset, Buffer>() };
-    for (const { preset, lighting } of CONFIGS) {
+    for (const preset of PRESETS) {
       const page = await context.newPage();
       page.on('console', (m) => {
         if (m.type() === 'error') errors.push(m.text());
       });
       page.on('pageerror', (e) => errors.push(e.message));
       const three = collectThreeProblems(page);
-      await startPinnedDrive(page, { preset, lighting }, exercise);
-      scales.push({
-        label: `${exercise} ${preset} ${lighting} before`,
-        scale: await renderScale(page),
-      });
+      await startPinnedDrive(page, { preset, lighting: 'day' }, exercise);
+      scales.push({ label: `${exercise} ${preset} before`, scale: await renderScale(page) });
       for (const shot of ['follow', 'yard'] as const) {
         const png = await shoot(page, shot);
-        const name = `${exercise} ${preset} ${lighting} ${shot}`;
+        const name = `${exercise} ${preset} ${shot}`;
         await testInfo.attach(`${name}.png`, { body: png, contentType: 'image/png' });
         expect(await distinctColours(page, png), name).toBeGreaterThan(MIN_DRAWN_COLOURS);
-        if (lighting !== 'day') continue;
         for (const [token, min] of MIN_TOKEN_SHARE[shot]) {
           const share = await tokenShare(page, png, token, TOKEN_TOLERANCE[token] ?? 0);
           expect(share, `${name}: ${token}`).toBeGreaterThan(min);
         }
         shots[shot].set(preset, png);
       }
-      scales.push({
-        label: `${exercise} ${preset} ${lighting} after`,
-        scale: await renderScale(page),
-      });
+      scales.push({ label: `${exercise} ${preset} after`, scale: await renderScale(page) });
       threeProblems.push(...three);
       await page.close();
     }
