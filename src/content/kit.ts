@@ -67,3 +67,18 @@ export function kitFootprint(
     heading,
   };
 }
+
+/**
+ * Where to stand `piece` so its back, `gap` metres off the face line through `(x, y)`, rests against
+ * a surface that looks along `heading` + 90 degrees; returns the piece's origin for `kitFootprint`.
+ */
+export function kitBackedTo(
+  piece: KitPiece,
+  x: number,
+  y: number,
+  heading: number,
+  gap = 0,
+): [number, number] {
+  const back = gap - KIT_FOOTPRINTS[piece].min[1];
+  return [x - Math.sin(heading) * back, y + Math.cos(heading) * back];
+}

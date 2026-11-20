@@ -6,6 +6,7 @@ import {
   type Fixture,
   isKitDecor,
   type KitDecor,
+  type KitPiece,
   type Marking,
   type ObstacleKind,
   type Prop,
@@ -37,6 +38,8 @@ export type PropPiece = {
   readonly x: number;
   readonly y: number;
   readonly geometry: BufferGeometry;
+  /** Drawn only until the yard kit draws its own copy of this prop. */
+  readonly kitStandIn?: true;
 };
 
 export type Range = readonly [number, number];
@@ -110,6 +113,7 @@ export const RESTYLED_KINDS: ReadonlySet<ObstacleKind> = new Set([
   'wall',
   'ramp',
   'cone',
+  'furniture',
 ]);
 
 /** Along-axis length, across-axis width and heading of a long box, cut along the longer side. */
@@ -617,6 +621,46 @@ function cone(o: Collider): PropPiece {
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
+const FURNITURE = {
+  lid: 0.1,
+  hydrant: { cap: 0.2, foot: 0.12 },
+  sign: { post: 0.06, height: 0.5, rim: 0.03 },
+};
+
+/** The kit's street furniture in plain boxes over its footprint: a hydrant, a sign post, otherwise a lidded bin. */
+function furniture(o: Collider, piece?: KitPiece): PropPiece {
+  const { cx, cy, halfLength: hl, halfWidth: hw, heading } = o.obb;
+  const h = o.height;
+  const [x, y] = [around(0, hl), around(0, hw)];
+  const p = new Parts();
+  if (piece === 'hydrant') {
+    const { cap, foot } = FURNITURE.hydrant;
+    p.box(x, y, [0, foot], HUE.anthracite)
+      .box(around(0, hl * 0.7), around(0, hw * 0.7), [foot, h - cap], HUE.tailLamp)
+      .box(x, y, [h - cap, h], HUE.tailLamp, 0.8);
+  } else if (piece === 'sign-post') {
+    const { post, height, rim } = FURNITURE.sign;
+    const top = h - 0.1;
+    p.box(around(0, post / 2), y, [0, top - height], HUE.whiteAluminium)
+      .box(x, y, [top - height, top], HUE.anthracite)
+      .box(
+        around(0, hl - rim),
+        around(0, hw + OVERLAY),
+        [top - height + rim, top - rim],
+        HUE.plateWhite,
+      );
+  } else {
+    const hue = piece === 'salt-bin' ? HUE.signalYellow : HUE.containerGreen;
+    p.box(x, y, [0, h - FURNITURE.lid], hue, 0.85).box(
+      x,
+      y,
+      [h - FURNITURE.lid, h],
+      HUE.anthracite,
+    );
+  }
+  return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
+}
+
 function bollard(o: Collider): PropPiece {
   const { cx, cy, halfLength: hl, halfWidth: hw, heading } = o.obb;
   const h = o.height;
@@ -700,6 +744,8 @@ function drawCollider(o: Collider, n: Counters): PropPiece[] {
       return [lamp(o)];
     case 'bollard':
       return [bollard(o)];
+    case 'furniture':
+      return [furniture(o)];
     case 'barrier':
       return [barrier(o)];
     case 'gatehouse':
@@ -707,6 +753,17 @@ function drawCollider(o: Collider, n: Counters): PropPiece[] {
     default:
       return unhandled(o.kind);
   }
+}
+
+/** What stands in for a kit prop until the kit draws it: its own collider's drawing, by the piece for furniture. */
+function kitStandIn({ id, colliders, kit }: Prop, n: Counters): PropPiece[] {
+  const [collider] = colliders;
+  if (collider === undefined || kit === undefined) {
+    throw new Error(`Yard props: kit prop ${id} needs a collider and a kit piece`);
+  }
+  const pieces =
+    collider.kind === 'furniture' ? [furniture(collider, kit.piece)] : drawCollider(collider, n);
+  return pieces.map((piece) => ({ ...piece, kitStandIn: true }));
 }
 
 function lampProp({ id, colliders, fixture }: Prop): PropPiece {
@@ -743,6 +800,9 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
         break;
       case 'lamp':
         out.push(lampProp(prop));
+        break;
+      case 'kit':
+        out.push(...kitStandIn(prop, counters));
         break;
       default:
         unhandled(prop.asset);
