@@ -3,6 +3,7 @@ import { Lighting, WebGPURenderer } from 'three/webgpu';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
   DEFAULT_GRAPHICS,
+  DEFAULT_LIGHTING,
   DEFAULT_TOP_DOWN_VIEW,
   GraphicsStartError,
   type GraphicsBackend,
@@ -25,6 +26,7 @@ import { createFrameTimer } from './governor';
 import { describeAdapter } from './gpu-backend';
 import { createMirror, mirrorPose } from './mirror';
 import { readScenePalette } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import {
   AIDS_LAYER,
@@ -255,9 +257,10 @@ export function createThreeSceneRenderer(
   }
 
   function applyQuality(b: Built): void {
-    b.environment.setQuality(quality);
-    b.truck.setQuality(quality);
-    b.trailer.setQuality(quality);
+    const look = lookFor(quality, DEFAULT_LIGHTING);
+    b.environment.setLook(look);
+    b.truck.setLook(look);
+    b.trailer.setLook(look);
     b.interior.setQuality(quality);
   }
 

@@ -12,14 +12,14 @@ import {
 } from 'three';
 import { dot, float, max, normalMap, sqrt, texture, uv, vec2, vec3, vec4 } from 'three/tsl';
 import { MeshStandardNodeMaterial, type Node, type WebGPURenderer } from 'three/webgpu';
-import { isKitDecor, type ResolvedLayout } from '../contracts/layout';
+import { isKitDecor, type KitPlacement, type ResolvedLayout } from '../contracts/layout';
 import type { ScenePalette } from '../contracts/render';
 import atlasAUrl from './assets/yard-kit-atlas-a.ktx2?url';
 import atlasBUrl from './assets/yard-kit-atlas-b.ktx2?url';
 import leavesUrl from './assets/yard-kit-leaves.ktx2?url';
 import kitUrl from './assets/yard-kit.glb?url';
 import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
-import type { QualityFlags } from './quality';
+import type { Look } from './look';
 import { COCKPIT_LAYERS, enableLayers, gpuLost, PERSPECTIVE_LAYER } from './seams';
 import { startShells, type Shells } from './glb-shells';
 import { startTextureSet, TEXTURE_FAILED, type TextureMaps, type TextureSet } from './texture-set';
@@ -253,20 +253,27 @@ export type YardKitParts = { readonly kit: YardKit; readonly reflections: Vehicl
 
 export interface YardKitLayer {
   readonly object: Group;
-  setQuality(flags: QualityFlags): void;
+  setLook(look: Look): void;
   dispose(): void;
 }
 
-/** The layout's kit decor as merged meshes under `object`, hidden until the kit has loaded and the preset draws it. */
+/**
+ * The layout's kit decor and kit props as merged meshes under `object`, hidden until the kit has
+ * loaded and the preset draws it. `onDrawn` hears each change of whether it does.
+ */
 export function createYardKitLayer(
   layout: ResolvedLayout,
   palette: ScenePalette,
   parts?: YardKitParts,
+  onDrawn?: (drawn: boolean) => void,
 ): YardKitLayer {
   const { kit, reflections } = parts ?? {};
   const object = new Group();
   object.visible = false;
-  const placements = layout.decor.filter(isKitDecor);
+  const placements: KitPlacement[] = [
+    ...layout.decor.filter(isKitDecor),
+    ...layout.props.flatMap(({ kit: placed }) => (placed === undefined ? [] : [placed])),
+  ];
   type Built = { materials: KitMaterials; geometries: BufferGeometry[] };
   let built: Built | null = null;
   let wanted = false;
@@ -289,6 +296,7 @@ export function createYardKitLayer(
     if (on !== drawn) {
       drawn = on;
       kit?.reportApplied(on);
+      onDrawn?.(on);
     }
   };
   const release = (): void => {
@@ -340,9 +348,9 @@ export function createYardKitLayer(
 
   return {
     object,
-    setQuality(flags) {
+    setLook({ flags, grade }) {
       wanted = flags.yardKit;
-      graded = flags.perspectiveLighting;
+      graded = grade.on;
       sync();
     },
     dispose() {

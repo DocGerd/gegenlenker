@@ -276,6 +276,7 @@ describe('scene tokens', () => {
   const t1: [object: string, ground: string][] = [
     ['cone', 'yard'],
     ['band', 'yard'],
+    ['band', 'verge'],
     ['wall', 'yard'],
     ['fence', 'yard'],
     ['ramp', 'yard'],
@@ -400,6 +401,17 @@ describe('scene tokens', () => {
         expect(luminance(scene(key)), `${o.id} darker`).toBeLessThan(luminance(scene('yard')));
         expect(contrast(scene(key), scene('yard')), o.id).toBeGreaterThanOrEqual(3.1);
       }
+    });
+
+    it('fences beyond the yard take the band key, which is T1 on the verge', () => {
+      const plot = keyed.filter(({ o, onYard }) => o.kind === 'fence' && !onYard);
+      expect(plot.length).toBeGreaterThan(0);
+      for (const { o, key } of plot) {
+        expect(key, o.id).toBe('band');
+        expect(contrast(scene(key), scene('verge')), o.id).toBeGreaterThanOrEqual(3.1);
+      }
+      const edge = keyed.filter(({ o, onYard }) => o.kind === 'fence' && onYard);
+      for (const { o, key } of edge) expect(key, o.id).toBe('fence');
     });
 
     it('street kerbs keep the kerb key and yard kerbs the band key', () => {

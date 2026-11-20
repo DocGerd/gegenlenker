@@ -7,6 +7,7 @@ import { GraphicsStartError, type ScenePalette } from '../contracts/render';
 import { trailerById, truckById } from '../vehicles/registry';
 import type { GpuOffer } from './gpu-backend';
 import type { QualityFlags } from './quality';
+import type { Look } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
 
@@ -90,6 +91,7 @@ function stubParts(
       object: new Group(),
       update: () => undefined,
       setQuality: (flags: QualityFlags) => void log.push(flags),
+      setLook: (look: Look) => void log.push(look.flags),
       dispose: () => undefined,
       ...extra,
     };
@@ -129,6 +131,7 @@ describe('renderer interior', () => {
       object: new Group(),
       update: () => undefined,
       setQuality: () => undefined,
+      setLook: () => undefined,
       dispose: () => undefined,
     });
     const renderer = createThreeSceneRenderer({

@@ -17,7 +17,8 @@ export type ObstacleKind =
   | 'cone'
   | 'bollard'
   | 'barrier'
-  | 'gatehouse';
+  | 'gatehouse'
+  | 'furniture';
 export type Obstacle = {
   readonly id: string;
   readonly kind: ObstacleKind;
@@ -31,7 +32,7 @@ export type Collider = {
   readonly height: number;
 };
 /** Closed set: a new asset needs a drawing in the renderer. */
-export type PropAsset = 'hall' | 'parked' | 'lamp' | 'gate' | 'bollard';
+export type PropAsset = 'hall' | 'parked' | 'lamp' | 'gate' | 'bollard' | 'kit';
 /** Light on a lamp prop: `flood` masts carry floodlights, `street` lamps a single arm; both face `aim`. */
 export type Fixture = { readonly kind: 'flood' | 'street'; readonly aim: Vec2 };
 export type Prop = {
@@ -41,6 +42,8 @@ export type Prop = {
   readonly colliders: readonly Collider[];
   /** Present exactly when `asset` is 'lamp'. */
   readonly fixture?: Fixture;
+  /** Present exactly when `asset` is 'kit'. */
+  readonly kit?: KitPlacement;
 };
 /** Id of a prop's `index`-th collider once resolved into an `Obstacle`. */
 export const colliderId = (propId: string, index: number): string => `${propId}/${index}`;
@@ -72,6 +75,9 @@ export type KitPiece =
   | 'salt-bin'
   | 'sign-post'
   | 'wash-canopy';
+/** A piece of the yard kit and the world box it is drawn within (`kitFootprint`). */
+export type KitPlacement = { readonly piece: KitPiece; readonly footprint: Obb };
+
 type DecorBase = {
   /** Unique within the layout. */
   readonly id: string;
@@ -81,7 +87,7 @@ type DecorBase = {
   readonly variant: number;
 };
 /** A piece of the yard kit, drawn from the glb where the footprint says (`kitFootprint`). */
-export type KitDecor = DecorBase & { readonly asset: 'kit'; readonly piece: KitPiece };
+export type KitDecor = DecorBase & KitPlacement & { readonly asset: 'kit' };
 /** Perspective-only goods on ground nothing drives: no collision, not part of a run. */
 export type Decor = (DecorBase & { readonly asset: Exclude<DecorAsset, 'kit'> }) | KitDecor;
 export const isKitDecor = (decor: Decor): decor is KitDecor => decor.asset === 'kit';

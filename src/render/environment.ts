@@ -12,7 +12,7 @@ import {
 import { MeshLambertNodeMaterial, type MeshStandardNodeMaterial } from 'three/webgpu';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette } from '../contracts/render';
-import { FOG_DENSITY, GRADE, setGraded } from './grade';
+import { setGraded } from './grade';
 import {
   Chunks,
   groundGeometry,
@@ -26,13 +26,8 @@ import { groundMask, groundMaskTexture } from './ground-mask';
 import { createGroundPbrMaterial } from './ground-pbr-material';
 import type { GroundTextures } from './ground-texture';
 import type { SkyTextures } from './sky-texture';
-import {
-  createLightRig,
-  perspectiveLight,
-  perspectiveSunDirection,
-  sunPosition,
-} from './light-rig';
-import type { QualityFlags } from './quality';
+import { createLightRig, perspectiveLight, sunPosition } from './light-rig';
+import { applyLook, type Look } from './look';
 import { AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
@@ -195,6 +190,7 @@ export function proceduralEnvironment(
   const obstacles = new Chunks(layout.bounds);
   const topDownOnly = new Chunks(layout.bounds);
   const detail = new Chunks(layout.bounds);
+  const standIns = new Chunks(layout.bounds);
   const { yard } = layout;
   for (const o of layout.obstacles) {
     const { cx, cy } = o.obb;
@@ -207,18 +203,28 @@ export function proceduralEnvironment(
   }
   const tokens = topDownOnly.meshes(solid, geometries);
   for (const mesh of tokens) group.add(mesh);
-  for (const piece of yardProps(layout)) detail.add(piece.x, piece.y, piece.geometry);
+  for (const piece of yardProps(layout)) {
+    (piece.kitStandIn === true ? standIns : detail).add(piece.x, piece.y, piece.geometry);
+  }
   // graded props wear their own copy, so the grade never reaches the layer-0 tokens
   const propMaterial = new MeshLambertNodeMaterial({ vertexColors: true });
-  setGraded(propMaterial, true);
   const props = detail.meshes(solid, geometries);
   for (const mesh of props) {
     castAndReceive(mesh);
     group.add(mesh);
   }
+  // The kit's stand-ins give way to the kit's own drawing, so exactly one of them is seen.
+  const standInGroup = new Group();
+  const standInMeshes = standIns.meshes(solid, geometries);
+  for (const mesh of standInMeshes) {
+    castAndReceive(mesh);
+    standInGroup.add(mesh);
+  }
+  group.add(standInGroup);
+  props.push(...standInMeshes);
   // Without the props the obstacles must still show in perspective, so the tokens go to every camera.
   const propSwap = tokenCopy(tokens);
-  propSwap.set(true); // detail on until the first setQuality
+  propSwap.set(true); // detail on until the first setLook
   propSwap.setCopies(props);
 
   const markings = new MarkingChunks(layout.bounds);
@@ -344,15 +350,18 @@ export function proceduralEnvironment(
   const rig = createLightRig(palette);
   group.add(rig.object);
   const light = perspectiveLight(palette);
-  const sunDirection = perspectiveSunDirection();
   const haze = new Color(REALISM_HUES.skyHaze);
+  const plainHaze = { toward: haze, away: haze };
   const sky = createSceneSky(palette);
   const legacyGround = domeGround(palette, false);
   const splitGround = domeGround(palette, true);
   const skyline = createSkyline(layout.bounds, haze);
-  const kit = createYardKitLayer(layout, palette, yardKit);
+  const kit = createYardKitLayer(layout, palette, yardKit, (drawn) => {
+    standInGroup.visible = !drawn;
+  });
   group.add(sky.mesh, skyline.mesh, kit.object);
 
+  let look: Look | null = null;
   let graded = false;
   let hdriOn = false;
   let hdriMap: Texture | null = null;
@@ -362,9 +371,8 @@ export function proceduralEnvironment(
     const on = hdriOn && hdriMap !== null;
     sky.setHdri(on ? hdriMap : null);
     // the haze uniforms are shared: a disposed environment must not overwrite the live one's
-    if (!disposed) {
-      GRADE.hazeToward.value.copy(on ? light.hazeToward : haze);
-      GRADE.hazeAway.value.copy(on ? light.hazeAway : haze);
+    if (!disposed && look !== null) {
+      applyLook(look, on ? { toward: light.hazeToward, away: light.hazeAway } : plainHaze);
     }
     if (on !== hdriReported) {
       hdriReported = on;
@@ -392,17 +400,18 @@ export function proceduralEnvironment(
         for (const m of gate.materials) m.color.copy(next);
       }
     },
-    setQuality(flags: QualityFlags): void {
-      graded = flags.perspectiveLighting;
-      rig.setSplit(graded);
+    setLook(next: Look): void {
+      look = next;
+      const { flags, lightSplit } = next;
+      graded = next.grade.on;
+      rig.setSplit(lightSplit);
       rig.setShadow(graded && flags.sunShadow);
-      sky.setSun(graded ? sunDirection : sunPosition());
-      sky.setGround(graded ? splitGround : legacyGround);
-      GRADE.sunDirection.value.copy(sunDirection);
-      GRADE.fogDensity.value = flags.aerialPerspective ? FOG_DENSITY : 0;
+      sky.setSun(lightSplit ? next.grade.sunDirection : sunPosition());
+      sky.setGround(lightSplit ? splitGround : legacyGround);
       hdriOn = flags.hdriSky;
       syncSky();
-      for (const mesh of props) mesh.material = graded ? propMaterial : solid;
+      setGraded(propMaterial, graded);
+      for (const mesh of props) mesh.material = lightSplit ? propMaterial : solid;
       if (texturedGroundMaterial !== null) setGraded(texturedGroundMaterial, graded);
       if (pbrMaterial !== null) setGraded(pbrMaterial, graded);
       pbrWanted = flags.groundPbr;
@@ -412,7 +421,7 @@ export function proceduralEnvironment(
       if (gate !== null) setGraded(gate.materials[1], graded);
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
-      kit.setQuality(flags);
+      kit.setLook(next);
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
       flatSwap.set(flags.litMarkings);

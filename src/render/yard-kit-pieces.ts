@@ -7,7 +7,7 @@ import {
   type Object3D,
   Texture,
 } from 'three';
-import type { KitDecor, KitPiece } from '../contracts/layout';
+import type { KitPiece, KitPlacement } from '../contracts/layout';
 import { YARD_KIT_NODES } from './yard-kit-dims';
 
 /*
@@ -157,15 +157,15 @@ const at = (array: Float32Array, i: number): number => array[i] ?? 0;
  */
 export function mergeKit(
   pieces: KitPieces,
-  placements: readonly KitDecor[],
+  placements: readonly KitPlacement[],
   kind: KitMaterialKind,
 ): BufferGeometry | null {
-  const parts: { primitive: KitPrimitive; model: KitModel; decor: KitDecor }[] = [];
-  for (const decor of placements) {
-    const model = pieces.get(decor.piece);
-    if (model === undefined) throw new Error(`yard kit lacks ${decor.piece}`);
+  const parts: { primitive: KitPrimitive; model: KitModel; placement: KitPlacement }[] = [];
+  for (const placement of placements) {
+    const model = pieces.get(placement.piece);
+    if (model === undefined) throw new Error(`yard kit lacks ${placement.piece}`);
     for (const primitive of model.primitives)
-      if (primitive.kind === kind) parts.push({ primitive, model, decor });
+      if (primitive.kind === kind) parts.push({ primitive, model, placement });
   }
   if (parts.length === 0) return null;
   const vertices = parts.reduce((sum, { primitive }) => sum + primitive.position.length / 3, 0);
@@ -176,8 +176,8 @@ export function mergeKit(
   const index = new Uint32Array(indices);
   let v = 0;
   let i = 0;
-  for (const { primitive, model, decor } of parts) {
-    const { footprint: f } = decor;
+  for (const { primitive, model, placement } of parts) {
+    const { footprint: f } = placement;
     const { min, max } = model.bounds;
     // sim frame of the piece: x along, y out of the face = three -z
     const scale = (2 * f.halfWidth) / (max[1] - min[1]);
