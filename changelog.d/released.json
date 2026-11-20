@@ -1,0 +1,189 @@
+[
+  {
+    "version": null,
+    "entries": [
+      {
+        "id": "13.added",
+        "category": "added",
+        "prs": [13, 6, 8],
+        "en": "Trainer for two trucks and two turntable drawbar trailers (four combinations) with realistic coupling behavior and collisions.",
+        "de": "Rangiertrainer für zwei Lkw und zwei Drehschemelanhänger (vier Kombinationen) mit realistischem Kupplungsverhalten und Kollisionen."
+      },
+      {
+        "id": "18.added",
+        "category": "added",
+        "prs": [18],
+        "en": "The app with its menu and driving screen.",
+        "de": "Die App mit Menü und Fahrbildschirm."
+      },
+      {
+        "id": "11.added",
+        "category": "added",
+        "prs": [11, 16],
+        "en": "A yard with a street and five exercises, plus a free yard mode.",
+        "de": "Ein Hof mit Straße und fünf Übungen sowie ein Freier Hof."
+      },
+      {
+        "id": "12.added",
+        "category": "added",
+        "prs": [12, 14],
+        "en": "Four views (cockpit, two mirrors, top-down) that lower their resolution on weak devices, and a display with angle gauges.",
+        "de": "Vier Ansichten (Cockpit, zwei Spiegel, Draufsicht), die auf schwachen Geräten die Auflösung senken, und eine Anzeige mit Winkelanzeigen."
+      },
+      {
+        "id": "9.added",
+        "category": "added",
+        "prs": [9, 85],
+        "en": "Touch, keyboard and mouse controls, including a speed lever that ramps up on W/S and Up/Down.",
+        "de": "Bedienung per Touch, Tastatur und Maus, einschließlich eines Tempohebels, der auf W/S und Pfeil hoch/runter gleichmäßig nachläuft."
+      },
+      {
+        "id": "7.added",
+        "category": "added",
+        "prs": [7, 20, 84],
+        "en": "Scoring with per-criterion results, bests with and without aids, a result screen, and a top-down replay with a timeline, event markers and speed control.",
+        "de": "Wertung mit Ergebnis je Kriterium, Bestwerten mit und ohne Hilfen, einer Ergebnisansicht und einer Wiederholung von oben mit Zeitleiste, Ereignismarken und Wiedergabetempo."
+      },
+      {
+        "id": "1.added",
+        "category": "added",
+        "prs": [1],
+        "en": "German and English UI.",
+        "de": "Oberfläche auf Deutsch und Englisch."
+      },
+      {
+        "id": "5.added",
+        "category": "added",
+        "prs": [5, 73, 124],
+        "en": "Installable offline app with an update prompt, update check, a screen that stays on while driving, an offline status and a notice when the device cannot show the graphics.",
+        "de": "Installierbare Offline-App mit Update-Hinweis, Update-Prüfung, einem Bildschirm, der beim Fahren an bleibt, Offline-Status und einem Hinweis, wenn das Gerät die Grafik nicht anzeigen kann."
+      },
+      {
+        "id": "75.added",
+        "category": "added",
+        "prs": [75],
+        "en": "Pause sheet with an unscored restart when leaving a run.",
+        "de": "Pausenansicht mit Neustart ohne Wertung, wenn eine Fahrt verlassen wird."
+      },
+      {
+        "id": "50.added",
+        "category": "added",
+        "prs": [50, 37, 74, 92],
+        "en": "Top-down aids: zoom and pan, the predicted path for truck and trailer, a marked slalom turn point, and a contact marker naming the body part.",
+        "de": "Hilfen in der Draufsicht: Zoomen und Verschieben, die Vorausschau für Lkw und Anhänger, ein markierter Wendepunkt im Slalom und eine Berührungsmarke, die das berührte Fahrzeugteil nennt."
+      },
+      {
+        "id": "82.added",
+        "category": "added",
+        "prs": [82],
+        "en": "Clearer exercise goals while driving.",
+        "de": "Deutlichere Übungsziele während der Fahrt."
+      },
+      {
+        "id": "15.added",
+        "category": "added",
+        "prs": [15, 49, 77, 80, 81, 120, 83, 91, 125],
+        "en": "More realistic cockpit and mirror views: vehicle detail, a sky gradient, contact shadows, haze with an industrial skyline, road markings per the German RMS guidelines, a German industrial yard and the remaining yard props.",
+        "de": "Realistischere Cockpit- und Spiegelansichten: Fahrzeugdetails, ein Himmelsverlauf, Schatten unter den Fahrzeugen, Dunst mit einer Industriekulisse, Fahrbahnmarkierungen nach den deutschen RMS-Richtlinien, ein deutscher Betriebshof und die übrigen Hofobjekte."
+      },
+      {
+        "id": "86.added",
+        "category": "added",
+        "prs": [86],
+        "en": "Loading is retried after a failure, borders are easier to see and the speed lever has a rail.",
+        "de": "Erneuter Ladeversuch nach einem Fehler, besser sichtbare Rahmen und eine Schiene für den Tempohebel."
+      },
+      {
+        "id": "134.added",
+        "category": "added",
+        "prs": [134],
+        "en": "Graphics quality presets Low, Balanced and High in settings, defaulting to Balanced.",
+        "de": "Grafikqualität Niedrig, Ausgewogen und Hoch in den Einstellungen, standardmäßig Ausgewogen."
+      },
+      {
+        "id": "71.changed",
+        "category": "changed",
+        "prs": [71],
+        "en": "Smoother edges in the mirrors.",
+        "de": "Glattere Kanten in den Spiegeln."
+      },
+      {
+        "id": "128.changed",
+        "category": "changed",
+        "prs": [128, 47],
+        "en": "Content keeps clear of notches and screen edges, mirrors are bigger and narrow windows lay out correctly; on shorter screens the mirrors stay above the controls.",
+        "de": "Inhalte halten Abstand zu Aussparungen und Bildschirmrändern, die Spiegel sind größer und schmale Fenster werden richtig aufgebaut; auf niedrigeren Bildschirmen bleiben die Spiegel über den Bedienelementen."
+      },
+      {
+        "id": "102.changed",
+        "category": "changed",
+        "prs": [102],
+        "en": "The desktop key legend is collapsed and the top view panels are slimmer.",
+        "de": "Die Tastenübersicht am Desktop ist eingeklappt und die Felder der Draufsicht sind schlanker."
+      },
+      {
+        "id": "94.fixed",
+        "category": "fixed",
+        "prs": [94],
+        "en": "Holding W/Up or S/Down ramps the speed lever.",
+        "de": "Wer W/Pfeil hoch oder S/Pfeil runter gedrückt hält, verstellt den Tempohebel gleichmäßig."
+      },
+      {
+        "id": "34.fixed",
+        "category": "fixed",
+        "prs": [34, 31],
+        "en": "Cockpit, mirrors and top-down are clearly separated, and grounds, obstacles and halls are distinguishable.",
+        "de": "Cockpit, Spiegel und Draufsicht sind klar voneinander getrennt; Böden, Hindernisse und Hallen lassen sich gut unterscheiden."
+      },
+      {
+        "id": "35.fixed",
+        "category": "fixed",
+        "prs": [35, 76, 114, 78, 106],
+        "en": "The top-down view draws wheels, axles, turntable and drawbar, keeps a dark outline under aid lines, and frames the whole yard and the follow view clear of the display panels.",
+        "de": "Die Draufsicht zeigt Räder, Achsen, Drehschemel und Deichsel, unterlegt Hilfslinien dunkel und rahmt den ganzen Hof und die Ansicht Folgen frei von den Anzeigefeldern."
+      },
+      {
+        "id": "32.fixed",
+        "category": "fixed",
+        "prs": [32],
+        "en": "The steering wheel shows its position and the straight state, and the controls layout is corrected.",
+        "de": "Das Lenkrad zeigt seine Stellung und die Geradeausstellung, und die Anordnung der Bedienelemente ist korrigiert."
+      },
+      {
+        "id": "93.fixed",
+        "category": "fixed",
+        "prs": [93, 117],
+        "en": "The forward view from the cockpit is no longer blocked by opaque cab glass, and the skyline draws a quay crane.",
+        "de": "Die Sicht nach vorn im Cockpit wird nicht mehr von undurchsichtigem Fahrerhausglas versperrt, und die Kulisse zeigt einen Kaikran."
+      },
+      {
+        "id": "113.fixed",
+        "category": "fixed",
+        "prs": [113, 103],
+        "en": "The slalom requires weaving between the obstacles, and exercise order and result details are corrected.",
+        "de": "Der Slalom verlangt echtes Schlängeln um die Hindernisse; Übungsreihenfolge und Ergebnisdetails sind korrigiert."
+      },
+      {
+        "id": "96.fixed",
+        "category": "fixed",
+        "prs": [96, 118],
+        "en": "The run clock and the with-aids mark start with the first driving input, and the last moment counts when a run ends in the target.",
+        "de": "Zeit und Hilfen-Markierung der Fahrt beginnen mit der ersten Fahreingabe, und endet eine Fahrt im Ziel, zählt der letzte Moment mit."
+      },
+      {
+        "id": "95.fixed",
+        "category": "fixed",
+        "prs": [95, 101],
+        "en": "Result screen comparison to the best, keyboard use and leaving a run unscored are corrected; the keyboard keeps working after the pause sheet closes.",
+        "de": "Der Vergleich zum Bestwert in der Ergebnisansicht, die Tastaturbedienung und das Verlassen ohne Wertung sind korrigiert; die Tastatur funktioniert nach dem Schließen der Pausenansicht weiter."
+      },
+      {
+        "id": "112.fixed",
+        "category": "fixed",
+        "prs": [112, 107],
+        "en": "The clock rounds correctly and a double click no longer selects text; the cockpit layout fits 1280-pixel-wide windows, and Stop no longer covers the counters at 1024x700.",
+        "de": "Die Zeitanzeige rundet richtig, und ein Doppelklick markiert keinen Text mehr; das Cockpit passt in 1280 Pixel breite Fenster, und Stopp verdeckt bei 1024x700 nicht mehr die Zähler."
+      }
+    ]
+  }
+]
