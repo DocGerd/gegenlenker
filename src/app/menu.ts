@@ -1,6 +1,11 @@
 import { exercises } from '../content/registry';
 import { LAYOUT_IDS, type LayoutId } from '../contracts/layout';
-import { GRAPHICS_PRESETS, type GraphicsPreset } from '../contracts/render';
+import {
+  GRAPHICS_PRESETS,
+  LIGHTING_MODES,
+  type GraphicsPreset,
+  type LightingMode,
+} from '../contracts/render';
 import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import {
@@ -38,6 +43,11 @@ const GRAPHICS_NAME: Readonly<Record<GraphicsPreset, MessageKey>> = {
   high: 'graphicsHigh',
 };
 
+const LIGHTING_NAME: Readonly<Record<LightingMode, MessageKey>> = {
+  day: 'lightingDay',
+  night: 'lightingNight',
+};
+
 const MARKUP = `
 <main class="menu">
   <header class="menu-header">
@@ -48,6 +58,7 @@ const MARKUP = `
     <div class="menu-fields">
       <label class="menu-field"><span class="menu-label" data-i18n="truck"></span><select class="menu-select" data-menu="truck"></select></label>
       <label class="menu-field"><span class="menu-label" data-i18n="trailer"></span><select class="menu-select" data-menu="trailer"></select></label>
+      <label class="menu-field"><span class="menu-label" data-i18n="lighting"></span><select class="menu-select" data-menu="lighting"></select></label>
     </div>
     <p class="menu-note" data-i18n="estimateNote"></p>
   </section>
@@ -130,6 +141,13 @@ function replayContext(log: InputLog): string {
     : t(EXERCISE_TITLE[log.exerciseId]);
 }
 
+/** The replay button's detail line; a night run says so, as it replays at night whatever the menu shows. */
+function replayLabel(log: InputLog): string {
+  return log.lighting === 'night'
+    ? `${replayContext(log)} · ${t('lightingNight')}`
+    : replayContext(log);
+}
+
 function startButton(title: string, onClick: () => void): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
@@ -189,6 +207,7 @@ export function showMenu(
 
     const truck = query(container, 'truck', HTMLSelectElement);
     const trailer = query(container, 'trailer', HTMLSelectElement);
+    const lighting = query(container, 'lighting', HTMLSelectElement);
     const language = query(container, 'language', HTMLSelectElement);
     const theme = query(container, 'theme', HTMLSelectElement);
     const graphics = query(container, 'graphics', HTMLSelectElement);
@@ -201,6 +220,11 @@ export function showMenu(
       trailer,
       trailers.map((s) => [s.id, s.name]),
       settings.trailerId,
+    );
+    fillSelect(
+      lighting,
+      LIGHTING_MODES.map((v) => [v, t(LIGHTING_NAME[v])]),
+      settings.lighting,
     );
     fillSelect(
       language,
@@ -235,7 +259,7 @@ export function showMenu(
     if (replay === null) replaySection.remove();
     else {
       const button = query(container, 'replay', HTMLElement);
-      button.append(span('menu-best', replayContext(replay.log)));
+      button.append(span('menu-best', replayLabel(replay.log)));
       button.addEventListener('click', replay.start);
     }
 
@@ -276,6 +300,14 @@ export function showMenu(
         trailerId: TRAILER_IDS.find((id) => id === trailer.value) ?? settings.trailerId,
       });
       refreshBest();
+    });
+    lighting.addEventListener('change', () => {
+      const mode = LIGHTING_MODES.find((v) => v === lighting.value);
+      if (mode === undefined) lighting.value = currentSettings().lighting;
+      else {
+        updateSettings({ lighting: mode });
+        refreshBest();
+      }
     });
     language.addEventListener('change', () => {
       const lang: Lang = language.value === 'en' ? 'en' : 'de';
