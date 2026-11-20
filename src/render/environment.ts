@@ -29,7 +29,7 @@ import type { GroundTextures } from './ground-texture';
 import type { SkyTextures } from './sky-texture';
 import { createLightRig, perspectiveLight, sunPosition } from './light-rig';
 import { applyLook, type Look } from './look';
-import { AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
+import { AID_STROKE, AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
 import { createYardKitLayer, type YardKitParts } from './yard-kit';
@@ -262,6 +262,26 @@ export function proceduralEnvironment(
   };
   for (const token of markingTokens) markingCopies.push(litCopy(token, litFlat));
 
+  // At night the top-down view draws the accent strokes in the night accent. A token's geometry is
+  // shared with its lit copy and carries the day colour, so a stroke gets a second mesh on the same
+  // geometry in a plain night material and the day token hides; the casings keep their colour.
+  const nightPolygon = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
+  const nightFlat = new MeshBasicMaterial({ color: palette.nightAccent, ...nightPolygon });
+  const nightCasing = new MeshBasicMaterial({ color: palette.wheel, ...nightPolygon });
+  const nightStrokes: { day: Mesh; night: readonly Mesh[] }[] = [];
+  const nightMesh = (geometry: BufferGeometry, material: MeshBasicMaterial, y = 0): Mesh => {
+    const mesh = new Mesh(geometry, material);
+    mesh.layers.set(AIDS_LAYER);
+    mesh.visible = false;
+    mesh.position.y = y;
+    return mesh;
+  };
+  /** `night` draws in place of `day` at night. */
+  const nightStroke = (day: Mesh, night: readonly Mesh[], parent: Group = group): void => {
+    parent.add(...night);
+    nightStrokes.push({ day, night });
+  };
+
   let yardBand: Group | null = null;
   const { target } = layout;
   if (target !== null) {
@@ -276,6 +296,18 @@ export function proceduralEnvironment(
     const outlineToken = new Mesh(outline, flat);
     group.add(outlineToken);
     aidCopy(outlineToken, litFlat, flat);
+    const outlineCasing = outlineGeometry(
+      target.length,
+      target.width,
+      TARGET_STRIP + 2 * AID_STROKE.casing,
+    )
+      .rotateY(target.pose.heading)
+      .translate(target.pose.x, TARGET_Y, -target.pose.y);
+    geometries.push(outlineCasing);
+    nightStroke(outlineToken, [
+      nightMesh(outlineCasing, nightCasing, -BAND_CASING_DROP),
+      nightMesh(outline, nightFlat),
+    ]);
 
     const { tolerances } = layout;
     if (tolerances !== null) {
@@ -303,6 +335,8 @@ export function proceduralEnvironment(
       const bandTokens = addBand(BAND_STRIP, 0);
       group.add(...bandTokens);
       for (const token of bandTokens) aidCopy(token, litFlat, flat);
+      const [, bandCore] = bandTokens;
+      if (bandCore !== undefined) nightStroke(bandCore, [nightMesh(bandCore.geometry, nightFlat)]);
 
       // World-metre strokes shrink to under a pixel in the whole-yard view, so it gets a wider copy.
       const { yard } = layout;
@@ -312,7 +346,11 @@ export function proceduralEnvironment(
       );
       if (yardStrip > BAND_STRIP) {
         yardBand = new Group();
-        for (const m of addBand(yardStrip, BAND_LIFT)) yardBand.add(m);
+        const [yardCasing, yardCore] = addBand(yardStrip, BAND_LIFT);
+        for (const m of [yardCasing, yardCore]) if (m !== undefined) yardBand.add(m);
+        if (yardCore !== undefined) {
+          nightStroke(yardCore, [nightMesh(yardCore.geometry, nightFlat)], yardBand);
+        }
         yardBand.traverse((o) => o.layers.set(AIDS_LAYER));
         group.add(yardBand);
       }
@@ -322,7 +360,9 @@ export function proceduralEnvironment(
   const { waypoint } = layout;
   let gate: {
     materials: readonly [MeshBasicMaterial, MeshLambertNodeMaterial];
+    night: MeshBasicMaterial;
     pending: Color;
+    nightPending: Color;
     passed: Color;
   } | null = null;
   if (waypoint !== null) {
@@ -340,16 +380,31 @@ export function proceduralEnvironment(
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
     });
-    geometries.push(ring);
+    const ringCasing = new RingGeometry(
+      waypoint.radius - half - AID_STROKE.casing,
+      waypoint.radius + half + AID_STROKE.casing,
+      GATE_SEGMENTS,
+    )
+      .rotateX(-Math.PI / 2)
+      .translate(waypoint.x, TARGET_Y, -waypoint.y);
+    geometries.push(ring, ringCasing);
     const gateToken = new Mesh(ring, material);
     group.add(gateToken);
     aidCopy(gateToken, litMaterial, material);
+    const nightGate = new MeshBasicMaterial(nightPolygon);
+    nightStroke(gateToken, [
+      nightMesh(ringCasing, nightCasing, -BAND_CASING_DROP),
+      nightMesh(ring, nightGate),
+    ]);
     gate = {
       materials: [material, litMaterial],
+      night: nightGate,
       pending: new Color(palette.accent),
+      nightPending: new Color(palette.nightAccent),
       passed: new Color(palette.marking),
     };
     for (const m of gate.materials) m.color.copy(gate.pending);
+    nightGate.color.copy(gate.nightPending);
   }
   const flatSwap = tokenCopy(flatTokens);
   flatSwap.setCopies(flatCopies);
@@ -415,6 +470,7 @@ export function proceduralEnvironment(
       if (gate !== null) {
         const next = frame.waypointVisited === true ? gate.passed : gate.pending;
         for (const m of gate.materials) m.color.copy(next);
+        gate.night.color.copy(next === gate.passed ? gate.passed : gate.nightPending);
       }
     },
     setLook(next: Look): void {
@@ -444,6 +500,11 @@ export function proceduralEnvironment(
       skyline.setHaze(night ? nightHaze : haze);
       kit.setLook(next);
       for (const { copy, lit, glow } of aidCopies) copy.material = next.aidGlow ? glow : lit;
+      rig.setTopDownLight(next.topDownLight);
+      for (const { day, night: strokes } of nightStrokes) {
+        day.visible = !night;
+        for (const stroke of strokes) stroke.visible = night;
+      }
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
       flatSwap.set(next.litCopies);
@@ -462,9 +523,12 @@ export function proceduralEnvironment(
       maskTexture?.dispose();
       geometries.forEach((g) => g.dispose());
       gate?.materials.forEach((m) => m.dispose());
+      gate?.night.dispose();
       solid.dispose();
       propMaterial.dispose();
       flat.dispose();
+      nightFlat.dispose();
+      nightCasing.dispose();
       litFlat.dispose();
       wornMaterial?.dispose();
       sky.dispose();

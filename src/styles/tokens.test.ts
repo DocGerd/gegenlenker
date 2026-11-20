@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LAYOUT_IDS } from '../contracts/layout';
-import type { ScenePaletteKey } from '../contracts/render';
+import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { isOnYard } from '../render/yard-props';
 import { obstaclePaletteKey } from '../render/yard-tokens';
+import { legacyIrradiance } from '../render/light-rig';
+import { TOP_DOWN_NIGHT_LIGHT } from '../render/look';
 import { KEYS, tokenName } from '../render/palette';
 import { REALISM_HUES } from '../render/realism-hues';
 import { HUD_BAND_SHARE } from '../render/viewports';
@@ -383,22 +385,122 @@ describe('scene tokens', () => {
     },
   );
 
-  // TN-a: the night clear colour is darker than every ground, so the yard's edge reads against it.
-  it.each(['yard', 'pavement', 'street', 'verge'])(
-    'TN-a: nightBackdrop is darker than %s with 1.5:1 or more',
-    (ground) => {
-      expect(luminance(scene('nightBackdrop')), 'darker').toBeLessThan(luminance(scene(ground)));
-      expect(contrast(scene(ground), scene('nightBackdrop'))).toBeGreaterThanOrEqual(1.5);
-    },
-  );
+  // The legacy lights run at TOP_DOWN_NIGHT_LIGHT of the day at night, so a lit surface shows
+  // lin(token) * f * k, f being the legacy irradiance over pi; unlit strokes and markings keep their colour.
+  const palette = Object.fromEntries(
+    keys.map((key) => [key, parseInt(scene(key).slice(1), 16)]),
+  ) as unknown as ScenePalette;
+  const dim = (legacyIrradiance(palette) / Math.PI) * TOP_DOWN_NIGHT_LIGHT;
+  /** Relative luminance of a lit surface at night. */
+  const lit = (key: string): number => luminance(scene(key)) * dim;
+  /** Relative luminance of an unlit token, which the night light does not touch. */
+  const flat = (key: string): number => luminance(scene(key));
+  const ratio = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
-  // TN-b: the strokes that stay in their day colour read against the night clear colour.
-  it.each(['accent', 'marking'])(
-    'TN-b: the %s core against nightBackdrop is 3:1 or more',
-    (core) => {
-      expect(contrast(scene(core), scene('nightBackdrop'))).toBeGreaterThanOrEqual(3);
-    },
-  );
+  describe('night top-down', () => {
+    const grounds = ['yard', 'pavement', 'street', 'verge'] as const;
+
+    it.each(t1)('TN1: %s is darker than %s with 3.1:1 or more', (object, ground) => {
+      expect(lit(object), 'darker').toBeLessThan(lit(ground));
+      expect(ratio(lit(object), lit(ground))).toBeGreaterThanOrEqual(3.1);
+    });
+
+    it.each(t3.filter(([a, b]) => grounds.some((g) => g === a) && grounds.some((g) => g === b)))(
+      'TN3: %s against %s is 1.5:1 or more',
+      (a, b) => {
+        expect(ratio(lit(a), lit(b))).toBeGreaterThanOrEqual(1.5);
+      },
+    );
+
+    // TN-a: the night clear colour is darker than every lit ground, so the yard's edge reads against it.
+    it.each(grounds)('TN-a: nightBackdrop is darker than %s with 1.5:1 or more', (ground) => {
+      expect(flat('nightBackdrop'), 'darker').toBeLessThan(lit(ground));
+      expect(ratio(lit(ground), flat('nightBackdrop'))).toBeGreaterThanOrEqual(1.5);
+    });
+
+    // TN-b: the unlit cores read against the night clear colour.
+    it.each(['nightAccent', 'marking'])(
+      'TN-b: the %s core against nightBackdrop is 3:1 or more',
+      (core) => {
+        expect(ratio(flat(core), flat('nightBackdrop'))).toBeGreaterThanOrEqual(3);
+      },
+    );
+
+    // Aid strokes: the night accent sits on the wheel casing, and on every ground the casing edge or
+    // the core reads: the casing on the lighter grounds, the core on the street.
+    it('night accent against its casing is 3:1 or more', () => {
+      expect(ratio(flat('nightAccent'), flat('wheel'))).toBeGreaterThanOrEqual(3);
+    });
+
+    it.each(grounds)(
+      'an aid stroke reads on %s through its casing or its core, 3:1 or more',
+      (ground) => {
+        const best = Math.max(
+          ratio(flat('wheel'), lit(ground)),
+          ratio(flat('nightAccent'), lit(ground)),
+        );
+        expect(best).toBeGreaterThanOrEqual(3);
+      },
+    );
+
+    it.each(['yard', 'street'])('night tracks against %s is 1.5:1 or more', (ground) => {
+      expect(ratio(flat('nightTracks'), lit(ground))).toBeGreaterThanOrEqual(1.5);
+    });
+
+    it.each(['yard', 'street', 'pavement'])(
+      'the lit body against %s is 1.5:1 or more',
+      (ground) => {
+        expect(ratio(lit('body'), lit(ground))).toBeGreaterThanOrEqual(1.5);
+      },
+    );
+
+    it('the lit body against the unlit marking is 1.5:1 or more', () => {
+      expect(ratio(lit('body'), flat('marking'))).toBeGreaterThanOrEqual(1.5);
+    });
+
+    // Contact marker: the unlit core on the dim dark surfaces, the casing on the dim light ones.
+    it.each(darkContactSurfaces.filter((surface) => surface !== 'tracks'))(
+      'contact marker core against %s is 3:1 or more',
+      (surface) => {
+        expect(ratio(flat('marking'), lit(surface))).toBeGreaterThanOrEqual(3);
+      },
+    );
+
+    it('contact marker core against the night tracks is 3:1 or more', () => {
+      expect(ratio(flat('marking'), flat('nightTracks'))).toBeGreaterThanOrEqual(3);
+    });
+
+    it.each(['yard', 'body', 'cab', 'kerb'])(
+      'contact marker casing against %s is 3:1 or more',
+      (surface) => {
+        expect(ratio(flat('wheel'), lit(surface))).toBeGreaterThanOrEqual(3);
+      },
+    );
+
+    // The legend swatch ground is the yard as the intermediate stores it.
+    it('draws the legend swatches on the lit night yard', () => {
+      const encode = (l: number): number =>
+        Math.round(255 * (l <= 0.0031308 ? 12.92 * l : 1.055 * l ** (1 / 2.4) - 0.055));
+      const decode = (c: number): number => {
+        const v = c / 255;
+        return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+      };
+      const yard = scene('yard');
+      const expected = [1, 3, 5]
+        .map((i) => encode(decode(parseInt(yard.slice(i, i + 2), 16)) * dim))
+        .map((c) => c.toString(16).padStart(2, '0'))
+        .join('');
+      const swatch =
+        /\[data-render-lighting='night'\] \.hud-swatch\s*\{[^}]*background:\s*(#[0-9a-f]{6})/.exec(
+          read('../hud/hud.css'),
+        )?.[1];
+      expect(swatch).toBe(`#${expected}`);
+    });
+
+    // Not rebased, as never a top-down pair: T2 (the hall's cladding is on side faces and the lamp's
+    // marking band sits under its full-footprint head), cladding against hall and fence, and sky and
+    // cladding against sky (the perspective dome); the day exceptions stay.
+  });
 
   // Routing: a single-tone obstacle on the yard resolves to a key that satisfies T1 there.
   describe('obstacle palette keys over the resolved layouts', () => {
@@ -420,6 +522,14 @@ describe('scene tokens', () => {
       for (const { o, key } of onYard) {
         expect(luminance(scene(key)), `${o.id} darker`).toBeLessThan(luminance(scene('yard')));
         expect(contrast(scene(key), scene('yard')), o.id).toBeGreaterThanOrEqual(3.1);
+      }
+    });
+
+    it('every non-cone obstacle on the yard keeps 3.1:1 or more against the night yard', () => {
+      for (const key of new Set(
+        keyed.filter(({ o, onYard }) => onYard && o.kind !== 'cone').map(({ key }) => key),
+      )) {
+        expect(ratio(lit(key), lit('yard')), key).toBeGreaterThanOrEqual(3.1);
       }
     });
 

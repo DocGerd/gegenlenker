@@ -35,7 +35,7 @@ import { FOG_DENSITY, GRADE } from './grade';
 import { NIGHT_AMBIENT, perspectiveLight } from './light-rig';
 import { nightDomeGround, skyColours } from './scene-sky';
 import { MARK_BOX } from './marking-wear';
-import { lookFor } from './look';
+import { lookFor, TOP_DOWN_NIGHT_LIGHT } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { REALISM_HUES } from './realism-hues';
 vi.mock('./ground-pbr-material', async (importOriginal) => {
@@ -393,17 +393,89 @@ describe('environment at night', () => {
     env.dispose();
   });
 
-  it('keeps the top-down meshes and materials as by day', () => {
-    const env = build();
-    const topDown = (): Map<Object3D, unknown> =>
+  describe('top-down strokes', () => {
+    const strokePalette = {
+      ...palette,
+      accent: 0xff0000,
+      nightAccent: 0x00ffff,
+      marking: 0x00ff00,
+      wheel: 0x101010,
+    };
+    const buildStroked = (): ReturnType<typeof proceduralEnvironment> => {
+      if (nightLayout === null) throw new Error('no slalom exercise');
+      return proceduralEnvironment(nightLayout, strokePalette);
+    };
+    const topDown = (env: { object: Object3D }): Map<Object3D, unknown> =>
       new Map([...seen(env.object, cameras.topDown)].map((m) => [m, asMesh(m).material]));
-    env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
-    const day = topDown();
-    for (const preset of ['low', 'balanced', 'high'] as const) {
-      env.setLook(lookFor(QUALITY_FLAGS[preset], 'night'));
-      expect(topDown(), preset).toEqual(day);
-    }
-    env.dispose();
+    const colour = (m: Object3D): number =>
+      (asMesh(m).material as unknown as { color: Color }).color.getHex();
+
+    it('keeps the top-down grounds, obstacles and markings as by day and swaps only the accent strokes', () => {
+      const env = buildStroked();
+      env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
+      const day = topDown(env);
+      for (const preset of ['low', 'balanced', 'high'] as const) {
+        env.setLook(lookFor(QUALITY_FLAGS[preset], 'night'));
+        const night = topDown(env);
+        for (const [mesh, material] of day) {
+          if (night.has(mesh)) expect(night.get(mesh), preset).toBe(material);
+        }
+        // the outline, the band core, its whole-yard copy and the gate give way; the outline and the gate gain a casing
+        const gone = [...day.keys()].filter((m) => !night.has(m));
+        const added = [...night.keys()].filter((m) => !day.has(m));
+        expect(gone, preset).toHaveLength(4);
+        expect(added.map(colour).sort(), preset).toEqual(
+          [0x00ffff, 0x00ffff, 0x00ffff, 0x00ffff, 0x101010, 0x101010].sort(),
+        );
+        expect(night.size - day.size, preset).toBe(2);
+      }
+      env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
+      expect(topDown(env)).toEqual(day);
+      env.dispose();
+    });
+
+    it('draws the night strokes to the top-down camera only', () => {
+      const env = buildStroked();
+      env.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+      const topOnly = only(seen(env.object, cameras.topDown), seen(env.object, cameras.cockpit));
+      expect(topOnly.map(colour)).toContain(0x00ffff);
+      for (const view of views) {
+        expect([...seen(env.object, view)].map((m) => colour(m))).not.toContain(0x00ffff);
+      }
+      env.dispose();
+    });
+
+    it('turns the night gate to the marking colour once it is passed', () => {
+      const env = buildStroked();
+      env.setLook(lookFor(QUALITY_FLAGS.low, 'night'));
+      const colours = (): number[] => [...seen(env.object, cameras.topDown)].map(colour);
+      expect(colours()).not.toContain(strokePalette.marking);
+      env.update({ topDown: 'follow', waypointVisited: true } as RenderFrame, {
+        x: 0,
+        y: 0,
+        radius: 10,
+      });
+      expect(colours().filter((c) => c === strokePalette.marking)).toHaveLength(1);
+      env.dispose();
+    });
+
+    it('scales the legacy lights to the night share and back', () => {
+      const env = buildStroked();
+      const lights: Light[] = [];
+      env.object.traverse((o) => {
+        if (o instanceof DirectionalLight || o instanceof HemisphereLight) lights.push(o);
+      });
+      const [legacySun, legacyAmbient] = lights;
+      env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
+      const day = [legacySun?.intensity, legacyAmbient?.intensity];
+      env.setLook(lookFor(QUALITY_FLAGS.high, 'night'));
+      expect([legacySun?.intensity, legacyAmbient?.intensity]).toEqual(
+        day.map((i) => (i ?? 0) * TOP_DOWN_NIGHT_LIGHT),
+      );
+      env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
+      expect([legacySun?.intensity, legacyAmbient?.intensity]).toEqual(day);
+      env.dispose();
+    });
   });
 
   it('lights the perspective views from a dim tinted probe alone, with no shadow, at every preset', () => {

@@ -112,7 +112,12 @@ function stubParts(
       trailer: () => part({}),
       environment: () => part({}),
       interior: () => part({ frame: 'eye' as const, place: () => undefined }),
-      aids: () => ({ object: new Group(), update: () => undefined, dispose: () => undefined }),
+      aids: () => ({
+        object: new Group(),
+        update: () => undefined,
+        setLook: () => undefined,
+        dispose: () => undefined,
+      }),
     });
   return { applied, renderer: create() };
 }
@@ -145,7 +150,12 @@ describe('renderer lighting', () => {
       trailer: part,
       environment: part,
       interior: () => ({ ...part(), frame: 'eye' as const, place: () => undefined }),
-      aids: () => ({ object: new Group(), update: () => undefined, dispose: () => undefined }),
+      aids: () => ({
+        object: new Group(),
+        update: () => undefined,
+        setLook: () => undefined,
+        dispose: () => undefined,
+      }),
     });
     renderer.setLighting('night');
     renderer.setScene(layout, truckById('man-le-18-280'), trailerById('krone-azw-18'));
@@ -188,7 +198,12 @@ describe('renderer interior', () => {
         interiors.push(interior);
         return interior;
       },
-      aids: () => ({ object: new Group(), update: () => undefined, dispose: () => undefined }),
+      aids: () => ({
+        object: new Group(),
+        update: () => undefined,
+        setLook: () => undefined,
+        dispose: () => undefined,
+      }),
     });
     const set = () =>
       renderer.setScene(layout, truckById('man-le-18-280'), trailerById('krone-azw-18'));
