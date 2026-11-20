@@ -6,8 +6,9 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
   OUT_PATH     where the raw .glb is written
   EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ..., "lampCommonSha256": ...}; the run aborts on a mismatch
 
-Two vertex-coloured meshes in the sim body frame (blender_common.py): "cab", and "cab-lens" with the
-lamp lenses of `lenses` (src/render/lamp-layout.ts). Livery is colours only: no lettering, emblems or
+Three vertex-coloured meshes in the sim body frame (blender_common.py): "cab", "cab-glass" with the
+windows (a node of their own so the renderer can keep them out of the sun shadow, #159), and "cab-lens"
+with the lamp lenses of `lenses` (src/render/lamp-layout.ts). Livery is colours only: no lettering, emblems or
 maker logos. Styles: "day" (short day cab) and "crew" (double cab with a second
 side window row, a roof rack and a front tow coupling).
 
@@ -70,7 +71,7 @@ def shell(p, shape, colour):
     shape.add(verts, faces, colour)
 
 
-def front_fittings(p, shape, hues):
+def front_fittings(p, shape, glass, hues):
     c, hw, front = p["cab"], p["width"] / 2, p["frontX"]
     relief = p["relief"]
     ahead = (front, front + relief)
@@ -81,7 +82,7 @@ def front_fittings(p, shape, hues):
 
     glass_z = above(c["glassSill"], c["glassHeight"])
     ws = hw - c["windscreenInset"]
-    shape.box(ahead, (-ws, ws), glass_z, hues["glass"])
+    glass.box(ahead, (-ws, ws), glass_z, hues["glass"])
     shape.box(
         ahead,
         (-c["grilleWidth"] / 2, c["grilleWidth"] / 2),
@@ -94,11 +95,11 @@ def front_fittings(p, shape, hues):
     )
     for side in (-1, 1):
         edge = (hw, hw + relief) if side > 0 else (-hw - relief, -hw)
-        shape.box(side_x, edge, glass_z, hues["glass"])
+        glass.box(side_x, edge, glass_z, hues["glass"])
         if p["style"] == "crew":
             gap, length = CREW_GLASS
             rear_x = (side_x[0] - gap - length, side_x[0] - gap)
-            shape.box(rear_x, edge, glass_z, hues["glass"])
+            glass.box(rear_x, edge, glass_z, hues["glass"])
     half = hw - p["bumperInset"]
     # The front face sits at frontX + relief, where the plate expects it.
     shape.box(
@@ -178,11 +179,11 @@ def tow_coupling(p, shape, hues):
     )
 
 
-def check_envelope(p, shape):
+def check_envelope(p, *shapes):
     """The cab stays behind the body and clear of the plate: only the tow coupling stands ahead of the bumper face."""
     rear = p["frontX"] - p["cabLength"]
     face = p["frontX"] + p["relief"]
-    for (x0, x1), _, (z0, z1) in shape.extents():
+    for (x0, x1), _, (z0, z1) in (e for shape in shapes for e in shape.extents()):
         if x0 < rear - EPS:
             raise ValueError("a face reaches behind the cab")
         if x1 > face + EPS and z1 > p["railBottom"] + EPS:
@@ -211,17 +212,17 @@ def main():
     COMMON["check_expected"](hashes, globals().get("EXPECTED_SHA256"))
     hues = {key: srgb(value) for key, value in sorted(params["hues"].items())}
 
-    shape = Shape()
+    shape, glass = Shape(), Shape()
     shell(params, shape, hues["body"])
-    front_fittings(params, shape, hues)
+    front_fittings(params, shape, glass, hues)
     livery(params, shape, hues)
     roof(params, shape, hues)
     if params["style"] == "crew":
         tow_coupling(params, shape, hues)
-    check_envelope(params, shape)
+    check_envelope(params, shape, glass)
     lens = LAMP["lens_shape"](params["lenses"])
     check_lenses(params, shape, lens)
-    return COMMON["export"](OUT_PATH, "cab-shell", hashes, [("cab", shape), ("cab-lens", lens)])
+    return COMMON["export"](OUT_PATH, "cab-shell", hashes, [("cab", shape), ("cab-glass", glass), ("cab-lens", lens)])
 
 
 RESULT = main()
