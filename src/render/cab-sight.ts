@@ -13,7 +13,10 @@ export type PillarSight = {
   readonly covered: number;
 };
 
-/** What the cab's glass shows the driver's eye, from the shell's windscreen and side windows. */
+/**
+ * What the cab's glass shows the driver's eye, from the shell's windscreen and side windows. The
+ * right pillar lies past the cockpit view's edge at every supported pane, so only its covered angle is used.
+ */
 export type CabSight = {
   /** Azimuth of the windscreen's centre, positive to the right of the forward axis. */
   readonly windscreenCentre: number;

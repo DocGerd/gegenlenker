@@ -12,7 +12,6 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Rect } from '../contracts/render';
 import type { TruckSpec } from '../contracts/vehicle';
 import { type CabSight, cabSight } from './cab-sight';
-import { COCKPIT_FOV } from './cockpit-camera';
 import { REALISM_HUES, type RealismHueKey } from './realism-hues';
 import { INTERIOR_LAYER, type CockpitInterior } from './seams';
 import { tint } from './tint';
@@ -36,19 +35,19 @@ export const headerEdge = (x: number, shift = 0): number =>
   0.78 - 0.06 * ((x - shift) / (1 + shift)) ** 2;
 const DASH_LIP = 0.035;
 
-/** The aspect the dash and header are shaped for, as the ratio of a landscape drive layout's cockpit view. */
-const REFERENCE_ASPECT = 2.4;
 /** NDC; the dash low point and header high point never move further right than this. */
 const MAX_SHIFT = 0.45;
 /** The instrument binnacle over the dash straight ahead of the driver; `top` stays below the sight cone. */
 export const HUMP = { halfWidth: 0.3, drop: 0.12, top: -0.475 };
 const hump = (x: number): number => HUMP.top - HUMP.drop * (Math.abs(x) / HUMP.halfWidth) ** 4;
 
-/** NDC x of the cab windscreen's centre, where the dash is lowest and the header highest. */
-export function edgeShift(truck: TruckSpec, fov: number): number {
+/**
+ * NDC x where the dash is lowest and the header highest: the cab windscreen's centre in a pane of
+ * `aspect`, held to `MAX_SHIFT` (the centre lies past the view edge in narrow panes).
+ */
+export function edgeShift(truck: TruckSpec, aspect: number, fov: number): number {
   const { windscreenCentre } = cabSight(truck);
-  const ndc =
-    Math.tan(windscreenCentre) / (REFERENCE_ASPECT * Math.tan(MathUtils.degToRad(fov / 2)));
+  const ndc = Math.tan(windscreenCentre) / (aspect * Math.tan(MathUtils.degToRad(fov / 2)));
   return Math.min(ndc, MAX_SHIFT);
 }
 
@@ -65,6 +64,10 @@ const PILLAR_LEAN = 0.25;
 
 export const VISOR = { left: -0.55, right: 0, bottom: 0.62 };
 const VISOR_LIP = 0.025;
+
+/** The visor's left edge: `VISOR.left`, kept `MIRROR_GAP` clear of the left mirror's inner edge (`mirrorInner` from the centre). */
+export const visorLeft = (mirrorInner: number): number =>
+  Math.min(Math.max(VISOR.left, MIRROR_GAP - mirrorInner), VISOR.right);
 
 /** The mirror rects' inner edges as distances from the view centre in NDC; 1 where there is no mirror. */
 export type InteriorLayout = { left: number; right: number };
@@ -103,8 +106,10 @@ export type PillarSpans = { left: PillarSpan | null; right: PillarSpan | null };
 
 /**
  * Both pillars in NDC, each in its own slot between the sight cone and its mirror. The near (left)
- * pillar fills the slot; the far one is narrower by the ratio of the angles the two cover from the
- * eye, and keeps its outer edge at the mirror. A pillar is null where its slot is too narrow.
+ * pillar fills its slot. The far one is stylised: from the left seat it lies past the view's edge
+ * (`CabSight`), so only its width follows the sight, narrower than the near pillar by the ratio of
+ * the angles they cover, and it keeps its outer edge at its mirror. It is never wider than the near
+ * pillar nor than its own slot, and it is dropped with it: null where a slot is too narrow.
  */
 export function pillarSpans(
   sight: CabSight,
@@ -114,15 +119,12 @@ export function pillarSpans(
 ): PillarSpans {
   const left = pillarSlot(aspect, fov, layout.left);
   const slot = pillarSlot(aspect, fov, layout.right);
-  let right: PillarSpan | null = null;
-  if (slot !== null) {
-    const width = Math.max(
-      MIN_PILLAR_WIDTH,
-      (slot.width * sight.right.covered) / sight.left.covered,
-    );
-    right = { centre: slot.centre + (slot.width - width) / 2, width };
-  }
-  return { left, right };
+  if (left === null || slot === null) return { left, right: null };
+  const width = Math.min(
+    slot.width,
+    Math.max(MIN_PILLAR_WIDTH, (left.width * sight.right.covered) / sight.left.covered),
+  );
+  return { left, right: { centre: slot.centre + (slot.width - width) / 2, width } };
 }
 
 function paint(positions: number[], index: number[], hue: RealismHueKey): BufferGeometry {
@@ -168,9 +170,6 @@ export type FlatInterior = CockpitInterior & {
 
 export function createCockpitInterior(truck: TruckSpec): FlatInterior {
   const sight = cabSight(truck);
-  const shift = edgeShift(truck, COCKPIT_FOV);
-  const dash = (x: number): number => Math.max(dashEdge(x, shift), hump(x));
-  const header = (x: number): number => headerEdge(x, shift);
   const object = new Group();
   object.name = 'cockpit-interior';
   const material = new MeshBasicMaterial({
@@ -211,37 +210,54 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
   const right = add('pillar-right', 0, pillar());
   const left = add('pillar-left', 0, pillar());
   // One draw for the static parts; later triangles cover earlier ones, since nothing is depth tested.
-  const parts = [
-    strip(
-      (x) => dash(x) - DASH_LIP,
-      () => -BLEED,
-      'chevronBlack',
-    ),
-    strip(dash, (x) => dash(x) - DASH_LIP, 'anthracite'),
-    strip(() => BLEED, header, 'headliner'),
-    quad(
-      [
-        [VISOR.left, VISOR.bottom],
-        [VISOR.right, VISOR.bottom],
-        [VISOR.right, header(VISOR.right)],
-        [VISOR.left, header(VISOR.left)],
-      ],
-      'anthracite',
-    ),
-    quad(
-      [
-        [VISOR.left, VISOR.bottom],
-        [VISOR.right, VISOR.bottom],
-        [VISOR.right, VISOR.bottom + VISOR_LIP],
-        [VISOR.left, VISOR.bottom + VISOR_LIP],
-      ],
-      'headliner',
-    ),
-  ];
-  const merged = mergeGeometries(parts);
-  parts.forEach((g) => g.dispose());
-  add('frame', 1, merged);
+  const buildFrame = (shift: number, visor: number): BufferGeometry => {
+    const dash = (x: number): number => Math.max(dashEdge(x, shift), hump(x));
+    const header = (x: number): number => headerEdge(x, shift);
+    const parts = [
+      strip(
+        (x) => dash(x) - DASH_LIP,
+        () => -BLEED,
+        'chevronBlack',
+      ),
+      strip(dash, (x) => dash(x) - DASH_LIP, 'anthracite'),
+      strip(() => BLEED, header, 'headliner'),
+      quad(
+        [
+          [visor, VISOR.bottom],
+          [VISOR.right, VISOR.bottom],
+          [VISOR.right, header(VISOR.right)],
+          [visor, header(visor)],
+        ],
+        'anthracite',
+      ),
+      quad(
+        [
+          [visor, VISOR.bottom],
+          [VISOR.right, VISOR.bottom],
+          [VISOR.right, VISOR.bottom + VISOR_LIP],
+          [visor, VISOR.bottom + VISOR_LIP],
+        ],
+        'headliner',
+      ),
+    ];
+    const merged = mergeGeometries(parts);
+    parts.forEach((g) => g.dispose());
+    return merged;
+  };
+  let shift = MAX_SHIFT;
+  let visor = VISOR.left;
+  const frame = add('frame', 1, buildFrame(shift, visor));
   object.visible = false;
+  /** The windscreen centre and the mirror move with the pane: the frame is rebuilt only when one of them does. */
+  const shape = (nextShift: number, nextVisor: number): void => {
+    if (nextShift === shift && nextVisor === visor) return;
+    shift = nextShift;
+    visor = nextVisor;
+    const previous = frame.geometry;
+    frame.geometry = buildFrame(shift, visor);
+    geometries[geometries.indexOf(previous)] = frame.geometry;
+    previous.dispose();
+  };
 
   const layout: InteriorLayout = { left: 1, right: 1 };
   const placePillar = (mesh: Mesh, side: -1 | 1, span: PillarSpan | null): void => {
@@ -262,6 +278,7 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
       object.quaternion.copy(camera.quaternion);
       object.scale.set(camera.aspect * tanV * DEPTH, tanV * DEPTH, DEPTH);
       interiorLayout(cockpit, mirrorLeft, mirrorRight, layout);
+      shape(edgeShift(truck, camera.aspect, camera.fov), visorLeft(layout.left));
       const spans = pillarSpans(sight, camera.aspect, camera.fov, layout);
       placePillar(left, -1, spans.left);
       placePillar(right, 1, spans.right);
