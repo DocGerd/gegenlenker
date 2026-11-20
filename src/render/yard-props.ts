@@ -1,5 +1,15 @@
 import { Color, type BufferGeometry } from 'three';
-import type { Obstacle, ObstacleKind, Rect2, ResolvedLayout } from '../contracts/layout';
+import {
+  colliderId,
+  type Collider,
+  type Decor,
+  type Fixture,
+  type Marking,
+  type ObstacleKind,
+  type Prop,
+  type Rect2,
+  type ResolvedLayout,
+} from '../contracts/layout';
 import { REALISM_HUES as HUE } from './realism-hues';
 import { tint } from './tint';
 import { box, merge } from './vehicle-geometry';
@@ -60,8 +70,6 @@ const HOOP = { offset: 0.11, arm: 0.5 }; // off the wall face (0.15 of relief wi
 const SWAP_BODY = { length: 7.45, width: 2.55, top: 3.65 };
 const SWAP_HUES = [HUE.whiteAluminium, HUE.containerBlue, HUE.containerGreen] as const;
 const SKIP_HUES = [HUE.containerBlue, HUE.containerOrange, HUE.containerRed] as const;
-/** Neighbouring plot behind the yard edge: unreachable, so decoration needs no collision. */
-const PLOT = { gap: 3, swapX: [14, 26, 38], skipX: [52, 56.5], pallets: 66, meshBoxes: 82 };
 
 /** Boxes in a local frame (x forward, y left, z up), merged and placed at a world pose. */
 export class Parts {
@@ -103,7 +111,7 @@ export const RESTYLED_KINDS: ReadonlySet<ObstacleKind> = new Set([
 ]);
 
 /** Along-axis length, across-axis width and heading of a long box, cut along the longer side. */
-function longFrame({ obb }: Obstacle): { along: number; across: number; heading: number } {
+function longFrame({ obb }: Collider): { along: number; across: number; heading: number } {
   const crosswise = obb.halfWidth > obb.halfLength;
   return {
     along: (crosswise ? obb.halfWidth : obb.halfLength) * 2,
@@ -114,7 +122,7 @@ function longFrame({ obb }: Obstacle): { along: number; across: number; heading:
 
 /** Cuts a long box into pieces; `build` also gets the piece's start, in metres along the obstacle. */
 function longPieces(
-  o: Obstacle,
+  o: Collider,
   build: (parts: Parts, length: number, across: number, offset: number) => void,
 ): PropPiece[] {
   const { along, across, heading } = longFrame(o);
@@ -134,7 +142,7 @@ function longPieces(
 }
 
 /** Double-bar mesh fence: posts, rails and a bar grid, see-through between the bars. */
-function fence(o: Obstacle): PropPiece[] {
+function fence(o: Collider): PropPiece[] {
   const h = o.height;
   return longPieces(o, (p, length, across) => {
     const post = across * 0.8;
@@ -166,7 +174,7 @@ function fence(o: Obstacle): PropPiece[] {
 }
 
 /** Plinth, trapezoidal cladding ribs and a roof-edge fascia on a wall box. */
-function hallWall(o: Obstacle): PropPiece[] {
+function hallWall(o: Collider): PropPiece[] {
   const h = o.height;
   return longPieces(o, (p, length, across) => {
     const x: Range = [-length / 2, length / 2];
@@ -188,14 +196,14 @@ function hallWall(o: Obstacle): PropPiece[] {
 
 type Footprint = { minX: number; minY: number; maxX: number; maxY: number };
 
-const footprint = ({ obb }: Obstacle): Footprint => ({
+const footprint = ({ obb }: Collider): Footprint => ({
   minX: obb.cx - obb.halfLength,
   maxX: obb.cx + obb.halfLength,
   minY: obb.cy - obb.halfWidth,
   maxY: obb.cy + obb.halfWidth,
 });
 
-const isAxisAligned = ({ obb }: Obstacle): boolean => Math.sin(obb.heading) === 0;
+const isAxisAligned = ({ obb }: Collider): boolean => Math.sin(obb.heading) === 0;
 
 /** A world-frame piece: local coordinates are world metres. */
 function worldPiece(x: number, y: number, parts: Parts): PropPiece {
@@ -203,8 +211,8 @@ function worldPiece(x: number, y: number, parts: Parts): PropPiece {
 }
 
 /** Walls along x with a gap between consecutive pieces on one line: the gate openings. */
-function openings(halls: readonly Obstacle[]): { x: Range; y: Range; height: number }[] {
-  const lines = new Map<string, Obstacle[]>();
+function openings(halls: readonly Collider[]): { x: Range; y: Range; height: number }[] {
+  const lines = new Map<string, Collider[]>();
   for (const o of halls.filter((h) => isAxisAligned(h) && h.obb.halfLength > h.obb.halfWidth)) {
     const key = `${o.obb.cy}|${o.obb.halfWidth}`;
     lines.set(key, [...(lines.get(key) ?? []), o]);
@@ -225,7 +233,9 @@ function openings(halls: readonly Obstacle[]): { x: Range; y: Range; height: num
   return out;
 }
 
-function hallDetail(layout: ResolvedLayout, halls: readonly Obstacle[]): PropPiece[] {
+function hallDetail(markings: readonly Marking[], colliders: readonly Collider[]): PropPiece[] {
+  const halls = colliders.filter((o) => o.kind === 'hall');
+  if (halls.length === 0) return [];
   const out: PropPiece[] = [];
   const rects = halls.filter(isAxisAligned).map(footprint);
   const height = Math.max(...halls.map((o) => o.height));
@@ -288,7 +298,13 @@ function hallDetail(layout: ResolvedLayout, halls: readonly Obstacle[]): PropPie
   }
 
   out.push(...cornerHoops(bounds));
-  out.push(...docks(layout, halls));
+  out.push(
+    ...docks(
+      markings,
+      colliders.filter((o) => o.kind === 'ramp'),
+      halls,
+    ),
+  );
   return out;
 }
 
@@ -314,16 +330,20 @@ export function cornerHoops(bounds: Footprint): PropPiece[] {
 }
 
 /** Dock doors, bumpers, lights and wheel guides where a ramp meets a hall wall, one per bay. */
-function docks(layout: ResolvedLayout, halls: readonly Obstacle[]): PropPiece[] {
+function docks(
+  markings: readonly Marking[],
+  ramps: readonly Collider[],
+  halls: readonly Collider[],
+): PropPiece[] {
   const out: PropPiece[] = [];
-  for (const ramp of layout.obstacles.filter((o) => o.kind === 'ramp' && isAxisAligned(o))) {
+  for (const ramp of ramps.filter(isAxisAligned)) {
     const r = footprint(ramp);
     const wall = halls
       .filter(isAxisAligned)
       .map(footprint)
       .find((f) => Math.abs(f.minY - r.maxY) < 1e-6 && f.minX < r.maxX && f.maxX > r.minX);
     if (wall === undefined) continue;
-    const lines = layout.markings
+    const lines = markings
       .filter(
         (m) =>
           m.kind === 'bay' &&
@@ -411,7 +431,7 @@ function rampGoods(p: Parts, bay: number, c: number, y: number, z: number): void
 }
 
 /** Container on a skeletal chassis: corrugation, corner castings, locking rods, tyres. */
-function container(o: Obstacle, index: number): PropPiece {
+function container(o: Collider, index: number): PropPiece {
   const { along: l, across: w, heading } = longFrame(o);
   const h = o.height;
   const deck = 0.9;
@@ -460,7 +480,7 @@ function container(o: Obstacle, index: number): PropPiece {
 }
 
 /** Swap body standing on its support legs, filling the obstacle's footprint. */
-function swapBodyProp(o: Obstacle, index: number): PropPiece {
+function swapBodyProp(o: Collider, index: number): PropPiece {
   const { along: l, across: w, heading } = longFrame(o);
   const hue = SWAP_HUES[index % SWAP_HUES.length] ?? HUE.whiteAluminium;
   const p = new Parts();
@@ -469,58 +489,64 @@ function swapBodyProp(o: Obstacle, index: number): PropPiece {
 }
 
 /** Convex mirror on the gatehouse roof corner nearest the entrance, facing the street. */
-function gatehouseMirror(o: Obstacle): PropPiece {
+function gatehouseMirror(o: Collider): PropPiece {
   const { cx, cy, halfLength: hl, halfWidth: hw, heading } = o.obb;
   const p = new Parts();
   trafficMirror(p, { x: -hl + 0.45, y: -hw + 0.45, z: o.height }, (-3 * Math.PI) / 4);
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
-/** Swap bodies, skips, pallets and mesh boxes on the neighbouring plot behind the yard's north edge. */
-export function plotGoods(yard: Rect2): PropPiece[] {
-  const out: PropPiece[] = [];
-  const y0 = yard.maxY + PLOT.gap;
-  const piece = (x: number, y: number, heading: number, build: (p: Parts) => void): void => {
-    const p = new Parts();
-    build(p);
-    out.push({ x, y, geometry: p.place(x, y, heading) });
-  };
+/** Half the length of one grid item: the grid's first item stands this far in from the footprint's rear. */
+const GRID_ITEM = { pallets: 0.6, 'mesh-boxes': 0.62 };
+
+/** Swap bodies, skips, pallets and mesh boxes on the plot behind the yard's north edge. */
+function decorPiece({ asset, footprint: f, variant }: Decor): PropPiece {
+  const p = new Parts();
   const origin = { x: 0, y: 0, z: 0 };
-  PLOT.swapX.forEach((x, i) => {
-    piece(yard.minX + x, y0 + 3, 0, (p) => {
-      const hue = SWAP_HUES[(i + 1) % SWAP_HUES.length] ?? HUE.whiteAluminium;
+  let lead = 0;
+  switch (asset) {
+    case 'swap-body': {
+      const hue = SWAP_HUES[variant % SWAP_HUES.length] ?? HUE.whiteAluminium;
       swapBody(p, origin, SWAP_BODY.length, SWAP_BODY.width, SWAP_BODY.top, hue);
-    });
-  });
-  PLOT.skipX.forEach((x, i) => {
-    for (const row of [0, 1]) {
-      const hue = SKIP_HUES[(i + row) % SKIP_HUES.length] ?? HUE.containerBlue;
-      piece(yard.minX + x, y0 + 2.5 + row * 4, row * 0.12 - 0.06, (p) => skip(p, origin, hue));
+      break;
     }
-  });
-  piece(yard.minX + PLOT.pallets, y0 + 4, 0, (p) => {
-    for (let k = 0; k < 4; k++) {
-      for (let j = 0; j < 3; j++) {
-        const at = { x: k * 1.4, y: (j - 1) * 1.1, z: 0 };
-        if ((k + j) % 3 === 0) palletStack(p, at, 4 + ((k * j) % 3));
-        else palletStack(p, at, 1, 0.8 + ((k + 2 * j) % 3) * 0.3);
+    case 'skip': {
+      const hue = SKIP_HUES[variant % SKIP_HUES.length] ?? HUE.containerBlue;
+      skip(p, origin, hue);
+      break;
+    }
+    case 'pallets':
+      lead = f.halfLength - GRID_ITEM.pallets;
+      for (let k = 0; k < 4; k++) {
+        for (let j = 0; j < 3; j++) {
+          const at = { x: k * 1.4, y: (j - 1) * 1.1, z: 0 };
+          if ((k + j) % 3 === 0) palletStack(p, at, 4 + ((k * j) % 3));
+          else palletStack(p, at, 1, 0.8 + ((k + 2 * j) % 3) * 0.3);
+        }
       }
-    }
-  });
-  piece(yard.minX + PLOT.meshBoxes, y0 + 4, 0, (p) => {
-    for (let k = 0; k < 5; k++) {
-      for (let j = 0; j < 2; j++) {
-        const at = { x: k * 1.4, y: (j - 0.5) * 1.1, z: 0 };
-        meshBox(p, at, (k + j) % 2 === 0);
-        if (k % 2 === 0) meshBox(p, { ...at, z: 0.97 });
+      break;
+    case 'mesh-boxes':
+      lead = f.halfLength - GRID_ITEM['mesh-boxes'];
+      for (let k = 0; k < 5; k++) {
+        for (let j = 0; j < 2; j++) {
+          const at = { x: k * 1.4, y: (j - 0.5) * 1.1, z: 0 };
+          meshBox(p, at, (k + j) % 2 === 0);
+          if (k % 2 === 0) meshBox(p, { ...at, z: 0.97 });
+        }
       }
-    }
-  });
-  return out;
+      break;
+    default:
+      unhandled(asset);
+  }
+  const x = f.cx - Math.cos(f.heading) * lead;
+  const y = f.cy - Math.sin(f.heading) * lead;
+  return { x, y, geometry: p.place(x, y, f.heading) };
 }
 
+export const decorPieces = (decor: readonly Decor[]): PropPiece[] => decor.map(decorPiece);
+
 /** Curtain-sider semitrailer: frame, strapped curtain, headboard, underrun bar, tandem-plus axles. */
-function curtainSider(o: Obstacle, index: number): PropPiece {
+function curtainSider(o: Collider, index: number): PropPiece {
   const { along: l, across: w, heading } = longFrame(o);
   const h = o.height;
   const hue = CURTAIN_HUES[index % CURTAIN_HUES.length] ?? HUE.whiteAluminium;
@@ -556,38 +582,38 @@ function curtainSider(o: Obstacle, index: number): PropPiece {
   return { x: o.obb.cx, y: o.obb.cy, geometry: p.place(o.obb.cx, o.obb.cy, heading) };
 }
 
-/** Yard masts carry floodlights aimed at `aim`; street lamps outside the yard get a single arm. */
-function lamp(o: Obstacle, aim: { x: number; y: number }, yard: Rect2): PropPiece {
+/** A bare post; a fixture adds floodlights (`flood`) or a single arm (`street`) facing its aim. */
+function lamp(o: Collider, fixture?: Fixture): PropPiece {
   const { cx, cy, halfLength: hl, halfWidth: hw } = o.obb;
   const h = o.height;
   const p = new Parts();
   p.box(around(0, hl), around(0, hw), [0, 0.6], HUE.anthracite);
   p.box(around(0, hl * 0.55), around(0, hw * 0.55), [0.6, h - 0.1], HUE.whiteAluminium);
-  if (isOnYard(yard, cx, cy)) {
+  if (fixture?.kind === 'flood') {
     p.box(around(0.1, 0.1), around(0, 0.9), [h - 0.35, h - 0.2], HUE.anthracite);
     for (let i = 0; i < FLOODLIGHTS; i++) {
       const yc = (i - (FLOODLIGHTS - 1) / 2) * 0.6;
       p.box([0.05, 0.4], around(yc, 0.25), [h - 0.65, h - 0.35], HUE.anthracite);
       p.box([0.4, 0.43], around(yc, 0.22), [h - 0.62, h - 0.38], HUE.plateWhite);
     }
-  } else {
+  } else if (fixture?.kind === 'street') {
     p.box([0, 1.2], around(0, 0.04), [h - 0.25, h - 0.15], HUE.whiteAluminium);
     p.box([0.8, 1.4], around(0, 0.15), [h - 0.3, h - 0.15], HUE.anthracite);
     p.box([0.85, 1.35], around(0, 0.12), [h - 0.32, h - 0.3], HUE.plateWhite);
   }
-  const heading = Math.atan2(aim.y - cy, aim.x - cx);
+  const heading = fixture === undefined ? 0 : Math.atan2(fixture.aim.y - cy, fixture.aim.x - cx);
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
 /** Cone on its black base; the base fills the footprint. */
-function cone(o: Obstacle): PropPiece {
+function cone(o: Collider): PropPiece {
   const { cx, cy, halfLength, halfWidth, heading } = o.obb;
   const p = new Parts();
   trafficCone(p, halfLength, halfWidth, o.height);
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
-function bollard(o: Obstacle): PropPiece {
+function bollard(o: Collider): PropPiece {
   const { cx, cy, halfLength: hl, halfWidth: hw, heading } = o.obb;
   const h = o.height;
   const x = around(0, hl);
@@ -602,7 +628,7 @@ function bollard(o: Obstacle): PropPiece {
 }
 
 /** Barrier post with a raised, striped boom pointing along the obstacle's +x. */
-function barrier(o: Obstacle): PropPiece {
+function barrier(o: Collider): PropPiece {
   const { cx, cy, halfLength: hl, halfWidth: hw, heading } = o.obb;
   const h = o.height;
   const p = new Parts()
@@ -623,7 +649,7 @@ function barrier(o: Obstacle): PropPiece {
 }
 
 /** Cabin with glazing towards the entrance (-x) and the street (-y). */
-function gatehouse(o: Obstacle): PropPiece {
+function gatehouse(o: Collider): PropPiece {
   const { cx, cy, halfLength: hl, halfWidth: hw, heading } = o.obb;
   const h = o.height;
   const eaves = h - 0.3;
@@ -637,72 +663,93 @@ function gatehouse(o: Obstacle): PropPiece {
 }
 
 function unhandled(kind: never): never {
-  throw new Error(`Yard props: no drawing for obstacle kind ${String(kind)}`);
+  throw new Error(`Yard props: no drawing for ${String(kind)}`);
 }
 
+type Counters = { containers: number; trailers: number; swaps: number };
+
+/** One collision box drawn by its kind; the counters vary the hue of trailers and containers. */
+function drawCollider(o: Collider, n: Counters): PropPiece[] {
+  switch (o.kind) {
+    case 'fence':
+      return fence(o);
+    case 'hall':
+      return hallWall(o);
+    case 'parked': {
+      if (longFrame(o).along >= TRAILER_MIN_LENGTH) return [curtainSider(o, n.trailers++)];
+      const i = n.containers++;
+      return [i % 3 === 1 ? swapBodyProp(o, n.swaps++) : container(o, i)];
+    }
+    case 'kerb':
+      return longPieces(o, (p, length, across, offset) =>
+        kerb(p, length, across, o.height, offset),
+      );
+    case 'wall':
+      return longPieces(o, (p, length, across, offset) =>
+        concreteWall(p, length, across, o.height, offset),
+      );
+    case 'ramp':
+      return longPieces(o, (p, length, across) => loadingRamp(p, length, across, o.height));
+    case 'cone':
+      return [cone(o)];
+    case 'lamp':
+      return [lamp(o)];
+    case 'bollard':
+      return [bollard(o)];
+    case 'barrier':
+      return [barrier(o)];
+    case 'gatehouse':
+      return [gatehouse(o), gatehouseMirror(o)];
+    default:
+      return unhandled(o.kind);
+  }
+}
+
+function lampProp({ id, colliders, fixture }: Prop): PropPiece {
+  const [post] = colliders;
+  if (post === undefined || fixture === undefined) {
+    throw new Error(`Yard props: lamp ${id} needs a collider and a fixture`);
+  }
+  return lamp(post, fixture);
+}
+
+/** Loose obstacles are drawn by kind, props by asset, in resolved order; hall details follow, then the decor. */
 export function yardProps(layout: ResolvedLayout): PropPiece[] {
-  const aim = {
-    x: (layout.yard.minX + layout.yard.maxX) / 2,
-    y: (layout.yard.minY + layout.yard.maxY) / 2,
-  };
+  const owned = new Set<string>();
+  const first = new Map<string, Prop>();
+  for (const prop of layout.props) {
+    prop.colliders.forEach((_, i) => owned.add(colliderId(prop.id, i)));
+    first.set(colliderId(prop.id, 0), prop);
+  }
+  const counters: Counters = { containers: 0, trailers: 0, swaps: 0 };
   const out: PropPiece[] = [];
-  let containers = 0;
-  let trailers = 0;
-  let swaps = 0;
-  for (const o of layout.obstacles) {
-    switch (o.kind) {
-      case 'fence':
-        out.push(...fence(o));
-        break;
+  const details: PropPiece[] = [];
+  const colliders = (prop: Prop): PropPiece[] =>
+    prop.colliders.flatMap((o) => drawCollider(o, counters));
+  const drawProp = (prop: Prop): void => {
+    switch (prop.asset) {
       case 'hall':
-        out.push(...hallWall(o));
+        out.push(...colliders(prop));
+        details.push(...hallDetail(layout.markings, prop.colliders));
         break;
       case 'parked':
-        if (longFrame(o).along >= TRAILER_MIN_LENGTH) {
-          out.push(curtainSider(o, trailers++));
-        } else {
-          const n = containers++;
-          out.push(n % 3 === 1 ? swapBodyProp(o, swaps++) : container(o, n));
-        }
-        break;
-      case 'kerb':
-        out.push(
-          ...longPieces(o, (p, length, across, offset) =>
-            kerb(p, length, across, o.height, offset),
-          ),
-        );
-        break;
-      case 'wall':
-        out.push(
-          ...longPieces(o, (p, length, across, offset) =>
-            concreteWall(p, length, across, o.height, offset),
-          ),
-        );
-        break;
-      case 'ramp':
-        out.push(...longPieces(o, (p, length, across) => loadingRamp(p, length, across, o.height)));
-        break;
-      case 'cone':
-        out.push(cone(o));
+      case 'gate':
+      case 'bollard':
+        out.push(...colliders(prop));
         break;
       case 'lamp':
-        out.push(lamp(o, aim, layout.yard));
-        break;
-      case 'bollard':
-        out.push(bollard(o));
-        break;
-      case 'barrier':
-        out.push(barrier(o));
-        break;
-      case 'gatehouse':
-        out.push(gatehouse(o), gatehouseMirror(o));
+        out.push(lampProp(prop));
         break;
       default:
-        return unhandled(o.kind);
+        unhandled(prop.asset);
     }
+  };
+  // A prop's colliders are contiguous in the resolved list: draw the prop where its first one stands.
+  for (const o of layout.obstacles) {
+    const prop = first.get(o.id);
+    if (prop !== undefined) drawProp(prop);
+    else if (!owned.has(o.id)) out.push(...drawCollider(o, counters));
   }
-  const halls = layout.obstacles.filter((o) => o.kind === 'hall');
-  if (halls.length > 0) out.push(...hallDetail(layout, halls));
-  out.push(...plotGoods(layout.yard));
+  out.push(...details, ...decorPieces(layout.decor));
   return out;
 }

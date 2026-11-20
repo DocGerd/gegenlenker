@@ -2,6 +2,7 @@ import { exerciseById } from '../content/registry';
 import type { RunResult } from '../contracts/exercise';
 import { formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
+import { isAction } from '../input/keymap';
 import { criteria, deltasToBest, endedMoving, type Deltas } from '../scoring/debrief';
 import { EXERCISE_TITLE } from './exercise-text';
 import './results.css';
@@ -167,7 +168,7 @@ export function showResult(
   root.append(container);
   (next ?? retry).focus();
   const onEscape = (e: KeyboardEvent): void => {
-    if (e.code !== 'Escape' || e.repeat || e.defaultPrevented) return;
+    if (!isAction('escape', e) || e.repeat || e.defaultPrevented) return;
     e.preventDefault();
     actions.menu();
   };
