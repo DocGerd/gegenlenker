@@ -1,62 +1,13 @@
-import { readFileSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { KHR_DF_TRANSFER_SRGB, read } from 'ktx-parse';
 import { describe, expect, it } from 'vitest';
 import { YARD_KIT_NODES } from '../../src/render/yard-kit-dims';
-import { ROOT, runHashes } from './glb-build';
-import {
-  encoderVersion,
-  KIT_BUDGETS,
-  KIT_TEXTURES,
-  KTX2_ENCODINGS,
-  ktx2Sha256,
-  KV_INPUTS,
-  textureInputsSha256,
-  type TextureManifest,
-} from './kit-build';
+import { ROOT, YARD_KIT_RUN } from './glb-build';
+import { bakedPixels, KIT_BUDGET_BYTES, KIT_TEXTURES } from './kit-build';
 
 const read_ = (file: string): Buffer => readFileSync(join(ROOT, file));
 const bytes = (file: string): number => statSync(join(ROOT, file)).size;
-
-/** Red means a stale bake: rerun the Blender script, `pnpm kit:atlas <run> <dir>` and, for the glb, `pnpm glb:optimise` and `pnpm glb:manifest`. */
-describe.each(KIT_TEXTURES)('kit texture: $key', (texture) => {
-  const manifest = JSON.parse(read_(texture.manifest).toString('utf8')) as TextureManifest;
-  const container = read(new Uint8Array(read_(texture.ktx2)));
-
-  it('records the current bake inputs and the committed ktx2', () => {
-    expect({
-      ...runHashes(texture.run),
-      inputsSha256: textureInputsSha256(texture),
-      encoderVersion: encoderVersion(),
-      ktx2Sha256: ktx2Sha256(texture),
-      ktx2Bytes: bytes(texture.ktx2),
-    }).toEqual({
-      scriptSha256: manifest.scriptSha256,
-      commonSha256: manifest.commonSha256,
-      kitCommonSha256: manifest.kitCommonSha256,
-      paramsSha256: manifest.paramsSha256,
-      inputsSha256: manifest.inputsSha256,
-      encoderVersion: manifest.encoderVersion,
-      ktx2Sha256: manifest.ktx2Sha256,
-      ktx2Bytes: manifest.ktx2Bytes,
-    });
-  });
-
-  it('was encoded from the current inputs', () => {
-    const recorded = container.keyValue[KV_INPUTS] as Uint8Array;
-    expect(new TextDecoder().decode(recorded).replace(/\0$/, '')).toBe(
-      textureInputsSha256(texture),
-    );
-  });
-
-  it('has the atlas size, a full mip chain and the encoding transfer function', () => {
-    const srgb = KTX2_ENCODINGS[texture.encoding].isSetKTX2SRGBTransferFunc;
-    expect(container.pixelWidth).toBe(texture.size);
-    expect(container.pixelHeight).toBe(texture.size);
-    expect(container.levelCount).toBe(Math.log2(texture.size) + 1);
-    expect(container.dataFormatDescriptor[0]?.transferFunction === KHR_DF_TRANSFER_SRGB).toBe(srgb);
-  });
-});
 
 type Gltf = {
   nodes: { name: string; mesh?: number; extras?: { bounds?: unknown } }[];
@@ -96,11 +47,22 @@ describe('yard-kit.glb', () => {
   });
 });
 
-describe('kit download budgets', () => {
-  it.each(Object.entries(KIT_BUDGETS))('%s fits its budget', (run, budget) => {
-    const files = KIT_TEXTURES.filter((t) => t.run.key === run).map((t) => t.ktx2);
-    if (run === 'yard-kit') files.push('src/render/assets/yard-kit.glb');
-    expect(files.length).toBeGreaterThan(0);
-    expect(files.reduce((sum, f) => sum + bytes(f), 0)).toBeLessThanOrEqual(budget);
+describe('yard kit download budget', () => {
+  it('fits with its glb and every atlas', () => {
+    const files = [
+      'src/render/assets/yard-kit.glb',
+      ...Object.values(KIT_TEXTURES).map((t) => t.ktx2),
+    ];
+    expect(files).toHaveLength(4);
+    expect(files.reduce((sum, f) => sum + bytes(f), 0)).toBeLessThanOrEqual(KIT_BUDGET_BYTES);
+  });
+});
+
+describe('baked pixels', () => {
+  it('name the missing bake rather than build from nothing', () => {
+    const root = mkdtempSync(join(tmpdir(), 'kit-bake-'));
+    expect(() => bakedPixels(YARD_KIT_RUN, 'yard-kit-atlas-a', 1024, root)).toThrow(
+      /no bake in tools\/blender\/bake/,
+    );
   });
 });

@@ -6,7 +6,6 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
   SOURCES_DIR  directory holding the CC0 source JPGs at the paths the params list (hash-checked)
   OUT_PATH     where the raw .glb is written; the raw atlases go beside it
   EXPECTED_SHA256  optional {"scriptSha256", "commonSha256", "kitCommonSha256"}; the run aborts on a mismatch
-  KEEP_SCENE   optional; True leaves the built scene for inspection instead of handing the session back
 
 Writes yard-kit.raw.glb (one node per kit piece, see src/render/yard-kit-dims.ts for the frame) and,
 as top-down RGBA8, yard-kit-atlas-a (sRGB albedo), yard-kit-atlas-b (normal x, normal y, roughness,
@@ -609,8 +608,6 @@ def main():
         "triangles": triangles,
         **hashes,
     }
-    if not globals().get("KEEP_SCENE"):
-        KIT["hand_back"]()
     return result
 
 

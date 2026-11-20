@@ -1,11 +1,38 @@
 import { YARD_KIT_DIMS, YARD_KIT_HUES } from '../../src/render/yard-kit-dims';
-import { KIT_SOURCES, type KitSourceId } from './kit-sources';
+import { ASSET_SOURCES, KIT_INPUT_DIR } from '../assets/sources';
 
 /** [x, y, width, height] in texels, origin at the image's top-left corner. */
 type Rect = readonly [number, number, number, number];
 
-const sources = (ids: readonly KitSourceId[]) =>
-  Object.fromEntries(ids.map((id) => [id, KIT_SOURCES[id]]));
+/** The names the bake script and the atlas params use for the `ASSET_SOURCES` ids. */
+const KIT_SOURCE_IDS = {
+  corrugatedIron: 'corrugated-iron-02',
+  corrugatedSteel: 'corrugated-steel-007a',
+  concreteFloor: 'concrete-floor-02',
+  facade: 'facade-001',
+  containerSide: 'container-side',
+  leafSet: 'leaf-set-009',
+  foliage: 'foliage-001',
+} as const;
+
+/** What the script reads: the source page, its licence and each file's SHA-256 by path under `SOURCES_DIR`. */
+const sources = (ids: readonly (keyof typeof KIT_SOURCE_IDS)[]) =>
+  Object.fromEntries(
+    ids.map((id) => {
+      const source = ASSET_SOURCES[KIT_SOURCE_IDS[id]];
+      if (source === undefined) throw new Error(`ASSET_SOURCES has no ${KIT_SOURCE_IDS[id]}`);
+      return [
+        id,
+        {
+          url: source.page,
+          licence: source.licence,
+          files: Object.fromEntries(
+            source.files.map((file) => [file.path.slice(KIT_INPUT_DIR.length), file.sha256]),
+          ),
+        },
+      ];
+    }),
+  );
 
 /** Which file of a source holds which map; `ao: null` means none (AO = 1). */
 const POLY_HAVEN_MAPS = { colour: 'diff', normal: 'nor_gl', roughness: 'arm:g', ao: 'arm:r' };

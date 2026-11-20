@@ -9,6 +9,8 @@ export type QualityFlags = {
   readonly skyline: boolean;
   /** Perspective yard props; off shows the plain obstacle tokens in the perspective views too. */
   readonly yardDetail: boolean;
+  /** The yard kit's meshes and atlases in the perspective views; a download, off until a preset draws it. */
+  readonly yardKit: boolean;
   readonly cabGlb: boolean;
   readonly vehicleGlb: boolean;
   readonly chaseView: boolean;
@@ -31,6 +33,7 @@ const BALANCED: QualityFlags = {
   mirrorMsaa: 4,
   skyline: true,
   yardDetail: true,
+  yardKit: false,
   cabGlb: true,
   vehicleGlb: true,
   chaseView: true,
@@ -52,6 +55,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     mirrorMsaa: 0,
     skyline: false,
     yardDetail: false,
+    yardKit: false,
     cabGlb: false,
     vehicleGlb: false,
     chaseView: false,

@@ -27,7 +27,6 @@
     "glb:params": "node scripts/glb-params.mjs",
     "glb:optimise": "node scripts/glb-optimise.mjs",
     "glb:manifest": "node scripts/glb-manifest.mjs",
-    "kit:atlas": "node scripts/kit-atlas.mjs",
     "texture": "node scripts/texture.mjs",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "verify": "pnpm check && pnpm test:e2e"

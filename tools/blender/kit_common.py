@@ -1,8 +1,7 @@
 """Helpers shared by the Gegenlenker kit scripts (yard_kit.py; issue #160).
 
-Loaded with runpy.run_path, never imported. Reuses shell_common.py read-only (hashing, params,
-colours, prism frames). It keeps its own scene names because shell_common.reset_scene accepts only
-the shell scenes, and it hands the session back under a shell scene name so the shell scripts still run.
+Loaded with runpy.run_path, never imported. Builds on blender_common.py (hashing, params, scenes,
+glTF options, colours, prism frames) and adds the kit's textured parts, source images and atlas output.
 
 Images are kept top-down (row 0 is the image's top), as KTX2 and glTF expect; Blender's pixel
 buffers are bottom-up and are flipped on the way in. Deterministic: fixed names and order, numpy
@@ -18,83 +17,27 @@ import runpy
 import bpy
 import numpy as np
 
-COMMON_FILE = os.path.join(os.path.dirname(__file__), "shell_common.py")
-SHELL = runpy.run_path(COMMON_FILE)
-srgb_to_linear = SHELL["srgb_to_linear"]
-file_sha256 = SHELL["file_sha256"]
-check_expected = SHELL["check_expected"]
-load_params = SHELL["load_params"]
-signed_area = SHELL["signed_area"]
-FRAMES = SHELL["FRAMES"]
-DECIMALS = SHELL["DECIMALS"]
-
-KIT_SCENES = ("yard-kit",)
-# shell_common.reset_scene refuses a dirty session that holds any scene but its own.
-HANDBACK_SCENE = SHELL["KNOWN_SCENES"][0]
+COMMON_FILE = os.path.join(os.path.dirname(__file__), "blender_common.py")
+COMMON = runpy.run_path(COMMON_FILE)
+srgb_to_linear = COMMON["srgb_to_linear"]
+file_sha256 = COMMON["file_sha256"]
+check_expected = COMMON["check_expected"]
+load_params = COMMON["load_params"]
+reset_scene = COMMON["reset_scene"]
+signed_area = COMMON["signed_area"]
+FRAMES = COMMON["FRAMES"]
+DECIMALS = COMMON["DECIMALS"]
 
 GLTF_OPTIONS = dict(
-    SHELL["GLTF_OPTIONS"],
+    COMMON["GLTF_OPTIONS"],
     export_texcoords=True,
     export_image_format="AUTO",
 )
 
 
 def provenance(entry_file, kit_file, params):
-    hashes = SHELL["provenance"](entry_file, COMMON_FILE, params)
-    hashes["kitCommonSha256"] = file_sha256(kit_file)
-    return dict(sorted(hashes.items()))
-
-
-# --- session -------------------------------------------------------------------------------------
-
-
-def _purge():
-    for blocks in (
-        bpy.data.objects,
-        bpy.data.meshes,
-        bpy.data.materials,
-        bpy.data.collections,
-        bpy.data.cameras,
-        bpy.data.lights,
-        bpy.data.images,
-        bpy.data.actions,
-        bpy.data.node_groups,
-        bpy.data.curves,
-        bpy.data.worlds,
-    ):
-        for block in list(blocks):
-            blocks.remove(block)
-
-
-def reset_scene(name):
-    """One empty scene called `name`; preferences and add-ons stay untouched (no read_factory_settings)."""
-    if name not in KIT_SCENES:
-        raise ValueError("unknown scene name " + name)
-    if bpy.data.filepath:
-        raise RuntimeError("refusing to reset a saved session: " + bpy.data.filepath)
-    known = KIT_SCENES + SHELL["KNOWN_SCENES"]
-    if bpy.data.is_dirty and any(s.name not in known for s in bpy.data.scenes):
-        raise RuntimeError("refusing to reset a session with unsaved work")
-    window = bpy.context.window
-    keep = bpy.context.scene
-    if window is not None:
-        keep = bpy.data.scenes.new(name)
-        window.scene = keep
-    for scene in list(bpy.data.scenes):
-        if scene != keep:
-            bpy.data.scenes.remove(scene)
-    keep.name = name
-    _purge()
-    return keep
-
-
-def hand_back():
-    """Leave one empty scene the shell scripts accept."""
-    scene = bpy.context.scene
-    if scene.name not in KIT_SCENES:
-        raise RuntimeError("hand_back outside a kit scene: " + scene.name)
-    _purge()
-    scene.name = HANDBACK_SCENE
+    """The hashes glb-build.ts records for a kit script: the entry, blender_common.py, this file and the params."""
+    return COMMON["provenance"](entry_file, {"commonSha256": COMMON_FILE, "kitCommonSha256": kit_file}, params)
 
 
 # --- images --------------------------------------------------------------------------------------

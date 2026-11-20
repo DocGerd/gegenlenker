@@ -10,8 +10,10 @@ import {
   ENCODING_NAME as SKY_ENCODING,
   inputsSha256 as skyInputsSha256,
   SKY_FILES,
+  SKY_HDR,
 } from '../textures/sky-build';
 import { hdriLightModule, readSkyImage, skyPixels } from '../textures/sky-pixels';
+import { KIT_TEXTURES } from '../blender/kit-build';
 import { canonicalJson, type Json, sha256 } from './provenance';
 
 export type TexturePixels = {
@@ -46,6 +48,8 @@ export type TextureAsset = {
   inputsSha256(root: string): string;
   /** Throws when a source that is not committed is missing. */
   pixels(root: string): TexturePixels;
+  /** The uncommitted file `pixels` needs, relative to the root; the pixel check skips without it. */
+  readonly uncommitted?: string;
   /** Ids in `ASSET_SOURCES` of the third-party files the pixels come from. */
   readonly sources: readonly string[];
   /** Set when a runtime constant is baked from the same sources as the ktx2. */
@@ -84,7 +88,9 @@ export const TEXTURE_ASSETS: Readonly<Record<string, TextureAsset>> = {
     encoding: { name: SKY_ENCODING, options: SKY_ENCODER },
     inputsSha256: skyInputsSha256,
     pixels: (root) => skyPixels(readSkyImage(root)),
+    uncommitted: SKY_HDR.path,
     sources: ['kloofendal-sky'],
     bake: { file: SKY_FILES.bake, source: hdriLightModule, bakedSha256 },
   },
+  ...KIT_TEXTURES,
 };
