@@ -85,6 +85,8 @@ export function proceduralEnvironment(
   let pbrMaterial: MeshStandardNodeMaterial | null = null;
   let pbrWanted = false;
   let pbrReported = false;
+  /** Whether the textured copy is the one drawn: the PBR ground is only drawn through it. */
+  let groundDrawn = false;
   const syncGroundPbr = (): void => {
     if (texturedGround === null || texturedGroundMaterial === null) return;
     if (pbrMaterial === null && pbrMaps !== null && detailMap !== null) {
@@ -99,14 +101,19 @@ export function proceduralEnvironment(
         console.warn('PBR ground could not be applied; keeping the detail ground', error);
       }
     }
-    const on = pbrWanted && pbrMaterial !== null;
-    texturedGround.material = on && pbrMaterial !== null ? pbrMaterial : texturedGroundMaterial;
+    const worn = pbrWanted && pbrMaterial !== null;
+    texturedGround.material = worn && pbrMaterial !== null ? pbrMaterial : texturedGroundMaterial;
+    const on = worn && groundDrawn;
     if (on !== pbrReported) {
       pbrReported = on;
       groundPbr?.reportApplied(on);
     }
   };
-  const groundSwap = tokenCopy([tokenGround], (on) => groundTextures?.reportApplied(on));
+  const groundSwap = tokenCopy([tokenGround], (on) => {
+    groundDrawn = on;
+    groundTextures?.reportApplied(on);
+    syncGroundPbr();
+  });
   const cancelGroundTexture = groundTextures?.onLoaded(
     ({ detail: texture }) => {
       let geometry: BufferGeometry | null = null;

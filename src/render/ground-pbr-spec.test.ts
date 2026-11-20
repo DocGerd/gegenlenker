@@ -1,6 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { GROUND_SURFACES } from './ground-texture-spec';
 import { PBR_PACKED } from './ground-pbr-pixels';
-import { GROUND_FRAME, type Mat2, SLAB_UV_TRANSFORMS, slabNormalMatrix } from './ground-pbr-spec';
+import {
+  GROUND_FRAME,
+  type Mat2,
+  SLAB_PITCH,
+  SLAB_UV_TRANSFORMS,
+  slabNormalMatrix,
+} from './ground-pbr-spec';
 import { countSamplers } from './ground-pbr';
 
 const apply = ([a, b, c, d]: Mat2, [x, y]: readonly [number, number]): [number, number] => [
@@ -48,6 +57,18 @@ describe('slab transforms', () => {
         expect(ny).toBeCloseTo(slopeZ, 6);
       }
     }
+  });
+});
+
+describe('slab pitch', () => {
+  it('is the concrete tile over the slab count baked into ground.ktx2, so the joints stay in phase', () => {
+    const source = readFileSync(
+      join(import.meta.dirname, '../../tools/textures/ground-texture.ts'),
+      'utf8',
+    );
+    const slabs = Number(/const slabs = (\d+);/.exec(source)?.[1]);
+    expect(slabs).toBeGreaterThan(0);
+    expect(SLAB_PITCH).toBe(GROUND_SURFACES.concrete.tile / slabs);
   });
 });
 

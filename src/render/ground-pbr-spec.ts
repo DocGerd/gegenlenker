@@ -23,10 +23,12 @@ export const JOINT_OCCLUDE = 0.8;
 export const VERGE_ROUGHNESS = 0.95;
 
 /**
- * Mip level the ground.ktx2 concrete channel is read at: its slab joints, grain and pores are
- * blurred away and only slab tone and mottling remain, as macro variation over the scan's repeat.
+ * Mip bias the ground.ktx2 channels are read at, on top of the level the pixel footprint picks:
+ * the procedural paver grid, slab joints, grain and pores average out and only slab tone and
+ * mottling remain, as macro variation over the scan's repeat. A bias, not a pinned level, so a
+ * grazing view minifies further instead of point-sampling a band.
  */
-export const MACRO_LOD = 3;
+export const MACRO_BIAS = 6;
 
 /** Most samplers the PBR ground material may declare: the macro map, six scans and three's DFG look-up table. */
 export const PBR_SAMPLER_BUDGET = 8;

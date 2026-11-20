@@ -33,7 +33,7 @@ import {
   JOINT_DARKEN,
   JOINT_HALF_WIDTH,
   JOINT_OCCLUDE,
-  MACRO_LOD,
+  MACRO_BIAS,
   PBR_TILE,
   type PbrKey,
   SLAB_PITCH,
@@ -156,7 +156,7 @@ export function createGroundPbrMaterial(
     .mul(min(float(1), footprint.reciprocal().mul(JOINT_HALF_WIDTH)));
   const joint = max(edge.x, edge.y).mul(weights.concrete);
 
-  const macroGain = dot(texture(macro, uv()).level(float(MACRO_LOD)).rgb, select3).mul(
+  const macroGain = dot(texture(macro, uv()).bias(float(MACRO_BIAS)).rgb, select3).mul(
     1 / GROUND_TEXTURE_MEAN,
   );
   const gain = blend((s) => colour[s], vec3(PBR_ALBEDO_MEAN)).mul(1 / PBR_ALBEDO_MEAN);

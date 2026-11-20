@@ -700,6 +700,32 @@ describe('environment PBR ground', () => {
     env.dispose();
   });
 
+  it('stops reporting the PBR ground when the environment is disposed while it is drawn', () => {
+    if (layout === undefined) return;
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    detail.deliver();
+    pbr.deliver();
+    expect(pbr.applied).toEqual([true]);
+    env.dispose();
+    expect(pbr.applied).toEqual([true, false]);
+  });
+
+  it('stops reporting the PBR ground when the detail copy it is drawn through is rejected', () => {
+    if (layout === undefined) return;
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    detail.deliver();
+    pbr.deliver();
+    detail.reject();
+    expect(pbr.applied).toEqual([true, false]);
+    env.dispose();
+  });
+
   it('keeps the detail ground and warns once when the PBR material cannot be built', () => {
     if (layout === undefined) return;
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
