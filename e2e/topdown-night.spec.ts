@@ -113,10 +113,10 @@ const ACCENT_SLACK_PX = 2;
 /** Accent pixels a zoom on a stroke must hold (the zoomed outline and gate hold several thousand), so a miss of the stroke fails. */
 const MIN_ZOOM_ACCENT_PX = 2000;
 /**
- * Pixels of the wheel colour the night zoom must hold over the day zoom: the night casings of the
- * outline and the gate ring, about 2700 px at the yard view's maximum zoom, of which at least a
- * quarter are the pure colour. The lit wheels of a vehicle in frame drop out at night, so a zoom
- * without a casing falls short.
+ * Pixels of the wheel colour each zoom must hold, by day and at night: the casings of the outline
+ * and the gate ring, about 2700 px at the yard view's maximum zoom, of which at least a quarter are
+ * the pure colour. The lit wheels of a vehicle in frame never match the token, so a zoom without a
+ * casing falls short.
  */
 const MIN_CASING_PX = 800;
 /** The two yards' exercises: slalom's depot has a gate, the bay's logistics yard has none. */
@@ -277,11 +277,14 @@ for (const { id, name: exercise, zooms } of EXERCISES) {
             `${label}: only ${nightAccent} night accent pixels, the stroke is not in frame`,
           );
         }
-        const casing = (await count(base, tokens.wheel)) - (await count(day, tokens.wheel));
-        if (casing < MIN_CASING_PX) {
-          mismatches.push(
-            `${label}: ${casing} more casing pixels than by day, under ${MIN_CASING_PX}`,
-          );
+        for (const [when, png] of [
+          ['day', day],
+          ['night', base],
+        ] as const) {
+          const casing = await count(png, tokens.wheel);
+          if (casing < MIN_CASING_PX) {
+            mismatches.push(`${label}: ${casing} casing pixels by ${when}, under ${MIN_CASING_PX}`);
+          }
         }
       }
       await scratch.close();
