@@ -1,4 +1,4 @@
-import type { GraphicsPreset, SceneRenderer } from '../contracts/render';
+import { DEFAULT_LIGHTING, type GraphicsPreset, type SceneRenderer } from '../contracts/render';
 import type { Texture } from 'three';
 import { proceduralAids } from './aids';
 import { createCockpitInterior } from './cockpit-interior';
@@ -16,6 +16,7 @@ import { startGroundPbrTextures } from './ground-pbr';
 import { startGroundTextures } from './ground-texture';
 import { readBackendRequest, requestGpuDevice, type BackendRequest } from './gpu-backend';
 import { ATTACHMENTS, type AttachmentKey } from './asset-registry';
+import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { startSkyTexture } from './sky-texture';
 import { skylineGradeSample } from './skyline';
@@ -156,7 +157,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       groundPbr.setEnabled(flags.groundTexture && flags.groundPbr);
       yardKit.setEnabled(flags.yardKit);
       skyTexture.setEnabled(flags.hdriSky);
-      gradeCheck.setWanted(flags.perspectiveLighting);
+      gradeCheck.setWanted(lookFor(flags, DEFAULT_LIGHTING).grade.on);
       renderer.setQuality(preset);
     },
     dispose() {
