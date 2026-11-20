@@ -37,6 +37,7 @@ import { AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
 import { createSceneSky, domeGround } from './scene-sky';
+import { addMarkBox, createWornMarkingMaterial } from './marking-wear';
 import { tint } from './tint';
 import { addMarking, addObstacle } from './yard-tokens';
 import { tokenCopy } from './token-copy';
@@ -89,6 +90,10 @@ export function proceduralEnvironment(
   let maskSize = { width: 0, height: 0 };
   let pbrWanted = false;
   let pbrReported = false;
+  // High, over the PBR ground: the marking copies wear paint instead of the shared lit flat look.
+  const markingCopies: Mesh[] = [];
+  let wornMaterial: MeshLambertNodeMaterial | null = null;
+  let wearable = false;
   /** Whether the textured copy is the one drawn: the PBR ground is only drawn through it. */
   let groundDrawn = false;
   const syncGroundPbr = (): void => {
@@ -113,6 +118,18 @@ export function proceduralEnvironment(
       }
     }
     const worn = pbrWanted && pbrMaterial !== null;
+    if (worn && wearable && wornMaterial === null) {
+      try {
+        wornMaterial = createWornMarkingMaterial();
+        setGraded(wornMaterial, graded);
+      } catch (error) {
+        wearable = false;
+        console.warn('Worn markings could not be applied; keeping the lit markings', error);
+      }
+    }
+    for (const copy of markingCopies) {
+      copy.material = worn && wornMaterial !== null ? wornMaterial : litFlat;
+    }
     texturedGround.material = worn && pbrMaterial !== null ? pbrMaterial : texturedGroundMaterial;
     const on = worn && groundDrawn;
     if (on !== pbrReported) {
@@ -204,14 +221,16 @@ export function proceduralEnvironment(
   });
   const flatTokens: Mesh[] = [];
   const flatCopies: Mesh[] = [];
-  const litCopy = (token: Mesh, material: MeshLambertNodeMaterial): void => {
+  const litCopy = (token: Mesh, material: MeshLambertNodeMaterial): Mesh => {
     const copy = new Mesh(token.geometry, material);
     copy.receiveShadow = true;
     group.add(copy);
     flatTokens.push(token);
     flatCopies.push(copy);
+    return copy;
   };
-  for (const token of markingTokens) litCopy(token, litFlat);
+  for (const token of markingTokens) markingCopies.push(litCopy(token, litFlat));
+  wearable = markingTokens.every((token) => addMarkBox(token.geometry));
 
   let yardBand: Group | null = null;
   const { target } = layout;
@@ -370,6 +389,7 @@ export function proceduralEnvironment(
       pbrWanted = flags.groundPbr;
       syncGroundPbr();
       setGraded(litFlat, graded);
+      if (wornMaterial !== null) setGraded(wornMaterial, graded);
       if (gate !== null) setGraded(gate.materials[1], graded);
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
@@ -395,6 +415,7 @@ export function proceduralEnvironment(
       propMaterial.dispose();
       flat.dispose();
       litFlat.dispose();
+      wornMaterial?.dispose();
       sky.dispose();
       skyline.dispose();
     },
