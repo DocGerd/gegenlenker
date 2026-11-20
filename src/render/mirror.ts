@@ -7,10 +7,10 @@ import {
   PlaneGeometry,
   RenderTarget,
   Scene,
+  SRGBColorSpace,
   type Vector3,
 } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
-import type { Rect } from '../contracts/render';
 import type { Pose2 } from '../contracts/sim';
 import type { Vec3 } from '../contracts/vehicle';
 import { bodyToThree } from './coords';
@@ -85,7 +85,7 @@ export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsa
       const w = Math.max(1, Math.round(widthPx));
       const h = Math.max(1, Math.round(heightPx));
       if (target === null) {
-        target = new RenderTarget(w, h, { samples });
+        target = new RenderTarget(w, h, { samples, colorSpace: SRGBColorSpace });
         material.map = target.texture;
         material.needsUpdate = true;
       } else if (target.width !== w || target.height !== h) {
@@ -100,11 +100,8 @@ export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsa
       renderer.render(scene, camera);
       renderer.setRenderTarget(null);
     },
-    /** `rect` in CSS px from the top left, as the renderer's viewport. */
-    composite(renderer: WebGPURenderer, rect: Rect): void {
-      renderer.setViewport(rect.x, rect.y, rect.width, rect.height);
-      renderer.setScissor(rect.x, rect.y, rect.width, rect.height);
-      renderer.setScissorTest(true);
+    /** Draws into the bound target, within the viewport it was given. */
+    composite(renderer: WebGPURenderer): void {
       renderer.render(quadScene, quadCamera);
     },
     dispose(): void {

@@ -39,6 +39,12 @@ WSL offers no core hardware adapter, so the gate is unmet there; Chrome on Windo
 
 `pnpm shoot --out <dir> --backend webgpu` (`scripts/shoot.mjs`: builds, serves on a free port, shoots, always stops its own server; it takes the `shoot-views.mjs` arguments except `--url`) is the local WebGPU check (not CI: CI's Chromium has no WebGPU adapter, so CI e2e covers the fallback). It draws every view on SwiftShader's WebGPU adapter in Chromium's new headless mode and fails when the app does not run on WebGPU, logs a three.js problem or a page error, or draws the top-down view differently per preset. To compare with WebGL 2, shoot that side with `--new-headless` (the new headless mode wraps HUD text differently, which moves the top-down framing) and diff with `--diff`.
 
+## Frame target
+
+Every pane is drawn into one app-owned 8-bit, 4-sample sRGB target (`src/render/frame-target.ts`), and one output pass draws it to the canvas. The target stores sRGB codes, so darks keep the codes a linear 8-bit buffer rounds away. It is renderer-wide, never per preset or a user setting: the top-down view must not depend on it. Its colour space also stops three adding an output pass per pane, so `drawCalls` counts one.
+
+It costs fill rate: SwiftShader frames, which CI e2e draws on, are slower than with a linear target, so the heavy e2e specs (`@heavy`, in `e2e/pinned-shoot.ts`) run in shards of their own (`.github/workflows/ci.yml`). Real-GPU frame time is checked with `pnpm perf:tablet` (see above), and a physical tablet still decides.
+
 ## Other tools
 
 - `pnpm preview:stop [--port <n>]` stops the listener on this checkout's e2e preview port (the one `pnpm test:e2e` prints) or the given port, and nothing else; use it instead of `pkill -f` on an orphaned preview.

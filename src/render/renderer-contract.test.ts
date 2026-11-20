@@ -1,4 +1,4 @@
-import { Group } from 'three';
+import { Group, type RenderTarget } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
@@ -24,6 +24,7 @@ vi.mock('three/webgpu', async (importOriginal) => {
   // does not take the renderer for a thenable. Like three's WebGL 2 backend, it reports a lost
   // context of its canvas through `onDeviceLost` until disposed.
   function FakeWebGPURenderer({ canvas }: { canvas: HTMLCanvasElement }): object {
+    let bound: RenderTarget | null = null;
     const own: Record<PropertyKey, unknown> = {
       info: { autoReset: true, reset: () => undefined, render: { drawCalls: 0 } },
       backend: { isWebGLBackend: true },
@@ -33,10 +34,14 @@ vi.mock('three/webgpu', async (importOriginal) => {
         return Promise.resolve();
       },
       onDeviceLost: () => undefined,
+      setRenderTarget: (target: RenderTarget | null) => {
+        bound = target;
+      },
+      // a render target keeps its own viewport: three ignores the renderer's for it
       render: () => {
         draws.count++;
+        if (bound !== null) draws.viewports.push(bound.viewport.toArray());
       },
-      setViewport: (...rect: number[]) => draws.viewports.push(rect),
     };
     const lost = (): void => {
       (own['onDeviceLost'] as () => void)();
@@ -198,7 +203,7 @@ describe.each([['three', three]] as const)('SceneRenderer contract: %s', (_, h) 
     expect(renderer.stats()).toMatchObject({ contextLost: false, backend: 'webgl2' });
   });
 
-  it('sets each pane viewport from its CSS rect, origin top left', async () => {
+  it('draws each pane into the frame target within its CSS rect, origin top left', async () => {
     const { renderer } = await started();
     draws.viewports.length = 0;
     renderer.render(frame);

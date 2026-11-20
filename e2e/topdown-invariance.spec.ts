@@ -21,15 +21,14 @@ const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 
 /**
  * Per channel, how far a flat region may sit from its `--scene-*` token. The clear colour is unlit and
- * comes out exact; ground, road, verge and the vehicle body are lit, so they carry the sun and hemisphere shade (the
- * previous renderer shows the same), plus the 8-bit linear intermediate's rounding.
+ * comes out exact; ground, road, verge and the vehicle body are lit, so they carry the sun and hemisphere shade.
  */
 const TOKEN_TOLERANCE: Readonly<Partial<Record<ScenePaletteKey, number>>> = {
   backdrop: 0,
   yard: 8,
   street: 5,
-  verge: 6,
-  body: 7,
+  verge: 5,
+  body: 6,
 };
 /**
  * Share of the pane each shot's token must fill, set per shot and token so a change that moves most

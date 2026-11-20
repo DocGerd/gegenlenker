@@ -29,10 +29,10 @@ const PRESETS = ['low', 'balanced', 'high'];
 const SHOTS = ['cockpit', 'mirrorLeft', 'mirrorRight', 'follow', 'yard', 'chase'];
 /** Views whose flat regions must survive a renderer change; the perspective ones are judged by eye. */
 const TOP_DOWN = new Set(['follow', 'yard']);
-/** Largest step a flat pixel may move: the 8-bit linear intermediate rounds sRGB tokens, dark ones by more. */
+/** Largest step a flat pixel may move: an 8-bit linear intermediate rounds sRGB tokens, dark ones by more. */
 const MAX_FLAT_DELTA = 2;
 /** Share of flat pixels allowed to move by more than one step (the dark tokens). */
-const MAX_FLAT_MORE = 0.009;
+const MAX_FLAT_MORE = 0.015;
 /** Share of edge pixels allowed to move by more than one step: antialiasing differs between renderers. */
 const MAX_EDGE_MORE = 0.55;
 const EXERCISE = 'Straight reverse';

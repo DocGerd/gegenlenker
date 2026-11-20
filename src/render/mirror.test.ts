@@ -1,4 +1,4 @@
-import { type Mesh, type Object3D, type RenderTarget, Scene } from 'three';
+import { type Mesh, type Object3D, type RenderTarget, Scene, SRGBColorSpace } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { createMirror, mirrorSamples } from './mirror';
@@ -26,6 +26,12 @@ describe('mirror samples', () => {
     expect([0, 1, 2, 3, 4, 8].map(mirrorSamples)).toEqual([0, 0, 0, 0, 4, 4]);
   });
 
+  it('captures into an sRGB target, so a dark reflection keeps its codes', () => {
+    const { gl, bound } = fakeRenderer();
+    createMirror().capture(gl, new Scene(), 64, 32, 0);
+    expect(bound[0]?.texture.colorSpace).toBe(SRGBColorSpace);
+  });
+
   it('rebuilds the target only when the effective samples change', () => {
     const { gl, bound } = fakeRenderer();
     const mirror = createMirror(4);
@@ -50,7 +56,7 @@ describe('mirror samples', () => {
 describe('mirror quad', () => {
   it('flips the texture in u (a mirror) and in v (the target reads back upside down)', () => {
     const { gl, drawn } = fakeRenderer();
-    createMirror().composite(gl, { x: 0, y: 0, width: 64, height: 32 });
+    createMirror().composite(gl);
     const quad = drawn[0]?.children[0] as Mesh;
     const position = quad.geometry.getAttribute('position');
     const uv = quad.geometry.getAttribute('uv');

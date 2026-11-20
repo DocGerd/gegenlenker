@@ -284,20 +284,6 @@ export function distinctColours(page: Page, png: Buffer): Promise<number> {
   }, png.toString('base64'));
 }
 
-/**
- * An sRGB colour as the 8-bit linear intermediate returns it: each channel decoded to linear, rounded
- * to a byte, and encoded again. Dark channels move the most.
- */
-export function throughIntermediate(rgb: readonly number[]): number[] {
-  return rgb.map((c) => {
-    const v = c / 255;
-    const linear = v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-    const q = Math.round(linear * 255) / 255;
-    const encoded = q <= 0.0031308 ? q * 12.92 : 1.055 * q ** (1 / 2.4) - 0.055;
-    return Math.round(encoded * 255);
-  });
-}
-
 /** Share of a PNG's pixels within `tolerance` per channel of the page's `--scene-<token>` colour. */
 export function tokenShare(
   page: Page,

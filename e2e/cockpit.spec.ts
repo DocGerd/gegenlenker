@@ -7,16 +7,15 @@ import { cabSight } from '../src/render/cab-sight';
 import { interiorLayout, pillarSpans } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
 import { truckById } from '../src/vehicles/registry';
-import { attachmentsReady, throughIntermediate, type Preset } from './pinned-shoot';
+import { attachmentsReady, type Preset } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
-/** What is left of an unlit vertex colour's distance from the hue once the 8-bit intermediate's rounding is applied to the hue. */
-const TOLERANCE = 3;
+/** An unlit vertex colour reaches the canvas as its hue, give or take the rounding of the sRGB frame target. */
+const TOLERANCE = 1;
 /** How much paler (red channel) the horizon haze is than the sky near the header. */
 const HAZE_STEP = 10;
 
-const rgb = (hex: number): readonly number[] =>
-  throughIntermediate([hex >> 16, (hex >> 8) & 0xff, hex & 0xff]);
+const rgb = (hex: number): readonly number[] => [hex >> 16, (hex >> 8) & 0xff, hex & 0xff];
 const HEADLINER = rgb(REALISM_HUES.headliner);
 const DASH = rgb(REALISM_HUES.chevronBlack);
 const PILLAR = rgb(REALISM_HUES.anthracite);
