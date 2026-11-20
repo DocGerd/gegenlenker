@@ -251,8 +251,11 @@ describe('HUD band', () => {
     expect(Number(share) / 100).toBeCloseTo(HUD_BAND_SHARE, 10);
   });
 
-  it('is the only place the band height is written', () => {
-    expect(hud.match(/\b18%/g)).toHaveLength(1);
+  it('sizes the band and offsets the legend from the one token', () => {
+    const rule = (selector: string) =>
+      new RegExp(`(?:^|\\n)${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(hud)?.[1] ?? '';
+    expect(rule('.hud-band')).toMatch(/\bheight:\s*var\(--hud-band\)/);
+    expect(rule('.hud-legend')).toMatch(/\bbottom:\s*calc\(var\(--hud-band\)/);
   });
 });
 

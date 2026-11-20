@@ -173,6 +173,8 @@ const layersOf = (ids: readonly number[]): Layers => {
 type Route = {
   readonly name: string;
   readonly make: RendererParts['interior'];
+  /** Names of the meshes that carry the dashboard; the pillars and the roof parts never count. */
+  readonly dash: readonly string[];
   /** Where a part may cover a mirror rect by design (NDC); everywhere else the rect's view is clear. */
   readonly mayCoverMirror: (x: number, y: number) => boolean;
 };
@@ -182,6 +184,7 @@ const ROUTES: readonly Route[] = [
   {
     name: 'flat overlay',
     make: createCockpitInterior,
+    dash: ['frame'],
     // The headliner and the stowed visor reach down over the top of a mirror rect on small
     // windows; the header edge is a chord polyline just below the curve.
     mayCoverMirror: (x, y) =>
@@ -216,7 +219,7 @@ function drawn(interior: CockpitInterior): Mesh[] {
   return shown(interior).filter((o): o is Mesh => o instanceof Mesh);
 }
 
-describe.each(ROUTES)('cockpit interior seam: $name', ({ make, mayCoverMirror }) => {
+describe.each(ROUTES)('cockpit interior seam: $name', ({ make, dash, mayCoverMirror }) => {
   const build = (flags: QualityFlags) => {
     const interior = make(truck, palette);
     interior.setQuality(flags);
@@ -326,7 +329,11 @@ describe.each(ROUTES)('cockpit interior seam: $name', ({ make, mayCoverMirror })
         const { camera, interior } = shootRoute(w, h);
         const parts = drawn(interior);
         for (let x = -1; x <= 1; x += 0.125) {
-          expect(hits(camera, parts, x, y).length, `${w}x${h} x=${x}`).toBeGreaterThan(0);
+          const names = hits(camera, parts, x, y);
+          expect(
+            names.some((name) => dash.includes(name)),
+            `${w}x${h} x=${x}: ${names.join(', ') || 'no hit'}`,
+          ).toBe(true);
         }
       }
     });
