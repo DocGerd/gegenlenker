@@ -38,6 +38,7 @@ import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
 import { createYardKitLayer, type YardKitParts } from './yard-kit';
 import { createSceneSky, domeGround } from './scene-sky';
+import { createWornMarkingMaterial, MarkingChunks, wearableMarkings } from './marking-wear';
 import { tint } from './tint';
 import { addMarking, addObstacle } from './yard-tokens';
 import { tokenCopy } from './token-copy';
@@ -54,6 +55,11 @@ const BAND_RING_SHARE = 0.5;
 const BAND_YARD_DIVISOR = 150; // the whole-yard view shows the band this many strokes across the yard
 const GATE_STRIP = 0.3;
 const GATE_SEGMENTS = 64;
+
+const castAndReceive = (mesh: Mesh): void => {
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+};
 
 export function proceduralEnvironment(
   layout: ResolvedLayout,
@@ -78,6 +84,7 @@ export function proceduralEnvironment(
   const ground = groundGeometry(layout, palette);
   geometries.push(ground);
   const tokenGround = new Mesh(ground, solid);
+  tokenGround.receiveShadow = true;
   group.add(tokenGround);
 
   // High: perspective cameras draw this textured copy of the ground instead, top-down keeps the tokens.
@@ -91,6 +98,10 @@ export function proceduralEnvironment(
   let maskSize = { width: 0, height: 0 };
   let pbrWanted = false;
   let pbrReported = false;
+  // High, over the PBR ground: the marking copies wear paint instead of the shared lit flat look.
+  const markingCopies: Mesh[] = [];
+  let wornMaterial: MeshLambertNodeMaterial | null = null;
+  let wearable = true;
   /** Whether the textured copy is the one drawn: the PBR ground is only drawn through it. */
   let groundDrawn = false;
   const syncGroundPbr = (): void => {
@@ -115,6 +126,18 @@ export function proceduralEnvironment(
       }
     }
     const worn = pbrWanted && pbrMaterial !== null;
+    if (worn && wearable && wornMaterial === null) {
+      try {
+        wornMaterial = createWornMarkingMaterial();
+        setGraded(wornMaterial, graded);
+      } catch (error) {
+        wearable = false;
+        console.warn('Worn markings could not be applied; keeping the lit markings', error);
+      }
+    }
+    for (const copy of markingCopies) {
+      copy.material = worn && wornMaterial !== null ? wornMaterial : litFlat;
+    }
     texturedGround.material = worn && pbrMaterial !== null ? pbrMaterial : texturedGroundMaterial;
     const on = worn && groundDrawn;
     if (on !== pbrReported) {
@@ -178,7 +201,10 @@ export function proceduralEnvironment(
     const chunks = RESTYLED_KINDS.has(o.kind) ? topDownOnly : obstacles;
     addObstacle(o, palette, chunks, color, roof, isOnYard(yard, cx, cy));
   }
-  for (const mesh of obstacles.meshes(solid, geometries)) group.add(mesh);
+  for (const mesh of obstacles.meshes(solid, geometries)) {
+    castAndReceive(mesh);
+    group.add(mesh);
+  }
   const tokens = topDownOnly.meshes(solid, geometries);
   for (const mesh of tokens) group.add(mesh);
   for (const piece of yardProps(layout)) detail.add(piece.x, piece.y, piece.geometry);
@@ -186,15 +212,22 @@ export function proceduralEnvironment(
   const propMaterial = new MeshLambertNodeMaterial({ vertexColors: true });
   setGraded(propMaterial, true);
   const props = detail.meshes(solid, geometries);
-  for (const mesh of props) group.add(mesh);
+  for (const mesh of props) {
+    castAndReceive(mesh);
+    group.add(mesh);
+  }
   // Without the props the obstacles must still show in perspective, so the tokens go to every camera.
   const propSwap = tokenCopy(tokens);
   propSwap.set(true); // detail on until the first setQuality
   propSwap.setCopies(props);
 
-  const markings = new Chunks(layout.bounds);
+  const markings = new MarkingChunks(layout.bounds);
   color.set(palette.marking);
-  for (const m of layout.markings) addMarking(m, markings, color);
+  const wearing = wearableMarkings(layout.markings);
+  layout.markings.forEach((m, i) => {
+    markings.worn = wearing[i] === true;
+    addMarking(m, markings, color);
+  });
   const markingTokens = markings.meshes(flat, geometries);
   for (const mesh of markingTokens) group.add(mesh);
   // Perspective cameras draw lit copies of every flat token; the tokens keep the top-down view, unlit.
@@ -206,14 +239,15 @@ export function proceduralEnvironment(
   });
   const flatTokens: Mesh[] = [];
   const flatCopies: Mesh[] = [];
-  const litCopy = (token: Mesh, material: MeshLambertNodeMaterial): void => {
+  const litCopy = (token: Mesh, material: MeshLambertNodeMaterial): Mesh => {
     const copy = new Mesh(token.geometry, material);
     copy.receiveShadow = true;
     group.add(copy);
     flatTokens.push(token);
     flatCopies.push(copy);
+    return copy;
   };
-  for (const token of markingTokens) litCopy(token, litFlat);
+  for (const token of markingTokens) markingCopies.push(litCopy(token, litFlat));
 
   let yardBand: Group | null = null;
   const { target } = layout;
@@ -361,6 +395,7 @@ export function proceduralEnvironment(
     setQuality(flags: QualityFlags): void {
       graded = flags.perspectiveLighting;
       rig.setSplit(graded);
+      rig.setShadow(graded && flags.sunShadow);
       sky.setSun(graded ? sunDirection : sunPosition());
       sky.setGround(graded ? splitGround : legacyGround);
       GRADE.sunDirection.value.copy(sunDirection);
@@ -373,6 +408,7 @@ export function proceduralEnvironment(
       pbrWanted = flags.groundPbr;
       syncGroundPbr();
       setGraded(litFlat, graded);
+      if (wornMaterial !== null) setGraded(wornMaterial, graded);
       if (gate !== null) setGraded(gate.materials[1], graded);
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
@@ -399,6 +435,7 @@ export function proceduralEnvironment(
       propMaterial.dispose();
       flat.dispose();
       litFlat.dispose();
+      wornMaterial?.dispose();
       sky.dispose();
       skyline.dispose();
       kit.dispose();

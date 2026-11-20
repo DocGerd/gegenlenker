@@ -26,6 +26,8 @@ export type QualityFlags = {
   readonly perspectiveLighting: boolean;
   /** Distance haze in the graded materials; needs `perspectiveLighting`. */
   readonly aerialPerspective: boolean;
+  /** The sun casts shadows in the perspective views; needs `perspectiveLighting`. */
+  readonly sunShadow: boolean;
   /** HDRI sky dome, also what the vehicles reflect; a download. */
   readonly hdriSky: boolean;
 };
@@ -46,6 +48,7 @@ const BALANCED: QualityFlags = {
   pbr: false,
   perspectiveLighting: false,
   aerialPerspective: false,
+  sunShadow: false,
   hdriSky: false,
 };
 
@@ -69,6 +72,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     pbr: false,
     perspectiveLighting: false,
     aerialPerspective: false,
+    sunShadow: false,
     hdriSky: false,
   },
   balanced: BALANCED,
@@ -80,6 +84,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     pbr: true,
     perspectiveLighting: true,
     aerialPerspective: true,
+    sunShadow: true,
     hdriSky: true,
   },
 };

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { GRADE_SHADER_MARKER, setGradeDisabled } from './grade';
 import { GROUND_PBR_MARKER } from './ground-pbr-material';
 import { precompileGroundPbr } from './ground-pbr';
+import { MARKING_WEAR_MARKER } from './marking-wear';
 import { PBR_SAMPLER_BUDGET, type PbrKey, SHADOW_SAMPLERS } from './ground-pbr-spec';
 import type { TextureMaps } from './texture-set';
 
@@ -17,9 +18,17 @@ const maps: TextureMaps<PbrKey> = {
   paversPacked: texture(),
 };
 
-/** A renderer whose build yields `fragment`, on a context that is `lost` or not. */
-const building = (fragment: string | null, lost = false, shadowed = fragment): WebGPURenderer => {
-  const builds = [fragment, shadowed];
+/**
+ * A renderer whose ground build yields `fragment` (`shadowed` under the sun shadow), and whose worn
+ * marking build yields `worn`, on a context that is `lost` or not.
+ */
+const building = (
+  fragment: string | null,
+  lost = false,
+  shadowed = fragment,
+  worn: string | null = wornBuild(),
+): WebGPURenderer => {
+  const builds = [fragment, worn, shadowed, worn];
   return Object.assign(Object.create(WebGPURenderer.prototype) as WebGPURenderer, {
     debug: {
       onShaderError: null,
@@ -34,6 +43,11 @@ const samplers = (count: number): string =>
 const built = (count: number, markers: readonly string[]): string =>
   `${samplers(count)}\n${markers.map((m) => `vec3 ${m};`).join('\n')}`;
 const both = [GROUND_PBR_MARKER, GRADE_SHADER_MARKER];
+function wornBuild(
+  markers: readonly string[] = [MARKING_WEAR_MARKER, GRADE_SHADER_MARKER],
+): string {
+  return markers.map((m) => `vec3 ${m};`).join('\n');
+}
 
 describe('PBR ground precompile', () => {
   afterEach(() => {
@@ -62,7 +76,10 @@ describe('PBR ground precompile', () => {
   it('needs only its own marker while the grade is disabled', async () => {
     setGradeDisabled(true);
     await expect(
-      precompileGroundPbr(building(built(1, [GROUND_PBR_MARKER])), maps),
+      precompileGroundPbr(
+        building(built(1, [GROUND_PBR_MARKER]), false, undefined, wornBuild([MARKING_WEAR_MARKER])),
+        maps,
+      ),
     ).resolves.toBeUndefined();
   });
 
@@ -79,6 +96,18 @@ describe('PBR ground precompile', () => {
         false,
         built(PBR_SAMPLER_BUDGET + SHADOW_SAMPLERS + 1, both),
       ),
+    ],
+    [
+      'the worn marking marker is missing',
+      building(built(1, both), false, undefined, wornBuild([GRADE_SHADER_MARKER])),
+    ],
+    [
+      'the worn marking grade marker is missing',
+      building(built(1, both), false, undefined, wornBuild([MARKING_WEAR_MARKER])),
+    ],
+    [
+      'the worn marking build has no fragment shader',
+      building(built(1, both), false, undefined, null),
     ],
     ['the context is lost', building(built(1, both), true)],
   ])('rejects when %s', async (_, gl) => {

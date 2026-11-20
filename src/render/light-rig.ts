@@ -8,6 +8,7 @@ import {
   Vector3,
 } from 'three';
 import type { ScenePalette } from '../contracts/render';
+import { gradeDisabled } from './grade';
 import { HDRI_LIGHT } from './hdri-light';
 import { AIDS_LAYER, DEFAULT_LAYER, PERSPECTIVE_LAYER, type ShadowFocus } from './seams';
 import { neutralSky } from './sky';
@@ -161,7 +162,10 @@ export type LightRig = {
   setSplit(on: boolean): void;
   /** Scales the perspective rig (night dims it); the light set stays constant. */
   setIntensity(share: number): void;
-  /** Whether the HDRI sun casts; the legacy lights never do. */
+  /**
+   * Whether the HDRI sun casts; the legacy lights never do. A failed grade check (`gradeDisabled`)
+   * stops it casting too, as `fitShadow` finds out: the shadow receivers share the grade's shaders.
+   */
   setShadow(on: boolean): void;
   /** Fits the shadow box to `focus` and queues the map for this frame; call before the scene's matrices update. */
   fitShadow(focus: ShadowFocus): void;
@@ -181,6 +185,7 @@ export function createLightRig(palette: ScenePalette): LightRig {
   const sunDirection = perspectiveSunDirection();
   sun.position.copy(sunDirection).multiplyScalar(SUN_DISTANCE);
   prepareShadow(sun);
+  let shadowWanted = false;
   const probe = new LightProbe(light.sh, 1);
   for (const l of [sun, probe]) {
     l.layers.set(PERSPECTIVE_LAYER);
@@ -202,9 +207,11 @@ export function createLightRig(palette: ScenePalette): LightRig {
       probe.intensity = share;
     },
     setShadow(on) {
-      sun.castShadow = on;
+      shadowWanted = on;
+      sun.castShadow = on && !gradeDisabled();
     },
     fitShadow(focus) {
+      sun.castShadow = shadowWanted && !gradeDisabled();
       if (sun.castShadow) {
         const fit = fitSunShadow(focus, sunDirection, sun.shadow.mapSize.width);
         sun.position.copy(fit.position);
