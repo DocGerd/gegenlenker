@@ -6,7 +6,7 @@ import { fragmentFiles } from './changelog';
 
 const DIR = join(import.meta.dirname, '..', 'changelog.d');
 const GOOD = '([#7](https://github.com/DocGerd/gegenlenker/pull/7))';
-const okay = `Fixes it ${GOOD}.\nde: Behebt es.\n`;
+const okay = `Fixes it ${GOOD}.\n`;
 
 describe('changelog fragments', () => {
   it('has the format README', () => {
@@ -19,25 +19,19 @@ describe('changelog fragments', () => {
       category: 'fixed',
       prs: [7],
       en: 'Fixes it.',
-      de: 'Behebt es.',
     });
-    expect(parseFragment('7-2.added.md', `Adds it ${GOOD}\nde: Fügt es hinzu.`).id).toBe(
-      '7-2.added',
-    );
+    expect(parseFragment('7-2.added.md', `Adds it ${GOOD}`).id).toBe('7-2.added');
   });
 
   it.each([
     ['name', '7.bug.md', okay, /bad file name/],
-    ['one line', '7.fixed.md', `Fixes it ${GOOD}.\n`, /English line and a "de: " line/],
-    ['three lines', '7.fixed.md', `${okay}Extra.\n`, /English line and a "de: " line/],
-    ['list marker', '7.fixed.md', `- Fixes it ${GOOD}.\nde: Behebt es.`, /starts like a list/],
-    ['heading', '7.fixed.md', `# Fixes it ${GOOD}.\nde: Behebt es.`, /starts like a list/],
-    ['missing link', '7.fixed.md', 'Fixes it.\nde: Behebt es.', /end with its PR link/],
+    ['two lines', '7.fixed.md', `${okay}Extra.\n`, /exactly one non-empty line/],
+    ['no text', '7.fixed.md', '\n', /exactly one non-empty line/],
+    ['list marker', '7.fixed.md', `- Fixes it ${GOOD}.`, /starts like a list/],
+    ['heading', '7.fixed.md', `# Fixes it ${GOOD}.`, /starts like a list/],
+    ['missing link', '7.fixed.md', 'Fixes it.', /end with its PR link/],
     ['other number', '8.fixed.md', okay, /differs from the file name/],
-    ['de prefix', '7.fixed.md', `Fixes it ${GOOD}.\nBehebt es.`, /start with "de: "/],
-    ['link on de', '7.fixed.md', `Fixes it ${GOOD}.\nde: Behebt es ${GOOD}.`, /German line/],
-    ['de equals en', '7.fixed.md', `Fixes it ${GOOD}.\nde: Fixes it.`, /equals the English/],
-    ['no period', '7.fixed.md', `Fixes it ${GOOD}.\nde: Behebt es`, /does not end with a period/],
+    ['markup', '7.fixed.md', `Fixes **it** ${GOOD}.`, /markup/],
   ])('rejects %s', (_label, name, text, message) => {
     expect(() => parseFragment(name, text)).toThrow(message);
   });
@@ -63,7 +57,7 @@ describe('changelog fragments', () => {
   });
 
   // Zero fragments is valid: right after a release the directory holds only README.md and released.json.
-  it.each(fragmentFiles(DIR))('%s is a well-formed bilingual fragment', (file) => {
+  it.each(fragmentFiles(DIR))('%s is a well-formed fragment', (file) => {
     expect(() => parseFragment(file, readFileSync(join(DIR, file), 'utf8'))).not.toThrow();
   });
 });

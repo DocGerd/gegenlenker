@@ -13,7 +13,6 @@ export interface ChangelogEntry {
   category: Category;
   prs: number[];
   en: string;
-  de: string;
 }
 
 export interface Release {
@@ -50,7 +49,7 @@ export const inlineProblem = (text: string): string | null => {
   return null;
 };
 
-/** Parses `<number>.<category>.md`: English line with its PR link, then `de: ` line. Throws on a malformed fragment. */
+/** Parses `<number>.<category>.md`: one English line ending with its PR link. Throws on a malformed fragment. */
 export const parseFragment = (name: string, text: string): ChangelogEntry => {
   const named = NAME_RE.exec(name);
   const number = named?.[1];
@@ -58,28 +57,19 @@ export const parseFragment = (name: string, text: string): ChangelogEntry => {
   if (number === undefined || category === undefined) throw new Error(`${name}: bad file name`);
 
   const lines = text.split('\n').filter((line) => line.trim() !== '');
-  const [first, second] = lines.map((line) => line.trim());
-  if (lines.length !== 2 || first === undefined || second === undefined)
-    throw new Error(`${name}: expected an English line and a "de: " line`);
+  const [first] = lines.map((line) => line.trim());
+  if (lines.length !== 1 || first === undefined)
+    throw new Error(`${name}: expected exactly one non-empty line`);
 
   const link = LINK_RE.exec(first);
-  if (!link) throw new Error(`${name}: line 1 must end with its PR link`);
+  if (!link) throw new Error(`${name}: the line must end with its PR link`);
   const [, body = '', linked, repeated] = link;
   if (linked !== number || repeated !== number)
     throw new Error(`${name}: PR link number differs from the file name`);
   const en = body.endsWith('.') ? body : `${body}.`;
 
-  if (!second.startsWith('de: ')) throw new Error(`${name}: line 2 must start with "de: "`);
-  const de = second.slice('de: '.length);
+  const problem = inlineProblem(en);
+  if (problem !== null) throw new Error(`${name}: text ${problem}`);
 
-  for (const [label, value] of [
-    ['English line', en],
-    ['German line', de],
-  ] as const) {
-    const problem = inlineProblem(value);
-    if (problem !== null) throw new Error(`${name}: ${label} ${problem}`);
-  }
-  if (en === de) throw new Error(`${name}: German line equals the English line`);
-
-  return { id: name.slice(0, -'.md'.length), category, prs: [Number(number)], en, de };
+  return { id: name.slice(0, -'.md'.length), category, prs: [Number(number)], en };
 };

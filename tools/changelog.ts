@@ -38,7 +38,7 @@ export const loadReleases = (dir: string): unknown =>
 const entryProblems = (entry: unknown, where: string, seen: Set<string>): string[] => {
   if (!isRecord(entry)) return [`${where}: not an object`];
   const out: string[] = [];
-  const { id, category, prs, en, de } = entry;
+  const { id, category, prs, en } = entry;
   if (typeof id !== 'string' || id === '') out.push(`${where}: id must be a non-empty string`);
   else if (seen.has(id)) out.push(`${where}: duplicate id ${id}`);
   else seen.add(id);
@@ -50,20 +50,12 @@ const entryProblems = (entry: unknown, where: string, seen: Set<string>): string
     new Set(prs).size !== prs.length
   )
     out.push(`${where}: prs must be a non-empty list of distinct PR numbers`);
-  for (const [key, value] of [
-    ['en', en],
-    ['de', de],
-  ] as const) {
-    if (typeof value !== 'string') out.push(`${where}: ${key} must be a string`);
-    else {
-      const problem = inlineProblem(value);
-      if (problem !== null) out.push(`${where}: ${key} ${problem}`);
-    }
+  if (typeof en !== 'string') out.push(`${where}: en must be a string`);
+  else {
+    const problem = inlineProblem(en);
+    if (problem !== null) out.push(`${where}: en ${problem}`);
   }
-  if (typeof en === 'string' && en === de) out.push(`${where}: de equals en`);
-  const extra = Object.keys(entry).filter(
-    (key) => !['id', 'category', 'prs', 'en', 'de'].includes(key),
-  );
+  const extra = Object.keys(entry).filter((key) => !['id', 'category', 'prs', 'en'].includes(key));
   if (extra.length > 0) out.push(`${where}: unknown keys ${extra.join(', ')}`);
   return out;
 };

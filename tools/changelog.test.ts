@@ -18,7 +18,6 @@ const entry = (over: Partial<ChangelogEntry> = {}): ChangelogEntry => ({
   category: 'added',
   prs: [1],
   en: 'One.',
-  de: 'Eins.',
   ...over,
 });
 const unreleased = (...entries: ChangelogEntry[]): Release => ({ version: null, entries });
@@ -39,8 +38,7 @@ describe('released.json', () => {
     expect(problems([unreleased(entry({ prs: [] }))])).toMatch(/prs/);
     expect(problems([unreleased(entry({ prs: [2, 2] }))])).toMatch(/prs/);
     expect(problems([unreleased(entry({ en: '' }))])).toMatch(/en empty/);
-    expect(problems([unreleased(entry({ de: 'Eins' }))])).toMatch(/de does not end/);
-    expect(problems([unreleased(entry({ de: 'One.' }))])).toMatch(/de equals en/);
+    expect(problems([unreleased(entry({ en: 'No period' }))])).toMatch(/en does not end/);
     expect(problems([unreleased(entry({ en: 'A **bold** one.' }))])).toMatch(/en contains markup/);
     expect(problems([{ version: '1.0.0', entries: [] }])).toMatch(/needs a YYYY-MM-DD date/);
     expect(problems([{ version: '1.0.0', date: '2026-01-01', entries: [] }, unreleased()])).toMatch(
@@ -57,10 +55,10 @@ describe('renderChangelog', () => {
         {
           version: '1.0.0',
           date: '2026-01-02',
-          entries: [entry({ id: 'old', en: 'Old.', de: 'Alt.' })],
+          entries: [entry({ id: 'old', en: 'Old.' })],
         },
       ],
-      [entry({ id: 'n', prs: [9], en: 'New.', de: 'Neu.' })],
+      [entry({ id: 'n', prs: [9], en: 'New.' })],
     );
     const base = 'https://github.com/DocGerd/gegenlenker/pull/';
     expect(text).toContain(`## [Unreleased]\n\n### Added\n\n- New ([#9](${base}9)).`);
