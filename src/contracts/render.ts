@@ -80,6 +80,10 @@ export type CollapsedPanels = {
 export type GraphicsPreset = 'low' | 'balanced' | 'high';
 export const GRAPHICS_PRESETS: readonly GraphicsPreset[] = ['low', 'balanced', 'high'];
 export const DEFAULT_GRAPHICS: GraphicsPreset = 'balanced';
+/** The time of day the perspective views are lit for. */
+export type LightingMode = 'day' | 'night';
+export const LIGHTING_MODES: readonly LightingMode[] = ['day', 'night'];
+export const DEFAULT_LIGHTING: LightingMode = 'day';
 export type ScenePaletteKey =
   | 'sky'
   | 'backdrop'

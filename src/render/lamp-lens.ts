@@ -135,7 +135,7 @@ export function createDetailMaterial(lamps: LampEmission): MeshLambertNodeMateri
 }
 
 /**
- * Gives a shell's meshes their slots: the shell dark, its lens from `lamps` (the layout's shell
+ * Gives a shell's meshes their slots: the shell and its glass dark, its lens from `lamps` (the layout's shell
  * lenses). Throws when the glb's lens mesh and the layout disagree, so the procedural mesh stays.
  */
 export function slotShell(shell: Shell, lamps: readonly Lamp[]): void {
@@ -144,7 +144,9 @@ export function slotShell(shell: Shell, lamps: readonly Lamp[]): void {
       `shell ${shell.mesh.name} has ${shell.lens === null ? 'no' : 'a'} lens mesh for ${lamps.length} shell lamps`,
     );
   }
-  if (!shell.mesh.geometry.hasAttribute(SLOT_ATTRIBUTE)) withSlot(shell.mesh.geometry);
+  for (const dark of [shell.mesh, shell.glass]) {
+    if (dark !== null && !dark.geometry.hasAttribute(SLOT_ATTRIBUTE)) withSlot(dark.geometry);
+  }
   if (shell.lens !== null && !shell.lens.geometry.hasAttribute(SLOT_ATTRIBUTE)) {
     shell.lens.geometry = tagShellLenses(shell.lens.geometry, shell.lens.matrixWorld, lamps);
   }

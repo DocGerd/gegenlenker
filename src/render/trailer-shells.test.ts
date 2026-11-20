@@ -17,6 +17,7 @@ import {
 } from './glb-shells';
 import { TRAILER_LOOKS } from './livery';
 import { KEYS } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import {
   AIDS_LAYER,
@@ -403,15 +404,15 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
     const shown = stateOf(visual.object);
     expect(shown).not.toEqual(procedural);
 
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(stateOf(visual.object)).toEqual(procedural);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(stateOf(visual.object)).toEqual(shown);
-    visual.setQuality({ ...QUALITY_FLAGS.balanced, cabGlb: true, vehicleGlb: false });
+    visual.setLook(lookFor({ ...QUALITY_FLAGS.balanced, cabGlb: true, vehicleGlb: false }, 'day'));
     expect(stateOf(visual.object)).toEqual(procedural);
-    visual.setQuality({ ...QUALITY_FLAGS.balanced, cabGlb: false, vehicleGlb: true });
+    visual.setLook(lookFor({ ...QUALITY_FLAGS.balanced, cabGlb: false, vehicleGlb: true }, 'day'));
     expect(stateOf(visual.object)).toEqual(shown);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     visual.dispose();
     expect(error).not.toHaveBeenCalled();
     error.mockRestore();
@@ -421,30 +422,30 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
     const d = deferred(await load(id));
     const visual = proceduralTrailer(spec, palette, d.shells);
     const procedural = stateOf(visual.object);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     d.apply();
     expect(stateOf(visual.object)).toEqual(procedural);
     expect(d.attached).toEqual([]);
 
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(stateOf(visual.object)).not.toEqual(procedural);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(stateOf(visual.object)).toEqual(procedural);
   });
 
   it('reports the shell once when it attaches, not when it merely loads, and clears it on detach and dispose', async () => {
     const d = deferred(await load(id));
     const visual = proceduralTrailer(spec, palette, d.shells);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     d.apply();
     expect(d.attached).toEqual([]);
 
     const key = `${id}-trailer`;
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(d.attached).toEqual([[key, true]]);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(d.attached.slice(1)).toEqual([[key, false]]);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     visual.dispose();
     expect(d.attached.slice(3)).toEqual([[key, false]]);
   });
@@ -454,19 +455,19 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
     const d = deferred(await load(id));
     const visual = proceduralTrailer(spec, palette, d.shells);
     const procedural = stateOf(visual.object);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     d.apply();
     const { dolly } = partsOf(visual);
     const stuck = vi.spyOn(dolly, 'add').mockImplementation(() => {
       throw new Error('stuck');
     });
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(warn).toHaveBeenCalledOnce();
     expect(stateOf(visual.object)).toEqual(procedural);
     expect(d.attached).toEqual([]);
 
     stuck.mockRestore();
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(stateOf(visual.object)).not.toEqual(procedural);
     expect(d.attached).toEqual([[`${id}-trailer`, true]]);
     warn.mockRestore();

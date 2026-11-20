@@ -19,6 +19,7 @@ import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
 import { KEYS } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { applyShell } from './glb-shells';
 import { createMirror } from './mirror';
@@ -271,9 +272,11 @@ describe('number plate grade', () => {
       [QUALITY_FLAGS.low, false],
       [QUALITY_FLAGS.high, true],
     ] as const) {
-      visual.setQuality(flags);
+      visual.setLook(lookFor(flags, 'day'));
       expect(graded().every((g) => g === on)).toBe(true);
     }
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+    expect(graded().some((g) => g)).toBe(false);
     visual.dispose();
   });
 });
@@ -330,7 +333,7 @@ describe('sun shadow', () => {
         QUALITY_FLAGS.low,
         QUALITY_FLAGS.high,
       ]) {
-        visual.setQuality(flags);
+        visual.setLook(lookFor(flags, 'day'));
         for (const opacity of opacities()) {
           if (flags.sunShadow) {
             expect(opacity).toBeGreaterThan(0);
@@ -341,9 +344,16 @@ describe('sun shadow', () => {
     },
   );
 
+  it('keeps the blobs at night on a preset without sun shadow', () => {
+    for (const visual of visuals) {
+      visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+      for (const m of shadowsOf(visual.object)) expect((m.material as Material).opacity).toBe(1);
+    }
+  });
+
   it('restores the blobs once a failed grade stops the sun casting', () => {
     const visual = proceduralTruck(truckById(TRUCK_IDS[0]), palette);
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const opacity = (): number => (shadowsOf(visual.object)[0]?.material as Material).opacity;
     expect(opacity()).toBeLessThan(1);
     setGradeDisabled(true);
@@ -354,18 +364,20 @@ describe('sun shadow', () => {
     expect(opacity()).toBeLessThan(1);
   });
 
-  it('lets a shell body cast, and its lenses only take shadow', () => {
+  it('lets a shell body cast, and its glass and lenses only take shadow', () => {
     const body = new Mesh(new BoxGeometry());
+    const glass = new Mesh(new BoxGeometry());
     const lens = new Mesh(new BoxGeometry());
     const group = new Group();
     const swap = applyShell(
       group,
-      { mesh: body, lens },
+      { mesh: body, glass, lens },
       { toAids: [], remove: [], layer: PERSPECTIVE_LAYER },
       { material: new MeshBasicMaterial() },
     );
-    const [shell, shellLens] = meshes(group);
+    const [shell, shellGlass, shellLens] = meshes(group);
     expect([shell?.castShadow, shell?.receiveShadow]).toEqual([true, true]);
+    expect([shellGlass?.castShadow, shellGlass?.receiveShadow]).toEqual([false, true]);
     expect([shellLens?.castShadow, shellLens?.receiveShadow]).toEqual([false, true]);
     swap.dispose();
   });

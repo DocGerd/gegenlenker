@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, Color, Layers, Mesh, type Object3D, Vector3 } from 'three';
+import { Box3, type BufferGeometry, Color, Layers, Mesh, type Object3D, Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { TRUCK_IDS, type TruckId } from '../contracts/vehicle';
@@ -20,6 +20,7 @@ import {
 import { TRUCK_LOOKS } from './livery';
 import { createMirror } from './mirror';
 import { KEYS } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS, type QualityFlags } from './quality';
 import {
   AIDS_LAYER,
@@ -73,6 +74,24 @@ describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
     expect(Math.max(-box.min.z, box.max.z)).toBeLessThanOrEqual(half + RELIEF + 1e-3);
     expect(Math.max(-box.min.z, box.max.z)).toBeCloseTo(half + RELIEF, 2);
     expect(box.max.y).toBeCloseTo(CAB_HEIGHT + BEACON_TOP, 2);
+  });
+
+  it('keeps the windows in a mesh of their own, on the glass hue', async () => {
+    const { mesh, glass } = await loadShell(id, 'cab');
+    const glassHue = new Color(cabShellParams(spec).hues.glass);
+    const isGlass = (m: Mesh, i: number): boolean => {
+      const c = m.geometry.getAttribute('color');
+      const colour = new Color(c.getX(i), c.getY(i), c.getZ(i));
+      return (
+        Math.abs(colour.r - glassHue.r) + Math.abs(colour.g - glassHue.g) < 4 * COLOUR_TOLERANCE
+      );
+    };
+    const count = (m: Mesh): number => m.geometry.getAttribute('color').count;
+    expect(glass?.name).toBe('cab-glass');
+    expect(
+      Array.from({ length: count(glass as Mesh) }, (_, i) => isGlass(glass as Mesh, i)),
+    ).not.toContain(false);
+    expect(Array.from({ length: count(mesh) }, (_, i) => isGlass(mesh, i))).not.toContain(true);
   });
 
   it('decodes the body into one coloured mesh that fills the body footprint', async () => {
@@ -286,9 +305,9 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     applyAll(d);
     const removed = before.filter((m) => !group.children.includes(m));
     const added = group.children.filter((m) => !before.includes(m));
-    // cab shell and its lenses replace the cab front; the body shell adds one mesh, plus the detail swap when linked
+    // cab shell, its glass and lenses replace the cab front; the body shell adds one mesh, plus the detail swap when linked
     expect(removed).toHaveLength(linked ? 2 : 1);
-    expect(added).toHaveLength(linked ? 4 : 3);
+    expect(added).toHaveLength(linked ? 5 : 4);
   });
 
   it('draws no more meshes with the shells than without, apart from the shells themselves', async () => {
@@ -296,8 +315,20 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const group = proceduralTruck(spec, palette, d.shells).object;
     const before = group.children.length;
     applyAll(d);
-    // cab shell replaces the cab front; its lenses and the body shell are added
-    expect(group.children.length).toBe(before + 2);
+    // cab shell replaces the cab front; its glass, lenses and the body shell are added
+    expect(group.children.length).toBe(before + 3);
+  });
+
+  it('lets the cab body cast the sun shadow and its glass only take it', async () => {
+    const shells = await loadBoth(id);
+    const d = deferred(shells);
+    const group = proceduralTruck(spec, palette, d.shells).object;
+    applyAll(d);
+    const placed = (geometry: BufferGeometry | undefined): Mesh | undefined =>
+      meshesOf(group).find((m) => m.geometry === geometry);
+    const [cab, glass] = [placed(shells.cab.mesh.geometry), placed(shells.cab.glass?.geometry)];
+    expect([cab?.castShadow, cab?.receiveShadow]).toEqual([true, true]);
+    expect([glass?.castShadow, glass?.receiveShadow]).toEqual([false, true]);
   });
 
   it('restores the procedural meshes, layers and order when switched off, and reproduces the swap when switched on again', async () => {
@@ -309,11 +340,11 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const shown = maskOf(group);
     expect(shown).not.toEqual(procedural);
 
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(maskOf(group)).toEqual(procedural);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(maskOf(group)).toEqual(shown);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(maskOf(group)).toEqual(procedural);
   });
 
@@ -322,15 +353,15 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const visual = proceduralTruck(spec, palette, d.shells);
     const group = visual.object;
     const procedural = maskOf(group);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     applyAll(d);
     expect(maskOf(group)).toEqual(procedural);
     expect(d.attached).toEqual([]);
 
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(group.children.length).toBeGreaterThan(procedural.length - 1);
     expect(maskOf(group)).not.toEqual(procedural);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(maskOf(group)).toEqual(procedural);
   });
 
@@ -339,9 +370,9 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const d = deferred(await loadBoth(id));
     const visual = proceduralTruck(spec, palette, d.shells);
     applyAll(d);
-    visual.setQuality(QUALITY_FLAGS.low);
-    visual.setQuality(QUALITY_FLAGS.balanced);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     visual.dispose();
     expect(error).not.toHaveBeenCalled();
     error.mockRestore();
@@ -356,10 +387,10 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
       const visual = proceduralTruck(spec, palette, d.shells);
       const group = visual.object;
       const procedural = maskOf(group);
-      visual.setQuality(flags(true, false));
+      visual.setLook(lookFor(flags(true, false), 'day'));
       applyAll(d);
       const cabOnly = maskOf(group);
-      visual.setQuality(flags(false, true));
+      visual.setLook(lookFor(flags(false, true), 'day'));
       const bodyOnly = maskOf(group);
       if (linked) {
         expect(cabOnly).toEqual(procedural);
@@ -369,9 +400,9 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
         expect(bodyOnly).not.toEqual(procedural);
         expect(bodyOnly).not.toEqual(cabOnly);
       }
-      visual.setQuality(flags(false, false));
+      visual.setLook(lookFor(flags(false, false), 'day'));
       expect(maskOf(group)).toEqual(procedural);
-      visual.setQuality(flags(true, true));
+      visual.setLook(lookFor(flags(true, true), 'day'));
       expect(group.children.length).toBeGreaterThan(procedural.length);
     },
   );
@@ -379,21 +410,21 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
   it('reports a shell when it attaches, not when it merely loads, and clears it on detach and dispose', async () => {
     const d = deferred(await loadBoth(id));
     const visual = proceduralTruck(spec, palette, d.shells);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     applyAll(d);
     expect(d.attached).toEqual([]);
 
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(d.attached).toEqual([
       [`${id}-cab`, true],
       [`${id}-body`, true],
     ]);
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(d.attached.slice(2)).toEqual([
       [`${id}-cab`, false],
       [`${id}-body`, false],
     ]);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     visual.dispose();
     expect(d.attached.slice(6)).toEqual([
       [`${id}-cab`, false],
