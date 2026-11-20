@@ -20,7 +20,7 @@ export const HEAVY = '@heavy';
 export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
   low: 90_000,
   balanced: 150_000,
-  high: 240_000,
+  high: 360_000,
 };
 /** How long a web-first wait for a High first-load marker may take on software GL, against the 30 s default. */
 export const HIGH_WAIT_MS = 60_000;
