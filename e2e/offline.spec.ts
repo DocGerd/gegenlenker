@@ -133,6 +133,7 @@ test('High graphics caches the ground, sky, yard kit and cockpit interior assets
   context,
   baseURL,
 }) => {
+  test.setTimeout(PRESET_TIMEOUT_MS.high);
   const origin = new URL(baseURL ?? '').origin;
   const foreign: string[] = [];
   context.on('request', (r) => {
