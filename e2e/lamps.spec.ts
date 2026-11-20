@@ -22,7 +22,7 @@ for (const preset of PRESETS) {
     `lighting the stop lamps leaves the top-down view unchanged at ${preset}`,
     { tag: HEAVY },
     async ({ context }) => {
-      test.setTimeout(PRESET_TIMEOUT_MS);
+      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
       const errors: string[] = [];
       const page = await context.newPage();
       page.on('console', (m) => {

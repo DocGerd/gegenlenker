@@ -19,7 +19,7 @@ for (const preset of PRESETS) {
     `every view stays within the draw-call budget at ${preset}`,
     { tag: HEAVY },
     async ({ context }) => {
-      test.setTimeout(PRESET_TIMEOUT_MS);
+      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
       const errors: string[] = [];
       const over: string[] = [];
       const page = await context.newPage();

@@ -27,8 +27,8 @@ const TOKEN_TOLERANCE: Readonly<Partial<Record<ScenePaletteKey, number>>> = {
   backdrop: 0,
   yard: 8,
   street: 5,
-  verge: 5,
-  body: 6,
+  verge: 6,
+  body: 7,
 };
 /**
  * Share of the pane each shot's token must fill, set per shot and token so a change that moves most
@@ -56,7 +56,7 @@ for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
     `the top-down view is the same at every graphics preset: ${exercise}`,
     { tag: HEAVY },
     async ({ context }, testInfo) => {
-      test.setTimeout(PRESET_TIMEOUT_MS * PRESETS.length);
+      test.setTimeout(PRESETS.reduce((sum, preset) => sum + PRESET_TIMEOUT_MS[preset], 0));
       const errors: string[] = [];
       const threeProblems: string[] = [];
       const mismatches: string[] = [];

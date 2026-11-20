@@ -16,8 +16,12 @@ export type Shot = 'cockpit' | 'mirrorLeft' | 'mirrorRight' | 'follow' | 'yard' 
  * them in shards of their own (`--grep @heavy`) apart from the rest (`--grep-invert @heavy`).
  */
 export const HEAVY = '@heavy';
-/** Wall-clock bound for a heavy spec that drives one preset. */
-export const PRESET_TIMEOUT_MS = 120_000;
+/** Wall-clock bound for a heavy spec that drives one preset; High loads the most and draws slowest on software GL. */
+export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
+  low: 90_000,
+  balanced: 150_000,
+  high: 240_000,
+};
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const FRAME_MS = 16;
