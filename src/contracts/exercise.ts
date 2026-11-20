@@ -1,4 +1,5 @@
 import type { LayoutId, Marking, Obstacle } from './layout';
+import type { LightingMode } from './render';
 import type { InputChange, Pose2, Vec2 } from './sim';
 import type { TrailerId, TruckId } from './vehicle';
 /** Curriculum order, easiest first; the menu lists them in this order (`content.test.ts` pins it). */
@@ -37,6 +38,8 @@ export type RunResult = {
   readonly reached: boolean;
   /** Any aid was on while the run drove. */
   readonly assisted: boolean;
+  /** Bests rank apart per lighting, like `assisted`. */
+  readonly lighting: LightingMode;
   /** The exercise has a waypoint the run never came within range of. */
   readonly waypointMissed: boolean;
   readonly positionError: number;
@@ -48,11 +51,12 @@ export type RunResult = {
 };
 export type BestResults = Readonly<Record<string, RunResult>>;
 export type InputLog = {
-  readonly version: 1;
+  readonly version: 2;
   readonly layoutId: LayoutId;
   readonly exerciseId: ExerciseId | null;
   readonly truckId: TruckId;
   readonly trailerId: TrailerId;
+  readonly lighting: LightingMode;
   readonly steps: number;
   readonly changes: readonly InputChange[];
 };

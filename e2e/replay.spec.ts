@@ -32,3 +32,35 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   await scrubber.fill('0');
   await expect(time).toHaveText(`0.0 s / ${total}`);
 });
+
+test('a night run replays at night after the stored setting switched to day', async ({ page }) => {
+  const SETTINGS_KEY = 'gegenlenker.settings.v1';
+  await page.addInitScript((key) => {
+    // Only the first load: the later reload must keep the day setting.
+    if (localStorage.getItem(key) === null) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, graphics: 'low', lighting: 'night' }));
+    }
+  }, SETTINGS_KEY);
+  const html = page.locator('html');
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(html).toHaveAttribute('data-render-lighting', 'night');
+  await page.keyboard.press('4');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('w');
+  await page.waitForTimeout(500);
+  await page.getByRole('button', { name: en.finish }).click();
+  await page
+    .getByRole('dialog', { name: en.paused })
+    .getByRole('button', { name: en.finish })
+    .click();
+  await expect(page.getByRole('button', { name: en.replay })).toBeVisible();
+
+  await page.evaluate((key) => {
+    localStorage.setItem(key, JSON.stringify({ version: 1, graphics: 'low', lighting: 'day' }));
+  }, SETTINGS_KEY);
+  await page.reload();
+  await expect(html).not.toHaveAttribute('data-render-lighting');
+  await page.getByRole('button', { name: en.replayLastRun }).click();
+  await expect(page.getByRole('slider', { name: en.timeline })).toBeVisible();
+  await expect(html).toHaveAttribute('data-render-lighting', 'night');
+});

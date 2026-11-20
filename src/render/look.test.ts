@@ -105,6 +105,15 @@ describe('applyLook', () => {
     applyLook(look, { toward, away });
     expect(GRADE.exposure.value).toBe(1);
   });
+
+  it('keeps the cab interior at full light by day', () => {
+    const look = lookFor(QUALITY_FLAGS.high, 'day');
+    expect(look.interior.light).toBe(1);
+    applyLook({ ...look, interior: { light: 0.25 } }, { toward: new Color(), away: new Color() });
+    expect(GRADE.interiorLight.value).toBe(0.25);
+    applyLook(look, { toward: new Color(), away: new Color() });
+    expect(GRADE.interiorLight.value).toBe(1);
+  });
 });
 
 describe('the grade uniforms', () => {

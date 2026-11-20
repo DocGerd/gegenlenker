@@ -27,6 +27,7 @@ import {
   TWIN_WHEEL_WIDTH,
   WALL_THICKNESS,
 } from './body-dims';
+import { cabShadowCaster } from './cab-shadow';
 import { CAB_HEIGHT, CAB_LENGTH, FRAME_TOP, RAIL_BOTTOM, TRUCK_WHEEL_RADIUS } from './cab-dims';
 import {
   applyShell,
@@ -42,7 +43,7 @@ import { DAY, lampState, type LampToggles } from './lamp-state';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
-import { CAB_LAYER, PERSPECTIVE_LAYER, type VehicleVisual } from './seams';
+import { CAB_LAYER, PERSPECTIVE_LAYER, SHADOW_ONLY_LAYER, type VehicleVisual } from './seams';
 import {
   ARM_HEIGHT,
   ARM_WIDTH,
@@ -247,6 +248,13 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     cabFront(geometry: BufferGeometry): Mesh {
       const mesh = this.detail(geometry);
       mesh.layers.set(CAB_LAYER);
+      return mesh;
+    },
+    /** A caster only the sun's shadow camera sees; nothing draws it. */
+    shadowCaster(geometry: BufferGeometry): Mesh {
+      const mesh = this.mesh(geometry, this.material(0));
+      mesh.receiveShadow = false;
+      mesh.layers.set(SHADOW_ONLY_LAYER);
       return mesh;
     },
     /** Perspective-only contact shadow; the geometry's vertex alpha carries the softness. */
@@ -455,7 +463,12 @@ export function proceduralTruck(
     cabShell = applyShell(
       group,
       shell,
-      { toAids: [cabBox], remove: [cabFront], layer: CAB_LAYER },
+      {
+        toAids: [cabBox],
+        remove: [cabFront],
+        add: [res.shadowCaster(cabShadowCaster(spec))],
+        layer: CAB_LAYER,
+      },
       {
         material: res.detailMaterial(),
         enabled: cabOn(),
