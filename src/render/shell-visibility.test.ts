@@ -22,11 +22,13 @@ import { computeViewports, NO_INSETS } from './viewports';
  * count the shell vertices inside each frustum.
  */
 
-const read = async (id: TruckId, kind: ShellKind): Promise<Mesh> => {
+const readShell = async (id: TruckId, kind: ShellKind) => {
   const bytes = readFileSync(join(import.meta.dirname, `assets/${id}-${kind}.glb`));
   const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  return (await parseShell(data, kind)).mesh;
+  return parseShell(data, kind);
 };
+const read = async (id: TruckId, kind: ShellKind): Promise<Mesh> =>
+  (await readShell(id, kind)).mesh;
 
 const readTrailer = async (id: TrailerId) => {
   const bytes = readFileSync(join(import.meta.dirname, `assets/${id}-trailer.glb`));
@@ -195,16 +197,19 @@ describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
   it.each(Object.entries(SCREENS))(
     'frames the cab front corners of the glb bounds at the default azimuth, %s screen',
     async (_name, screen) => {
-      const mesh = await read(id, 'cab');
+      const { mesh, glass } = await readShell(id, 'cab');
       const face = cabFront(truckById(id));
       // The glb's front face: what sits above the frame within the front 0.2 m, which leaves out the
       // tow coupling, the bumper and the roof fittings further back.
       const box = new Box3();
-      const positions = mesh.geometry.getAttribute('position');
       const point = new Vector3();
-      for (let i = 0; i < positions.count; i++) {
-        point.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
-        if (point.y >= face.bottom - 1e-3 && point.x >= face.x - 0.2) box.expandByPoint(point);
+      // the windscreen is a mesh of its own
+      for (const part of [mesh, ...(glass === null ? [] : [glass])]) {
+        const positions = part.geometry.getAttribute('position');
+        for (let i = 0; i < positions.count; i++) {
+          point.fromBufferAttribute(positions, i).applyMatrix4(part.matrixWorld);
+          if (point.y >= face.bottom - 1e-3 && point.x >= face.x - 0.2) box.expandByPoint(point);
+        }
       }
       expect(box.max.x).toBeCloseTo(face.x + RELIEF, 3);
       expect(box.max.y).toBeCloseTo(face.top, 3);
