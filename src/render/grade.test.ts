@@ -187,6 +187,38 @@ describe('precompileGrade', () => {
     expect(dispose).toHaveBeenCalledOnce();
   });
 
+  it('wants a sample its own markers, not the grade', async () => {
+    const sample = (markers: string[]): (() => GradeSample) => {
+      return () => ({
+        mesh: new Mesh(),
+        override: new MeshLambertNodeMaterial(),
+        markers,
+        dispose: vi.fn(),
+      });
+    };
+    const shader = `vec3 ${GRADE_SHADER_MARKER}; vec3 kit; discard;`;
+    await expect(
+      precompileGrade(gpu(shader), [sample(['kit', 'discard'])]),
+    ).resolves.toBeUndefined();
+    await expect(precompileGrade(gpu(shader), [sample(['kit', 'missing'])])).rejects.toThrow(
+      'did not build',
+    );
+  });
+
+  it('rejects when the GLSL of a sample fails, by the sample marker', async () => {
+    const context = {
+      getShaderSource: (shader: unknown) => shader,
+      getShaderInfoLog: () => 'log',
+      getProgramInfoLog: () => 'log',
+    } as unknown as WebGL2RenderingContext;
+    const shader = `vec3 ${GRADE_SHADER_MARKER}; vec3 kit;`;
+    const g = gpu(shader, (hook) => {
+      hook(...([context, {}, 'vertex', 'vec3 kit;'] as unknown as Parameters<typeof hook>));
+    });
+    const sample = (): GradeSample => ({ mesh: new Mesh(), markers: ['kit'], dispose: vi.fn() });
+    await expect(precompileGrade(g, [sample])).rejects.toThrow('failed to compile');
+  });
+
   it('rejects when three swapped in a plain material', async () => {
     const g = gpu('void main() {}');
     await expect(precompileGrade(g)).rejects.toThrow('did not build');

@@ -1,8 +1,11 @@
 import { OrthographicCamera, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
+import { KIT_FOOTPRINTS } from '../content/kit';
+import { layouts } from '../content/registry';
+import { resolveLayout } from '../content/resolve-layout';
 import { perspectiveSunDirection } from './light-rig';
 import type { ShadowFocus } from './seams';
-import { fitSunShadow, SHADOW_MAP_SIZE, type SunShadowFit } from './sun-shadow';
+import { CASTER_HEIGHT, fitSunShadow, SHADOW_MAP_SIZE, type SunShadowFit } from './sun-shadow';
 
 const SUN = perspectiveSunDirection();
 const HALF_LENGTH = 8;
@@ -69,6 +72,24 @@ describe('fitSunShadow', () => {
     const ground = new Vector3(x, 0, -y);
     const sunSide = ground.clone().addScaledVector(SUN, 10 / SUN.y);
     expect(inside(camera, sunSide)).toBe(true);
+  });
+
+  it('reaches the tallest caster of the kit and of every layout', () => {
+    const tops = Object.values(KIT_FOOTPRINTS).map((piece) => piece.height);
+    for (const source of Object.values(layouts)) {
+      tops.push(...resolveLayout(source, null).obstacles.map((o) => o.height));
+    }
+    expect(CASTER_HEIGHT).toBeGreaterThanOrEqual(Math.max(...tops));
+    expect(CASTER_HEIGHT).toBeGreaterThan(12);
+    const { x, y } = foci[1] as { x: number; y: number };
+    const camera = shadowCamera(fit({ x, y, radius: RADIUS }));
+    // the top of the tallest caster whose shadow tip lands on the edge of the ground the box covers, the
+    // sun side of it: the point that needs the near plane furthest
+    const top = new Vector3(x, 0, -y)
+      .addScaledVector(new Vector3(SUN.x, 0, SUN.z).normalize(), RADIUS)
+      .addScaledVector(SUN, CASTER_HEIGHT / SUN.y);
+    expect(inside(camera, top)).toBe(true);
+    expect(inside(camera, top.addScaledVector(SUN, 2))).toBe(false);
   });
 
   it('keeps the extent per radius, whatever the focus', () => {

@@ -1,12 +1,22 @@
 import { Vector3, type Camera, type DirectionalLight } from 'three';
+import { KIT_FOOTPRINTS } from '../content/kit';
 import { enableLayers, SHADOW_CASTER_LAYERS, type ShadowFocus } from './seams';
 
 export const SUN_DISTANCE = 100;
 export const SHADOW_MAP_SIZE = 2048;
 /** Half the box's side per metre of focus radius. */
 const REACH = 1.5;
-/** Height (m) of the tallest caster that may shade the focus. */
-const CASTER_HEIGHT = 12;
+/** Height (m) of the tallest caster other than the kit's pieces. */
+const OTHER_CASTER_HEIGHT = 12;
+/**
+ * Height (m) of the tallest caster that may shade the focus. The light is orthographic, so a caster
+ * shades the focus only from inside the box's column and only the near plane clips it: the depth
+ * range reaches this high. Casters outside the column are left out of the map.
+ */
+export const CASTER_HEIGHT = Math.max(
+  OTHER_CASTER_HEIGHT,
+  ...Object.values(KIT_FOOTPRINTS).map((piece) => piece.height),
+);
 const DEPTH_MARGIN = 1;
 
 export type SunShadowFit = {

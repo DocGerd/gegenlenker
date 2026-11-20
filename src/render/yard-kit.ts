@@ -1,24 +1,37 @@
 import {
   AmbientLight,
   BoxGeometry,
+  DataTexture,
   DirectionalLight,
   DoubleSide,
   Group,
   LightProbe,
   Mesh,
+  NoBlending,
   PerspectiveCamera,
   Scene,
   type BufferGeometry,
 } from 'three';
 import { dot, float, max, normalMap, sqrt, texture, uv, vec2, vec3, vec4 } from 'three/tsl';
-import { MeshStandardNodeMaterial, type Node, type WebGPURenderer } from 'three/webgpu';
+import {
+  MeshStandardNodeMaterial,
+  type Node,
+  NodeMaterial,
+  type WebGPURenderer,
+} from 'three/webgpu';
 import { isKitDecor, type KitPlacement, type ResolvedLayout } from '../contracts/layout';
 import { DEFAULT_LIGHTING, type LightingMode, type ScenePalette } from '../contracts/render';
 import atlasAUrl from './assets/yard-kit-atlas-a.ktx2?url';
 import atlasBUrl from './assets/yard-kit-atlas-b.ktx2?url';
 import leavesUrl from './assets/yard-kit-leaves.ktx2?url';
 import kitUrl from './assets/yard-kit.glb?url';
-import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
+import {
+  buildSerially,
+  GRADE_SHADER_MARKER,
+  gradeDisabled,
+  type GradeSample,
+  setGraded,
+} from './grade';
 import type { Look } from './look';
 import { COCKPIT_LAYERS, enableLayers, gpuLost, PERSPECTIVE_LAYER } from './seams';
 import { startShells, type Shells } from './glb-shells';
@@ -28,9 +41,10 @@ import { mergeKit, parseKitGlb, type KitPieces } from './yard-kit-pieces';
 
 /*
  * The yard kit (tools/blender/yard_kit.py, issue #160): the surroundings outside the yard, on High.
- * One merged mesh per material on PERSPECTIVE_LAYER; the top-down view never draws it, and it does
- * not cast the sun's shadow. Both materials are standard PBR with the kit's atlases, and take the
- * vehicles' sky map as a reflection where there is one.
+ * One merged mesh per material on PERSPECTIVE_LAYER; the top-down view never draws it. It casts the
+ * sun's shadow where the sun does (High); the atlas mesh receives it, the leaf cards do not
+ * (double-sided cards shadow themselves into acne). Both materials are standard PBR with the kit's
+ * atlases, and take the vehicles' sky map as a reflection where there is one.
  */
 
 /** Names the kit's atlas shader, so a compile error can be traced to it. */
@@ -77,7 +91,9 @@ export type KitMaterials = { readonly atlas: KitNodeMaterial; readonly leaves: K
 export function createKitMaterials(maps: TextureMaps<KitTextureKey>): KitMaterials {
   const packed = texture(maps.atlasB, uv());
   const atlas = new KitNodeMaterial(float(1).sub(packed.b));
-  atlas.colorNode = texture(maps.atlasA, uv()).rgb.toVar(YARD_KIT_SHADER_MARKER);
+  // a vec4: the shadow pass reads its alpha
+  const albedo = vec4(texture(maps.atlasA, uv()).rgb, 1).toVar(YARD_KIT_SHADER_MARKER);
+  atlas.colorNode = albedo;
   atlas.roughnessNode = packed.b;
   atlas.aoNode = packed.a;
   const xy = packed.rg.mul(2).sub(1);
@@ -89,7 +105,8 @@ export function createKitMaterials(maps: TextureMaps<KitTextureKey>): KitMateria
 
   const leaves = new KitNodeMaterial(float(LEAF_SPECULAR));
   const leaf = texture(maps.leaves, uv());
-  leaves.colorNode = vec4(leaf.rgb, leaf.a).toVar(YARD_KIT_SHADER_MARKER);
+  const colour = vec4(leaf.rgb, leaf.a).toVar(YARD_KIT_SHADER_MARKER);
+  leaves.colorNode = colour;
   leaves.roughnessNode = float(LEAF_ROUGHNESS);
   leaves.alphaTest = ALPHA_CUT;
   return { atlas, leaves };
@@ -108,7 +125,10 @@ export async function precompileYardKit(
   const graded = !gradeDisabled();
   const geometry = new BoxGeometry();
   const scene = new Scene();
-  const lights = [new DirectionalLight(), new LightProbe(), new AmbientLight()];
+  // the atlas is built as the sun-shadow receiver it is on High
+  const sun = new DirectionalLight();
+  sun.castShadow = true;
+  const lights = [sun, new LightProbe(), new AmbientLight()];
   for (const light of lights) light.layers.set(PERSPECTIVE_LAYER);
   scene.add(...lights);
   const camera = new PerspectiveCamera();
@@ -117,6 +137,7 @@ export async function precompileYardKit(
     for (const material of [materials.atlas, materials.leaves]) {
       setGraded(material, graded);
       const mesh = new Mesh(geometry, material);
+      mesh.receiveShadow = material === materials.atlas;
       scene.add(mesh);
       const { fragmentShader } = await buildSerially(renderer, () =>
         renderer.debug.getShaderAsync(scene, camera, mesh),
@@ -132,11 +153,51 @@ export async function precompileYardKit(
     // a compile on a lost context passes vacuously
     if (gpuLost(renderer)) throw new Error('the GPU context was lost');
   } finally {
+    sun.shadow.dispose();
     materials.atlas.dispose();
     materials.leaves.dispose();
     geometry.dispose();
   }
 }
+
+/**
+ * The kit material's shadow-pass program, for the grade's shader check: a box under an override
+ * shaped like the one three puts on a caster in the sun's shadow pass (`Renderer._getShadowNodes`:
+ * black, with the material's `colorNode` alpha and its alpha test). three fills that override in
+ * while it renders, but `compileAsync` queues its node builders after restoring it, so the check
+ * cannot read three's own program. It builds the same graph from the material's `colorNode`, so a
+ * lost leaf cut or a GLSL error in it fails the check instead of a frame.
+ */
+function kitShadowSample(kind: keyof KitMaterials): GradeSample {
+  const map = new DataTexture(new Uint8Array(4), 1, 1);
+  map.needsUpdate = true;
+  const materials = createKitMaterials({ atlasA: map, atlasB: map, leaves: map });
+  const geometry = new BoxGeometry();
+  const material = materials[kind];
+  const shell = new NodeMaterial();
+  shell.colorNode = vec4(0, 0, 0, (material.colorNode as Node<'vec4'>).a);
+  shell.alphaTest = material.alphaTest;
+  shell.blending = NoBlending;
+  shell.fog = false;
+  return {
+    mesh: new Mesh(geometry, material),
+    override: shell,
+    markers: kind === 'leaves' ? [YARD_KIT_SHADER_MARKER, 'discard'] : [YARD_KIT_SHADER_MARKER],
+    dispose: () => {
+      geometry.dispose();
+      shell.dispose();
+      materials.atlas.dispose();
+      materials.leaves.dispose();
+      map.dispose();
+    },
+  };
+}
+
+/** The grade check's samples of the kit's shadow casters: the cut leaves and the opaque atlas. */
+export const KIT_SHADOW_SAMPLES: readonly (() => GradeSample)[] = [
+  () => kitShadowSample('leaves'),
+  () => kitShadowSample('atlas'),
+];
 
 /** What the kit layer builds its meshes from. */
 export type LoadedKit = { readonly maps: TextureMaps<KitTextureKey>; readonly pieces: KitPieces };
@@ -278,12 +339,18 @@ export function createYardKitLayer(
   let built: Built | null = null;
   let wanted = false;
   let graded = false;
+  let casting = false;
   let mode: LightingMode = DEFAULT_LIGHTING;
   let drawn = false;
 
   const sync = (): void => {
     const on = wanted && built !== null;
     object.visible = on;
+    for (const mesh of object.children) {
+      mesh.castShadow = casting;
+      mesh.receiveShadow =
+        casting && mesh instanceof Mesh && mesh.material === built?.materials.atlas;
+    }
     if (built !== null) {
       const map = on ? (reflections?.texture(palette, mode) ?? null) : null;
       for (const material of [built.materials.atlas, built.materials.leaves]) {
@@ -327,8 +394,6 @@ export function createYardKitLayer(
                 const mesh = new Mesh(geometry, material);
                 mesh.layers.set(PERSPECTIVE_LAYER);
                 mesh.frustumCulled = false;
-                mesh.castShadow = false;
-                mesh.receiveShadow = false;
                 object.add(mesh);
               }
             } catch (error) {
@@ -349,10 +414,11 @@ export function createYardKitLayer(
 
   return {
     object,
-    setLook(look) {
-      wanted = look.flags.yardKit;
-      graded = look.grade.on;
-      mode = look.mode;
+    setLook({ flags, grade, mode: lookMode }) {
+      wanted = flags.yardKit;
+      graded = grade.on;
+      mode = lookMode;
+      casting = flags.sunShadow && grade.on;
       sync();
     },
     dispose() {
