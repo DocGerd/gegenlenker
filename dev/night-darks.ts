@@ -56,7 +56,7 @@ import { enableLayers, PERSPECTIVE_LAYER, type Environment } from '../src/render
  * `srgb` renders into an sRGB-encoded 8-bit multisample target and encodes the canvas with a
  * RenderPipeline output pass; `dither` is `today` with triangular noise of one linear 8-bit step
  * added before the quantisation. The ground scenes are the real environment at the High and
- * Balanced flags (no shadows, no HDRI), lit by `night` times the day light.
+ * Balanced flags (no shadows, no HDRI), lit, hazed and exposed by `night` times the day light.
  * Query: `scene=ramp|balanced|high`, `mode=today|srgb|dither`, `backend=webgl2|webgpu`,
  * `night=<light share>`, `exposure=<grade exposure>`, `samples=<target samples>`,
  * `rt=linear` (the `srgb` pipeline with a linear target, as a control), `trace=1` (GL call counts).
@@ -73,7 +73,7 @@ const HEIGHT = 576;
 /** Linear value at the right edge of the ramp. */
 const RAMP_MAX = 0.05;
 /** Share of the day light (and of `exposure`) a night-ish ground is lit by. */
-const DEFAULT_NIGHT = 0.04;
+const DEFAULT_NIGHT = 0.02;
 /** Rows of the ground frame above this share are sky and skyline. */
 const GROUND_FROM = 0.3;
 const TIMED_FRAMES = 20;
@@ -279,6 +279,9 @@ async function groundSubject(name: 'balanced' | 'high', share: number): Promise<
   environment.object.traverse((o) => {
     if (o instanceof Light) o.intensity *= share;
   });
+  // the haze is scene light too: left at its day value it would lift the darks the harness looks at
+  GRADE.hazeToward.value.multiplyScalar(share);
+  GRADE.hazeAway.value.multiplyScalar(share);
 
   const scene = new Scene();
   scene.add(environment.object);
