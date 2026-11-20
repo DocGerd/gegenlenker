@@ -2,6 +2,7 @@ import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
+import { HEAVY } from './pinned-shoot';
 
 const sizes = [
   { width: 1024, height: 600 },
@@ -71,30 +72,34 @@ for (const size of sizes) {
   for (const folded of [false, true]) {
     const name = `${size.width}x${size.height} ${folded ? 'panels collapsed' : 'panels open'}`;
 
-    test(`follow framing keeps the vehicle clear of the chrome at ${name}`, async ({ page }) => {
-      // The sim runs in real time; software GL on CI renders far below 60 fps.
-      test.setTimeout(180_000);
-      await start(page, size);
-      if (folded) {
-        await page.getByRole('button', { name: en.panelAids, exact: true }).click();
-        await page.getByRole('button', { name: en.panelGauges, exact: true }).click();
-      }
-      await expectClear(page, await vehicleBox(page));
-
-      for (const gear of ['2', '4']) {
-        await page.keyboard.press(gear);
-        for (let i = 0; i < 6; i++) await page.keyboard.press('w');
-        await expectClear(page, await afterSteps(page, STEPS));
-        // Steering while moving bends the combination, the widest pose for the bounding circle.
-        for (const steer of ['a', 'd']) {
-          await page.keyboard.down(steer);
-          await expectClear(page, await afterSteps(page, STEPS));
-          await page.keyboard.up(steer);
-          await expectClear(page, await afterSteps(page, STEPS));
+    test(
+      `follow framing keeps the vehicle clear of the chrome at ${name}`,
+      { tag: HEAVY },
+      async ({ page }) => {
+        // The sim runs in real time; software GL on CI renders far below 60 fps.
+        test.setTimeout(180_000);
+        await start(page, size);
+        if (folded) {
+          await page.getByRole('button', { name: en.panelAids, exact: true }).click();
+          await page.getByRole('button', { name: en.panelGauges, exact: true }).click();
         }
-        await page.keyboard.press('1');
-      }
-    });
+        await expectClear(page, await vehicleBox(page));
+
+        for (const gear of ['2', '4']) {
+          await page.keyboard.press(gear);
+          for (let i = 0; i < 6; i++) await page.keyboard.press('w');
+          await expectClear(page, await afterSteps(page, STEPS));
+          // Steering while moving bends the combination, the widest pose for the bounding circle.
+          for (const steer of ['a', 'd']) {
+            await page.keyboard.down(steer);
+            await expectClear(page, await afterSteps(page, STEPS));
+            await page.keyboard.up(steer);
+            await expectClear(page, await afterSteps(page, STEPS));
+          }
+          await page.keyboard.press('1');
+        }
+      },
+    );
   }
 }
 

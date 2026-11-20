@@ -9,7 +9,7 @@ import type { RunResult } from '../src/contracts/exercise';
 import {
   brightShare,
   DAY_BRIGHT,
-  HEAVY,
+  heavyAt,
   MAX_MIRROR_BRIGHT,
   PRESET_TIMEOUT_MS,
   type Preset,
@@ -54,7 +54,7 @@ async function driveFromMenu(page: Page, preset: Preset, mode: 'day' | 'night'):
 for (const preset of ['low', 'high'] as const) {
   test(
     `the menu Day/Night choice changes the drawn look, day to night to day, at ${preset}`,
-    preset === 'high' ? { tag: HEAVY } : {},
+    heavyAt(preset),
     async ({ page }) => {
       test.setTimeout(PRESET_TIMEOUT_MS[preset]);
       await startPinnedDrive(page, { preset, lighting: 'day' }, en.layoutDepot);

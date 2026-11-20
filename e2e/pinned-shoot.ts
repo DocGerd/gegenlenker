@@ -12,10 +12,15 @@ export type RenderConfig = { readonly preset: Preset; readonly lighting: Lightin
 export type Shot = 'cockpit' | 'mirrorLeft' | 'mirrorRight' | 'follow' | 'yard' | 'chase';
 
 /**
- * Tag of the specs that step several presets or views on software GL: the slowest frames, so CI runs
- * them in shards of their own (`--grep @heavy`) apart from the rest (`--grep-invert @heavy`).
+ * Tag of the tests that are slow on software GL: they load the High preset, step several presets,
+ * or step many frames. CI runs them in shards of their own (`--grep @heavy`) apart from the rest
+ * (`--grep-invert @heavy`), so each suite holds tests of similar cost and count-based sharding
+ * balances. A test that drives High or compares presets carries it.
  */
 export const HEAVY = '@heavy';
+/** `HEAVY` for a test that drives `preset` when that is High, else no tag. */
+export const heavyAt = (preset: Preset): { tag?: string } =>
+  preset === 'high' ? { tag: HEAVY } : {};
 /** Wall-clock bound for a heavy spec that drives one preset; High loads the most and draws slowest on software GL. */
 export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
   low: 90_000,

@@ -47,9 +47,10 @@ jobs:
       - run: pnpm test
 
   # Software GL (SwiftShader) draws the multisample frame target slowly. The suite runs in shards,
-  # per test, not per file, so the long layout spec spreads too; the `@heavy` specs (several
-  # presets or views stepped frame by frame) have shards of their own, so they do not set the pace
-  # of the rest. Every test runs in exactly one shard: `--grep` and `--grep-invert` split the suite.
+  # per test, not per file. Playwright cuts a suite into runs of equal test count, so the `@heavy`
+  # tests (they load High, step several presets or step many frames) have shards of their own, and
+  # each suite holds tests of similar cost. Every test runs in exactly one shard: `--grep` and
+  # `--grep-invert` split the suite.
   # Skipped on push to main: the ruleset's strict required status checks (no bypass) make the
   # merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
   # still runs it.
@@ -62,17 +63,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { suite: heavy, shard: 1, shards: 5, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 2, shards: 5, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 3, shards: 5, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 4, shards: 5, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 5, shards: 5, filter: '--grep @heavy' }
-          - { suite: light, shard: 1, shards: 6, filter: '--grep-invert @heavy' }
-          - { suite: light, shard: 2, shards: 6, filter: '--grep-invert @heavy' }
-          - { suite: light, shard: 3, shards: 6, filter: '--grep-invert @heavy' }
-          - { suite: light, shard: 4, shards: 6, filter: '--grep-invert @heavy' }
-          - { suite: light, shard: 5, shards: 6, filter: '--grep-invert @heavy' }
-          - { suite: light, shard: 6, shards: 6, filter: '--grep-invert @heavy' }
+          - { suite: heavy, shard: 1, shards: 8, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 2, shards: 8, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 3, shards: 8, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 4, shards: 8, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 5, shards: 8, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 6, shards: 8, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 7, shards: 8, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 8, shards: 8, filter: '--grep @heavy' }
+          - { suite: light, shard: 1, shards: 5, filter: '--grep-invert @heavy' }
+          - { suite: light, shard: 2, shards: 5, filter: '--grep-invert @heavy' }
+          - { suite: light, shard: 3, shards: 5, filter: '--grep-invert @heavy' }
+          - { suite: light, shard: 4, shards: 5, filter: '--grep-invert @heavy' }
+          - { suite: light, shard: 5, shards: 5, filter: '--grep-invert @heavy' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

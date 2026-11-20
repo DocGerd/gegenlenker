@@ -3,7 +3,7 @@ import { en } from '../src/i18n/en';
 import { DRAW_CALL_BUDGET, QUALITY_FLAGS } from '../src/render/quality';
 import { drawnBackend, parseOverlay } from './perf/tablet-logic';
 import type { LightingMode } from '../src/contracts/render';
-import { HEAVY, PRESET_TIMEOUT_MS, type Preset, settle, startPinnedDrive } from './pinned-shoot';
+import { heavyAt, PRESET_TIMEOUT_MS, type Preset, settle, startPinnedDrive } from './pinned-shoot';
 import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 
 // High at night is the one lit scene with the sun's shadow pass taken out and the aids unlit.
@@ -27,7 +27,7 @@ for (const { preset, lighting } of RUNS) {
     if (view === 'chase' && !QUALITY_FLAGS[preset].chaseView) continue;
     test(
       `the ${view} view stays within the draw-call budget at ${label}`,
-      { tag: HEAVY },
+      heavyAt(preset),
       async ({ context }) => {
         test.setTimeout(PRESET_TIMEOUT_MS[preset]);
         const errors: string[] = [];
