@@ -286,6 +286,35 @@ describe.each(Object.values(layouts))('$id props', (layout) => {
   });
 });
 
+describe.each(Object.values(layouts))('$id decor', (layout) => {
+  const { surfaces, bounds } = resolveLayout(layout, null);
+
+  it('has unique ids', () => {
+    const ids = layout.decor.map((d) => d.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('stands off the yard and street surfaces and inside the layout bounds', () => {
+    for (const { id, footprint: f } of layout.decor) {
+      const reach = Math.hypot(f.halfLength, f.halfWidth);
+      expect(f.cx - reach, id).toBeGreaterThan(bounds.minX);
+      expect(f.cx + reach, id).toBeLessThan(bounds.maxX);
+      expect(f.cy - reach, id).toBeGreaterThan(bounds.minY);
+      expect(f.cy + reach, id).toBeLessThan(bounds.maxY);
+      for (const { kind, rect } of surfaces) {
+        const surface = {
+          cx: (rect.minX + rect.maxX) / 2,
+          cy: (rect.minY + rect.maxY) / 2,
+          halfLength: (rect.maxX - rect.minX) / 2,
+          halfWidth: (rect.maxY - rect.minY) / 2,
+          heading: 0,
+        };
+        expect(obbOverlap(f, surface), `${id} on ${kind}`).toBe(false);
+      }
+    }
+  });
+});
+
 it('registers exactly the contract ids', () => {
   expect(Object.keys(layouts).sort()).toEqual([...LAYOUT_IDS].sort());
   expect(exercises.map((e) => e.id)).toEqual([...EXERCISE_IDS]);

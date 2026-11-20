@@ -2,6 +2,7 @@ import { Color, type BufferGeometry } from 'three';
 import {
   colliderId,
   type Collider,
+  type Decor,
   type Fixture,
   type Marking,
   type ObstacleKind,
@@ -69,8 +70,6 @@ const HOOP = { offset: 0.11, arm: 0.5 }; // off the wall face (0.15 of relief wi
 const SWAP_BODY = { length: 7.45, width: 2.55, top: 3.65 };
 const SWAP_HUES = [HUE.whiteAluminium, HUE.containerBlue, HUE.containerGreen] as const;
 const SKIP_HUES = [HUE.containerBlue, HUE.containerOrange, HUE.containerRed] as const;
-/** Neighbouring plot behind the yard edge: unreachable, so decoration needs no collision. */
-const PLOT = { gap: 3, swapX: [14, 26, 38], skipX: [52, 56.5], pallets: 66, meshBoxes: 82 };
 
 /** Boxes in a local frame (x forward, y left, z up), merged and placed at a world pose. */
 export class Parts {
@@ -497,48 +496,52 @@ function gatehouseMirror(o: Collider): PropPiece {
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
-/** Swap bodies, skips, pallets and mesh boxes on the neighbouring plot behind the yard's north edge. */
-export function plotGoods(yard: Rect2): PropPiece[] {
-  const out: PropPiece[] = [];
-  const y0 = yard.maxY + PLOT.gap;
-  const piece = (x: number, y: number, heading: number, build: (p: Parts) => void): void => {
-    const p = new Parts();
-    build(p);
-    out.push({ x, y, geometry: p.place(x, y, heading) });
-  };
+/** Where the pallet and mesh-box grids' first item stands, from the centre of the footprint. */
+const GRID_CENTRE = { pallets: 2.1, 'mesh-boxes': 2.8 };
+
+/** Swap bodies, skips, pallets and mesh boxes on the plot behind the yard's north edge. */
+function decorPiece({ asset, footprint: f, variant }: Decor): PropPiece {
+  const p = new Parts();
   const origin = { x: 0, y: 0, z: 0 };
-  PLOT.swapX.forEach((x, i) => {
-    piece(yard.minX + x, y0 + 3, 0, (p) => {
-      const hue = SWAP_HUES[(i + 1) % SWAP_HUES.length] ?? HUE.whiteAluminium;
+  let x = f.cx;
+  switch (asset) {
+    case 'swap-body': {
+      const hue = SWAP_HUES[variant % SWAP_HUES.length] ?? HUE.whiteAluminium;
       swapBody(p, origin, SWAP_BODY.length, SWAP_BODY.width, SWAP_BODY.top, hue);
-    });
-  });
-  PLOT.skipX.forEach((x, i) => {
-    for (const row of [0, 1]) {
-      const hue = SKIP_HUES[(i + row) % SKIP_HUES.length] ?? HUE.containerBlue;
-      piece(yard.minX + x, y0 + 2.5 + row * 4, row * 0.12 - 0.06, (p) => skip(p, origin, hue));
+      break;
     }
-  });
-  piece(yard.minX + PLOT.pallets, y0 + 4, 0, (p) => {
-    for (let k = 0; k < 4; k++) {
-      for (let j = 0; j < 3; j++) {
-        const at = { x: k * 1.4, y: (j - 1) * 1.1, z: 0 };
-        if ((k + j) % 3 === 0) palletStack(p, at, 4 + ((k * j) % 3));
-        else palletStack(p, at, 1, 0.8 + ((k + 2 * j) % 3) * 0.3);
+    case 'skip': {
+      const hue = SKIP_HUES[variant % SKIP_HUES.length] ?? HUE.containerBlue;
+      skip(p, origin, hue);
+      break;
+    }
+    case 'pallets':
+      x -= GRID_CENTRE.pallets;
+      for (let k = 0; k < 4; k++) {
+        for (let j = 0; j < 3; j++) {
+          const at = { x: k * 1.4, y: (j - 1) * 1.1, z: 0 };
+          if ((k + j) % 3 === 0) palletStack(p, at, 4 + ((k * j) % 3));
+          else palletStack(p, at, 1, 0.8 + ((k + 2 * j) % 3) * 0.3);
+        }
       }
-    }
-  });
-  piece(yard.minX + PLOT.meshBoxes, y0 + 4, 0, (p) => {
-    for (let k = 0; k < 5; k++) {
-      for (let j = 0; j < 2; j++) {
-        const at = { x: k * 1.4, y: (j - 0.5) * 1.1, z: 0 };
-        meshBox(p, at, (k + j) % 2 === 0);
-        if (k % 2 === 0) meshBox(p, { ...at, z: 0.97 });
+      break;
+    case 'mesh-boxes':
+      x -= GRID_CENTRE['mesh-boxes'];
+      for (let k = 0; k < 5; k++) {
+        for (let j = 0; j < 2; j++) {
+          const at = { x: k * 1.4, y: (j - 0.5) * 1.1, z: 0 };
+          meshBox(p, at, (k + j) % 2 === 0);
+          if (k % 2 === 0) meshBox(p, { ...at, z: 0.97 });
+        }
       }
-    }
-  });
-  return out;
+      break;
+    default:
+      unhandled(asset);
+  }
+  return { x, y: f.cy, geometry: p.place(x, f.cy, f.heading) };
 }
+
+export const decorPieces = (decor: readonly Decor[]): PropPiece[] => decor.map(decorPiece);
 
 /** Curtain-sider semitrailer: frame, strapped curtain, headboard, underrun bar, tandem-plus axles. */
 function curtainSider(o: Collider, index: number): PropPiece {
@@ -708,7 +711,7 @@ function lampProp({ id, colliders, fixture }: Prop): PropPiece {
   return lamp(post, fixture);
 }
 
-/** Loose obstacles are drawn by kind, props by asset, in resolved order; hall details follow, then the plot goods. */
+/** Loose obstacles are drawn by kind, props by asset, in resolved order; hall details follow, then the decor. */
 export function yardProps(layout: ResolvedLayout): PropPiece[] {
   const owned = new Set<string>();
   const first = new Map<string, Prop>();
@@ -745,6 +748,6 @@ export function yardProps(layout: ResolvedLayout): PropPiece[] {
     if (prop !== undefined) drawProp(prop);
     else if (!owned.has(o.id)) out.push(...drawCollider(o, counters));
   }
-  out.push(...details, ...plotGoods(layout.yard));
+  out.push(...details, ...decorPieces(layout.decor));
   return out;
 }

@@ -20,6 +20,7 @@ export function resolveLayout(layout: Layout, exercise: ExerciseDefinition | nul
       ...(exercise?.obstacles ?? []),
     ],
     props: layout.props,
+    decor: layout.decor,
     markings: [...street.markings, ...layout.markings, ...(exercise?.markings ?? [])],
     target: exercise?.target ?? null,
     tolerances: exercise?.tolerances ?? null,
