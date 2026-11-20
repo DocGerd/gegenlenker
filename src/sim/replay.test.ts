@@ -9,6 +9,7 @@ import {
   MAX_REPLAY_STEPS,
   parseInputLog,
   replaySnapshots,
+  serializeInputLog,
 } from './replay';
 import { createSimulation } from './simulation';
 
@@ -27,6 +28,7 @@ const meta = {
   truckId: 'man-le-18-280',
   trailerId: 'hueffermann-hpa-24-81-l',
 } as const;
+const recorded = { ...meta, lighting: 'day' } as const;
 
 const ctl = (c: Partial<ControlVector>): ControlVector => ({
   steer: 0,
@@ -56,7 +58,7 @@ describe('replay', () => {
       recorder.record(sim.snapshot().step, control);
       live.push(sim.step(control));
     }
-    const log = recorder.finish(meta, sim.snapshot().step);
+    const log = recorder.finish(recorded, sim.snapshot().step);
     expect(log.steps).toBe(1800);
     const replayed = replaySnapshots(log, createSimulation(params, start, contacts));
     expect(replayed).toEqual(live);
@@ -70,7 +72,7 @@ describe('replay', () => {
       recorder.record(sim.snapshot().step, control);
       sim.step(control);
     }
-    const log = recorder.finish(meta, sim.snapshot().step);
+    const log = recorder.finish(recorded, sim.snapshot().step);
     const makeSim = () => createSimulation(params, start, contacts);
     const played = replaySnapshots(log, makeSim());
     let observed = 0;
@@ -96,7 +98,7 @@ describe('replay', () => {
     recorder.record(2, b);
     recorder.record(3, { ...b });
     recorder.record(4, a);
-    expect(recorder.finish(meta, 5).changes).toEqual([
+    expect(recorder.finish(recorded, 5).changes).toEqual([
       { step: 0, control: a },
       { step: 2, control: b },
       { step: 4, control: a },
@@ -108,15 +110,15 @@ describe('replay', () => {
     const a = ctl({ lever: 1 });
     recorder.record(0, a);
     recorder.record(MAX_REPLAY_STEPS, ctl({ gear: 'R' }));
-    const log = recorder.finish(meta, MAX_REPLAY_STEPS + 10);
+    const log = recorder.finish(recorded, MAX_REPLAY_STEPS + 10);
     expect(log.changes).toEqual([{ step: 0, control: a }]);
     expect(log.steps).toBe(MAX_REPLAY_STEPS);
   });
 
   it('rejects malformed logs', () => {
     const valid: InputLog = {
-      version: 1,
-      ...meta,
+      version: 2,
+      ...recorded,
       steps: 10,
       changes: [
         { step: 0, control: ctl({ lever: 1 }) },
@@ -129,7 +131,9 @@ describe('replay', () => {
     expect(parse(null)).toBeNull();
     expect(parse('[]')).toBeNull();
     expect(parse('not json')).toBeNull();
-    expect(parse(json({ ...valid, version: 2 }))).toBeNull();
+    expect(parse(json({ ...valid, version: 3 }))).toBeNull();
+    expect(parse(json({ ...valid, lighting: 'dusk' }))).toBeNull();
+    expect(parse(json({ ...valid, lighting: undefined }))).toBeNull();
     expect(parse(json({ ...valid, truckId: 'scania-r' }))).toBeNull();
     expect(parse(json({ ...valid, steps: -1 }))).toBeNull();
     expect(parse(json({ ...valid, changes: [...valid.changes].reverse() }))).toBeNull();
@@ -140,8 +144,31 @@ describe('replay', () => {
     });
   });
 
+  it('round-trips lighting and reads a version 1 log as day', () => {
+    const fingerprint = (): string => 'data-a';
+    const night: InputLog = { version: 2, ...meta, lighting: 'night', steps: 10, changes: [] };
+    expect(parseInputLog(serializeInputLog(night, fingerprint), fingerprint)).toEqual(night);
+    const v1 = JSON.stringify({
+      version: 1,
+      ...meta,
+      steps: 10,
+      changes: [],
+      fingerprint: 'data-a',
+    });
+    expect(parseInputLog(v1, fingerprint)).toEqual({ ...night, lighting: 'day' });
+    const v1Night = JSON.stringify({
+      version: 1,
+      ...meta,
+      lighting: 'night',
+      steps: 10,
+      changes: [],
+      fingerprint: 'data-a',
+    });
+    expect(parseInputLog(v1Night, fingerprint)?.lighting).toBe('day');
+  });
+
   it('accepts a log only for the data that produced it', () => {
-    const valid: InputLog = { version: 1, ...meta, steps: 10, changes: [] };
+    const valid: InputLog = { version: 2, ...recorded, steps: 10, changes: [] };
     const seen: unknown[] = [];
     const fingerprint = (ids: unknown): string => {
       seen.push(ids);

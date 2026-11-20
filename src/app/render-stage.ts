@@ -1,4 +1,9 @@
-import { GraphicsStartError, type GraphicsPreset, type SceneRenderer } from '../contracts/render';
+import {
+  GraphicsStartError,
+  type GraphicsPreset,
+  type LightingMode,
+  type SceneRenderer,
+} from '../contracts/render';
 import { createSceneRenderer } from '../render';
 import { currentSettings } from './settings';
 import { showNotice } from './notice';
@@ -114,6 +119,8 @@ export type RenderStage = {
   readonly renderer: SceneRenderer;
   /** The preset the renderer was set to: read it for anything that must follow the renderer's quality. */
   readonly graphics: GraphicsPreset;
+  /** The lighting the stage drew with, which the stored setting does not decide: a replay keeps its run's. */
+  readonly lighting: LightingMode;
   /** Fills the host and holds the canvas, which a loss replaces: bind input here. */
   readonly surface: HTMLElement;
   start(hooks: StageHooks): void;
@@ -121,19 +128,22 @@ export type RenderStage = {
 };
 
 /**
- * Puts the shared renderer's surface into `host`. Frames start once its GPU renderer is ready; if it
+ * Puts the shared renderer's surface into `host`, drawn in `lighting`. Frames start once its GPU renderer is ready; if it
  * cannot start, a notice in `stage` offers `onBack`, and a loss it cannot recover from offers a reload.
  */
 export function mountRenderStage(
   stage: HTMLElement,
   host: HTMLElement,
   onBack: () => void,
+  lighting: LightingMode,
 ): RenderStage {
   const s = acquireRenderer();
   const { surface, renderer } = s;
-  const { graphics, lighting } = currentSettings();
+  const { graphics } = currentSettings();
   renderer.setQuality(graphics);
   renderer.setLighting(lighting);
+  // Read by the e2e; stays after dispose like the renderer's own state, until the next stage sets it.
+  document.documentElement.dataset['renderLighting'] = lighting;
   host.append(surface);
 
   const abort = new AbortController();
@@ -221,6 +231,7 @@ export function mountRenderStage(
   return {
     renderer,
     graphics,
+    lighting,
     surface,
     start(next) {
       hooks = next;

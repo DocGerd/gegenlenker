@@ -1,4 +1,5 @@
 import type { ExerciseDefinition, RunResult, TargetZone, Tolerances } from '../contracts/exercise';
+import type { LightingMode } from '../contracts/render';
 import type { ControlVector, SimSnapshot } from '../contracts/sim';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import { wrapAngle } from '../sim/angle';
@@ -89,6 +90,7 @@ export function runResult(
   waypointVisited: boolean,
   assisted: boolean,
   startTime: number,
+  lighting: LightingMode,
 ): RunResult {
   const e = targetError(s, exercise.target);
   return {
@@ -97,6 +99,7 @@ export function runResult(
     trailerId,
     reached,
     assisted,
+    lighting,
     waypointMissed: exercise.waypoint !== null && !waypointVisited,
     positionError: e.position,
     angleError: e.angle,

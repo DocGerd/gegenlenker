@@ -1,5 +1,6 @@
 import { EXERCISE_IDS, type InputLog } from '../contracts/exercise';
 import { LAYOUT_IDS } from '../contracts/layout';
+import { DEFAULT_LIGHTING, LIGHTING_MODES } from '../contracts/render';
 import type { ControlVector, Gear, InputChange, Simulation, SimSnapshot } from '../contracts/sim';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 
@@ -10,9 +11,11 @@ export const MAX_REPLAY_STEPS = 72_000;
 
 export type RunIds = Pick<InputLog, 'layoutId' | 'exerciseId' | 'truckId' | 'trailerId'>;
 
+export type RunMeta = RunIds & Pick<InputLog, 'lighting'>;
+
 export type InputRecorder = {
   record(step: number, control: ControlVector): void;
-  finish(meta: RunIds, steps: number): InputLog;
+  finish(meta: RunMeta, steps: number): InputLog;
 };
 
 const sameControl = (a: ControlVector, b: ControlVector): boolean =>
@@ -37,7 +40,7 @@ export function createInputRecorder(): InputRecorder {
     },
     finish(meta, steps) {
       return {
-        version: 1,
+        version: 2,
         ...meta,
         steps: Math.min(steps, MAX_REPLAY_STEPS),
         changes: [...changes],
@@ -144,8 +147,11 @@ export function parseInputLog(
   } catch {
     return null;
   }
-  if (!isRecord(data) || data.version !== 1) return null;
+  if (!isRecord(data) || (data.version !== 1 && data.version !== 2)) return null;
   const { layoutId, exerciseId, truckId, trailerId, steps, changes } = data;
+  // Version 1 predates lighting: every such run was drawn by day.
+  const lighting = data.version === 1 ? DEFAULT_LIGHTING : data.lighting;
+  if (!isMember(LIGHTING_MODES, lighting)) return null;
   if (!isMember(LAYOUT_IDS, layoutId) || !isMember(TRUCK_IDS, truckId)) return null;
   if (!isMember(TRAILER_IDS, trailerId) || !isStep(steps) || !Array.isArray(changes)) return null;
   if (exerciseId !== null && !isMember(EXERCISE_IDS, exerciseId)) return null;
@@ -159,5 +165,5 @@ export function parseInputLog(
     if (prev !== undefined && change.step <= prev.step) return null;
     parsed.push({ step: change.step, control });
   }
-  return { version: 1, layoutId, exerciseId, truckId, trailerId, steps, changes: parsed };
+  return { version: 2, layoutId, exerciseId, truckId, trailerId, lighting, steps, changes: parsed };
 }
