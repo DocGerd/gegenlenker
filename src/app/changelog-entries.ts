@@ -28,14 +28,23 @@ const NAME_RE = new RegExp(`^([1-9]\\d*)(?:-[1-9]\\d*)?\\.(${CATEGORIES.join('|'
 const LINK_RE =
   /^(.*\S) \(\[#(\d+)\]\(https:\/\/github\.com\/DocGerd\/gegenlenker\/pull\/(\d+)\)\)\.?$/;
 const FORBIDDEN_RE = /[<*\\[]|\]\(|``/;
+const PROSE_RE = /[_~&]/;
+const URL_RE = /https?:\/\//i;
 const BLOCK_RE = /^(?:[-+]\s|#{1,6}(?:\s|$)|\d+\.\s|>)/;
+
+const prose = (text: string): string =>
+  text
+    .split('`')
+    .filter((_, i) => i % 2 === 0)
+    .join(' ');
 
 /** Plain text and inline code only; null when `text` fits. */
 export const inlineProblem = (text: string): string | null => {
   if (text === '' || text !== text.trim()) return 'empty or padded with whitespace';
   if (text.includes('\n')) return 'contains a line break';
   if (BLOCK_RE.test(text)) return 'starts like a list item, heading or quote';
-  if (FORBIDDEN_RE.test(text)) return 'contains markup other than inline code';
+  if (FORBIDDEN_RE.test(text) || URL_RE.test(text) || PROSE_RE.test(prose(text)))
+    return 'contains markup other than inline code';
   if ((text.match(/`/g)?.length ?? 0) % 2 !== 0) return 'has an unbalanced backtick';
   if (!text.endsWith('.')) return 'does not end with a period';
   return null;

@@ -44,6 +44,7 @@ describe('changelog fragments', () => {
 
   it('limits text to plain text and inline code', () => {
     expect(inlineProblem('Uses `?probe` here.')).toBeNull();
+    expect(inlineProblem('Uses `a_b` here.')).toBeNull();
     for (const bad of [
       'Bold **x**.',
       'Italic *x*.',
@@ -53,6 +54,10 @@ describe('changelog fragments', () => {
       'Open `code.',
       '1. Item.',
       '> Quote.',
+      'Emphasis _x_ here.',
+      'Struck ~~x~~ here.',
+      'Entity &amp; here.',
+      'See https://example.com here.',
     ])
       expect(inlineProblem(bad), bad).not.toBeNull();
   });

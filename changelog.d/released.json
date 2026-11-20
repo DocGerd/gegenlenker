@@ -21,21 +21,21 @@
         "category": "added",
         "prs": [11, 16],
         "en": "A yard with a street and five exercises, plus a free yard mode.",
-        "de": "Ein Hof mit Straße und fünf Übungen sowie ein Freier Hof."
+        "de": "Ein Hof mit Straße und fünf Übungen sowie der Modus Freier Hof."
       },
       {
         "id": "12.added",
         "category": "added",
         "prs": [12, 14],
         "en": "Four views (cockpit, two mirrors, top-down) that lower their resolution on weak devices, and a display with angle gauges.",
-        "de": "Vier Ansichten (Cockpit, zwei Spiegel, Draufsicht), die auf schwachen Geräten die Auflösung senken, und eine Anzeige mit Winkelanzeigen."
+        "de": "Vier Ansichten (Cockpit, zwei Spiegel, Draufsicht), die auf schwachen Geräten die Auflösung senken, und Anzeigefelder mit Kupplungs- und Drehschemelwinkel."
       },
       {
         "id": "9.added",
         "category": "added",
         "prs": [9, 85],
         "en": "Touch, keyboard and mouse controls, including a speed lever that ramps up on W/S and Up/Down.",
-        "de": "Bedienung per Touch, Tastatur und Maus, einschließlich eines Tempohebels, der auf W/S und Pfeil hoch/runter gleichmäßig nachläuft."
+        "de": "Bedienung per Touch, Tastatur und Maus, einschließlich eines Tempohebels, der sich mit W/S und Pfeil hoch/runter gleichmäßig verstellt."
       },
       {
         "id": "7.added",
@@ -112,7 +112,7 @@
         "category": "changed",
         "prs": [128, 47],
         "en": "Content keeps clear of notches and screen edges, mirrors are bigger and narrow windows lay out correctly; on shorter screens the mirrors stay above the controls.",
-        "de": "Inhalte halten Abstand zu Aussparungen und Bildschirmrändern, die Spiegel sind größer und schmale Fenster werden richtig aufgebaut; auf niedrigeren Bildschirmen bleiben die Spiegel über den Bedienelementen."
+        "de": "Inhalte halten Abstand zu Aussparungen und Bildschirmrändern, die Spiegel sind größer und schmale Fenster werden richtig dargestellt; auf niedrigeren Bildschirmen bleiben die Spiegel über den Bedienelementen."
       },
       {
         "id": "102.changed",
@@ -140,7 +140,7 @@
         "category": "fixed",
         "prs": [35, 76, 114, 78, 106],
         "en": "The top-down view draws wheels, axles, turntable and drawbar, keeps a dark outline under aid lines, and frames the whole yard and the follow view clear of the display panels.",
-        "de": "Die Draufsicht zeigt Räder, Achsen, Drehschemel und Deichsel, unterlegt Hilfslinien dunkel und rahmt den ganzen Hof und die Ansicht Folgen frei von den Anzeigefeldern."
+        "de": "Die Draufsicht zeigt Räder, Achsen, Drehschemel und Deichsel, unterlegt Hilfslinien dunkel und hält den ganzen Hof und die Ansicht Folgen frei von den Anzeigefeldern."
       },
       {
         "id": "32.fixed",
