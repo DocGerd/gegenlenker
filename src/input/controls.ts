@@ -1,3 +1,4 @@
+import type { LampSwitches } from '../contracts/render';
 import type { ControlVector, Gear } from '../contracts/sim';
 import { applyMessages, t } from '../i18n/i18n';
 import { createKeyboard } from './keyboard';
@@ -17,6 +18,8 @@ import {
 
 export type Controls = {
   control(): ControlVector;
+  /** The lamp switches; a new object after each change, so a caller may compare by identity. */
+  lamps(): LampSwitches;
   /** `actualSteer` is the snapshot's rate-limited steer; the centred cue waits for it. */
   tick(dt: number, actualSteer: number): void;
   dispose(): void;
@@ -35,6 +38,11 @@ const ARC_PATH = ((): string => {
 
 const RESET_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7" /><path d="M12 2.5v5.5M12 13v.01" /></svg>';
+
+const LIGHTS_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5.5C5.5 5.5 4 8.5 4 12s1.5 6.5 6 6.5c1.5 0 2.5-.5 3.5-1.5V7C12.5 6 11.5 5.5 10 5.5z" /><path d="M16.5 8.5H21M16.5 12H21M16.5 15.5H21" /></svg>';
+const HAZARD_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5L21.5 20h-19z" /><path d="M12 9.5L16.5 17.5h-9z" /></svg>';
 
 const markup = (lockToLockTurns: number): string => `
 <div class="ctl" data-ctl="root">
@@ -71,6 +79,10 @@ const markup = (lockToLockTurns: number): string => `
     <span class="ctl-label" data-i18n="gear"></span>
     <div data-ctl="gears">
       ${GEARS.map((g) => `<button type="button" class="ctl-gear" data-gear="${g}">${g}</button>`).join('')}
+    </div>
+    <div class="ctl-lamps">
+      <button type="button" class="ctl-lamp" data-ctl="lights" aria-pressed="false">${LIGHTS_ICON}</button>
+      <button type="button" class="ctl-lamp" data-ctl="hazard" aria-pressed="false">${HAZARD_ICON}</button>
     </div>
   </div>
   <div class="ctl-pedals">
@@ -131,9 +143,9 @@ const query = <T extends Element>(
 
 export function createControls(
   root: HTMLElement,
-  opts: { lockToLockTurns: number; steerRate: number },
+  opts: { lockToLockTurns: number; steerRate: number; lights?: boolean },
 ): Controls {
-  const state = createInputState();
+  const state = createInputState(opts.lights ?? false);
   const abort = new AbortController();
   const { signal } = abort;
 
@@ -152,6 +164,22 @@ export function createControls(
   const reset = query(container, 'reset', HTMLElement);
   reset.title = t('resetSteer');
   reset.setAttribute('aria-label', t('resetSteer'));
+  const lightsButton = query(container, 'lights', HTMLElement);
+  const hazardButton = query(container, 'hazard', HTMLElement);
+  for (const [button, key, label] of [
+    [lightsButton, 'lights', t('lights')],
+    [hazardButton, 'hazard', t('hazardLights')],
+  ] as const) {
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.addEventListener(
+      'click',
+      () => {
+        state[key] = !state[key];
+      },
+      { signal },
+    );
+  }
   const keyboard = createKeyboard(state, opts.steerRate);
 
   // Two brake sources, so releasing one cannot release a Stop button a finger still holds.
@@ -260,6 +288,13 @@ export function createControls(
   let shownLever = '';
   let shownBrake = false;
   let shownGear: Gear | null = null;
+  let lamps: LampSwitches = { lights: state.lights, hazard: state.hazard };
+  const syncLamps = (): void => {
+    if (state.lights === lamps.lights && state.hazard === lamps.hazard) return;
+    lamps = { lights: state.lights, hazard: state.hazard };
+    lightsButton.setAttribute('aria-pressed', String(lamps.lights));
+    hazardButton.setAttribute('aria-pressed', String(lamps.hazard));
+  };
   const render = (actualSteer: number): void => {
     const d = steerDisplay(state.steer, actualSteer, opts.lockToLockTurns, shownCentred);
     const rimTenths = Math.round(d.rimRotationDeg * 10);
@@ -290,13 +325,19 @@ export function createControls(
       for (const b of gearButtons)
         b.setAttribute('aria-pressed', String(b.dataset['gear'] === state.gear));
     }
+    syncLamps();
   };
+  lightsButton.setAttribute('aria-pressed', String(lamps.lights));
   render(state.steer);
 
   return {
     control() {
       syncBrake();
       return toControlVector(state);
+    },
+    lamps() {
+      syncLamps();
+      return lamps;
     },
     tick(dt, actualSteer) {
       syncBrake();

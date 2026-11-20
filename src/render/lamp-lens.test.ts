@@ -178,7 +178,7 @@ describe('lamp lenses', () => {
     expect(lit()).toEqual(
       [slotOf(['rear-position', 'stop']), slotOf(['reversing'])].sort((a, b) => a - b),
     );
-    lamps.update(lampState(drive(true, 'R'), { night: true, hazard: true }));
+    lamps.update(lampState(drive(true, 'R'), { lights: true, hazard: true }));
     expect(lamps.emission[DARK_SLOT]?.getHex()).toBe(0);
     expect(lamps.emission).toHaveLength(LENS_SLOTS.length + 1);
   });

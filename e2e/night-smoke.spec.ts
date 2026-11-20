@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { QUALITY_FLAGS } from '../src/render/quality';
@@ -11,6 +12,7 @@ import {
   PRESET_TIMEOUT_MS,
   type Preset,
   type Shot,
+  settle,
   shoot,
   startPinnedDrive,
   tokenShare,
@@ -59,3 +61,48 @@ for (const preset of PRESETS) {
     },
   );
 }
+
+const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
+
+// Lamp lenses are what the chase view shows of the lamps; the light they cast is not asserted here.
+test(
+  'the lamp keys and buttons switch the lenses at night at balanced',
+  { tag: HEAVY },
+  async ({ page }) => {
+    test.setTimeout(PRESET_TIMEOUT_MS.balanced);
+    const errors: string[] = [];
+    page.on('console', (m) => {
+      if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
+    });
+    page.on('pageerror', (e) => errors.push(e.message));
+    const three = collectThreeProblems(page);
+    await startPinnedDrive(
+      page,
+      { preset: 'balanced', lighting: 'night' },
+      en.exerciseStraightReverse,
+    );
+    const lights = page.locator('[data-ctl="lights"]');
+    const hazard = page.locator('[data-ctl="hazard"]');
+    await expect(lights).toHaveAttribute('aria-pressed', 'true');
+    await expect(hazard).toHaveAttribute('aria-pressed', 'false');
+    const lit = hash(await shoot(page, 'chase'));
+
+    await page.keyboard.press('h');
+    await settle(page, 'balanced');
+    await expect(lights).toHaveAttribute('aria-pressed', 'false');
+    const dark = hash(await shoot(page, 'chase'));
+    expect(dark, 'lights off').not.toBe(lit);
+
+    await lights.click();
+    await settle(page, 'balanced');
+    await expect(lights).toHaveAttribute('aria-pressed', 'true');
+    expect(hash(await shoot(page, 'chase')), 'lights back on').toBe(lit);
+
+    await hazard.click();
+    await page.keyboard.press('x');
+    await settle(page, 'balanced');
+    await expect(hazard).toHaveAttribute('aria-pressed', 'false');
+    expect(errors).toEqual([]);
+    expect(three).toEqual([]);
+  },
+);

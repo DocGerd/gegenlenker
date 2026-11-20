@@ -1,7 +1,7 @@
 import type { Layers, Object3D, PerspectiveCamera } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import type { ResolvedLayout } from '../contracts/layout';
-import type { Rect, RenderFrame, ScenePalette } from '../contracts/render';
+import type { LampSwitches, Rect, RenderFrame, ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import type { GpuOffer } from './gpu-backend';
@@ -61,7 +61,8 @@ export function enableLayers(layers: Layers, ids: readonly number[]): void {
 }
 export interface VehicleVisual {
   readonly object: Object3D;
-  update(snapshot: SimSnapshot): void;
+  /** `lamps` absent means the look's default. */
+  update(snapshot: SimSnapshot, lamps?: LampSwitches): void;
   setLook(look: Look): void;
   dispose(): void;
 }

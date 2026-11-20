@@ -13,6 +13,7 @@ import {
   distinctColours,
   MIN_DRAWN_COLOURS,
   sceneRgb,
+  settle,
   shoot,
   shootYardZoomed,
   startPinnedDrive,
@@ -194,8 +195,10 @@ for (const { id, name: exercise, zooms } of EXERCISES) {
           return label;
         };
         let yardPng: Buffer | null = null;
+        const hashes = new Map<string, string>();
         for (const shot of SHOTS) {
           const png = await shoot(page, shot);
+          hashes.set(shot, sha(png));
           const label = await taken(shot, png, true);
           if (shot === 'yard') yardPng = png;
           if (lighting !== 'night') continue;
@@ -210,6 +213,23 @@ for (const { id, name: exercise, zooms } of EXERCISES) {
           expect(await tokenShare(page, png, 'accent', 2), `${label}: day accent`).toBe(0);
         }
         if (yardPng === null) throw new Error('no yard shot');
+        if (lighting === 'night') {
+          // the lamps are perspective-only: switching the lights off and the hazard lights on changes no top-down pixel
+          await page.keyboard.press('h');
+          await page.keyboard.press('x');
+          await settle(page, preset);
+          await expect(page.locator('[data-ctl="lights"]')).toHaveAttribute(
+            'aria-pressed',
+            'false',
+          );
+          await expect(page.locator('[data-ctl="hazard"]')).toHaveAttribute('aria-pressed', 'true');
+          for (const shot of SHOTS) {
+            const again = sha(await shoot(page, shot));
+            expect(again, `${exercise} ${preset} ${shot} with the lamp keys pressed`).toBe(
+              hashes.get(shot),
+            );
+          }
+        }
         const paneAt = await paneMapper(
           page,
           yardPng,

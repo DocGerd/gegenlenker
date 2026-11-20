@@ -97,13 +97,15 @@ async function hudReady(page: Page): Promise<void> {
   await expect(page.locator('.hud-action')).toBeVisible();
   await expect(page.locator('.ctl-wheel')).toBeVisible();
   await expect(page.locator('.ctl-lever')).toBeVisible();
+  await expect(page.locator('.ctl-lamp')).toHaveCount(2);
+  await expect(page.locator('.ctl-lamp').first()).toBeVisible();
 }
 
 /** The mirrors, controls, panels and gauge labels do not collide or clip. */
 async function expectMirrorsClearControls(page: Page, size: Size): Promise<void> {
   const mirrors = page.locator('.hud-mirror:not([hidden])');
   const controls = page.locator(
-    '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+    '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend',
   );
 
   const mirrorBoxes = await boxes(mirrors);
@@ -188,7 +190,7 @@ for (const size of insetSizes) {
     const placed = await boxes(
       page.locator(
         [
-          '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever',
+          '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever',
           '.hud-action, .hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-legend',
           '.hud-gear, .hud-speed, .hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])',
         ].join(', '),
@@ -215,7 +217,7 @@ for (const size of insetSizes) {
     const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
     const controls = await boxes(
       page.locator(
-        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend',
       ),
     );
     for (const m of mirrors) {
@@ -328,7 +330,7 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
     const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
     const controls = await boxes(
       page.locator(
-        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend',
       ),
     );
     const panels = await boxes(
