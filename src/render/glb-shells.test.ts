@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, Color, Layers, Mesh, type Object3D, Vector3 } from 'three';
+import { Box3, type BufferGeometry, Color, Layers, Mesh, type Object3D, Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { TRUCK_IDS, type TruckId } from '../contracts/vehicle';
@@ -73,6 +73,24 @@ describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
     expect(Math.max(-box.min.z, box.max.z)).toBeLessThanOrEqual(half + RELIEF + 1e-3);
     expect(Math.max(-box.min.z, box.max.z)).toBeCloseTo(half + RELIEF, 2);
     expect(box.max.y).toBeCloseTo(CAB_HEIGHT + BEACON_TOP, 2);
+  });
+
+  it('keeps the windows in a mesh of their own, on the glass hue', async () => {
+    const { mesh, glass } = await loadShell(id, 'cab');
+    const glassHue = new Color(cabShellParams(spec).hues.glass);
+    const isGlass = (m: Mesh, i: number): boolean => {
+      const c = m.geometry.getAttribute('color');
+      const colour = new Color(c.getX(i), c.getY(i), c.getZ(i));
+      return (
+        Math.abs(colour.r - glassHue.r) + Math.abs(colour.g - glassHue.g) < 4 * COLOUR_TOLERANCE
+      );
+    };
+    const count = (m: Mesh): number => m.geometry.getAttribute('color').count;
+    expect(glass?.name).toBe('cab-glass');
+    expect(
+      Array.from({ length: count(glass as Mesh) }, (_, i) => isGlass(glass as Mesh, i)),
+    ).not.toContain(false);
+    expect(Array.from({ length: count(mesh) }, (_, i) => isGlass(mesh, i))).not.toContain(true);
   });
 
   it('decodes the body into one coloured mesh that fills the body footprint', async () => {
@@ -286,9 +304,9 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     applyAll(d);
     const removed = before.filter((m) => !group.children.includes(m));
     const added = group.children.filter((m) => !before.includes(m));
-    // cab shell and its lenses replace the cab front; the body shell adds one mesh, plus the detail swap when linked
+    // cab shell, its glass and lenses replace the cab front; the body shell adds one mesh, plus the detail swap when linked
     expect(removed).toHaveLength(linked ? 2 : 1);
-    expect(added).toHaveLength(linked ? 4 : 3);
+    expect(added).toHaveLength(linked ? 5 : 4);
   });
 
   it('draws no more meshes with the shells than without, apart from the shells themselves', async () => {
@@ -296,8 +314,20 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const group = proceduralTruck(spec, palette, d.shells).object;
     const before = group.children.length;
     applyAll(d);
-    // cab shell replaces the cab front; its lenses and the body shell are added
-    expect(group.children.length).toBe(before + 2);
+    // cab shell replaces the cab front; its glass, lenses and the body shell are added
+    expect(group.children.length).toBe(before + 3);
+  });
+
+  it('lets the cab body cast the sun shadow and its glass only take it', async () => {
+    const shells = await loadBoth(id);
+    const d = deferred(shells);
+    const group = proceduralTruck(spec, palette, d.shells).object;
+    applyAll(d);
+    const placed = (geometry: BufferGeometry | undefined): Mesh | undefined =>
+      meshesOf(group).find((m) => m.geometry === geometry);
+    const [cab, glass] = [placed(shells.cab.mesh.geometry), placed(shells.cab.glass?.geometry)];
+    expect([cab?.castShadow, cab?.receiveShadow]).toEqual([true, true]);
+    expect([glass?.castShadow, glass?.receiveShadow]).toEqual([false, true]);
   });
 
   it('restores the procedural meshes, layers and order when switched off, and reproduces the swap when switched on again', async () => {
