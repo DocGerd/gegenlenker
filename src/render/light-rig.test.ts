@@ -155,6 +155,17 @@ describe('light rig', () => {
     expect(legacy.map((l) => l.intensity)).toEqual(before);
   });
 
+  it('scales the legacy lights only, and a share of 1 gives the day intensities back', () => {
+    const rig = createLightRig(scene);
+    const { legacy, sun, probe } = lights(rig);
+    const [day, hdri] = [legacy.map((l) => l.intensity), [sun.intensity, probe.intensity]];
+    rig.setTopDownLight(0.5);
+    expect(legacy.map((l) => l.intensity)).toEqual(day.map((i) => i * 0.5));
+    expect([sun.intensity, probe.intensity]).toEqual(hdri);
+    rig.setTopDownLight(1);
+    expect(legacy.map((l) => l.intensity)).toEqual(day);
+  });
+
   it('lights the night from a uniform tinted probe and gives the day sky back unchanged', () => {
     const rig = createLightRig(scene);
     const { sun, probe } = lights(rig);

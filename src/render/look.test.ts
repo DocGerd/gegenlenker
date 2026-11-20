@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { GRAPHICS_PRESETS } from '../contracts/render';
 import { FOG_DENSITY, GRADE } from './grade';
 import { NIGHT_AMBIENT, NIGHT_TINT, perspectiveSunDirection } from './light-rig';
-import { applyLook, lookFor } from './look';
+import { applyLook, lookFor, TOP_DOWN_NIGHT_LIGHT } from './look';
 import { KEYS, tokenName } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import type { ScenePaletteKey } from '../contracts/render';
@@ -29,6 +29,7 @@ describe('lookFor', () => {
     expect(look.litCopies).toBe(flags.litMarkings);
     expect(look.aidGlow).toBe(false);
     expect(look.rig).toEqual({ sun: 1, ambient: 1, tint: null });
+    expect(look.topDownLight).toBe(1);
     expect(look.sky).toBe('day');
     expect(look.lamps).toBe(false);
     expect(look.shadow).toBe(flags.sunShadow && flags.perspectiveLighting);
@@ -45,6 +46,7 @@ describe('lookFor', () => {
       expect(look.litCopies).toBe(true);
       expect(look.aidGlow).toBe(true);
       expect(look.rig).toEqual({ sun: 0, ambient: NIGHT_AMBIENT, tint: NIGHT_TINT });
+      expect(look.topDownLight).toBe(TOP_DOWN_NIGHT_LIGHT);
       expect(look.sky).toBe('night');
       expect(look.lamps).toBe(true);
       expect(look.shadow).toBe(false);
@@ -71,7 +73,7 @@ describe('the night yard', () => {
     return [lit.getHex() >> 16, (lit.getHex() >> 8) & 255, lit.getHex() & 255];
   };
   const lit = (Object.keys(KEYS) as ScenePaletteKey[]).filter(
-    (k) => k !== 'sky' && k !== 'backdrop' && k !== 'nightBackdrop',
+    (k) => !['sky', 'backdrop', 'nightBackdrop', 'nightAccent', 'nightTracks'].includes(k),
   );
 
   it('keeps at least 12 distinct codes across the surfaces, so the dark does not band', () => {

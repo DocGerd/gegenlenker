@@ -266,6 +266,7 @@ export function createThreeSceneRenderer(
   function applyLookTo(b: Built): void {
     const look = lookFor(quality, lighting);
     b.environment.setLook(look);
+    b.aids.setLook(look);
     b.truck.setLook(look);
     b.trailer.setLook(look);
     b.interior.setLook(look);

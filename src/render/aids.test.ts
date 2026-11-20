@@ -1,4 +1,4 @@
-import type { Mesh } from 'three';
+import type { Mesh, MeshBasicMaterial } from 'three';
 import { describe, expect, it } from 'vitest';
 import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
@@ -17,7 +17,9 @@ import { createSimulation } from '../sim/simulation';
 import { resolveCombination } from '../vehicles/resolve';
 import { trailerById, truckById } from '../vehicles/registry';
 import { dashSegments, proceduralAids } from './aids';
+import { lookFor } from './look';
 import { KEYS } from './palette';
+import { QUALITY_FLAGS } from './quality';
 import { AID_DASH_OFF, AID_DASH_ON, AID_STROKE } from './seams';
 
 type Dash = { from: Vec2; to: Vec2 };
@@ -275,5 +277,37 @@ describe('the aids layer corridor', () => {
     [a, b] = barEnds();
     near(a, { x: clear, y: 1 });
     near(b, { x: clear, y: -1 });
+  });
+});
+
+describe('the aids layer at night', () => {
+  const palette = {
+    ...Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])),
+    accent: 0xff0000,
+    nightAccent: 0x00ffff,
+    tracks: 0x0000ff,
+    nightTracks: 0xffff00,
+    wheel: 0x101010,
+  } as ScenePalette;
+  const colourOf = (mesh: unknown): number =>
+    ((mesh as Mesh).material as MeshBasicMaterial).color.getHex();
+
+  it('draws the accent and track strokes in their night colours, and the casings as by day', () => {
+    const layer = proceduralAids(truck, trailer, resolveLayout(layouts.depot, null), palette);
+    const group = layer.object.children[0] as unknown as { children: Mesh[] };
+    const track = layer.object.children[layer.object.children.length - 1];
+    const strokes = (): number[] => [
+      colourOf(group.children[0]),
+      colourOf(group.children[1]),
+      colourOf(track),
+    ];
+    expect(strokes()).toEqual([0x101010, 0xff0000, 0x0000ff]);
+    for (const preset of ['low', 'high'] as const) {
+      layer.setLook(lookFor(QUALITY_FLAGS[preset], 'night'));
+      expect(strokes(), preset).toEqual([0x101010, 0x00ffff, 0xffff00]);
+    }
+    layer.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
+    expect(strokes()).toEqual([0x101010, 0xff0000, 0x0000ff]);
+    layer.dispose();
   });
 });

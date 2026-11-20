@@ -23,6 +23,8 @@ export const KEYS: Record<ScenePaletteKey, true> = {
   wheel: true,
   tracks: true,
   accent: true,
+  nightAccent: true,
+  nightTracks: true,
   band: true,
   cladding: true,
 };

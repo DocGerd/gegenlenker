@@ -290,21 +290,27 @@ export function distinctColours(page: Page, png: Buffer): Promise<number> {
   }, png.toString('base64'));
 }
 
-/** Share of a PNG's pixels within `tolerance` per channel of the page's scene token for `token` (`nightBackdrop` is `--scene-night-backdrop`). */
-export function tokenShare(
+/** The page's scene token for `token` as 0-255 RGB (`nightBackdrop` is `--scene-night-backdrop`). */
+export function sceneRgb(page: Page, token: ScenePaletteKey): Promise<[number, number, number]> {
+  return page.evaluate((name) => {
+    const hex = getComputedStyle(document.documentElement)
+      .getPropertyValue(`--scene-${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`)
+      .trim();
+    const want = /^#([0-9a-f]{6})$/i.exec(hex)?.[1];
+    if (want === undefined) throw new Error(`no scene token ${name}`);
+    return [0, 2, 4].map((i) => parseInt(want.slice(i, i + 2), 16)) as [number, number, number];
+  }, token);
+}
+
+/** Share of a PNG's pixels within `tolerance` per channel of `rgb` (0-255). */
+export function colourShare(
   page: Page,
   png: Buffer,
-  token: ScenePaletteKey,
+  rgb: readonly [number, number, number],
   tolerance: number,
 ): Promise<number> {
   return page.evaluate(
-    async ([data, name, tol]) => {
-      const hex = getComputedStyle(document.documentElement)
-        .getPropertyValue(`--scene-${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`)
-        .trim();
-      const want = /^#([0-9a-f]{6})$/i.exec(hex)?.[1];
-      if (want === undefined) throw new Error(`no scene token ${name}`);
-      const rgb = [0, 2, 4].map((i) => parseInt(want.slice(i, i + 2), 16));
+    async ([data, want, tol]) => {
       const img = new Image();
       img.src = `data:image/png;base64,${data}`;
       await img.decode();
@@ -317,12 +323,22 @@ export function tokenShare(
       const px = ctx.getImageData(0, 0, img.width, img.height).data;
       let near = 0;
       for (let i = 0; i < px.length; i += 4) {
-        if (rgb.every((c, k) => Math.abs((px[i + k] ?? 0) - c) <= tol)) near++;
+        if (want.every((c, k) => Math.abs((px[i + k] ?? 0) - c) <= tol)) near++;
       }
       return near / (img.width * img.height);
     },
-    [png.toString('base64'), token, tolerance] as const,
+    [png.toString('base64'), rgb, tolerance] as const,
   );
+}
+
+/** Share of a PNG's pixels within `tolerance` per channel of the page's scene token for `token`. */
+export async function tokenShare(
+  page: Page,
+  png: Buffer,
+  token: ScenePaletteKey,
+  tolerance: number,
+): Promise<number> {
+  return colourShare(page, png, await sceneRgb(page, token), tolerance);
 }
 
 /** Share of a PNG's pixels with a channel above `level` (0-255). */

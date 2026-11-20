@@ -16,6 +16,7 @@ import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { trailerAnchors } from '../vehicles/anchors';
 import { placePose } from './coords';
 import { outlineGeometry } from './ground-geometry';
+import type { Look } from './look';
 import { AID_DASH_OFF, AID_DASH_ON, AID_STROKE, AIDS_LAYER, type AidsLayer } from './seams';
 
 const PATH_WIDTH = AID_STROKE.path;
@@ -305,7 +306,14 @@ export function proceduralAids(
     return m;
   };
 
-  const accent = material(palette.accent, false);
+  // the accent and track strokes take their night colours at night; the casings and the marker keep theirs
+  const accents: MeshBasicMaterial[] = [];
+  const accentMaterial = (overlay: boolean): MeshBasicMaterial => {
+    const m = material(palette.accent, overlay);
+    accents.push(m);
+    return m;
+  };
+  const accent = accentMaterial(false);
   const casing = material(palette.wheel, false, 1, -3);
   // the corridor's two lines: solid behind the trailer, dashed ahead of the truck
   const solid = [0, 1].map(
@@ -323,7 +331,7 @@ export function proceduralAids(
     4,
     PIVOT_WIDTH,
     PIVOT_Y,
-    material(palette.accent, true),
+    accentMaterial(true),
     material(palette.wheel, true, 1, -3),
     OVERLAY_ORDER,
   );
@@ -358,7 +366,7 @@ export function proceduralAids(
     const edge = onAidsLayer(new Mesh(casingGeometry, material(palette.wheel, true, 1, -3)));
     edge.renderOrder = OVERLAY_ORDER - 1;
     edge.position.y = -CASING_DROP;
-    const fill = onAidsLayer(new Mesh(geometry, material(palette.accent, true)));
+    const fill = onAidsLayer(new Mesh(geometry, accentMaterial(true)));
     fill.renderOrder = OVERLAY_ORDER;
     ghost.add(edge, fill);
     ghost.position.y = GHOST_Y;
@@ -392,6 +400,11 @@ export function proceduralAids(
 
   return {
     object: group,
+    setLook(look: Look): void {
+      const night = look.mode === 'night';
+      for (const m of accents) m.color.set(night ? palette.nightAccent : palette.accent);
+      trackMaterial.color.set(night ? palette.nightTracks : palette.tracks);
+    },
     update(frame: RenderFrame): void {
       const { snapshot: s, aids, predicted } = frame;
       history.observe(s.step);

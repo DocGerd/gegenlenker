@@ -185,6 +185,8 @@ export type LightRig = {
   setSplit(on: boolean): void;
   /** Sets what the perspective rig emits; the light set stays constant, so no shader changes. */
   setLevels(levels: RigLevels): void;
+  /** Scales the legacy lights, which light the top-down view's grounds, to `share` of their day intensity. */
+  setTopDownLight(share: number): void;
   /**
    * Whether the HDRI sun casts; the legacy lights never do. A failed grade check (`gradeDisabled`)
    * stops it casting too, as `fitShadow` finds out: the shadow receivers share the grade's shaders.
@@ -225,6 +227,10 @@ export function createLightRig(palette: ScenePalette): LightRig {
       for (const l of [legacySun, legacyAmbient]) l.layers.set(on ? AIDS_LAYER : DEFAULT_LAYER);
       sun.visible = on;
       probe.visible = on;
+    },
+    setTopDownLight(share) {
+      legacySun.intensity = SUN_INTENSITY * share;
+      legacyAmbient.intensity = HEMISPHERE_INTENSITY * share;
     },
     setLevels({ sun: sunShare, ambient, tint }) {
       sun.intensity = light.sunIntensity * sunShare;
