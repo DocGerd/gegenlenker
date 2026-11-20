@@ -89,31 +89,33 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   });
 
   await loseAndReplace(page);
-  await expect(page.locator('.drive-surface > canvas')).toHaveCount(1);
-  await expect(html).toHaveAttribute('data-render-backend', 'webgl2');
+  await expect(page.locator('.drive-surface > canvas')).toHaveCount(1, high);
+  await expect(html).toHaveAttribute('data-render-backend', 'webgl2', high);
   await expect(page.getByText(en.contextLost)).toHaveCount(0);
   await expect(html).toHaveAttribute('data-yard-kit', 'on', high);
   // The reflections were rebuilt for the new renderer, not left over from the old one.
   await expect
-    .poll(() =>
-      page.evaluate(() => {
-        // A null old value: the attribute was set again after it had been removed.
-        const seen = (window as unknown as { pbrSeen: (string | null)[] }).pbrSeen;
-        return seen.includes(null) && document.documentElement.dataset['vehiclePbr'] === 'on';
-      }),
+    .poll(
+      () =>
+        page.evaluate(() => {
+          // A null old value: the attribute was set again after it had been removed.
+          const seen = (window as unknown as { pbrSeen: (string | null)[] }).pbrSeen;
+          return seen.includes(null) && document.documentElement.dataset['vehiclePbr'] === 'on';
+        }),
+      high,
     )
     .toBe(true);
 
   const pane = await page.locator('[data-hud="topDown"]').boundingBox();
   if (pane === null) throw new Error('no top-down pane');
   await expect
-    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)))
+    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)), high)
     .toBeGreaterThan(MIN_DRAWN_COLOURS);
 
   const speed = page.locator('[data-hud="speed"]');
   await page.keyboard.press('4');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
-  await expect(speed).not.toHaveText('0.0 km/h');
+  await expect(speed).not.toHaveText('0.0 km/h', high);
 
   // Pan and zoom listen on the surface, which outlives the canvas.
   await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
