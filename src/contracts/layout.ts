@@ -24,6 +24,26 @@ export type Obstacle = {
   readonly obb: Obb;
   readonly height: number;
 };
+/** A prop's collision box, in world coordinates. */
+export type Collider = {
+  readonly kind: ObstacleKind;
+  readonly obb: Obb;
+  readonly height: number;
+};
+/** Closed set: a new asset needs a drawing in the renderer. */
+export type PropAsset = 'hall' | 'parked' | 'lamp' | 'gate' | 'bollard';
+/** Light on a lamp prop: `flood` masts carry floodlights, `street` lamps a single arm; both face `aim`. */
+export type Fixture = { readonly kind: 'flood' | 'street'; readonly aim: Vec2 };
+export type Prop = {
+  /** Unique within the layout, without '/'. */
+  readonly id: string;
+  readonly asset: PropAsset;
+  readonly colliders: readonly Collider[];
+  /** Present exactly when `asset` is 'lamp'. */
+  readonly fixture?: Fixture;
+};
+/** Id of a prop's `index`-th collider once resolved into an `Obstacle`. */
+export const colliderId = (propId: string, index: number): string => `${propId}/${index}`;
 export type MarkingKind = 'lane-centre' | 'bay' | 'stop' | 'arrow' | 'dock-number';
 export type Marking = {
   readonly kind: MarkingKind;
@@ -51,7 +71,9 @@ export type Layout = {
   readonly yard: Rect2;
   readonly street: StreetSpec;
   readonly start: Pose2;
+  /** Loose obstacles; collidable props live in `props`. */
   readonly obstacles: readonly Obstacle[];
+  readonly props: readonly Prop[];
   readonly markings: readonly Marking[];
 };
 /** Turn point the truck must come within `radius` of before the target counts. */
@@ -61,7 +83,9 @@ export type ResolvedLayout = {
   readonly bounds: Rect2;
   readonly yard: Rect2;
   readonly surfaces: readonly Surface[];
+  /** Street, loose, prop-collider and exercise obstacles, in that order. */
   readonly obstacles: readonly Obstacle[];
+  readonly props: readonly Prop[];
   readonly markings: readonly Marking[];
   readonly target: TargetZone | null;
   /** Present exactly when `target` is. */

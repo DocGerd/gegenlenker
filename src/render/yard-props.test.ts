@@ -2,7 +2,7 @@ import { Box3, Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
-import type { ObstacleKind } from '../contracts/layout';
+import type { Collider, Fixture, ObstacleKind, Prop, ResolvedLayout } from '../contracts/layout';
 import { OVERLAY } from './yard-concrete';
 import { cornerHoops, plotGoods, RESTYLED_KINDS, yardProps } from './yard-props';
 
@@ -28,7 +28,7 @@ describe('yard prop coverage', () => {
   it('draws a synthetic obstacle of every restyled kind', () => {
     const { resolved } = cases[0] ?? { resolved: undefined };
     if (resolved === undefined) throw new Error('no layout');
-    const baseline = yardProps({ ...resolved, obstacles: [] }).length;
+    const baseline = yardProps({ ...resolved, obstacles: [], props: [] }).length;
     for (const kind of RESTYLED_KINDS) {
       const obstacle = {
         id: `synthetic-${kind}`,
@@ -36,7 +36,7 @@ describe('yard prop coverage', () => {
         obb: { cx: 20, cy: 20, halfLength: 2, halfWidth: 0.5, heading: 0 },
         height: 1,
       };
-      const drawn = yardProps({ ...resolved, obstacles: [obstacle] }).length;
+      const drawn = yardProps({ ...resolved, obstacles: [obstacle], props: [] }).length;
       expect(drawn, kind).toBeGreaterThan(baseline);
     }
   });
@@ -60,11 +60,11 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
   });
 
   it('fill the footprint of kerbs, walls, ramps and cones without outgrowing it', () => {
-    const plot = yardProps({ ...resolved, obstacles: [] }).length;
+    const plot = yardProps({ ...resolved, obstacles: [], props: [] }).length;
     const concrete = resolved.obstacles.filter((o) => FILLS_AXES.includes(o.kind));
     for (const o of concrete) {
       const b = new Box3();
-      const own = yardProps({ ...resolved, obstacles: [o] });
+      const own = yardProps({ ...resolved, obstacles: [o], props: [] });
       for (const p of own.slice(0, own.length - plot)) {
         b.union(new Box3().setFromObject(new Mesh(p.geometry)));
       }
@@ -96,9 +96,23 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
     for (const kind of RESTYLED_KINDS) {
       const obstacles = resolved.obstacles.filter((o) => o.kind === kind);
       if (obstacles.length === 0) continue;
-      const baseline = yardProps({ ...resolved, obstacles: [] }).length;
-      expect(yardProps({ ...resolved, obstacles }).length, kind).toBeGreaterThan(baseline);
+      const baseline = yardProps({ ...resolved, obstacles: [], props: [] }).length;
+      expect(yardProps({ ...resolved, obstacles, props: [] }).length, kind).toBeGreaterThan(
+        baseline,
+      );
     }
+  });
+});
+
+describe.each(cases)('$name drawing order', ({ resolved }) => {
+  it('numbers parked bodies in resolved obstacle order, props and exercise blocks alike', () => {
+    const at = (x: number, y: number): string => `${x},${y}`;
+    const parked = resolved.obstacles.filter((o) => o.kind === 'parked');
+    const drawn = new Set(parked.map(({ obb }) => at(obb.cx, obb.cy)));
+    const pieces = yardProps(resolved)
+      .map((p) => at(p.x, p.y))
+      .filter((k) => drawn.has(k));
+    expect(pieces).toEqual(parked.map(({ obb }) => at(obb.cx, obb.cy)));
   });
 });
 
@@ -114,5 +128,88 @@ describe('corner hoops', () => {
       expect(-b.max.z - (hall.minY - MAX_RELIEF)).toBeGreaterThanOrEqual(0);
       expect(-b.min.z - (hall.maxY + MAX_RELIEF)).toBeLessThanOrEqual(0);
     }
+  });
+});
+
+const wallBox = (minX: number, minY: number, maxX: number, maxY: number): Collider => ({
+  kind: 'hall',
+  obb: {
+    cx: (minX + maxX) / 2,
+    cy: (minY + maxY) / 2,
+    halfLength: (maxX - minX) / 2,
+    halfWidth: (maxY - minY) / 2,
+    heading: 0,
+  },
+  height: 8,
+});
+
+/** Four walls around a courtyard. */
+const hallProp = (id: string, x0: number): Prop => ({
+  id,
+  asset: 'hall',
+  colliders: [
+    wallBox(x0, 0, x0 + 1, 10),
+    wallBox(x0 + 9, 0, x0 + 10, 10),
+    wallBox(x0 + 1, 0, x0 + 9, 1),
+    wallBox(x0 + 1, 9, x0 + 9, 10),
+  ],
+});
+
+const withProps = (props: readonly Prop[]): ResolvedLayout => {
+  const { resolved } = cases[0] ?? { resolved: undefined };
+  if (resolved === undefined) throw new Error('no layout');
+  return {
+    ...resolved,
+    obstacles: props.flatMap((p) => p.colliders.map((c, i) => ({ id: `${p.id}/${i}`, ...c }))),
+    props,
+    markings: [],
+  };
+};
+
+describe('hall props', () => {
+  it('are detailed one by one, with no gate across the gap between two halls', () => {
+    const a = hallProp('hall-1', 0);
+    const b = hallProp('hall-2', 17); // walls 9 m apart: a merged derivation would open a gate
+    const plot = yardProps(withProps([])).length;
+    const own = (prop: Prop): number => yardProps(withProps([prop])).length - plot;
+    expect(own(a)).toBeGreaterThan(0);
+    expect(yardProps(withProps([a, b])).length - plot).toBe(own(a) + own(b));
+  });
+});
+
+describe('lamp fixtures', () => {
+  const lampAt = (fixture: Fixture): Prop => ({
+    id: 'lamp-1',
+    asset: 'lamp',
+    colliders: [
+      {
+        kind: 'lamp',
+        obb: { cx: 0, cy: 0, halfLength: 0.15, halfWidth: 0.15, heading: 0 },
+        height: 8,
+      },
+    ],
+    fixture,
+  });
+  const box = (fixture: Fixture): Box3 => {
+    const pieces = yardProps(withProps([lampAt(fixture)]));
+    const [piece] = pieces;
+    if (piece === undefined) throw new Error('no piece');
+    return new Box3().setFromObject(new Mesh(piece.geometry));
+  };
+  const vertices = (fixture: Fixture): number =>
+    yardProps(withProps([lampAt(fixture)]))[0]?.geometry.getAttribute('position').count ?? 0;
+
+  it('carry floodlights only on a flood fixture', () => {
+    const aim = { x: 10, y: 0 };
+    expect(vertices({ kind: 'flood', aim })).toBeGreaterThan(vertices({ kind: 'street', aim }));
+  });
+
+  it.each(['flood', 'street'] as const)('face the aim of a %s fixture', (kind) => {
+    const east = box({ kind, aim: { x: 10, y: 0 } });
+    const west = box({ kind, aim: { x: -10, y: 0 } });
+    expect(east.max.x).toBeGreaterThan(0.3);
+    expect(east.min.x).toBeGreaterThan(-0.3);
+    expect(west.min.x).toBeLessThan(-0.3);
+    expect(west.max.x).toBeLessThan(0.3);
   });
 });
