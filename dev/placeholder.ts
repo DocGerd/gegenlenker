@@ -84,7 +84,7 @@ function truckVisual(spec: TruckSpec, palette: ScenePalette): VehicleVisual {
   return {
     object: group,
     update: (s) => placePose(group, s.truck),
-    setQuality: () => undefined,
+    setLook: () => undefined,
     dispose: () => disposeTree(group),
   };
 }
@@ -107,7 +107,7 @@ function trailerVisual(spec: TrailerSpec, palette: ScenePalette): VehicleVisual 
       placePose(dolly, s.dolly);
       placePose(trailer, s.trailer);
     },
-    setQuality: () => undefined,
+    setLook: () => undefined,
     dispose: () => disposeTree(group),
   };
 }
@@ -219,7 +219,7 @@ function environment(layout: ResolvedLayout, palette: ScenePalette): Environment
   return {
     object: group,
     update: () => undefined,
-    setQuality: () => undefined,
+    setLook: () => undefined,
     dispose: () => {
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());

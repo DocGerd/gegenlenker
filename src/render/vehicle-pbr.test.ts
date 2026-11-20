@@ -25,6 +25,7 @@ import { trailerById, truckById } from '../vehicles/registry';
 import { parseShell, parseTrailerShell, type ShellKind, startShells } from './glb-shells';
 import { GRADE_SHADER_MARKER, setGradeDisabled } from './grade';
 import { KEYS } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { REALISM_HUES } from './realism-hues';
 import { AIDS_LAYER, CAB_LAYER, PERSPECTIVE_LAYER } from './seams';
@@ -271,16 +272,16 @@ describe('vehicle environment', () => {
     const { env, states } = setup();
     env.attach(renderer());
     const visual = proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(states.at(-1)).toBeNull();
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(standardOf(visual.object)).toHaveLength(0);
     await settle();
     expect(states.at(-1)).toBe('on');
     expect(standardOf(visual.object).length).toBeGreaterThan(0);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(states.at(-1)).toBeNull();
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(states.at(-1)).toBe('on');
     visual.dispose();
     expect(states.at(-1)).toBeNull();
@@ -384,14 +385,14 @@ describe.each(makers)('reflective detail of the %s', (_kind, make) => {
   it('swaps the detail material at high and restores the very same materials after', () => {
     const visual = make(fixed(new Texture()));
     const before = materialsOf(visual.object);
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const high = materialsOf(visual.object);
     const swapped = [...high].filter(([m, material]) => before.get(m) !== material);
     expect(swapped.length).toBeGreaterThan(0);
     for (const [, material] of swapped) expect(material).toBeInstanceOf(VehicleNodeMaterial);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(materialsOf(visual.object)).toEqual(before);
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(materialsOf(visual.object)).toEqual(high);
   });
 
@@ -400,24 +401,24 @@ describe.each(makers)('reflective detail of the %s', (_kind, make) => {
     const seen = meshes(visual.object).filter((m) => m.layers.isEnabled(AIDS_LAYER));
     expect(seen.length).toBeGreaterThan(0);
     const before = seen.map((m) => m.material);
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(seen.map((m) => m.material)).toEqual(before);
   });
 
   it('keeps the Lambert look without a map', () => {
     const visual = make(fixed(null));
     const before = materialsOf(visual.object);
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(materialsOf(visual.object)).toEqual(before);
   });
 
   it('follows the map the environment hands out, and drops it when the environment fails', () => {
     let map: Texture | null = new Texture();
     const visual = make(environment(() => map));
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const first = map;
     map = new Texture();
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(standardOf(visual.object).length).toBeGreaterThan(0);
     for (const material of standardOf(visual.object)) {
       expect(material.envMap).toBe(map);
@@ -425,7 +426,7 @@ describe.each(makers)('reflective detail of the %s', (_kind, make) => {
     }
     const [material] = standardOf(visual.object);
     map = null;
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(standardOf(visual.object)).toHaveLength(0);
     expect(material?.envMap).toBeNull();
   });
@@ -433,7 +434,7 @@ describe.each(makers)('reflective detail of the %s', (_kind, make) => {
   it('disposes its own material and leaves the shared map to its owner', () => {
     const map = new Texture();
     const visual = make(fixed(map));
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const [material] = standardOf(visual.object);
     const materialDisposed = vi.fn();
     material?.addEventListener('dispose', materialDisposed);
@@ -472,7 +473,7 @@ async function truckWithShells(
   };
   const visual = proceduralTruck(truckById(id), palette, shells, env);
   const procedural = materialsOf(visual.object);
-  visual.setQuality(QUALITY_FLAGS[preset]);
+  visual.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
   await vi.waitFor(() => {
     expect(attached.size).toBe(2);
   });
@@ -491,7 +492,7 @@ describe('reflective shells', () => {
     expect(detail.length).toBeGreaterThan(0);
 
     expect(standardOf(visual.object)).toHaveLength(0);
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const withShells = standardOf(visual.object).length;
     expect(withShells).toBeGreaterThan(2);
     for (const [mesh] of detail) expect(mesh.material).toBeInstanceOf(VehicleNodeMaterial);
@@ -499,12 +500,12 @@ describe('reflective shells', () => {
       if (m.material instanceof VehicleNodeMaterial)
         expect(m.layers.isEnabled(AIDS_LAYER)).toBe(false);
     }
-    visual.setQuality(QUALITY_FLAGS.low);
+    visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(standardOf(visual.object)).toHaveLength(0);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(standardOf(visual.object)).toHaveLength(0);
     for (const [mesh, material] of detail) expect(mesh.material).toBe(material);
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(standardOf(visual.object)).toHaveLength(withShells);
     visual.dispose();
     expect(error).not.toHaveBeenCalled();
@@ -513,7 +514,7 @@ describe('reflective shells', () => {
   it('puts a shell that loads at high straight on the reflective material', async () => {
     const { visual } = await truckWithShells(id, fixed(new Texture()), 'high');
     expect(standardOf(visual.object).length).toBeGreaterThan(2);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(standardOf(visual.object)).toHaveLength(0);
   });
 });
@@ -546,11 +547,11 @@ describe.each(TRAILER_IDS)('reflective trailer shell of %s', (id) => {
       (m) => m.material instanceof MeshLambertNodeMaterial && m.material.vertexColors,
     );
     attach();
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(standardOf(visual.object).length).toBeGreaterThan(1);
-    visual.setQuality(QUALITY_FLAGS.balanced);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(standardOf(visual.object)).toHaveLength(0);
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(detail.length).toBeGreaterThan(0);
     for (const mesh of detail) expect(mesh.material).toBeInstanceOf(VehicleNodeMaterial);
     for (const m of meshes(visual.object)) {

@@ -511,13 +511,13 @@ export function proceduralTruck(
       res.lamps.update(lampState(snapshot));
       res.syncBlobs();
     },
-    setQuality(flags) {
+    setLook({ flags, grade }) {
       cabGlb = flags.cabGlb;
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
-      res.setGrade(flags.perspectiveLighting);
-      res.setSunShadow(flags.sunShadow && flags.perspectiveLighting);
+      res.setGrade(grade.on);
+      res.setSunShadow(flags.sunShadow && grade.on);
       res.setPbr(group, flags.pbr);
     },
     dispose() {
@@ -770,11 +770,11 @@ export function proceduralTrailer(
       res.lamps.update(lampState(snapshot));
       res.syncBlobs();
     },
-    setQuality(flags) {
+    setLook({ flags, grade }) {
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
-      res.setGrade(flags.perspectiveLighting);
-      res.setSunShadow(flags.sunShadow && flags.perspectiveLighting);
+      res.setGrade(grade.on);
+      res.setSunShadow(flags.sunShadow && grade.on);
       res.setPbr(group, flags.pbr);
     },
     dispose() {
