@@ -8,6 +8,7 @@ const DOWNLOADS: readonly (keyof QualityFlags)[] = [
   'groundPbr',
   'hdriSky',
   'yardKit',
+  'interiorGlb',
 ];
 
 /** Flags High adds over Balanced that cost compute only: each new High-only flag is classified here or in DOWNLOADS. */

@@ -7,7 +7,6 @@ import {
 } from '../contracts/render';
 import type { Texture } from 'three';
 import { proceduralAids } from './aids';
-import { createCockpitInterior } from './cockpit-interior';
 import { proceduralEnvironment } from './environment';
 import {
   BODY_SHELL_URLS,
@@ -18,6 +17,7 @@ import {
   TRAILER_SHELL_URLS,
 } from './glb-shells';
 import { createGradeCheck, precompileGrade } from './grade';
+import { createGlbInterior, INTERIOR_URLS, interiorShellFrom } from './interior-glb';
 import { startGroundPbrTextures } from './ground-pbr';
 import { startGroundTextures } from './ground-texture';
 import { readBackendRequest, requestGpuDevice, type BackendRequest } from './gpu-backend';
@@ -76,6 +76,17 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     body: startShells(BODY_SHELL_URLS, { onAttached, enabled: false }),
     trailer: startGlbAsset(TRAILER_SHELL_URLS, trailerShellFrom, { onAttached, enabled: false }),
   };
+  // `on` while the Blender cockpit interior replaces the flat overlay.
+  const publishInterior = publishState('interior');
+  const interiorDrawn = new Set<string>();
+  const interiorShells = startGlbAsset(INTERIOR_URLS, interiorShellFrom, {
+    onAttached: (key, on) => {
+      if (on) interiorDrawn.add(key);
+      else interiorDrawn.delete(key);
+      publishInterior(interiorDrawn.size > 0 ? 'on' : null);
+    },
+    enabled: false,
+  });
   // The ground state is the transcoded format while the textured ground is drawn.
   const groundTextures = startGroundTextures(undefined, publishState('ground'));
   // The PBR ground draws over the detail ground; its state is the transcode target while it is drawn.
@@ -131,7 +142,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
         kit: yardKit,
         reflections: vehicleEnvironment,
       }),
-    interior: createCockpitInterior,
+    interior: (truck) => createGlbInterior(truck, { shells: interiorShells }),
     aids: proceduralAids,
   });
   // Read by the e2e: the GPU API of the live renderer and why it is not WebGPU when that was asked
@@ -161,6 +172,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       shells.cab.setEnabled(flags.cabGlb);
       shells.body.setEnabled(flags.vehicleGlb);
       shells.trailer.setEnabled(flags.vehicleGlb);
+      interiorShells.setEnabled(flags.cockpitInterior && flags.interiorGlb);
       groundTextures.setEnabled(flags.groundTexture);
       groundPbr.setEnabled(flags.groundTexture && flags.groundPbr);
       yardKit.setEnabled(flags.yardKit);

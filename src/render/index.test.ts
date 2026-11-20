@@ -8,6 +8,11 @@ const mocks = vi.hoisted(() => ({
   sky: null as ((state: string | null) => void) | null,
   grade: null as ((state: 'on' | 'failed' | null) => void) | null,
   onAttached: null as ((key: string, on: boolean) => void) | null,
+  glbAssets: [] as {
+    urls: Record<string, string>;
+    onAttached: (key: string, on: boolean) => void;
+    setEnabled: ReturnType<typeof vi.fn>;
+  }[],
   skyAttach: vi.fn(),
   skySetEnabled: vi.fn(),
   skyOnLoaded: vi.fn(),
@@ -29,12 +34,14 @@ vi.mock('./glb-shells', () => ({
   TRAILER_SHELL_URLS: {},
   trailerShellFrom: vi.fn(),
   startGlbAsset: (
-    _urls: unknown,
+    urls: Record<string, string>,
     _parse: unknown,
     options: { onAttached: (key: string, on: boolean) => void },
   ) => {
     if (mocks.syncAttach) options.onAttached('cab', true);
-    return { setEnabled: vi.fn() };
+    const setEnabled = vi.fn();
+    mocks.glbAssets.push({ urls, onAttached: options.onAttached, setEnabled });
+    return { setEnabled };
   },
   startShells: (_urls: unknown, options: { onAttached: (key: string, on: boolean) => void }) => {
     mocks.onAttached = options.onAttached;
@@ -280,5 +287,41 @@ describe('scene renderer attach hooks', () => {
     expect(marker()).toBe('krone-trailer');
     mocks.onAttached?.('krone-trailer', false);
     expect(marker()).toBeUndefined();
+  });
+
+  describe('cockpit interior asset', () => {
+    const interiorAsset = (): (typeof mocks.glbAssets)[number] => {
+      const found = mocks.glbAssets.find((a) => 'man-le-18-280-interior' in a.urls);
+      if (found === undefined) throw new Error('the interior asset was not started');
+      return found;
+    };
+
+    it('asks for the asset only on a preset that draws it', () => {
+      mocks.glbAssets.length = 0;
+      const renderer = createSceneRenderer();
+      const { setEnabled } = interiorAsset();
+      for (const preset of ['low', 'balanced', 'high'] as const) {
+        renderer.setQuality(preset);
+        const flags = QUALITY_FLAGS[preset];
+        expect(setEnabled).toHaveBeenLastCalledWith(flags.cockpitInterior && flags.interiorGlb);
+      }
+      const calls = setEnabled.mock.calls as [boolean][];
+      expect(calls.map(([on]) => on)).toEqual([false, false, true]);
+    });
+
+    it('publishes the marker while any interior is drawn, warming up for a new one', () => {
+      mocks.glbAssets.length = 0;
+      createSceneRenderer();
+      const { onAttached } = interiorAsset();
+      const marker = (): string | undefined => attribute(ATTACHMENTS.interior.marker);
+      onAttached('man-le-18-280-interior', true);
+      expect(marker()).toBe('on');
+      expect(mocks.warmUp).toHaveBeenCalledTimes(1);
+      onAttached('arocs-1835-ak-interior', true);
+      onAttached('man-le-18-280-interior', false);
+      expect(marker()).toBe('on');
+      onAttached('arocs-1835-ak-interior', false);
+      expect(marker()).toBeUndefined();
+    });
   });
 });

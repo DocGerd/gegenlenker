@@ -51,7 +51,8 @@ export type GlbOptions = {
   readonly require?: readonly GlbAttribute[];
 };
 
-async function parseMeshes(
+/** Decodes a glb into its meshes, each checked for the `require`d attributes. */
+export async function parseMeshes(
   data: ArrayBuffer,
   require: readonly GlbAttribute[] = ['color'],
 ): Promise<Mesh[]> {

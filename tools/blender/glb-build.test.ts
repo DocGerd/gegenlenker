@@ -98,10 +98,10 @@ describe('helper load scan', () => {
 });
 
 describe('glb shell assets', () => {
-  it('give every truck a cab and a body, every trailer a trailer shell, and the yard a kit', () => {
+  it('give every truck a cab, a body and an interior, every trailer a trailer shell, and the yard a kit', () => {
     expect(ASSETS.map((a) => a.key).sort()).toEqual(
       [
-        ...TRUCK_IDS.flatMap((id) => [`${id}-body`, `${id}-cab`]),
+        ...TRUCK_IDS.flatMap((id) => [`${id}-body`, `${id}-cab`, `${id}-interior`]),
         ...TRAILER_IDS.map((id) => `${id}-trailer`),
         'yard-kit',
       ].sort(),
