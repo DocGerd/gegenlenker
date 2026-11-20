@@ -4,14 +4,14 @@ import type { Decor, DecorAsset, Rect2 } from '../contracts/layout';
 const GAP = 3;
 const SWAP_X = [14, 26, 38];
 const SKIP_X = [52, 56.5];
-const PALLETS_X = 66;
-const MESH_BOXES_X = 82;
+const PALLETS_X = 68.1;
+const MESH_BOXES_X = 84.8;
 
 // Footprint half sizes, centred on the drawn goods.
 const SWAP = { halfLength: 3.725, halfWidth: 1.275, row: 3 };
 const SKIP = { halfLength: 1.7, halfWidth: 0.85, row: 2.5, rowPitch: 4, tilt: 0.06 };
-const PALLETS = { halfLength: 2.7, halfWidth: 1.5, centreX: 2.1, row: 4 };
-const MESH_BOXES = { halfLength: 3.42, halfWidth: 0.97, centreX: 2.8, row: 4 };
+const PALLETS = { halfLength: 2.7, halfWidth: 1.5, row: 4 };
+const MESH_BOXES = { halfLength: 3.42, halfWidth: 0.97, row: 4 };
 
 export function plotDecor(yard: Rect2): Decor[] {
   const y0 = yard.maxY + GAP;
@@ -45,16 +45,10 @@ export function plotDecor(yard: Rect2): Decor[] {
       add('skip', yard.minX + x, cy, SKIP.halfLength, SKIP.halfWidth, heading, i + row);
     }
   });
-  add(
-    'pallets',
-    yard.minX + PALLETS_X + PALLETS.centreX,
-    y0 + PALLETS.row,
-    PALLETS.halfLength,
-    PALLETS.halfWidth,
-  );
+  add('pallets', yard.minX + PALLETS_X, y0 + PALLETS.row, PALLETS.halfLength, PALLETS.halfWidth);
   add(
     'mesh-boxes',
-    yard.minX + MESH_BOXES_X + MESH_BOXES.centreX,
+    yard.minX + MESH_BOXES_X,
     y0 + MESH_BOXES.row,
     MESH_BOXES.halfLength,
     MESH_BOXES.halfWidth,

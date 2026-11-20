@@ -496,14 +496,14 @@ function gatehouseMirror(o: Collider): PropPiece {
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 
-/** Where the pallet and mesh-box grids' first item stands, from the centre of the footprint. */
-const GRID_CENTRE = { pallets: 2.1, 'mesh-boxes': 2.8 };
+/** Half the length of one grid item: the grid's first item stands this far in from the footprint's rear. */
+const GRID_ITEM = { pallets: 0.6, 'mesh-boxes': 0.62 };
 
 /** Swap bodies, skips, pallets and mesh boxes on the plot behind the yard's north edge. */
 function decorPiece({ asset, footprint: f, variant }: Decor): PropPiece {
   const p = new Parts();
   const origin = { x: 0, y: 0, z: 0 };
-  let x = f.cx;
+  let lead = 0;
   switch (asset) {
     case 'swap-body': {
       const hue = SWAP_HUES[variant % SWAP_HUES.length] ?? HUE.whiteAluminium;
@@ -516,7 +516,7 @@ function decorPiece({ asset, footprint: f, variant }: Decor): PropPiece {
       break;
     }
     case 'pallets':
-      x -= GRID_CENTRE.pallets;
+      lead = f.halfLength - GRID_ITEM.pallets;
       for (let k = 0; k < 4; k++) {
         for (let j = 0; j < 3; j++) {
           const at = { x: k * 1.4, y: (j - 1) * 1.1, z: 0 };
@@ -526,7 +526,7 @@ function decorPiece({ asset, footprint: f, variant }: Decor): PropPiece {
       }
       break;
     case 'mesh-boxes':
-      x -= GRID_CENTRE['mesh-boxes'];
+      lead = f.halfLength - GRID_ITEM['mesh-boxes'];
       for (let k = 0; k < 5; k++) {
         for (let j = 0; j < 2; j++) {
           const at = { x: k * 1.4, y: (j - 0.5) * 1.1, z: 0 };
@@ -538,7 +538,9 @@ function decorPiece({ asset, footprint: f, variant }: Decor): PropPiece {
     default:
       unhandled(asset);
   }
-  return { x, y: f.cy, geometry: p.place(x, f.cy, f.heading) };
+  const x = f.cx - Math.cos(f.heading) * lead;
+  const y = f.cy - Math.sin(f.heading) * lead;
+  return { x, y, geometry: p.place(x, y, f.heading) };
 }
 
 export const decorPieces = (decor: readonly Decor[]): PropPiece[] => decor.map(decorPiece);
