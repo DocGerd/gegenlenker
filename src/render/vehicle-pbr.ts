@@ -20,7 +20,7 @@ import {
   PMREMGenerator,
   type WebGPURenderer,
 } from 'three/webgpu';
-import type { ScenePalette } from '../contracts/render';
+import type { LightingMode, ScenePalette } from '../contracts/render';
 import { createSceneSky, domeGround } from './scene-sky';
 import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
@@ -235,7 +235,7 @@ export interface VehicleEnvironment {
    * context is lost, while the map is checked (`onChange` fires when it is ready), or after a
    * failure (retried only on a new renderer).
    */
-  texture(palette: ScenePalette): Texture | null;
+  texture(palette: ScenePalette, mode: LightingMode): Texture | null;
   /** `listener` runs when `texture` may now return something else; returns the unsubscribe. */
   onChange(listener: () => void): () => void;
   /** A visual reports whether it currently wears the reflective material, for the state. */
@@ -362,9 +362,9 @@ export function createVehicleEnvironment(
       publish();
       renderer = gpu;
     },
-    texture(palette) {
+    texture(palette, mode) {
       if (renderer === null || gpuLost(renderer)) return null;
-      const next = `${palette.sky}/${palette.verge}`;
+      const next = `${palette.sky}/${palette.verge}/${mode}`;
       if (next !== key) {
         release();
         key = next;

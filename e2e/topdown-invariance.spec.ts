@@ -65,7 +65,7 @@ test('the top-down view is the same at every graphics preset', async ({ context 
       });
       page.on('pageerror', (e) => errors.push(e.message));
       const three = collectThreeProblems(page);
-      await startPinnedDrive(page, preset, exercise);
+      await startPinnedDrive(page, { preset, lighting: 'day' }, exercise);
       scales.push({ label: `${exercise} ${preset} before`, scale: await renderScale(page) });
       for (const shot of ['follow', 'yard'] as const) {
         const png = await shoot(page, shot);

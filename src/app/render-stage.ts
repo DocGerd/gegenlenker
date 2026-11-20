@@ -131,8 +131,9 @@ export function mountRenderStage(
 ): RenderStage {
   const s = acquireRenderer();
   const { surface, renderer } = s;
-  const { graphics } = currentSettings();
+  const { graphics, lighting } = currentSettings();
   renderer.setQuality(graphics);
+  renderer.setLighting(lighting);
   host.append(surface);
 
   const abort = new AbortController();

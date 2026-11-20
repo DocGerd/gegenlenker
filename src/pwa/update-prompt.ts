@@ -13,6 +13,14 @@ export function startUpdatePrompt(root: HTMLElement): void {
   toast.setAttribute('role', 'status');
   root.append(toast);
 
+  // Screens keep their last controls clear of the toast, whatever its height or width.
+  const reserve = () => {
+    const { top, height } = toast.getBoundingClientRect();
+    root.style.setProperty('--toast-reserve', height > 0 ? `${window.innerHeight - top}px` : '0px');
+  };
+  new ResizeObserver(reserve).observe(toast);
+  window.addEventListener('resize', reserve);
+
   let hideTimer: number | undefined;
   const hide = () => {
     window.clearTimeout(hideTimer);

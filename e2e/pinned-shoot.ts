@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import type { ScenePaletteKey } from '../src/contracts/render';
+import type { LightingMode, ScenePaletteKey } from '../src/contracts/render';
 import { ATTACHMENTS, type Attachment } from '../src/render/asset-registry.ts';
 import { QUALITY_FLAGS } from '../src/render/quality.ts';
 
@@ -7,6 +7,8 @@ import { QUALITY_FLAGS } from '../src/render/quality.ts';
 // carry their `.ts` extension and reach only modules that import nothing at runtime.
 
 export type Preset = 'low' | 'balanced' | 'high';
+/** What a drive is rendered with: the stored `graphics` and `lighting` settings. */
+export type RenderConfig = { readonly preset: Preset; readonly lighting: LightingMode };
 export type Shot = 'cockpit' | 'mirrorLeft' | 'mirrorRight' | 'follow' | 'yard' | 'chase';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
@@ -108,20 +110,20 @@ function pinResolvePath(): void {
 }
 
 /**
- * Opens a standstill drive of `exercise` on `preset` with `performance.now`, timers and rAF frozen,
+ * Opens a standstill drive of `exercise` on `config` with `performance.now`, timers and rAF frozen,
  * so the resolution governor and the sim only move when stepped, and pins the multisample resolve
  * to one path. Call on a fresh page; `search` is the app URL's query (`?backend=webgpu`).
  */
 export async function startPinnedDrive(
   page: Page,
-  preset: Preset,
+  { preset, lighting }: RenderConfig,
   exercise: string,
   search = '',
 ): Promise<void> {
   await page.addInitScript(pinResolvePath);
   await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
     SETTINGS_KEY,
-    JSON.stringify({ version: 1, graphics: preset, topDown: 'follow' }),
+    JSON.stringify({ version: 1, graphics: preset, lighting, topDown: 'follow' }),
   ] as const);
   await page.clock.install({ time: 0 });
   await page.clock.pauseAt(1000);

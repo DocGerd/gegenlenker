@@ -19,7 +19,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ScenePalette } from '../contracts/render';
+import type { LightingMode, ScenePalette } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import { trailerById, truckById } from '../vehicles/registry';
 import { parseShell, parseTrailerShell, type ShellKind, startShells } from './glb-shells';
@@ -63,7 +63,7 @@ const standardOf = (root: Object3D): VehicleNodeMaterial[] =>
     .map((m) => m.material)
     .filter((m): m is VehicleNodeMaterial => m instanceof VehicleNodeMaterial);
 
-const environment = (texture: () => Texture | null): VehicleEnvironment => ({
+const environment = (texture: VehicleEnvironment['texture']): VehicleEnvironment => ({
   attach: () => undefined,
   texture,
   onChange: () => () => undefined,
@@ -174,15 +174,19 @@ describe('vehicle environment', () => {
     return { env, states, generate, compiles, changes };
   };
   /** The map once its check has passed. */
-  const ready = async (env: VehicleEnvironment, p: ScenePalette = palette) => {
-    env.texture(p);
+  const ready = async (
+    env: VehicleEnvironment,
+    p: ScenePalette = palette,
+    mode: LightingMode = 'day',
+  ) => {
+    env.texture(p, mode);
     await settle();
-    return env.texture(p);
+    return env.texture(p, mode);
   };
 
   it('has no map until a renderer is attached, and disposes without one', () => {
     const { env } = setup();
-    expect(env.texture(palette)).toBeNull();
+    expect(env.texture(palette, 'day')).toBeNull();
     expect(() => {
       env.dispose();
     }).not.toThrow();
@@ -197,14 +201,14 @@ describe('vehicle environment', () => {
         }),
     });
     env.attach(renderer());
-    expect(env.texture(palette)).toBeNull();
-    expect(env.texture(palette)).toBeNull();
+    expect(env.texture(palette, 'day')).toBeNull();
+    expect(env.texture(palette, 'day')).toBeNull();
     expect(compiles).toHaveBeenCalledOnce();
     expect(changes).not.toHaveBeenCalled();
     pass(true);
     await settle();
     expect(changes).toHaveBeenCalledOnce();
-    expect(env.texture(palette)).not.toBeNull();
+    expect(env.texture(palette, 'day')).not.toBeNull();
   });
 
   it('generates once per palette, reuses it, and replaces it when the palette changes', async () => {
@@ -215,12 +219,26 @@ describe('vehicle environment', () => {
     env.attach(renderer());
     const first = await ready(env);
     expect(first).not.toBeNull();
-    expect(env.texture(palette)).toBe(first);
+    expect(env.texture(palette, 'day')).toBe(first);
     expect(generate).toHaveBeenCalledOnce();
     const other = { ...palette, sky: 0x123456 };
     const second = await ready(env, other);
     expect(second).not.toBeNull();
     expect(second).not.toBe(first);
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(disposed(made[0])).toHaveBeenCalledOnce();
+  });
+
+  it('replaces the map when the lighting mode changes', async () => {
+    const made: RenderTarget[] = [];
+    const { env, generate } = setup({
+      generate: () => made[made.push(target()) - 1] as never,
+    });
+    env.attach(renderer());
+    const day = await ready(env);
+    const night = await ready(env, palette, 'night');
+    expect(night).not.toBeNull();
+    expect(night).not.toBe(day);
     expect(generate).toHaveBeenCalledTimes(2);
     expect(disposed(made[0])).toHaveBeenCalledOnce();
   });
@@ -233,8 +251,8 @@ describe('vehicle environment', () => {
       },
     });
     env.attach(renderer());
-    expect(env.texture(palette)).toBeNull();
-    expect(env.texture(palette)).toBeNull();
+    expect(env.texture(palette, 'day')).toBeNull();
+    expect(env.texture(palette, 'day')).toBeNull();
     expect(generate).toHaveBeenCalledOnce();
     expect(warn).toHaveBeenCalledOnce();
     expect(states.at(-1)).toBe('failed');
@@ -259,8 +277,8 @@ describe('vehicle environment', () => {
     let n = 0;
     const { env, generate } = setup({ generate: () => made[n++] as RenderTarget });
     env.attach(renderer());
-    env.texture(palette);
-    env.texture({ ...palette, sky: 0x123456 });
+    env.texture(palette, 'day');
+    env.texture({ ...palette, sky: 0x123456 }, 'day');
     env.attach(renderer());
     expect(disposed(made[0])).toHaveBeenCalledOnce();
     expect(disposed(made[1])).toHaveBeenCalledOnce();
@@ -298,7 +316,7 @@ describe('vehicle environment', () => {
     expect(disposed(made)).toHaveBeenCalledOnce();
     expect(changes).toHaveBeenCalledTimes(2);
     expect(states.at(-1)).toBeNull();
-    env.texture(palette);
+    env.texture(palette, 'day');
     expect(generate).toHaveBeenCalledTimes(2);
 
     const failing = setup({
@@ -310,7 +328,7 @@ describe('vehicle environment', () => {
         .mockImplementation(target),
     });
     failing.env.attach(renderer());
-    expect(failing.env.texture(palette)).toBeNull();
+    expect(failing.env.texture(palette, 'day')).toBeNull();
     failing.env.attach(renderer());
     expect(await ready(failing.env)).not.toBeNull();
   });
@@ -338,7 +356,7 @@ describe('vehicle environment', () => {
     const lost = { value: true };
     const { env, generate } = setup();
     env.attach(renderer(lost));
-    expect(env.texture(palette)).toBeNull();
+    expect(env.texture(palette, 'day')).toBeNull();
     expect(generate).not.toHaveBeenCalled();
     lost.value = false;
     expect(await ready(env)).not.toBeNull();
@@ -354,7 +372,7 @@ describe('vehicle environment', () => {
     expect(disposed(made)).not.toHaveBeenCalled();
     env.attach(renderer());
     expect(disposed(made)).toHaveBeenCalledOnce();
-    env.texture(palette);
+    env.texture(palette, 'day');
     expect(generate).toHaveBeenCalledTimes(2);
   });
 });
@@ -394,6 +412,20 @@ describe.each(makers)('reflective detail of the %s', (_kind, make) => {
     expect(materialsOf(visual.object)).toEqual(before);
     visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(materialsOf(visual.object)).toEqual(high);
+  });
+
+  it('asks for the reflection map of the lighting mode of the look', () => {
+    const asked: LightingMode[] = [];
+    const visual = make(
+      environment((_palette, mode) => {
+        asked.push(mode);
+        return new Texture();
+      }),
+    );
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'night'));
+    expect(asked.at(0)).toBe('day');
+    expect(asked.at(-1)).toBe('night');
   });
 
   it('never touches a mesh the top-down camera sees', () => {
