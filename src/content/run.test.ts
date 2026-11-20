@@ -16,7 +16,8 @@ const ctl = (c: Partial<ControlVector>): ControlVector => ({
 });
 
 const FIXED_LOG = {
-  version: 1,
+  version: 2,
+  lighting: 'day',
   steps: 2400,
   changes: [
     { step: 0, control: ctl({ steer: 0.4, lever: 0.8 }) },
@@ -64,8 +65,10 @@ function pinned(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' | 'reverse
     tracker.waypointVisited(),
     false,
     0,
+    log.lighting,
   );
-  return { SIM_REVISION, digest: fnv(JSON.stringify([final, result])) };
+  // Lighting is outside the simulation: the digest pins behaviour, not what a run is tagged with.
+  return { SIM_REVISION, digest: fnv(JSON.stringify([final, { ...result, lighting: undefined }])) };
 }
 
 describe('run behaviour pin', () => {

@@ -258,7 +258,10 @@ export function showMenu(
       for (const { button, exercise } of exerciseButtons) {
         button.querySelectorAll('.menu-best').forEach((line) => line.remove());
         const lines = [false, true]
-          .map((assisted) => best[bestKey(exercise.id, truckId, trailerId, assisted)])
+          .map(
+            (assisted) =>
+              best[bestKey(exercise.id, truckId, trailerId, assisted, settings.lighting)],
+          )
           .filter((r) => r !== undefined)
           .map(bestLine);
         button.append(...(lines.length > 0 ? lines : [span('menu-best', t('noResult'))]));

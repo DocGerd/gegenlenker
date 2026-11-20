@@ -32,3 +32,27 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   await scrubber.fill('0');
   await expect(time).toHaveText(`0.0 s / ${total}`);
 });
+
+test('a night run is drawn and replayed at night', async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'gegenlenker.settings.v1',
+      JSON.stringify({ version: 1, graphics: 'low', lighting: 'night' }),
+    );
+  });
+  const html = page.locator('html');
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(html).toHaveAttribute('data-render-lighting', 'night');
+  await page.keyboard.press('4');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('w');
+  await page.waitForTimeout(500);
+  await page.getByRole('button', { name: en.finish }).click();
+  await page
+    .getByRole('dialog', { name: en.paused })
+    .getByRole('button', { name: en.finish })
+    .click();
+  await page.getByRole('button', { name: en.replay }).click();
+  await expect(page.getByRole('slider', { name: en.timeline })).toBeVisible();
+  await expect(html).toHaveAttribute('data-render-lighting', 'night');
+});

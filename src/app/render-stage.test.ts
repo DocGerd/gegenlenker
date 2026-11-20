@@ -32,13 +32,14 @@ vi.mock('../render', () => ({
     };
   },
 }));
-vi.mock('./settings', () => ({ currentSettings: () => ({ graphics: 'low', lighting: 'night' }) }));
+vi.mock('./settings', () => ({ currentSettings: () => ({ graphics: 'low', lighting: 'day' }) }));
 const showNotice = vi.hoisted(() =>
   vi.fn((_parent: unknown, key: string) => ({ key, remove: () => undefined })),
 );
 vi.mock('./notice', () => ({ showNotice }));
 
 const doc = {
+  documentElement: { dataset: {} as Record<string, string> },
   visibilityState: 'visible' as DocumentVisibilityState,
   listeners: new Set<{ type: string; fn: () => void }>(),
   createElement: () => element(),
@@ -97,7 +98,7 @@ const notices = (): string[] => showNotice.mock.calls.map(([, key]) => key);
 async function mount() {
   const { mountRenderStage } = await import('./render-stage');
   const hooks = { resized: vi.fn(), frame: vi.fn(), restored: vi.fn(), halted: vi.fn() };
-  const stage = mountRenderStage(element(), element(), () => undefined);
+  const stage = mountRenderStage(element(), element(), () => undefined, 'night');
   stage.start(hooks);
   return { stage, hooks };
 }
@@ -132,9 +133,11 @@ describe('render stage recovery', () => {
     vi.restoreAllMocks();
   });
 
-  it('sets the stored lighting once on mounting', async () => {
-    await mount();
+  it('draws in the lighting it is given, not the stored one, and marks it', async () => {
+    const { stage } = await mount();
     expect(fake.lighting).toEqual(['night']);
+    expect(stage.lighting).toBe('night');
+    expect(doc.documentElement.dataset['renderLighting']).toBe('night');
   });
 
   it('starts afresh after three losses within a minute and asks for a reload on the fourth', async () => {
@@ -217,7 +220,7 @@ describe('render stage recovery', () => {
 
   it('halts a stage started after its notice', async () => {
     const { mountRenderStage } = await import('./render-stage');
-    const stage = mountRenderStage(element(), element(), () => undefined);
+    const stage = mountRenderStage(element(), element(), () => undefined, 'night');
     fake.inits[0]?.reject(await startError('unavailable'));
     await flush();
     const halted = vi.fn();
