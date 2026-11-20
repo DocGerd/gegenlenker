@@ -1,10 +1,13 @@
 import type { Layout, Marking } from '../../contracts/layout';
+import { kitBackedTo } from '../kit';
 import { numberMarkings, solidLine } from '../markings';
 import { plotDecor } from '../plot';
 import {
   addBollardProp,
+  addEntranceFurniture,
   addGate,
   addLamps,
+  addPlotFences,
   addYardEdge,
   BOUNDS,
   ObstacleBuilder,
@@ -20,6 +23,14 @@ const HALL_HEIGHT = 8;
 export const RAMP = { minX: 14, minY: 49, maxX: 70, maxY: 52 };
 const RAMP_HEIGHT = 1.2;
 const RAMP_BOLLARD_OFFSET = 1; // beyond each ramp end
+const BACK_GAP = 0.05;
+const HALL_BINS = [
+  { piece: 'bin-1100', x: HALL.minX, y: 57, heading: Math.PI / 2 },
+  { piece: 'bin-240', x: HALL.minX, y: 59.2, heading: Math.PI / 2 },
+  { piece: 'bin-1100', x: HALL.maxX, y: 57, heading: -Math.PI / 2 },
+  { piece: 'bin-240', x: HALL.maxX, y: 59.2, heading: -Math.PI / 2 },
+] as const; // on the hall's end faces, outside the ramp
+const HYDRANT = { x: 72.5, y: 51.2 }; // beside the east end of the ramp
 export const BAY_SPACING = 4;
 const BAY_LINE_LENGTH = 18;
 const BAY_LINE_WIDTH = 0.12;
@@ -54,6 +65,13 @@ function props(): Layout['props'] {
   for (const x of [RAMP.minX - RAMP_BOLLARD_OFFSET, RAMP.maxX + RAMP_BOLLARD_OFFSET]) {
     addBollardProp(p, x, RAMP.minY + RAMP_BOLLARD_OFFSET / 2);
   }
+  for (const { piece, x, y, heading } of HALL_BINS) {
+    const [bx, by] = kitBackedTo(piece, x, y, heading, BACK_GAP);
+    p.addKit(piece, 'furniture', bx, by, heading);
+  }
+  p.addKit('hydrant', 'furniture', HYDRANT.x, HYDRANT.y, 0);
+  addEntranceFurniture(p, STREET);
+  addPlotFences(p, STREET);
   return p.props;
 }
 

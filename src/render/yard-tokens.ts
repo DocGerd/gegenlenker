@@ -65,11 +65,12 @@ function addCone(o: Obstacle, palette: ScenePalette, chunks: Chunks, color: Colo
   }
 }
 
-/** Yard kerbs are dark so they stand out from the yard; street kerbs stay light. */
+/** Yard kerbs are dark so they stand out from the yard, street kerbs stay light; a fence off the yard stands on the verge, where the fence token is too light. */
 export function obstaclePaletteKey(kind: ObstacleKind, onYard: boolean): ScenePaletteKey {
   if (kind === 'kerb' && onYard) return 'band';
-  if (kind === 'bollard' || kind === 'barrier') return 'lamp';
+  if (kind === 'bollard' || kind === 'barrier' || kind === 'furniture') return 'lamp';
   if (kind === 'gatehouse') return 'wall';
+  if (kind === 'fence' && !onYard) return 'band';
   return kind;
 }
 
