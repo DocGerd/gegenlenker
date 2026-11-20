@@ -324,14 +324,17 @@ export function applyShell(
     onChange(next);
   };
   try {
-    const place = (prototype: Mesh): Mesh => {
+    // lenses are thin and lit by the lamps: they take the sun's shadow but never cast one
+    const place = (prototype: Mesh, casts: boolean): Mesh => {
       const mesh = new Mesh(prototype.geometry, material);
       prototype.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
       mesh.layers.set(swap.layer);
+      mesh.castShadow = casts;
+      mesh.receiveShadow = true;
       return mesh;
     };
-    const lens = shell.lens === null ? [] : [place(shell.lens)];
-    added = [place(shell.mesh), ...lens, ...(swap.add ?? [])];
+    const lens = shell.lens === null ? [] : [place(shell.lens, false)];
+    added = [place(shell.mesh, true), ...lens, ...(swap.add ?? [])];
     setEnabled(enabled);
   } catch (error) {
     setEnabled(false);

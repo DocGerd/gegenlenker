@@ -363,6 +363,30 @@ describe('environment quality wiring', () => {
     env.dispose();
   });
 
+  it('lets the props cast and every lit ground and marking copy receive, never the sky or the skyline', () => {
+    expect(layout).toBeDefined();
+    if (layout === undefined) return;
+    const env = proceduralEnvironment(layout, palette);
+    env.setQuality(QUALITY_FLAGS.high);
+    const all: Mesh[] = [];
+    env.object.traverse((o) => {
+      if (isMesh(o)) all.push(o);
+    });
+    const casters = all.filter((m) => m.castShadow);
+    expect(casters.length).toBeGreaterThan(0);
+    for (const m of casters) {
+      expect((m.material as { vertexColors?: boolean }).vertexColors, 'casts only solids').toBe(
+        true,
+      );
+      expect(isMarking(m), 'no marking casts').toBe(false);
+      expect(m.receiveShadow).toBe(true);
+    }
+    const markings = all.filter(isMarking);
+    expect(markings.length).toBeGreaterThan(0);
+    for (const m of markings.filter(isNodeMaterial)) expect(m.receiveShadow).toBe(true);
+    env.dispose();
+  });
+
   it('follows the flags through high, balanced, low and high again', () => {
     expect(layout).toBeDefined();
     if (layout === undefined) return;
@@ -408,6 +432,7 @@ describe('environment quality wiring', () => {
     ] as const) {
       env.setQuality(flags);
       expectGraded(flags.perspectiveLighting, label);
+      expect(hdriSun?.castShadow, label).toBe(flags.sunShadow);
       expect(GRADE.fogDensity.value, label).toBe(flags.aerialPerspective ? FOG_DENSITY : 0);
       expect(hazeToward(), label).toBe(flags.hdriSky ? sunHaze : plainHaze);
     }

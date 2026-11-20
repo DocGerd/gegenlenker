@@ -81,6 +81,8 @@ import {
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
 export const SHADOW_NAME = 'blob-shadow';
+/** Share of the contact blobs' opacity kept while the sun casts a shadow. */
+const BLOB_OPACITY_UNDER_SUN = 0.5;
 export const SHADOW_HEIGHT = 0.02; // above the markings
 const BODY_SHADOW = { alpha: 0.5, squareness: 4, margin: 0.7 } as const;
 const WHEEL_SHADOW = { alpha: 0.6, squareness: 2, growX: 1.3, growY: 1.4 } as const;
@@ -147,6 +149,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   let pbrWanted = false;
   let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
+  let sunShadowed = false;
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
     return material;
@@ -185,9 +188,13 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     material(color: number): MeshLambertMaterial {
       return track(new MeshLambertMaterial({ color }));
     },
+    /** A mesh that casts and takes the sun's shadow; the flags only matter in the perspective views. */
     mesh(geometry: BufferGeometry, material: Material): Mesh {
       geometries.add(geometry);
-      return new Mesh(geometry, material);
+      const mesh = new Mesh(geometry, material);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
     },
     /** Perspective-only detail: vertex colours in one shared material, off the top-down camera. */
     detail(geometry: BufferGeometry): Mesh {
@@ -212,6 +219,11 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       if (detailMaterial !== null) setGraded(detailMaterial, on);
       if (pbrMaterial !== null) setGraded(pbrMaterial, on);
     },
+    /** The contact blobs pale while the sun's shadow draws the real one. */
+    setSunShadow(on: boolean): void {
+      sunShadowed = on;
+      if (shadowMaterial !== null) shadowMaterial.opacity = on ? BLOB_OPACITY_UNDER_SUN : 1;
+    },
     /** The lamp lenses of the detail and the shells, switched per snapshot. */
     lamps,
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
@@ -234,7 +246,10 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
           polygonOffsetUnits: -4,
         }),
       );
+      shadowMaterial.opacity = sunShadowed ? BLOB_OPACITY_UNDER_SUN : 1;
       const mesh = this.mesh(geometry, shadowMaterial);
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
       mesh.name = SHADOW_NAME;
       mesh.layers.set(PERSPECTIVE_LAYER);
       return mesh;
@@ -250,6 +265,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       plateMaterials.push(material);
       setGraded(material, gradeOn);
       const mesh = this.mesh(plateGeometry(spot), material);
+      mesh.castShadow = false;
       mesh.layers.set(PERSPECTIVE_LAYER);
       return mesh;
     },
@@ -493,6 +509,7 @@ export function proceduralTruck(
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
       res.setGrade(flags.perspectiveLighting);
+      res.setSunShadow(flags.sunShadow && flags.perspectiveLighting);
       res.setPbr(group, flags.pbr);
     },
     dispose() {
@@ -748,6 +765,7 @@ export function proceduralTrailer(
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
       res.setGrade(flags.perspectiveLighting);
+      res.setSunShadow(flags.sunShadow && flags.perspectiveLighting);
       res.setPbr(group, flags.pbr);
     },
     dispose() {
