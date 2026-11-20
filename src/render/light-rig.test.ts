@@ -16,11 +16,13 @@ import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
 import {
   createLightRig,
   legacyIrradiance,
+  NIGHT_AMBIENT,
+  NIGHT_TINT,
   perspectiveLight,
   perspectiveSunDirection,
 } from './light-rig';
 import { domeGround } from './scene-sky';
-import { KEYS } from './palette';
+import { KEYS, tokenName } from './palette';
 import {
   AIDS_LAYER,
   CAB_LAYER,
@@ -40,7 +42,7 @@ import { isShadowCamera } from './sun-shadow';
 const css = readFileSync(new URL('../styles/tokens.css', import.meta.url), 'utf8');
 const scene = Object.fromEntries(
   (Object.keys(KEYS) as ScenePaletteKey[]).map((k) => {
-    const hex = new RegExp(`--scene-${k}:\\s*#([0-9a-f]{6});`, 'i').exec(css)?.[1];
+    const hex = new RegExp(`--scene-${tokenName(k)}:\\s*#([0-9a-f]{6});`, 'i').exec(css)?.[1];
     if (hex === undefined) throw new Error(`--scene-${k} missing`);
     return [k, parseInt(hex, 16)];
   }),
@@ -147,10 +149,32 @@ describe('light rig', () => {
     const rig = createLightRig(scene);
     const { legacy, sun, probe } = lights(rig);
     const before = legacy.map((l) => l.intensity);
-    rig.setIntensity(0.25);
+    rig.setLevels({ sun: 0.25, ambient: 0.5, tint: null });
     expect(sun.intensity).toBeCloseTo(perspectiveLight(scene).sunIntensity * 0.25, 6);
-    expect(probe.intensity).toBe(0.25);
+    expect(probe.intensity).toBe(0.5);
     expect(legacy.map((l) => l.intensity)).toEqual(before);
+  });
+
+  it('lights the night from a uniform tinted probe and gives the day sky back unchanged', () => {
+    const rig = createLightRig(scene);
+    const { sun, probe } = lights(rig);
+    const day = probe.sh.coefficients.map((c) => c.toArray());
+    const dayIntensity = sun.intensity;
+    rig.setSplit(true);
+    rig.setLevels({ sun: 0, ambient: NIGHT_AMBIENT, tint: NIGHT_TINT });
+    expect(sun.intensity).toBe(0);
+    expect(sun.visible).toBe(true);
+    const up = probe.sh.getIrradianceAt(new Vector3(0, 1, 0), new Vector3());
+    const side = probe.sh.getIrradianceAt(new Vector3(1, 0, 0), new Vector3());
+    NIGHT_TINT.forEach((t, i) => {
+      expect(up.getComponent(i)).toBeCloseTo(Math.PI * t, 5);
+      expect(side.getComponent(i)).toBeCloseTo(Math.PI * t, 5);
+    });
+    expect(probe.intensity).toBe(NIGHT_AMBIENT);
+    rig.setLevels({ sun: 1, ambient: 1, tint: null });
+    expect(probe.sh.coefficients.map((c) => c.toArray())).toEqual(day);
+    expect(sun.intensity).toBe(dayIntensity);
+    expect(probe.intensity).toBe(1);
   });
 
   describe('sun shadow', () => {

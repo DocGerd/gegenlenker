@@ -39,7 +39,7 @@ import {
 import { gradeDisabled, setGraded } from './grade';
 import { trailerLamps, truckLamps } from './lamp-layout';
 import { createDetailMaterial, createLampEmission, slotShell } from './lamp-lens';
-import { lampState } from './lamp-state';
+import { DAY, lampState, type LampToggles } from './lamp-state';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
@@ -152,6 +152,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
   let sunShadowed = false;
+  let lampToggles: LampToggles = DAY;
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
     return material;
@@ -236,6 +237,13 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     },
     /** The lamp lenses of the detail and the shells, switched per snapshot. */
     lamps,
+    /** Lights the lenses the look asks for: the night's lamp functions, or none by day. */
+    setLamps(night: boolean): void {
+      lampToggles = night ? { night: true, hazard: false } : DAY;
+    },
+    updateLamps(snapshot: Parameters<typeof lampState>[0]): void {
+      lamps.update(lampState(snapshot, lampToggles));
+    },
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
       const mesh = this.detail(geometry);
@@ -523,16 +531,17 @@ export function proceduralTruck(
       placePose(group, snapshot.truck);
       pivotRight.rotation.y = snapshot.roadWheelAngle;
       pivotLeft.rotation.y = snapshot.roadWheelAngle;
-      res.lamps.update(lampState(snapshot));
+      res.updateLamps(snapshot);
       res.syncBlobs();
     },
-    setLook({ flags, grade, mode }) {
+    setLook({ flags, grade, mode, shadow, lamps }) {
       cabGlb = flags.cabGlb;
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
       res.setGrade(grade.on);
-      res.setSunShadow(flags.sunShadow && grade.on);
+      res.setSunShadow(shadow);
+      res.setLamps(lamps);
       res.setPbr(group, flags.pbr, mode);
     },
     dispose() {
@@ -782,14 +791,15 @@ export function proceduralTrailer(
     update(snapshot) {
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
-      res.lamps.update(lampState(snapshot));
+      res.updateLamps(snapshot);
       res.syncBlobs();
     },
-    setLook({ flags, grade, mode }) {
+    setLook({ flags, grade, mode, shadow, lamps }) {
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
       res.setGrade(grade.on);
-      res.setSunShadow(flags.sunShadow && grade.on);
+      res.setSunShadow(shadow);
+      res.setLamps(lamps);
       res.setPbr(group, flags.pbr, mode);
     },
     dispose() {

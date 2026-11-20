@@ -59,11 +59,24 @@ export function hdriRadiance(map: Texture, direction: Node<'vec3'>, scale: Color
     .toVar(SKY_SHADER_MARKER);
 }
 
+/** The dome's colour overhead for a horizon colour: deeper and bluer. */
+export const zenithOf = (horizon: Color): Color => horizon.clone().multiply(ZENITH_SHIFT);
+
 /** Grey of the sky's luminance: the ambient light stays neutral under the blue sky. */
 export function neutralSky(sky: number): Color {
   const c = new Color(sky);
   return new Color().setScalar(0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
 }
+
+/** What the analytic dome is drawn from; the HDRI part has its own (`SkyHdri`). */
+export type SkyColours = {
+  readonly horizon: Color;
+  readonly zenith: Color;
+  /** The colour the horizon lightens towards. */
+  readonly haze: Color;
+  /** Added around the sun; black draws none. */
+  readonly halo: Color;
+};
 
 export type Sky = {
   readonly mesh: Mesh;
@@ -73,6 +86,8 @@ export type Sky = {
   setSun(direction: Vector3): void;
   /** The colour below the horizon. */
   setGround(colour: Color): void;
+  /** Redraws the analytic dome from other colours: uniforms only, no shader change. */
+  setColours(colours: SkyColours): void;
   dispose(): void;
 };
 
@@ -108,6 +123,7 @@ export function createSky(
   halo: Color,
   sunDirection: Vector3,
   hdri: SkyHdri = PLACEHOLDER_HDRI,
+  zenithColour: Color = zenithOf(horizon),
 ): Sky {
   const geometry = new SphereGeometry(1, 16, 8);
   const material = new MeshBasicNodeMaterial({
@@ -124,10 +140,12 @@ export function createSky(
 
   const direction = normalize(positionLocal);
   const up = max(direction.y, 0);
-  const zenith = horizon.clone().multiply(ZENITH_SHIFT);
-  const gradient = mix(uniform(horizon.clone()), uniform(zenith), pow(up, 0.6));
+  const horizonUniform = uniform(horizon.clone());
+  const zenithUniform = uniform(zenithColour.clone());
+  const hazeUniform = uniform(haze.clone());
+  const gradient = mix(horizonUniform, zenithUniform, pow(up, 0.6));
   const hazed = mix(
-    uniform(haze.clone()),
+    hazeUniform,
     gradient,
     float(1).sub(exp(up.mul(-HAZE_FALLOFF)).mul(HAZE_STRENGTH)),
   );
@@ -176,6 +194,12 @@ export function createSky(
     },
     setGround(colour) {
       groundColour.value.copy(colour);
+    },
+    setColours(colours) {
+      horizonUniform.value.copy(colours.horizon);
+      zenithUniform.value.copy(colours.zenith);
+      hazeUniform.value.copy(colours.haze);
+      haloColour.value.copy(colours.halo);
     },
     dispose: () => {
       geometry.dispose();

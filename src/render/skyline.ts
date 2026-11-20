@@ -20,8 +20,8 @@ import { REALISM_HUES } from './realism-hues';
  * Lambert with a per-vertex haze share mixed towards the haze colour after lighting, so a distant
  * building fades as a whole instead of showing a vertical gradient.
  */
-const plainHaze = (haze: Color): Node<'vec4'> =>
-  vec4(mix(output.rgb, uniform(haze), attribute('haze', 'float')), output.a);
+const plainHaze = (haze: Node<'color'>): Node<'vec4'> =>
+  vec4(mix(output.rgb, haze, attribute('haze', 'float')), output.a);
 
 /** The building's own haze already exceeds the aerial perspective out there, so the larger one wins. */
 const gradedHaze = (): Node<'vec4'> =>
@@ -36,6 +36,8 @@ export type Skyline = {
   readonly mesh: Mesh;
   /** Takes the shared haze colour, aerial perspective and tone mapping (`grade.ts`). */
   setGraded(on: boolean): void;
+  /** The colour a building fades to without the grade, which brings its own haze. */
+  setHaze(haze: Color): void;
   dispose(): void;
 };
 
@@ -43,7 +45,8 @@ export type Skyline = {
 export function createSkyline(bounds: Rect2, haze: Color): Skyline {
   const geometry = skylineGeometry(skylineBuildings(bounds));
   const material = new MeshLambertNodeMaterial({ map: createAtlasTexture() });
-  const plain = plainHaze(haze.clone());
+  const plainColour = uniform(haze.clone());
+  const plain = plainHaze(plainColour);
   material.outputNode = plain;
   const grade = gradedHaze();
   const mesh = new Mesh(geometry, material);
@@ -53,6 +56,9 @@ export function createSkyline(bounds: Rect2, haze: Color): Skyline {
     mesh,
     setGraded: (on) => {
       setGraded(material, on, plain, grade);
+    },
+    setHaze: (next) => {
+      plainColour.value.copy(next);
     },
     dispose: () => {
       geometry.dispose();
@@ -72,7 +78,7 @@ export function skylineGradeSample(): GradeSample {
   const map = new DataTexture(new Uint8Array(4), 1, 1);
   map.needsUpdate = true;
   const material = new MeshLambertNodeMaterial({ map });
-  setGraded(material, true, plainHaze(new Color(REALISM_HUES.skyHaze)), gradedHaze());
+  setGraded(material, true, plainHaze(uniform(new Color(REALISM_HUES.skyHaze))), gradedHaze());
   return {
     mesh: new Mesh(geometry, material),
     dispose: () => {

@@ -22,6 +22,8 @@ export const REALISM_HUES = {
   skylineDark: 0x5c6875, // distant industrial silhouettes
   skyHaze: 0xdcebf2, // horizon haze, pale blue-grey
   sunHalo: 0xfff1d0, // warm glow around the sun
+  nightHorizon: 0x18243f, // night sky dome at the horizon; the haze fades to it
+  nightZenith: 0x03050a, // night sky dome overhead
   thwBlue: 0x00387b, // THW cab, body and tarpaulin; RAL 5002 sRGB approximation
   thwBlueDeep: 0x00214a, // low-loader side members and crossmembers, a darker THW blue
   liveryWhite: 0xf6f6f6, // THW bumper, corners, arches and side stripe; RAL 9016

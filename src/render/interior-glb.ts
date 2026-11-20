@@ -118,6 +118,7 @@ export function createGlbInterior(
    */
   const dress = (): void => {
     if (look === null) return;
+    plain.color.setRGB(...look.interior.unlit);
     const on = look.flags.perspectiveLighting;
     const map = on && palette !== undefined ? (env?.texture(palette, look.mode) ?? null) : null;
     const verdict: InteriorVerdict =

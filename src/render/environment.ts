@@ -7,6 +7,7 @@ import {
   RingGeometry,
   MeshBasicMaterial,
   MeshLambertMaterial,
+  type Material,
   type Texture,
 } from 'three';
 import { MeshLambertNodeMaterial, type MeshStandardNodeMaterial } from 'three/webgpu';
@@ -32,7 +33,7 @@ import { AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
 import { createYardKitLayer, type YardKitParts } from './yard-kit';
-import { createSceneSky, domeGround } from './scene-sky';
+import { createSceneSky, domeGround, nightDomeGround, skyColours } from './scene-sky';
 import { createWornMarkingMaterial, MarkingChunks, wearableMarkings } from './marking-wear';
 import { tint } from './tint';
 import { addMarking, addObstacle } from './yard-tokens';
@@ -253,6 +254,12 @@ export function proceduralEnvironment(
     flatCopies.push(copy);
     return copy;
   };
+  // The target outline, tolerance band and gate glow at night: their copies take the token's unlit
+  // material, so they keep the day colour; no program is built that the tokens do not already use.
+  const aidCopies: { copy: Mesh; lit: Material; glow: Material }[] = [];
+  const aidCopy = (token: Mesh, material: MeshLambertNodeMaterial, glow: Material): void => {
+    aidCopies.push({ copy: litCopy(token, material), lit: material, glow });
+  };
   for (const token of markingTokens) markingCopies.push(litCopy(token, litFlat));
 
   let yardBand: Group | null = null;
@@ -268,7 +275,7 @@ export function proceduralEnvironment(
     geometries.push(outline);
     const outlineToken = new Mesh(outline, flat);
     group.add(outlineToken);
-    litCopy(outlineToken, litFlat);
+    aidCopy(outlineToken, litFlat, flat);
 
     const { tolerances } = layout;
     if (tolerances !== null) {
@@ -295,7 +302,7 @@ export function proceduralEnvironment(
       };
       const bandTokens = addBand(BAND_STRIP, 0);
       group.add(...bandTokens);
-      for (const token of bandTokens) litCopy(token, litFlat);
+      for (const token of bandTokens) aidCopy(token, litFlat, flat);
 
       // World-metre strokes shrink to under a pixel in the whole-yard view, so it gets a wider copy.
       const { yard } = layout;
@@ -336,7 +343,7 @@ export function proceduralEnvironment(
     geometries.push(ring);
     const gateToken = new Mesh(ring, material);
     group.add(gateToken);
-    litCopy(gateToken, litMaterial);
+    aidCopy(gateToken, litMaterial, material);
     gate = {
       materials: [material, litMaterial],
       pending: new Color(palette.accent),
@@ -353,6 +360,8 @@ export function proceduralEnvironment(
   const haze = new Color(REALISM_HUES.skyHaze);
   const plainHaze = { toward: haze, away: haze };
   const sky = createSceneSky(palette);
+  const nightHaze = skyColours(palette, 'night').haze;
+  const nightGround = nightDomeGround(palette);
   const legacyGround = domeGround(palette, false);
   const splitGround = domeGround(palette, true);
   const skyline = createSkyline(layout.bounds, haze);
@@ -372,7 +381,15 @@ export function proceduralEnvironment(
     sky.setHdri(on ? hdriMap : null);
     // the haze uniforms are shared: a disposed environment must not overwrite the live one's
     if (!disposed && look !== null) {
-      applyLook(look, on ? { toward: light.hazeToward, away: light.hazeAway } : plainHaze);
+      const night = look.sky === 'night';
+      applyLook(
+        look,
+        night
+          ? { toward: nightHaze, away: nightHaze }
+          : on
+            ? { toward: light.hazeToward, away: light.hazeAway }
+            : plainHaze,
+      );
     }
     if (on !== hdriReported) {
       hdriReported = on;
@@ -404,10 +421,13 @@ export function proceduralEnvironment(
       look = next;
       const { flags, lightSplit } = next;
       graded = next.grade.on;
+      const night = next.sky === 'night';
       rig.setSplit(lightSplit);
-      rig.setShadow(graded && flags.sunShadow);
+      rig.setLevels(next.rig);
+      rig.setShadow(next.shadow);
       sky.setSun(lightSplit ? next.grade.sunDirection : sunPosition());
-      sky.setGround(lightSplit ? splitGround : legacyGround);
+      sky.setColours(skyColours(palette, next.sky));
+      sky.setGround(night ? nightGround : lightSplit ? splitGround : legacyGround);
       hdriOn = flags.hdriSky;
       syncSky();
       setGraded(propMaterial, graded);
@@ -421,10 +441,12 @@ export function proceduralEnvironment(
       if (gate !== null) setGraded(gate.materials[1], graded);
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
+      skyline.setHaze(night ? nightHaze : haze);
       kit.setLook(next);
+      for (const { copy, lit, glow } of aidCopies) copy.material = next.aidGlow ? glow : lit;
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
-      flatSwap.set(flags.litMarkings);
+      flatSwap.set(next.litCopies);
     },
     dispose: () => {
       cancelGroundTexture?.();

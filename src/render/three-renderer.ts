@@ -544,7 +544,7 @@ export function createThreeSceneRenderer(
       // the panes drawn before, so there one clear takes the whole target. The sky dome covers each
       // perspective pane.
       gl.setRenderTarget(out.target);
-      gl.setClearColor(b.palette.backdrop);
+      gl.setClearColor(lighting === 'night' ? b.palette.nightBackdrop : b.palette.backdrop);
       const clearInPass = scissoredClear(backend);
       if (clearInPass) {
         gl.autoClear = true;

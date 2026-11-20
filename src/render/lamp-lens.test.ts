@@ -321,6 +321,18 @@ describe.each(TRUCK_IDS)('lamp slots of the %s truck', (id) => {
   const spec = truckById(id);
   const lamps = truckLamps(spec).lamps;
 
+  it('light the night lamps with the night look and none by day', () => {
+    const visual = proceduralTruck(spec, palette, undefined, env);
+    const [, driving] = snapshots(id, TRAILER_IDS[0]);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+    visual.update(driving);
+    expect(litSlots(visual.object)).toContain(slotOf(['front-position']));
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.update(driving);
+    expect(litSlots(visual.object)).toEqual([]);
+    visual.dispose();
+  });
+
   it('light the stop and reversing lamps from the snapshot', () => {
     const visual = proceduralTruck(spec, palette, undefined, env);
     const [braking, driving] = snapshots(id, TRAILER_IDS[0]);
@@ -361,6 +373,18 @@ describe.each(TRUCK_IDS)('lamp slots of the %s truck', (id) => {
 
 describe.each(TRAILER_IDS)('lamp slots of the %s trailer', (id) => {
   const spec = trailerById(id);
+
+  it('light the night lamps with the night look and none by day', () => {
+    const visual = proceduralTrailer(spec, palette, undefined, env);
+    const [, driving] = snapshots(TRUCK_IDS[0], id);
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+    visual.update(driving);
+    expect(litSlots(visual.object)).toContain(slotOf(['rear-position', 'stop']));
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.update(driving);
+    expect(litSlots(visual.object)).toEqual([]);
+    visual.dispose();
+  });
 
   it('light the stop and reversing lamps from the snapshot', () => {
     const visual = proceduralTrailer(spec, palette, undefined, env);
