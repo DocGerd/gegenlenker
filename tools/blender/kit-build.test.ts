@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { KIT_FOOTPRINTS } from '../../src/content/kit';
 import { YARD_KIT_NODES } from '../../src/render/yard-kit-dims';
 import { ROOT, YARD_KIT_RUN } from './glb-build';
 import { bakedPixels, KIT_BUDGET_BYTES, KIT_TEXTURES } from './kit-build';
@@ -10,7 +11,7 @@ const read_ = (file: string): Buffer => readFileSync(join(ROOT, file));
 const bytes = (file: string): number => statSync(join(ROOT, file)).size;
 
 type Gltf = {
-  nodes: { name: string; mesh?: number; extras?: { bounds?: unknown } }[];
+  nodes: { name: string; mesh?: number; extras?: { bounds?: { min: number[]; max: number[] } } }[];
   meshes: {
     primitives: { attributes: Record<string, number>; indices: number; material: number }[];
   }[];
@@ -30,6 +31,20 @@ describe('yard-kit.glb', () => {
   it('holds one node per kit piece, each with its bounds for placement', () => {
     expect(json.nodes.map((n) => n.name).sort()).toEqual([...YARD_KIT_NODES].sort());
     for (const node of json.nodes) expect(node.extras?.bounds).toBeDefined();
+  });
+
+  it('matches the footprints content places it by, within a millimetre', () => {
+    expect(Object.keys(KIT_FOOTPRINTS).sort()).toEqual([...YARD_KIT_NODES].sort());
+    for (const node of json.nodes) {
+      const bounds = node.extras?.bounds;
+      const footprint = KIT_FOOTPRINTS[node.name as keyof typeof KIT_FOOTPRINTS];
+      if (bounds === undefined) throw new Error(`${node.name} has no bounds`);
+      const [x0, y0, , x1, y1, z1] = [...bounds.min, ...bounds.max];
+      const flat = [...footprint.min, ...footprint.max, footprint.height];
+      flat.forEach((value, i) => {
+        expect(value, `${node.name}[${i}]`).toBeCloseTo([x0, y0, x1, y1, z1][i] ?? Number.NaN, 3);
+      });
+    }
   });
 
   it('gives every primitive atlas UVs, normals and an untextured vertex colour', () => {

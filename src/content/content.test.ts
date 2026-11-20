@@ -286,41 +286,145 @@ describe.each(Object.values(layouts))('$id props', (layout) => {
   });
 });
 
-const EDGE_STEP = 0.5;
-const EDGE_PROBE = 0.05; // inside the yard edge, within a boundary wall's thickness
+/** Edge (m) of a flood-fill cell: fine against the margin of the narrowest passage (0.14 m). */
+const FILL = 0.1;
+/** Step (m) of the decor probe. */
+const STEP = 0.25;
+/** Half the narrowest vehicle: the clearance a vehicle's centre keeps from an obstacle. */
+const HALF_WIDTH =
+  Math.min(...trucks.map((t) => t.width.value), ...trailers.map((t) => t.width.value)) / 2000;
+
+type Reach = { readonly reached: (x: number, y: number) => boolean; readonly count: number };
+
+/**
+ * Flood fill over the layout bounds on a grid of `FILL` cells, 4-connected, from `seeds`: the cells
+ * a vehicle's centre can reach. An obstacle grown by `clearance` on every side blocks only the cells
+ * that lie wholly inside it, so a passage a vehicle fits through is never closed by the grid.
+ */
+function floodReach(
+  { bounds, obstacles }: ReturnType<typeof resolveLayout>,
+  seeds: readonly Vec2[],
+  clearance: number,
+): Reach {
+  const nx = Math.ceil((bounds.maxX - bounds.minX) / FILL);
+  const ny = Math.ceil((bounds.maxY - bounds.minY) / FILL);
+  const index = (x: number, y: number): [number, number] => [
+    Math.floor((x - bounds.minX) / FILL),
+    Math.floor((y - bounds.minY) / FILL),
+  ];
+  const at = (x: number, y: number): number => {
+    const [ix, iy] = index(x, y);
+    return ix < 0 || iy < 0 || ix >= nx || iy >= ny ? -1 : iy * nx + ix;
+  };
+  const blocked = new Uint8Array(nx * ny);
+  for (const { obb } of obstacles) {
+    const [c, s] = [Math.cos(obb.heading), Math.sin(obb.heading)];
+    const [hl, hw] = [obb.halfLength + clearance, obb.halfWidth + clearance];
+    const [rx, ry] = [Math.abs(c) * hl + Math.abs(s) * hw, Math.abs(s) * hl + Math.abs(c) * hw];
+    const inside = (x: number, y: number): boolean => {
+      const [dx, dy] = [x - obb.cx, y - obb.cy];
+      return Math.abs(c * dx + s * dy) <= hl && Math.abs(-s * dx + c * dy) <= hw;
+    };
+    const [i0, j0] = index(obb.cx - rx, obb.cy - ry);
+    const [i1, j1] = index(obb.cx + rx, obb.cy + ry);
+    for (let j = Math.max(0, j0); j <= Math.min(ny - 1, j1); j++) {
+      for (let i = Math.max(0, i0); i <= Math.min(nx - 1, i1); i++) {
+        const [x0, y0] = [bounds.minX + i * FILL, bounds.minY + j * FILL];
+        if (
+          inside(x0, y0) &&
+          inside(x0 + FILL, y0) &&
+          inside(x0, y0 + FILL) &&
+          inside(x0 + FILL, y0 + FILL)
+        ) {
+          blocked[j * nx + i] = 1;
+        }
+      }
+    }
+  }
+  const seen = new Uint8Array(nx * ny);
+  const queue: number[] = [];
+  for (const { x, y } of seeds) {
+    const cell = at(x, y);
+    if (cell >= 0 && blocked[cell] === 0 && seen[cell] === 0) {
+      seen[cell] = 1;
+      queue.push(cell);
+    }
+  }
+  for (let head = 0; head < queue.length; head++) {
+    const cell = queue[head] ?? 0;
+    const [ix, iy] = [cell % nx, Math.floor(cell / nx)];
+    for (const [jx, jy] of [
+      [ix + 1, iy],
+      [ix - 1, iy],
+      [ix, iy + 1],
+      [ix, iy - 1],
+    ] as const) {
+      const next = jx < 0 || jy < 0 || jx >= nx || jy >= ny ? -1 : jy * nx + jx;
+      if (next >= 0 && blocked[next] === 0 && seen[next] === 0) {
+        seen[next] = 1;
+        queue.push(next);
+      }
+    }
+  }
+  return {
+    reached: (x, y) => {
+      const cell = at(x, y);
+      return cell >= 0 && seen[cell] === 1;
+    },
+    count: queue.length,
+  };
+}
 
 describe.each(Object.values(layouts))('$id decor', (layout) => {
-  const { surfaces, bounds } = resolveLayout(layout, null);
+  const resolved = resolveLayout(layout, null);
+  const { surfaces, bounds } = resolved;
+  const { street } = layout;
+  const owned = exercises.filter((e) => e.layout === layout.id);
+  const carriageway = { x: (street.fromX + street.toX) / 2, y: street.kerbY - street.width / 2 };
+  const entrance = {
+    x: (street.entrance.fromX + street.entrance.toX) / 2,
+    y: street.kerbY + street.pavement / 2,
+  };
+  const reach = floodReach(resolved, [layout.start, entrance, carriageway], HALF_WIDTH);
 
   it('has unique ids', () => {
     const ids = layout.decor.map((d) => d.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  // Nothing outside the yard and street surfaces is drivable once the yard's north edge is closed
-  // along the decor's whole width and the decor lies beyond it, inside the yard's x range.
-  it('lies beyond a closed north edge, so no vehicle reaches it', () => {
-    const { yard, obstacles } = resolveLayout(layout, null);
+  // The flood fill is only worth its verdict if it reaches what a vehicle must reach.
+  it('reaches the start, the entrance, the street and every exercise start', () => {
+    const wanted = [layout.start, entrance, carriageway, ...owned.map((e) => e.start)];
+    for (const { x, y } of wanted) expect(reach.reached(x, y), `${x}, ${y}`).toBe(true);
+    expect(reach.reached(50, layout.yard.maxY + 5), 'beyond the closed north edge').toBe(false);
+    expect(reach.count).toBeGreaterThan(1000);
+  });
+
+  // The pavement strip beside the entrance is 2.35 m wide: a vehicle half a width past it is shut
+  // out, and the fill must leak into the surroundings just short of that.
+  it('is shut out of the surroundings by 0.14 m and no more', () => {
+    const strip = layout.street.pavement - 0.15;
+    expect(2 * HALF_WIDTH).toBeGreaterThan(strip);
+    expect(2 * HALF_WIDTH - strip).toBeLessThan(0.15);
+    const seeds = [layout.start, entrance, carriageway];
+    expect(reach.reached(-5, 30), 'at the narrowest vehicle').toBe(false);
+    expect(floodReach(resolved, seeds, strip / 2 - 0.005).reached(-5, 30)).toBe(true);
+  });
+
+  // A body reaches half its width past the cells its centre can reach, so the footprint is grown by that.
+  it('stands beyond what a vehicle can reach', () => {
     for (const { id, footprint: f } of layout.decor) {
-      const c = Math.abs(Math.cos(f.heading));
-      const s = Math.abs(Math.sin(f.heading));
-      const halfX = c * f.halfLength + s * f.halfWidth;
-      const halfY = s * f.halfLength + c * f.halfWidth;
-      expect(f.cy - halfY, id).toBeGreaterThan(yard.maxY);
-      expect(f.cx - halfX, id).toBeGreaterThanOrEqual(yard.minX);
-      expect(f.cx + halfX, id).toBeLessThanOrEqual(yard.maxX);
-      const open: number[] = [];
-      for (let x = f.cx - halfX; x <= f.cx + halfX; x += EDGE_STEP) {
-        const probe = {
-          cx: x,
-          cy: yard.maxY - EDGE_PROBE,
-          halfLength: 0.01,
-          halfWidth: 0.01,
-          heading: 0,
-        };
-        if (!obstacles.some((o) => obbOverlap(probe, o.obb))) open.push(x);
+      const [c, s] = [Math.cos(f.heading), Math.sin(f.heading)];
+      const [hl, hw] = [f.halfLength + HALF_WIDTH + FILL, f.halfWidth + HALF_WIDTH + FILL];
+      const [rx, ry] = [Math.abs(c) * hl + Math.abs(s) * hw, Math.abs(s) * hl + Math.abs(c) * hw];
+      for (let y = f.cy - ry; y <= f.cy + ry; y += STEP) {
+        for (let x = f.cx - rx; x <= f.cx + rx; x += STEP) {
+          const [dx, dy] = [x - f.cx, y - f.cy];
+          if (Math.abs(c * dx + s * dy) <= hl && Math.abs(-s * dx + c * dy) <= hw) {
+            expect(reach.reached(x, y), `${id} at ${x}, ${y}`).toBe(false);
+          }
+        }
       }
-      expect(open, id).toEqual([]);
     }
   });
 

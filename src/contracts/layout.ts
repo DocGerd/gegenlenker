@@ -45,17 +45,46 @@ export type Prop = {
 /** Id of a prop's `index`-th collider once resolved into an `Obstacle`. */
 export const colliderId = (propId: string, index: number): string => `${propId}/${index}`;
 /** Closed set: a new asset needs a drawing in the renderer. */
-export type DecorAsset = 'swap-body' | 'skip' | 'pallets' | 'mesh-boxes';
-/** Perspective-only goods on ground nothing drives: no collision, not part of a run. */
-export type Decor = {
+export type DecorAsset = 'swap-body' | 'skip' | 'pallets' | 'mesh-boxes' | 'kit';
+/** A node of the yard kit (`src/render/assets/yard-kit.glb`); `tools/blender/kit-build.test.ts` pins the list. */
+export type KitPiece =
+  | 'bench'
+  | 'bike-rack'
+  | 'bin-1100'
+  | 'bin-240'
+  | 'fence-gate'
+  | 'fence-panel'
+  | 'flagpole'
+  | 'grass-tuft'
+  | 'hall-corner'
+  | 'hall-door-bay'
+  | 'hall-roof'
+  | 'hall-wall-bay'
+  | 'hedge'
+  | 'hydrant'
+  | 'lime-a'
+  | 'lime-b'
+  | 'maple-a'
+  | 'maple-b'
+  | 'office-bay'
+  | 'office-entrance'
+  | 'office-roof'
+  | 'salt-bin'
+  | 'sign-post'
+  | 'wash-canopy';
+type DecorBase = {
   /** Unique within the layout. */
   readonly id: string;
-  readonly asset: DecorAsset;
   /** World-coordinate box the drawing stays within; its heading is the drawing's. */
   readonly footprint: Obb;
   /** Palette index, wrapped by the renderer; assets with one look ignore it. */
   readonly variant: number;
 };
+/** A piece of the yard kit, drawn from the glb where the footprint says (`kitFootprint`). */
+export type KitDecor = DecorBase & { readonly asset: 'kit'; readonly piece: KitPiece };
+/** Perspective-only goods on ground nothing drives: no collision, not part of a run. */
+export type Decor = (DecorBase & { readonly asset: Exclude<DecorAsset, 'kit'> }) | KitDecor;
+export const isKitDecor = (decor: Decor): decor is KitDecor => decor.asset === 'kit';
 
 export type MarkingKind = 'lane-centre' | 'bay' | 'stop' | 'arrow' | 'dock-number';
 export type Marking = {
