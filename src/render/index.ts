@@ -1,4 +1,10 @@
-import { DEFAULT_LIGHTING, type GraphicsPreset, type SceneRenderer } from '../contracts/render';
+import {
+  DEFAULT_GRAPHICS,
+  DEFAULT_LIGHTING,
+  type GraphicsPreset,
+  type LightingMode,
+  type SceneRenderer,
+} from '../contracts/render';
 import type { Texture } from 'three';
 import { proceduralAids } from './aids';
 import { createCockpitInterior } from './cockpit-interior';
@@ -136,6 +142,8 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     delete marker['renderFallback'];
   };
   renderer.onLost(unmark);
+  let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
+  let lighting: LightingMode = DEFAULT_LIGHTING;
   const { warmUp: warmTarget, ...sceneRenderer } = renderer;
   warm.target = warmTarget;
   if (warm.pending) warmTarget();
@@ -157,8 +165,14 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       groundPbr.setEnabled(flags.groundTexture && flags.groundPbr);
       yardKit.setEnabled(flags.yardKit);
       skyTexture.setEnabled(flags.hdriSky);
-      gradeCheck.setWanted(lookFor(flags, DEFAULT_LIGHTING).grade.on);
+      quality = flags;
+      gradeCheck.setWanted(lookFor(quality, lighting).grade.on);
       renderer.setQuality(preset);
+    },
+    setLighting(mode: LightingMode) {
+      lighting = mode;
+      gradeCheck.setWanted(lookFor(quality, lighting).grade.on);
+      renderer.setLighting(mode);
     },
     dispose() {
       unmark();

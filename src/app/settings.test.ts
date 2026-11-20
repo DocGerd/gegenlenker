@@ -12,6 +12,7 @@ const defaults: Settings = {
   topDownLayout: { landscape: 0.4, portrait: 0.45 },
   collapsed: { aids: false, gauges: false, keys: false },
   graphics: 'balanced',
+  lighting: 'day',
 };
 
 const stored: Settings = {
@@ -25,6 +26,7 @@ const stored: Settings = {
   topDownLayout: { landscape: 0.5, portrait: 0.35 },
   collapsed: { aids: true, gauges: true, keys: true },
   graphics: 'low',
+  lighting: 'night',
 };
 
 describe('loadSettings', () => {
@@ -55,6 +57,7 @@ describe('loadSettings', () => {
       topDown: null,
       collapsed: { aids: true, gauges: 'no' },
       graphics: 'ultra',
+      lighting: 'dusk',
     });
     expect(loadSettings(raw, 'en')).toEqual({
       ...defaults,

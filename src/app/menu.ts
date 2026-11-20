@@ -72,6 +72,7 @@ const MARKUP = `
   </section>
   <footer class="menu-footer">
     <span>© 2026 Patrick Kuhn</span>
+    <button type="button" class="menu-link" data-menu="whatsNew" data-i18n="whatsNew"></button>
     <span class="menu-offline" data-menu="offline" role="status"></span>
   </footer>
 </main>`;
@@ -150,6 +151,9 @@ export function showMenu(
   onStart: (run: RunConfig) => void,
   /** Null when there is no run to replay. */
   replay: { readonly log: InputLog; readonly start: () => void } | null,
+  onWhatsNew: () => void,
+  /** The `data-menu` control that takes focus on open. */
+  focus: string | null = null,
 ): () => void {
   const container = document.createElement('div');
   container.className = 'menu-scroll';
@@ -277,11 +281,13 @@ export function showMenu(
       else updateSettings({ graphics: preset });
     });
 
+    query(container, 'whatsNew', HTMLElement).addEventListener('click', onWhatsNew);
+
     paintOffline();
     if (focus !== null) query(container, focus, HTMLElement).focus();
   };
 
-  render(null);
+  render(focus);
   return () => {
     stopOffline();
     container.remove();

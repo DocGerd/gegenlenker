@@ -1,6 +1,8 @@
 import type { TruckSpec } from '../contracts/vehicle';
 import { SOURCES, estimate, sourced } from './sources';
 
+const eyeAboveFloor =
+  'cab floor 1.1 m above ground (render model), seated eye 1.25 m above it: seat height plus sitting eye height; no source found';
 const typical = 'typical for the vehicle class, no source found';
 const inBumper = "in the bumper, chosen inside UN R48 6.2.4.2's 1,200 mm; no source found";
 const onFloor =
@@ -19,9 +21,9 @@ export const manLe18280: TruckSpec = {
   couplingOffset: estimate(1250, 'frame end plus coupling crossmember, no source found'),
   turningRadius: sourced(7800, SOURCES.D),
   eye: {
-    height: estimate(1950, typical),
+    height: estimate(2350, eyeAboveFloor),
     behindBumper: estimate(1000, typical),
-    leftOfCentre: estimate(400, typical),
+    leftOfCentre: estimate(600, 'about 0.65 m inboard of the 2.5 m cab side; no source found'),
   },
   mirror: {
     lateral: estimate(1250, typical),

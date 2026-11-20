@@ -17,10 +17,9 @@
   gap: var(--space-6);
   max-width: var(--content-max);
   margin: 0 auto;
-  padding: calc(var(--space-8) + env(safe-area-inset-top, 0px))
-    calc(var(--space-6) + env(safe-area-inset-right, 0px))
-    calc(var(--space-6) + env(safe-area-inset-bottom, 0px))
-    calc(var(--space-6) + env(safe-area-inset-left, 0px));
+  padding: calc(var(--space-8) + var(--safe-top)) calc(var(--space-6) + var(--safe-right))
+    calc(var(--space-6) + var(--safe-bottom) + var(--toast-reserve, 0px))
+    calc(var(--space-6) + var(--safe-left));
 }
 
 .menu-title {
@@ -169,12 +168,85 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+  align-items: center;
   gap: var(--space-2) var(--space-4);
   padding-top: var(--space-4);
   border-top: 1px solid var(--color-divider);
   font-size: var(--text-sm);
   line-height: var(--leading-sm);
   color: var(--color-text-muted);
+}
+
+.menu-link {
+  min-height: var(--size-target);
+  padding: 0 var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--color-accent-strong);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.whats-new {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: calc(var(--space-6) + var(--safe-top)) calc(var(--space-6) + var(--safe-right))
+    calc(var(--space-6) + var(--safe-bottom) + var(--toast-reserve, 0px))
+    calc(var(--space-6) + var(--safe-left));
+}
+
+.whats-new-title {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-3xl);
+  line-height: var(--leading-3xl);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+.whats-new-group {
+  align-self: stretch;
+  min-width: 0;
+}
+
+.whats-new-group-title {
+  margin: var(--space-4) 0 0;
+  font-size: var(--text-xl);
+  line-height: var(--leading-xl);
+  font-weight: var(--weight-semibold);
+}
+
+.whats-new-category {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.whats-new-list {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.whats-new-entry {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  overflow-wrap: anywhere;
+}
+
+.whats-new-code {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
 }
 
 .drive,

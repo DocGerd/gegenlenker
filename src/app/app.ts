@@ -181,7 +181,22 @@ export function startApp(root: HTMLElement): void {
       menu();
     });
   };
-  const menu = (): void => {
+  const whatsNew = (): void => {
+    import('./whats-new')
+      .then((m) => {
+        const close = m.showWhatsNew(screen, () => {
+          close();
+          leave();
+          menu('whatsNew');
+        });
+        enter(() => {
+          close();
+          menu('whatsNew');
+        });
+      })
+      .catch((error: unknown) => loadFailed(error, whatsNew));
+  };
+  const menu = (focus: string | null = null): void => {
     const log = lastRun();
     const close = showMenu(
       screen,
@@ -201,6 +216,11 @@ export function startApp(root: HTMLElement): void {
               });
             },
           },
+      () => {
+        close();
+        whatsNew();
+      },
+      focus,
     );
   };
 

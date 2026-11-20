@@ -26,7 +26,12 @@ test('every view stays within the draw-call budget at every preset', async ({ co
     });
     page.on('pageerror', (e) => errors.push(e.message));
     const three = collectThreeProblems(page);
-    await startPinnedDrive(page, preset, en.exerciseStraightReverse, '?perf=1');
+    await startPinnedDrive(
+      page,
+      { preset, lighting: 'day' },
+      en.exerciseStraightReverse,
+      '?perf=1',
+    );
     for (const { view, key } of VIEWS) {
       if (view === 'chase' && !QUALITY_FLAGS[preset].chaseView) continue;
       await page.keyboard.press(key);

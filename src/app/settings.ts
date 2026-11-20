@@ -1,11 +1,14 @@
 import {
   DEFAULT_GRAPHICS,
+  DEFAULT_LIGHTING,
   DEFAULT_TOP_DOWN_LAYOUT,
   GRAPHICS_PRESETS,
+  LIGHTING_MODES,
   TOP_DOWN_SHARE_LIMITS,
   type AidFlags,
   type CollapsedPanels,
   type GraphicsPreset,
+  type LightingMode,
   type DrivingView,
   type Orientation,
   type TopDownLayout,
@@ -25,6 +28,7 @@ export type Settings = {
   readonly topDownLayout: TopDownLayout;
   readonly collapsed: CollapsedPanels;
   readonly graphics: GraphicsPreset;
+  readonly lighting: LightingMode;
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
@@ -84,6 +88,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
       keys: flag(collapsed['keys'], DEFAULT_COLLAPSED.keys),
     },
     graphics: pick(GRAPHICS_PRESETS, s['graphics'], DEFAULT_GRAPHICS),
+    lighting: pick(LIGHTING_MODES, s['lighting'], DEFAULT_LIGHTING),
   };
 }
 

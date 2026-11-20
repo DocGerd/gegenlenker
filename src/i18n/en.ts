@@ -136,6 +136,15 @@ export const en = {
   viewSwitch: 'Follow / yard / outside',
   viewSwitchNoOutside: 'Follow / whole yard',
   panView: 'Pan / orbit',
+  whatsNew: "What's new",
+  whatsNewLatest: 'Latest',
+  whatsNewEarlier: 'Earlier changes',
+  changeAdded: 'Added',
+  changeChanged: 'Changed',
+  changeDeprecated: 'Deprecated',
+  changeRemoved: 'Removed',
+  changeFixed: 'Fixed',
+  changeSecurity: 'Security',
 } as const;
 
 export type MessageKey = keyof typeof en;

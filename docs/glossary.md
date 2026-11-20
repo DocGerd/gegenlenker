@@ -26,3 +26,4 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Orbit view of the truck from outside            | outside view      | Außenansicht                                 |
 | Split of the screen into cockpit and top view   | view size         | Ansichtsgröße                                |
 | Legend: reset both view and view size           | reset view / size | Standardansicht                              |
+| Menu screen listing the app's changes           | what's new        | Neuigkeiten                                  |
