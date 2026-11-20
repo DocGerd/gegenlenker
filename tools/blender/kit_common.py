@@ -1,4 +1,4 @@
-"""Helpers shared by the Gegenlenker kit scripts (yard_kit.py, cockpit_interior.py; issues #159, #160).
+"""Helpers shared by the Gegenlenker kit scripts (yard_kit.py; issue #160).
 
 Loaded with runpy.run_path, never imported. Reuses shell_common.py read-only (hashing, params,
 colours, prism frames). It keeps its own scene names because shell_common.reset_scene accepts only
@@ -28,7 +28,7 @@ signed_area = SHELL["signed_area"]
 FRAMES = SHELL["FRAMES"]
 DECIMALS = SHELL["DECIMALS"]
 
-KIT_SCENES = ("yard-kit", "cockpit-interior")
+KIT_SCENES = ("yard-kit",)
 # shell_common.reset_scene refuses a dirty session that holds any scene but its own.
 HANDBACK_SCENE = SHELL["KNOWN_SCENES"][0]
 

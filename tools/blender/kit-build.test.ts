@@ -2,8 +2,6 @@ import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { KHR_DF_TRANSFER_SRGB, read } from 'ktx-parse';
 import { describe, expect, it } from 'vitest';
-import { cockpitBakeParams } from '../../src/render/cockpit-bake-dims';
-import { createCockpitInterior, dashEdge } from '../../src/render/cockpit-interior';
 import { YARD_KIT_NODES } from '../../src/render/yard-kit-dims';
 import { ROOT, runHashes } from './glb-build';
 import {
@@ -104,51 +102,5 @@ describe('kit download budgets', () => {
     if (run === 'yard-kit') files.push('src/render/assets/yard-kit.glb');
     expect(files.length).toBeGreaterThan(0);
     expect(files.reduce((sum, f) => sum + bytes(f), 0)).toBeLessThanOrEqual(budget);
-  });
-});
-
-describe('cockpit bake params', () => {
-  const params = cockpitBakeParams();
-  const interior = createCockpitInterior();
-  const points = (name: string): (readonly [number, number])[] => {
-    const mesh = interior.meshes.find((m) => m.name === name);
-    if (mesh === undefined) throw new Error(`no ${name} mesh`);
-    const position = mesh.geometry.getAttribute('position');
-    return Array.from(
-      { length: position.count },
-      (_, i) => [position.getX(i), position.getY(i)] as const,
-    );
-  };
-  const has = (list: readonly (readonly [number, number])[], x: number, y: number): boolean =>
-    list.some(([px, py]) => Math.abs(px - x) < 1e-6 && Math.abs(py - y) < 1e-6);
-
-  it('duplicates the pillar bleed and lean of cockpit-interior.ts', () => {
-    const pillar = points('pillar-right');
-    expect(has(pillar, 0.5, -params.bleed)).toBe(true);
-    expect(has(pillar, 0.5 - params.pillar.lean, params.bleed)).toBe(true);
-  });
-
-  it('duplicates the visor and the dash lip of cockpit-interior.ts', () => {
-    const frame = points('frame');
-    const { left, right, bottom, lip } = params.visor;
-    expect(has(frame, left, bottom) && has(frame, right, bottom)).toBe(true);
-    expect(has(frame, left, bottom + lip)).toBe(true);
-    expect(has(frame, -params.bleed, dashEdge(-params.bleed) - params.dash.lip)).toBe(true);
-  });
-
-  it('renders every atlas region inside the bake overscan', () => {
-    const edge = (x: number, anchor: 'dash' | 'header'): number =>
-      (anchor === 'dash' ? params.dash : params.header).centre +
-      (anchor === 'dash' ? params.dash : params.header).curve * x * x;
-    for (const region of Object.values(params.atlas.regions)) {
-      if (region.kind !== 'edge') continue;
-      for (const x of [...region.x, 0].map((v) => v / params.aspect)) {
-        for (const y of region.y) {
-          const ndc = region.anchor === 'dash' ? edge(x, 'dash') - y : edge(x, 'header') + y;
-          expect(Math.abs(ndc)).toBeLessThan(params.overscan);
-          expect(Math.abs(x)).toBeLessThan(params.overscan);
-        }
-      }
-    }
   });
 });

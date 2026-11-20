@@ -1,4 +1,3 @@
-import { cockpitBakeParams } from '../../src/render/cockpit-bake-dims';
 import { YARD_KIT_DIMS, YARD_KIT_HUES } from '../../src/render/yard-kit-dims';
 import { KIT_SOURCES, type KitSourceId } from './kit-sources';
 
@@ -134,19 +133,5 @@ export function yardKitParams() {
       'leafSet',
       'foliage',
     ]),
-  };
-}
-
-/** Inputs of `tools/blender/cockpit_interior.py`. */
-export function cockpitInteriorParams() {
-  return {
-    ...cockpitBakeParams(),
-    maps: {
-      plastic: AMBIENT_CG_MAPS,
-      leather: AMBIENT_CG_MAPS,
-      rubber: AMBIENT_CG_MAPS,
-      fabric: { ...AMBIENT_CG_MAPS, ao: 'AmbientOcclusion' },
-    },
-    sources: sources(['plastic', 'fabric', 'leather', 'rubber']),
   };
 }

@@ -11,7 +11,7 @@ const { module } = await runnerImport('/tools/blender/glb-build.ts', {
   logLevel: 'error',
 });
 
-for (const asset of module.RUNS) {
+for (const asset of module.ASSETS) {
   const file = join(root, asset.params);
   mkdirSync(dirname(file), { recursive: true });
   const config = await resolveConfig(file);

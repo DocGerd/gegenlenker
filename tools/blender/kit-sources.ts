@@ -1,5 +1,5 @@
 /**
- * CC0 texture sources of the Blender kit bakes (yard_kit.py, cockpit_interior.py). The scripts read
+ * CC0 texture sources of the Blender kit bakes (yard_kit.py). The scripts read
  * only these JPGs, by path under their `SOURCES_DIR`, and refuse a file whose SHA-256 differs.
  * Poly Haven and ambientCG license every asset CC0 site-wide.
  */
@@ -60,27 +60,6 @@ export const KIT_SOURCES = {
   foliage: ambientCg('Foliage001', {
     Color: '1e95514317c34fe70189879e553fd3baa5ca8092a9d33249837ab79f7aa5bd7c',
     Opacity: '7bb223b929b4f3af27306be1e88b5b3ed5a19590521d7bdd62b6b121f3cecce7',
-  }),
-  plastic: ambientCg('Plastic006', {
-    Color: 'f35b6190d8ec055ffff775849ead3278e32248999b6f047c92103cc40a90e4ca',
-    NormalGL: 'b6331bb56ab61eb2dbcea051a93e0819f1025ebe5f9abe215a761a1930cf59af',
-    Roughness: '76caae54f89b62ebc0d56ce6b3597bb7b3ebecf7960b189052521622756962b5',
-  }),
-  fabric: ambientCg('Fabric030', {
-    Color: '7aa2ae8d953523c1e7489b4fa7ffd3cfda8f463738db4ddebbbaf126a1ee351a',
-    NormalGL: '7c871bf6969e45e5aa11c5d04c7ad141dbc0aadf1124b7eeb9b0b42eb0c8890b',
-    Roughness: 'ac4806ea54090d5979f5052eb02f72b27cb01762ebfafa82cce2464e5274c1ec',
-    AmbientOcclusion: '19d2e4f9f510f8582412120087bc9326fb42aa6b18fff2666d5b1fd56836dc69',
-  }),
-  leather: ambientCg('Leather037', {
-    Color: 'a9eaa4b723a541062c47c619b20c2399f90d18fb4627c031231b1a6786fe8a13',
-    NormalGL: '04b01b79fdb46470af38e1f1ea82bb53b607d6235aa8137b93a5fb41a56c5293',
-    Roughness: '801c202182181386969a251470f76b854b47a9236d832f77c4fe736ca2fc6f8e',
-  }),
-  rubber: ambientCg('Rubber004', {
-    Color: '9d560551d0beae1726f98c8a72a12441a01e28413417ebd0c8229bcec20dbcfc',
-    NormalGL: '59242ba156992a6cf9f8cb461be117667f8e14d0aad5a6a801f6fc825223d4df',
-    Roughness: '84486ce9e73fa0dc4c70ec86ab33e94e409ebdd8ad194f164abf554a167ccdc7',
   }),
 } as const satisfies Record<string, KitSource>;
 

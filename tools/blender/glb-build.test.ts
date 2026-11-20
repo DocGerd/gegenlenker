@@ -12,7 +12,6 @@ import {
   type Json,
   optimiseSha256,
   ROOT,
-  RUNS,
   runHashes,
   unsafeNumbers,
 } from './glb-build';
@@ -39,21 +38,19 @@ function loadedHelpers(
 }
 
 /** Red means stale inputs: rerun `pnpm glb:params`, the Blender script, `pnpm glb:optimise`, `pnpm glb:manifest`. */
-describe.each(RUNS)('blender params: $key', (run) => {
-  it('commits the params the current data produces', () => {
-    expect(read(run.params)).toEqual(run.build());
+describe.each(ASSETS)('glb shell build: $key', (asset) => {
+  const manifest = read(asset.manifest) as GlbManifest;
+
+  it('commits the params the current vehicle data produces', () => {
+    expect(read(asset.params)).toEqual(asset.build());
   });
 
   it('keeps every param number out of the range where Python and JavaScript print differently', () => {
-    expect(unsafeNumbers(run.build())).toEqual([]);
+    expect(unsafeNumbers(asset.build())).toEqual([]);
   });
-});
-
-describe.each(ASSETS)('glb build: $key', (asset) => {
-  const manifest = read(asset.manifest) as GlbManifest;
-  const { blenderVersion, gltfTransformVersion, ...recorded } = manifest;
 
   it('hashes the scripts, params and glb recorded in the manifest', () => {
+    const { blenderVersion, gltfTransformVersion, ...recorded } = manifest;
     expect(blenderVersion).not.toBe('');
     expect(gltfTransformVersion).not.toBe('');
     expect({

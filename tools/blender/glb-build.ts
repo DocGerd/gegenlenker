@@ -7,7 +7,7 @@ import { bodyLampParams, cabLampParams, trailerLampParams } from '../../src/rend
 import { TRUCK_LOOKS } from '../../src/render/livery';
 import { trailerShellParams } from '../../src/render/trailer-dims';
 import { trailerById, truckById } from '../../src/vehicles/registry';
-import { cockpitInteriorParams, yardKitParams } from './kit-params';
+import { yardKitParams } from './kit-params';
 import { canonicalJson, fileSha256, type Json, ROOT, sha256 } from '../assets/provenance';
 
 export { canonicalJson, type Json, ROOT, sha256 };
@@ -74,7 +74,6 @@ const kitRun = (key: string, build: () => Json): Run => ({
 });
 
 export const YARD_KIT_RUN = kitRun('yard-kit', yardKitParams);
-export const COCKPIT_INTERIOR_RUN = kitRun('cockpit-interior', cockpitInteriorParams);
 
 export const ASSETS: readonly Asset[] = [
   ...TRUCK_IDS.flatMap((id) => [
@@ -100,9 +99,6 @@ export const ASSETS: readonly Asset[] = [
     manifest: 'src/render/assets/yard-kit.manifest.json',
   },
 ];
-
-/** Every committed params file: the glb assets plus the bakes that write only textures. */
-export const RUNS: readonly Run[] = [...ASSETS, COCKPIT_INTERIOR_RUN];
 
 export function assetByKey(key: string): Asset {
   const found = ASSETS.find((a) => a.key === key);
