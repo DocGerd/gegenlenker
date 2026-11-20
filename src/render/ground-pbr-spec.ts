@@ -28,7 +28,7 @@ export const VERGE_ROUGHNESS = 0.95;
  */
 export const MACRO_LOD = 3;
 
-/** Most samplers the PBR ground material may declare: the macro map, six scans, one spare. */
+/** Most samplers the PBR ground material may declare: the macro map, six scans and three's DFG look-up table. */
 export const PBR_SAMPLER_BUDGET = 8;
 
 /**
