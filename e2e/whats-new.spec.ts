@@ -60,3 +60,25 @@ test("the back button leaves what's new for the menu", async ({ page }) => {
   await expect(page.getByRole('button', { name: en.whatsNew })).toBeFocused();
   await expect(page.getByRole('button', { name: en.exerciseStraightReverse })).toBeVisible();
 });
+
+for (const { locale, messages } of locales) {
+  test(`a persistent toast never covers the footer controls in ${locale}`, async ({
+    browser,
+    allow,
+  }) => {
+    allow(/SW registration failed/);
+    const context = await browser.newContext({
+      locale,
+      viewport: { width: 360, height: 740 },
+      serviceWorkers: 'block',
+    });
+    const page = await context.newPage();
+    await page.goto('./');
+    const toast = page.locator('.update-toast');
+    await expect(toast).toBeVisible();
+    await page.getByRole('button', { name: messages.whatsNew }).click({ timeout: 1000 });
+    await expect(page.getByRole('heading', { level: 1, name: messages.whatsNew })).toBeVisible();
+    await expect(toast).toBeVisible();
+    await context.close();
+  });
+}
