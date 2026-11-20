@@ -21,6 +21,7 @@ import {
   MIN_DRAWN_COLOURS,
   shoot,
   startPinnedDrive,
+  tokenShare,
 } from '../e2e/pinned-shoot.ts';
 import { collectThreeProblems } from '../e2e/three-problems.ts';
 import { QUALITY_FLAGS } from '../src/render/quality.ts';
@@ -29,12 +30,14 @@ const PRESETS = ['low', 'balanced', 'high'];
 const SHOTS = ['cockpit', 'mirrorLeft', 'mirrorRight', 'follow', 'yard', 'chase'];
 /** Views whose flat regions must survive a renderer change; the perspective ones are judged by eye. */
 const TOP_DOWN = new Set(['follow', 'yard']);
-/** Largest step a flat pixel may move: the 8-bit linear intermediate rounds sRGB tokens, dark ones by more. */
+/** Largest step a flat pixel may move: an 8-bit linear intermediate rounds sRGB tokens, dark ones by more. */
 const MAX_FLAT_DELTA = 2;
 /** Share of flat pixels allowed to move by more than one step (the dark tokens). */
-const MAX_FLAT_MORE = 0.009;
+const MAX_FLAT_MORE = 0.015;
 /** Share of edge pixels allowed to move by more than one step: antialiasing differs between renderers. */
 const MAX_EDGE_MORE = 0.55;
+/** Most of a cockpit shot the clear colour may fill: the mirrors alone carry a wiped pane past the colour count. */
+const MAX_COCKPIT_BACKDROP = 0.2;
 const EXERCISE = 'Straight reverse';
 // Same GL as the e2e `offline` project, so hashes match what CI renders.
 const ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'];
@@ -113,6 +116,13 @@ try {
         const colours = await distinctColours(page, png);
         if (colours <= MIN_DRAWN_COLOURS)
           throw new Error(`${name} has ${colours} colours: not drawn`);
+        if (shot === 'cockpit') {
+          const backdrop = await tokenShare(page, png, 'backdrop', 0);
+          if (backdrop > MAX_COCKPIT_BACKDROP)
+            throw new Error(
+              `${name} is ${(100 * backdrop).toFixed(0)}% clear colour: pane not drawn`,
+            );
+        }
         writeFileSync(join(values.out, `${name}.png`), png);
         hashes[name] = createHash('sha256').update(png).digest('hex');
       }

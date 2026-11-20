@@ -1,4 +1,4 @@
-import { Group } from 'three';
+import { Group, RenderTarget } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { layouts } from '../content/registry';
@@ -12,6 +12,7 @@ import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
 
 type Made = {
+  setSize: ReturnType<typeof vi.fn>;
   shadowMap: { enabled: boolean };
   dispose: () => void;
   onDeviceLost: () => void;
@@ -30,6 +31,7 @@ vi.mock('three/webgpu', async (importOriginal) => {
     autoClear = true;
     backend: { isWebGLBackend: boolean };
     info = { autoReset: true };
+    xr = { enabled: false };
     shadowMap = { enabled: false };
     onDeviceLost = (): void => undefined;
     onError = threeOnError;
@@ -61,6 +63,13 @@ vi.mock('three/webgpu', async (importOriginal) => {
     getContext() {
       return { getExtension: () => null };
     }
+    getDrawingBufferSize(out: { set: (x: number, y: number) => void }) {
+      out.set(300, 150);
+    }
+    setPixelRatio = vi.fn();
+    setSize = vi.fn();
+    setRenderTarget = vi.fn();
+    render = vi.fn();
   }
   return { ...actual, WebGPURenderer: FakeWebGPURenderer };
 });
@@ -206,6 +215,7 @@ describe('renderer start', () => {
   const trailer = trailerById('krone-azw-18');
 
   vi.stubGlobal('document', { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+  vi.stubGlobal('window', { devicePixelRatio: 1 });
   afterEach(() => {
     vi.clearAllMocks();
     made.length = 0;
@@ -261,6 +271,19 @@ describe('renderer start', () => {
     const error: unknown = await renderer.init(target).catch((e: unknown) => e);
     expect(error).not.toBeInstanceOf(GraphicsStartError);
     expect(error).toMatchObject({ message: 'Error creating WebGL context.' });
+  });
+
+  it('draws into a frame target of its own, sized with the canvas and released with the renderer', async () => {
+    const dispose = vi.spyOn(RenderTarget.prototype, 'dispose');
+    const { renderer } = stubParts();
+    await renderer.init(canvas());
+    renderer.resize(150, 75);
+    expect(made[0]?.setSize).toHaveBeenCalledWith(150, 75, false);
+    expect(dispose).toHaveBeenCalledOnce();
+    dispose.mockClear();
+    renderer.dispose();
+    expect(dispose).toHaveBeenCalledOnce();
+    dispose.mockRestore();
   });
 
   it('shrinks a canvas it lets go of, so a restored context there holds no backing store', async () => {

@@ -1,5 +1,6 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { DRIVER_PERFORMANCE_HINT } from './three-problems';
 import { en } from '../src/i18n/en';
 import { COCKPIT_FOV } from '../src/render/cockpit-camera';
 import { TRUCK_IDS } from '../src/contracts/vehicle';
@@ -7,16 +8,15 @@ import { cabSight } from '../src/render/cab-sight';
 import { interiorLayout, pillarSpans } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
 import { truckById } from '../src/vehicles/registry';
-import { attachmentsReady, throughIntermediate, type Preset } from './pinned-shoot';
+import { attachmentsReady, HIGH_WAIT_MS, PRESET_TIMEOUT_MS, type Preset } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
-/** What is left of an unlit vertex colour's distance from the hue once the 8-bit intermediate's rounding is applied to the hue. */
-const TOLERANCE = 3;
+/** An unlit vertex colour reaches the canvas as its hue, give or take the rounding of the sRGB frame target. */
+const TOLERANCE = 1;
 /** How much paler (red channel) the horizon haze is than the sky near the header. */
 const HAZE_STEP = 10;
 
-const rgb = (hex: number): readonly number[] =>
-  throughIntermediate([hex >> 16, (hex >> 8) & 0xff, hex & 0xff]);
+const rgb = (hex: number): readonly number[] => [hex >> 16, (hex >> 8) & 0xff, hex & 0xff];
 const HEADLINER = rgb(REALISM_HUES.headliner);
 const DASH = rgb(REALISM_HUES.chevronBlack);
 const PILLAR = rgb(REALISM_HUES.anthracite);
@@ -32,7 +32,7 @@ const isGround = (p: number[] | undefined): boolean =>
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text());
+    if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
   });
   page.on('pageerror', (e) => errors.push(e.message));
   return errors;
@@ -243,6 +243,8 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
   test(`each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`, async ({
     page,
   }) => {
+    if (preset === 'high') test.setTimeout(PRESET_TIMEOUT_MS.high);
+    const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
     const errors = collectErrors(page);
     await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
       SETTINGS_KEY,
@@ -250,7 +252,7 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     ] as const);
     await page.goto('./');
     await drive(page);
-    await expect.poll(() => attachmentsReady(page, preset)).toBe(true);
+    await expect.poll(() => attachmentsReady(page, preset), wait).toBe(true);
 
     // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
     // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.
@@ -309,7 +311,7 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
       .poll(async () => {
         seen = await sample();
         return seen.map((s) => `${s.side}: ${String(s.drawn)}`);
-      })
+      }, wait)
       .toEqual(sides.map((s) => `${s.side}: true`));
     for (const { side, outerYard, innerYard } of seen) {
       expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);

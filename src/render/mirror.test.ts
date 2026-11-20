@@ -1,29 +1,52 @@
-import { type Mesh, type Object3D, type RenderTarget, Scene } from 'three';
+import { type Mesh, type Object3D, type RenderTarget, Scene, SRGBColorSpace } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { createMirror, mirrorSamples } from './mirror';
 
 /** Records the render targets a mirror binds and the scenes it draws; the fake accepts what three's renderer would. */
-function fakeRenderer(): { gl: WebGPURenderer; bound: RenderTarget[]; drawn: Object3D[] } {
+function fakeRenderer(): {
+  gl: WebGPURenderer;
+  bound: RenderTarget[];
+  drawn: Object3D[];
+  clearedWith: boolean[];
+} {
   const bound: RenderTarget[] = [];
   const drawn: Object3D[] = [];
+  const clearedWith: boolean[] = [];
   const gl = {
+    autoClear: false,
     setRenderTarget: (target: RenderTarget | null) => {
       if (target !== null) bound.push(target);
     },
     setClearColor: () => undefined,
     clear: () => undefined,
-    render: (scene: Object3D) => drawn.push(scene),
+    render: (scene: Object3D) => {
+      drawn.push(scene);
+      clearedWith.push(gl.autoClear);
+    },
     setViewport: () => undefined,
     setScissor: () => undefined,
     setScissorTest: () => undefined,
   } as unknown as WebGPURenderer;
-  return { gl, bound, drawn };
+  return { gl, bound, drawn, clearedWith };
 }
 
 describe('mirror samples', () => {
   it('maps any request to the counts both backends take', () => {
     expect([0, 1, 2, 3, 4, 8].map(mirrorSamples)).toEqual([0, 0, 0, 0, 4, 4]);
+  });
+
+  it('captures into an sRGB target, so a dark reflection keeps its codes', () => {
+    const { gl, bound } = fakeRenderer();
+    createMirror().capture(gl, new Scene(), 64, 32, 0);
+    expect(bound[0]?.texture.colorSpace).toBe(SRGBColorSpace);
+  });
+
+  it('clears inside the capture pass, so the multisample target resolves once', () => {
+    const { gl, clearedWith } = fakeRenderer();
+    createMirror().capture(gl, new Scene(), 64, 32, 0);
+    expect(clearedWith).toEqual([true]);
+    expect(gl.autoClear).toBe(false);
   });
 
   it('rebuilds the target only when the effective samples change', () => {
@@ -50,7 +73,7 @@ describe('mirror samples', () => {
 describe('mirror quad', () => {
   it('flips the texture in u (a mirror) and in v (the target reads back upside down)', () => {
     const { gl, drawn } = fakeRenderer();
-    createMirror().composite(gl, { x: 0, y: 0, width: 64, height: 32 });
+    createMirror().composite(gl);
     const quad = drawn[0]?.children[0] as Mesh;
     const position = quad.geometry.getAttribute('position');
     const uv = quad.geometry.getAttribute('uv');

@@ -1,14 +1,8 @@
 import { expect, test as base, type BrowserContext } from '@playwright/test';
-import { isThreeProblem } from './three-problems';
+import { DRIVER_PERFORMANCE_HINT, isThreeProblem } from './three-problems';
 
-/**
- * Console messages only: headless Chromium denies the wake lock, and ANGLE's software GL hints that
- * it split a render pass while High starts up. Neither is a fault of the app.
- */
-const IGNORED_CONSOLE: readonly RegExp[] = [
-  /Wake Lock/,
-  /GL Driver Message \(OpenGL, Performance, [^)]*\): Running out of reserved outsideRenderPass queueSerial/,
-];
+/** Console messages only: headless Chromium denies the wake lock, and the software GL driver hints at performance. Neither is a fault of the app. */
+const IGNORED_CONSOLE: readonly RegExp[] = [/Wake Lock/, DRIVER_PERFORMANCE_HINT];
 
 type Guard = { allow: (pattern: RegExp) => void };
 

@@ -1,4 +1,4 @@
-import { Group } from 'three';
+import { Group, type RenderTarget } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
@@ -16,7 +16,15 @@ import { trailerById, truckById } from '../vehicles/registry';
 import { createThreeSceneRenderer } from './three-renderer';
 import { computeViewports } from './viewports';
 
-const draws = vi.hoisted(() => ({ count: 0, viewports: [] as number[][], loseInInit: false }));
+const draws = vi.hoisted(() => ({
+  count: 0,
+  viewports: [] as number[][],
+  /** Per draw into a render target: its viewport and whether the draw cleared in its pass. */
+  passes: [] as { viewport: number[]; autoClear: boolean }[],
+  clears: 0,
+  webgpu: false,
+  loseInInit: false,
+}));
 
 vi.mock('three/webgpu', async (importOriginal) => {
   const actual = await importOriginal<typeof import('three/webgpu')>();
@@ -24,19 +32,33 @@ vi.mock('three/webgpu', async (importOriginal) => {
   // does not take the renderer for a thenable. Like three's WebGL 2 backend, it reports a lost
   // context of its canvas through `onDeviceLost` until disposed.
   function FakeWebGPURenderer({ canvas }: { canvas: HTMLCanvasElement }): object {
+    let bound: RenderTarget | null = null;
     const own: Record<PropertyKey, unknown> = {
       info: { autoReset: true, reset: () => undefined, render: { drawCalls: 0 } },
-      backend: { isWebGLBackend: true },
+      backend: { isWebGLBackend: !draws.webgpu },
       getContext: () => ({ getExtension: () => null }),
       init: () => {
         if (draws.loseInInit) (own['onDeviceLost'] as () => void)();
         return Promise.resolve();
       },
       onDeviceLost: () => undefined,
+      setRenderTarget: (target: RenderTarget | null) => {
+        bound = target;
+      },
+      // a render target keeps its own viewport: three ignores the renderer's for it
+      autoClear: false,
+      clear: () => {
+        draws.clears++;
+      },
       render: () => {
         draws.count++;
+        if (bound === null) return;
+        draws.viewports.push(bound.viewport.toArray());
+        draws.passes.push({
+          viewport: bound.viewport.toArray(),
+          autoClear: own['autoClear'] === true,
+        });
       },
-      setViewport: (...rect: number[]) => draws.viewports.push(rect),
     };
     const lost = (): void => {
       (own['onDeviceLost'] as () => void)();
@@ -197,7 +219,7 @@ describe.each([['three', three]] as const)('SceneRenderer contract: %s', (_, h) 
     expect(renderer.stats()).toMatchObject({ contextLost: false, backend: 'webgl2' });
   });
 
-  it('sets each pane viewport from its CSS rect, origin top left', async () => {
+  it('draws each pane into the frame target within its CSS rect, origin top left', async () => {
     const { renderer } = await started();
     draws.viewports.length = 0;
     renderer.render(frame);
@@ -215,5 +237,70 @@ describe.each([['three', three]] as const)('SceneRenderer contract: %s', (_, h) 
     const before = h.draws();
     renderer.render(frame);
     expect(h.draws()).toBe(before);
+  });
+});
+
+describe('pane clears', () => {
+  const adapterInfo = {
+    vendor: 'test',
+    architecture: 'test',
+    description: '',
+    isFallbackAdapter: false,
+  };
+  async function draw(
+    webgpu: boolean,
+  ): Promise<{ cockpit: boolean; topDown: boolean; clears: number }> {
+    draws.webgpu = webgpu;
+    draws.passes.length = 0;
+    draws.clears = 0;
+    const renderer = createThreeSceneRenderer({
+      truck: part,
+      trailer: part,
+      environment: part,
+      interior,
+      aids: part,
+      gpuDevice: () =>
+        Promise.resolve({
+          device: webgpu
+            ? ({ adapterInfo, destroy: () => undefined } as unknown as GPUDevice)
+            : null,
+          fallback: null,
+        }),
+    });
+    renderer.setScene(layout, truck, trailer);
+    renderer.resize(800, 600);
+    await renderer.init(three.canvas());
+    expect(renderer.stats().backend).toBe(webgpu ? 'webgpu' : 'webgl2');
+    const driving = {
+      ...frame,
+      views: {
+        cockpit: { x: 0, y: 200, width: 800, height: 400 },
+        mirrorLeft: null,
+        mirrorRight: null,
+        topDown: { x: 0, y: 0, width: 800, height: 200 },
+      },
+    };
+    renderer.render(driving);
+    renderer.dispose();
+    draws.webgpu = false;
+    const { cockpit, topDown } = driving.views;
+    const clearedIn = (rect: { x: number; y: number; width: number; height: number } | null) =>
+      draws.passes.find(
+        (p) =>
+          rect !== null && p.viewport.join() === [rect.x, rect.y, rect.width, rect.height].join(),
+      )?.autoClear;
+    return {
+      cockpit: clearedIn(cockpit) === true,
+      topDown: clearedIn(topDown) === true,
+      clears: draws.clears,
+    };
+  }
+
+  it('clears each pane inside its own pass on WebGL 2, where the scissor keeps it to the pane', async () => {
+    expect(await draw(false)).toEqual({ cockpit: true, topDown: true, clears: 0 });
+  });
+
+  it('clears the whole target once on WebGPU, whose in-pass clear ignores the scissor and would wipe the panes drawn before', async () => {
+    expect(await draw(true)).toEqual({ cockpit: false, topDown: false, clears: 1 });
   });
 });

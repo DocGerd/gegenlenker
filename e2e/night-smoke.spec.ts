@@ -1,14 +1,14 @@
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { distinctColours, MIN_DRAWN_COLOURS, shoot, startPinnedDrive } from './pinned-shoot';
-import { collectThreeProblems } from './three-problems';
+import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 
 // Night has no look of its own yet, so this only guards that the stored mode draws without errors.
 test('the cockpit draws at night without errors', async ({ page }) => {
   test.setTimeout(120_000);
   const errors: string[] = [];
   page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text());
+    if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
   });
   page.on('pageerror', (e) => errors.push(e.message));
   const three = collectThreeProblems(page);
