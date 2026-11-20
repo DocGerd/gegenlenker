@@ -7,6 +7,7 @@ const fake = vi.hoisted(() => ({
   disposed: 0,
   inits: [] as Pending[],
   lost: new Set<() => void>(),
+  lighting: [] as string[],
 }));
 
 vi.mock('../render', () => ({
@@ -22,6 +23,7 @@ vi.mock('../render', () => ({
         return () => fake.lost.delete(listener);
       },
       setQuality: () => undefined,
+      setLighting: (mode: string) => void fake.lighting.push(mode),
       resize: () => undefined,
       dispose: () => {
         fake.disposed++;
@@ -30,7 +32,7 @@ vi.mock('../render', () => ({
     };
   },
 }));
-vi.mock('./settings', () => ({ currentSettings: () => ({ graphics: 'low' }) }));
+vi.mock('./settings', () => ({ currentSettings: () => ({ graphics: 'low', lighting: 'night' }) }));
 const showNotice = vi.hoisted(() =>
   vi.fn((_parent: unknown, key: string) => ({ key, remove: () => undefined })),
 );
@@ -117,7 +119,7 @@ describe('render stage recovery', () => {
 
   beforeEach(() => {
     vi.resetModules();
-    Object.assign(fake, { created: 0, disposed: 0, inits: [] });
+    Object.assign(fake, { created: 0, disposed: 0, inits: [], lighting: [] });
     fake.lost.clear();
     doc.visibilityState = 'visible';
     doc.listeners.clear();
@@ -128,6 +130,11 @@ describe('render stage recovery', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('sets the stored lighting once on mounting', async () => {
+    await mount();
+    expect(fake.lighting).toEqual(['night']);
   });
 
   it('starts afresh after three losses within a minute and asks for a reload on the fourth', async () => {

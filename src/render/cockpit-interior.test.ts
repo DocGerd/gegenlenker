@@ -14,8 +14,10 @@ import {
 } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { LegendBox, Rect, ScenePalette } from '../contracts/render';
+import type { TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
-import { truckById } from '../vehicles/registry';
+import { truckById, trucks } from '../vehicles/registry';
+import { cabSight } from './cab-sight';
 import { placePose } from './coords';
 import { createChaseCamera } from './chase-camera';
 import { COCKPIT_FOV, createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
@@ -24,13 +26,15 @@ import {
   CONE_GAP,
   coneEdge,
   createCockpitInterior,
+  edgeShift,
   headerEdge,
   type FlatInterior,
   interiorLayout,
   MIN_PILLAR_WIDTH,
   MIRROR_GAP,
-  pillarSpan,
+  pillarSpans,
   VISOR,
+  visorLeft,
 } from './cockpit-interior';
 import { createMirror } from './mirror';
 import { KEYS } from './palette';
@@ -44,11 +48,10 @@ import {
   type CockpitInterior,
   type RendererParts,
 } from './seams';
-import { bandTopNdc, computeViewports } from './viewports';
+import { bandTopNdc, computeViewports, type Insets } from './viewports';
 
 const truck = truckById('man-le-18-280');
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
-const eye = truckAnchors(truck).eye;
 
 type Shot<I extends CockpitInterior = FlatInterior> = {
   readonly camera: PerspectiveCamera;
@@ -70,8 +73,16 @@ function shootWith<I extends CockpitInterior>(
   heading: number,
   legend: LegendBox | null,
   flags: QualityFlags,
+  spec: TruckSpec = truck,
+  insets?: Insets,
 ): Shot<I> {
-  const { cockpit, mirrorLeft, mirrorRight } = computeViewports(width, height, 'drive', legend);
+  const { cockpit, mirrorLeft, mirrorRight } = computeViewports(
+    width,
+    height,
+    'drive',
+    legend,
+    insets,
+  );
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) throw new Error('no views');
   const pose = { x: 12, y: -7, heading };
   const scene = new Group();
@@ -81,7 +92,7 @@ function shootWith<I extends CockpitInterior>(
   scene.add(truckObject);
   (interior.frame === 'truck' ? truckObject : scene).add(interior.object);
   const camera = createCockpitCamera();
-  placeCockpitCamera(camera, pose, eye, cockpit);
+  placeCockpitCamera(camera, pose, truckAnchors(spec).eye, cockpit);
   interior.setQuality(flags);
   scene.updateMatrixWorld();
   interior.place({ camera, cockpit, mirrorLeft, mirrorRight });
@@ -93,8 +104,19 @@ function shoot(
   height: number,
   heading = 0.7,
   legend: LegendBox | null = null,
+  spec: TruckSpec = truck,
+  insets?: Insets,
 ): Shot {
-  return shootWith(createCockpitInterior(), width, height, heading, legend, QUALITY_FLAGS.balanced);
+  return shootWith(
+    createCockpitInterior(spec),
+    width,
+    height,
+    heading,
+    legend,
+    QUALITY_FLAGS.balanced,
+    spec,
+    insets,
+  );
 }
 
 /** Windows whose pillars must show: landscape desktop and tablet sizes. */
@@ -176,7 +198,7 @@ type Route = {
   /** Names of the meshes that carry the dashboard; the pillars and the roof parts never count. */
   readonly dash: readonly string[];
   /** Where a part may cover a mirror rect by design (NDC); everywhere else the rect's view is clear. */
-  readonly mayCoverMirror: (x: number, y: number) => boolean;
+  readonly mayCoverMirror: (x: number, y: number, shift: number) => boolean;
 };
 
 /** Every route that implements the seam; a new interior joins here and inherits the checks below. */
@@ -185,10 +207,9 @@ const ROUTES: readonly Route[] = [
     name: 'flat overlay',
     make: createCockpitInterior,
     dash: ['frame'],
-    // The headliner and the stowed visor reach down over the top of a mirror rect on small
-    // windows; the header edge is a chord polyline just below the curve.
-    mayCoverMirror: (x, y) =>
-      y >= headerEdge(x) - 0.005 || (x >= VISOR.left && x <= VISOR.right && y >= VISOR.bottom),
+    // Only the headliner reaches down over the top of a mirror rect on small windows; its edge is a
+    // chord polyline just below the curve. The visor is not exempt: it keeps clear of the mirror.
+    mayCoverMirror: (x, y, shift) => y >= headerEdge(x, shift) - 0.005,
   },
 ];
 
@@ -219,14 +240,19 @@ function drawn(interior: CockpitInterior): Mesh[] {
   return shown(interior).filter((o): o is Mesh => o instanceof Mesh);
 }
 
-describe.each(ROUTES)('cockpit interior seam: $name', ({ make, dash, mayCoverMirror }) => {
+/** Every route on every truck. */
+const CASES = ROUTES.flatMap((route) =>
+  trucks.map((spec) => ({ ...route, spec, label: `${route.name}, ${spec.id}` })),
+);
+
+describe.each(CASES)('cockpit interior seam: $label', ({ make, dash, mayCoverMirror, spec }) => {
   const build = (flags: QualityFlags) => {
-    const interior = make(truck, palette);
+    const interior = make(spec, palette);
     interior.setQuality(flags);
     return interior;
   };
   const shootRoute = (width: number, height: number, heading = 0.7) =>
-    shootWith(make(truck, palette), width, height, heading, null, QUALITY_FLAGS.balanced);
+    shootWith(make(spec, palette), width, height, heading, null, QUALITY_FLAGS.balanced, spec);
 
   describe.each(DRAWING)('at %s', (preset) => {
     const flags = QUALITY_FLAGS[preset];
@@ -315,7 +341,7 @@ describe.each(ROUTES)('cockpit interior seam: $name', ({ make, dash, mayCoverMir
           for (let u = 0; u <= 1; u += 0.125) {
             for (let v = 0; v <= 1; v += 0.125) {
               const [x, y] = rectToNdc(cockpit, rect, u, v);
-              if (mayCoverMirror(x, y)) continue;
+              if (mayCoverMirror(x, y, edgeShift(spec, camera.aspect, COCKPIT_FOV))) continue;
               expect(hits(camera, parts, x, y), `${w}x${h} (${u}, ${v})`).toEqual([]);
             }
           }
@@ -374,8 +400,12 @@ describe('cockpit interior in the real cockpit camera', () => {
       expect(hits(camera, m, 0, 0.9)).toEqual(['frame']);
       expect(hits(camera, m, -0.3, 0.7)).toContain('frame');
       const layout = interiorLayout(cockpit, left, right);
-      const span = pillarSpan(camera.aspect, COCKPIT_FOV, layout.right);
-      const leftSpan = pillarSpan(camera.aspect, COCKPIT_FOV, layout.left);
+      const { left: leftSpan, right: span } = pillarSpans(
+        cabSight(truck),
+        camera.aspect,
+        COCKPIT_FOV,
+        layout,
+      );
       if (span === null || leftSpan === null) throw new Error('no pillar');
       expect(hits(camera, m, span.centre, 0)).toEqual(['pillar-right']);
       expect(hits(camera, m, -leftSpan.centre, 0)).toEqual(['pillar-left']);
@@ -432,6 +462,132 @@ describe('cockpit interior pillars', () => {
       const [x, y] = rectToNdc(cockpit, rect, 0.5, 0.5);
       expect(hits(camera, interior.meshes, x, y)).toEqual([]);
     }
+  });
+});
+
+describe.each(trucks)('cockpit interior from the left seat of $id', (spec) => {
+  const sight = cabSight(spec);
+
+  it.each(REQUIRED)('has a wider left pillar than right at %i x %i', (w, h) => {
+    const { camera, interior, cockpit, left, right } = shoot(w, h, 0.7, null, spec);
+    const { left: l, right: r } = pillarSpans(
+      sight,
+      camera.aspect,
+      COCKPIT_FOV,
+      interiorLayout(cockpit, left, right),
+    );
+    if (l === null || r === null) throw new Error('no pillar');
+    expect(l.width).toBeGreaterThan(r.width);
+    expect(r.width).toBeGreaterThanOrEqual(MIN_PILLAR_WIDTH);
+    const { pillars, meshes } = interior;
+    expect(hits(camera, meshes, -l.centre, 0)).toEqual(['pillar-left']);
+    expect(hits(camera, meshes, r.centre, 0)).toEqual(['pillar-right']);
+    expect(pillars.left.scale.x).toBeLessThan(0);
+  });
+
+  describe('draws the pillars in their slots', () => {
+    const windows: (readonly [number, number])[] = [
+      ...REQUIRED,
+      [1024, 768],
+      [390, 844],
+      [844, 390],
+    ];
+    const insets = [0, 24, 48, 96, 160].map((left) => ({ top: 0, right: 0, bottom: 0, left }));
+    const extent = (mesh: Mesh) => {
+      const centre = Math.abs(mesh.position.x);
+      const width = Math.abs(mesh.scale.x);
+      return { inner: centre - width / 2, outer: centre + width / 2, width };
+    };
+
+    it.each(windows)('at %i x %i, with and without a left safe-area inset', (w, h) => {
+      for (const inset of insets) {
+        const { camera, interior, cockpit, left, right } = shoot(w, h, 0.7, null, spec, inset);
+        const layout = interiorLayout(cockpit, left, right);
+        const margin = coneEdge(camera.aspect, COCKPIT_FOV) + CONE_GAP;
+        const { left: l, right: r } = interior.pillars;
+        const label = `${w}x${h} inset ${inset.left}`;
+        if (!l.visible) {
+          expect(r.visible, label).toBe(false);
+          continue;
+        }
+        expect(l.position.x, label).toBeLessThan(0);
+        expect(r.visible, label).toBe(true);
+        expect(r.position.x, label).toBeGreaterThan(0);
+        const near = extent(l);
+        const far = extent(r);
+        expect(near.width, label).toBeGreaterThanOrEqual(far.width);
+        expect(far.width, label).toBeGreaterThanOrEqual(MIN_PILLAR_WIDTH - 1e-9);
+        expect(near.outer, label).toBeLessThanOrEqual(layout.left - MIRROR_GAP + 1e-9);
+        expect(far.outer, label).toBeLessThanOrEqual(layout.right - MIRROR_GAP + 1e-9);
+        expect(near.inner, label).toBeGreaterThanOrEqual(margin - 1e-9);
+        expect(far.inner, label).toBeGreaterThanOrEqual(margin - 1e-9);
+      }
+    });
+
+    it('narrows the far pillar by the covered-angle ratio where the slot is full', () => {
+      const { interior } = shoot(1350, 600, 0.7, null, spec);
+      const ratio = sight.right.covered / sight.left.covered;
+      const near = extent(interior.pillars.left);
+      const far = extent(interior.pillars.right);
+      expect(far.width).toBeCloseTo(Math.max(MIN_PILLAR_WIDTH, near.width * ratio), 9);
+      expect(far.width).toBeLessThan(near.width);
+    });
+  });
+
+  it('drops both pillars together where the slot is too narrow', () => {
+    const { interior } = shoot(1024, 768, 0.7, null, spec);
+    expect(interior.pillars.left.visible).toBe(false);
+    expect(interior.pillars.right.visible).toBe(false);
+  });
+
+  it('puts the dash low point towards the windscreen centre: higher on the left than the right', () => {
+    const { camera, interior } = shoot(1280, 720, 0.7, null, spec);
+    const edgeAt = (x: number): number => {
+      for (let y = -0.9; y < 0; y += 0.002) {
+        if (
+          hits(camera, interior.meshes, x, y).includes('frame') &&
+          hits(camera, interior.meshes, x, y + 0.002).length === 0
+        ) {
+          return y;
+        }
+      }
+      throw new Error(`no dash edge at ${x}`);
+    };
+    expect(edgeAt(-0.9)).toBeGreaterThan(edgeAt(0.9));
+    const low = edgeShift(spec, camera.aspect, COCKPIT_FOV);
+    expect(edgeAt(low)).toBeLessThan(edgeAt(low - 0.6));
+    expect(edgeAt(low)).toBeLessThan(edgeAt(low + 0.4));
+  });
+
+  it('keeps the instrument hump straight ahead below the sight cone', () => {
+    const { camera, interior } = shoot(1280, 720, 0.7, null, spec);
+    expect(hits(camera, interior.meshes, 0, -0.48)).toEqual(['frame']);
+    expect(hits(camera, interior.meshes, 0, -0.46)).toEqual([]);
+  });
+});
+
+describe('edgeShift', () => {
+  const fov = COCKPIT_FOV;
+
+  it.each(trucks)(
+    'is the windscreen centre in a wide pane and held to the cap in a narrow one: $id',
+    (spec) => {
+      const wide = edgeShift(spec, 4, fov);
+      expect(wide).toBeCloseTo(
+        Math.tan(cabSight(spec).windscreenCentre) / (4 * Math.tan(MathUtils.degToRad(fov / 2))),
+        12,
+      );
+      expect(edgeShift(spec, 1.07, fov)).toBeGreaterThan(wide);
+      expect(edgeShift(spec, 0.5, fov)).toBe(edgeShift(spec, 1.07, fov));
+    },
+  );
+});
+
+describe('visorLeft', () => {
+  it('keeps the visor clear of the left mirror, and at its own edge where there is room', () => {
+    expect(visorLeft(0.467)).toBeCloseTo(MIRROR_GAP - 0.467, 12);
+    expect(visorLeft(1)).toBe(VISOR.left);
+    expect(visorLeft(0.05)).toBeLessThanOrEqual(VISOR.right);
   });
 });
 

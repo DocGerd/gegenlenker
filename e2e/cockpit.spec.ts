@@ -2,8 +2,11 @@ import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { COCKPIT_FOV } from '../src/render/cockpit-camera';
-import { interiorLayout, pillarSpan } from '../src/render/cockpit-interior';
+import { TRUCK_IDS } from '../src/contracts/vehicle';
+import { cabSight } from '../src/render/cab-sight';
+import { interiorLayout, pillarSpans } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
+import { truckById } from '../src/vehicles/registry';
 import { attachmentsReady, throughIntermediate, type Preset } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
@@ -99,8 +102,9 @@ async function probePoints(page: Page) {
   const right = await boxOf(page, '[data-hud="mirrorRight"]');
   const layout = interiorLayout(cockpit, left, right);
   const aspect = cockpit.width / cockpit.height;
-  const leftSpan = pillarSpan(aspect, COCKPIT_FOV, layout.left);
-  const rightSpan = pillarSpan(aspect, COCKPIT_FOV, layout.right);
+  // The default truck: the menu keeps its first entry unless a setting says otherwise.
+  const sight = cabSight(truckById(TRUCK_IDS[0]));
+  const { left: leftSpan, right: rightSpan } = pillarSpans(sight, aspect, COCKPIT_FOV, layout);
   if (leftSpan === null || rightSpan === null) throw new Error('no pillar at this viewport');
   const x = Math.round(cockpit.width * 0.55);
   const mid = Math.round(cockpit.height / 2);

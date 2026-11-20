@@ -162,6 +162,8 @@ export interface SceneRenderer {
   setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec): void;
   /** Applies at once, to the current scene and to every later one. */
   setQuality(preset: GraphicsPreset): void;
+  /** Applies at once, to the current scene and to every later one. */
+  setLighting(mode: LightingMode): void;
   resize(cssWidth: number, cssHeight: number): void;
   render(frame: RenderFrame): void;
   /** Sim-plane point to screen CSS px as of the last render; null before the first. */

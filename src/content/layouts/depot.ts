@@ -1,10 +1,13 @@
 import type { Layout } from '../../contracts/layout';
+import { kitBackedTo } from '../kit';
 import { solidLine } from '../markings';
 import { plotDecor } from '../plot';
 import {
   addBollardProp,
+  addEntranceFurniture,
   addGate,
   addLamps,
+  addPlotFences,
   addYardEdge,
   BOUNDS,
   ObstacleBuilder,
@@ -23,6 +26,14 @@ const GATE_CENTRES = [70, 86];
 const GATE_BOLLARD_OFFSET = GATE_WIDTH / 2 + 0.7; // outside each jamb
 const PARKED = { x: 1.75, width: 2.5, length: 10, height: 3.5, firstY: 36 };
 const PARKED_BAYS = 3;
+const BACK_GAP = 0.05;
+const HALL_BINS = [
+  { piece: 'bin-1100', x: 62.5 },
+  { piece: 'bin-240', x: 64.3 },
+  { piece: 'bin-1100', x: 76 },
+  { piece: 'bin-240', x: 77.7 },
+] as const; // on the hall's street face, between its gates
+const HYDRANT = { x: 4, y: 68.4 }; // by the north-west mast
 const PARKING_LINE_WIDTH = 0.12;
 
 function obstacles(): Layout['obstacles'] {
@@ -60,6 +71,13 @@ function props(): Layout['props'] {
   for (const c of GATE_CENTRES) {
     for (const side of [-1, 1]) addBollardProp(p, c + side * GATE_BOLLARD_OFFSET, minY - 0.8);
   }
+  for (const { piece, x } of HALL_BINS) {
+    const [bx, by] = kitBackedTo(piece, x, minY, Math.PI, BACK_GAP);
+    p.addKit(piece, 'furniture', bx, by, Math.PI);
+  }
+  p.addKit('hydrant', 'furniture', HYDRANT.x, HYDRANT.y, 0);
+  addEntranceFurniture(p, STREET);
+  addPlotFences(p, STREET);
   return p.props;
 }
 

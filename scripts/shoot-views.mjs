@@ -91,7 +91,12 @@ try {
       const page = await context.newPage();
       const problems = collectThreeProblems(page);
       page.on('pageerror', (e) => problems.push(e.message));
-      await startPinnedDrive(page, preset, EXERCISE, `?backend=${values.backend}`);
+      await startPinnedDrive(
+        page,
+        { preset, lighting: 'day' },
+        EXERCISE,
+        `?backend=${values.backend}`,
+      );
       const backend = await page.locator('html').getAttribute('data-render-backend');
       if (backend !== values.backend)
         throw new Error(`${preset}: drawn on ${backend ?? 'nothing'}, not ${values.backend}`);

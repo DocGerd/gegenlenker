@@ -12,7 +12,7 @@ import {
   type Texture,
 } from 'three';
 import { MeshLambertNodeMaterial } from 'three/webgpu';
-import type { ScenePalette } from '../contracts/render';
+import { DEFAULT_LIGHTING, type LightingMode, type ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
@@ -147,6 +147,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   let pbrRoot: Object3D | null = null;
   const pbrToken = {};
   let pbrWanted = false;
+  let pbrMode: LightingMode = DEFAULT_LIGHTING;
   let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
   let sunShadowed = false;
@@ -162,10 +163,11 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
    * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
    * has taken out of it; without `on` it repeats the last request, for shells that attach later.
    */
-  const setPbr = (root: Object3D, on = pbrWanted): void => {
+  const setPbr = (root: Object3D, on = pbrWanted, mode = pbrMode): void => {
     pbrRoot = root;
     pbrWanted = on;
-    const map = on ? (env?.texture(palette) ?? null) : null;
+    pbrMode = mode;
+    const map = on ? (env?.texture(palette, mode) ?? null) : null;
     if (map !== null) {
       if (pbrMaterial === null) {
         pbrMaterial = track(createVehicleMaterial(map, lamps));
@@ -511,14 +513,14 @@ export function proceduralTruck(
       res.lamps.update(lampState(snapshot));
       res.syncBlobs();
     },
-    setLook({ flags, grade }) {
+    setLook({ flags, grade, mode }) {
       cabGlb = flags.cabGlb;
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
       res.setGrade(grade.on);
       res.setSunShadow(flags.sunShadow && grade.on);
-      res.setPbr(group, flags.pbr);
+      res.setPbr(group, flags.pbr, mode);
     },
     dispose() {
       cancelCab?.();
@@ -770,12 +772,12 @@ export function proceduralTrailer(
       res.lamps.update(lampState(snapshot));
       res.syncBlobs();
     },
-    setLook({ flags, grade }) {
+    setLook({ flags, grade, mode }) {
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
       res.setGrade(grade.on);
       res.setSunShadow(flags.sunShadow && grade.on);
-      res.setPbr(group, flags.pbr);
+      res.setPbr(group, flags.pbr, mode);
     },
     dispose() {
       cancel?.();
