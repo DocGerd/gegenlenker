@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { EXERCISE_IDS } from '../contracts/exercise';
 import type { ExerciseId } from '../contracts/exercise';
-import { LAYOUT_IDS } from '../contracts/layout';
+import { colliderId, LAYOUT_IDS } from '../contracts/layout';
 import type { Obstacle } from '../contracts/layout';
 import type { ControlVector, Pose2, Simulation, SimSnapshot, Vec2 } from '../contracts/sim';
 import { createContactQuery, obbOverlap, SELF_OBSTACLE_ID } from '../sim/collision';
@@ -254,6 +254,36 @@ it('slalom cannot be driven in a straight line', () => {
     }
   }
   expect(free).toEqual([]);
+});
+
+describe.each(Object.values(layouts))('$id props', (layout) => {
+  it('have unique slash-free ids, colliders, and a fixture exactly on lamps', () => {
+    const ids = layout.props.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const prop of layout.props) {
+      expect(prop.id, prop.id).not.toContain('/');
+      expect(prop.colliders.length, prop.id).toBeGreaterThan(0);
+      expect(prop.fixture !== undefined, prop.id).toBe(prop.asset === 'lamp');
+    }
+  });
+
+  it('resolve after the street and loose obstacles, before the exercise ones', () => {
+    for (const exercise of [null, ...exercises.filter((e) => e.layout === layout.id)]) {
+      const resolved = resolveLayout(layout, exercise);
+      const loose = layout.obstacles.map((o) => o.id);
+      const colliders = layout.props.flatMap((p) => p.colliders.map((_, i) => colliderId(p.id, i)));
+      const ids = resolved.obstacles.map((o) => o.id);
+      const from = ids.indexOf(loose[0] ?? colliders[0] ?? '');
+      expect(ids.slice(from, from + loose.length + colliders.length)).toEqual([
+        ...loose,
+        ...colliders,
+      ]);
+      expect(ids.slice(0, from).every((id) => id.startsWith('street-'))).toBe(true);
+      expect(ids.slice(from + loose.length + colliders.length)).toEqual(
+        (exercise?.obstacles ?? []).map((o) => o.id),
+      );
+    }
+  });
 });
 
 it('registers exactly the contract ids', () => {

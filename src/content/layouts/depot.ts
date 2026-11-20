@@ -1,12 +1,13 @@
 import type { Layout } from '../../contracts/layout';
 import { solidLine } from '../markings';
 import {
-  addBollard,
+  addBollardProp,
   addGate,
   addLamps,
   addYardEdge,
   BOUNDS,
   ObstacleBuilder,
+  PropBuilder,
   STREET,
   YARD,
 } from '../street';
@@ -23,34 +24,42 @@ const PARKED = { x: 1.75, width: 2.5, length: 10, height: 3.5, firstY: 36 };
 const PARKED_BAYS = 3;
 const PARKING_LINE_WIDTH = 0.12;
 
-function build(): Layout['obstacles'] {
+function obstacles(): Layout['obstacles'] {
   const b = new ObstacleBuilder('');
   addYardEdge(b, 'fence', FENCE_THICKNESS, FENCE_HEIGHT, STREET.entrance);
+  return b.obstacles;
+}
 
+function props(): Layout['props'] {
+  const p = new PropBuilder();
   const { minX, minY, maxX, maxY } = HALL;
-  const wall = (rect: { minX: number; minY: number; maxX: number; maxY: number }): void =>
-    b.addRect('hall', rect, HALL_HEIGHT);
-  wall({ minX, minY, maxX: minX + HALL_WALL, maxY });
-  wall({ minX: maxX - HALL_WALL, minY, maxX, maxY });
-  wall({ minX: minX + HALL_WALL, minY: maxY - HALL_WALL, maxX: maxX - HALL_WALL, maxY });
-  let from = minX + HALL_WALL;
-  for (const c of GATE_CENTRES) {
-    wall({ minX: from, minY, maxX: c - GATE_WIDTH / 2, maxY: minY + HALL_WALL });
-    from = c + GATE_WIDTH / 2;
-  }
-  wall({ minX: from, minY, maxX: maxX - HALL_WALL, maxY: minY + HALL_WALL });
+  p.add('hall', (b) => {
+    const wall = (rect: { minX: number; minY: number; maxX: number; maxY: number }): void =>
+      b.addRect('hall', rect, HALL_HEIGHT);
+    wall({ minX, minY, maxX: minX + HALL_WALL, maxY });
+    wall({ minX: maxX - HALL_WALL, minY, maxX, maxY });
+    wall({ minX: minX + HALL_WALL, minY: maxY - HALL_WALL, maxX: maxX - HALL_WALL, maxY });
+    let from = minX + HALL_WALL;
+    for (const c of GATE_CENTRES) {
+      wall({ minX: from, minY, maxX: c - GATE_WIDTH / 2, maxY: minY + HALL_WALL });
+      from = c + GATE_WIDTH / 2;
+    }
+    wall({ minX: from, minY, maxX: maxX - HALL_WALL, maxY: minY + HALL_WALL });
+  });
 
   for (let i = 0; i < PARKED_BAYS; i++) {
     const cy = PARKED.firstY + PARKED.length * (i + 0.5);
-    b.addBox('parked', PARKED.x, cy, PARKED.width, PARKED.length, 0, PARKED.height);
+    p.add('parked', (b) =>
+      b.addBox('parked', PARKED.x, cy, PARKED.width, PARKED.length, 0, PARKED.height),
+    );
   }
 
-  addLamps(b, STREET);
-  addGate(b, STREET);
+  addLamps(p, STREET);
+  addGate(p, STREET);
   for (const c of GATE_CENTRES) {
-    for (const side of [-1, 1]) addBollard(b, c + side * GATE_BOLLARD_OFFSET, minY - 0.8);
+    for (const side of [-1, 1]) addBollardProp(p, c + side * GATE_BOLLARD_OFFSET, minY - 0.8);
   }
-  return b.obstacles;
+  return p.props;
 }
 
 /** Bay ends and the open side line of the parked-trailer row. */
@@ -71,6 +80,7 @@ export const depot: Layout = {
   yard: YARD,
   street: STREET,
   start: { x: 30, y: 15, heading: 0 },
-  obstacles: build(),
+  obstacles: obstacles(),
+  props: props(),
   markings: parkingLines(),
 };
