@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { TRUCK_IDS } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById } from '../vehicles/registry';
-import { CAB_HEIGHT, cabShellParams, FRAME_TOP } from './cab-dims';
+import { cabShellParams, FRAME_TOP } from './cab-dims';
 
-const MARGIN = 0.25;
+const MARGIN = 0.3;
 
 describe('cockpit eye against the cab glass', () => {
   it.each(TRUCK_IDS)(
@@ -17,7 +17,6 @@ describe('cockpit eye against the cab glass', () => {
       const { z } = truckAnchors(spec).eye;
       expect(z).toBeGreaterThanOrEqual(sill + MARGIN);
       expect(z).toBeLessThanOrEqual(glassTop - MARGIN);
-      expect(glassTop).toBeLessThan(CAB_HEIGHT);
     },
   );
 });

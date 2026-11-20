@@ -2,7 +2,7 @@ import type { TruckSpec } from '../contracts/vehicle';
 import { SOURCES, estimate, sourced } from './sources';
 
 const eyeAboveFloor =
-  'seated eye about 1.25-1.3 m above the cab floor: seat height plus sitting eye height; no source found';
+  'cab floor 1.1 m above ground (render model), seated eye 1.35 m above it (4x4 tipper seat sits higher than the MAN distribution cab); no source found';
 const typical = 'typical for the vehicle class, no source found';
 const inBumper = "in the bumper, chosen inside UN R48 6.2.4.2's 1,200 mm; no source found";
 const onFloor =
@@ -22,7 +22,7 @@ export const arocs1835Ak: TruckSpec = {
   couplingOffset: estimate(1500, 'frame end plus coupling crossmember, no source found'),
   turningRadius: sourced(8150, SOURCES.A),
   eye: {
-    height: estimate(2400, eyeAboveFloor),
+    height: estimate(2450, eyeAboveFloor),
     behindBumper: estimate(1300, typical),
     leftOfCentre: estimate(500, typical),
   },
