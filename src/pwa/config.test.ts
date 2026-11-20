@@ -97,6 +97,10 @@ describe('asset registry', () => {
       '**/basis_transcoder-*.wasm',
       '**/ground-*.ktx2',
       '**/sky-*.ktx2',
+      '**/yard-kit-*.glb',
+      '**/yard-kit-atlas-a-*.ktx2',
+      '**/yard-kit-atlas-b-*.ktx2',
+      '**/yard-kit-leaves-*.ktx2',
     ]);
   });
 

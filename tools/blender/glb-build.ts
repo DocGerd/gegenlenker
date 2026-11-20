@@ -7,15 +7,17 @@ import { bodyLampParams, cabLampParams, trailerLampParams } from '../../src/rend
 import { TRUCK_LOOKS } from '../../src/render/livery';
 import { trailerShellParams } from '../../src/render/trailer-dims';
 import { trailerById, truckById } from '../../src/vehicles/registry';
+import { yardKitParams } from './kit-params';
 import { canonicalJson, fileSha256, type Json, ROOT, sha256 } from '../assets/provenance';
 
 export { canonicalJson, type Json, ROOT, sha256 };
 
 export const COMMON_SCRIPT = 'tools/blender/blender_common.py';
 export const LAMP_COMMON_SCRIPT = 'tools/blender/lamp_common.py';
+export const KIT_COMMON_SCRIPT = 'tools/blender/kit_common.py';
 export const OPTIMISE_SCRIPT = 'scripts/glb-optimise.mjs';
 
-export type AssetKind = 'cab' | 'body' | 'trailer';
+export type AssetKind = 'cab' | 'body' | 'trailer' | 'kit';
 
 /** One run of a Blender script on one params file. */
 export type Run = {
@@ -29,14 +31,13 @@ export type Run = {
 };
 
 export type Asset = Run & {
-  readonly vehicleId: TruckId | TrailerId;
+  /** `<vehicle id>-<kind>` names the glb and its manifest; the kit is `yard-kit`. */
   readonly kind: AssetKind;
-  /** `<vehicle id>-<kind>` names the glb and its manifest. */
   readonly glb: string;
   readonly manifest: string;
 };
 
-const SCRIPTS: Readonly<Record<AssetKind, string>> = {
+const SCRIPTS: Readonly<Record<Exclude<AssetKind, 'kit'>, string>> = {
   cab: 'tools/blender/cab_shell.py',
   body: 'tools/blender/body_shell.py',
   trailer: 'tools/blender/trailer_shell.py',
@@ -44,11 +45,14 @@ const SCRIPTS: Readonly<Record<AssetKind, string>> = {
 
 const SHELL_HELPERS = { commonSha256: COMMON_SCRIPT, lampCommonSha256: LAMP_COMMON_SCRIPT };
 
-const asset = (vehicleId: TruckId | TrailerId, kind: AssetKind, build: () => Json): Asset => {
+const asset = (
+  vehicleId: TruckId | TrailerId,
+  kind: Exclude<AssetKind, 'kit'>,
+  build: () => Json,
+): Asset => {
   const key = `${vehicleId}-${kind}`;
   return {
     key,
-    vehicleId,
     kind,
     script: SCRIPTS[kind],
     params: `tools/blender/params/${vehicleId}.${kind}.json`,
@@ -58,6 +62,18 @@ const asset = (vehicleId: TruckId | TrailerId, kind: AssetKind, build: () => Jso
     build,
   };
 };
+
+const KIT_HELPERS = { commonSha256: COMMON_SCRIPT, kitCommonSha256: KIT_COMMON_SCRIPT };
+
+const kitRun = (key: string, build: () => Json): Run => ({
+  key,
+  script: `tools/blender/${key.replaceAll('-', '_')}.py`,
+  params: `tools/blender/params/${key}.json`,
+  helpers: KIT_HELPERS,
+  build,
+});
+
+export const YARD_KIT_RUN = kitRun('yard-kit', yardKitParams);
 
 export const ASSETS: readonly Asset[] = [
   ...TRUCK_IDS.flatMap((id) => [
@@ -76,6 +92,12 @@ export const ASSETS: readonly Asset[] = [
       ...trailerLampParams(trailerById(id)),
     })),
   ),
+  {
+    ...YARD_KIT_RUN,
+    kind: 'kit',
+    glb: 'src/render/assets/yard-kit.glb',
+    manifest: 'src/render/assets/yard-kit.manifest.json',
+  },
 ];
 
 export function assetByKey(key: string): Asset {
@@ -89,7 +111,8 @@ export function assetByKey(key: string): Asset {
 export type GlbManifest = {
   readonly scriptSha256: string;
   readonly commonSha256: string;
-  readonly lampCommonSha256: string;
+  readonly lampCommonSha256?: string;
+  readonly kitCommonSha256?: string;
   readonly paramsSha256: string;
   readonly blenderVersion: string;
   readonly gltfTransformVersion: string;
