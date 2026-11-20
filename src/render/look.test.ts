@@ -51,13 +51,26 @@ describe('applyLook', () => {
 });
 
 describe('the grade uniforms', () => {
-  it('are written by look.ts alone', () => {
-    const root = import.meta.dirname;
-    const written =
-      /\bGRADE\.\w+\.value\s*=(?!=)|\bGRADE\.\w+\.value\.(?:copy|set|add|sub|multiply\w*|lerp\w*)\(/;
+  // any member access on a uniform (`.value`, `.value.setHex(`), also across lines; the shaders take the nodes
+  const reached = /\bGRADE\s*\.\s*\w+\s*\.\s*\w+/;
+  const root = import.meta.dirname;
+
+  it('are reached from look.ts alone, the shaders in grade.ts aside', () => {
     const offenders = readdirSync(root, { recursive: true, encoding: 'utf8' })
-      .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && f !== 'look.ts')
-      .filter((f) => written.test(readFileSync(join(root, f), 'utf8')));
+      .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
+      .filter((f) => f !== 'look.ts' && f !== 'grade.ts')
+      .filter((f) => reached.test(readFileSync(join(root, f), 'utf8')));
     expect(offenders).toEqual([]);
+  });
+
+  it('are found by the pattern in look.ts and in planted writes', () => {
+    expect(reached.test(readFileSync(join(root, 'look.ts'), 'utf8'))).toBe(true);
+    for (const write of [
+      'GRADE.exposure.value *= 2',
+      'GRADE.hazeToward.value.setHex(1)',
+      'GRADE\n  .sunDirection\n  .value.normalize()',
+    ]) {
+      expect(reached.test(write), write).toBe(true);
+    }
   });
 });

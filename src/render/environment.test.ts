@@ -418,7 +418,7 @@ describe('environment quality wiring', () => {
     const sunHaze = perspectiveLight(palette).hazeToward.getHex();
     const plainHaze = new Color(REALISM_HUES.skyHaze).getHex();
 
-    const expectGraded = (on: boolean, label: string): void => {
+    const expectSplit = (on: boolean, label: string): void => {
       for (const l of [legacySun, legacyAmbient]) {
         expect(l?.layers.mask, label).toBe(only(on ? AIDS_LAYER : DEFAULT_LAYER));
       }
@@ -433,6 +433,13 @@ describe('environment quality wiring', () => {
       }
     };
 
+    // night splits the lights on a preset that does not grade: the props are lit, and still plain
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+    expectSplit(true, 'balanced night');
+    expect((wears()[0] as { outputNode: unknown }).outputNode, 'balanced night').toBeNull();
+    expect(hdriSun?.castShadow, 'balanced night').toBe(false);
+    expect(GRADE.fogDensity.value, 'balanced night').toBe(0);
+
     for (const [label, flags] of [
       ['high', QUALITY_FLAGS.high],
       ['balanced', QUALITY_FLAGS.balanced],
@@ -440,7 +447,7 @@ describe('environment quality wiring', () => {
       ['high again', QUALITY_FLAGS.high],
     ] as const) {
       env.setLook(lookFor(flags, 'day'));
-      expectGraded(flags.perspectiveLighting, label);
+      expectSplit(flags.perspectiveLighting, label);
       expect(hdriSun?.castShadow, label).toBe(flags.sunShadow);
       expect(GRADE.fogDensity.value, label).toBe(flags.aerialPerspective ? FOG_DENSITY : 0);
       expect(hazeToward(), label).toBe(flags.hdriSky ? sunHaze : plainHaze);

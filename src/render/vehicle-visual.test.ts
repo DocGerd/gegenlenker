@@ -275,6 +275,8 @@ describe('number plate grade', () => {
       visual.setLook(lookFor(flags, 'day'));
       expect(graded().every((g) => g === on)).toBe(true);
     }
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+    expect(graded().some((g) => g)).toBe(false);
     visual.dispose();
   });
 });
@@ -341,6 +343,13 @@ describe('sun shadow', () => {
       }
     },
   );
+
+  it('keeps the blobs at night on a preset without sun shadow', () => {
+    for (const visual of visuals) {
+      visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+      for (const m of shadowsOf(visual.object)) expect((m.material as Material).opacity).toBe(1);
+    }
+  });
 
   it('restores the blobs once a failed grade stops the sun casting', () => {
     const visual = proceduralTruck(truckById(TRUCK_IDS[0]), palette);

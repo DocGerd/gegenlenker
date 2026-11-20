@@ -19,7 +19,7 @@ import atlasBUrl from './assets/yard-kit-atlas-b.ktx2?url';
 import leavesUrl from './assets/yard-kit-leaves.ktx2?url';
 import kitUrl from './assets/yard-kit.glb?url';
 import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
-import type { QualityFlags } from './quality';
+import type { Look } from './look';
 import { COCKPIT_LAYERS, enableLayers, gpuLost, PERSPECTIVE_LAYER } from './seams';
 import { startShells, type Shells } from './glb-shells';
 import { startTextureSet, TEXTURE_FAILED, type TextureMaps, type TextureSet } from './texture-set';
@@ -253,7 +253,7 @@ export type YardKitParts = { readonly kit: YardKit; readonly reflections: Vehicl
 
 export interface YardKitLayer {
   readonly object: Group;
-  setQuality(flags: QualityFlags): void;
+  setLook(look: Look): void;
   dispose(): void;
 }
 
@@ -340,9 +340,9 @@ export function createYardKitLayer(
 
   return {
     object,
-    setQuality(flags) {
+    setLook({ flags, grade }) {
       wanted = flags.yardKit;
-      graded = flags.perspectiveLighting;
+      graded = grade.on;
       sync();
     },
     dispose() {

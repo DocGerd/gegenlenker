@@ -205,7 +205,6 @@ export function proceduralEnvironment(
   for (const piece of yardProps(layout)) detail.add(piece.x, piece.y, piece.geometry);
   // graded props wear their own copy, so the grade never reaches the layer-0 tokens
   const propMaterial = new MeshLambertNodeMaterial({ vertexColors: true });
-  setGraded(propMaterial, true);
   const props = detail.meshes(solid, geometries);
   for (const mesh of props) {
     castAndReceive(mesh);
@@ -392,11 +391,12 @@ export function proceduralEnvironment(
       const { flags, lightSplit } = next;
       graded = next.grade.on;
       rig.setSplit(lightSplit);
-      rig.setShadow(lightSplit && flags.sunShadow);
+      rig.setShadow(graded && flags.sunShadow);
       sky.setSun(lightSplit ? next.grade.sunDirection : sunPosition());
       sky.setGround(lightSplit ? splitGround : legacyGround);
       hdriOn = flags.hdriSky;
       syncSky();
+      setGraded(propMaterial, graded);
       for (const mesh of props) mesh.material = lightSplit ? propMaterial : solid;
       if (texturedGroundMaterial !== null) setGraded(texturedGroundMaterial, graded);
       if (pbrMaterial !== null) setGraded(pbrMaterial, graded);
@@ -407,7 +407,7 @@ export function proceduralEnvironment(
       if (gate !== null) setGraded(gate.materials[1], graded);
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
-      kit.setQuality(flags);
+      kit.setLook(next);
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
       flatSwap.set(flags.litMarkings);
