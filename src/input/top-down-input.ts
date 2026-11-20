@@ -5,6 +5,7 @@ import {
   type TopDownView,
 } from '../contracts/render';
 import { isFormField } from './keyboard';
+import { actionFor } from './keymap';
 import {
   clampView,
   panBy,
@@ -125,9 +126,10 @@ export function createTopDownInput(surface: HTMLElement, opts: TopDownInputOptio
     (e) => {
       if (e.defaultPrevented || isFormField(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
       const ctx = context();
-      if (e.key === '+' || e.key === '=') commit(zoomAt(view, KEY_ZOOM, centre(ctx), ctx));
-      else if (e.key === '-') commit(zoomAt(view, 1 / KEY_ZOOM, centre(ctx), ctx));
-      else if (e.key === '0') commit(DEFAULT_TOP_DOWN_VIEW);
+      const action = actionFor('view', e);
+      if (action === 'zoomIn') commit(zoomAt(view, KEY_ZOOM, centre(ctx), ctx));
+      else if (action === 'zoomOut') commit(zoomAt(view, 1 / KEY_ZOOM, centre(ctx), ctx));
+      else if (action === 'resetView') commit(DEFAULT_TOP_DOWN_VIEW);
       else return;
       e.preventDefault();
     },

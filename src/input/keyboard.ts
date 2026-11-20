@@ -1,23 +1,15 @@
 import type { Gear } from '../contracts/sim';
+import { actionFor, isAction, type Action } from './keymap';
 import { type InputState, clamp, rampLever, rampTime, stepLever } from './mapping';
 
 export type Keyboard = { readonly brake: boolean; tick(dt: number): void; dispose(): void };
 
-const GEARS: Record<string, Gear> = {
-  Digit1: 'P',
-  Digit2: 'R',
-  Digit3: 'N',
-  Digit4: 'D',
-  Numpad1: 'P',
-  Numpad2: 'R',
-  Numpad3: 'N',
-  Numpad4: 'D',
+const GEAR_OF: Partial<Record<Action, Gear>> = {
+  gearP: 'P',
+  gearR: 'R',
+  gearN: 'N',
+  gearD: 'D',
 };
-const LEFT = ['KeyA', 'ArrowLeft'];
-const RIGHT = ['KeyD', 'ArrowRight'];
-const FASTER = ['KeyW', 'ArrowUp'];
-const SLOWER = ['KeyS', 'ArrowDown'];
-const RESET_STEER = 'KeyC';
 
 /** Keys typed into a form field or the pause dialog are not driving input. */
 export const isFormField = (target: EventTarget | null): boolean =>
@@ -30,9 +22,10 @@ export const isFormField = (target: EventTarget | null): boolean =>
  * in `tick` while held. Every other key acts on keydown.
  */
 export function createKeyboard(state: InputState, steerRate: number): Keyboard {
-  const held = new Set<string>();
-  /** Lever keys down, with seconds held. */
-  const leverHeld = new Map<string, number>();
+  /** Steering keys down, by code. */
+  const held = new Map<string, 'steerLeft' | 'steerRight'>();
+  /** Lever keys down, by code, with their direction and seconds held. */
+  const leverHeld = new Map<string, { dir: 1 | -1; heldFor: number }>();
   let brake = false;
   const abort = new AbortController();
   const { signal } = abort;
@@ -47,25 +40,24 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
     'keydown',
     (e) => {
       if (isFormField(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
-      const { code } = e;
-      if (LEFT.includes(code) || RIGHT.includes(code)) {
-        held.add(code);
+      const action = actionFor('drive', e);
+      if (action === undefined) return;
+      const gear = GEAR_OF[action];
+      const lever = action === 'faster' ? 1 : action === 'slower' ? -1 : 0;
+      if (action === 'steerLeft' || action === 'steerRight') {
+        held.set(e.code, action);
         state.resetting = false;
-      } else if (code === RESET_STEER) state.resetting = true;
-      else if (
-        e.repeat &&
-        (FASTER.includes(code) || SLOWER.includes(code) || code === 'Space' || GEARS[code])
-      ) {
+      } else if (action === 'resetSteer') state.resetting = true;
+      else if (e.repeat) {
         // OS key-repeat must not step the lever again; the ramp runs in `tick`.
-      } else if (FASTER.includes(code) || SLOWER.includes(code)) {
-        stepLever(state, FASTER.includes(code) ? 1 : -1);
-        leverHeld.set(code, 0);
-      } else if (code === 'Space') {
+      } else if (lever !== 0) {
+        stepLever(state, lever);
+        leverHeld.set(e.code, { dir: lever, heldFor: 0 });
+      } else if (action === 'brake') {
         state.lever = 0;
         leverHeld.clear();
         brake = true;
-      } else if (GEARS[code]) state.gear = GEARS[code];
-      else return;
+      } else if (gear !== undefined) state.gear = gear;
       e.preventDefault();
     },
     { signal },
@@ -76,7 +68,7 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
     'keyup',
     (e) => {
       if (held.delete(e.code) || leverHeld.delete(e.code)) e.preventDefault();
-      else if (e.code === 'Space' && brake) {
+      else if (isAction('brake', e) && brake) {
         brake = false;
         e.preventDefault();
       }
@@ -100,12 +92,13 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
     tick(dt) {
       // A brake from any source cancels the ramp, as Space does.
       if (state.brake) leverHeld.clear();
-      for (const [code, heldFor] of leverHeld) {
-        rampLever(state, FASTER.includes(code) ? 1 : -1, rampTime(heldFor, dt));
-        leverHeld.set(code, heldFor + dt);
+      for (const [code, { dir, heldFor }] of leverHeld) {
+        rampLever(state, dir, rampTime(heldFor, dt));
+        leverHeld.set(code, { dir, heldFor: heldFor + dt });
       }
-      const left = LEFT.some((k) => held.has(k));
-      const right = RIGHT.some((k) => held.has(k));
+      const pressed = [...held.values()];
+      const left = pressed.includes('steerLeft');
+      const right = pressed.includes('steerRight');
       if (left !== right) {
         state.resetting = false;
         state.steer = clamp(state.steer + (left ? 1 : -1) * steerRate * dt, -1, 1);

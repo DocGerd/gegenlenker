@@ -1,5 +1,6 @@
 import type { Layout } from '../../contracts/layout';
 import { solidLine } from '../markings';
+import { plotDecor } from '../plot';
 import {
   addBollardProp,
   addGate,
@@ -82,5 +83,6 @@ export const depot: Layout = {
   start: { x: 30, y: 15, heading: 0 },
   obstacles: obstacles(),
   props: props(),
+  decor: plotDecor(YARD),
   markings: parkingLines(),
 };
