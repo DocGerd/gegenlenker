@@ -72,7 +72,7 @@ const MARKUP = `
   </section>
   <footer class="menu-footer">
     <span>© 2026 Patrick Kuhn</span>
-    <button type="button" class="menu-link" data-menu="whatsNew" data-i18n="whatsNew"></button>
+    <button type="button" class="menu-link" data-menu="whatsNew"><span data-i18n="whatsNew"></span><span class="menu-badge" data-menu="whatsNewBadge" data-i18n="whatsNewBadge" hidden></span></button>
     <span class="menu-offline" data-menu="offline" role="status"></span>
   </footer>
 </main>`;
@@ -152,6 +152,8 @@ export function showMenu(
   /** Null when there is no run to replay. */
   replay: { readonly log: InputLog; readonly start: () => void } | null,
   onWhatsNew: () => void,
+  /** Settles true when What's new has entries the trainee has not seen; a rejection shows no badge. */
+  hasNews: Promise<boolean>,
   /** The `data-menu` control that takes focus on open. */
   focus: string | null = null,
 ): () => void {
@@ -167,6 +169,18 @@ export function showMenu(
       status === 'ready' ? t('offlineReady') : status === 'failed' ? t('offlineSetupFailed') : '';
   };
   const stopOffline = onOfflineStatus(paintOffline);
+
+  let news = false;
+  const paintNews = (): void => {
+    const badge = container.querySelector('[data-menu="whatsNewBadge"]');
+    if (badge instanceof HTMLElement) badge.hidden = !news;
+  };
+  hasNews
+    .then((value) => {
+      news = value;
+      paintNews();
+    })
+    .catch(() => undefined);
 
   const render = (focus: string | null): void => {
     const settings = currentSettings();
@@ -284,6 +298,7 @@ export function showMenu(
     query(container, 'whatsNew', HTMLElement).addEventListener('click', onWhatsNew);
 
     paintOffline();
+    paintNews();
     if (focus !== null) query(container, focus, HTMLElement).focus();
   };
 

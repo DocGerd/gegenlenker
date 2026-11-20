@@ -9,6 +9,16 @@ const entryCount =
   loadFragments(dir).length +
   (loadReleases(dir) as { entries: unknown[] }[]).reduce((n, { entries }) => n + entries.length, 0);
 
+const SEEN_KEY = 'gegenlenker.whatsNewSeen.v1';
+const fragments = loadFragments(dir);
+const allIds = [
+  ...fragments.map(({ id }) => id),
+  ...(loadReleases(dir) as { entries: { id: string }[] }[]).flatMap(({ entries }) =>
+    entries.map(({ id }) => id),
+  ),
+];
+const newest = fragments.reduce((a, b) => ((a.prs[0] ?? 0) > (b.prs[0] ?? 0) ? a : b));
+
 const locales = [
   { locale: 'en-US', messages: en },
   { locale: 'de-DE', messages: de },
@@ -79,6 +89,60 @@ for (const { locale, messages } of locales) {
     await page.getByRole('button', { name: messages.whatsNew }).click({ timeout: 1000 });
     await expect(page.getByRole('heading', { level: 1, name: messages.whatsNew })).toBeVisible();
     await expect(toast).toBeVisible();
+    await context.close();
+  });
+}
+
+for (const { locale, messages } of locales) {
+  test(`a new entry is badged until what's new is opened in ${locale}`, async ({ browser }) => {
+    const context = await browser.newContext({ locale, viewport: { width: 360, height: 740 } });
+    await context.addInitScript(
+      ([key, ids]) => {
+        try {
+          if (localStorage.getItem(key) === null) localStorage.setItem(key, JSON.stringify(ids));
+        } catch {
+          // Opaque frames have no storage.
+        }
+      },
+      [SEEN_KEY, allIds.filter((id) => id !== newest.id)] as const,
+    );
+    const page = await context.newPage();
+    await page.goto('./');
+    const open = page.getByRole('button', { name: messages.whatsNew });
+    await expect(open.getByText(messages.whatsNewBadge, { exact: true })).toBeVisible();
+
+    await open.click();
+    await expect(
+      page.getByRole('heading', { level: 2, name: messages.whatsNewSince }),
+    ).toBeVisible();
+    const since = page.locator('section', {
+      has: page.getByRole('heading', { level: 2, name: messages.whatsNewSince }),
+    });
+    await expect(since.getByRole('listitem')).toHaveCount(1);
+    await expect(since.getByRole('listitem')).toContainText(newest.en.replace(/`/g, ''));
+    await expect(page.getByRole('listitem')).toHaveCount(entryCount);
+
+    await page.goBack();
+    await expect(open).toBeFocused();
+    await expect(open.getByText(messages.whatsNewBadge, { exact: true })).toBeHidden();
+    await open.click();
+    await expect(page.getByRole('heading', { level: 1, name: messages.whatsNew })).toBeVisible();
+    await expect(page.getByRole('heading', { name: messages.whatsNewSince })).toHaveCount(0);
+    await context.close();
+  });
+
+  test(`a first visit shows no badge in ${locale}`, async ({ browser }) => {
+    const context = await browser.newContext({ locale, viewport: { width: 360, height: 740 } });
+    const page = await context.newPage();
+    await page.goto('./');
+    const open = page.getByRole('button', { name: messages.whatsNew });
+    await expect(open).toBeVisible();
+    await expect
+      .poll(() => page.evaluate((key) => localStorage.getItem(key), SEEN_KEY))
+      .not.toBeNull();
+    await expect(open.getByText(messages.whatsNewBadge, { exact: true })).toBeHidden();
+    await open.click();
+    await expect(page.getByRole('heading', { name: messages.whatsNewSince })).toHaveCount(0);
     await context.close();
   });
 }

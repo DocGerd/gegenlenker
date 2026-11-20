@@ -1,8 +1,10 @@
 import type { MessageKey } from '../i18n/en';
 import { t } from '../i18n/i18n';
+import { markAllSeen, unseenIds } from './whats-new-seen';
 import { tokens, whatsNewGroups, type GroupKind, type WhatsNewGroup } from './whats-new-source';
 
 const GROUP_TITLE: Readonly<Record<Exclude<GroupKind, 'release'>, MessageKey>> = {
+  unseen: 'whatsNewSince',
   latest: 'whatsNewLatest',
   earlier: 'whatsNewEarlier',
 };
@@ -67,7 +69,8 @@ export function showWhatsNew(root: HTMLElement, onBack: () => void): () => void 
   const title = element('h1', 'whats-new-title', t('whatsNew'));
   title.tabIndex = -1;
 
-  main.append(back, title, ...whatsNewGroups().map(groupSection));
+  main.append(back, title, ...whatsNewGroups(unseenIds()).map(groupSection));
+  markAllSeen();
   container.append(main);
   root.append(container);
   title.focus();

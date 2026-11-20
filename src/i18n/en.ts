@@ -137,6 +137,8 @@ export const en = {
   viewSwitchNoOutside: 'Follow / whole yard',
   panView: 'Pan / orbit',
   whatsNew: "What's new",
+  whatsNewBadge: 'New',
+  whatsNewSince: 'Since your last visit',
   whatsNewLatest: 'Latest',
   whatsNewEarlier: 'Earlier changes',
   changeAdded: 'Added',

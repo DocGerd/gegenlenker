@@ -14,6 +14,7 @@ export const BEST_KEY = 'gegenlenker.best.v2';
 // Bests before the assisted/unaided split cannot be classified, so they are dropped.
 const LEGACY_BEST_KEY = 'gegenlenker.best.v1';
 export const LAST_RUN_KEY = 'gegenlenker.lastRun.v1';
+export const WHATS_NEW_SEEN_KEY = 'gegenlenker.whatsNewSeen.v1';
 
 const PROBE_KEY = 'gegenlenker.probe';
 
