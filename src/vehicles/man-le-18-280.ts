@@ -23,7 +23,7 @@ export const manLe18280: TruckSpec = {
   eye: {
     height: estimate(2350, eyeAboveFloor),
     behindBumper: estimate(1000, typical),
-    leftOfCentre: estimate(400, typical),
+    leftOfCentre: estimate(600, 'about 0.65 m inboard of the 2.5 m cab side; no source found'),
   },
   mirror: {
     lateral: estimate(1250, typical),
