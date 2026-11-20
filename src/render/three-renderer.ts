@@ -535,11 +535,11 @@ export function createThreeSceneRenderer(
         );
       }
 
-      // One clear for every pane: they tile the canvas, and the sky dome covers each perspective one.
+      // The panes tile the canvas, so each clears its own rect as part of its pass (a clear of its own
+      // would resolve the whole multisample target once more); the sky dome covers each perspective one.
       gl.setRenderTarget(out.target);
-      out.target.scissorTest = false;
       gl.setClearColor(b.palette.backdrop);
-      gl.clear();
+      gl.autoClear = true;
 
       if (cockpit !== null) {
         placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit);
@@ -584,6 +584,7 @@ export function createThreeSceneRenderer(
         }
       }
 
+      gl.autoClear = false;
       if (leftRect !== null) {
         out.place(leftRect, pixelRatio);
         mirrorLeft.composite(gl);

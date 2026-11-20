@@ -51,12 +51,12 @@ export function createFrame(renderer: WebGPURenderer) {
       if (target.width !== size.x || target.height !== size.y) target.setSize(size.x, size.y);
     },
     place(rect: Rect, pixelRatio: number): void {
-      target.viewport.set(
-        rect.x * pixelRatio,
-        rect.y * pixelRatio,
-        rect.width * pixelRatio,
-        rect.height * pixelRatio,
-      );
+      // from edges, so panes that meet in CSS px meet in device px: no gap, no overlap
+      const x0 = Math.floor(rect.x * pixelRatio);
+      const y0 = Math.floor(rect.y * pixelRatio);
+      const x1 = Math.floor((rect.x + rect.width) * pixelRatio);
+      const y1 = Math.floor((rect.y + rect.height) * pixelRatio);
+      target.viewport.set(x0, y0, x1 - x0, y1 - y0);
       target.scissor.copy(target.viewport);
       target.scissorTest = true;
     },

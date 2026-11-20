@@ -93,11 +93,14 @@ export function createMirror(requestedSamples = QUALITY_FLAGS.balanced.mirrorMsa
       }
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      // three resolves the clear colour against the target bound when it is set
+      // three resolves the clear colour against the target bound when it is set. The clear is part of
+      // the render pass: a clear of its own would resolve the multisample target once more.
+      const autoClear = renderer.autoClear;
       renderer.setRenderTarget(target);
       renderer.setClearColor(sky);
-      renderer.clear();
+      renderer.autoClear = true;
       renderer.render(scene, camera);
+      renderer.autoClear = autoClear;
       renderer.setRenderTarget(null);
     },
     /** Draws into the bound target, within the viewport it was given. */
