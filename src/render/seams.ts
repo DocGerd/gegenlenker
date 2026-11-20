@@ -83,7 +83,11 @@ export interface CockpitInterior {
   readonly object: Object3D;
   /** `eye`: placed in world space from the camera; `truck`: a child of the truck's object, moving with it. */
   readonly frame: 'eye' | 'truck';
-  /** Fixes the interior to `view` before each cockpit frame. */
+  /**
+   * Fixes the interior to `view` before each cockpit frame. The renderer has already updated the
+   * scene's world matrices (the scene does not update itself), so `place` sets the object's local
+   * transform and updates its own world matrices.
+   */
   place(view: InteriorView): void;
   setQuality(flags: QualityFlags): void;
   dispose(): void;

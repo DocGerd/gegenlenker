@@ -43,7 +43,7 @@ export const MIN_PILLAR_WIDTH = 0.06;
 /** The pillar's top edge leans this far towards the centre of the view, in pillar widths. */
 const PILLAR_LEAN = 0.25;
 
-const VISOR = { left: -0.5, right: -0.08, bottom: 0.62 };
+export const VISOR = { left: -0.5, right: -0.08, bottom: 0.62 };
 const VISOR_LIP = 0.025;
 
 /** The mirror rects' inner edges as distances from the view centre in NDC; 1 where there is no mirror. */

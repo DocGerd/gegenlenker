@@ -1,6 +1,8 @@
 import {
   Frustum,
+  Group,
   Layers,
+  Light,
   Matrix4,
   MathUtils,
   type Object3D,
@@ -14,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 import type { LegendBox, Rect, ScenePalette } from '../contracts/render';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById } from '../vehicles/registry';
+import { placePose } from './coords';
 import { createChaseCamera } from './chase-camera';
 import { COCKPIT_FOV, createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import {
@@ -21,11 +24,13 @@ import {
   CONE_GAP,
   coneEdge,
   createCockpitInterior,
+  headerEdge,
   type FlatInterior,
   interiorLayout,
   MIN_PILLAR_WIDTH,
   MIRROR_GAP,
   pillarSpan,
+  VISOR,
 } from './cockpit-interior';
 import { createMirror } from './mirror';
 import { KEYS } from './palette';
@@ -53,7 +58,11 @@ type Shot<I extends CockpitInterior = FlatInterior> = {
   readonly right: Rect;
 };
 
-/** The real cockpit camera and `interior` placed for a window of `width` x `height` CSS px. */
+/**
+ * The real cockpit camera and `interior` placed for a window of `width` x `height` CSS px, as the
+ * renderer does: the interior hangs under the posed truck or the scene root by its `frame`, and the
+ * world matrices are updated once before `place`, which owns the interior's own afterwards.
+ */
 function shootWith<I extends CockpitInterior>(
   interior: I,
   width: number,
@@ -64,9 +73,17 @@ function shootWith<I extends CockpitInterior>(
 ): Shot<I> {
   const { cockpit, mirrorLeft, mirrorRight } = computeViewports(width, height, 'drive', legend);
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) throw new Error('no views');
+  const pose = { x: 12, y: -7, heading };
+  const scene = new Group();
+  scene.matrixWorldAutoUpdate = false;
+  const truckObject = new Group();
+  placePose(truckObject, pose);
+  scene.add(truckObject);
+  (interior.frame === 'truck' ? truckObject : scene).add(interior.object);
   const camera = createCockpitCamera();
-  placeCockpitCamera(camera, { x: 12, y: -7, heading }, eye, cockpit);
+  placeCockpitCamera(camera, pose, eye, cockpit);
   interior.setQuality(flags);
+  scene.updateMatrixWorld();
   interior.place({ camera, cockpit, mirrorLeft, mirrorRight });
   return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight };
 }
@@ -153,30 +170,54 @@ const layersOf = (ids: readonly number[]): Layers => {
   return layers;
 };
 
+type Route = {
+  readonly name: string;
+  readonly make: RendererParts['interior'];
+  /** Where a part may cover a mirror rect by design (NDC); everywhere else the rect's view is clear. */
+  readonly mayCoverMirror: (x: number, y: number) => boolean;
+};
+
 /** Every route that implements the seam; a new interior joins here and inherits the checks below. */
-const ROUTES: readonly (readonly [string, RendererParts['interior']])[] = [
-  ['flat overlay', createCockpitInterior],
+const ROUTES: readonly Route[] = [
+  {
+    name: 'flat overlay',
+    make: createCockpitInterior,
+    // The headliner and the stowed visor reach down over the top of a mirror rect on small
+    // windows; the header edge is a chord polyline just below the curve.
+    mayCoverMirror: (x, y) =>
+      y >= headerEdge(x) - 0.005 || (x >= VISOR.left && x <= VISOR.right && y >= VISOR.bottom),
+  },
 ];
+
+/** The presets that draw an interior: the checks run at each, as a route may differ per preset. */
+const DRAWING = ['balanced', 'high'] as const;
+
+const isPart = (o: Object3D): boolean => o.type !== 'Group' && o.type !== 'Object3D';
 
 /** Everything under `interior` that draws or lights; bare containers do not. */
 function renderables(interior: CockpitInterior): Object3D[] {
   const found: Object3D[] = [];
   interior.object.traverse((o) => {
-    if (o.type !== 'Group' && o.type !== 'Object3D') found.push(o);
+    if (isPart(o)) found.push(o);
+  });
+  return found;
+}
+
+/** What the cockpit camera would draw or light: visible renderables of a visible chain. */
+function shown(interior: CockpitInterior): Object3D[] {
+  const found: Object3D[] = [];
+  interior.object.traverseVisible((o) => {
+    if (isPart(o)) found.push(o);
   });
   return found;
 }
 
 function drawn(interior: CockpitInterior): Mesh[] {
-  const found: Mesh[] = [];
-  interior.object.traverseVisible((o) => {
-    if (o instanceof Mesh) found.push(o as Mesh);
-  });
-  return found;
+  return shown(interior).filter((o): o is Mesh => o instanceof Mesh);
 }
 
-describe.each(ROUTES)('cockpit interior seam: %s', (_name, make) => {
-  const build = (flags: QualityFlags = QUALITY_FLAGS.balanced) => {
+describe.each(ROUTES)('cockpit interior seam: $name', ({ make, mayCoverMirror }) => {
+  const build = (flags: QualityFlags) => {
     const interior = make(truck, palette);
     interior.setQuality(flags);
     return interior;
@@ -184,26 +225,46 @@ describe.each(ROUTES)('cockpit interior seam: %s', (_name, make) => {
   const shootRoute = (width: number, height: number, heading = 0.7) =>
     shootWith(make(truck, palette), width, height, heading, null, QUALITY_FLAGS.balanced);
 
-  it('is on INTERIOR_LAYER alone throughout, which only the cockpit camera enables', () => {
-    const found = renderables(build());
-    expect(found.length).toBeGreaterThan(0);
-    const cockpit = createCockpitCamera().layers;
-    const mirror = createMirror().camera.layers;
-    const chase = createChaseCamera().layers;
-    const topDown = layersOf(TOP_DOWN_LAYERS);
-    for (const o of found) {
-      const name = `${o.type} ${o.name}`;
-      expect(o.layers.mask, name).toBe(1 << INTERIOR_LAYER);
-      expect(o.layers.test(cockpit), name).toBe(true);
-      expect(o.layers.test(mirror), name).toBe(false);
-      expect(o.layers.test(chase), name).toBe(false);
-      expect(o.layers.test(topDown), name).toBe(false);
-    }
-  });
+  describe.each(DRAWING)('at %s', (preset) => {
+    const flags = QUALITY_FLAGS[preset];
 
-  it('is not drawn into the sun shadow', () => {
-    const shadow = layersOf(SHADOW_CASTER_LAYERS);
-    for (const o of renderables(build())) expect(o.layers.test(shadow), o.name).toBe(false);
+    it('puts every part on INTERIOR_LAYER alone, which only the cockpit camera enables', () => {
+      const found = renderables(build(flags)).filter((o) => !(o instanceof Light));
+      expect(found.length).toBeGreaterThan(0);
+      const cockpit = createCockpitCamera().layers;
+      const mirror = createMirror().camera.layers;
+      const chase = createChaseCamera().layers;
+      const topDown = layersOf(TOP_DOWN_LAYERS);
+      for (const o of found) {
+        const name = `${o.type} ${o.name}`;
+        expect(o.layers.mask, name).toBe(1 << INTERIOR_LAYER);
+        expect(o.layers.test(cockpit), name).toBe(true);
+        expect(o.layers.test(mirror), name).toBe(false);
+        expect(o.layers.test(chase), name).toBe(false);
+        expect(o.layers.test(topDown), name).toBe(false);
+      }
+    });
+
+    it('puts every light on PERSPECTIVE_LAYER alone: seen by every perspective camera, never top-down', () => {
+      const lights = renderables(build(flags)).filter((o) => o instanceof Light);
+      const perspective = [
+        createCockpitCamera().layers,
+        createMirror().camera.layers,
+        createChaseCamera().layers,
+      ];
+      for (const light of lights) {
+        expect(light.layers.mask, light.name).toBe(1 << PERSPECTIVE_LAYER);
+        for (const layers of perspective) expect(light.layers.test(layers), light.name).toBe(true);
+        expect(light.layers.test(layersOf(TOP_DOWN_LAYERS)), light.name).toBe(false);
+      }
+    });
+
+    it('is not drawn into the sun shadow', () => {
+      const shadow = layersOf(SHADOW_CASTER_LAYERS);
+      for (const o of renderables(build(flags)).filter((r) => !(r instanceof Light))) {
+        expect(o.layers.test(shadow), o.name).toBe(false);
+      }
+    });
   });
 
   it('keeps the cockpit camera on the perspective layer too, and no other camera on the interior', () => {
@@ -214,9 +275,11 @@ describe.each(ROUTES)('cockpit interior seam: %s', (_name, make) => {
     }
   });
 
-  it('is not drawn on the Low preset', () => {
-    expect(drawn(build(QUALITY_FLAGS.low))).toEqual([]);
-    expect(drawn(build()).length).toBeGreaterThan(0);
+  it('draws and lights nothing on the Low preset, and something on the others', () => {
+    expect(shown(build(QUALITY_FLAGS.low))).toEqual([]);
+    for (const preset of DRAWING) {
+      expect(drawn(build(QUALITY_FLAGS[preset])).length, preset).toBeGreaterThan(0);
+    }
   });
 
   describe('keeps the training view clear', () => {
@@ -236,6 +299,22 @@ describe.each(ROUTES)('cockpit interior seam: %s', (_name, make) => {
           for (let el = -cone; el <= cone + 1e-9; el += cone / 6) {
             if (Math.hypot(az, el) > cone) continue;
             expect(hitsAlong(camera, parts, az, el), `${w}x${h} ${az} ${el}`).toEqual([]);
+          }
+        }
+      }
+    });
+
+    it('keeps every part out of the lines of sight to each mirror rect, bar what the route covers by design', () => {
+      for (const [w, h] of windows) {
+        const { camera, interior, cockpit, left, right } = shootRoute(w, h);
+        const parts = drawn(interior);
+        for (const rect of [left, right]) {
+          for (let u = 0; u <= 1; u += 0.125) {
+            for (let v = 0; v <= 1; v += 0.125) {
+              const [x, y] = rectToNdc(cockpit, rect, u, v);
+              if (mayCoverMirror(x, y)) continue;
+              expect(hits(camera, parts, x, y), `${w}x${h} (${u}, ${v})`).toEqual([]);
+            }
           }
         }
       }
