@@ -22,7 +22,7 @@ export const arocs1835Ak: TruckSpec = {
   eye: {
     height: estimate(2150, typical),
     behindBumper: estimate(1300, typical),
-    leftOfCentre: estimate(500, typical),
+    leftOfCentre: estimate(600, 'about 0.65 m inboard of the 2.5 m cab side; no source found'),
   },
   mirror: {
     lateral: estimate(1400, typical),
