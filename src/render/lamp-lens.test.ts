@@ -128,7 +128,7 @@ describe('lamp lenses', () => {
   it('refuse a shell whose lens mesh and layout disagree', async () => {
     const cab = await parseShell(glb('arocs-1835-ak-cab'), 'cab');
     expect(() => {
-      slotShell({ mesh: cab.mesh, lens: null }, cabLenses('arocs-1835-ak'));
+      slotShell({ mesh: cab.mesh, glass: cab.glass, lens: null }, cabLenses('arocs-1835-ak'));
     }).toThrow('no lens mesh');
     expect(() => {
       slotShell(cab, []);

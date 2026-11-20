@@ -364,18 +364,20 @@ describe('sun shadow', () => {
     expect(opacity()).toBeLessThan(1);
   });
 
-  it('lets a shell body cast, and its lenses only take shadow', () => {
+  it('lets a shell body cast, and its glass and lenses only take shadow', () => {
     const body = new Mesh(new BoxGeometry());
+    const glass = new Mesh(new BoxGeometry());
     const lens = new Mesh(new BoxGeometry());
     const group = new Group();
     const swap = applyShell(
       group,
-      { mesh: body, lens },
+      { mesh: body, glass, lens },
       { toAids: [], remove: [], layer: PERSPECTIVE_LAYER },
       { material: new MeshBasicMaterial() },
     );
-    const [shell, shellLens] = meshes(group);
+    const [shell, shellGlass, shellLens] = meshes(group);
     expect([shell?.castShadow, shell?.receiveShadow]).toEqual([true, true]);
+    expect([shellGlass?.castShadow, shellGlass?.receiveShadow]).toEqual([false, true]);
     expect([shellLens?.castShadow, shellLens?.receiveShadow]).toEqual([false, true]);
     swap.dispose();
   });

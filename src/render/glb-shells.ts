@@ -9,7 +9,8 @@ import manCabUrl from './assets/man-le-18-280-cab.glb?url';
 import { AIDS_LAYER } from './seams';
 
 /*
- * Blender shells (tools/blender, issues #68 and #133): one vertex-coloured mesh per rigid group, and
+ * Blender shells (tools/blender, issues #68 and #133): one vertex-coloured mesh per rigid group, a
+ * `<group>-glass` mesh with its windows where the shell has any (they cast no sun shadow, #159), and
  * a `<group>-lens` mesh with its lamp lenses where the shell carries any (lamp-layout.ts), shown in
  * the perspective views only. The top-down view keeps the procedural token meshes, moved
  * onto AIDS_LAYER while a shell is in place. Colours are linear in the glb, like `tint()`.
@@ -33,7 +34,11 @@ export const TRAILER_SHELL_URLS = {
 } as const satisfies Record<`${TrailerId}-trailer`, string>;
 
 /** Mesh prototypes carrying the glTF node transforms; visuals share their geometry. */
-export type Shell = { readonly mesh: Mesh; readonly lens: Mesh | null };
+export type Shell = {
+  readonly mesh: Mesh;
+  readonly glass: Mesh | null;
+  readonly lens: Mesh | null;
+};
 
 /** A trailer asset holds two rigid groups: the body, and the dolly with its drawbar. */
 export type TrailerShell = { readonly trailer: Shell; readonly dolly: Shell };
@@ -82,10 +87,11 @@ export async function loadGlb(url: string, { require }: GlbOptions = {}): Promis
 }
 
 const lensName = (group: string): string => `${group}-lens`;
+const glassName = (group: string): string => `${group}-glass`;
 
-/** The meshes of `groups`, each with its lens mesh when there is one; anything else is refused. */
+/** The meshes of `groups`, each with its glass and lens meshes when there are any; anything else is refused. */
 function groupMeshes(meshes: readonly Mesh[], groups: readonly string[]): Map<string, Shell> {
-  const known = groups.flatMap((g) => [g, lensName(g)]);
+  const known = groups.flatMap((g) => [g, glassName(g), lensName(g)]);
   const names = meshes.map((m) => m.name).sort();
   const unique = new Set(names).size === names.length;
   if (
@@ -94,12 +100,18 @@ function groupMeshes(meshes: readonly Mesh[], groups: readonly string[]): Map<st
     !groups.every((g) => names.includes(g))
   ) {
     throw new Error(
-      `shell has meshes [${names.join(', ')}], expected [${[...groups].sort().join(', ')}] and their lenses`,
+      `shell has meshes [${names.join(', ')}], expected [${[...groups].sort().join(', ')}] and their glass and lenses`,
     );
   }
   const byName = (name: string): Mesh | null => meshes.find((m) => m.name === name) ?? null;
   return new Map(
-    groups.map((g) => [g, { mesh: byName(g) as Mesh, lens: byName(lensName(g)) }] as const),
+    groups.map(
+      (g) =>
+        [
+          g,
+          { mesh: byName(g) as Mesh, glass: byName(glassName(g)), lens: byName(lensName(g)) },
+        ] as const,
+    ),
   );
 }
 
@@ -324,7 +336,8 @@ export function applyShell(
     onChange(next);
   };
   try {
-    // lenses are thin and lit by the lamps: they take the sun's shadow but never cast one
+    // lenses and glass take the sun's shadow but never cast one: lenses are thin and lit by the lamps,
+    // and a window must not shade the interior behind it
     const place = (prototype: Mesh, casts: boolean): Mesh => {
       const mesh = new Mesh(prototype.geometry, material);
       prototype.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
@@ -333,8 +346,9 @@ export function applyShell(
       mesh.receiveShadow = true;
       return mesh;
     };
+    const glass = shell.glass === null ? [] : [place(shell.glass, false)];
     const lens = shell.lens === null ? [] : [place(shell.lens, false)];
-    added = [place(shell.mesh, true), ...lens, ...(swap.add ?? [])];
+    added = [place(shell.mesh, true), ...glass, ...lens, ...(swap.add ?? [])];
     setEnabled(enabled);
   } catch (error) {
     setEnabled(false);
