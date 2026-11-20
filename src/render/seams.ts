@@ -6,7 +6,6 @@ import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import type { GpuOffer } from './gpu-backend';
 import type { Look } from './look';
-import type { QualityFlags } from './quality';
 /** three.js default layer: every camera sees it. */
 export const DEFAULT_LAYER = 0;
 export const AIDS_LAYER = 1; // seen by the top-down camera only
@@ -90,7 +89,7 @@ export interface CockpitInterior {
    * transform and updates its own world matrices.
    */
   place(view: InteriorView): void;
-  setQuality(flags: QualityFlags): void;
+  setLook(look: Look): void;
   dispose(): void;
 }
 

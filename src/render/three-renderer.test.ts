@@ -142,13 +142,13 @@ describe('renderer lighting', () => {
     });
     renderer.setLighting('night');
     renderer.setScene(layout, truckById('man-le-18-280'), trailerById('krone-azw-18'));
-    expect(looks.map((l) => l.mode)).toEqual(['night', 'night', 'night']);
+    expect(looks.map((l) => l.mode)).toEqual(['night', 'night', 'night', 'night']);
 
     looks.length = 0;
     renderer.setLighting('night');
     expect(looks).toEqual([]);
     renderer.setLighting('day');
-    expect(looks.map((l) => l.mode)).toEqual(['day', 'day', 'day']);
+    expect(looks.map((l) => l.mode)).toEqual(['day', 'day', 'day', 'day']);
   });
 });
 
@@ -176,7 +176,7 @@ describe('renderer interior', () => {
           object: new Group(),
           frame: 'truck' as const,
           place: () => undefined,
-          setQuality: () => undefined,
+          setLook: () => undefined,
           dispose: vi.fn(),
         };
         interiors.push(interior);

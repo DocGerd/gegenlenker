@@ -17,6 +17,7 @@ import {
   TRAILER_SHELL_URLS,
 } from './glb-shells';
 import { createGradeCheck, precompileGrade } from './grade';
+import { interiorSample } from './interior-material';
 import { createGlbInterior, INTERIOR_URLS, interiorShellFrom } from './interior-glb';
 import { startGroundPbrTextures } from './ground-pbr';
 import { startGroundTextures } from './ground-texture';
@@ -122,7 +123,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       syncReflection();
       publishGrade(state);
     },
-    (gpu) => precompileGrade(gpu, [skylineGradeSample, ...KIT_SHADOW_SAMPLES]),
+    (gpu) => precompileGrade(gpu, [skylineGradeSample, ...KIT_SHADOW_SAMPLES, interiorSample]),
   );
   const renderer = createThreeSceneRenderer({
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
@@ -142,7 +143,8 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
         kit: yardKit,
         reflections: vehicleEnvironment,
       }),
-    interior: (truck) => createGlbInterior(truck, { shells: interiorShells }),
+    interior: (truck, palette) =>
+      createGlbInterior(truck, { shells: interiorShells, env: vehicleEnvironment, palette }),
     aids: proceduralAids,
   });
   // Read by the e2e: the GPU API of the live renderer and why it is not WebGPU when that was asked

@@ -53,6 +53,7 @@ import {
 } from './interior-glb';
 import { createMirror } from './mirror';
 import { KEYS } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS, type QualityFlags } from './quality';
 import {
   enableLayers,
@@ -108,7 +109,7 @@ function shootWith<I extends CockpitInterior>(
   (interior.frame === 'truck' ? truckObject : scene).add(interior.object);
   const camera = createCockpitCamera();
   placeCockpitCamera(camera, pose, truckAnchors(spec).eye, cockpit);
-  interior.setQuality(flags);
+  interior.setLook(lookFor(flags, 'day'));
   scene.updateMatrixWorld();
   interior.place({ camera, cockpit, mirrorLeft, mirrorRight });
   return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight };
@@ -291,7 +292,7 @@ describe.each(CASES)(
   ({ make, dash, mayCoverMirror, underMirror, presets, spec }) => {
     const build = (flags: QualityFlags) => {
       const interior = make(spec, palette);
-      interior.setQuality(flags);
+      interior.setLook(lookFor(flags, 'day'));
       return interior;
     };
     const shootRoute = (width: number, height: number, heading = 0.7) =>

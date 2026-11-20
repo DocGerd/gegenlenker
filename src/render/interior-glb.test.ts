@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, Group, Vector3 } from 'three';
+import { Box3, DataTexture, Group, MeshBasicMaterial, Vector3 } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { Rect } from '../contracts/render';
 import { trucks } from '../vehicles/registry';
@@ -8,13 +8,17 @@ import { truckAnchors } from '../vehicles/anchors';
 import { cabShellParams } from './cab-dims';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { placePose } from './coords';
+import { GRADE_SHADER_MARKER } from './grade';
 import { type Shells, parseMeshes } from './glb-shells';
+import type { VehicleEnvironment } from './vehicle-pbr';
 import {
   createGlbInterior,
   INTERIOR_URLS,
   type InteriorShell,
   interiorShellFrom,
 } from './interior-glb';
+import { lookFor } from './look';
+import { InteriorNodeMaterial, INTERIOR_SHADER_MARKER, interiorSample } from './interior-material';
 import { QUALITY_FLAGS } from './quality';
 import { INTERIOR_LAYER } from './seams';
 import { computeViewports } from './viewports';
@@ -52,7 +56,7 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
       onLoaded: () => () => undefined,
     } as unknown as Shells<InteriorShell>;
     const interior = createGlbInterior(spec, { shells });
-    interior.setQuality(QUALITY_FLAGS.high);
+    interior.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(interior.drawn).toBe(false);
     expect(interior.flat.object.visible).toBe(true);
     interior.attach(await glb(spec.id));
@@ -68,10 +72,10 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
   it('keeps the flat overlay on Balanced and draws nothing on Low, asset or not', async () => {
     const interior = createGlbInterior(spec);
     interior.attach(await glb(spec.id));
-    interior.setQuality(QUALITY_FLAGS.balanced);
+    interior.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(interior.drawn).toBe(false);
     expect(interior.flat.object.visible).toBe(true);
-    interior.setQuality(QUALITY_FLAGS.low);
+    interior.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(interior.drawn).toBe(false);
     expect(interior.flat.object.visible).toBe(false);
   });
@@ -88,7 +92,7 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
       },
     };
     const interior = createGlbInterior(spec, { shells });
-    interior.setQuality(QUALITY_FLAGS.high);
+    interior.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(interior.drawn).toBe(false);
     (deliver as unknown as (shell: InteriorShell) => void)(shell);
     expect(interior.drawn).toBe(true);
@@ -97,7 +101,7 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
   it('sits inside the cab at any heading, on the interior layer, casting no shadow', async () => {
     const interior = createGlbInterior(spec);
     interior.attach(await glb(spec.id));
-    interior.setQuality(QUALITY_FLAGS.high);
+    interior.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const { cockpit, mirrorLeft, mirrorRight } = computeViewports(1350, 600, 'drive', null);
     const cab = cabShellParams(spec);
     const anchors = truckAnchors(spec);
@@ -139,5 +143,76 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
         expect(centre.y, mesh.name).toBeGreaterThan(cab.frameTop);
       }
     }
+  });
+});
+
+describe.each(trucks)('lit interior of $id', (spec) => {
+  const day = (flags: typeof QUALITY_FLAGS.high) => lookFor(flags, 'day');
+  const palette = {} as never;
+
+  it('wears the lit node material and takes the sun shadow on High, casting none', async () => {
+    const interior = createGlbInterior(spec);
+    interior.attach(await glb(spec.id));
+    interior.setLook(day(QUALITY_FLAGS.high));
+    expect(interior.material).toBeInstanceOf(InteriorNodeMaterial);
+    expect(interior.meshes.length).toBeGreaterThan(0);
+    for (const mesh of interior.meshes) {
+      expect(mesh.material, mesh.name).toBe(interior.material);
+      expect(mesh.receiveShadow, mesh.name).toBe(true);
+      expect(mesh.castShadow, mesh.name).toBe(false);
+    }
+  });
+
+  it('is lit only while the preset lights the perspective views, and receives only while the sun casts', async () => {
+    const interior = createGlbInterior(spec);
+    interior.attach(await glb(spec.id));
+    const unlit = { ...QUALITY_FLAGS.high, perspectiveLighting: false, sunShadow: false };
+    interior.setLook(day(unlit));
+    expect(interior.material).toBeInstanceOf(MeshBasicMaterial);
+    expect(interior.meshes.every((m) => !m.receiveShadow)).toBe(true);
+    interior.setLook(day({ ...QUALITY_FLAGS.high, sunShadow: false }));
+    expect(interior.material).toBeInstanceOf(InteriorNodeMaterial);
+    expect(interior.meshes.every((m) => !m.receiveShadow)).toBe(true);
+    interior.setLook(day(QUALITY_FLAGS.high));
+    expect(interior.meshes.every((m) => m.receiveShadow)).toBe(true);
+    interior.setLook(day(QUALITY_FLAGS.balanced));
+    expect(interior.material).toBeInstanceOf(MeshBasicMaterial);
+  });
+
+  it('reflects the vehicles sky map on its own material once it is ready, never on the scene', async () => {
+    const map = new DataTexture(new Uint8Array(4), 1, 1);
+    let ready: DataTexture | null = null;
+    const listeners = new Set<() => void>();
+    const env = {
+      texture: () => ready,
+      onChange: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    } as unknown as VehicleEnvironment;
+    const interior = createGlbInterior(spec, { env, palette });
+    interior.attach(await glb(spec.id));
+    interior.setLook(day(QUALITY_FLAGS.high));
+    const envMap = (): unknown => {
+      const { material } = interior;
+      return material instanceof InteriorNodeMaterial ? material.envMap : undefined;
+    };
+    expect(envMap()).toBeNull();
+    ready = map;
+    listeners.forEach((listener) => listener());
+    expect(envMap()).toBe(map);
+    interior.dispose();
+    expect(listeners.size).toBe(0);
+  });
+});
+
+describe('the interior grade sample', () => {
+  it('builds the lit material as a shadow receiver under a casting sun, marked in the shader', () => {
+    const sample = interiorSample();
+    expect(sample.mesh.material).toBeInstanceOf(InteriorNodeMaterial);
+    expect(sample.mesh.receiveShadow).toBe(true);
+    expect(sample.lights?.some((l) => l.castShadow)).toBe(true);
+    expect(sample.markers).toEqual([INTERIOR_SHADER_MARKER, GRADE_SHADER_MARKER]);
+    sample.dispose();
   });
 });

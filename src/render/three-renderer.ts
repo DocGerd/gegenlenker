@@ -263,7 +263,7 @@ export function createThreeSceneRenderer(
     b.environment.setLook(look);
     b.truck.setLook(look);
     b.trailer.setLook(look);
-    b.interior.setQuality(quality);
+    b.interior.setLook(look);
   }
 
   function disposeBuilt(): void {

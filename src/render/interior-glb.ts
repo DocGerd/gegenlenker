@@ -1,19 +1,25 @@
-import { Group, Mesh, MeshBasicMaterial } from 'three';
+import { Group, type Material, Mesh, MeshBasicMaterial } from 'three';
+import type { ScenePalette } from '../contracts/render';
 import type { TruckId, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { createCockpitInterior, type FlatInterior } from './cockpit-interior';
 import arocsUrl from './assets/arocs-1835-ak-interior.glb?url';
 import manUrl from './assets/man-le-18-280-interior.glb?url';
 import type { InteriorMeshName } from './interior-dims';
+import { InteriorNodeMaterial } from './interior-material';
+import type { Look } from './look';
 import { INTERIOR_LAYER, type CockpitInterior } from './seams';
 import type { Shells } from './glb-shells';
+import { setGraded } from './grade';
+import type { VehicleEnvironment } from './vehicle-pbr';
 
 /*
  * The cab interior as a Blender asset (tools/blender/interior_shell.py, #159): the dashboard with its
  * binnacle, the door tops, the A-pillars at the windscreen's corners, the header band with the roof
- * lining and the stowed visor, and the steering wheel, all in the truck's frame and unlit. They are
- * depth tested, so each hides what lies behind it. Until the asset is in place, and wherever the preset
- * does not draw it, the flat overlay shows.
+ * lining and the stowed visor, and the steering wheel, all in the truck's frame. They are depth
+ * tested, so each hides what lies behind it. Where the preset lights the perspective views they wear
+ * the lit material and take the sun's shadow; elsewhere they stay unlit. Until the asset is in place,
+ * and wherever the preset does not draw it, the flat overlay shows.
  */
 
 /** `<truck id>-interior`: the keys of the asset list in tools/blender/glb-build.ts. */
@@ -47,6 +53,9 @@ export function interiorShellFrom(meshes: readonly Mesh[]): InteriorShell {
 export type InteriorOptions = {
   /** Where the asset comes from; none keeps the flat overlay. */
   readonly shells?: Shells<InteriorShell>;
+  /** The sky the lit material reflects, with the palette it is made for. */
+  readonly env?: VehicleEnvironment;
+  readonly palette?: ScenePalette;
 };
 
 export type GlbInterior = CockpitInterior & {
@@ -55,11 +64,16 @@ export type GlbInterior = CockpitInterior & {
   readonly meshes: readonly Mesh[];
   /** Whether the asset, not the flat overlay, is what shows now. */
   readonly drawn: boolean;
+  /** The material the parts wear now: lit under perspective lighting, plain vertex colours otherwise. */
+  readonly material: Material;
   attach(shell: InteriorShell): void;
   detach(): void;
 };
 
-export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions = {}): GlbInterior {
+export function createGlbInterior(
+  truck: TruckSpec,
+  { shells, env, palette }: InteriorOptions = {},
+): GlbInterior {
   const flat = createCockpitInterior(truck);
   const key = `${truck.id}-interior`;
   const { eye } = truckAnchors(truck);
@@ -75,19 +89,39 @@ export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions 
   object.add(flat.object, standing);
   standing.visible = false;
 
-  const material = new MeshBasicMaterial({ vertexColors: true, fog: false });
+  const plain = new MeshBasicMaterial({ vertexColors: true, fog: false });
+  let lit: InteriorNodeMaterial | null = null;
+  let look: Look | null = null;
   const meshes: Mesh[] = [];
   let attached = false;
   let wanted = false;
   let drawn = false;
 
+  const current = (): Material =>
+    look?.flags.perspectiveLighting === true ? litMaterial() : plain;
+  const litMaterial = (): InteriorNodeMaterial => (lit ??= new InteriorNodeMaterial());
+
+  /** Lit and sun-shadowed under perspective lighting; the sky map follows once the vehicles' is ready. */
+  const dress = (): void => {
+    if (look === null) return;
+    const on = look.flags.perspectiveLighting;
+    if (on) {
+      const material = litMaterial();
+      setGraded(material, look.grade.on);
+      material.envMap = (palette && env?.texture(palette, look.mode)) || null;
+    }
+    for (const mesh of meshes) {
+      mesh.material = current();
+      mesh.receiveShadow = on && look.flags.sunShadow;
+    }
+  };
+
   const place = (proto: Mesh): Mesh => {
-    const mesh = new Mesh(proto.geometry, material);
+    const mesh = new Mesh(proto.geometry, current());
     proto.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
     mesh.name = proto.name;
     mesh.layers.set(INTERIOR_LAYER);
     mesh.castShadow = false;
-    mesh.receiveShadow = false;
     meshes.push(mesh);
     return mesh;
   };
@@ -102,11 +136,11 @@ export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions 
     }
   };
 
-  let lastFlags: Parameters<CockpitInterior['setQuality']>[0] | null = null;
   const apply = (): void => {
-    if (lastFlags === null) return;
-    flat.setQuality(lastFlags);
-    wanted = lastFlags.cockpitInterior && lastFlags.interiorGlb;
+    if (look === null) return;
+    flat.setLook(look);
+    wanted = look.flags.cockpitInterior && look.flags.interiorGlb;
+    dress();
     sync();
   };
 
@@ -127,6 +161,7 @@ export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions 
     apply();
   };
   const cancel = shells?.onLoaded(key, attach);
+  const stopWatching = env?.onChange(dress);
 
   return {
     object,
@@ -135,6 +170,9 @@ export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions 
     meshes,
     get drawn() {
       return drawn;
+    },
+    get material() {
+      return current();
     },
     attach,
     detach,
@@ -146,16 +184,18 @@ export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions 
       standing.rotation.set(0, camera.rotation.y + Math.PI / 2, 0);
       standing.updateMatrixWorld(true);
     },
-    setQuality(flags) {
-      lastFlags = flags;
+    setLook(next) {
+      look = next;
       apply();
     },
     dispose() {
       cancel?.();
+      stopWatching?.();
       if (drawn) shells?.attached(key, false);
       drawn = false;
       flat.dispose();
-      material.dispose();
+      plain.dispose();
+      lit?.dispose();
     },
   };
 }

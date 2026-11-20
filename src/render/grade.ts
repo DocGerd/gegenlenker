@@ -54,6 +54,8 @@ export const GRADE = {
   skyHdri: uniform(1),
   /** Unit vector towards the perspective sun: the haze is warmer on that side. */
   sunDirection: uniform(new Vector3(0, 1, 0)),
+  /** Share of the light the cab interior's albedo takes: the dash lamps and night dim it. */
+  interiorLight: uniform(1),
 };
 
 /** Share of the fog colour at this fragment. */

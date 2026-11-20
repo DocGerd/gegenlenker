@@ -24,9 +24,12 @@ import { KEYS } from './palette';
 import {
   AIDS_LAYER,
   CAB_LAYER,
+  CHASE_LAYERS,
+  COCKPIT_LAYERS,
   DEFAULT_LAYER,
   enableLayers,
   INTERIOR_LAYER,
+  MIRROR_LAYERS,
   PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
 } from './seams';
@@ -126,6 +129,17 @@ describe('light rig', () => {
     rig.setSplit(false);
     expect(legacy.every(only(DEFAULT_LAYER))).toBe(true);
     expect(hdri.every((l) => !l.visible)).toBe(true);
+  });
+
+  it('lights every perspective camera, the cockpit pass over the interior layer included', () => {
+    const { hdri } = lights(createLightRig(scene));
+    for (const layers of [COCKPIT_LAYERS, MIRROR_LAYERS, CHASE_LAYERS]) {
+      const camera = new Layers();
+      camera.disableAll();
+      enableLayers(camera, layers);
+      expect(hdri.every((l) => camera.test(l.layers))).toBe(true);
+    }
+    expect(COCKPIT_LAYERS).toContain(INTERIOR_LAYER);
   });
 
   it('dims the HDRI rig only', () => {
