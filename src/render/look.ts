@@ -7,6 +7,7 @@ import type { QualityFlags } from './quality';
 /** What the perspective renderer applies, derived from the quality flags and the lighting mode. */
 export type Look = {
   readonly flags: QualityFlags;
+  readonly mode: LightingMode;
   /** The legacy lights serve the top-down view only and the HDRI rig lights the perspective views. */
   readonly lightSplit: boolean;
   readonly grade: {
@@ -23,6 +24,7 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
   const night = mode === 'night';
   return {
     flags,
+    mode,
     lightSplit: flags.perspectiveLighting || night,
     grade: {
       on: flags.perspectiveLighting,

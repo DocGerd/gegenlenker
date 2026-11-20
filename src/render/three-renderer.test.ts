@@ -123,6 +123,35 @@ describe('renderer quality', () => {
   });
 });
 
+describe('renderer lighting', () => {
+  it('reaches the scene parts through the look whether set before the scene or after, and ignores a repeat', () => {
+    const looks: Look[] = [];
+    const part = () => ({
+      object: new Group(),
+      update: () => undefined,
+      setQuality: () => undefined,
+      setLook: (look: Look) => void looks.push(look),
+      dispose: () => undefined,
+    });
+    const renderer = createThreeSceneRenderer({
+      truck: part,
+      trailer: part,
+      environment: part,
+      interior: () => ({ ...part(), frame: 'eye' as const, place: () => undefined }),
+      aids: () => ({ object: new Group(), update: () => undefined, dispose: () => undefined }),
+    });
+    renderer.setLighting('night');
+    renderer.setScene(layout, truckById('man-le-18-280'), trailerById('krone-azw-18'));
+    expect(looks.map((l) => l.mode)).toEqual(['night', 'night', 'night']);
+
+    looks.length = 0;
+    renderer.setLighting('night');
+    expect(looks).toEqual([]);
+    renderer.setLighting('day');
+    expect(looks.map((l) => l.mode)).toEqual(['day', 'day', 'day']);
+  });
+});
+
 describe('renderer interior', () => {
   it('builds one interior per scene, hangs a truck-frame one on the truck, and disposes it with the scene', () => {
     const interiors: { object: Group; dispose: ReturnType<typeof vi.fn> }[] = [];

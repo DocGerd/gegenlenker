@@ -8,6 +8,7 @@ import {
   GraphicsStartError,
   type GraphicsBackend,
   type GraphicsPreset,
+  type LightingMode,
   type Rect,
   type RenderFrame,
   type RenderStats,
@@ -202,6 +203,7 @@ export function createThreeSceneRenderer(
   topDownCamera.rotation.x = -Math.PI / 2;
   topDownCamera.position.y = SKY_HEIGHT;
   let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
+  let lighting: LightingMode = DEFAULT_LIGHTING;
   const mirrorLeft = createMirror(quality.mirrorMsaa);
   const mirrorRight = createMirror(quality.mirrorMsaa);
   const mirrorPosition = new Vector3();
@@ -256,8 +258,8 @@ export function createThreeSceneRenderer(
     appliedRatio = r;
   }
 
-  function applyQuality(b: Built): void {
-    const look = lookFor(quality, DEFAULT_LIGHTING);
+  function applyLookTo(b: Built): void {
+    const look = lookFor(quality, lighting);
     b.environment.setLook(look);
     b.truck.setLook(look);
     b.trailer.setLook(look);
@@ -406,7 +408,7 @@ export function createThreeSceneRenderer(
       resetTiming();
       parts.onRenderer?.(next);
       applySize();
-      if (built !== null) applyQuality(built);
+      if (built !== null) applyLookTo(built);
       timer.warmUp();
       // lost after the start settled but before `renderer` named it, so the handler skipped it
       if (gpuLost(next)) onLost();
@@ -451,7 +453,7 @@ export function createThreeSceneRenderer(
         yardBounds: fitBounds(nextLayout),
         radius: followRadius(truck, trailer),
       };
-      applyQuality(built);
+      applyLookTo(built);
     },
 
     setQuality(preset: GraphicsPreset) {
@@ -462,7 +464,16 @@ export function createThreeSceneRenderer(
       mirrorLeft.setSamples(quality.mirrorMsaa);
       mirrorRight.setSamples(quality.mirrorMsaa);
       if (built !== null) {
-        applyQuality(built);
+        applyLookTo(built);
+        timer.warmUp();
+      }
+    },
+
+    setLighting(mode: LightingMode) {
+      if (mode === lighting) return;
+      lighting = mode;
+      if (built !== null) {
+        applyLookTo(built);
         timer.warmUp();
       }
     },

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   pbrAttach: vi.fn(),
   setSky: vi.fn(),
   setQuality: vi.fn(),
+  setLighting: vi.fn(),
   onRenderer: null as ((gpu: unknown) => void) | null,
 }));
 
@@ -95,6 +96,7 @@ vi.mock('./three-renderer', () => ({
       warmUp: mocks.warmUp,
       onLost: vi.fn(),
       setQuality: mocks.setQuality,
+      setLighting: mocks.setLighting,
       dispose: vi.fn(),
     };
   },
@@ -131,6 +133,7 @@ describe('scene renderer attach hooks', () => {
       mocks.pbrAttach,
       mocks.setSky,
       mocks.setQuality,
+      mocks.setLighting,
     ])
       mock.mockClear();
     mocks.syncAttach = false;
@@ -194,6 +197,12 @@ describe('scene renderer attach hooks', () => {
     }
     expect(QUALITY_FLAGS.high.hdriSky).toBe(true);
     expect(QUALITY_FLAGS.low.hdriSky).toBe(false);
+  });
+
+  it('passes the lighting mode on to the renderer', () => {
+    const renderer = createSceneRenderer();
+    renderer.setLighting('night');
+    expect(mocks.setLighting).toHaveBeenLastCalledWith('night');
   });
 
   it('enables the yard kit per preset flag', () => {
