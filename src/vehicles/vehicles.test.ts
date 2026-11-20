@@ -111,7 +111,7 @@ describe('resolution', () => {
     const eye = truckAnchors(man).eye;
     expect(eye.x).toBeCloseTo(4.22, 12);
     expect(eye.y).toBeCloseTo(0.6, 12);
-    expect(eye.z).toBeCloseTo(1.95, 12);
+    expect(eye.z).toBeCloseTo(2.35, 12);
     const mirrorRight = truckAnchors(man).mirrorRight;
     expect(mirrorRight.x).toBeCloseTo(4.62, 12);
     expect(mirrorRight.y).toBeCloseTo(-1.45, 12);

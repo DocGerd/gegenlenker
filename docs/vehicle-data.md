@@ -23,7 +23,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | frontTrack | 1950 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | rearTrack | 1800 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | couplingOffset | 1250 mm | frame end plus coupling crossmember, no source found |
-| MAN LE 18.280 | eye.height | 1950 mm | typical for the vehicle class, no source found |
+| MAN LE 18.280 | eye.height | 2350 mm | cab floor 1.1 m above ground (render model), seated eye 1.25 m above it: seat height plus sitting eye height; no source found |
 | MAN LE 18.280 | eye.behindBumper | 1000 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | eye.leftOfCentre | 600 mm | about 0.65 m inboard of the 2.5 m cab side; no source found |
 | MAN LE 18.280 | mirror.lateral | 1250 mm | typical for the vehicle class, no source found |
@@ -57,7 +57,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Mercedes-Benz Arocs 1835 AK | frontTrack | 2050 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | rearTrack | 1850 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | couplingOffset | 1500 mm | frame end plus coupling crossmember, no source found |
-| Mercedes-Benz Arocs 1835 AK | eye.height | 2150 mm | typical for the vehicle class, no source found |
+| Mercedes-Benz Arocs 1835 AK | eye.height | 2450 mm | cab floor 1.1 m above ground (render model), seated eye 1.35 m above it (4x4 tipper seat sits higher than the MAN distribution cab); no source found |
 | Mercedes-Benz Arocs 1835 AK | eye.behindBumper | 1300 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | eye.leftOfCentre | 600 mm | about 0.65 m inboard of the 2.5 m cab side; no source found |
 | Mercedes-Benz Arocs 1835 AK | mirror.lateral | 1400 mm | typical for the vehicle class, no source found |
