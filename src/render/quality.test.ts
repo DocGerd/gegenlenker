@@ -3,7 +3,12 @@ import { GRAPHICS_PRESETS } from '../contracts/render';
 import { QUALITY_FLAGS, type QualityFlags } from './quality';
 
 /** Flags whose asset is a download: the tablet preset must not pay for them. A new one is added here. */
-const DOWNLOADS: readonly (keyof QualityFlags)[] = ['groundTexture', 'groundPbr', 'hdriSky'];
+const DOWNLOADS: readonly (keyof QualityFlags)[] = [
+  'groundTexture',
+  'groundPbr',
+  'hdriSky',
+  'yardKit',
+];
 
 /** Flags High adds over Balanced that cost compute only: each new High-only flag is classified here or in DOWNLOADS. */
 const COMPUTE_ONLY: readonly (keyof QualityFlags)[] = [
@@ -47,7 +52,9 @@ describe('quality flags', () => {
     for (const key of changed) expect(classified, key).toContain(key);
     for (const key of classified)
       expect(QUALITY_FLAGS.high[key as keyof QualityFlags], key).toBe(true);
-    expect(DOWNLOADS).toEqual(expect.arrayContaining(['groundTexture', 'groundPbr', 'hdriSky']));
+    expect(DOWNLOADS).toEqual(
+      expect.arrayContaining(['groundTexture', 'groundPbr', 'hdriSky', 'yardKit']),
+    );
     for (const key of DOWNLOADS) expect(QUALITY_FLAGS.balanced[key], key).toBe(false);
   });
 

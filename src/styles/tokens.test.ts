@@ -7,6 +7,7 @@ import { isOnYard } from '../render/yard-props';
 import { obstaclePaletteKey } from '../render/yard-tokens';
 import { KEYS } from '../render/palette';
 import { REALISM_HUES } from '../render/realism-hues';
+import { HUD_BAND_SHARE } from '../render/viewports';
 
 const read = (relative: string) => readFileSync(new URL(relative, import.meta.url), 'utf8');
 
@@ -239,6 +240,22 @@ describe('HUD view frame', () => {
     expect(tokens).toHaveLength(2);
     const [a = '', b = ''] = tokens.map((token) => value(token, theme));
     expect(contrast(a, b)).toBeGreaterThanOrEqual(9);
+  });
+});
+
+describe('HUD band', () => {
+  const hud = read('../hud/hud.css');
+
+  it('has the height viewports.ts places the cockpit interior above', () => {
+    const share = /--hud-band:\s*([\d.]+)%/.exec(hud)?.[1];
+    expect(Number(share) / 100).toBeCloseTo(HUD_BAND_SHARE, 10);
+  });
+
+  it('sizes the band and offsets the legend from the one token', () => {
+    const rule = (selector: string) =>
+      new RegExp(`(?:^|\\n)${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(hud)?.[1] ?? '';
+    expect(rule('.hud-band')).toMatch(/\bheight:\s*var\(--hud-band\)/);
+    expect(rule('.hud-legend')).toMatch(/\bbottom:\s*calc\(var\(--hud-band\)/);
   });
 });
 

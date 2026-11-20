@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Marking, ResolvedLayout } from '../contracts/layout';
+import { isKitDecor, type Marking, type ResolvedLayout } from '../contracts/layout';
 import type { Obb } from '../contracts/sim';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
@@ -53,7 +53,7 @@ describe.each(['depot', 'logistics'] as const)('ground mask of %s', (id) => {
   it('darkens only within reach of a footprint, and does so at every obstacle', () => {
     const footprints = [
       ...layout.obstacles.map((o) => o.obb),
-      ...layout.decor.map((d) => d.footprint),
+      ...layout.decor.filter((d) => !isKitDecor(d)).map((d) => d.footprint),
     ];
     const contact = lit(mask, 0);
     expect(contact.length).toBeGreaterThan(0);
