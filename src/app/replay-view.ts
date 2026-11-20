@@ -122,7 +122,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   const map = document.createElement('div');
   map.className = 'replay-map';
   stage.append(map);
-  const view = mountRenderStage(stage, map, exit);
+  const view = mountRenderStage(stage, map, exit, log.lighting);
   cleanups.push(() => view.dispose());
   const { renderer } = view;
   renderer.setScene(layout, truckById(log.truckId), trailerById(log.trailerId));

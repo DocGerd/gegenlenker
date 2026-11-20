@@ -1,22 +1,28 @@
 import { EXERCISE_IDS } from '../contracts/exercise';
 import type { BestResults, ExerciseId, RunResult } from '../contracts/exercise';
+import { DEFAULT_LIGHTING, LIGHTING_MODES, type LightingMode } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 
 const STORAGE_VERSION = 2;
 
-/** Assisted and unaided runs rank apart: an aid must not beat an unaided best. */
+/**
+ * Assisted and unaided runs rank apart: an aid must not beat an unaided best. Night runs rank
+ * apart too; day keys carry no suffix, so bests stored before lighting existed stay valid.
+ */
 export function bestKey(
   exerciseId: ExerciseId,
   truckId: TruckId,
   trailerId: TrailerId,
   assisted: boolean,
+  lighting: LightingMode,
 ): string {
-  return `${exerciseId}/${truckId}/${trailerId}/${assisted ? 'assisted' : 'unaided'}`;
+  const base = `${exerciseId}/${truckId}/${trailerId}/${assisted ? 'assisted' : 'unaided'}`;
+  return lighting === 'night' ? `${base}/night` : base;
 }
 
 export const resultKey = (r: RunResult): string =>
-  bestKey(r.exerciseId, r.truckId, r.trailerId, r.assisted);
+  bestKey(r.exerciseId, r.truckId, r.trailerId, r.assisted, r.lighting);
 
 /** Negative when `a` is better. */
 export function compareResults(a: RunResult, b: RunResult): number {
@@ -71,10 +77,13 @@ function toResult(v: unknown): RunResult | null {
   if (typeof v !== 'object' || v === null) return null;
   const r = v as Record<string, unknown>;
   const { exerciseId, truckId, trailerId } = r;
+  // Stored before lighting existed: drawn by day.
+  const lighting = 'lighting' in r ? r.lighting : DEFAULT_LIGHTING;
   if (
     !EXERCISE_IDS.some((id) => id === exerciseId) ||
     !TRUCK_IDS.some((id) => id === truckId) ||
     !TRAILER_IDS.some((id) => id === trailerId) ||
+    !LIGHTING_MODES.some((mode) => mode === lighting) ||
     typeof r.reached !== 'boolean' ||
     typeof r.assisted !== 'boolean' ||
     !isMeasure(r.positionError) ||
@@ -92,6 +101,7 @@ function toResult(v: unknown): RunResult | null {
     trailerId: trailerId as TrailerId,
     reached: r.reached,
     assisted: r.assisted,
+    lighting: lighting as LightingMode,
     waypointMissed: r.waypointMissed === true,
     positionError: r.positionError,
     angleError: r.angleError,

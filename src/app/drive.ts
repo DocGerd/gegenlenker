@@ -78,6 +78,7 @@ export function startDrive(
   const truck = truckById(run.truckId);
   const trailer = trailerById(run.trailerId);
   const sim = createSimulation(params, { truck: start }, contacts);
+  const { lighting } = settings;
   const recorder = createInputRecorder();
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
@@ -107,6 +108,7 @@ export function startDrive(
         exerciseId: exercise?.id ?? null,
         truckId: run.truckId,
         trailerId: run.trailerId,
+        lighting,
       },
       snapshot.step,
     );
@@ -121,6 +123,7 @@ export function startDrive(
             tracker?.waypointVisited() ?? true,
             assisted,
             startTime ?? snapshot.time,
+            lighting,
           )
         : null;
     dispose();
@@ -158,7 +161,7 @@ export function startDrive(
     });
   };
 
-  const view = mountRenderStage(stage, stage, () => exit(false));
+  const view = mountRenderStage(stage, stage, () => exit(false), lighting);
   cleanups.push(() => view.dispose());
   // Released early when the stage halts behind a notice: nothing may drive or hold the screen under it.
   const live: (() => void)[] = [];
