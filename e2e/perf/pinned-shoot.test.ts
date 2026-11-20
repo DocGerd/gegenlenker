@@ -65,6 +65,7 @@ describe('readyMarkers', () => {
     'data-render-backend': 'webgl2',
     'data-vehicle-shells': shells,
     'data-ground-texture': 'ktx2:bc7',
+    'data-ground-pbr': 'ktx2:bc7',
     'data-vehicle-pbr': 'on',
     'data-sky-hdri': 'on',
     'data-perspective-grade': 'on',
@@ -85,6 +86,7 @@ describe('readyMarkers', () => {
     expect(ready('low', {})).toBe(false);
     expect(ready('balanced', { ...all, 'data-vehicle-shells': 'a b' })).toBe(false);
     expect(ready('high', { ...all, 'data-ground-texture': 'failed' })).toBe(false);
+    expect(ready('high', { ...all, 'data-ground-pbr': 'failed' })).toBe(false);
     expect(ready('high', { ...all, 'data-sky-hdri': '' })).toBe(false);
   });
 });

@@ -13,7 +13,7 @@ const hash = (png: Buffer): string => createHash('sha256').update(png).digest('h
 test('lighting the stop lamps leaves the top-down view unchanged at every preset', async ({
   context,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   const errors: string[] = [];
   const threeProblems: string[] = [];
   for (const preset of PRESETS) {

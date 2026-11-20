@@ -8,7 +8,7 @@ import {
   MeshLambertMaterial,
   type Texture,
 } from 'three';
-import { MeshLambertNodeMaterial } from 'three/webgpu';
+import { MeshLambertNodeMaterial, type MeshStandardNodeMaterial } from 'three/webgpu';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette } from '../contracts/render';
 import { FOG_DENSITY, GRADE, setGraded } from './grade';
@@ -20,6 +20,8 @@ import {
   toleranceGeometry,
 } from './ground-geometry';
 import { createGroundMaterial } from './ground-material';
+import type { GroundPbrTextures } from './ground-pbr';
+import { createGroundPbrMaterial } from './ground-pbr-material';
 import type { GroundTextures } from './ground-texture';
 import type { SkyTextures } from './sky-texture';
 import {
@@ -55,6 +57,7 @@ export function proceduralEnvironment(
   palette: ScenePalette,
   groundTextures?: GroundTextures,
   skyTexture?: SkyTextures,
+  groundPbr?: GroundPbrTextures,
 ): Environment {
   const group = new Group();
   const geometries: BufferGeometry[] = [];
@@ -74,8 +77,43 @@ export function proceduralEnvironment(
   group.add(tokenGround);
 
   // High: perspective cameras draw this textured copy of the ground instead, top-down keeps the tokens.
+  // The PBR ground, once loaded, takes over the copy's material; the detail material is its fallback.
   let texturedGroundMaterial: MeshLambertNodeMaterial | null = null;
-  const groundSwap = tokenCopy([tokenGround], (on) => groundTextures?.reportApplied(on));
+  let texturedGround: Mesh | null = null;
+  let detailMap: Texture | null = null;
+  let pbrMaps: Parameters<typeof createGroundPbrMaterial>[0] | null = null;
+  let pbrMaterial: MeshStandardNodeMaterial | null = null;
+  let pbrWanted = false;
+  let pbrReported = false;
+  /** Whether the textured copy is the one drawn: the PBR ground is only drawn through it. */
+  let groundDrawn = false;
+  const syncGroundPbr = (): void => {
+    if (texturedGround === null || texturedGroundMaterial === null) return;
+    if (pbrMaterial === null && pbrMaps !== null && detailMap !== null) {
+      try {
+        pbrMaterial = createGroundPbrMaterial(pbrMaps, detailMap, {
+          x: layout.bounds.minX,
+          y: layout.bounds.minY,
+        });
+        setGraded(pbrMaterial, graded);
+      } catch (error) {
+        pbrMaps = null;
+        console.warn('PBR ground could not be applied; keeping the detail ground', error);
+      }
+    }
+    const worn = pbrWanted && pbrMaterial !== null;
+    texturedGround.material = worn && pbrMaterial !== null ? pbrMaterial : texturedGroundMaterial;
+    const on = worn && groundDrawn;
+    if (on !== pbrReported) {
+      pbrReported = on;
+      groundPbr?.reportApplied(on);
+    }
+  };
+  const groundSwap = tokenCopy([tokenGround], (on) => {
+    groundDrawn = on;
+    groundTextures?.reportApplied(on);
+    syncGroundPbr();
+  });
   const cancelGroundTexture = groundTextures?.onLoaded(
     ({ detail: texture }) => {
       let geometry: BufferGeometry | null = null;
@@ -85,10 +123,14 @@ export function proceduralEnvironment(
         material = createGroundMaterial(texture);
         setGraded(material, graded);
         const mesh = new Mesh(geometry, material);
+        mesh.receiveShadow = true;
         group.add(mesh);
         geometries.push(geometry);
         texturedGroundMaterial = material;
+        texturedGround = mesh;
+        detailMap = texture;
         groundSwap.setCopies([mesh]);
+        syncGroundPbr();
       } catch (error) {
         geometry?.dispose();
         material?.dispose();
@@ -97,6 +139,18 @@ export function proceduralEnvironment(
     },
     () => {
       groundSwap.disable();
+    },
+  );
+  const cancelGroundPbr = groundPbr?.onLoaded(
+    (maps) => {
+      pbrMaps = maps;
+      syncGroundPbr();
+    },
+    () => {
+      pbrMaps = null;
+      pbrMaterial?.dispose();
+      pbrMaterial = null;
+      syncGroundPbr();
     },
   );
 
@@ -301,6 +355,9 @@ export function proceduralEnvironment(
       syncSky();
       for (const mesh of props) mesh.material = graded ? propMaterial : solid;
       if (texturedGroundMaterial !== null) setGraded(texturedGroundMaterial, graded);
+      if (pbrMaterial !== null) setGraded(pbrMaterial, graded);
+      pbrWanted = flags.groundPbr;
+      syncGroundPbr();
       setGraded(litFlat, graded);
       if (gate !== null) setGraded(gate.materials[1], graded);
       skyline.setGraded(graded);
@@ -311,6 +368,7 @@ export function proceduralEnvironment(
     },
     dispose: () => {
       cancelGroundTexture?.();
+      cancelGroundPbr?.();
       cancelSkyTexture?.();
       disposed = true;
       hdriMap = null;
@@ -318,6 +376,7 @@ export function proceduralEnvironment(
       syncSky();
       groundSwap.disable();
       texturedGroundMaterial?.dispose();
+      pbrMaterial?.dispose();
       geometries.forEach((g) => g.dispose());
       gate?.materials.forEach((m) => m.dispose());
       solid.dispose();

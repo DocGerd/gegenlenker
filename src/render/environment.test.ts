@@ -8,8 +8,9 @@ import {
   Mesh,
   type Light,
   type Object3D,
+  type Texture,
 } from 'three';
-import { MeshLambertNodeMaterial } from 'three/webgpu';
+import { MeshLambertNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
@@ -18,13 +19,19 @@ import { createMirror } from './mirror';
 import { proceduralEnvironment } from './environment';
 import { texturedGroundGeometry } from './ground-geometry';
 import { createGroundMaterial } from './ground-material';
+import { createGroundPbrMaterial } from './ground-pbr-material';
 import type { TextureMaps, TextureSet } from './texture-set';
+import type { PbrKey } from './ground-pbr-spec';
 import { GROUND_SURFACES } from './ground-texture-spec';
 import { KEYS } from './palette';
 import { FOG_DENSITY, GRADE } from './grade';
 import { perspectiveLight } from './light-rig';
 import { QUALITY_FLAGS } from './quality';
 import { REALISM_HUES } from './realism-hues';
+vi.mock('./ground-pbr-material', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./ground-pbr-material')>();
+  return { ...actual, createGroundPbrMaterial: vi.fn(actual.createGroundPbrMaterial) };
+});
 vi.mock('./ground-material', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./ground-material')>();
   return { createGroundMaterial: vi.fn(actual.createGroundMaterial) };
@@ -607,6 +614,147 @@ describe('environment ground texture', () => {
     expect(cancel).toHaveBeenCalledOnce();
     deliver();
     expect(env.object.children).toHaveLength(children);
+  });
+});
+
+/** Delivers the PBR ground set on demand, standing in for the six KTX2 loads. */
+function fakePbrTextures() {
+  const waiting = new Map<(maps: TextureMaps<PbrKey>) => void, (() => void) | undefined>();
+  const applied: boolean[] = [];
+  const textures: TextureSet<PbrKey> = {
+    attach: () => undefined,
+    setEnabled: () => undefined,
+    onLoaded(apply, revert) {
+      waiting.set(apply, revert);
+      return () => waiting.delete(apply);
+    },
+    reportApplied: (on) => applied.push(on),
+    dispose: () => undefined,
+  };
+  return {
+    textures,
+    applied,
+    deliver: () => {
+      const texture = (): Texture => new DataTexture(new Uint8Array(4), 1, 1);
+      const maps: TextureMaps<PbrKey> = {
+        concreteAlbedo: texture(),
+        concretePacked: texture(),
+        asphaltAlbedo: texture(),
+        asphaltPacked: texture(),
+        paversAlbedo: texture(),
+        paversPacked: texture(),
+      };
+      for (const apply of waiting.keys()) apply(maps);
+    },
+    reject: () => {
+      for (const revert of waiting.values()) revert?.();
+    },
+  };
+}
+
+describe('environment PBR ground', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const flags = {
+    pbr: { ...QUALITY_FLAGS.high, litMarkings: false },
+    detail: { ...QUALITY_FLAGS.high, litMarkings: false, groundPbr: false },
+  };
+  const groundMaterial = (env: { object: Object3D }): unknown => {
+    const meshes = env.object.children.filter(
+      (o): o is Mesh => 'geometry' in o && (o as Mesh).geometry.hasAttribute('groundSelect'),
+    );
+    expect(meshes).toHaveLength(1);
+    return meshes[0]?.material;
+  };
+
+  it('puts the PBR material on the perspective ground copy over the detail one, and takes it off below High', () => {
+    if (layout === undefined) return;
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    detail.deliver();
+    expect(groundMaterial(env)).toBeInstanceOf(MeshLambertNodeMaterial);
+    pbr.deliver();
+    expect(groundMaterial(env)).toBeInstanceOf(MeshStandardNodeMaterial);
+    expect(pbr.applied).toEqual([true]);
+    env.setQuality(flags.detail);
+    expect(groundMaterial(env)).toBeInstanceOf(MeshLambertNodeMaterial);
+    env.setQuality(flags.pbr);
+    expect(groundMaterial(env)).toBeInstanceOf(MeshStandardNodeMaterial);
+    expect(pbr.applied).toEqual([true, false, true]);
+    // the detail set is still the one reported as drawn
+    expect(detail.applied).toEqual([true]);
+    env.dispose();
+  });
+
+  it('wears the PBR ground whichever set loads last', () => {
+    if (layout === undefined) return;
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    pbr.deliver();
+    detail.deliver();
+    expect(groundMaterial(env)).toBeInstanceOf(MeshStandardNodeMaterial);
+    env.dispose();
+  });
+
+  it('falls back to the detail ground when the GPU rejects the PBR shader', () => {
+    if (layout === undefined) return;
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    detail.deliver();
+    pbr.deliver();
+    pbr.reject();
+    expect(groundMaterial(env)).toBeInstanceOf(MeshLambertNodeMaterial);
+    expect(pbr.applied).toEqual([true, false]);
+    env.dispose();
+  });
+
+  it('stops reporting the PBR ground when the environment is disposed while it is drawn', () => {
+    if (layout === undefined) return;
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    detail.deliver();
+    pbr.deliver();
+    expect(pbr.applied).toEqual([true]);
+    env.dispose();
+    expect(pbr.applied).toEqual([true, false]);
+  });
+
+  it('stops reporting the PBR ground when the detail copy it is drawn through is rejected', () => {
+    if (layout === undefined) return;
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    detail.deliver();
+    pbr.deliver();
+    detail.reject();
+    expect(pbr.applied).toEqual([true, false]);
+    env.dispose();
+  });
+
+  it('keeps the detail ground and warns once when the PBR material cannot be built', () => {
+    if (layout === undefined) return;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.mocked(createGroundPbrMaterial).mockImplementationOnce(() => {
+      throw new Error('no node material');
+    });
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    detail.deliver();
+    pbr.deliver();
+    expect(warn).toHaveBeenCalledOnce();
+    expect(groundMaterial(env)).toBeInstanceOf(MeshLambertNodeMaterial);
+    expect(pbr.applied).toEqual([]);
+    env.dispose();
   });
 });
 

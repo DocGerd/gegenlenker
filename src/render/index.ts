@@ -11,6 +11,7 @@ import {
   TRAILER_SHELL_URLS,
 } from './glb-shells';
 import { createGradeCheck, precompileGrade } from './grade';
+import { startGroundPbrTextures } from './ground-pbr';
 import { startGroundTextures } from './ground-texture';
 import { readBackendRequest, requestGpuDevice, type BackendRequest } from './gpu-backend';
 import { ATTACHMENTS, type AttachmentKey } from './asset-registry';
@@ -68,6 +69,8 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   };
   // The ground state is the transcoded format while the textured ground is drawn.
   const groundTextures = startGroundTextures(undefined, publishState('ground'));
+  // The PBR ground draws over the detail ground; its state is the transcode target while it is drawn.
+  const groundPbr = startGroundPbrTextures(undefined, publishState('groundPbr'));
   // `on` once the vehicle reflections are built, `failed` if they fell back.
   const vehicleEnvironment = createVehicleEnvironment(publishState('pbr'));
   // `on` while the HDRI sky is drawn.
@@ -103,6 +106,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
     onRenderer: (gpu) => {
       groundTextures.attach(gpu);
+      groundPbr.attach(gpu);
       skyTexture.attach(gpu);
       vehicleEnvironment.attach(gpu);
       gradeCheck.attach(gpu);
@@ -111,7 +115,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     trailer: (spec, palette) =>
       proceduralTrailer(spec, palette, shells.trailer, vehicleEnvironment),
     environment: (layout, palette) =>
-      proceduralEnvironment(layout, palette, groundTextures, skyTexture),
+      proceduralEnvironment(layout, palette, groundTextures, skyTexture, groundPbr),
     aids: proceduralAids,
   });
   // Read by the e2e: the GPU API of the live renderer and why it is not WebGPU when that was asked
@@ -140,6 +144,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       shells.body.setEnabled(flags.vehicleGlb);
       shells.trailer.setEnabled(flags.vehicleGlb);
       groundTextures.setEnabled(flags.groundTexture);
+      groundPbr.setEnabled(flags.groundTexture && flags.groundPbr);
       skyTexture.setEnabled(flags.hdriSky);
       gradeCheck.setWanted(flags.perspectiveLighting);
       renderer.setQuality(preset);
@@ -148,6 +153,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       unmark();
       renderer.dispose();
       groundTextures.dispose();
+      groundPbr.dispose();
       skyTexture.dispose();
       vehicleEnvironment.dispose();
       gradeCheck.dispose();

@@ -1,3 +1,4 @@
+import { ENCODINGS } from '../assets/encodings';
 import { lfText, ROOT, sha256 } from '../assets/provenance';
 
 export const GROUND_FILES = {
@@ -11,18 +12,7 @@ export const GROUND_FILES = {
   manifest: 'src/render/assets/ground.manifest.json',
 } as const;
 
-/** Linear data packed into RGB, so no sRGB transfer and no perceptual weighting. */
-export const ENCODER_OPTIONS = {
-  isUASTC: true,
-  uastcLDRQualityLevel: 3,
-  needSupercompression: true,
-  enableRDO: true,
-  rdoQualityLevel: 1,
-  generateMipmap: true,
-  isPerceptual: false,
-  isSetKTX2SRGBTransferFunc: false,
-  isKTX2File: true,
-} as const;
+export const ENCODER_OPTIONS = ENCODINGS.linearUastcMips.options;
 
 /** Source files (LF-normalised) plus the encoder settings. */
 export const inputsSha256 = (root = ROOT): string =>
