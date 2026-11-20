@@ -132,7 +132,7 @@ test('the cockpit looks the same after a loss as before it', async ({ page }) =>
   test.setTimeout(180_000);
   const problems = collectProblems(page);
   await watchFailedAttachments(page);
-  await startPinnedDrive(page, 'high', en.exerciseStraightReverse);
+  await startPinnedDrive(page, { preset: 'high', lighting: 'day' }, en.exerciseStraightReverse);
   const hash = async (): Promise<string> => {
     const png = await shoot(page, 'cockpit');
     expect(await distinctColours(page, png)).toBeGreaterThan(MIN_DRAWN_COLOURS);

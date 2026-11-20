@@ -13,7 +13,7 @@ import {
 import { dot, float, max, normalMap, sqrt, texture, uv, vec2, vec3, vec4 } from 'three/tsl';
 import { MeshStandardNodeMaterial, type Node, type WebGPURenderer } from 'three/webgpu';
 import { isKitDecor, type KitPlacement, type ResolvedLayout } from '../contracts/layout';
-import type { ScenePalette } from '../contracts/render';
+import { DEFAULT_LIGHTING, type LightingMode, type ScenePalette } from '../contracts/render';
 import atlasAUrl from './assets/yard-kit-atlas-a.ktx2?url';
 import atlasBUrl from './assets/yard-kit-atlas-b.ktx2?url';
 import leavesUrl from './assets/yard-kit-leaves.ktx2?url';
@@ -278,13 +278,14 @@ export function createYardKitLayer(
   let built: Built | null = null;
   let wanted = false;
   let graded = false;
+  let mode: LightingMode = DEFAULT_LIGHTING;
   let drawn = false;
 
   const sync = (): void => {
     const on = wanted && built !== null;
     object.visible = on;
     if (built !== null) {
-      const map = on ? (reflections?.texture(palette) ?? null) : null;
+      const map = on ? (reflections?.texture(palette, mode) ?? null) : null;
       for (const material of [built.materials.atlas, built.materials.leaves]) {
         setGraded(material, graded);
         if (material.envMap !== map) {
@@ -348,9 +349,10 @@ export function createYardKitLayer(
 
   return {
     object,
-    setLook({ flags, grade }) {
-      wanted = flags.yardKit;
-      graded = grade.on;
+    setLook(look) {
+      wanted = look.flags.yardKit;
+      graded = look.grade.on;
+      mode = look.mode;
       sync();
     },
     dispose() {

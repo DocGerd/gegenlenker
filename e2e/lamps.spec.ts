@@ -23,7 +23,7 @@ test('lighting the stop lamps leaves the top-down view unchanged at every preset
     });
     page.on('pageerror', (e) => errors.push(e.message));
     const three = collectThreeProblems(page);
-    await startPinnedDrive(page, preset, en.exerciseStraightReverse);
+    await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
     if (preset !== 'low') {
       await expect(page.locator('html')).toHaveAttribute('data-vehicle-shells', /^\S+ \S+ \S+$/);
     }
