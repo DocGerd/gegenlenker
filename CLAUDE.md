@@ -59,7 +59,8 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 ## Blender assets
 
 - `tools/blender/{cab,body,trailer}_shell.py` (kernel `blender_common.py`, lamp helpers `lamp_common.py`) are the source of truth for the vehicle `.glb`s: run each unmodified through the `blender` MCP (`runpy.run_path` on its `wslpath -w` path; `init_globals` `PARAMS_PATH` or `PARAMS_JSON`, `OUT_PATH`, `EXPECTED_SHA256` `{scriptSha256, commonSha256, lampCommonSha256, paramsSha256}`: `runHashes` in `glb-build.ts`), then `pnpm glb:optimise <key> <raw.glb>` and `pnpm glb:manifest "<Blender version>"`; keys are `<truck id>-cab|body` and `<trailer id>-trailer` (one glb, `trailer` + `dolly` nodes).
-- After changing those scripts, `scripts/glb-optimise.mjs`, their params, `src/render/{cab,body,trailer}-dims.ts` or `livery.ts`, run `pnpm glb:params` and rebuild (optimise-only changes need just a re-optimise; editing `blender_common.py` or `lamp_common.py` changes a recorded hash in every glb, so rebuild all assets); `tools/blender/glb-build.test.ts` checks every input hash in the glb. Params numbers are 0 or ≥ 1e-4 (Python and JS print smaller floats differently).
+- After changing those scripts, `scripts/glb-optimise.mjs`, their params, `src/render/{cab,body,trailer}-dims.ts` or `livery.ts`, run `pnpm glb:params` and rebuild (optimise-only changes need just a re-optimise; editing `blender_common.py` or `lamp_common.py` changes a recorded hash in every glb, so rebuild all assets, including the yard kit and its atlases); `tools/blender/glb-build.test.ts` checks every input hash in the glb. Params numbers are 0 or ≥ 1e-4 (Python and JS print smaller floats differently).
+- Yard kit: `tools/blender/yard_kit.py` (helpers `kit_common.py`, which records `commonSha256` + `kitCommonSha256`) bakes `yard-kit.glb` and its atlas pixels into the git-ignored `tools/blender/bake/`; `pnpm texture yard-kit-atlas-a|yard-kit-atlas-b|yard-kit-leaves` encodes them from there; `tools/blender/kit-build.test.ts` checks the hashes and budgets; the `yardKit` flag draws it.
 - Livery is colours only (no lettering, emblems or maker logos). Look dimensions in `src/render/livery.ts` are perspective-only render estimates, not Params, so they stay out of `dataFingerprint`.
 - MCP-run bpy scripts must not call `read_factory_settings`: it reloads preferences and disables the MCP add-on.
 - `tools/textures/` makes the KTX2 ground texture (`pnpm texture ground`); `tools/textures/ground-build.test.ts` fails when stale; it is runtime-cached at High, not precached.
@@ -70,6 +71,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 
 Test logic and critical paths only; no blanket coverage, no tests without value.
 
+- Perspective detail (decals, wear, AO) must never hint at the target: derive it from bay geometry, not from what an exercise parks or marks, and test it across every exercise.
 - e2e: await web-first assertions (`toHaveCount`, `toBeVisible`; `hudReady()` in `e2e/layout.spec.ts`) before measuring DOM boxes.
 - Never spread a possibly empty list into `add()`: three reports that (and shader errors) only via `console.error`/`THREE.` warnings, not pageerror; `e2e/fixtures.ts` fails any test on those and on page errors, so specs import `test`/`expect` from it (lint-enforced) and exempt deliberate messages with `allow()`.
 
@@ -88,6 +90,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Compare before/after by hash only at standstill with `performance.now`/rAF pinned in the shoot script: the resolution governor and the sim both step on wall-clock time, so other shots differ run to run.
 - Headless screenshots run on software GL and passed a see-through skyline; perspective realism changes need an owner device check before calling them done.
 - `node scripts/shoot-views.mjs --diff <before-dir>` compares pinned shots per view (`pnpm shoot --out <dir>` takes them); `?perf=1` fps is meaningless on SwiftShader.
+- `pnpm shoot` covers one exercise per layout: for content or layout refactors that claim no visual change, also compare `yardProps` geometry (positions, colours, order) against main for every layout × exercise, including no exercise.
 
 ## Workflow
 
