@@ -27,6 +27,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { MeshStandardNodeMaterial, type Node } from 'three/webgpu';
+import { GLOSS_FROM, GLOSS_ROUGHNESS, WEAR_DARKEN } from './ground-mask';
 import { GROUND_TEXTURE_MEAN } from './ground-texture-pixels';
 import { PBR_ALBEDO_MEAN, PBR_PACKED, PBR_SURFACE_IDS, type PbrSurface } from './ground-pbr-pixels';
 import {
@@ -41,6 +42,13 @@ import {
   slabNormalMatrix,
   VERGE_ROUGHNESS,
 } from './ground-pbr-spec';
+
+/** The ground mask (`groundMask`) and the metres its texture spans from the layout origin. */
+export type MaskBinding = {
+  readonly texture: Texture;
+  readonly width: number;
+  readonly height: number;
+};
 
 /** Names the PBR ground in its shader, so a compile error can be traced to it. */
 export const GROUND_PBR_MARKER = 'groundPbr';
@@ -71,8 +79,11 @@ function pick(table: readonly (readonly number[])[], index: FloatNode): Node<'ve
  * saw-cut slab joints on the yard. The albedo is detail around 1, so it multiplies the token vertex
  * colour and a surface keeps its token colour on average.
  *
- * Samplers: `macro` (ground.ktx2, read blurred for slab tone and mottling) and one albedo and one
- * packed map per surface.
+ * The mask's R channel only dims the ambient (aoNode), so it never doubles a sun shadow; its G
+ * channel darkens the albedo and, where strong, polishes the roughness.
+ *
+ * Samplers: `macro` (ground.ktx2, read blurred for slab tone and mottling), one albedo and one
+ * packed map per surface, and the mask.
  *
  * @param origin the layout bounds minimum: the detail ground's texture coordinates start there, and
  *   the slab joints sit at multiples of the pitch from it.
@@ -81,6 +92,7 @@ export function createGroundPbrMaterial(
   maps: Readonly<Record<PbrKey, Texture>>,
   macro: Texture,
   origin: { readonly x: number; readonly y: number },
+  mask: MaskBinding,
 ): MeshStandardNodeMaterial {
   const material = new MeshStandardNodeMaterial({ vertexColors: true, metalness: 0 });
   const select3 = attribute('groundSelect', 'vec3');
@@ -156,6 +168,9 @@ export function createGroundPbrMaterial(
     .mul(min(float(1), footprint.reciprocal().mul(JOINT_HALF_WIDTH)));
   const joint = max(edge.x, edge.y).mul(weights.concrete);
 
+  const marks = texture(mask.texture, vec2(sim.x.div(mask.width), sim.y.div(mask.height)));
+  const wear = channel(marks, 1);
+
   const macroGain = dot(texture(macro, uv()).bias(float(MACRO_BIAS)).rgb, select3).mul(
     1 / GROUND_TEXTURE_MEAN,
   );
@@ -163,15 +178,18 @@ export function createGroundPbrMaterial(
   material.colorNode = gain
     .mul(mix(float(1), macroGain, covered))
     .mul(float(1).sub(joint.mul(JOINT_DARKEN)))
+    .mul(float(1).sub(wear.mul(WEAR_DARKEN)))
     .toVar(GROUND_PBR_MARKER);
 
-  material.roughnessNode = blend(
-    (s) => channel(data[s], PBR_PACKED.roughness),
-    float(VERGE_ROUGHNESS),
+  const roughness = blend((s) => channel(data[s], PBR_PACKED.roughness), float(VERGE_ROUGHNESS));
+  material.roughnessNode = mix(
+    roughness,
+    float(GLOSS_ROUGHNESS),
+    smoothstep(GLOSS_FROM, GLOSS_FROM + 0.3, wear),
   );
-  material.aoNode = blend((s) => channel(data[s], PBR_PACKED.occlusion), float(1)).mul(
-    float(1).sub(joint.mul(JOINT_OCCLUDE)),
-  );
+  material.aoNode = blend((s) => channel(data[s], PBR_PACKED.occlusion), float(1))
+    .mul(float(1).sub(joint.mul(JOINT_OCCLUDE)))
+    .mul(float(1).sub(channel(marks, 0)));
 
   // Tangent-space XY (the concrete's turned with its slab), Z rebuilt, then into the frame the
   // texture axes lie in (GROUND_FRAME) and on to view space.

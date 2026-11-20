@@ -30,8 +30,10 @@ export const VERGE_ROUGHNESS = 0.95;
  */
 export const MACRO_BIAS = 6;
 
-/** Most samplers the PBR ground material may declare: the macro map, six scans and three's DFG look-up table. */
-export const PBR_SAMPLER_BUDGET = 8;
+/** Most samplers the PBR ground material may declare: the macro map, six scans, the mask and three's DFG look-up table. */
+export const PBR_SAMPLER_BUDGET = 9;
+/** What a sun shadow adds to a receiver. */
+export const SHADOW_SAMPLERS = 1;
 
 /**
  * Directions in the three frame of the texture axes. u runs along +x and v down the image along +z,
