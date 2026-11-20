@@ -4,9 +4,11 @@ import { Color } from 'three';
 import { describe, expect, it } from 'vitest';
 import { GRAPHICS_PRESETS } from '../contracts/render';
 import { FOG_DENSITY, GRADE } from './grade';
-import { perspectiveSunDirection } from './light-rig';
+import { NIGHT_AMBIENT, NIGHT_TINT, perspectiveSunDirection } from './light-rig';
 import { applyLook, lookFor } from './look';
+import { KEYS, tokenName } from './palette';
 import { QUALITY_FLAGS } from './quality';
+import type { ScenePaletteKey } from '../contracts/render';
 
 describe('lookFor', () => {
   it.each(GRAPHICS_PRESETS)('the day look of %s is what the flags have always driven', (preset) => {
@@ -21,12 +23,67 @@ describe('lookFor', () => {
     expect(look.grade.sunDirection).toEqual(perspectiveSunDirection());
   });
 
-  it('splits the lights at night on every preset without grading', () => {
-    for (const preset of GRAPHICS_PRESETS) {
-      const look = lookFor(QUALITY_FLAGS[preset], 'night');
-      expect(look.lightSplit, preset).toBe(true);
-      expect(look.grade.on, preset).toBe(QUALITY_FLAGS[preset].perspectiveLighting);
-    }
+  it.each(GRAPHICS_PRESETS)('the day look of %s changes nothing the flags did not', (preset) => {
+    const flags = QUALITY_FLAGS[preset];
+    const look = lookFor(flags, 'day');
+    expect(look.litCopies).toBe(flags.litMarkings);
+    expect(look.aidGlow).toBe(false);
+    expect(look.rig).toEqual({ sun: 1, ambient: 1, tint: null });
+    expect(look.sky).toBe('day');
+    expect(look.lamps).toBe(false);
+    expect(look.shadow).toBe(flags.sunShadow && flags.perspectiveLighting);
+  });
+
+  it.each(GRAPHICS_PRESETS)(
+    'the night look of %s is the same lit scene on every preset',
+    (preset) => {
+      const flags = QUALITY_FLAGS[preset];
+      const look = lookFor(flags, 'night');
+      expect(look.flags).toBe(flags);
+      expect(look.lightSplit).toBe(true);
+      expect(look.litCopies).toBe(true);
+      expect(look.aidGlow).toBe(true);
+      expect(look.rig).toEqual({ sun: 0, ambient: NIGHT_AMBIENT, tint: NIGHT_TINT });
+      expect(look.sky).toBe('night');
+      expect(look.lamps).toBe(true);
+      expect(look.shadow).toBe(false);
+      expect(look.grade.on).toBe(flags.perspectiveLighting);
+      expect(look.grade.exposure).toBe(1);
+      expect(look.grade.skyHdri).toBe(0);
+      expect(look.grade.fogDensity).toBe(flags.aerialPerspective ? FOG_DENSITY : 0);
+    },
+  );
+});
+
+describe('the night yard', () => {
+  const css = readFileSync(join(import.meta.dirname, '../styles/tokens.css'), 'utf8');
+  const token = (key: ScenePaletteKey): number => {
+    const hex = new RegExp(`--scene-${tokenName(key)}:\\s*#([0-9a-f]{6});`, 'i').exec(css)?.[1];
+    if (hex === undefined) throw new Error(`--scene-${tokenName(key)} missing`);
+    return parseInt(hex, 16);
+  };
+  // an upward Lambert surface under the night ambient, as the 8-bit sRGB intermediate stores it
+  const code = (key: ScenePaletteKey): number[] => {
+    const lit = new Color(token(key))
+      .multiply(new Color(...NIGHT_TINT))
+      .multiplyScalar(NIGHT_AMBIENT);
+    return [lit.getHex() >> 16, (lit.getHex() >> 8) & 255, lit.getHex() & 255];
+  };
+  const lit = (Object.keys(KEYS) as ScenePaletteKey[]).filter(
+    (k) => k !== 'sky' && k !== 'backdrop' && k !== 'nightBackdrop',
+  );
+
+  it('keeps at least 12 distinct codes across the surfaces, so the dark does not band', () => {
+    const luma = new Set(lit.map((k) => Math.max(...code(k))));
+    expect(luma.size).toBeGreaterThanOrEqual(12);
+  });
+
+  it('keeps the grounds apart and above the black floor', () => {
+    const grounds = (['yard', 'pavement', 'street', 'verge'] as const).map((k) =>
+      Math.max(...code(k)),
+    );
+    expect(new Set(grounds).size).toBe(4);
+    for (const g of grounds) expect(g).toBeGreaterThanOrEqual(16);
   });
 });
 

@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LAYOUT_IDS } from '../contracts/layout';
+import type { ScenePaletteKey } from '../contracts/render';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { isOnYard } from '../render/yard-props';
 import { obstaclePaletteKey } from '../render/yard-tokens';
-import { KEYS } from '../render/palette';
+import { KEYS, tokenName } from '../render/palette';
 import { REALISM_HUES } from '../render/realism-hues';
 import { HUD_BAND_SHARE } from '../render/viewports';
 
@@ -260,14 +261,16 @@ describe('HUD band', () => {
 });
 
 describe('scene tokens', () => {
-  const keys = Object.keys(KEYS);
-  const scene = (key: string) => value(`--scene-${key}`, 'light');
+  const keys = Object.keys(KEYS) as ScenePaletteKey[];
+  const scene = (key: string) => value(`--scene-${tokenName(key as ScenePaletteKey)}`, 'light');
 
   it('defines --scene-<key> for every scene palette key, as 6-digit hex, in :root only', () => {
     for (const key of keys) {
-      expect(root.get(`--scene-${key}`), key).toMatch(/^#[0-9a-f]{6}$/);
+      expect(root.get(`--scene-${tokenName(key)}`), key).toMatch(/^#[0-9a-f]{6}$/);
     }
-    expect(named(root, '--scene-').sort()).toEqual(keys.map((key) => `--scene-${key}`).sort());
+    expect(named(root, '--scene-').sort()).toEqual(
+      keys.map((key) => `--scene-${tokenName(key)}`).sort(),
+    );
     expect(named(darkBlock, '--scene-')).toEqual([]);
   });
 
@@ -377,6 +380,23 @@ describe('scene tokens', () => {
     'contact marker casing against %s is 3:1 or more',
     (surface) => {
       expect(contrast(scene('wheel'), scene(surface))).toBeGreaterThanOrEqual(3);
+    },
+  );
+
+  // TN-a: the night clear colour is darker than every ground, so the yard's edge reads against it.
+  it.each(['yard', 'pavement', 'street', 'verge'])(
+    'TN-a: nightBackdrop is darker than %s with 1.5:1 or more',
+    (ground) => {
+      expect(luminance(scene('nightBackdrop')), 'darker').toBeLessThan(luminance(scene(ground)));
+      expect(contrast(scene(ground), scene('nightBackdrop'))).toBeGreaterThanOrEqual(1.5);
+    },
+  );
+
+  // TN-b: the strokes that stay in their day colour read against the night clear colour.
+  it.each(['accent', 'marking'])(
+    'TN-b: the %s core against nightBackdrop is 3:1 or more',
+    (core) => {
+      expect(contrast(scene(core), scene('nightBackdrop'))).toBeGreaterThanOrEqual(3);
     },
   );
 

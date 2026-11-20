@@ -256,6 +256,7 @@ export interface VehicleEnvironmentParts {
     gpu: WebGPURenderer,
     palette: ScenePalette,
     sky: Texture | null,
+    mode: LightingMode,
   ) => RenderTarget;
   readonly compiles: (gpu: WebGPURenderer, map: Texture) => Promise<boolean>;
 }
@@ -264,12 +265,15 @@ export function generateSkyMap(
   gpu: WebGPURenderer,
   palette: ScenePalette,
   hdri: Texture | null = null,
+  mode: LightingMode = 'day',
 ): RenderTarget {
   // untoned: the reflective material tone-maps what it reflects
-  const sky = createSceneSky(palette, false);
-  // only High captures, and it lights the perspective views with the split rig
-  sky.setGround(domeGround(palette, true));
-  sky.setHdri(hdri);
+  const sky = createSceneSky(palette, false, mode);
+  // only High captures, and it lights the perspective views with the split rig; the night dome has no HDRI
+  if (mode === 'day') {
+    sky.setGround(domeGround(palette, true));
+    sky.setHdri(hdri);
+  }
   // the dome sits on PERSPECTIVE_LAYER for the game cameras; the capture camera sees layer 0 only
   sky.mesh.layers.set(0);
   const scene = new Scene();
@@ -365,14 +369,16 @@ export function createVehicleEnvironment(
     texture(palette, mode) {
       if (renderer === null || gpuLost(renderer)) return null;
       const next = `${palette.sky}/${palette.verge}/${mode}`;
+      // the night dome has no HDRI to follow
+      const sky = mode === 'night' ? null : skyMap;
       if (next !== key) {
         release();
         key = next;
         failed = false;
       }
-      if ((target === null || targetSky !== skyMap) && pending === null && !failed) {
+      if ((target === null || targetSky !== sky) && pending === null && !failed) {
         try {
-          check(renderer, generate(renderer, palette, skyMap), skyMap);
+          check(renderer, generate(renderer, palette, sky, mode), sky);
         } catch (error) {
           fail(error);
         }

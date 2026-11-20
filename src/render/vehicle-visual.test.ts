@@ -351,6 +351,13 @@ describe('sun shadow', () => {
     }
   });
 
+  it('keeps the blobs at night on high, where the sun casts no shadow', () => {
+    for (const visual of visuals) {
+      visual.setLook(lookFor(QUALITY_FLAGS.high, 'night'));
+      for (const m of shadowsOf(visual.object)) expect((m.material as Material).opacity).toBe(1);
+    }
+  });
+
   it('restores the blobs once a failed grade stops the sun casting', () => {
     const visual = proceduralTruck(truckById(TRUCK_IDS[0]), palette);
     visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));

@@ -87,6 +87,7 @@ export const DEFAULT_LIGHTING: LightingMode = 'day';
 export type ScenePaletteKey =
   | 'sky'
   | 'backdrop'
+  | 'nightBackdrop'
   | 'verge'
   | 'yard'
   | 'pavement'

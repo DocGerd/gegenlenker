@@ -414,11 +414,11 @@ export function createYardKitLayer(
 
   return {
     object,
-    setLook({ flags, grade, mode: lookMode }) {
+    setLook({ flags, grade, mode: lookMode, shadow }) {
       wanted = flags.yardKit;
       graded = grade.on;
       mode = lookMode;
-      casting = flags.sunShadow && grade.on;
+      casting = shadow;
       sync();
     },
     dispose() {

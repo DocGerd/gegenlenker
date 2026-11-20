@@ -3,6 +3,7 @@ import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
 export const KEYS: Record<ScenePaletteKey, true> = {
   sky: true,
   backdrop: true,
+  nightBackdrop: true,
   verge: true,
   yard: true,
   pavement: true,
@@ -26,13 +27,18 @@ export const KEYS: Record<ScenePaletteKey, true> = {
   cladding: true,
 };
 
+/** `nightBackdrop` is the token `--scene-night-backdrop`. */
+export const tokenName = (key: ScenePaletteKey): string =>
+  key.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+
 export function readScenePalette(el: Element = document.documentElement): ScenePalette {
   const style = getComputedStyle(el);
   const palette: Partial<Record<ScenePaletteKey, number>> = {};
   for (const key of Object.keys(KEYS) as ScenePaletteKey[]) {
-    const raw = style.getPropertyValue(`--scene-${key}`).trim();
+    const raw = style.getPropertyValue(`--scene-${tokenName(key)}`).trim();
     const hex = /^#([0-9a-f]{6})$/i.exec(raw)?.[1];
-    if (hex === undefined) throw new Error(`Missing or invalid scene token --scene-${key}`);
+    if (hex === undefined)
+      throw new Error(`Missing or invalid scene token --scene-${tokenName(key)}`);
     palette[key] = parseInt(hex, 16);
   }
   return palette as ScenePalette;

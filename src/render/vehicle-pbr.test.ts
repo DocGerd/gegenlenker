@@ -243,6 +243,21 @@ describe('vehicle environment', () => {
     expect(disposed(made[0])).toHaveBeenCalledOnce();
   });
 
+  it('captures the night dome without the HDRI, whatever sky the day map follows', async () => {
+    const sky = new Texture();
+    const { env, generate } = setup();
+    env.attach(renderer());
+    env.setSky(sky);
+    await ready(env, palette, 'night');
+    expect(generate.mock.calls.at(-1)?.slice(2)).toEqual([null, 'night']);
+    // no regeneration for the night map when the day sky changes
+    env.setSky(new Texture());
+    await ready(env, palette, 'night');
+    expect(generate).toHaveBeenCalledTimes(1);
+    await ready(env, palette, 'day');
+    expect(generate.mock.calls.at(-1)?.slice(2)).toEqual([expect.any(Texture), 'day']);
+  });
+
   it('warns once, reports failure and stays plain when the map cannot be built', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { env, states, generate } = setup({

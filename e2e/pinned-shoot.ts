@@ -290,7 +290,7 @@ export function distinctColours(page: Page, png: Buffer): Promise<number> {
   }, png.toString('base64'));
 }
 
-/** Share of a PNG's pixels within `tolerance` per channel of the page's `--scene-<token>` colour. */
+/** Share of a PNG's pixels within `tolerance` per channel of the page's scene token for `token` (`nightBackdrop` is `--scene-night-backdrop`). */
 export function tokenShare(
   page: Page,
   png: Buffer,
@@ -300,7 +300,7 @@ export function tokenShare(
   return page.evaluate(
     async ([data, name, tol]) => {
       const hex = getComputedStyle(document.documentElement)
-        .getPropertyValue(`--scene-${name}`)
+        .getPropertyValue(`--scene-${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`)
         .trim();
       const want = /^#([0-9a-f]{6})$/i.exec(hex)?.[1];
       if (want === undefined) throw new Error(`no scene token ${name}`);

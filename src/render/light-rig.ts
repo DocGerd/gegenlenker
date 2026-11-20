@@ -17,8 +17,14 @@ import { fitSunShadow, prepareShadow, queueShadow, SUN_DISTANCE } from './sun-sh
 export const SUN_ELEVATION = (50 * Math.PI) / 180;
 export const SUN_INTENSITY = 2.4;
 export const HEMISPHERE_INTENSITY = 1.4;
+/** Share of the albedo an upward surface keeps at night, before the tint. */
+export const NIGHT_AMBIENT = 0.1;
+/** Linear tint of the night ambient light: cool, so the yard reads as moonless rather than grey. */
+export const NIGHT_TINT: readonly [number, number, number] = [0.55, 0.7, 1];
 /** SH9 basis constants of band 0 and the y term of band 1 (three's `getBasisAt`). */
 const SH_Y00 = 0.282095;
+/** The cosine lobe's band-0 factor, π * `SH_Y00`: a probe's irradiance from a uniform radiance of 1 is π, so its band-0 term is π over this. */
+const SH_IRRADIANCE_0 = 0.886227;
 const SH_Y10 = 0.488603;
 
 /** The legacy sun's position relative to the origin: south-west, where world (−, −) is Three (−x, +z). */
@@ -153,6 +159,23 @@ export function perspectiveLight(palette: ScenePalette): PerspectiveLight {
   };
 }
 
+/** A probe's SH for a uniform radiance of `tint` from every direction. */
+export function uniformSh(tint: readonly [number, number, number]): SphericalHarmonics3 {
+  const sh = new SphericalHarmonics3();
+  sh.coefficients[0]?.set(...tint).multiplyScalar(Math.PI / SH_IRRADIANCE_0);
+  return sh;
+}
+
+/** What the perspective rig emits; the day rig is `{ sun: 1, ambient: 1, tint: null }`. */
+export type RigLevels = {
+  /** Share of the HDRI sun's intensity. */
+  readonly sun: number;
+  /** Share of the sky light's intensity. */
+  readonly ambient: number;
+  /** Replaces the HDRI's sky light by a uniform light of this linear colour; null keeps the HDRI's. */
+  readonly tint: readonly [number, number, number] | null;
+};
+
 export type LightRig = {
   readonly object: Group;
   /**
@@ -160,8 +183,8 @@ export type LightRig = {
    * views. Separate from the quality flag, so night can force the split on every preset.
    */
   setSplit(on: boolean): void;
-  /** Scales the perspective rig (night dims it); the light set stays constant. */
-  setIntensity(share: number): void;
+  /** Sets what the perspective rig emits; the light set stays constant, so no shader changes. */
+  setLevels(levels: RigLevels): void;
   /**
    * Whether the HDRI sun casts; the legacy lights never do. A failed grade check (`gradeDisabled`)
    * stops it casting too, as `fitShadow` finds out: the shadow receivers share the grade's shaders.
@@ -186,7 +209,8 @@ export function createLightRig(palette: ScenePalette): LightRig {
   sun.position.copy(sunDirection).multiplyScalar(SUN_DISTANCE);
   prepareShadow(sun);
   let shadowWanted = false;
-  const probe = new LightProbe(light.sh, 1);
+  // the probe owns its SH: night overwrites it and day copies `light.sh` back
+  const probe = new LightProbe(light.sh.clone(), 1);
   for (const l of [sun, probe]) {
     l.layers.set(PERSPECTIVE_LAYER);
     l.visible = false;
@@ -202,9 +226,10 @@ export function createLightRig(palette: ScenePalette): LightRig {
       sun.visible = on;
       probe.visible = on;
     },
-    setIntensity(share) {
-      sun.intensity = light.sunIntensity * share;
-      probe.intensity = share;
+    setLevels({ sun: sunShare, ambient, tint }) {
+      sun.intensity = light.sunIntensity * sunShare;
+      probe.sh.copy(tint === null ? light.sh : uniformSh(tint));
+      probe.intensity = ambient;
     },
     setShadow(on) {
       shadowWanted = on;
