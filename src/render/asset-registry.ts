@@ -22,6 +22,12 @@ export const ASSET_REGISTRY: Readonly<
   'yard-kit-leaves': { kind: 'ktx2', flag: 'yardKit' },
   ground: { kind: 'ktx2', flag: 'groundTexture' },
   sky: { kind: 'ktx2', flag: 'hdriSky' },
+  'concrete-albedo': { kind: 'ktx2', flag: 'groundPbr' },
+  'concrete-packed': { kind: 'ktx2', flag: 'groundPbr' },
+  'asphalt-albedo': { kind: 'ktx2', flag: 'groundPbr' },
+  'asphalt-packed': { kind: 'ktx2', flag: 'groundPbr' },
+  'pavers-albedo': { kind: 'ktx2', flag: 'groundPbr' },
+  'pavers-packed': { kind: 'ktx2', flag: 'groundPbr' },
 };
 
 /** An asynchronous attachment that publishes its state on `<html>` for the e2e specs. */
@@ -43,6 +49,11 @@ export const ATTACHMENTS = {
   ground: {
     marker: 'data-ground-texture',
     flags: ['groundTexture'],
+    ready: (v) => v.startsWith('ktx2:'),
+  },
+  groundPbr: {
+    marker: 'data-ground-pbr',
+    flags: ['groundTexture', 'groundPbr'],
     ready: (v) => v.startsWith('ktx2:'),
   },
   yardKit: { marker: 'data-yard-kit', flags: ['yardKit'], ready: (v) => v === 'on' },

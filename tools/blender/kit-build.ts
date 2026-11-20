@@ -98,7 +98,7 @@ const kitTexture = (
       }),
     ),
   pixels: (root) => bakedPixels(run, key, size, root),
-  uncommitted: `${KIT_BAKE_DIR}/${key}.rgba`,
+  available: (root) => existsSync(join(root, `${KIT_BAKE_DIR}/${key}.rgba`)),
   sources,
 });
 

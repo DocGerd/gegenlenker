@@ -1,3 +1,4 @@
+import { ENCODINGS } from '../assets/encodings';
 import { lfText, ROOT, sha256 } from '../assets/provenance';
 import { ASSET_SOURCES } from '../assets/sources';
 
@@ -16,20 +17,9 @@ export const SKY_FILES = {
   bake: 'src/render/hdri-light.ts',
 } as const;
 
-/** sRGB colour, no mips: the dome's u wraps at one azimuth, where a mip chain would draw a seam. */
-export const ENCODER_OPTIONS = {
-  isUASTC: true,
-  uastcLDRQualityLevel: 3,
-  needSupercompression: true,
-  enableRDO: true,
-  rdoQualityLevel: 3,
-  generateMipmap: false,
-  isPerceptual: true,
-  isSetKTX2SRGBTransferFunc: true,
-  isKTX2File: true,
-} as const;
+export const ENCODER_OPTIONS = ENCODINGS.srgbUastcSingleLevel.options;
 
-export const ENCODING_NAME = 'srgb-uastc-single-level';
+export const ENCODING_NAME = ENCODINGS.srgbUastcSingleLevel.name;
 
 /** Source files (LF-normalised), the named encoding and the .hdr's hash. */
 export const inputsSha256 = (root = ROOT): string =>

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { read } from 'ktx-parse';
 import { describe, expect, it } from 'vitest';
@@ -41,8 +41,8 @@ describe.each(assets)('texture $key', (asset) => {
     });
   });
 
-  it.skipIf(asset.uncommitted !== undefined && !existsSync(join(ROOT, asset.uncommitted)))(
-    'generates the pixels its manifest records (skipped without its uncommitted source)',
+  it.skipIf(!asset.available(ROOT))(
+    'generates the pixels its manifest records (skipped without its uncommitted sources, see docs/asset-credits.md)',
     () => {
       expect(sha256(asset.pixels(ROOT).rgba)).toBe(manifest.pixelsSha256);
     },

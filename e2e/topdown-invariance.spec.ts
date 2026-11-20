@@ -50,7 +50,7 @@ const MIN_TOKEN_SHARE: Readonly<
 
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
 test('the top-down view is the same at every graphics preset', async ({ context }, testInfo) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   const errors: string[] = [];
   const threeProblems: string[] = [];
   const mismatches: string[] = [];

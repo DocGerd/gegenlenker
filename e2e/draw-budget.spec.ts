@@ -15,7 +15,7 @@ const VIEWS = [
 const PAST_REFRESH_MS = 500;
 
 test('every view stays within the draw-call budget at every preset', async ({ context }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   const errors: string[] = [];
   const threeProblems: string[] = [];
   const over: string[] = [];

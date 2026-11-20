@@ -93,9 +93,15 @@ describe('asset registry', () => {
 
   it('runtime-caches the textures the default preset does not draw, with their transcoder', () => {
     expect([...ignored].sort()).toEqual([
+      '**/asphalt-albedo-*.ktx2',
+      '**/asphalt-packed-*.ktx2',
       '**/basis_transcoder-*.js',
       '**/basis_transcoder-*.wasm',
+      '**/concrete-albedo-*.ktx2',
+      '**/concrete-packed-*.ktx2',
       '**/ground-*.ktx2',
+      '**/pavers-albedo-*.ktx2',
+      '**/pavers-packed-*.ktx2',
       '**/sky-*.ktx2',
       '**/yard-kit-*.glb',
       '**/yard-kit-atlas-a-*.ktx2',

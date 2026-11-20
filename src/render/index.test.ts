@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   skySetEnabled: vi.fn(),
   skyOnLoaded: vi.fn(),
   groundAttach: vi.fn(),
+  groundPbrAttach: vi.fn(),
   pbrAttach: vi.fn(),
   setSky: vi.fn(),
   setQuality: vi.fn(),
@@ -43,6 +44,13 @@ vi.mock('./ground-texture', () => ({
     if (mocks.syncAttach) onApplied('ktx2');
     return { attach: mocks.groundAttach, setEnabled: vi.fn(), dispose: vi.fn() };
   },
+}));
+vi.mock('./ground-pbr', () => ({
+  startGroundPbrTextures: () => ({
+    attach: mocks.groundPbrAttach,
+    setEnabled: vi.fn(),
+    dispose: vi.fn(),
+  }),
 }));
 vi.mock('./sky-texture', () => ({
   startSkyTexture: (_load: unknown, onApplied: (state: string | null) => void) => {
@@ -104,6 +112,7 @@ describe('scene renderer attach hooks', () => {
       mocks.skySetEnabled,
       mocks.skyOnLoaded,
       mocks.groundAttach,
+      mocks.groundPbrAttach,
       mocks.pbrAttach,
       mocks.setSky,
       mocks.setQuality,
@@ -155,6 +164,7 @@ describe('scene renderer attach hooks', () => {
     const gpu = {};
     mocks.onRenderer?.(gpu);
     expect(mocks.groundAttach).toHaveBeenCalledWith(gpu);
+    expect(mocks.groundPbrAttach).toHaveBeenCalledWith(gpu);
     expect(mocks.skyAttach).toHaveBeenCalledWith(gpu);
     expect(mocks.pbrAttach).toHaveBeenCalledWith(gpu);
   });
