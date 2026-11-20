@@ -35,7 +35,7 @@ const SCUFF_ODDS = 0.5;
 const MANHOLE_ODDS = 0.7;
 const MANHOLE_RADIUS = 0.34;
 const GULLY = { halfLength: 0.4, halfWidth: 0.18, kerbSetback: 0.3, slat: 0.1 };
-const DRIPS_PER_PARKED = 4;
+const DRIPS_PER_BAY_LINE = 3;
 
 export type GroundMask = {
   /** Interleaved R (contact occlusion) and G (decal), `width * height` texels, row 0 at `origin.y`. */
@@ -181,7 +181,8 @@ export function groundMask(layout: ResolvedLayout): GroundMask {
     disc(x, y, radius, 0.9);
   };
 
-  // every bay line alike: a scuff curving away from each end, seeded by the line itself
+  // every bay line alike, seeded by the line itself: a scuff curving away from each end and oil
+  // drips beside it, wherever a trailer stands or not
   for (const m of layout.markings) {
     if (m.kind !== 'bay') continue;
     const [a, b] = [m.from, m.to].sort((p, q) => p.x - q.x || p.y - q.y);
@@ -206,20 +207,20 @@ export function groundMask(layout: ResolvedLayout): GroundMask {
         0.5,
       );
     }
-  }
-
-  // every parked trailer alike: oil drips around its footprint
-  for (const prop of layout.props) {
-    if (prop.asset !== 'parked') continue;
-    for (const { obb } of prop.colliders) {
-      const cos = Math.cos(obb.heading);
-      const sin = Math.sin(obb.heading);
-      for (let k = 0; k < DRIPS_PER_PARKED; k++) {
-        const seed = [cm(obb.cx), cm(obb.cy), k];
-        const u = (rand(...seed, 1) * 2 - 1) * (obb.halfLength + 0.8);
-        const v = (rand(...seed, 2) * 2 - 1) * (obb.halfWidth + 0.3);
-        drip(obb.cx + cos * u - sin * v, obb.cy + sin * u + cos * v, 0.1 + 0.1 * rand(...seed, 3));
-      }
+    const lineSeed = [cm(a.x), cm(a.y), cm(b.x), cm(b.y)];
+    const span = Math.hypot(b.x - a.x, b.y - a.y);
+    if (span === 0) continue;
+    for (let k = 0; k < DRIPS_PER_BAY_LINE; k++) {
+      const along = (0.1 + 0.8 * rand(...lineSeed, k, 1)) * span;
+      const aside =
+        (rand(...lineSeed, k, 2) < 0.5 ? -1 : 1) * (0.3 + 0.9 * rand(...lineSeed, k, 3));
+      const ux = (b.x - a.x) / span;
+      const uy = (b.y - a.y) / span;
+      drip(
+        a.x + ux * along - uy * aside,
+        a.y + uy * along + ux * aside,
+        0.1 + 0.1 * rand(...lineSeed, k, 4),
+      );
     }
   }
 
@@ -287,6 +288,7 @@ export function groundMaskTexture(mask: GroundMask): DataTexture {
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
+  texture.unpackAlignment = 1; // rows are 2 bytes a texel, whatever the width
   texture.anisotropy = 4; // three clamps this to what the GPU offers
   texture.needsUpdate = true;
   return texture;

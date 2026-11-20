@@ -88,6 +88,28 @@ describe.each(['depot', 'logistics'] as const)('ground mask of %s', (id) => {
   });
 });
 
+describe('parked trailers', () => {
+  it('draw no decals of their own, wherever an exercise parks them', () => {
+    const layout = resolved('depot');
+    const parked = (cx: number, cy: number): ResolvedLayout => ({
+      ...layout,
+      obstacles: [
+        ...layout.obstacles,
+        {
+          id: 'x',
+          kind: 'parked',
+          obb: { cx, cy, halfLength: 8, halfWidth: 1.25, heading: 0 },
+          height: 3.5,
+        },
+      ],
+    });
+    const base = decals(groundMask(layout));
+    expect(decals(groundMask(parked(72, 20)))).toEqual(base);
+    expect(decals(groundMask(parked(30, 50)))).toEqual(base);
+    expect(decals(groundMask({ ...layout, props: [] }))).toEqual(base);
+  });
+});
+
 describe('bays', () => {
   const layout = resolved('logistics');
   const bays = layout.markings.filter((m) => m.kind === 'bay');

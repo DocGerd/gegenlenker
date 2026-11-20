@@ -67,6 +67,7 @@ export async function precompileGroundPbr(
   const macro = new DataTexture(new Uint8Array(4), 1, 1);
   macro.needsUpdate = true;
   const mask = new DataTexture(new Uint8Array(2), 1, 1, RGFormat, UnsignedByteType);
+  mask.unpackAlignment = 1;
   mask.needsUpdate = true;
   const material = createGroundPbrMaterial(
     maps,
