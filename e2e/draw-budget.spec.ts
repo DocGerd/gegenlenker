@@ -3,7 +3,7 @@ import { en } from '../src/i18n/en';
 import { DRAW_CALL_BUDGET, QUALITY_FLAGS } from '../src/render/quality';
 import { drawnBackend, parseOverlay } from './perf/tablet-logic';
 import { HEAVY, PRESET_TIMEOUT_MS, type Preset, settle, startPinnedDrive } from './pinned-shoot';
-import { collectThreeProblems } from './three-problems';
+import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 const VIEWS = [
@@ -24,7 +24,7 @@ for (const preset of PRESETS) {
       const over: string[] = [];
       const page = await context.newPage();
       page.on('console', (m) => {
-        if (m.type() === 'error') errors.push(m.text());
+        if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
       });
       page.on('pageerror', (e) => errors.push(e.message));
       const threeProblems = collectThreeProblems(page);

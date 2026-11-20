@@ -3,6 +3,7 @@ import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { expectNoFailedAttachment, watchFailedAttachments } from './attachment-markers';
+import { DRIVER_PERFORMANCE_HINT } from './three-problems';
 import {
   bareScreenshot,
   distinctColours,
@@ -14,13 +15,6 @@ import {
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const LOST = 'Graphics context lost; starting afresh';
-
-/**
- * ANGLE's software GL warns that it split a render pass while High starts up; a performance hint of
- * the driver CI runs on, not a fault of the app.
- */
-const DRIVER_PERFORMANCE_HINT =
-  /GL Driver Message \(OpenGL, Performance, [^)]*\): Running out of reserved outsideRenderPass queueSerial/;
 
 /**
  * Console warnings, errors and page errors; headless Chromium denies the wake lock, which is not

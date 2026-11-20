@@ -13,7 +13,7 @@ import {
   tokenShare,
   type Preset,
 } from './pinned-shoot';
-import { collectThreeProblems } from './three-problems';
+import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 import type { ScenePaletteKey } from '../src/contracts/render';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
@@ -65,7 +65,8 @@ for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
       for (const preset of PRESETS) {
         const page = await context.newPage();
         page.on('console', (m) => {
-          if (m.type() === 'error') errors.push(m.text());
+          if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text()))
+            errors.push(m.text());
         });
         page.on('pageerror', (e) => errors.push(e.message));
         const three = collectThreeProblems(page);

@@ -1,5 +1,6 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { DRIVER_PERFORMANCE_HINT } from './three-problems';
 import { en } from '../src/i18n/en';
 import { COCKPIT_FOV } from '../src/render/cockpit-camera';
 import { TRUCK_IDS } from '../src/contracts/vehicle';
@@ -31,7 +32,7 @@ const isGround = (p: number[] | undefined): boolean =>
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on('console', (m) => {
-    if (m.type() === 'error') errors.push(m.text());
+    if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
   });
   page.on('pageerror', (e) => errors.push(e.message));
   return errors;
