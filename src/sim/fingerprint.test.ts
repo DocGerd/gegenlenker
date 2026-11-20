@@ -33,7 +33,7 @@ describe('data fingerprint', () => {
 
   // Changes only with the data or SIM_REVISION; an accidental key reorder in the hashed constants would show here.
   it('is pinned for one combination', () => {
-    expect(base).toBe('01948716');
+    expect(base).toBe('a4734945');
   });
 
   it('differs per vehicle pair, exercise and layout', () => {

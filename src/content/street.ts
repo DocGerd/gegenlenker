@@ -230,31 +230,37 @@ export function addEntranceFurniture(p: PropBuilder, { entrance }: StreetSpec): 
   }
 }
 
-/** Per side plot: a gate, then `pairs` of two panels each followed by a gate; it stops `wallGap` short of the yard wall. */
-const FENCE_RUN = { gate: 4, panel: 2.5, pairs: 4, wallGap: 0.2 };
+type FencePiece = 'fence-gate' | 'fence-panel';
+/** Per side plot, from its outer end; panels advance 2.5 m and gates 4 m, so a run is 39.5 m. */
+const FENCE_RUN: readonly FencePiece[] = [
+  ...Array<FencePiece>(3).fill('fence-panel'),
+  'fence-gate',
+  ...Array<FencePiece>(3).fill('fence-panel'),
+  'fence-gate',
+  ...Array<FencePiece>(3).fill('fence-panel'),
+  'fence-gate',
+  ...Array<FencePiece>(2).fill('fence-panel'),
+];
+const FENCE_ADVANCE: Readonly<Record<FencePiece, number>> = { 'fence-gate': 4, 'fence-panel': 2.5 };
+const FENCE_MARGIN = 0.05; // inside the layout bounds
+const FENCE_WALL_GAP = 0.45; // between a run and the yard wall
 
 /**
- * Fence with gates along the street edge of both side plots, flush against the pavement. The pieces
- * collide like the yard's own edge; the plots behind them are not part of a run.
+ * Fence with gates along the street edge of both side plots, flush against the pavement and inside
+ * the layout bounds. The pieces collide like the yard's own edge; the plots behind them are not part
+ * of a run.
  */
 export function addPlotFences(p: PropBuilder, { kerbY, pavement }: StreetSpec): void {
-  const { gate, panel, pairs, wallGap } = FENCE_RUN;
-  const run = gate + pairs * (2 * panel + gate);
-  const { min, max } = KIT_FOOTPRINTS['fence-gate'];
-  // origins of the first gate: the west run ends, the east run starts, `wallGap` off the yard wall
-  const starts = [YARD.minX - wallGap - run + gate - max[0], YARD.maxX + wallGap - min[0]];
-  for (const start of starts) {
-    let x = start;
-    const lay = (piece: 'fence-gate' | 'fence-panel', advance: number): void => {
+  const [first] = FENCE_RUN;
+  if (first === undefined) return;
+  // each run starts with a panel, whose extent begins `min[0]` before its origin
+  const lead = -KIT_FOOTPRINTS[first].min[0];
+  for (const start of [BOUNDS.minX + FENCE_MARGIN, YARD.maxX + FENCE_WALL_GAP]) {
+    let x = start + lead;
+    for (const piece of FENCE_RUN) {
       const [ox, oy] = kitBackedTo(piece, x, kerbY + pavement, 0);
       p.addKit(piece, 'fence', ox, oy, 0);
-      x += advance;
-    };
-    lay('fence-gate', gate);
-    for (let i = 0; i < pairs; i++) {
-      lay('fence-panel', panel);
-      lay('fence-panel', panel);
-      lay('fence-gate', gate);
+      x += FENCE_ADVANCE[piece];
     }
   }
 }

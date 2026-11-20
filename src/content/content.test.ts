@@ -277,6 +277,13 @@ describe.each(Object.values(layouts))('$id props', (layout) => {
       const [only, ...rest] = colliders;
       expect(rest, id).toEqual([]);
       expect(only?.obb, id).toEqual(placed.footprint);
+      const { cx, cy, halfLength, halfWidth, heading } = placed.footprint;
+      const [c, s] = [Math.abs(Math.cos(heading)), Math.abs(Math.sin(heading))];
+      const [rx, ry] = [c * halfLength + s * halfWidth, s * halfLength + c * halfWidth];
+      expect(cx - rx, id).toBeGreaterThanOrEqual(layout.bounds.minX);
+      expect(cx + rx, id).toBeLessThanOrEqual(layout.bounds.maxX);
+      expect(cy - ry, id).toBeGreaterThanOrEqual(layout.bounds.minY);
+      expect(cy + ry, id).toBeLessThanOrEqual(layout.bounds.maxY);
       expect(only?.height, id).toBe(KIT_FOOTPRINTS[placed.piece].height);
       expect(only?.kind, id).toBe(placed.piece.startsWith('fence-') ? 'fence' : 'furniture');
     }
