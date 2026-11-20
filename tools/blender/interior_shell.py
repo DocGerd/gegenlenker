@@ -9,8 +9,8 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
 The geometry is derived in src/render/interior-dims.ts and only exported here: every mesh in the
 params is a list of solids (vertices, faces, hue key) whose faces wind counter-clockwise seen from
 the front. Four vertex-coloured meshes in the sim body frame (blender_common.py):
-"interior" (dashboard with binnacle, door tops, header), "wheel", and the unit slabs
-"pillar-left" and "pillar-right", which the renderer scales into their slots.
+"interior" (dashboard with binnacle, door tops), "wheel", "header" (shade band, roof lining, visor)
+and "pillars" (both A-pillars).
 
 Tested Blender version: 5.3.0 (bpy.app.version_string is printed and recorded in the manifest).
 """
@@ -24,7 +24,7 @@ COMMON = runpy.run_path(COMMON_FILE)
 Shape = COMMON["Shape"]
 srgb = COMMON["srgb_to_linear"]
 
-MESHES = ("interior", "wheel", "pillar-left", "pillar-right")
+MESHES = ("interior", "wheel", "header", "pillars")
 
 
 def build(solids, hues):

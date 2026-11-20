@@ -1,15 +1,7 @@
-import { Group, MathUtils, Mesh, MeshBasicMaterial, Quaternion, Vector3 } from 'three';
+import { Group, Mesh, MeshBasicMaterial } from 'three';
 import type { TruckId, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
-import { cabSight } from './cab-sight';
-import {
-  createCockpitInterior,
-  type FlatInterior,
-  type InteriorLayout,
-  interiorLayout,
-  type PillarSpan,
-  pillarSpans,
-} from './cockpit-interior';
+import { createCockpitInterior, type FlatInterior } from './cockpit-interior';
 import arocsUrl from './assets/arocs-1835-ak-interior.glb?url';
 import manUrl from './assets/man-le-18-280-interior.glb?url';
 import type { InteriorMeshName } from './interior-dims';
@@ -18,9 +10,10 @@ import type { Shells } from './glb-shells';
 
 /*
  * The cab interior as a Blender asset (tools/blender/interior_shell.py, #159): the dashboard with its
- * binnacle, the door tops, header and visor and the steering wheel stand in the truck's frame, and
- * the two A-pillar slabs are swung into their slots in front of the eye like the flat overlay's.
- * Until the asset is in place, and wherever the preset does not draw it, the flat overlay shows.
+ * binnacle, the door tops, the A-pillars at the windscreen's corners, the header band with the roof
+ * lining and the stowed visor, and the steering wheel, all in the truck's frame and unlit. They are
+ * depth tested, so each hides what lies behind it. Until the asset is in place, and wherever the preset
+ * does not draw it, the flat overlay shows.
  */
 
 /** `<truck id>-interior`: the keys of the asset list in tools/blender/glb-build.ts. */
@@ -32,7 +25,7 @@ export const INTERIOR_URLS = {
 /** Mesh prototypes carrying the glTF node transforms; visuals share their geometry. */
 export type InteriorShell = Readonly<Record<InteriorMeshName, Mesh>>;
 
-const NAMES: readonly InteriorMeshName[] = ['interior', 'wheel', 'pillar-left', 'pillar-right'];
+const NAMES: readonly InteriorMeshName[] = ['interior', 'wheel', 'header', 'pillars'];
 
 /** The interior's meshes among decoded ones; any other set is refused. */
 export function interiorShellFrom(meshes: readonly Mesh[]): InteriorShell {
@@ -46,14 +39,10 @@ export function interiorShellFrom(meshes: readonly Mesh[]): InteriorShell {
   return {
     interior: byName('interior'),
     wheel: byName('wheel'),
-    'pillar-left': byName('pillar-left'),
-    'pillar-right': byName('pillar-right'),
+    header: byName('header'),
+    pillars: byName('pillars'),
   };
 }
-
-/** Metres ahead of the eye of the pillar slabs' front face, as the flat overlay's plane. */
-const PILLAR_DEPTH = 0.5;
-const TURN = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2);
 
 export type InteriorOptions = {
   /** Where the asset comes from; none keeps the flat overlay. */
@@ -62,7 +51,7 @@ export type InteriorOptions = {
 
 export type GlbInterior = CockpitInterior & {
   readonly flat: FlatInterior;
-  /** The parts drawn when the asset shows: static ones first, then the pillars. */
+  /** The parts drawn when the asset shows. */
   readonly meshes: readonly Mesh[];
   /** Whether the asset, not the flat overlay, is what shows now. */
   readonly drawn: boolean;
@@ -73,23 +62,18 @@ export type GlbInterior = CockpitInterior & {
 export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions = {}): GlbInterior {
   const flat = createCockpitInterior(truck);
   const key = `${truck.id}-interior`;
-  const sight = cabSight(truck);
   const { eye } = truckAnchors(truck);
   const object = new Group();
   object.name = 'cockpit-interior-glb';
+  // Placed at the camera's eye with the truck's heading each frame.
   const standing = new Group();
   standing.name = 'interior-standing';
   // The meshes are authored in the body frame about the origin; the eye is the anchor.
   const frame = new Group();
   frame.position.set(-eye.x, -eye.z, eye.y);
   standing.add(frame);
-  const slots = new Group();
-  slots.name = 'interior-pillars';
-  const pillarSlots = { left: new Group(), right: new Group() };
-  slots.add(pillarSlots.left, pillarSlots.right);
-  object.add(flat.object, standing, slots);
+  object.add(flat.object, standing);
   standing.visible = false;
-  slots.visible = false;
 
   const material = new MeshBasicMaterial({ vertexColors: true, fog: false });
   const meshes: Mesh[] = [];
@@ -112,7 +96,6 @@ export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions 
     const next = wanted && attached;
     flat.object.visible = flat.object.visible && !next;
     standing.visible = next;
-    slots.visible = next;
     if (next !== drawn) {
       drawn = next;
       shells?.attached(key, next);
@@ -129,16 +112,12 @@ export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions 
 
   const clear = (): void => {
     frame.clear();
-    pillarSlots.left.clear();
-    pillarSlots.right.clear();
     meshes.length = 0;
   };
 
   const attach = (shell: InteriorShell): void => {
     clear();
-    frame.add(place(shell.interior), place(shell.wheel));
-    pillarSlots.left.add(place(shell['pillar-left']));
-    pillarSlots.right.add(place(shell['pillar-right']));
+    frame.add(place(shell.interior), place(shell.wheel), place(shell.header), place(shell.pillars));
     attached = true;
     apply();
   };
@@ -148,14 +127,6 @@ export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions 
     apply();
   };
   const cancel = shells?.onLoaded(key, attach);
-
-  const layout: InteriorLayout = { left: 1, right: 1 };
-  const placePillar = (slot: Group, side: -1 | 1, span: PillarSpan | null): void => {
-    slot.visible = span !== null;
-    if (span === null) return;
-    slot.position.z = side * span.centre;
-    slot.scale.z = span.width;
-  };
 
   return {
     object,
@@ -170,19 +141,10 @@ export function createGlbInterior(truck: TruckSpec, { shells }: InteriorOptions 
     place(view) {
       if (flat.object.visible) flat.place(view);
       if (!drawn) return;
-      const { camera, cockpit, mirrorLeft, mirrorRight } = view;
+      const { camera } = view;
       standing.position.copy(camera.position);
       standing.rotation.set(0, camera.rotation.y + Math.PI / 2, 0);
-      const tanV = Math.tan(MathUtils.degToRad(camera.fov / 2));
-      slots.position.copy(camera.position);
-      slots.quaternion.copy(camera.quaternion).multiply(TURN);
-      slots.scale.set(PILLAR_DEPTH, tanV * PILLAR_DEPTH, camera.aspect * tanV * PILLAR_DEPTH);
-      interiorLayout(cockpit, mirrorLeft, mirrorRight, layout);
-      const spans = pillarSpans(sight, camera.aspect, camera.fov, layout);
-      placePillar(pillarSlots.left, -1, spans.left);
-      placePillar(pillarSlots.right, 1, spans.right);
       standing.updateMatrixWorld(true);
-      slots.updateMatrixWorld(true);
     },
     setQuality(flags) {
       lastFlags = flags;

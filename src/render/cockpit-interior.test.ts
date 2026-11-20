@@ -20,9 +20,15 @@ import type { TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById, trucks } from '../vehicles/registry';
 import { cabSight } from './cab-sight';
+import { cabShellParams, FRAME_TOP } from './cab-dims';
 import { placePose } from './coords';
 import { createChaseCamera } from './chase-camera';
-import { COCKPIT_FOV, createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
+import {
+  COCKPIT_FOV,
+  COCKPIT_PITCH,
+  createCockpitCamera,
+  placeCockpitCamera,
+} from './cockpit-camera';
 import {
   CLEAR_CONE_DEG,
   CONE_GAP,
@@ -39,7 +45,6 @@ import {
   visorLeft,
 } from './cockpit-interior';
 import { parseMeshes } from './glb-shells';
-import { HEADER } from './interior-dims';
 import {
   createGlbInterior,
   type GlbInterior,
@@ -211,6 +216,8 @@ type Route = {
   readonly dash: readonly string[];
   /** Where a part may cover a mirror rect by design (NDC); everywhere else the rect's view is clear. */
   readonly mayCoverMirror: (x: number, y: number, shift: number) => boolean;
+  /** Parts that may lie under a mirror rect anywhere: the mirror insets are composited over them. */
+  readonly underMirror: readonly string[];
 };
 
 const interiorGlb = async (id: string): Promise<InteriorShell> => {
@@ -232,6 +239,7 @@ const ROUTES: readonly Route[] = [
     // Only the headliner reaches down over the top of a mirror rect on small windows; its edge is a
     // chord polyline just below the curve. The visor is not exempt: it keeps clear of the mirror.
     mayCoverMirror: (x, y, shift) => y >= headerEdge(x, shift) - 0.005,
+    underMirror: [],
   },
   {
     name: 'glb interior',
@@ -242,8 +250,10 @@ const ROUTES: readonly Route[] = [
       return interior;
     },
     dash: ['interior'],
-    // Only the header band reaches down over the top of a mirror rect.
-    mayCoverMirror: (_x, y) => y >= HEADER.bottomNdc - 0.005,
+    // The header with its visor and the A-pillars, which stand at the windscreen's corners and
+    // cannot move for a mirror, lie under the mirror insets.
+    mayCoverMirror: () => false,
+    underMirror: ['header', 'pillars'],
   },
 ];
 
@@ -278,7 +288,7 @@ const CASES = ROUTES.flatMap((route) =>
 
 describe.each(CASES)(
   'cockpit interior seam: $label',
-  ({ make, dash, mayCoverMirror, presets, spec }) => {
+  ({ make, dash, mayCoverMirror, underMirror, presets, spec }) => {
     const build = (flags: QualityFlags) => {
       const interior = make(spec, palette);
       interior.setQuality(flags);
@@ -384,7 +394,10 @@ describe.each(CASES)(
               for (let v = 0; v <= 1; v += 0.125) {
                 const [x, y] = rectToNdc(cockpit, rect, u, v);
                 if (mayCoverMirror(x, y, edgeShift(spec, camera.aspect, COCKPIT_FOV))) continue;
-                expect(hits(camera, parts, x, y), `${w}x${h} (${u}, ${v})`).toEqual([]);
+                expect(
+                  hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
+                  `${w}x${h} (${u}, ${v})`,
+                ).toEqual([]);
               }
             }
           }
@@ -412,7 +425,10 @@ describe.each(CASES)(
           const parts = drawn(interior);
           for (const rect of [left, right]) {
             const [x, y] = rectToNdc(cockpit, rect, 0.5, 0.5);
-            expect(hits(camera, parts, x, y), `${w}x${h}`).toEqual([]);
+            expect(
+              hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
+              `${w}x${h}`,
+            ).toEqual([]);
           }
         }
       });
@@ -738,5 +754,49 @@ describe.each(trucks)('glb interior steering wheel of $id', (spec) => {
       const y = bandTopNdc() + 0.03;
       expect(hits(shot.camera, rim(shot), 0, y), `${w}x${h}`).toEqual(['wheel']);
     }
+  });
+});
+
+describe.each(trucks)('glb interior closes the cab above the windscreen of $id', (spec) => {
+  const anchors = truckAnchors(spec);
+  const cab = cabShellParams(spec);
+  const glassTop = FRAME_TOP + cab.cab.glassSill + cab.cab.glassHeight;
+  const screen = cab.width / 2 - cab.cab.windscreenInset;
+  const probe = new Raycaster();
+  const PITCH = -COCKPIT_PITCH;
+
+  it('hits an interior part on every ray that would leave through the front wall above the glass', () => {
+    let total = 0;
+    for (const [w, h] of [...REQUIRED, [1024, 768], [844, 390], [1920, 800]] as const) {
+      const interior = createGlbInterior(spec);
+      interior.attach(GLB_SHELLS[spec.id] as InteriorShell);
+      // heading 0 at (12, -7): three space is body x, body z, -body y from there
+      const { camera } = shootWith(interior, w, h, 0, null, QUALITY_FLAGS.high, spec);
+      const parts = drawn(interior);
+      probe.layers.mask = camera.layers.mask;
+      let rays = 0;
+      for (let x = -1; x <= 1; x += 0.05) {
+        for (let y = -1; y <= 1; y += 0.05) {
+          probe.setFromCamera(new Vector2(x, y), camera);
+          const { origin, direction } = probe.ray;
+          if (direction.x <= 0) continue;
+          const t = (12 + anchors.frontX - origin.x) / direction.x;
+          const z = origin.y + t * direction.y;
+          const across = 7 - (origin.z + t * direction.z);
+          if (z <= glassTop + 0.002 || Math.abs(across) >= screen) continue;
+          rays++;
+          expect(
+            hits(camera, parts, x, y),
+            `${w}x${h} (${x.toFixed(2)}, ${y.toFixed(2)})`,
+          ).not.toEqual([]);
+        }
+      }
+      total += rays;
+    }
+    // The glass top projects inside the pane for the truck with the higher eye only.
+    const topNdc =
+      Math.tan(Math.atan2(glassTop - anchors.eye.z, anchors.frontX - anchors.eye.x) + PITCH) /
+      Math.tan(MathUtils.degToRad(COCKPIT_FOV / 2));
+    if (topNdc < 1) expect(total).toBeGreaterThan(0);
   });
 });

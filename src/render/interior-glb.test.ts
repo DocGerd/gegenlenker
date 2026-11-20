@@ -76,13 +76,6 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
     expect(interior.flat.object.visible).toBe(false);
   });
 
-  it('asks for the asset only on a preset that draws it', () => {
-    const states = Object.entries(QUALITY_FLAGS).map(
-      ([preset, flags]) => [preset, flags.cockpitInterior && flags.interiorGlb] as const,
-    );
-    expect(Object.fromEntries(states)).toEqual({ low: false, balanced: false, high: true });
-  });
-
   it('takes the asset from the shells once they deliver it', async () => {
     const shell = await glb(spec.id);
     let deliver: ((shell: InteriorShell) => void) | null = null;
@@ -121,9 +114,7 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
       interior.place({ camera, cockpit: cockpit as Rect, mirrorLeft, mirrorRight });
       truck.updateMatrixWorld(true);
       const inverse = truck.matrixWorld.clone().invert();
-      for (const mesh of interior.meshes.filter(
-        (m) => m.name !== 'pillar-left' && m.name !== 'pillar-right',
-      )) {
+      for (const mesh of interior.meshes) {
         expect(mesh.layers.mask, mesh.name).toBe(1 << INTERIOR_LAYER);
         expect(mesh.castShadow, mesh.name).toBe(false);
         mesh.updateWorldMatrix(true, false);

@@ -23,7 +23,8 @@ export type Solid = {
   readonly verts: readonly Vec3[];
   readonly faces: readonly (readonly number[])[];
 };
-export type InteriorMeshName = 'interior' | 'wheel' | 'pillar-left' | 'pillar-right';
+/** `header` holds the shade band, headliner and visor, and `pillars` both A-pillars. */
+export type InteriorMeshName = 'interior' | 'wheel' | 'header' | 'pillars';
 
 const rad = (deg: number): number => (deg * Math.PI) / 180;
 const TAN_V = Math.tan(rad(VIEW_FOV_DEG / 2));
@@ -51,13 +52,23 @@ export const WHEEL = {
   segments: 20,
 } as const;
 
-export const HEADER = { bottomNdc: 0.86, depth: 0.9, thickness: 0.1 } as const;
+/** The shade band's lower front edge at `bottomNdc`, but never above the glass top; the visor hangs ahead of the driver. */
+export const HEADER = { bottomNdc: 0.86, thickness: 0.1 } as const;
+export const VISOR = {
+  bottomNdc: 0.72,
+  depth: 0.7,
+  thickness: 0.06,
+  /** Metres right and left of the eye. */
+  right: 0.05,
+  left: 0.4,
+} as const;
 /** The door tops rise from the sill at the windscreen to this much above it at the driver's end. */
 export const DOOR_RISE = 0.4;
 const DOOR_TOP_OVER_SILL = 0.07;
 
-/** The pillar's unit slab, scaled at runtime like the flat overlay's: depth 1, width 1, height from -BLEED to BLEED. */
-export const PILLAR = { thickness: 0.08, bleed: 1.05, lean: 0.25 } as const;
+/** Metres the A-pillars reach back from the glass, and the highest the roof lining sits under the cab roof. */
+export const PILLAR_DEPTH = 0.09;
+const ROOF_LINING = 0.1;
 
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -182,8 +193,11 @@ function anchorsOf(spec: TruckSpec) {
   const sill = FRAME_TOP + cab.cab.glassSill;
   return {
     eye: [eye.x, eye.y, eye.z] as Vec3,
+    front: frontX,
     glass: frontX - GLASS_SETBACK,
     half,
+    screen: half - cab.cab.windscreenInset,
+    sideFront: frontX - cab.cab.sideGlassSetback,
     inner: half - DOOR_THICKNESS,
     sill,
     glassTop: sill + cab.cab.glassHeight,
@@ -265,15 +279,38 @@ function doors(a: Anchors): Solid[] {
   });
 }
 
-/** The shade band over the windscreen; the front edge of its underside, the lowest the eye sees, is at `HEADER.bottomNdc`. */
+/** The shade band over the windscreen, the roof lining behind it and the stowed visor over the driver. */
 function header(a: Anchors): Solid[] {
-  const ceiling = CAB_HEIGHT - 0.1;
-  const edge = viewPoint(a.eye, HEADER.depth, 0, heightAt(HEADER.bottomNdc, HEADER.depth));
-  if (edge[2] >= ceiling) return [];
-  const front = Math.min(edge[0], a.glass);
-  return [
-    box('headliner', [front - HEADER.thickness, front], [-a.inner, a.inner], [edge[2], ceiling]),
+  const [ex, ey] = a.eye;
+  const ceiling = CAB_HEIGHT - ROOF_LINING;
+  const ahead = a.front - ex;
+  const edgeZ = a.eye[2] + ahead * Math.tan(Math.atan(HEADER.bottomNdc * TAN_V) - PITCH);
+  const bottom = Math.min(edgeZ, a.glassTop);
+  const parts: Solid[] = [
+    box('headliner', [ex - 0.4, a.front], [-a.inner, a.inner], [ceiling, ceiling + 0.02]),
   ];
+  if (bottom < ceiling) {
+    parts.push(
+      box(
+        'headliner',
+        [a.front - HEADER.thickness, a.front],
+        [-a.inner, a.inner],
+        [bottom, ceiling],
+      ),
+    );
+  }
+  const visor = viewPoint(a.eye, VISOR.depth, 0, heightAt(VISOR.bottomNdc, VISOR.depth));
+  if (visor[2] < ceiling) {
+    parts.push(
+      box(
+        'anthracite',
+        [visor[0], visor[0] + VISOR.thickness],
+        [ey - VISOR.right, ey + VISOR.left],
+        [visor[2], ceiling],
+      ),
+    );
+  }
+  return parts;
 }
 
 function wheel(a: Anchors): Solid[] {
@@ -319,18 +356,19 @@ function wheel(a: Anchors): Solid[] {
   return parts;
 }
 
-/** The pillar's slab in unit space: forward 1 to 1 + `thickness`, across ±0.5, up ±`bleed`; the top leans towards the view's centre. */
-function pillar(side: 'left' | 'right'): Solid[] {
-  const { thickness, bleed, lean } = PILLAR;
-  // Body +Y is left; the right pillar's top leans left, the left pillar's right.
-  const shift = side === 'right' ? lean : -lean;
-  const ring = (z: number, dy: number): Vec3[] => [
-    [1, -0.5 + dy, z],
-    [1 + thickness, -0.5 + dy, z],
-    [1 + thickness, 0.5 + dy, z],
-    [1, 0.5 + dy, z],
-  ];
-  return [hexahedron('anthracite', ring(-bleed, 0), ring(bleed, shift))];
+/** Both A-pillars: from the windscreen's edge to the front edge of the side glass, floor to roof lining. */
+function pillars(a: Anchors): Solid[] {
+  const bottom = a.sill - 0.1;
+  const top = CAB_HEIGHT - ROOF_LINING;
+  return ([-1, 1] as const).map((side) => {
+    const ring = (z: number): Vec3[] => [
+      [a.glass, side * a.screen, z],
+      [a.sideFront, side * a.half, z],
+      [a.sideFront - PILLAR_DEPTH, side * a.half, z],
+      [a.glass - PILLAR_DEPTH, side * a.screen, z],
+    ];
+    return hexahedron('anthracite', ring(bottom), ring(top));
+  });
 }
 
 export type InteriorShellParams = ReturnType<typeof interiorShellParams>;
@@ -339,10 +377,10 @@ export type InteriorShellParams = ReturnType<typeof interiorShellParams>;
 export function interiorShellParams(spec: TruckSpec) {
   const a = anchorsOf(spec);
   const meshes: Record<InteriorMeshName, Solid[]> = {
-    interior: [...dash(a), ...doors(a), ...header(a)],
+    interior: [...dash(a), ...doors(a)],
     wheel: wheel(a),
-    'pillar-left': pillar('left'),
-    'pillar-right': pillar('right'),
+    header: header(a),
+    pillars: pillars(a),
   };
   const hues = Object.fromEntries(
     [...new Set(Object.values(meshes).flatMap((m) => m.map((s) => s.hue)))]

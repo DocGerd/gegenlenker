@@ -47,7 +47,7 @@ describe.each(trucks)('interior of $id', (spec) => {
     const sill = FRAME_TOP + cab.cab.glassSill;
     const halfWidth = cab.width / 2;
     const rear = frontX - cab.cabLength;
-    for (const name of ['interior', 'wheel'] as const) {
+    for (const name of ['interior', 'wheel', 'header', 'pillars'] as const) {
       for (const [x, y, z] of vertices(params.meshes[name])) {
         expect(x, name).toBeGreaterThanOrEqual(rear);
         expect(x, name).toBeLessThanOrEqual(frontX);
