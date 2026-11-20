@@ -90,7 +90,6 @@ function stubParts(
     return {
       object: new Group(),
       update: () => undefined,
-      setQuality: (flags: QualityFlags) => void log.push(flags),
       setLook: (look: Look) => void log.push(look.flags),
       dispose: () => undefined,
       ...extra,
@@ -129,7 +128,6 @@ describe('renderer lighting', () => {
     const part = () => ({
       object: new Group(),
       update: () => undefined,
-      setQuality: () => undefined,
       setLook: (look: Look) => void looks.push(look),
       dispose: () => undefined,
     });
@@ -159,7 +157,6 @@ describe('renderer interior', () => {
     const part = () => ({
       object: new Group(),
       update: () => undefined,
-      setQuality: () => undefined,
       setLook: () => undefined,
       dispose: () => undefined,
     });

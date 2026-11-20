@@ -1,7 +1,17 @@
-import { BoxGeometry, DirectionalLight, Float32BufferAttribute, Mesh, type Texture } from 'three';
+import {
+  BoxGeometry,
+  DirectionalLight,
+  Float32BufferAttribute,
+  LightProbe,
+  Mesh,
+  PerspectiveCamera,
+  Scene,
+  type Texture,
+} from 'three';
 import { float, vertexColor } from 'three/tsl';
-import { MeshStandardNodeMaterial } from 'three/webgpu';
-import { GRADE, GRADE_SHADER_MARKER, type GradeSample, setGraded } from './grade';
+import { MeshStandardNodeMaterial, type WebGPURenderer } from 'three/webgpu';
+import { buildSerially, GRADE, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
+import { gpuLost } from './seams';
 import { VehicleLightingModel } from './vehicle-pbr';
 
 /*
@@ -35,26 +45,134 @@ export class InteriorNodeMaterial extends MeshStandardNodeMaterial {
 }
 
 /**
- * The grade check's sample: the graded interior material on a shadow receiver under a casting sun,
- * the program the cockpit view builds on High.
+ * Builds the interior material on `gpu` the way the cockpit draws it on High: with `envMap`, graded
+ * unless the grade is off, as a shadow receiver under a casting sun and a light probe. Resolves
+ * whether it compiled. three swaps a material whose node graph throws for a plain one and only logs
+ * it, so the built shader must carry the marker.
  */
-export function interiorSample(): GradeSample {
+export function interiorShaderCompiles(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+  return buildSerially(gpu, () => buildInteriorShader(gpu, envMap));
+}
+
+async function buildInteriorShader(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+  const material = new InteriorNodeMaterial(envMap);
+  const graded = !gradeDisabled();
+  setGraded(material, graded);
   const geometry = new BoxGeometry();
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
-  const material = new InteriorNodeMaterial();
-  setGraded(material, true);
   const mesh = new Mesh(geometry, material);
   mesh.receiveShadow = true;
   const sun = new DirectionalLight();
   sun.castShadow = true;
+  const scene = new Scene();
+  scene.add(mesh, sun, new LightProbe());
+  const { debug } = gpu;
+  const previous = debug.onShaderError;
+  let accepted = true;
+  // only the WebGL 2 backend reports here; a node build error rejects the build on either
+  const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
+    if (context.getShaderSource(fragment)?.includes(INTERIOR_SHADER_MARKER) === true) {
+      accepted = false;
+      console.warn(
+        'Interior shader failed',
+        context.getShaderInfoLog(vertex),
+        context.getShaderInfoLog(fragment),
+        context.getProgramInfoLog(program),
+      );
+    } else if (previous !== null) previous(context, program, vertex, fragment);
+    else
+      console.error(
+        'Shader error',
+        context.getShaderInfoLog(vertex),
+        context.getShaderInfoLog(fragment),
+        context.getProgramInfoLog(program),
+      );
+  };
+  debug.onShaderError = watcher;
+  try {
+    const { fragmentShader } = await debug.getShaderAsync(scene, new PerspectiveCamera(), mesh);
+    const markers = graded
+      ? [INTERIOR_SHADER_MARKER, GRADE_SHADER_MARKER]
+      : [INTERIOR_SHADER_MARKER];
+    if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
+      console.warn('Interior shader failed to build');
+      return false;
+    }
+    return accepted;
+  } catch (error) {
+    console.warn('Interior shader failed', error);
+    return false;
+  } finally {
+    if (debug.onShaderError === watcher) debug.onShaderError = previous;
+    material.dispose();
+    geometry.dispose();
+    sun.shadow.dispose();
+  }
+}
+
+export type InteriorVerdict = 'ok' | 'failed' | 'pending';
+
+/** Whether the lit interior compiles on the live renderer with the sky map it will wear. */
+export interface InteriorCheck {
+  /** The renderer the checks run on; a different one drops every verdict. */
+  attach(gpu: WebGPURenderer): void;
+  /**
+   * `ok` once `map` built the interior shader, `failed` if it did not, `pending` while it is
+   * checked or without a renderer. The first ask for a map starts its check.
+   */
+  verdict(map: Texture): InteriorVerdict;
+  /** `listener` runs when a verdict is settled; returns the unsubscribe. */
+  onChange(listener: () => void): () => void;
+  dispose(): void;
+}
+
+export function createInteriorCheck(
+  compiles: (gpu: WebGPURenderer, map: Texture) => Promise<boolean> = interiorShaderCompiles,
+): InteriorCheck {
+  let renderer: WebGPURenderer | null = null;
+  let verdicts = new WeakMap<Texture, InteriorVerdict>();
+  const listeners = new Set<() => void>();
+  const settle = (gpu: WebGPURenderer, map: Texture, ok: boolean): void => {
+    // a stale request, or a compile on a lost context, which passes vacuously
+    if (renderer !== gpu || verdicts.get(map) !== 'pending') return;
+    if (gpuLost(gpu)) {
+      verdicts.delete(map);
+      return;
+    }
+    verdicts.set(map, ok ? 'ok' : 'failed');
+    for (const listener of [...listeners]) listener();
+  };
   return {
-    mesh,
-    lights: [sun],
-    markers: [INTERIOR_SHADER_MARKER, GRADE_SHADER_MARKER],
-    dispose: () => {
-      sun.shadow.dispose();
-      geometry.dispose();
-      material.dispose();
+    attach(gpu) {
+      if (gpu === renderer) return;
+      renderer = gpu;
+      verdicts = new WeakMap();
+    },
+    verdict(map) {
+      const gpu = renderer;
+      if (gpu === null) return 'pending';
+      const known = verdicts.get(map);
+      if (known !== undefined) return known;
+      verdicts.set(map, 'pending');
+      compiles(gpu, map).then(
+        (ok) => settle(gpu, map, ok),
+        (error: unknown) => {
+          console.warn('Interior shader failed', error);
+          settle(gpu, map, false);
+        },
+      );
+      return 'pending';
+    },
+    onChange(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    dispose() {
+      renderer = null;
+      verdicts = new WeakMap();
+      listeners.clear();
     },
   };
 }

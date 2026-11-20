@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, DataTexture, Group, MeshBasicMaterial, Vector3 } from 'three';
+import { Box3, DataTexture, Group, MeshBasicMaterial, type Texture, Vector3 } from 'three';
+import type { WebGPURenderer } from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import type { Rect } from '../contracts/render';
 import { trucks } from '../vehicles/registry';
@@ -8,7 +9,7 @@ import { truckAnchors } from '../vehicles/anchors';
 import { cabShellParams } from './cab-dims';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { placePose } from './coords';
-import { GRADE_SHADER_MARKER } from './grade';
+import { gradeDisabled } from './grade';
 import { type Shells, parseMeshes } from './glb-shells';
 import type { VehicleEnvironment } from './vehicle-pbr';
 import {
@@ -18,7 +19,12 @@ import {
   interiorShellFrom,
 } from './interior-glb';
 import { lookFor } from './look';
-import { InteriorNodeMaterial, INTERIOR_SHADER_MARKER, interiorSample } from './interior-material';
+import {
+  createInteriorCheck,
+  type InteriorCheck,
+  InteriorNodeMaterial,
+  type InteriorVerdict,
+} from './interior-material';
 import { QUALITY_FLAGS } from './quality';
 import { INTERIOR_LAYER } from './seams';
 import { computeViewports } from './viewports';
@@ -179,40 +185,139 @@ describe.each(trucks)('lit interior of $id', (spec) => {
     expect(interior.material).toBeInstanceOf(MeshBasicMaterial);
   });
 
-  it('reflects the vehicles sky map on its own material once it is ready, never on the scene', async () => {
+  describe('with the vehicles sky map', () => {
     const map = new DataTexture(new Uint8Array(4), 1, 1);
-    let ready: DataTexture | null = null;
-    const listeners = new Set<() => void>();
-    const env = {
-      texture: () => ready,
-      onChange: (listener: () => void) => {
-        listeners.add(listener);
-        return () => listeners.delete(listener);
-      },
-    } as unknown as VehicleEnvironment;
-    const interior = createGlbInterior(spec, { env, palette });
-    interior.attach(await glb(spec.id));
-    interior.setLook(day(QUALITY_FLAGS.high));
-    const envMap = (): unknown => {
-      const { material } = interior;
-      return material instanceof InteriorNodeMaterial ? material.envMap : undefined;
+    const setup = (verdict: InteriorVerdict | null) => {
+      let ready: DataTexture | null = null;
+      const listeners = new Set<() => void>();
+      const env = {
+        texture: () => ready,
+        onChange: (listener: () => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      } as unknown as VehicleEnvironment;
+      let state: InteriorVerdict = verdict ?? 'ok';
+      const checkListeners = new Set<() => void>();
+      const check: InteriorCheck = {
+        attach: () => undefined,
+        verdict: () => state,
+        onChange: (listener) => {
+          checkListeners.add(listener);
+          return () => checkListeners.delete(listener);
+        },
+        dispose: () => undefined,
+      };
+      return {
+        env,
+        check,
+        listeners,
+        checkListeners,
+        deliver: () => {
+          ready = map;
+          listeners.forEach((listener) => listener());
+        },
+        settle: (next: InteriorVerdict) => {
+          state = next;
+          checkListeners.forEach((listener) => listener());
+        },
+      };
     };
-    expect(envMap()).toBeNull();
-    ready = map;
-    listeners.forEach((listener) => listener());
-    expect(envMap()).toBe(map);
-    interior.dispose();
-    expect(listeners.size).toBe(0);
+    const lit = (interior: { material: unknown }): boolean =>
+      interior.material instanceof InteriorNodeMaterial;
+    const mapOf = (interior: { material: unknown }): unknown =>
+      interior.material instanceof InteriorNodeMaterial ? interior.material.envMap : undefined;
+
+    it('stays plain until the map is ready and has built the shader, then wears it on its own material', async () => {
+      const t = setup('pending');
+      const interior = createGlbInterior(spec, { env: t.env, palette, check: t.check });
+      interior.attach(await glb(spec.id));
+      interior.setLook(day(QUALITY_FLAGS.high));
+      expect(lit(interior)).toBe(false);
+      t.deliver();
+      expect(lit(interior), 'checking').toBe(false);
+      expect(interior.meshes.every((m) => !m.receiveShadow)).toBe(true);
+      t.settle('ok');
+      expect(lit(interior)).toBe(true);
+      expect(mapOf(interior)).toBe(map);
+      expect(interior.meshes.every((m) => m.receiveShadow)).toBe(true);
+      interior.dispose();
+      expect(t.listeners.size + t.checkListeners.size).toBe(0);
+    });
+
+    it('falls back to the plain interior where the shader fails, leaving the grade and sun on', async () => {
+      const t = setup('pending');
+      const interior = createGlbInterior(spec, { env: t.env, palette, check: t.check });
+      interior.attach(await glb(spec.id));
+      interior.setLook(day(QUALITY_FLAGS.high));
+      t.deliver();
+      t.settle('failed');
+      expect(interior.material).toBeInstanceOf(MeshBasicMaterial);
+      expect(
+        interior.meshes.every((m) => m.material === interior.material && !m.receiveShadow),
+      ).toBe(true);
+      expect(gradeDisabled()).toBe(false);
+      expect(interior.flat.object.visible).toBe(false);
+      expect(interior.drawn).toBe(true);
+    });
   });
 });
 
-describe('the interior grade sample', () => {
-  it('builds the lit material as a shadow receiver under a casting sun, marked in the shader', () => {
-    const sample = interiorSample();
-    expect(sample.mesh.material).toBeInstanceOf(InteriorNodeMaterial);
-    expect(sample.mesh.receiveShadow).toBe(true);
-    expect(sample.lights?.some((l) => l.castShadow)).toBe(true);
-    expect(sample.markers).toEqual([INTERIOR_SHADER_MARKER, GRADE_SHADER_MARKER]);
-    sample.dispose();
+describe('the interior check', () => {
+  const gpu = (): WebGPURenderer => ({ getContext: () => null }) as unknown as WebGPURenderer;
+  const settled = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+  const map = (): Texture => new DataTexture(new Uint8Array(4), 1, 1);
+
+  it('is pending without a renderer, then checks each map once on the attached one', async () => {
+    const compiles = vi.fn(() => Promise.resolve(true));
+    const check = createInteriorCheck(compiles);
+    const a = map();
+    expect(check.verdict(a)).toBe('pending');
+    expect(compiles).not.toHaveBeenCalled();
+    const first = gpu();
+    check.attach(first);
+    const changed = vi.fn();
+    check.onChange(changed);
+    expect(check.verdict(a)).toBe('pending');
+    expect(check.verdict(a)).toBe('pending');
+    await settled();
+    expect(compiles).toHaveBeenCalledTimes(1);
+    expect(compiles).toHaveBeenCalledWith(first, a);
+    expect(check.verdict(a)).toBe('ok');
+    expect(changed).toHaveBeenCalledOnce();
+  });
+
+  it('fails a map whose shader did not build or threw, and drops every verdict with a new renderer', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const compiles = vi
+      .fn<(g: WebGPURenderer, m: Texture) => Promise<boolean>>()
+      .mockResolvedValueOnce(false)
+      .mockRejectedValueOnce(new Error('node graph'))
+      .mockResolvedValue(true);
+    const check = createInteriorCheck(compiles);
+    check.attach(gpu());
+    const [a, b] = [map(), map()];
+    check.verdict(a);
+    check.verdict(b);
+    await settled();
+    expect([check.verdict(a), check.verdict(b)]).toEqual(['failed', 'failed']);
+    check.attach(gpu());
+    expect(check.verdict(a)).toBe('pending');
+    await settled();
+    expect(check.verdict(a)).toBe('ok');
+    warn.mockRestore();
+  });
+
+  it('ignores a verdict that arrives for a renderer that has been replaced', async () => {
+    let finish: (ok: boolean) => void = () => undefined;
+    const compiles = vi.fn(() => new Promise<boolean>((resolve) => (finish = resolve)));
+    const check = createInteriorCheck(compiles);
+    check.attach(gpu());
+    const a = map();
+    check.verdict(a);
+    check.attach(gpu());
+    finish(false);
+    await settled();
+    expect(check.verdict(a)).toBe('pending');
   });
 });

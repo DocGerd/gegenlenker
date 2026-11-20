@@ -6,7 +6,7 @@ import { createCockpitInterior, type FlatInterior } from './cockpit-interior';
 import arocsUrl from './assets/arocs-1835-ak-interior.glb?url';
 import manUrl from './assets/man-le-18-280-interior.glb?url';
 import type { InteriorMeshName } from './interior-dims';
-import { InteriorNodeMaterial } from './interior-material';
+import { type InteriorCheck, InteriorNodeMaterial } from './interior-material';
 import type { Look } from './look';
 import { INTERIOR_LAYER, type CockpitInterior } from './seams';
 import type { Shells } from './glb-shells';
@@ -56,6 +56,11 @@ export type InteriorOptions = {
   /** The sky the lit material reflects, with the palette it is made for. */
   readonly env?: VehicleEnvironment;
   readonly palette?: ScenePalette;
+  /**
+   * Whether the lit shader compiles with that map on the live renderer; the plain material stays until
+   * it does, and for good where it fails. Without one, a ready map is trusted.
+   */
+  readonly check?: InteriorCheck;
 };
 
 export type GlbInterior = CockpitInterior & {
@@ -72,7 +77,7 @@ export type GlbInterior = CockpitInterior & {
 
 export function createGlbInterior(
   truck: TruckSpec,
-  { shells, env, palette }: InteriorOptions = {},
+  { shells, env, palette, check }: InteriorOptions = {},
 ): GlbInterior {
   const flat = createCockpitInterior(truck);
   const key = `${truck.id}-interior`;
@@ -97,22 +102,28 @@ export function createGlbInterior(
   let wanted = false;
   let drawn = false;
 
-  const current = (): Material =>
-    look?.flags.perspectiveLighting === true ? litMaterial() : plain;
+  let useLit = false;
+  const current = (): Material => (useLit ? litMaterial() : plain);
   const litMaterial = (): InteriorNodeMaterial => (lit ??= new InteriorNodeMaterial());
 
-  /** Lit and sun-shadowed under perspective lighting; the sky map follows once the vehicles' is ready. */
+  /**
+   * Lit and sun-shadowed under perspective lighting once the sky map is ready and has built the lit
+   * shader; plain until then and wherever that fails, which leaves the grade and the sun to the rest.
+   */
   const dress = (): void => {
     if (look === null) return;
     const on = look.flags.perspectiveLighting;
-    if (on) {
+    const map = on && palette !== undefined ? (env?.texture(palette, look.mode) ?? null) : null;
+    const lightable = on && (env === undefined || map !== null);
+    useLit = lightable && (map === null || (check?.verdict(map) ?? 'ok') === 'ok');
+    if (useLit) {
       const material = litMaterial();
       setGraded(material, look.grade.on);
-      material.envMap = (palette && env?.texture(palette, look.mode)) || null;
+      material.envMap = map;
     }
     for (const mesh of meshes) {
       mesh.material = current();
-      mesh.receiveShadow = on && look.flags.sunShadow;
+      mesh.receiveShadow = useLit && look.flags.sunShadow;
     }
   };
 
@@ -161,7 +172,8 @@ export function createGlbInterior(
     apply();
   };
   const cancel = shells?.onLoaded(key, attach);
-  const stopWatching = env?.onChange(dress);
+  const stopEnv = env?.onChange(dress);
+  const stopCheck = check?.onChange(dress);
 
   return {
     object,
@@ -190,7 +202,8 @@ export function createGlbInterior(
     },
     dispose() {
       cancel?.();
-      stopWatching?.();
+      stopEnv?.();
+      stopCheck?.();
       if (drawn) shells?.attached(key, false);
       drawn = false;
       flat.dispose();

@@ -31,6 +31,7 @@ import {
   INTERIOR_LAYER,
   MIRROR_LAYERS,
   PERSPECTIVE_LAYER,
+  SHADOW_ONLY_LAYER,
   TOP_DOWN_LAYERS,
 } from './seams';
 import { isShadowCamera } from './sun-shadow';
@@ -166,7 +167,7 @@ describe('light rig', () => {
     it('draws the caster layers only, once per queued frame', () => {
       const { sun } = lights(createLightRig(scene));
       const { camera } = sun.shadow;
-      for (const layer of [DEFAULT_LAYER, PERSPECTIVE_LAYER, CAB_LAYER]) {
+      for (const layer of [DEFAULT_LAYER, PERSPECTIVE_LAYER, CAB_LAYER, SHADOW_ONLY_LAYER]) {
         expect(sees(camera.layers, layer), `layer ${layer}`).toBe(true);
       }
       for (const layer of [AIDS_LAYER, INTERIOR_LAYER]) {
@@ -174,6 +175,12 @@ describe('light rig', () => {
       }
       expect(sun.shadow.autoUpdate).toBe(false);
       expect(isShadowCamera(camera)).toBe(true);
+    });
+
+    it('keeps the shadow-only layer out of every camera', () => {
+      for (const layers of [COCKPIT_LAYERS, MIRROR_LAYERS, CHASE_LAYERS, TOP_DOWN_LAYERS]) {
+        expect(layers).not.toContain(SHADOW_ONLY_LAYER);
+      }
     });
 
     it('queues the map only while the sun casts', () => {

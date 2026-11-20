@@ -30,6 +30,7 @@ import {
   enableLayers,
   PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
+  SHADOW_ONLY_LAYER,
 } from './seams';
 import { proceduralTruck } from './vehicle-visual';
 
@@ -307,7 +308,7 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const added = group.children.filter((m) => !before.includes(m));
     // cab shell, its glass and lenses replace the cab front; the body shell adds one mesh, plus the detail swap when linked
     expect(removed).toHaveLength(linked ? 2 : 1);
-    expect(added).toHaveLength(linked ? 5 : 4);
+    expect(added).toHaveLength(linked ? 6 : 5);
   });
 
   it('draws no more meshes with the shells than without, apart from the shells themselves', async () => {
@@ -315,11 +316,11 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const group = proceduralTruck(spec, palette, d.shells).object;
     const before = group.children.length;
     applyAll(d);
-    // cab shell replaces the cab front; its glass, lenses and the body shell are added
-    expect(group.children.length).toBe(before + 3);
+    // cab shell replaces the cab front; its glass, lenses, shadow caster and the body shell are added
+    expect(group.children.length).toBe(before + 4);
   });
 
-  it('lets the cab body cast the sun shadow and its glass only take it', async () => {
+  it('lets the cab skin cast the sun shadow with a hollow stand-in no camera draws, and its glass only take it', async () => {
     const shells = await loadBoth(id);
     const d = deferred(shells);
     const group = proceduralTruck(spec, palette, d.shells).object;
@@ -329,6 +330,9 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const [cab, glass] = [placed(shells.cab.mesh.geometry), placed(shells.cab.glass?.geometry)];
     expect([cab?.castShadow, cab?.receiveShadow]).toEqual([true, true]);
     expect([glass?.castShadow, glass?.receiveShadow]).toEqual([false, true]);
+    const standIn = meshesOf(group).filter((m) => m.layers.mask === 1 << SHADOW_ONLY_LAYER);
+    expect(standIn).toHaveLength(1);
+    expect([standIn[0]?.castShadow, standIn[0]?.receiveShadow]).toEqual([true, false]);
   });
 
   it('restores the procedural meshes, layers and order when switched off, and reproduces the swap when switched on again', async () => {
