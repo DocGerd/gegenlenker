@@ -189,6 +189,22 @@
   touch-action: manipulation;
 }
 
+.menu-badge {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-tint);
+  color: var(--color-accent-strong);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.menu-badge[hidden] {
+  display: none;
+}
+
 .whats-new {
   box-sizing: border-box;
   display: flex;

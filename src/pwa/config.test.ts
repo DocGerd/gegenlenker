@@ -93,6 +93,7 @@ describe('asset registry', () => {
 
   it('runtime-caches the textures the default preset does not draw, with their transcoder', () => {
     expect([...ignored].sort()).toEqual([
+      '**/arocs-1835-ak-interior-*.glb',
       '**/asphalt-albedo-*.ktx2',
       '**/asphalt-packed-*.ktx2',
       '**/basis_transcoder-*.js',
@@ -100,6 +101,7 @@ describe('asset registry', () => {
       '**/concrete-albedo-*.ktx2',
       '**/concrete-packed-*.ktx2',
       '**/ground-*.ktx2',
+      '**/man-le-18-280-interior-*.glb',
       '**/pavers-albedo-*.ktx2',
       '**/pavers-packed-*.ktx2',
       '**/sky-*.ktx2',

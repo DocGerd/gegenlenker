@@ -143,6 +143,8 @@ export const de: Record<MessageKey, string> = {
   viewSwitchNoOutside: 'Folgen / ganzer Hof',
   panView: 'Verschieben / drehen',
   whatsNew: 'Neuigkeiten',
+  whatsNewBadge: 'Neu',
+  whatsNewSince: 'Seit dem letzten Besuch',
   whatsNewLatest: 'Aktuell',
   whatsNewEarlier: 'Frühere Änderungen',
   changeAdded: 'Neu',

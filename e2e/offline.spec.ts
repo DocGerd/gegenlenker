@@ -128,7 +128,7 @@ test('zooms and pans the top-down view without disturbing the controls', async (
   expect(three).toEqual([]);
 });
 
-test('High graphics caches the ground, sky and yard kit assets and transcoder on first use and applies them offline', async ({
+test('High graphics caches the ground, sky, yard kit and cockpit interior assets and transcoder on first use and applies them offline', async ({
   page,
   context,
   baseURL,
@@ -187,6 +187,7 @@ test('High graphics caches the ground, sky and yard kit assets and transcoder on
   );
   expect(drawn.map(String).sort()).toEqual(
     [
+      /arocs-1835-ak-interior-[\w-]+\.glb$/,
       /asphalt-albedo-[\w-]+\.ktx2$/,
       /asphalt-packed-[\w-]+\.ktx2$/,
       /basis_transcoder-[\w-]+\.js$/,
@@ -194,6 +195,7 @@ test('High graphics caches the ground, sky and yard kit assets and transcoder on
       /concrete-albedo-[\w-]+\.ktx2$/,
       /concrete-packed-[\w-]+\.ktx2$/,
       /ground-[\w-]+\.ktx2$/,
+      /man-le-18-280-interior-[\w-]+\.glb$/,
       /pavers-albedo-[\w-]+\.ktx2$/,
       /pavers-packed-[\w-]+\.ktx2$/,
       /sky-[\w-]+\.ktx2$/,
@@ -220,6 +222,7 @@ test('High graphics caches the ground, sky and yard kit assets and transcoder on
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on', high);
   await expect(marker).toHaveAttribute('data-sky-hdri', 'on', high);
   await expect(marker).toHaveAttribute('data-yard-kit', 'on', high);
+  await expect(marker).toHaveAttribute('data-cockpit-interior', 'on', high);
   await expect(marker).toHaveAttribute('data-perspective-grade', 'on', high);
   // WebGL 2 stays the default until WebGPU passes its gate (docs/perf.md)
   await expect(marker).toHaveAttribute('data-render-backend', 'webgl2', high);
@@ -245,6 +248,7 @@ test('High graphics caches the ground, sky and yard kit assets and transcoder on
   await expect(marker).not.toHaveAttribute('data-vehicle-pbr', /.*/);
   await expect(marker).not.toHaveAttribute('data-sky-hdri', /.*/);
   await expect(marker).not.toHaveAttribute('data-yard-kit', /.*/);
+  await expect(marker).not.toHaveAttribute('data-cockpit-interior', /.*/);
   await expect(marker).not.toHaveAttribute('data-perspective-grade', /.*/);
 
   offline = true;
@@ -256,10 +260,13 @@ test('High graphics caches the ground, sky and yard kit assets and transcoder on
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on', high);
   await expect(marker).toHaveAttribute('data-sky-hdri', 'on', high);
   await expect(marker).toHaveAttribute('data-yard-kit', 'on', high);
+  await expect(marker).toHaveAttribute('data-cockpit-interior', 'on', high);
   await expect(marker).toHaveAttribute('data-perspective-grade', 'on', high);
   expect(
     warnings.filter((w) =>
-      /Ground texture|PBR ground|Sky texture|Yard kit|Vehicle reflection|Perspective grade/.test(w),
+      /Ground texture|PBR ground|Sky texture|Yard kit|Vehicle reflection|Perspective grade|Shell .*interior/.test(
+        w,
+      ),
     ),
   ).toEqual([]);
   expect(errors).toEqual([]);

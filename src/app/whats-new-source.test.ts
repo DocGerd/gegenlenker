@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CATEGORIES, PR_URL, type Release } from './changelog-entries';
-import { buildGroups, tokens, whatsNewGroups } from './whats-new-source';
+import { buildGroups, entryIds, tokens, whatsNewGroups } from './whats-new-source';
 
 const fragment = (pr: number, line: string): string => `${line} ([#${pr}](${PR_URL}${pr}))\n`;
 
@@ -43,6 +43,29 @@ describe('buildGroups', () => {
     expect(groups.map(({ kind }) => kind)).toEqual(['release', 'earlier']);
     expect(groups[1]?.categories.map(({ category }) => category)).toEqual(['added', 'fixed']);
     expect(buildGroups({}, [{ version: null, entries: [] }])).toEqual([]);
+  });
+
+  it('moves unseen entries into a first group, whichever group held them', () => {
+    const groups = buildGroups(
+      {
+        '/changelog.d/9.added.md': fragment(9, 'Nine.'),
+        '/changelog.d/4.fixed.md': fragment(4, 'Four.'),
+      },
+      releases,
+      new Set(['9.added', 'a', 'c']),
+    );
+    expect(groups.map(({ kind, version }) => [kind, version])).toEqual([
+      ['unseen', null],
+      ['latest', null],
+      ['earlier', null],
+    ]);
+    expect(
+      groups[0]?.categories.map(({ category, entries }) => [category, entries.map(({ id }) => id)]),
+    ).toEqual([
+      ['added', ['9.added', 'c']],
+      ['fixed', ['a']],
+    ]);
+    expect(entryIds(groups).sort()).toEqual(['4.fixed', '9.added', 'a', 'b', 'c']);
   });
 
   it('rejects a malformed fragment', () => {

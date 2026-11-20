@@ -4,6 +4,7 @@ import {
   DirectionalLight,
   Float32BufferAttribute,
   type Light,
+  type Material,
   Mesh,
   PerspectiveCamera,
   Scene,
@@ -186,10 +187,17 @@ export function buildSerially<T>(gpu: WebGPURenderer, build: () => Promise<T>): 
   return turn;
 }
 
-/** A mesh the grade check compiles, the lights it is lit by, and what releases it. */
+/**
+ * A mesh the grade check compiles, the lights it is lit by, and what releases it. `override` is the
+ * scene's override material, so the sample builds the shadow pass's program; `markers` are the
+ * strings its fragment shader must hold (the grade's by default), and GLSL errors in a shader that
+ * holds the first of them reject the check.
+ */
 export type GradeSample = {
   readonly mesh: Mesh;
   readonly lights?: readonly Light[];
+  readonly override?: Material;
+  readonly markers?: readonly string[];
   dispose(): void;
 };
 
@@ -245,13 +253,15 @@ async function buildGrade(
   const rejected: { log: string | null } = { log: null };
   // another asset may have chained its own hook behind this one: pass through once the check is over
   let active = true;
+  const watched = new Set([GRADE_SHADER_MARKER]);
   const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
     const info = [
       context.getShaderInfoLog(vertex),
       context.getShaderInfoLog(fragment),
       context.getProgramInfoLog(program),
     ];
-    if (active && context.getShaderSource(fragment)?.includes(GRADE_SHADER_MARKER) === true) {
+    const source = context.getShaderSource(fragment);
+    if (active && source !== null && [...watched].some((marker) => source.includes(marker))) {
       rejected.log = info.join(' ');
     } else if (previous !== null) previous(context, program, vertex, fragment);
     else console.error('Shader error', ...info);
@@ -263,12 +273,16 @@ async function buildGrade(
       samples.push(sample);
       const scene = new Scene();
       scene.add(sample.mesh, ...(sample.lights ?? []));
+      if (sample.override !== undefined) scene.overrideMaterial = sample.override;
+      const markers = sample.markers ?? [GRADE_SHADER_MARKER];
+      const [first] = markers;
+      if (first !== undefined) watched.add(first);
       const { fragmentShader } = await debug.getShaderAsync(
         scene,
         new PerspectiveCamera(),
         sample.mesh,
       );
-      if (fragmentShader?.includes(GRADE_SHADER_MARKER) !== true) {
+      if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
         throw new Error('a graded shader did not build');
       }
     }

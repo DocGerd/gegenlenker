@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../../src/contracts/vehicle';
 import { bodyShellParams } from '../../src/render/body-dims';
 import { cabShellParams } from '../../src/render/cab-dims';
+import { interiorShellParams } from '../../src/render/interior-dims';
 import { bodyLampParams, cabLampParams, trailerLampParams } from '../../src/render/lamp-layout';
 import { TRUCK_LOOKS } from '../../src/render/livery';
 import { trailerShellParams } from '../../src/render/trailer-dims';
@@ -17,7 +18,7 @@ export const LAMP_COMMON_SCRIPT = 'tools/blender/lamp_common.py';
 export const KIT_COMMON_SCRIPT = 'tools/blender/kit_common.py';
 export const OPTIMISE_SCRIPT = 'scripts/glb-optimise.mjs';
 
-export type AssetKind = 'cab' | 'body' | 'trailer' | 'kit';
+export type AssetKind = 'cab' | 'body' | 'trailer' | 'interior' | 'kit';
 
 /** One run of a Blender script on one params file. */
 export type Run = {
@@ -41,9 +42,11 @@ const SCRIPTS: Readonly<Record<Exclude<AssetKind, 'kit'>, string>> = {
   cab: 'tools/blender/cab_shell.py',
   body: 'tools/blender/body_shell.py',
   trailer: 'tools/blender/trailer_shell.py',
+  interior: 'tools/blender/interior_shell.py',
 };
 
 const SHELL_HELPERS = { commonSha256: COMMON_SCRIPT, lampCommonSha256: LAMP_COMMON_SCRIPT };
+const INTERIOR_HELPERS = { commonSha256: COMMON_SCRIPT };
 
 const asset = (
   vehicleId: TruckId | TrailerId,
@@ -56,7 +59,7 @@ const asset = (
     kind,
     script: SCRIPTS[kind],
     params: `tools/blender/params/${vehicleId}.${kind}.json`,
-    helpers: SHELL_HELPERS,
+    helpers: kind === 'interior' ? INTERIOR_HELPERS : SHELL_HELPERS,
     glb: `src/render/assets/${key}.glb`,
     manifest: `src/render/assets/${key}.manifest.json`,
     build,
@@ -85,6 +88,7 @@ export const ASSETS: readonly Asset[] = [
       ...bodyShellParams(truckById(id)),
       ...bodyLampParams(truckById(id), TRUCK_LOOKS[id].cab.length),
     })),
+    asset(id, 'interior', () => interiorShellParams(truckById(id))),
   ]),
   ...TRAILER_IDS.map((id) =>
     asset(id, 'trailer', () => ({
