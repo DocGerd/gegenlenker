@@ -218,7 +218,11 @@ function edgePoints(width: number, height: number, side: 'left' | 'right') {
 const yardShare = (pixels: (number[] | undefined)[]): number =>
   pixels.filter(isYard).length / pixels.length;
 
-/** Probe points of one mirror: sky above ground at its centre column, then the edge columns. */
+/**
+ * Probe points of one mirror: sky above ground at its centre column, then the edge columns. The
+ * vehicle's own sun shadow can darken the whole centre column on High, so the ground check also
+ * reads the outer edge.
+ */
 function mirrorPoints(box: Box) {
   const x = Math.round(box.width / 2);
   // several columns along the top: on High a cloud of the HDRI sky may cover one
@@ -286,10 +290,11 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
         const centre = take(probe.centre.length);
         const bottom = centre.at(-1);
         const edges = { left: take(probe.left.length), right: take(probe.right.length) };
+        const ground = [bottom, ...edges[outer]];
         return {
           side,
           // Sky above and ground below first: only a drawn frame can pass, so absence at the edge means something.
-          drawn: centre.slice(0, -1).some(isSky) && !isSky(bottom) && isGround(bottom),
+          drawn: centre.slice(0, -1).some(isSky) && !ground.some(isSky) && ground.some(isGround),
           outerYard: yardShare(edges[outer]),
           innerYard: yardShare(edges[inner]),
         };

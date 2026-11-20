@@ -54,6 +54,11 @@ const BAND_YARD_DIVISOR = 150; // the whole-yard view shows the band this many s
 const GATE_STRIP = 0.3;
 const GATE_SEGMENTS = 64;
 
+const castAndReceive = (mesh: Mesh): void => {
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+};
+
 export function proceduralEnvironment(
   layout: ResolvedLayout,
   palette: ScenePalette,
@@ -76,6 +81,7 @@ export function proceduralEnvironment(
   const ground = groundGeometry(layout, palette);
   geometries.push(ground);
   const tokenGround = new Mesh(ground, solid);
+  tokenGround.receiveShadow = true;
   group.add(tokenGround);
 
   // High: perspective cameras draw this textured copy of the ground instead, top-down keeps the tokens.
@@ -176,7 +182,10 @@ export function proceduralEnvironment(
     const chunks = RESTYLED_KINDS.has(o.kind) ? topDownOnly : obstacles;
     addObstacle(o, palette, chunks, color, roof, isOnYard(yard, cx, cy));
   }
-  for (const mesh of obstacles.meshes(solid, geometries)) group.add(mesh);
+  for (const mesh of obstacles.meshes(solid, geometries)) {
+    castAndReceive(mesh);
+    group.add(mesh);
+  }
   const tokens = topDownOnly.meshes(solid, geometries);
   for (const mesh of tokens) group.add(mesh);
   for (const piece of yardProps(layout)) detail.add(piece.x, piece.y, piece.geometry);
@@ -184,7 +193,10 @@ export function proceduralEnvironment(
   const propMaterial = new MeshLambertNodeMaterial({ vertexColors: true });
   setGraded(propMaterial, true);
   const props = detail.meshes(solid, geometries);
-  for (const mesh of props) group.add(mesh);
+  for (const mesh of props) {
+    castAndReceive(mesh);
+    group.add(mesh);
+  }
   // Without the props the obstacles must still show in perspective, so the tokens go to every camera.
   const propSwap = tokenCopy(tokens);
   propSwap.set(true); // detail on until the first setQuality
@@ -358,6 +370,7 @@ export function proceduralEnvironment(
     setQuality(flags: QualityFlags): void {
       graded = flags.perspectiveLighting;
       rig.setSplit(graded);
+      rig.setShadow(graded && flags.sunShadow);
       sky.setSun(graded ? sunDirection : sunPosition());
       sky.setGround(graded ? splitGround : legacyGround);
       GRADE.sunDirection.value.copy(sunDirection);

@@ -10,6 +10,7 @@ const COMPUTE_ONLY: readonly (keyof QualityFlags)[] = [
   'pbr',
   'perspectiveLighting',
   'aerialPerspective',
+  'sunShadow',
 ];
 
 describe('quality flags', () => {
@@ -65,6 +66,14 @@ describe('quality flags', () => {
       if (flags.aerialPerspective) expect(flags.perspectiveLighting, preset).toBe(true);
     }
     expect(GRAPHICS_PRESETS.filter((p) => QUALITY_FLAGS[p].aerialPerspective)).toEqual(['high']);
+  });
+
+  it('shadows only lit views, on High', () => {
+    expect(GRAPHICS_PRESETS.filter((p) => QUALITY_FLAGS[p].sunShadow)).toEqual(['high']);
+    for (const preset of GRAPHICS_PRESETS) {
+      const flags = QUALITY_FLAGS[preset];
+      if (flags.sunShadow) expect(flags.perspectiveLighting, preset).toBe(true);
+    }
   });
 
   it('tone-maps every reflection: pbr with the HDRI sky needs the grade', () => {
