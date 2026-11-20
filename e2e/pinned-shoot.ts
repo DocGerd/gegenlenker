@@ -249,6 +249,26 @@ export async function shoot(page: Page, shot: Shot): Promise<Buffer> {
   return bareScreenshot(page, box, () => step(page, 1));
 }
 
+/**
+ * The yard view zoomed in about the pane-local point `at` by a wheel of `deltaY` (negative zooms in);
+ * the view resets first, so each shot starts from the whole yard.
+ */
+export async function shootYardZoomed(
+  page: Page,
+  at: { readonly x: number; readonly y: number },
+  deltaY: number,
+): Promise<Buffer> {
+  await page.keyboard.press('y');
+  await page.locator('[data-view="yard"][aria-pressed="true"]').waitFor();
+  await step(page, SETTLE_FRAMES);
+  const box = await page.locator(BOX.yard).boundingBox();
+  if (box === null) throw new Error('no box for yard');
+  await page.mouse.move(box.x + at.x, box.y + at.y);
+  await page.mouse.wheel(0, deltaY);
+  await step(page, SETTLE_FRAMES);
+  return bareScreenshot(page, box, () => step(page, 1));
+}
+
 /** `clip` with the HUD and controls hidden, so only the canvas shows; `settle` runs once they are. */
 export async function bareScreenshot(
   page: Page,
@@ -290,21 +310,27 @@ export function distinctColours(page: Page, png: Buffer): Promise<number> {
   }, png.toString('base64'));
 }
 
-/** Share of a PNG's pixels within `tolerance` per channel of the page's scene token for `token` (`nightBackdrop` is `--scene-night-backdrop`). */
-export function tokenShare(
+/** The page's scene token for `token` as 0-255 RGB (`nightBackdrop` is `--scene-night-backdrop`). */
+export function sceneRgb(page: Page, token: ScenePaletteKey): Promise<[number, number, number]> {
+  return page.evaluate((name) => {
+    const hex = getComputedStyle(document.documentElement)
+      .getPropertyValue(`--scene-${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`)
+      .trim();
+    const want = /^#([0-9a-f]{6})$/i.exec(hex)?.[1];
+    if (want === undefined) throw new Error(`no scene token ${name}`);
+    return [0, 2, 4].map((i) => parseInt(want.slice(i, i + 2), 16)) as [number, number, number];
+  }, token);
+}
+
+/** Share of a PNG's pixels within `tolerance` per channel of `rgb` (0-255). */
+export function colourShare(
   page: Page,
   png: Buffer,
-  token: ScenePaletteKey,
+  rgb: readonly [number, number, number],
   tolerance: number,
 ): Promise<number> {
   return page.evaluate(
-    async ([data, name, tol]) => {
-      const hex = getComputedStyle(document.documentElement)
-        .getPropertyValue(`--scene-${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}`)
-        .trim();
-      const want = /^#([0-9a-f]{6})$/i.exec(hex)?.[1];
-      if (want === undefined) throw new Error(`no scene token ${name}`);
-      const rgb = [0, 2, 4].map((i) => parseInt(want.slice(i, i + 2), 16));
+    async ([data, want, tol]) => {
       const img = new Image();
       img.src = `data:image/png;base64,${data}`;
       await img.decode();
@@ -317,11 +343,86 @@ export function tokenShare(
       const px = ctx.getImageData(0, 0, img.width, img.height).data;
       let near = 0;
       for (let i = 0; i < px.length; i += 4) {
-        if (rgb.every((c, k) => Math.abs((px[i + k] ?? 0) - c) <= tol)) near++;
+        if (want.every((c, k) => Math.abs((px[i + k] ?? 0) - c) <= tol)) near++;
       }
       return near / (img.width * img.height);
     },
-    [png.toString('base64'), token, tolerance] as const,
+    [png.toString('base64'), rgb, tolerance] as const,
+  );
+}
+
+/** Share of a PNG's pixels within `tolerance` per channel of the page's scene token for `token`. */
+export async function tokenShare(
+  page: Page,
+  png: Buffer,
+  token: ScenePaletteKey,
+  tolerance: number,
+): Promise<number> {
+  return colourShare(page, png, await sceneRgb(page, token), tolerance);
+}
+
+/**
+ * Bounding box (pixels, inclusive) of the solid regions of `rgb` in a PNG, within `tolerance` per
+ * channel: a pixel counts when its whole 5x5 neighbourhood matches, so the one-pixel blends along the
+ * edges between two other colours do not; null when no region is solid.
+ */
+export function colourBox(
+  page: Page,
+  png: Buffer,
+  rgb: readonly [number, number, number],
+  tolerance: number,
+): Promise<{ minX: number; minY: number; maxX: number; maxY: number } | null> {
+  return page.evaluate(
+    async ([data, want, tol]) => {
+      const reach = 2;
+      const img = new Image();
+      img.src = `data:image/png;base64,${data}`;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx === null) throw new Error('no 2d context');
+      ctx.drawImage(img, 0, 0);
+      const px = ctx.getImageData(0, 0, img.width, img.height).data;
+      const { width, height } = img;
+      const match = new Uint8Array(width * height);
+      for (let i = 0; i < match.length; i++) {
+        match[i] = want.every((c, k) => Math.abs((px[i * 4 + k] ?? 0) - c) <= tol) ? 1 : 0;
+      }
+      const solid = (x: number, y: number): boolean => {
+        for (let dy = -reach; dy <= reach; dy++) {
+          for (let dx = -reach; dx <= reach; dx++) {
+            if (match[(y + dy) * width + x + dx] !== 1) return false;
+          }
+        }
+        return true;
+      };
+      let box: { minX: number; minY: number; maxX: number; maxY: number } | null = null;
+      for (let y = reach; y < height - reach; y++) {
+        for (let x = reach; x < width - reach; x++) {
+          if (!solid(x, y)) continue;
+          box =
+            box === null
+              ? { minX: x, minY: y, maxX: x, maxY: y }
+              : {
+                  minX: Math.min(box.minX, x),
+                  minY: Math.min(box.minY, y),
+                  maxX: Math.max(box.maxX, x),
+                  maxY: Math.max(box.maxY, y),
+                };
+        }
+      }
+      return box === null
+        ? null
+        : {
+            minX: box.minX - reach,
+            minY: box.minY - reach,
+            maxX: box.maxX + reach,
+            maxY: box.maxY + reach,
+          };
+    },
+    [png.toString('base64'), rgb, tolerance] as const,
   );
 }
 

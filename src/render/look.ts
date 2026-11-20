@@ -15,6 +15,8 @@ export type Look = {
   /** The perspective aids (target outline, tolerance band, gate) draw unlit, in their token colours. */
   readonly aidGlow: boolean;
   readonly rig: RigLevels;
+  /** Scales the legacy lights, which light the top-down view's grounds; the same on every preset. */
+  readonly topDownLight: number;
   /** Which dome and haze the perspective views show. */
   readonly sky: LightingMode;
   /** The lamp lenses of the vehicles are lit. */
@@ -39,6 +41,9 @@ export type Look = {
 
 const DAY_RIG: RigLevels = { sun: 1, ambient: 1, tint: null };
 
+/** Share of the day light the top-down view's legacy lights keep at night; the grounds dim to it. */
+export const TOP_DOWN_NIGHT_LIGHT = 0.75;
+
 export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
   const night = mode === 'night';
   return {
@@ -48,6 +53,7 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
     litCopies: flags.litMarkings || night,
     aidGlow: night,
     rig: night ? { sun: 0, ambient: NIGHT_AMBIENT, tint: NIGHT_TINT } : DAY_RIG,
+    topDownLight: night ? TOP_DOWN_NIGHT_LIGHT : 1,
     sky: mode,
     lamps: night,
     shadow: flags.sunShadow && flags.perspectiveLighting && !night,

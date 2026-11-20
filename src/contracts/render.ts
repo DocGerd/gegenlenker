@@ -107,6 +107,8 @@ export type ScenePaletteKey =
   | 'wheel'
   | 'tracks'
   | 'accent'
+  | 'nightAccent'
+  | 'nightTracks'
   | 'band'
   | 'cladding';
 export type ScenePalette = Readonly<Record<ScenePaletteKey, number>>;

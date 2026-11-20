@@ -229,7 +229,12 @@ function environment(layout: ResolvedLayout, palette: ScenePalette): Environment
 
 function aids(): AidsLayer {
   const group = new Group();
-  return { object: group, update: () => undefined, dispose: () => undefined };
+  return {
+    object: group,
+    update: () => undefined,
+    setLook: () => undefined,
+    dispose: () => undefined,
+  };
 }
 
 export const placeholderParts: RendererParts = {

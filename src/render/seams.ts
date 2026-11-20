@@ -74,6 +74,7 @@ export interface Environment {
 export interface AidsLayer {
   readonly object: Object3D;
   update(frame: RenderFrame): void;
+  setLook(look: Look): void;
   dispose(): void;
 }
 /** What a cockpit interior is placed against each cockpit frame; the rects are in CSS px. */
