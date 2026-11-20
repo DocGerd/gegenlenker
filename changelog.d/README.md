@@ -2,7 +2,7 @@
 
 A PR with a user-visible change adds one file here instead of editing `CHANGELOG.md`, so parallel PRs never conflict. Docs, CI, chore and test-only PRs add none.
 
-`CHANGELOG.md` is generated: `pnpm changelog` builds it from `released.json` (released history) and the fragments (pending changes). Never edit it by hand; `tools/changelog.test.ts` fails when it is stale, so run `pnpm changelog` after every change here.
+`CHANGELOG.md` is generated: `pnpm changelog` builds it from `released.json` only; pending fragments are not in it (they show in the app's "What's new" and enter `released.json` at release), so a fragment PR never touches `CHANGELOG.md`. Never edit it by hand; `tools/changelog.test.ts` fails when it is stale, so run `pnpm changelog` after every change to `released.json`.
 
 ## Filename: `<number>.<category>.md`
 
@@ -32,5 +32,5 @@ An array of releases, newest first. The unreleased group (`"version": null`, no 
 1. In `released.json`, give the unreleased group its `"version"` and `"date"`; if there is none, add a new first group with them.
 2. Add each fragment to that group as an entry, in PR number order, with `id` the file name without `.md`, `prs` the PR number, and `en` the line without the link group (ending in a period).
 3. Delete only the folded files, by name, never by glob.
-4. Run `pnpm changelog`; it moves the group from `## [Unreleased]` to its own `## [X.Y.Z] - date` section.
+4. Run `pnpm changelog`; the folded entries appear in `CHANGELOG.md`, in their own `## [X.Y.Z] - date` section.
 5. Before tagging, confirm `changelog.d/` holds only `README.md` and `released.json`; a fragment merged after the fold is otherwise lost.

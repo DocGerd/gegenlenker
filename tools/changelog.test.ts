@@ -49,17 +49,17 @@ describe('released.json', () => {
 
 describe('renderChangelog', () => {
   it('groups by category in Keep a Changelog order and rebuilds the PR links', () => {
-    const text = renderChangelog(
-      [
-        unreleased(entry({ id: 'f', category: 'fixed', prs: [5, 6], en: 'Fixed it.' })),
-        {
-          version: '1.0.0',
-          date: '2026-01-02',
-          entries: [entry({ id: 'old', en: 'Old.' })],
-        },
-      ],
-      [entry({ id: 'n', prs: [9], en: 'New.' })],
-    );
+    const text = renderChangelog([
+      unreleased(
+        entry({ id: 'n', prs: [9], en: 'New.' }),
+        entry({ id: 'f', category: 'fixed', prs: [5, 6], en: 'Fixed it.' }),
+      ),
+      {
+        version: '1.0.0',
+        date: '2026-01-02',
+        entries: [entry({ id: 'old', en: 'Old.' })],
+      },
+    ]);
     const base = 'https://github.com/DocGerd/gegenlenker/pull/';
     expect(text).toContain(`## [Unreleased]\n\n### Added\n\n- New ([#9](${base}9)).`);
     expect(text.indexOf('### Added')).toBeLessThan(text.indexOf('### Fixed'));
@@ -70,7 +70,7 @@ describe('renderChangelog', () => {
 });
 
 describe('CHANGELOG.md', () => {
-  it('is what `pnpm changelog` generates', () => {
+  it('is what `pnpm changelog` generates from released.json alone', () => {
     expect(readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8')).toBe(generateChangelog(ROOT));
   });
 });
