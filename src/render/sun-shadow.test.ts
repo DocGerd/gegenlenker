@@ -83,13 +83,13 @@ describe('fitSunShadow', () => {
     expect(CASTER_HEIGHT).toBeGreaterThan(12);
     const { x, y } = foci[1] as { x: number; y: number };
     const camera = shadowCamera(fit({ x, y, radius: RADIUS }));
-    // the top of the tallest caster standing at the edge of the ground the box covers, towards the sun
-    const edge = new Vector3(x, 0, -y).addScaledVector(
-      new Vector3(SUN.x, 0, SUN.z).normalize(),
-      RADIUS,
-    );
-    edge.y = CASTER_HEIGHT;
-    expect(inside(camera, edge)).toBe(true);
+    // the top of the tallest caster whose shadow tip lands on the edge of the ground the box covers, the
+    // sun side of it: the point that needs the near plane furthest
+    const top = new Vector3(x, 0, -y)
+      .addScaledVector(new Vector3(SUN.x, 0, SUN.z).normalize(), RADIUS)
+      .addScaledVector(SUN, CASTER_HEIGHT / SUN.y);
+    expect(inside(camera, top)).toBe(true);
+    expect(inside(camera, top.addScaledVector(SUN, 2))).toBe(false);
   });
 
   it('keeps the extent per radius, whatever the focus', () => {

@@ -9,7 +9,13 @@ import { proceduralEnvironment } from './environment';
 import { KEYS } from './palette';
 import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
-import { COCKPIT_LAYERS, DEFAULT_LAYER, enableLayers, TOP_DOWN_LAYERS } from './seams';
+import {
+  COCKPIT_LAYERS,
+  DEFAULT_LAYER,
+  enableLayers,
+  SHADOW_CASTER_LAYERS,
+  TOP_DOWN_LAYERS,
+} from './seams';
 import type { VehicleEnvironment } from './vehicle-pbr';
 import { type KitTextureKey, type LoadedKit, type YardKit } from './yard-kit';
 import type { KitModel, KitPieces } from './yard-kit-pieces';
@@ -45,6 +51,13 @@ function trianglePieces(): KitPieces {
     primitives: [
       {
         kind: 'atlas',
+        position: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+        normal: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
+        uv: new Float32Array([0, 0, 1, 0, 0, 1]),
+        index: new Uint32Array([0, 1, 2]),
+      },
+      {
+        kind: 'leaves',
         position: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
         normal: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]),
         uv: new Float32Array([0, 0, 1, 0, 0, 1]),
@@ -132,18 +145,29 @@ describe('the yard kit props', () => {
     env.dispose();
   });
 
-  it('cast the sun shadow only where the sun does', () => {
-    const { env, load, off } = setup();
+  it('cast the sun shadow only where the sun does, and only the atlas receives it', () => {
+    const { env, load } = setup();
+    // what the sun's shadow camera draws: the cockpit camera's layers would pass a kit on the wrong one
+    const shadowCamera = camera(SHADOW_CASTER_LAYERS);
+    const before = seen(env.object, shadowCamera);
     load();
-    const casters = (flags: typeof draws): boolean[] => {
+    const kitMeshes = (flags: typeof draws): Mesh[] => {
       env.setLook(lookFor(flags, 'day'));
-      return minus(seen(env.object, cockpit), off).map((m) => m.castShadow);
+      return minus(seen(env.object, shadowCamera), before).filter(
+        (m): m is Mesh => m instanceof Mesh,
+      );
     };
-    expect(casters(draws), 'no sun shadow').not.toContain(true);
-    const high = casters(QUALITY_FLAGS.high);
+    const leaves = (m: Mesh): boolean => (m.material as { alphaTest: number }).alphaTest > 0;
+    const without = kitMeshes(draws);
+    expect(without.length).toBeGreaterThan(0);
+    for (const m of without)
+      expect([m.castShadow, m.receiveShadow], 'no sun shadow').toEqual([false, false]);
+    const high = kitMeshes(QUALITY_FLAGS.high);
     expect(high.length).toBeGreaterThan(0);
-    expect(high).not.toContain(false);
-    expect(casters(draws), 'off again').not.toContain(true);
+    for (const m of high) expect([m.castShadow, m.receiveShadow]).toEqual([true, !leaves(m)]);
+    expect(high.some(leaves)).toBe(true);
+    for (const m of kitMeshes(draws))
+      expect([m.castShadow, m.receiveShadow], 'off again').toEqual([false, false]);
     env.dispose();
   });
 
