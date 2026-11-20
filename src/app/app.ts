@@ -220,6 +220,7 @@ export function startApp(root: HTMLElement): void {
         close();
         whatsNew();
       },
+      import('./whats-new-seen').then((m) => m.hasUnseen()),
       focus,
     );
   };
