@@ -44,7 +44,7 @@ export function queueShadow(light: DirectionalLight): void {
 /**
  * An orthographic box over the focus, looking along `-sunDir`. Its size depends on the radius
  * only, and its centre sits on the map's texel grid in light space so the shadows do not crawl as
- * the focus moves. Depth reaches the tallest caster towards the sun and the ground behind.
+ * the focus moves. Depth reaches the tallest caster towards the sun and the longest shadow it casts away from it.
  */
 export function fitSunShadow(focus: ShadowFocus, sunDir: Vector3, mapSize: number): SunShadowFit {
   const d = sunDir.clone().normalize();
@@ -61,7 +61,7 @@ export function fitSunShadow(focus: ShadowFocus, sunDir: Vector3, mapSize: numbe
 
   const horizontal = Math.hypot(d.x, d.z);
   const towardSun = focus.radius * horizontal + CASTER_HEIGHT / d.y;
-  const behind = focus.radius * horizontal;
+  const behind = horizontal * (focus.radius + (CASTER_HEIGHT * horizontal) / d.y);
   return {
     position: snapped.clone().addScaledVector(d, SUN_DISTANCE),
     target: snapped,

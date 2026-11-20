@@ -133,7 +133,7 @@ export type RenderStats = {
   readonly frameP95Ms: number;
   readonly resolutionScale: number;
   readonly drawCalls: number;
-  /** Sun shadow map renders in the last frame. */
+  /** Shadow-camera renders in the last frame: one per shadow map, a point light's six faces counting six. */
   readonly shadowPasses: number;
   readonly glRenderer: string;
   readonly contextLost: boolean;

@@ -11,13 +11,7 @@ import type { ScenePalette } from '../contracts/render';
 import { HDRI_LIGHT } from './hdri-light';
 import { AIDS_LAYER, DEFAULT_LAYER, PERSPECTIVE_LAYER, type ShadowFocus } from './seams';
 import { neutralSky } from './sky';
-import {
-  fitSunShadow,
-  prepareShadow,
-  queueShadow,
-  SHADOW_MAP_SIZE,
-  SUN_DISTANCE,
-} from './sun-shadow';
+import { fitSunShadow, prepareShadow, queueShadow, SUN_DISTANCE } from './sun-shadow';
 
 export const SUN_ELEVATION = (50 * Math.PI) / 180;
 export const SUN_INTENSITY = 2.4;
@@ -212,7 +206,7 @@ export function createLightRig(palette: ScenePalette): LightRig {
     },
     fitShadow(focus) {
       if (sun.castShadow) {
-        const fit = fitSunShadow(focus, sunDirection, SHADOW_MAP_SIZE);
+        const fit = fitSunShadow(focus, sunDirection, sun.shadow.mapSize.width);
         sun.position.copy(fit.position);
         sun.target.position.copy(fit.target);
         const camera = sun.shadow.camera;

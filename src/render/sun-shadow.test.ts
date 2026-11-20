@@ -50,6 +50,8 @@ describe('fitSunShadow', () => {
             expect(inside(camera, p), `corner ${u},${v},${z} at ${x},${y} heading ${heading}`).toBe(
               true,
             );
+            const tip = p.clone().addScaledVector(SUN, -z / SUN.y);
+            expect(inside(camera, tip), `shadow tip of ${u},${v},${z} at ${x},${y}`).toBe(true);
           }
         }
         for (let a = 0; a < 360; a += 10) {
@@ -61,14 +63,12 @@ describe('fitSunShadow', () => {
     }
   });
 
-  it('reaches tall casters towards the sun and the ground behind the focus', () => {
+  it('reaches tall casters towards the sun', () => {
     const { x, y } = foci[1] as { x: number; y: number };
     const camera = shadowCamera(fit({ x, y, radius: RADIUS }));
     const ground = new Vector3(x, 0, -y);
     const sunSide = ground.clone().addScaledVector(SUN, 10 / SUN.y);
-    const behind = ground.clone().addScaledVector(SUN, -RADIUS * Math.hypot(SUN.x, SUN.z));
     expect(inside(camera, sunSide)).toBe(true);
-    expect(inside(camera, behind)).toBe(true);
   });
 
   it('keeps the extent per radius, whatever the focus', () => {
