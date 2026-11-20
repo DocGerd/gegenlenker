@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { GRADE_SHADER_MARKER, setGradeDisabled } from './grade';
 import { GROUND_PBR_MARKER } from './ground-pbr-material';
 import { precompileGroundPbr } from './ground-pbr';
-import { PBR_SAMPLER_BUDGET, type PbrKey } from './ground-pbr-spec';
+import { PBR_SAMPLER_BUDGET, type PbrKey, SHADOW_SAMPLERS } from './ground-pbr-spec';
 import type { TextureMaps } from './texture-set';
 
 const texture = (): Texture => new DataTexture(new Uint8Array(4), 1, 1);
@@ -18,14 +18,16 @@ const maps: TextureMaps<PbrKey> = {
 };
 
 /** A renderer whose build yields `fragment`, on a context that is `lost` or not. */
-const building = (fragment: string | null, lost = false): WebGPURenderer =>
-  Object.assign(Object.create(WebGPURenderer.prototype) as WebGPURenderer, {
+const building = (fragment: string | null, lost = false, shadowed = fragment): WebGPURenderer => {
+  const builds = [fragment, shadowed];
+  return Object.assign(Object.create(WebGPURenderer.prototype) as WebGPURenderer, {
     debug: {
       onShaderError: null,
-      getShaderAsync: () => Promise.resolve({ fragmentShader: fragment }),
+      getShaderAsync: () => Promise.resolve({ fragmentShader: builds.shift() ?? null }),
     },
     getContext: () => ({ isContextLost: () => lost }),
   });
+};
 
 const samplers = (count: number): string =>
   Array.from({ length: count }, (_, i) => `uniform sampler2D nodeUniform${String(i)};`).join('\n');
@@ -44,6 +46,19 @@ describe('PBR ground precompile', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('lets the sun shadow add its sampler', async () => {
+    await expect(
+      precompileGroundPbr(
+        building(
+          built(PBR_SAMPLER_BUDGET, both),
+          false,
+          built(PBR_SAMPLER_BUDGET + SHADOW_SAMPLERS, both),
+        ),
+        maps,
+      ),
+    ).resolves.toBeUndefined();
+  });
+
   it('needs only its own marker while the grade is disabled', async () => {
     setGradeDisabled(true);
     await expect(
@@ -57,6 +72,14 @@ describe('PBR ground precompile', () => {
     ['the PBR marker is missing', building(built(1, [GRADE_SHADER_MARKER]))],
     ['the grade marker is missing', building(built(1, [GROUND_PBR_MARKER]))],
     ['it declares more samplers than the budget', building(built(PBR_SAMPLER_BUDGET + 1, both))],
+    [
+      'the shadow-receiving build goes over the budget',
+      building(
+        built(PBR_SAMPLER_BUDGET, both),
+        false,
+        built(PBR_SAMPLER_BUDGET + SHADOW_SAMPLERS + 1, both),
+      ),
+    ],
     ['the context is lost', building(built(1, both), true)],
   ])('rejects when %s', async (_, gl) => {
     await expect(precompileGroundPbr(gl, maps)).rejects.toThrow();
