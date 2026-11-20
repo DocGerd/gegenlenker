@@ -31,7 +31,7 @@ import {
   sunPosition,
 } from './light-rig';
 import type { QualityFlags } from './quality';
-import { AIDS_LAYER, type Environment } from './seams';
+import { AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
 import { createSceneSky, domeGround } from './scene-sky';
@@ -336,7 +336,8 @@ export function proceduralEnvironment(
 
   return {
     object: group,
-    update(frame: RenderFrame): void {
+    update(frame: RenderFrame, focus: ShadowFocus): void {
+      rig.fitShadow(focus);
       if (yardBand !== null) yardBand.visible = frame.topDown === 'yard';
       if (gate !== null) {
         const next = frame.waypointVisited === true ? gate.passed : gate.pending;

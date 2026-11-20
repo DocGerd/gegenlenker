@@ -9,11 +9,11 @@ import {
 } from 'three';
 import type { ScenePalette } from '../contracts/render';
 import { HDRI_LIGHT } from './hdri-light';
-import { AIDS_LAYER, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
+import { AIDS_LAYER, DEFAULT_LAYER, PERSPECTIVE_LAYER, type ShadowFocus } from './seams';
 import { neutralSky } from './sky';
+import { fitSunShadow, prepareShadow, queueShadow, SUN_DISTANCE } from './sun-shadow';
 
 export const SUN_ELEVATION = (50 * Math.PI) / 180;
-const SUN_DISTANCE = 100;
 export const SUN_INTENSITY = 2.4;
 export const HEMISPHERE_INTENSITY = 1.4;
 /** SH9 basis constants of band 0 and the y term of band 1 (three's `getBasisAt`). */
@@ -161,6 +161,10 @@ export type LightRig = {
   setSplit(on: boolean): void;
   /** Scales the perspective rig (night dims it); the light set stays constant. */
   setIntensity(share: number): void;
+  /** Whether the HDRI sun casts; the legacy lights never do. */
+  setShadow(on: boolean): void;
+  /** Fits the shadow box to `focus` and queues the map for this frame; call before the scene's matrices update. */
+  fitShadow(focus: ShadowFocus): void;
 };
 
 export function createLightRig(palette: ScenePalette): LightRig {
@@ -174,7 +178,9 @@ export function createLightRig(palette: ScenePalette): LightRig {
 
   const light = perspectiveLight(palette);
   const sun = new DirectionalLight(light.sunColor, light.sunIntensity);
-  sun.position.copy(perspectiveSunDirection().multiplyScalar(SUN_DISTANCE));
+  const sunDirection = perspectiveSunDirection();
+  sun.position.copy(sunDirection).multiplyScalar(SUN_DISTANCE);
+  prepareShadow(sun);
   const probe = new LightProbe(light.sh, 1);
   for (const l of [sun, probe]) {
     l.layers.set(PERSPECTIVE_LAYER);
@@ -182,7 +188,8 @@ export function createLightRig(palette: ScenePalette): LightRig {
   }
 
   const object = new Group();
-  object.add(legacySun, legacyAmbient, sun, probe);
+  // in the graph: three never updates the matrix of a target outside it
+  object.add(legacySun, legacyAmbient, sun, sun.target, probe);
   return {
     object,
     setSplit(on) {
@@ -193,6 +200,25 @@ export function createLightRig(palette: ScenePalette): LightRig {
     setIntensity(share) {
       sun.intensity = light.sunIntensity * share;
       probe.intensity = share;
+    },
+    setShadow(on) {
+      sun.castShadow = on;
+    },
+    fitShadow(focus) {
+      if (sun.castShadow) {
+        const fit = fitSunShadow(focus, sunDirection, sun.shadow.mapSize.width);
+        sun.position.copy(fit.position);
+        sun.target.position.copy(fit.target);
+        const camera = sun.shadow.camera;
+        camera.left = -fit.half;
+        camera.right = fit.half;
+        camera.bottom = -fit.half;
+        camera.top = fit.half;
+        camera.near = fit.near;
+        camera.far = fit.far;
+        camera.updateProjectionMatrix();
+      }
+      queueShadow(sun);
     },
   };
 }

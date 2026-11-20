@@ -170,10 +170,18 @@ test('High graphics caches the ground and sky textures and transcoder on first u
       }
       return urls;
     });
-  const files = RUNTIME_ASSETS.flatMap(([stem, extensions]) =>
-    extensions.map((extension) => new RegExp(`${stem}-[\\w-]+\\.${extension}$`)),
+  const patterns = (assets: typeof RUNTIME_ASSETS): RegExp[] =>
+    assets.flatMap(([stem, extensions]) =>
+      extensions.map((extension) => new RegExp(`${stem}-[\\w-]+\\.${extension}$`)),
+    );
+  // the transcoder has no registry entry: whatever draws a KTX2 needs it
+  const drawn = patterns(
+    RUNTIME_ASSETS.filter(([stem]) => {
+      const entry = ASSET_REGISTRY[stem];
+      return entry === undefined || QUALITY_FLAGS.high[entry.flag];
+    }),
   );
-  expect(files.map(String).sort()).toEqual(
+  expect(drawn.map(String).sort()).toEqual(
     [
       /asphalt-albedo-[\w-]+\.ktx2$/,
       /asphalt-packed-[\w-]+\.ktx2$/,
@@ -189,6 +197,7 @@ test('High graphics caches the ground and sky textures and transcoder on first u
       .map(String)
       .sort(),
   );
+  const files = patterns(RUNTIME_ASSETS);
   const matching = (urls: string[], file: RegExp): string[] => urls.filter((url) => file.test(url));
 
   // Installing does not download them: only High draws the texture, so the other presets skip the cost.
@@ -208,9 +217,9 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   await expect
     .poll(async () => {
       const { runtime } = await cached();
-      return files.map((file) => matching(runtime, file).length);
+      return drawn.map((file) => matching(runtime, file).length);
     })
-    .toEqual(files.map(() => 1));
+    .toEqual(drawn.map(() => 1));
 
   // The marker follows the preset: Balanced draws no reflections, so it is gone.
   await page.getByRole('button', { name: en.finish }).click();

@@ -16,6 +16,10 @@ export const ASSET_REGISTRY: Readonly<
   'man-le-18-280-body': { kind: 'glb', flag: 'vehicleGlb' },
   'hueffermann-hpa-24-81-l-trailer': { kind: 'glb', flag: 'vehicleGlb' },
   'krone-azw-18-trailer': { kind: 'glb', flag: 'vehicleGlb' },
+  'yard-kit': { kind: 'glb', flag: 'yardKit' },
+  'yard-kit-atlas-a': { kind: 'ktx2', flag: 'yardKit' },
+  'yard-kit-atlas-b': { kind: 'ktx2', flag: 'yardKit' },
+  'yard-kit-leaves': { kind: 'ktx2', flag: 'yardKit' },
   ground: { kind: 'ktx2', flag: 'groundTexture' },
   sky: { kind: 'ktx2', flag: 'hdriSky' },
   'concrete-albedo': { kind: 'ktx2', flag: 'groundPbr' },
@@ -52,6 +56,7 @@ export const ATTACHMENTS = {
     flags: ['groundTexture', 'groundPbr'],
     ready: (v) => v.startsWith('ktx2:'),
   },
+  yardKit: { marker: 'data-yard-kit', flags: ['yardKit'], ready: (v) => v === 'on' },
   pbr: { marker: 'data-vehicle-pbr', flags: ['pbr'], ready: (v) => v === 'on' },
   sky: { marker: 'data-sky-hdri', flags: ['hdriSky'], ready: (v) => v === 'on' },
   grade: {

@@ -3,6 +3,7 @@ import {
   Color,
   DirectionalLight,
   HemisphereLight,
+  Layers,
   LightProbe,
   type Light,
   SphericalHarmonics3,
@@ -19,7 +20,16 @@ import {
 } from './light-rig';
 import { domeGround } from './scene-sky';
 import { KEYS } from './palette';
-import { AIDS_LAYER, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
+import {
+  AIDS_LAYER,
+  CAB_LAYER,
+  DEFAULT_LAYER,
+  enableLayers,
+  INTERIOR_LAYER,
+  PERSPECTIVE_LAYER,
+  TOP_DOWN_LAYERS,
+} from './seams';
+import { isShadowCamera } from './sun-shadow';
 
 // the scene tokens are theme-independent
 const css = readFileSync(new URL('../styles/tokens.css', import.meta.url), 'utf8');
@@ -125,5 +135,73 @@ describe('light rig', () => {
     expect(sun.intensity).toBeCloseTo(perspectiveLight(scene).sunIntensity * 0.25, 6);
     expect(probe.intensity).toBe(0.25);
     expect(legacy.map((l) => l.intensity)).toEqual(before);
+  });
+
+  describe('sun shadow', () => {
+    const sees = (camera: Layers, layer: number): boolean => {
+      const object = new Layers();
+      object.set(layer);
+      return camera.test(object);
+    };
+    const focus = { x: 40, y: -12, radius: 12 };
+
+    it('draws the caster layers only, once per queued frame', () => {
+      const { sun } = lights(createLightRig(scene));
+      const { camera } = sun.shadow;
+      for (const layer of [DEFAULT_LAYER, PERSPECTIVE_LAYER, CAB_LAYER]) {
+        expect(sees(camera.layers, layer), `layer ${layer}`).toBe(true);
+      }
+      for (const layer of [AIDS_LAYER, INTERIOR_LAYER]) {
+        expect(sees(camera.layers, layer), `layer ${layer}`).toBe(false);
+      }
+      expect(sun.shadow.autoUpdate).toBe(false);
+      expect(isShadowCamera(camera)).toBe(true);
+    });
+
+    it('queues the map only while the sun casts', () => {
+      const rig = createLightRig(scene);
+      const { sun } = lights(rig);
+      rig.fitShadow(focus);
+      expect(sun.shadow.needsUpdate).toBe(false);
+      rig.setShadow(true);
+      rig.fitShadow(focus);
+      expect(sun.shadow.needsUpdate).toBe(true);
+      sun.shadow.needsUpdate = false;
+      rig.setShadow(false);
+      rig.fitShadow(focus);
+      expect(sun.shadow.needsUpdate).toBe(false);
+    });
+
+    it('keeps the target in the graph so its matrix follows the fit', () => {
+      const rig = createLightRig(scene);
+      const { sun } = lights(rig);
+      expect(sun.target.parent).toBe(rig.object);
+      rig.setShadow(true);
+      rig.fitShadow(focus);
+      rig.object.updateMatrixWorld();
+      const aimed = sun.position.clone().sub(sun.target.position).normalize();
+      expect(aimed.distanceTo(perspectiveSunDirection())).toBeLessThan(1e-9);
+      expect(sun.target.matrixWorld.elements.slice(12, 15)).toEqual(sun.target.position.toArray());
+      expect(
+        Math.hypot(sun.target.position.x - focus.x, sun.target.position.z + focus.y),
+      ).toBeLessThan(1);
+    });
+
+    it('never lets a light the top-down camera sees cast', () => {
+      const topDown = new Layers();
+      topDown.set(DEFAULT_LAYER);
+      enableLayers(topDown, TOP_DOWN_LAYERS);
+      for (const split of [false, true]) {
+        const rig = createLightRig(scene);
+        rig.setSplit(split);
+        rig.setShadow(true);
+        rig.fitShadow(focus);
+        const all = rig.object.children.filter((l): l is Light => 'isLight' in l);
+        expect(all.length).toBeGreaterThan(0);
+        for (const l of all) {
+          if (topDown.test(l.layers)) expect(l.castShadow, `split ${split}`).toBe(false);
+        }
+      }
+    });
   });
 });

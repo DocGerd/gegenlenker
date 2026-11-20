@@ -14,6 +14,7 @@ import {
   type ScenePalette,
   type WebgpuFallback,
 } from '../contracts/render';
+import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckAnchors, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { resolveCombination } from '../vehicles/resolve';
@@ -37,6 +38,7 @@ import {
   type RendererParts,
   type VehicleVisual,
 } from './seams';
+import { isShadowCamera } from './sun-shadow';
 import { placeTopDownCamera } from './top-down-camera';
 
 const FOLLOW_HALF_HEIGHT = 20;
@@ -89,6 +91,14 @@ function followRadius(truck: TruckSpec, trailer: TrailerSpec): number {
   const length =
     p.truckFront + p.couplingOffset + p.drawbar + p.trailerWheelbase + p.trailerRearOverhang;
   return length / 2 + Math.max(p.truckWidth, p.trailerWidth) / 2 + FOLLOW_RADIUS_MARGIN;
+}
+
+/** The bumper-to-trailer-rear midpoint the follow views and the sun shadow centre on. */
+function vehicleCentre(snapshot: SimSnapshot, frontX: number): { x: number; y: number } {
+  const { truck, trailerRear } = snapshot;
+  const bumperX = truck.x + Math.cos(truck.heading) * frontX;
+  const bumperY = truck.y + Math.sin(truck.heading) * frontX;
+  return { x: (bumperX + trailerRear.x) / 2, y: (bumperY + trailerRear.y) / 2 };
 }
 
 function setAidsLayer(object: Object3D): void {
@@ -209,6 +219,7 @@ export function createThreeSceneRenderer(
   let glRenderer = 'unknown';
   let backend: GraphicsBackend = 'webgl2';
   let drawCalls = 0;
+  let shadowPasses = 0;
   let topDownRect: Rect | null = null;
   let chaseShown = false;
   const lead = { x: 0, y: 0 };
@@ -266,10 +277,7 @@ export function createThreeSceneRenderer(
     let cy: number;
     let halfH: number;
     if (frame.topDown === 'follow') {
-      const { truck, trailer, trailerRear, speed, control } = frame.snapshot;
-      const frontX = b.anchors.frontX;
-      const bumperX = truck.x + Math.cos(truck.heading) * frontX;
-      const bumperY = truck.y + Math.sin(truck.heading) * frontX;
+      const { truck, trailer, speed, control } = frame.snapshot;
       const target = leadTarget(truck.heading, trailer.heading, speed, control.gear);
       const now = performance.now();
       const k =
@@ -280,7 +288,7 @@ export function createThreeSceneRenderer(
       lead.x += (target.x - lead.x) * k;
       lead.y += (target.y - lead.y) * k;
       const framing = followFraming({
-        vehicle: { x: (bumperX + trailerRear.x) / 2, y: (bumperY + trailerRear.y) / 2 },
+        vehicle: vehicleCentre(frame.snapshot, b.anchors.frontX),
         lead,
         radius: b.radius,
         pane: rect,
@@ -386,6 +394,7 @@ export function createThreeSceneRenderer(
       canvas = target;
       contextLost = false;
       next.autoClear = false;
+      next.shadowMap.enabled = true;
       next.info.autoReset = false;
       glRenderer = nextDevice === null ? describeGl(next) : describeAdapter(nextDevice.adapterInfo);
       backend = backendOf(next);
@@ -414,6 +423,9 @@ export function createThreeSceneRenderer(
       const palette = readScenePalette();
       const scene = new Scene();
       scene.matrixWorldAutoUpdate = false;
+      scene.onBeforeRender = (_renderer, _scene, camera) => {
+        if (isShadowCamera(camera)) shadowPasses++;
+      };
       const truckVisual = parts.truck(truck, palette);
       const trailerVisual = parts.trailer(trailer, palette);
       const environment = parts.environment(nextLayout, palette);
@@ -474,7 +486,11 @@ export function createThreeSceneRenderer(
       const sky = b.palette.sky;
       b.truck.update(snapshot);
       b.trailer.update(snapshot);
-      b.environment.update(frame);
+      shadowPasses = 0;
+      b.environment.update(frame, {
+        ...vehicleCentre(snapshot, b.anchors.frontX),
+        radius: b.radius,
+      });
       b.aids.update(frame);
       b.scene.updateMatrixWorld();
 
@@ -584,6 +600,7 @@ export function createThreeSceneRenderer(
         frameP95Ms: timer.p95Ms(),
         resolutionScale: timer.scale(),
         drawCalls,
+        shadowPasses,
         glRenderer,
         contextLost,
       };

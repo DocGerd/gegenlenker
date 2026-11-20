@@ -18,12 +18,13 @@ import {
   ENCODING_NAME as SKY_ENCODING,
   inputsSha256 as skyInputsSha256,
   SKY_FILES,
+  SKY_HDR,
 } from '../textures/sky-build';
 import { hdriLightModule, readSkyImage, skyPixels } from '../textures/sky-pixels';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { KIT_TEXTURES } from '../blender/kit-build';
 import { canonicalJson, type Json, sha256 } from './provenance';
-import { SKY_HDR } from '../textures/sky-build';
 
 export type TexturePixels = {
   readonly width: number;
@@ -119,4 +120,5 @@ export const TEXTURE_ASSETS: Readonly<Record<string, TextureAsset>> = {
     bake: { file: SKY_FILES.bake, source: hdriLightModule, bakedSha256 },
   },
   ...PBR_ASSETS,
+  ...KIT_TEXTURES,
 };

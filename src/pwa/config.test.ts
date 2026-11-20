@@ -103,6 +103,10 @@ describe('asset registry', () => {
       '**/pavers-albedo-*.ktx2',
       '**/pavers-packed-*.ktx2',
       '**/sky-*.ktx2',
+      '**/yard-kit-*.glb',
+      '**/yard-kit-atlas-a-*.ktx2',
+      '**/yard-kit-atlas-b-*.ktx2',
+      '**/yard-kit-leaves-*.ktx2',
     ]);
   });
 
