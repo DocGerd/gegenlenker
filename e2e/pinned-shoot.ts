@@ -426,6 +426,14 @@ export function colourBox(
   );
 }
 
+/**
+ * Channel value above which a pixel is a day sight; the night horizon and the lit ground stay well
+ * below it. Mirrors show no interior, so a day dome (most of the pane) is what pushes the share up.
+ */
+export const DAY_BRIGHT = 110;
+/** Largest share of a mirror above `DAY_BRIGHT` at night: lamp lenses and the unlit aids only. */
+export const MAX_MIRROR_BRIGHT = 0.1;
+
 /** Share of a PNG's pixels with a channel above `level` (0-255). */
 export function brightShare(page: Page, png: Buffer, level: number): Promise<number> {
   return page.evaluate(

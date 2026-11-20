@@ -3,8 +3,10 @@ import { en } from '../src/i18n/en';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import {
   brightShare,
+  DAY_BRIGHT,
   distinctColours,
   HEAVY,
+  MAX_MIRROR_BRIGHT,
   MIN_DRAWN_COLOURS,
   PRESET_TIMEOUT_MS,
   type Preset,
@@ -17,13 +19,6 @@ import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems'
 
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 const PERSPECTIVE: readonly Shot[] = ['cockpit', 'mirrorLeft', 'mirrorRight', 'chase'];
-/**
- * Channel value above which a pixel is a day sight; the night horizon and the lit ground stay well
- * below it. Mirrors show no interior, so a day dome (most of the pane) is what pushes the share up.
- */
-const DAY_BRIGHT = 110;
-/** Largest share of a mirror above it at night: lamp lenses and the unlit aids only. */
-const MAX_MIRROR_BRIGHT = 0.1;
 /** Most of a perspective pane the top-down clear colour may fill: a night dome that failed would show it. */
 const MAX_CLEAR_COLOUR = 0.2;
 
