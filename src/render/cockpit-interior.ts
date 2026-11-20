@@ -10,13 +10,16 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Rect } from '../contracts/render';
+import type { TruckSpec } from '../contracts/vehicle';
+import { type CabSight, cabSight } from './cab-sight';
+import { COCKPIT_FOV } from './cockpit-camera';
 import { REALISM_HUES, type RealismHueKey } from './realism-hues';
 import { INTERIOR_LAYER, type CockpitInterior } from './seams';
 import { tint } from './tint';
 
 /**
  * The cab interior as the cockpit camera sees it: dashboard edge, A-pillars, roof header and a
- * stowed visor. The parts are authored in normalised device coordinates on a plane `DEPTH` ahead of
+ * stowed visor, from the left-hand seat: the cab's windscreen centre lies to the right of the view axis. The parts are authored in normalised device coordinates on a plane `DEPTH` ahead of
  * the eye and `place` scales them to the camera's field of view, so the framing holds at every aspect.
  */
 
@@ -24,13 +27,30 @@ import { tint } from './tint';
 const DEPTH = 0.5;
 /** Past the view edge, so no hairline shows at the border. */
 const BLEED = 1.05;
-const STRIP_STEPS = 24;
+const STRIP_STEPS = 48;
 
-/** The dashboard's top edge as NDC y at NDC x: lowest at the centre, rising towards the sides. */
-export const dashEdge = (x: number): number => -0.52 + 0.06 * x * x;
-/** The header's lower edge: highest at the centre. */
-export const headerEdge = (x: number): number => 0.78 - 0.06 * x * x;
+/** The dashboard's top edge as NDC y at NDC x: lowest at `shift`, rising towards the sides. */
+export const dashEdge = (x: number, shift = 0): number => -0.52 + 0.06 * (x - shift) ** 2;
+/** The header's lower edge: highest at `shift`, and as high at the left view edge as unshifted, where the left mirror sits. */
+export const headerEdge = (x: number, shift = 0): number =>
+  0.78 - 0.06 * ((x - shift) / (1 + shift)) ** 2;
 const DASH_LIP = 0.035;
+
+/** The aspect the dash and header are shaped for, as the ratio of a landscape drive layout's cockpit view. */
+const REFERENCE_ASPECT = 2.4;
+/** NDC; the dash low point and header high point never move further right than this. */
+const MAX_SHIFT = 0.45;
+/** The instrument binnacle over the dash straight ahead of the driver; `top` stays below the sight cone. */
+export const HUMP = { halfWidth: 0.3, drop: 0.12, top: -0.475 };
+const hump = (x: number): number => HUMP.top - HUMP.drop * (Math.abs(x) / HUMP.halfWidth) ** 4;
+
+/** NDC x of the cab windscreen's centre, where the dash is lowest and the header highest. */
+export function edgeShift(truck: TruckSpec, fov: number): number {
+  const { windscreenCentre } = cabSight(truck);
+  const ndc =
+    Math.tan(windscreenCentre) / (REFERENCE_ASPECT * Math.tan(MathUtils.degToRad(fov / 2)));
+  return Math.min(ndc, MAX_SHIFT);
+}
 
 /** Half-angle in degrees about the view axis of the forward sight cone that no part may enter. */
 export const CLEAR_CONE_DEG = 12;
@@ -43,7 +63,7 @@ export const MIN_PILLAR_WIDTH = 0.06;
 /** The pillar's top edge leans this far towards the centre of the view, in pillar widths. */
 const PILLAR_LEAN = 0.25;
 
-export const VISOR = { left: -0.5, right: -0.08, bottom: 0.62 };
+export const VISOR = { left: -0.55, right: 0, bottom: 0.62 };
 const VISOR_LIP = 0.025;
 
 /** The mirror rects' inner edges as distances from the view centre in NDC; 1 where there is no mirror. */
@@ -71,18 +91,38 @@ export function coneEdge(aspect: number, fov: number): number {
 
 export type PillarSpan = { centre: number; width: number };
 
-/** A pillar's centre and width in NDC beside a mirror whose inner edge is `mirrorInner` from the centre; null where it does not fit. */
-export function pillarSpan(
-  aspect: number,
-  fov: number,
-  mirrorInner: number,
-  into: PillarSpan = { centre: 0, width: 0 },
-): PillarSpan | null {
+/** The room for a pillar in NDC beside a mirror whose inner edge is `mirrorInner` from the centre; null where it does not fit. */
+function pillarSlot(aspect: number, fov: number, mirrorInner: number): PillarSpan | null {
   const outer = Math.min(mirrorInner - MIRROR_GAP, 1);
   const inner = Math.max(outer - PILLAR_WIDTH, coneEdge(aspect, fov) + CONE_GAP);
-  into.width = outer - inner;
-  into.centre = (inner + outer) / 2;
-  return into.width < MIN_PILLAR_WIDTH ? null : into;
+  const width = outer - inner;
+  return width < MIN_PILLAR_WIDTH ? null : { centre: (inner + outer) / 2, width };
+}
+
+export type PillarSpans = { left: PillarSpan | null; right: PillarSpan | null };
+
+/**
+ * Both pillars in NDC, each in its own slot between the sight cone and its mirror. The near (left)
+ * pillar fills the slot; the far one is narrower by the ratio of the angles the two cover from the
+ * eye, and keeps its outer edge at the mirror. A pillar is null where its slot is too narrow.
+ */
+export function pillarSpans(
+  sight: CabSight,
+  aspect: number,
+  fov: number,
+  layout: InteriorLayout,
+): PillarSpans {
+  const left = pillarSlot(aspect, fov, layout.left);
+  const slot = pillarSlot(aspect, fov, layout.right);
+  let right: PillarSpan | null = null;
+  if (slot !== null) {
+    const width = Math.max(
+      MIN_PILLAR_WIDTH,
+      (slot.width * sight.right.covered) / sight.left.covered,
+    );
+    right = { centre: slot.centre + (slot.width - width) / 2, width };
+  }
+  return { left, right };
 }
 
 function paint(positions: number[], index: number[], hue: RealismHueKey): BufferGeometry {
@@ -126,7 +166,11 @@ export type FlatInterior = CockpitInterior & {
   readonly pillars: { readonly left: Mesh; readonly right: Mesh };
 };
 
-export function createCockpitInterior(): FlatInterior {
+export function createCockpitInterior(truck: TruckSpec): FlatInterior {
+  const sight = cabSight(truck);
+  const shift = edgeShift(truck, COCKPIT_FOV);
+  const dash = (x: number): number => Math.max(dashEdge(x, shift), hump(x));
+  const header = (x: number): number => headerEdge(x, shift);
   const object = new Group();
   object.name = 'cockpit-interior';
   const material = new MeshBasicMaterial({
@@ -169,18 +213,18 @@ export function createCockpitInterior(): FlatInterior {
   // One draw for the static parts; later triangles cover earlier ones, since nothing is depth tested.
   const parts = [
     strip(
-      (x) => dashEdge(x) - DASH_LIP,
+      (x) => dash(x) - DASH_LIP,
       () => -BLEED,
       'chevronBlack',
     ),
-    strip(dashEdge, (x) => dashEdge(x) - DASH_LIP, 'anthracite'),
-    strip(() => BLEED, headerEdge, 'headliner'),
+    strip(dash, (x) => dash(x) - DASH_LIP, 'anthracite'),
+    strip(() => BLEED, header, 'headliner'),
     quad(
       [
         [VISOR.left, VISOR.bottom],
         [VISOR.right, VISOR.bottom],
-        [VISOR.right, headerEdge(VISOR.right)],
-        [VISOR.left, headerEdge(VISOR.left)],
+        [VISOR.right, header(VISOR.right)],
+        [VISOR.left, header(VISOR.left)],
       ],
       'anthracite',
     ),
@@ -200,16 +244,9 @@ export function createCockpitInterior(): FlatInterior {
   object.visible = false;
 
   const layout: InteriorLayout = { left: 1, right: 1 };
-  const span: PillarSpan = { centre: 0, width: 0 };
-  const placePillar = (
-    mesh: Mesh,
-    side: -1 | 1,
-    aspect: number,
-    fov: number,
-    inner: number,
-  ): void => {
-    mesh.visible = pillarSpan(aspect, fov, inner, span) !== null;
-    if (!mesh.visible) return;
+  const placePillar = (mesh: Mesh, side: -1 | 1, span: PillarSpan | null): void => {
+    mesh.visible = span !== null;
+    if (span === null) return;
     mesh.position.x = side * span.centre;
     mesh.scale.x = side * span.width;
   };
@@ -225,8 +262,9 @@ export function createCockpitInterior(): FlatInterior {
       object.quaternion.copy(camera.quaternion);
       object.scale.set(camera.aspect * tanV * DEPTH, tanV * DEPTH, DEPTH);
       interiorLayout(cockpit, mirrorLeft, mirrorRight, layout);
-      placePillar(left, -1, camera.aspect, camera.fov, layout.left);
-      placePillar(right, 1, camera.aspect, camera.fov, layout.right);
+      const spans = pillarSpans(sight, camera.aspect, camera.fov, layout);
+      placePillar(left, -1, spans.left);
+      placePillar(right, 1, spans.right);
       object.updateMatrixWorld(true);
     },
     setQuality(flags) {
