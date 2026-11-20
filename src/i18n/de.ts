@@ -142,4 +142,13 @@ export const de: Record<MessageKey, string> = {
   viewSwitch: 'Folgen / Hof / Außen',
   viewSwitchNoOutside: 'Folgen / ganzer Hof',
   panView: 'Verschieben / drehen',
+  whatsNew: 'Neuigkeiten',
+  whatsNewLatest: 'Aktuell',
+  whatsNewEarlier: 'Frühere Änderungen',
+  changeAdded: 'Neu',
+  changeChanged: 'Geändert',
+  changeDeprecated: 'Veraltet',
+  changeRemoved: 'Entfernt',
+  changeFixed: 'Behoben',
+  changeSecurity: 'Sicherheit',
 };
