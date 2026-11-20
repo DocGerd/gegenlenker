@@ -3,8 +3,10 @@ import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { expectNoFailedAttachment, watchFailedAttachments } from './attachment-markers';
+import { DRIVER_PERFORMANCE_HINT } from './three-problems';
 import {
   bareScreenshot,
+  HIGH_WAIT_MS,
   distinctColours,
   MIN_DRAWN_COLOURS,
   settle,
@@ -13,14 +15,8 @@ import {
 } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
+const high = { timeout: HIGH_WAIT_MS };
 const LOST = 'Graphics context lost; starting afresh';
-
-/**
- * ANGLE's software GL warns that it split a render pass while High starts up; a performance hint of
- * the driver CI runs on, not a fault of the app.
- */
-const DRIVER_PERFORMANCE_HINT =
-  /GL Driver Message \(OpenGL, Performance, [^)]*\): Running out of reserved outsideRenderPass queueSerial/;
 
 /**
  * Console warnings, errors and page errors; headless Chromium denies the wake lock, which is not
@@ -57,7 +53,7 @@ async function loseLiveContext(page: Page) {
 /** Loses the live context and waits until a fresh canvas replaced the lost one. */
 async function loseAndReplace(page: Page): Promise<void> {
   const lost = await loseLiveContext(page);
-  await expect.poll(() => lost.evaluate((c) => c.isConnected)).toBe(false);
+  await expect.poll(() => lost.evaluate((c) => c.isConnected), high).toBe(false);
 }
 
 async function startDrive(page: Page): Promise<void> {
@@ -77,12 +73,12 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await watchFailedAttachments(page);
   await startDrive(page);
   const html = page.locator('html');
-  await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
-  await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
-  await expect(html).toHaveAttribute('data-ground-pbr', /^ktx2:/);
+  await expect(html).toHaveAttribute('data-vehicle-pbr', 'on', high);
+  await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/, high);
+  await expect(html).toHaveAttribute('data-ground-pbr', /^ktx2:/, high);
   // a loss during a load would warn and spend a retry
-  await expect(html).toHaveAttribute('data-sky-hdri', 'on');
-  await expect(html).toHaveAttribute('data-yard-kit', 'on');
+  await expect(html).toHaveAttribute('data-sky-hdri', 'on', high);
+  await expect(html).toHaveAttribute('data-yard-kit', 'on', high);
   await page.evaluate(() => {
     const seen: (string | null)[] = [];
     Object.assign(window, { pbrSeen: seen });
@@ -93,31 +89,33 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   });
 
   await loseAndReplace(page);
-  await expect(page.locator('.drive-surface > canvas')).toHaveCount(1);
-  await expect(html).toHaveAttribute('data-render-backend', 'webgl2');
+  await expect(page.locator('.drive-surface > canvas')).toHaveCount(1, high);
+  await expect(html).toHaveAttribute('data-render-backend', 'webgl2', high);
   await expect(page.getByText(en.contextLost)).toHaveCount(0);
-  await expect(html).toHaveAttribute('data-yard-kit', 'on');
+  await expect(html).toHaveAttribute('data-yard-kit', 'on', high);
   // The reflections were rebuilt for the new renderer, not left over from the old one.
   await expect
-    .poll(() =>
-      page.evaluate(() => {
-        // A null old value: the attribute was set again after it had been removed.
-        const seen = (window as unknown as { pbrSeen: (string | null)[] }).pbrSeen;
-        return seen.includes(null) && document.documentElement.dataset['vehiclePbr'] === 'on';
-      }),
+    .poll(
+      () =>
+        page.evaluate(() => {
+          // A null old value: the attribute was set again after it had been removed.
+          const seen = (window as unknown as { pbrSeen: (string | null)[] }).pbrSeen;
+          return seen.includes(null) && document.documentElement.dataset['vehiclePbr'] === 'on';
+        }),
+      high,
     )
     .toBe(true);
 
   const pane = await page.locator('[data-hud="topDown"]').boundingBox();
   if (pane === null) throw new Error('no top-down pane');
   await expect
-    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)))
+    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)), high)
     .toBeGreaterThan(MIN_DRAWN_COLOURS);
 
   const speed = page.locator('[data-hud="speed"]');
   await page.keyboard.press('4');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
-  await expect(speed).not.toHaveText('0.0 km/h');
+  await expect(speed).not.toHaveText('0.0 km/h', high);
 
   // Pan and zoom listen on the surface, which outlives the canvas.
   await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);

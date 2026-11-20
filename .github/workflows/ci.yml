@@ -46,19 +46,32 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
-  # Software GL (SwiftShader) renders the half-float frame target slowly, so the suite runs in
-  # shards; per test, not per file, so the long layout spec spreads too.
+  # Software GL (SwiftShader) draws the multisample frame target slowly. The suite runs in shards,
+  # per test, not per file, so the long layout spec spreads too; the `@heavy` specs (several
+  # presets or views stepped frame by frame) have shards of their own, so they do not set the pace
+  # of the rest. Every test runs in exactly one shard: `--grep` and `--grep-invert` split the suite.
   # Skipped on push to main: the ruleset's strict required status checks (no bypass) make the
   # merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
   # still runs it.
   e2e:
     if: github.event_name != 'push'
+    name: e2e (${{ matrix.suite }} ${{ matrix.shard }}/${{ matrix.shards }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        include:
+          - { suite: heavy, shard: 1, shards: 4, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 2, shards: 4, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 3, shards: 4, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 4, shards: 4, filter: '--grep @heavy' }
+          - { suite: light, shard: 1, shards: 6, filter: '--grep-invert @heavy' }
+          - { suite: light, shard: 2, shards: 6, filter: '--grep-invert @heavy' }
+          - { suite: light, shard: 3, shards: 6, filter: '--grep-invert @heavy' }
+          - { suite: light, shard: 4, shards: 6, filter: '--grep-invert @heavy' }
+          - { suite: light, shard: 5, shards: 6, filter: '--grep-invert @heavy' }
+          - { suite: light, shard: 6, shards: 6, filter: '--grep-invert @heavy' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -101,19 +114,19 @@ jobs:
           else
             echo '::warning::no .debs to cache'
           fi
-      - run: pnpm test:e2e --fully-parallel --shard=${{ matrix.shard }}/3 --reporter=list,json
+      - run: pnpm test:e2e --fully-parallel ${{ matrix.filter }} --shard=${{ matrix.shard }}/${{ matrix.shards }} --reporter=list,json
         env:
-          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/e2e-results-${{ matrix.shard }}.json
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/e2e-results-${{ matrix.suite }}-${{ matrix.shard }}.json
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-results-${{ matrix.shard }}
-          path: ${{ runner.temp }}/e2e-results-${{ matrix.shard }}.json
+          name: e2e-results-${{ matrix.suite }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/e2e-results-${{ matrix.suite }}-${{ matrix.shard }}.json
           overwrite: true
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: test-results-${{ matrix.shard }}
+          name: test-results-${{ matrix.suite }}-${{ matrix.shard }}
           path: test-results/
 
   # The required status check. `always()` keeps it running when a dependency

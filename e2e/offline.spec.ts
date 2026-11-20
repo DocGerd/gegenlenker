@@ -6,12 +6,16 @@ import { DEFAULT_GRAPHICS } from '../src/contracts/render';
 import { RUNTIME_ASSETS } from '../src/pwa/config';
 import { collectThreeProblems } from './three-problems';
 import { expectNoFailedAttachment, watchFailedAttachments } from './attachment-markers';
+import { HIGH_WAIT_MS, PRESET_TIMEOUT_MS } from './pinned-shoot';
+
+const high = { timeout: HIGH_WAIT_MS };
 
 test('loads from the subpath and drives an exercise offline', async ({
   page,
   context,
   baseURL,
 }) => {
+  test.setTimeout(PRESET_TIMEOUT_MS.high);
   const origin = new URL(baseURL ?? '').origin;
   const foreign: string[] = [];
   // Context level, so requests made by the service worker are seen too.
@@ -212,21 +216,21 @@ test('High graphics caches the ground, sky, yard kit and cockpit interior assets
 
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   const marker = page.locator('html');
-  await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/);
+  await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/, high);
   const target = await marker.getAttribute('data-ground-texture');
-  await expect(marker).toHaveAttribute('data-ground-pbr', /^ktx2:[a-z0-9-]+$/);
-  await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
-  await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
-  await expect(marker).toHaveAttribute('data-yard-kit', 'on');
-  await expect(marker).toHaveAttribute('data-cockpit-interior', 'on');
-  await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
+  await expect(marker).toHaveAttribute('data-ground-pbr', /^ktx2:[a-z0-9-]+$/, high);
+  await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on', high);
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on', high);
+  await expect(marker).toHaveAttribute('data-yard-kit', 'on', high);
+  await expect(marker).toHaveAttribute('data-cockpit-interior', 'on', high);
+  await expect(marker).toHaveAttribute('data-perspective-grade', 'on', high);
   // WebGL 2 stays the default until WebGPU passes its gate (docs/perf.md)
-  await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
+  await expect(marker).toHaveAttribute('data-render-backend', 'webgl2', high);
   await expect
     .poll(async () => {
       const { runtime } = await cached();
       return drawn.map((file) => matching(runtime, file).length);
-    })
+    }, high)
     .toEqual(drawn.map(() => 1));
 
   // The marker follows the preset: Balanced draws no reflections, so it is gone.
@@ -251,13 +255,13 @@ test('High graphics caches the ground, sky, yard kit and cockpit interior assets
   await context.setOffline(true);
   await page.reload();
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
-  await expect(marker).toHaveAttribute('data-ground-texture', target ?? '');
-  await expect(marker).toHaveAttribute('data-ground-pbr', /^ktx2:[a-z0-9-]+$/);
-  await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
-  await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
-  await expect(marker).toHaveAttribute('data-yard-kit', 'on');
-  await expect(marker).toHaveAttribute('data-cockpit-interior', 'on');
-  await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
+  await expect(marker).toHaveAttribute('data-ground-texture', target ?? '', high);
+  await expect(marker).toHaveAttribute('data-ground-pbr', /^ktx2:[a-z0-9-]+$/, high);
+  await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on', high);
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on', high);
+  await expect(marker).toHaveAttribute('data-yard-kit', 'on', high);
+  await expect(marker).toHaveAttribute('data-cockpit-interior', 'on', high);
+  await expect(marker).toHaveAttribute('data-perspective-grade', 'on', high);
   expect(
     warnings.filter((w) =>
       /Ground texture|PBR ground|Sky texture|Yard kit|Vehicle reflection|Perspective grade|Shell .*interior/.test(

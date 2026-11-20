@@ -1,4 +1,4 @@
-import { OrthographicCamera, Scene, UnsignedByteType, Vector3, type Object3D } from 'three';
+import { OrthographicCamera, Scene, Vector3, type Object3D } from 'three';
 import { Lighting, WebGPURenderer } from 'three/webgpu';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
@@ -24,6 +24,7 @@ import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
+import { createFrame, type Frame } from './frame-target';
 import { describeAdapter } from './gpu-backend';
 import { createMirror, mirrorPose } from './mirror';
 import { readScenePalette } from './palette';
@@ -148,11 +149,10 @@ async function startGpu(
   try {
     const own = new WebGPURenderer({
       canvas,
-      antialias: true,
+      // the frame target is multisampled; a multisampled canvas would only cost
+      antialias: false,
       powerPreference: 'high-performance',
       ...(device === null ? { forceWebGL: true } : { device }),
-      // the 8-bit canvas WebGLRenderer drew into; half-float with MSAA is far slower on software GL
-      outputBufferType: UnsignedByteType,
     });
     gpu = own;
     own.onDeviceLost = () => {
@@ -180,6 +180,9 @@ async function startGpu(
   loss.started = true;
   return gpu;
 }
+
+/** Whether a clear inside a pass honours the pane's scissor: WebGL 2's does, WebGPU's load op does not. */
+const scissoredClear = (backend: GraphicsBackend): boolean => backend === 'webgl2';
 
 const backendOf = (gpu: WebGPURenderer): GraphicsBackend =>
   (gpu.backend as { isWebGLBackend?: boolean }).isWebGLBackend === true ? 'webgl2' : 'webgpu';
@@ -210,6 +213,7 @@ export function createThreeSceneRenderer(
   const projected = new Vector3();
 
   let renderer: WebGPURenderer | null = null;
+  let drawing: Frame | null = null;
   /** The device the WebGPU backend draws through; null on WebGL 2. */
   let device: GPUDevice | null = null;
   /** Why WebGPU is not drawing although asked for; once set, later starts go straight to WebGL 2. */
@@ -255,6 +259,7 @@ export function createThreeSceneRenderer(
     const r = ratio();
     renderer.setPixelRatio(r);
     renderer.setSize(cssWidth, cssHeight, false);
+    drawing?.resize();
     appliedRatio = r;
   }
 
@@ -331,6 +336,8 @@ export function createThreeSceneRenderer(
       canvas.width = 0;
       canvas.height = 0;
     }
+    drawing?.dispose();
+    drawing = null;
     if (renderer !== null) release(renderer, device);
     renderer = null;
     device = null;
@@ -378,12 +385,6 @@ export function createThreeSceneRenderer(
     return { gpu: await startGpu(target, lost, failed, null), device: null };
   }
 
-  /** WebGPURenderer's viewport origin is the top left, as the CSS rects'. */
-  function viewRect(gl: WebGPURenderer, rect: Rect): void {
-    gl.setViewport(rect.x, rect.y, rect.width, rect.height);
-    gl.setScissor(rect.x, rect.y, rect.width, rect.height);
-  }
-
   return {
     async init(target) {
       releaseGpu();
@@ -396,6 +397,7 @@ export function createThreeSceneRenderer(
         throw new GraphicsStartError('superseded');
       }
       renderer = next;
+      drawing = createFrame(next);
       device = nextDevice;
       canvas = target;
       contextLost = false;
@@ -489,7 +491,9 @@ export function createThreeSceneRenderer(
       if (renderer === null || built === null || contextLost) return;
       if (cssWidth === 0) return;
       const gl = renderer;
+      const out = drawing;
       const b = built;
+      if (out === null) return;
       timer.frame(performance.now());
       if (ratio() !== appliedRatio) applySize();
       const pixelRatio = appliedRatio;
@@ -507,7 +511,6 @@ export function createThreeSceneRenderer(
       b.scene.updateMatrixWorld();
 
       gl.info.reset();
-      gl.setScissorTest(false);
 
       const anchors = b.anchors;
       const { cockpit, mirrorLeft: leftRect, mirrorRight: rightRect, topDown } = views;
@@ -535,11 +538,20 @@ export function createThreeSceneRenderer(
         );
       }
 
-      // One clear for every pane: they tile the canvas, and the sky dome covers each perspective one.
-      gl.setRenderTarget(null);
+      // The panes tile the canvas, so on WebGL 2 each clears its own rect as part of its pass: a clear
+      // of its own would resolve the whole multisample target once more, and the scissor keeps it to
+      // the pane. WebGPU turns an in-pass clear into a load op that ignores the scissor and would wipe
+      // the panes drawn before, so there one clear takes the whole target. The sky dome covers each
+      // perspective pane.
+      gl.setRenderTarget(out.target);
       gl.setClearColor(b.palette.backdrop);
-      gl.clear();
-      gl.setScissorTest(true);
+      const clearInPass = scissoredClear(backend);
+      if (clearInPass) {
+        gl.autoClear = true;
+      } else {
+        out.target.scissorTest = false;
+        gl.clear();
+      }
 
       if (cockpit !== null) {
         placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit);
@@ -549,11 +561,11 @@ export function createThreeSceneRenderer(
           mirrorLeft: leftRect,
           mirrorRight: rightRect,
         });
-        viewRect(gl, cockpit);
+        out.place(cockpit, pixelRatio);
         gl.render(b.scene, cockpitCamera);
       }
 
-      viewRect(gl, topDown);
+      out.place(topDown, pixelRatio);
       chaseShown = frame.topDown === 'chase';
       if (chaseShown) {
         placeChaseCamera(
@@ -584,10 +596,17 @@ export function createThreeSceneRenderer(
         }
       }
 
-      if (leftRect !== null) mirrorLeft.composite(gl, leftRect);
-      if (rightRect !== null) mirrorRight.composite(gl, rightRect);
-      gl.setScissorTest(false);
-      // includes one output pass per canvas render: the frame is drawn into an intermediate target
+      gl.autoClear = false;
+      if (leftRect !== null) {
+        out.place(leftRect, pixelRatio);
+        mirrorLeft.composite(gl);
+      }
+      if (rightRect !== null) {
+        out.place(rightRect, pixelRatio);
+        mirrorRight.composite(gl);
+      }
+      out.present();
+      // includes the one output pass that draws the frame target to the canvas
       drawCalls = gl.info.render.drawCalls;
     },
 
