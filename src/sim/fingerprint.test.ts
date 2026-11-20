@@ -33,7 +33,7 @@ describe('data fingerprint', () => {
 
   // Changes only with the data or SIM_REVISION; an accidental key reorder in the hashed constants would show here.
   it('is pinned for one combination', () => {
-    expect(base).toBe('9e337d5e');
+    expect(base).toBe('7571e692');
   });
 
   it('differs per vehicle pair, exercise and layout', () => {
@@ -50,8 +50,19 @@ describe('data fingerprint', () => {
     const stop = { kind: 'stop', from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, width: 0.3 } as const;
     const markings = [...exercise.markings, { ...stop, dashed: false }];
     expect(dataFingerprint({ ...data, exercise: { ...exercise, markings } })).toBe(base);
-    const taller = editFirst((o) => ({ ...o, height: o.height + 1, kind: 'wall' }));
+    const taller = editFirst((o) => ({
+      ...o,
+      id: 'renamed-1',
+      height: o.height + 1,
+      kind: 'wall',
+    }));
     expect(dataFingerprint({ ...data, obstacles: taller })).toBe(base);
+  });
+
+  it('depends on obstacle order, which decides the first contact', () => {
+    const [first, second, ...rest] = data.obstacles;
+    if (!first || !second) throw new Error('two obstacles expected');
+    expect(dataFingerprint({ ...data, obstacles: [second, first, ...rest] })).not.toBe(base);
   });
 
   it('changes with what moves the run or its score', () => {

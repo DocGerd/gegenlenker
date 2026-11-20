@@ -52,7 +52,7 @@ const cabLenses = (id: TruckId): Lamp[] =>
 const lafetteLenses = (id: TrailerId): Lamp[] =>
   trailerLamps(trailerById(id), 'shell').lamps.filter((l) => l.shell && l.part === 'trailer');
 
-/** Each lens is one box in the glb (shell_common.py `lens_shape`). */
+/** Each lens is one box in the glb (lamp_common.py `lens_shape`). */
 const BOX_TRIANGLES = 12;
 
 const slotsOf = (mesh: Mesh): number[] => {

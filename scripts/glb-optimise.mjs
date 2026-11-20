@@ -31,7 +31,10 @@ const document = await io.readBinary(readFileSync(input));
 const [scene] = document.getRoot().listScenes();
 if (scene === undefined) throw new Error(`${input} has no scene`);
 scene.setExtras({ ...scene.getExtras(), optimiseSha256: module.optimiseSha256(root) });
-await document.transform(prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+await document.transform(
+  prune({ keepAttributes: true }),
+  meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
+);
 
 // Exporter and tool stamps change with versions and runs; the manifest records the versions instead.
 const gltfAsset = document.getRoot().getAsset();

@@ -1,7 +1,10 @@
 import type { ExerciseDefinition } from '../contracts/exercise';
-import type { Layout, ResolvedLayout } from '../contracts/layout';
+import { colliderId, type Layout, type Obstacle, type ResolvedLayout } from '../contracts/layout';
 import { WAYPOINT_RADIUS } from '../scoring/score';
 import { streetFeatures } from './street';
+
+const propObstacles = ({ props }: Layout): Obstacle[] =>
+  props.flatMap((prop) => prop.colliders.map((c, i) => ({ id: colliderId(prop.id, i), ...c })));
 
 export function resolveLayout(layout: Layout, exercise: ExerciseDefinition | null): ResolvedLayout {
   const street = streetFeatures(layout.street);
@@ -10,7 +13,14 @@ export function resolveLayout(layout: Layout, exercise: ExerciseDefinition | nul
     bounds: layout.bounds,
     yard: layout.yard,
     surfaces: [{ kind: 'yard', rect: layout.yard }, ...street.surfaces],
-    obstacles: [...street.obstacles, ...layout.obstacles, ...(exercise?.obstacles ?? [])],
+    obstacles: [
+      ...street.obstacles,
+      ...layout.obstacles,
+      ...propObstacles(layout),
+      ...(exercise?.obstacles ?? []),
+    ],
+    props: layout.props,
+    decor: layout.decor,
     markings: [...street.markings, ...layout.markings, ...(exercise?.markings ?? [])],
     target: exercise?.target ?? null,
     tolerances: exercise?.tolerances ?? null,

@@ -11,22 +11,29 @@ import { canonicalJson, fileSha256, type Json, ROOT, sha256 } from '../assets/pr
 
 export { canonicalJson, type Json, ROOT, sha256 };
 
-export const COMMON_SCRIPT = 'tools/blender/shell_common.py';
+export const COMMON_SCRIPT = 'tools/blender/blender_common.py';
+export const LAMP_COMMON_SCRIPT = 'tools/blender/lamp_common.py';
 export const OPTIMISE_SCRIPT = 'scripts/glb-optimise.mjs';
 
 export type AssetKind = 'cab' | 'body' | 'trailer';
 
-export type Asset = {
-  /** `<vehicle id>-<kind>`; names the glb and its manifest. */
+/** One run of a Blender script on one params file. */
+export type Run = {
   readonly key: string;
-  readonly vehicleId: TruckId | TrailerId;
-  readonly kind: AssetKind;
   readonly script: string;
   readonly params: string;
-  readonly glb: string;
-  readonly manifest: string;
+  /** Helper scripts the entry script loads, by the key it records their hash under. */
+  readonly helpers: Readonly<Record<string, string>>;
   /** What the committed params file must contain. */
   build(): Json;
+};
+
+export type Asset = Run & {
+  readonly vehicleId: TruckId | TrailerId;
+  readonly kind: AssetKind;
+  /** `<vehicle id>-<kind>` names the glb and its manifest. */
+  readonly glb: string;
+  readonly manifest: string;
 };
 
 const SCRIPTS: Readonly<Record<AssetKind, string>> = {
@@ -34,6 +41,8 @@ const SCRIPTS: Readonly<Record<AssetKind, string>> = {
   body: 'tools/blender/body_shell.py',
   trailer: 'tools/blender/trailer_shell.py',
 };
+
+const SHELL_HELPERS = { commonSha256: COMMON_SCRIPT, lampCommonSha256: LAMP_COMMON_SCRIPT };
 
 const asset = (vehicleId: TruckId | TrailerId, kind: AssetKind, build: () => Json): Asset => {
   const key = `${vehicleId}-${kind}`;
@@ -43,6 +52,7 @@ const asset = (vehicleId: TruckId | TrailerId, kind: AssetKind, build: () => Jso
     kind,
     script: SCRIPTS[kind],
     params: `tools/blender/params/${vehicleId}.${kind}.json`,
+    helpers: SHELL_HELPERS,
     glb: `src/render/assets/${key}.glb`,
     manifest: `src/render/assets/${key}.manifest.json`,
     build,
@@ -79,6 +89,7 @@ export function assetByKey(key: string): Asset {
 export type GlbManifest = {
   readonly scriptSha256: string;
   readonly commonSha256: string;
+  readonly lampCommonSha256: string;
   readonly paramsSha256: string;
   readonly blenderVersion: string;
   readonly gltfTransformVersion: string;
@@ -86,12 +97,18 @@ export type GlbManifest = {
   readonly glbBytes: number;
 };
 
-export const scriptSha256 = (a: Asset, root = ROOT): string => fileSha256(root, a.script);
-export const commonSha256 = (root = ROOT): string => fileSha256(root, COMMON_SCRIPT);
+export const scriptSha256 = (a: Run, root = ROOT): string => fileSha256(root, a.script);
 export const optimiseSha256 = (root = ROOT): string => fileSha256(root, OPTIMISE_SCRIPT);
 
-export const paramsSha256 = (a: Asset, root = ROOT): string =>
+export const paramsSha256 = (a: Run, root = ROOT): string =>
   sha256(canonicalJson(JSON.parse(readFileSync(join(root, a.params), 'utf8')) as Json));
+
+/** The input hashes a run records, in manifest order: script, helpers, params. */
+export const runHashes = (a: Run, root = ROOT): Record<string, string> => ({
+  scriptSha256: scriptSha256(a, root),
+  ...Object.fromEntries(Object.entries(a.helpers).map(([k, file]) => [k, fileSha256(root, file)])),
+  paramsSha256: paramsSha256(a, root),
+});
 
 export const glbSha256 = (a: Asset, root = ROOT): string => sha256(readFileSync(join(root, a.glb)));
 
