@@ -5,6 +5,7 @@ import { exercises, layouts } from '../src/content/registry';
 import { resolveLayout } from '../src/content/resolve-layout';
 import { en } from '../src/i18n/en';
 import {
+  colourBorder,
   colourBox,
   colourShare,
   HEAVY,
@@ -112,13 +113,15 @@ const ACCENT_MATCH = 0.05;
 const ACCENT_SLACK_PX = 2;
 /** Accent pixels a zoom on a stroke must hold (the zoomed outline and gate hold several thousand), so a miss of the stroke fails. */
 const MIN_ZOOM_ACCENT_PX = 2000;
+/** The ring of pixels this close around a stroke's core: the edge blend and the casing, which is a pixel or two wide at the zoom. */
+const CASING_FROM_PX = 0;
+const CASING_TO_PX = 2;
 /**
- * Pixels of the wheel colour the night zoom must hold over the day zoom: the night casings of the
- * outline and the gate ring, about 2700 px at the yard view's maximum zoom, of which at least a
- * quarter are the pure colour. The lit wheels of a vehicle in frame drop out at night, so a zoom
- * without a casing falls short.
+ * Share of that ring that may be anything but casing, by day and at night. The edge blend and the
+ * ground take about 0.35 to 0.45 of it when every stroke is cased; the outline or the gate ring
+ * drawn without its casing takes 0.53 or more, in the bay zoom as in the slalom's.
  */
-const MIN_CASING_PX = 800;
+const MAX_BARE_RING = 0.49;
 /** The two yards' exercises: slalom's depot has a gate, the bay's logistics yard has none. */
 const EXERCISES = [
   { id: 'slalom', name: en.exerciseSlalom, zooms: ['target', 'gate'] },
@@ -277,11 +280,24 @@ for (const { id, name: exercise, zooms } of EXERCISES) {
             `${label}: only ${nightAccent} night accent pixels, the stroke is not in frame`,
           );
         }
-        const casing = (await count(base, tokens.wheel)) - (await count(day, tokens.wheel));
-        if (casing < MIN_CASING_PX) {
-          mismatches.push(
-            `${label}: ${casing} more casing pixels than by day, under ${MIN_CASING_PX}`,
+        for (const [when, png, core] of [
+          ['day', day, tokens.accent],
+          ['night', base, tokens.nightAccent],
+        ] as const) {
+          const { bare, band } = await colourBorder(
+            scratch,
+            png,
+            core,
+            tokens.wheel,
+            ACCENT_TOLERANCE,
+            CASING_FROM_PX,
+            CASING_TO_PX,
           );
+          if (bare > MAX_BARE_RING * band) {
+            mismatches.push(
+              `${label}: ${bare} of ${band} pixels around the stroke are not casing by ${when}`,
+            );
+          }
         }
       }
       await scratch.close();

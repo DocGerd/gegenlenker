@@ -397,6 +397,65 @@ describe('scene tokens', () => {
   const flat = (key: string): number => luminance(scene(key));
   const ratio = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
+  // By day the lit ground shows lin(token) * f; the unlit strokes keep their colour. A target outline
+  // or gate ring reads on every ground it crosses through its casing or its core.
+  describe('day top-down', () => {
+    const f = legacyIrradiance(palette) / Math.PI;
+    const litDay = (key: string): number => luminance(scene(key)) * f;
+    const layoutsWithAids = LAYOUT_IDS.flatMap((id) =>
+      exercises.filter((e) => e.layout === id).map((e) => resolveLayout(layouts[id], e)),
+    );
+    const groundAt = (layout: (typeof layoutsWithAids)[number], x: number, y: number): string => {
+      const inside = (r: { minX: number; minY: number; maxX: number; maxY: number }) =>
+        x >= r.minX && x <= r.maxX && y >= r.minY && y <= r.maxY;
+      return layout.surfaces.find((s) => inside(s.rect))?.kind ?? 'verge';
+    };
+    const steps = Array.from({ length: 16 }, (_, i) => i / 16);
+    const crossed = new Set<string>();
+    for (const layout of layoutsWithAids) {
+      const { target, waypoint } = layout;
+      if (target !== null) {
+        const { x, y, heading } = target.pose;
+        const [c, s] = [Math.cos(heading), Math.sin(heading)];
+        for (const u of steps)
+          for (const v of steps) {
+            const [lx, ly] = [(u * 2 - 1) * (target.length / 2), (v * 2 - 1) * (target.width / 2)];
+            if (Math.abs(lx) < target.length / 2 - 0.5 && Math.abs(ly) < target.width / 2 - 0.5) {
+              continue;
+            }
+            crossed.add(groundAt(layout, x + lx * c - ly * s, y + lx * s + ly * c));
+          }
+      }
+      if (waypoint !== null) {
+        for (const u of steps) {
+          const a = u * 2 * Math.PI;
+          crossed.add(
+            groundAt(
+              layout,
+              waypoint.x + waypoint.radius * Math.cos(a),
+              waypoint.y + waypoint.radius * Math.sin(a),
+            ),
+          );
+        }
+      }
+    }
+
+    it('crosses at least the yard', () => {
+      expect(crossed.has('yard')).toBe(true);
+    });
+
+    it.each([...crossed].sort())(
+      'the target outline and gate ring read on %s through their casing or core, 3:1 or more',
+      (ground) => {
+        const best = Math.max(
+          ratio(flat('wheel'), litDay(ground)),
+          ratio(flat('accent'), litDay(ground)),
+        );
+        expect(best).toBeGreaterThanOrEqual(3);
+      },
+    );
+  });
+
   describe('night top-down', () => {
     const grounds = ['yard', 'pavement', 'street', 'verge'] as const;
 
