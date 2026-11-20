@@ -18,6 +18,10 @@ export type Look = {
     readonly skyHdri: number;
     readonly sunDirection: Vector3;
   };
+  readonly interior: {
+    /** Scales the lit cab interior's albedo; 1 by day. */
+    readonly light: number;
+  };
 };
 
 export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
@@ -33,6 +37,7 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
       skyHdri: 1,
       sunDirection: perspectiveSunDirection(),
     },
+    interior: { light: 1 },
   };
 }
 
@@ -45,6 +50,7 @@ export function applyLook(look: Look, haze: Haze): void {
   GRADE.fogDensity.value = look.grade.fogDensity;
   GRADE.skyHdri.value = look.grade.skyHdri;
   GRADE.sunDirection.value.copy(look.grade.sunDirection);
+  GRADE.interiorLight.value = look.interior.light;
   GRADE.hazeToward.value.copy(haze.toward);
   GRADE.hazeAway.value.copy(haze.away);
 }

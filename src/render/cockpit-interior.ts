@@ -284,8 +284,8 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
       placePillar(right, 1, spans.right);
       object.updateMatrixWorld(true);
     },
-    setQuality(flags) {
-      object.visible = flags.cockpitInterior;
+    setLook(look) {
+      object.visible = look.flags.cockpitInterior;
     },
     dispose() {
       geometries.forEach((g) => g.dispose());

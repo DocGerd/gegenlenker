@@ -17,6 +17,7 @@ import {
   TRAILER_SHELL_URLS,
 } from './glb-shells';
 import { createGradeCheck, precompileGrade } from './grade';
+import { createInteriorCheck } from './interior-material';
 import { createGlbInterior, INTERIOR_URLS, interiorShellFrom } from './interior-glb';
 import { startGroundPbrTextures } from './ground-pbr';
 import { startGroundTextures } from './ground-texture';
@@ -114,6 +115,8 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       syncReflection();
     },
   );
+  // whether the lit cab interior builds with the vehicles' sky map; it stays plain where it does not
+  const interiorCheck = createInteriorCheck();
   // `on` once the perspective grade compiled while the preset grades, `failed` if it fell back.
   const publishGrade = publishState('grade');
   const gradeCheck = createGradeCheck(
@@ -132,6 +135,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       yardKit.attach(gpu);
       skyTexture.attach(gpu);
       vehicleEnvironment.attach(gpu);
+      interiorCheck.attach(gpu);
       gradeCheck.attach(gpu);
     },
     truck: (spec, palette) => proceduralTruck(spec, palette, shells, vehicleEnvironment),
@@ -142,7 +146,13 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
         kit: yardKit,
         reflections: vehicleEnvironment,
       }),
-    interior: (truck) => createGlbInterior(truck, { shells: interiorShells }),
+    interior: (truck, palette) =>
+      createGlbInterior(truck, {
+        shells: interiorShells,
+        env: vehicleEnvironment,
+        palette,
+        check: interiorCheck,
+      }),
     aids: proceduralAids,
   });
   // Read by the e2e: the GPU API of the live renderer and why it is not WebGPU when that was asked
@@ -194,6 +204,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       yardKit.dispose();
       skyTexture.dispose();
       vehicleEnvironment.dispose();
+      interiorCheck.dispose();
       gradeCheck.dispose();
     },
   };

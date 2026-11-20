@@ -99,7 +99,6 @@ function stubParts(
     return {
       object: new Group(),
       update: () => undefined,
-      setQuality: (flags: QualityFlags) => void log.push(flags),
       setLook: (look: Look) => void log.push(look.flags),
       dispose: () => undefined,
       ...extra,
@@ -138,7 +137,6 @@ describe('renderer lighting', () => {
     const part = () => ({
       object: new Group(),
       update: () => undefined,
-      setQuality: () => undefined,
       setLook: (look: Look) => void looks.push(look),
       dispose: () => undefined,
     });
@@ -151,13 +149,13 @@ describe('renderer lighting', () => {
     });
     renderer.setLighting('night');
     renderer.setScene(layout, truckById('man-le-18-280'), trailerById('krone-azw-18'));
-    expect(looks.map((l) => l.mode)).toEqual(['night', 'night', 'night']);
+    expect(looks.map((l) => l.mode)).toEqual(['night', 'night', 'night', 'night']);
 
     looks.length = 0;
     renderer.setLighting('night');
     expect(looks).toEqual([]);
     renderer.setLighting('day');
-    expect(looks.map((l) => l.mode)).toEqual(['day', 'day', 'day']);
+    expect(looks.map((l) => l.mode)).toEqual(['day', 'day', 'day', 'day']);
   });
 });
 
@@ -168,7 +166,6 @@ describe('renderer interior', () => {
     const part = () => ({
       object: new Group(),
       update: () => undefined,
-      setQuality: () => undefined,
       setLook: () => undefined,
       dispose: () => undefined,
     });
@@ -185,7 +182,7 @@ describe('renderer interior', () => {
           object: new Group(),
           frame: 'truck' as const,
           place: () => undefined,
-          setQuality: () => undefined,
+          setLook: () => undefined,
           dispose: vi.fn(),
         };
         interiors.push(interior);
