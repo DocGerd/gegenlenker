@@ -33,7 +33,7 @@ function obstacles(): Layout['obstacles'] {
 function props(): Layout['props'] {
   const p = new PropBuilder();
   const { minX, minY, maxX, maxY } = HALL;
-  p.add('hall', { x: (minX + maxX) / 2, y: (minY + maxY) / 2, heading: 0 }, (b) => {
+  p.add('hall', (b) => {
     const wall = (rect: { minX: number; minY: number; maxX: number; maxY: number }): void =>
       b.addRect('hall', rect, HALL_HEIGHT);
     wall({ minX, minY, maxX: minX + HALL_WALL, maxY });
@@ -49,7 +49,7 @@ function props(): Layout['props'] {
 
   for (let i = 0; i < PARKED_BAYS; i++) {
     const cy = PARKED.firstY + PARKED.length * (i + 0.5);
-    p.add('parked', { x: PARKED.x, y: cy, heading: 0 }, (b) =>
+    p.add('parked', (b) =>
       b.addBox('parked', PARKED.x, cy, PARKED.width, PARKED.length, 0, PARKED.height),
     );
   }

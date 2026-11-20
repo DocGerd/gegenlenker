@@ -39,16 +39,12 @@ function obstacles(): Layout['obstacles'] {
 
 function props(): Layout['props'] {
   const p = new PropBuilder();
-  p.add(
-    'hall',
-    { x: (HALL.minX + HALL.maxX) / 2, y: (HALL.minY + HALL.maxY) / 2, heading: 0 },
-    (b) => {
-      b.addRect('hall', HALL, HALL_HEIGHT);
-      b.addRect('ramp', RAMP, RAMP_HEIGHT);
-    },
-  );
+  p.add('hall', (b) => {
+    b.addRect('hall', HALL, HALL_HEIGHT);
+    b.addRect('ramp', RAMP, RAMP_HEIGHT);
+  });
   for (const x of TRAILER_X) {
-    p.add('parked', { x, y: TRAILER_Y, heading: 0 }, (b) =>
+    p.add('parked', (b) =>
       b.addBox('parked', x, TRAILER_Y, TRAILER.width, TRAILER.length, 0, TRAILER.height),
     );
   }

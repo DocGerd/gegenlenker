@@ -104,6 +104,18 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
   });
 });
 
+describe.each(cases)('$name drawing order', ({ resolved }) => {
+  it('numbers parked bodies in resolved obstacle order, props and exercise blocks alike', () => {
+    const at = (x: number, y: number): string => `${x},${y}`;
+    const parked = resolved.obstacles.filter((o) => o.kind === 'parked');
+    const drawn = new Set(parked.map(({ obb }) => at(obb.cx, obb.cy)));
+    const pieces = yardProps(resolved)
+      .map((p) => at(p.x, p.y))
+      .filter((k) => drawn.has(k));
+    expect(pieces).toEqual(parked.map(({ obb }) => at(obb.cx, obb.cy)));
+  });
+});
+
 describe('corner hoops', () => {
   it('stand within thin relief of the hall block', () => {
     const hall = { minX: 10, minY: 52, maxX: 74, maxY: 68 };
@@ -135,7 +147,6 @@ const wallBox = (minX: number, minY: number, maxX: number, maxY: number): Collid
 const hallProp = (id: string, x0: number): Prop => ({
   id,
   asset: 'hall',
-  pose: { x: x0 + 5, y: 5, heading: 0 },
   colliders: [
     wallBox(x0, 0, x0 + 1, 10),
     wallBox(x0 + 9, 0, x0 + 10, 10),
@@ -158,7 +169,7 @@ const withProps = (props: readonly Prop[]): ResolvedLayout => {
 describe('hall props', () => {
   it('are detailed one by one, with no gate across the gap between two halls', () => {
     const a = hallProp('hall-1', 0);
-    const b = hallProp('hall-2', 19); // 9 m apart: within the width of a gate opening
+    const b = hallProp('hall-2', 17); // walls 9 m apart: a merged derivation would open a gate
     const plot = yardProps(withProps([])).length;
     const own = (prop: Prop): number => yardProps(withProps([prop])).length - plot;
     expect(own(a)).toBeGreaterThan(0);
@@ -170,7 +181,6 @@ describe('lamp fixtures', () => {
   const lampAt = (fixture: Fixture): Prop => ({
     id: 'lamp-1',
     asset: 'lamp',
-    pose: { x: 0, y: 0, heading: 0 },
     colliders: [
       {
         kind: 'lamp',

@@ -9,7 +9,7 @@ import type {
   StreetSpec,
   Surface,
 } from '../contracts/layout';
-import type { Obb, Pose2 } from '../contracts/sim';
+import type { Obb } from '../contracts/sim';
 import { arrow, solidLine } from './markings';
 
 const KERB_WIDTH = 0.15;
@@ -109,7 +109,7 @@ export class PropBuilder {
     return this.items;
   }
 
-  add(asset: PropAsset, pose: Pose2, fill: (b: ObstacleBuilder) => void, fixture?: Fixture): void {
+  add(asset: PropAsset, fill: (b: ObstacleBuilder) => void, fixture?: Fixture): void {
     const n = (this.counts.get(asset) ?? 0) + 1;
     this.counts.set(asset, n);
     const b = new ObstacleBuilder('');
@@ -118,7 +118,6 @@ export class PropBuilder {
     this.items.push({
       id: `${asset}-${n}`,
       asset,
-      pose,
       colliders,
       ...(fixture === undefined ? {} : { fixture }),
     });
@@ -153,12 +152,7 @@ export function addLamps(p: PropBuilder, street: StreetSpec): void {
   const { minX, minY, maxX, maxY } = YARD;
   const aim = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
   const lamp = (x: number, y: number, height: number, kind: Fixture['kind']): void =>
-    p.add(
-      'lamp',
-      { x, y, heading: 0 },
-      (b) => b.addBox('lamp', x, y, LAMP_SIZE, LAMP_SIZE, 0, height),
-      { kind, aim },
-    );
+    p.add('lamp', (b) => b.addBox('lamp', x, y, LAMP_SIZE, LAMP_SIZE, 0, height), { kind, aim });
   for (const x of [minX + LAMP_INSET, maxX - LAMP_INSET]) {
     for (const y of [minY + LAMP_INSET, maxY - LAMP_INSET]) lamp(x, y, MAST_HEIGHT, 'flood');
   }
@@ -179,14 +173,14 @@ export function addBollard(b: ObstacleBuilder, x: number, y: number): void {
 }
 
 export function addBollardProp(p: PropBuilder, x: number, y: number): void {
-  p.add('bollard', { x, y, heading: 0 }, (b) => addBollard(b, x, y));
+  p.add('bollard', (b) => addBollard(b, x, y));
 }
 
 /** Gatehouse and barrier post beside the entrance, with bollards guarding the gatehouse. */
 export function addGate(p: PropBuilder, { entrance }: StreetSpec): void {
   const { gap, length, width, height, y } = GATEHOUSE;
   const x = entrance.toX + gap + length / 2;
-  p.add('gate', { x, y, heading: 0 }, (b) => {
+  p.add('gate', (b) => {
     b.addBox('gatehouse', x, y, length, width, 0, height);
     for (const by of GATEHOUSE_BOLLARD_Y) addBollard(b, x - length / 2 - 1, by);
     // heading pi: the boom of the raised barrier points into the entrance

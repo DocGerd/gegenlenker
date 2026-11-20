@@ -38,14 +38,10 @@ export type Prop = {
   /** Unique within the layout, without '/'. */
   readonly id: string;
   readonly asset: PropAsset;
-  readonly pose: Pose2;
   readonly colliders: readonly Collider[];
   /** Present exactly when `asset` is 'lamp'. */
   readonly fixture?: Fixture;
 };
-export type DecorKind = 'swap-body' | 'skip' | 'pallets' | 'mesh-boxes';
-/** Scenery with no collision: unreachable, so it needs no collider. */
-export type Decor = { readonly kind: DecorKind; readonly pose: Pose2 };
 /** Id of a prop's `index`-th collider once resolved into an `Obstacle`. */
 export const colliderId = (propId: string, index: number): string => `${propId}/${index}`;
 export type MarkingKind = 'lane-centre' | 'bay' | 'stop' | 'arrow' | 'dock-number';

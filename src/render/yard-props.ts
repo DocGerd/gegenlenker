@@ -708,34 +708,42 @@ function lampProp({ id, colliders, fixture }: Prop): PropPiece {
   return lamp(post, fixture);
 }
 
-/** Loose obstacles are drawn by kind, props by asset; hall details follow, then the plot goods. */
+/** Loose obstacles are drawn by kind, props by asset, in resolved order; hall details follow, then the plot goods. */
 export function yardProps(layout: ResolvedLayout): PropPiece[] {
-  const owned = new Set(
-    layout.props.flatMap((p) => p.colliders.map((_, i) => colliderId(p.id, i))),
-  );
+  const owned = new Set<string>();
+  const first = new Map<string, Prop>();
+  for (const prop of layout.props) {
+    prop.colliders.forEach((_, i) => owned.add(colliderId(prop.id, i)));
+    first.set(colliderId(prop.id, 0), prop);
+  }
   const counters: Counters = { containers: 0, trailers: 0, swaps: 0 };
   const out: PropPiece[] = [];
   const details: PropPiece[] = [];
-  for (const o of layout.obstacles) {
-    if (!owned.has(o.id)) out.push(...drawCollider(o, counters));
-  }
-  for (const prop of layout.props) {
+  const colliders = (prop: Prop): PropPiece[] =>
+    prop.colliders.flatMap((o) => drawCollider(o, counters));
+  const drawProp = (prop: Prop): void => {
     switch (prop.asset) {
       case 'hall':
-        out.push(...prop.colliders.flatMap((o) => drawCollider(o, counters)));
+        out.push(...colliders(prop));
         details.push(...hallDetail(layout.markings, prop.colliders));
         break;
       case 'parked':
       case 'gate':
       case 'bollard':
-        out.push(...prop.colliders.flatMap((o) => drawCollider(o, counters)));
+        out.push(...colliders(prop));
         break;
       case 'lamp':
         out.push(lampProp(prop));
         break;
       default:
-        return unhandled(prop.asset);
+        unhandled(prop.asset);
     }
+  };
+  // A prop's colliders are contiguous in the resolved list: draw the prop where its first one stands.
+  for (const o of layout.obstacles) {
+    const prop = first.get(o.id);
+    if (prop !== undefined) drawProp(prop);
+    else if (!owned.has(o.id)) out.push(...drawCollider(o, counters));
   }
   out.push(...details, ...plotGoods(layout.yard));
   return out;
