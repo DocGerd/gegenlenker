@@ -405,16 +405,6 @@ describe('scene tokens', () => {
       expect(ratio(lit(object), lit(ground))).toBeGreaterThanOrEqual(3.1);
     });
 
-    // Both tones of a T2 object are lit, so the contrast offset costs the hall 0.3: its floor is 5.5.
-    const tn2: typeof t2 = t2.map(([dark, light, min]) => [
-      dark,
-      light,
-      dark === 'hall' ? 5.5 : min,
-    ]);
-    it.each(tn2)('TN2: %s against %s is %d:1 or more', (dark, light, min) => {
-      expect(ratio(lit(dark), lit(light))).toBeGreaterThanOrEqual(min);
-    });
-
     it.each(t3.filter(([a, b]) => grounds.some((g) => g === a) && grounds.some((g) => g === b)))(
       'TN3: %s against %s is 1.5:1 or more',
       (a, b) => {
@@ -507,7 +497,9 @@ describe('scene tokens', () => {
       expect(swatch).toBe(`#${expected}`);
     });
 
-    // Not rebased: sky and cladding against sky (the perspective dome); the day exceptions stay.
+    // Not rebased, as never a top-down pair: T2 (the hall's cladding is on side faces and the lamp's
+    // marking band sits under its full-footprint head), cladding against hall and fence, and sky and
+    // cladding against sky (the perspective dome); the day exceptions stay.
   });
 
   // Routing: a single-tone obstacle on the yard resolves to a key that satisfies T1 there.

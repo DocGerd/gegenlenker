@@ -69,13 +69,12 @@ Scene colours are theme-independent neutral greys, except the red obstacle cone 
 At night the top-down view draws the day grounds and objects dimmed and its strokes in night tokens. The legacy lights run at `TOP_DOWN_NIGHT_LIGHT` (`src/render/look.ts`) of the day: a lit surface shows `lin(token) · f · k`, where `f` is the legacy irradiance over π and `k` the night share. `k` is the same on every graphics preset, so the top-down output never depends on the preset. Unlit tokens are not dimmed: the white bay lines and the contact marker keep their colour, the casing stays `--scene-wheel`, and the accent and track strokes switch to `--scene-night-accent` and `--scene-night-tracks`. `tokens.test.ts` checks these targets on that model. A darker night needs its own lit token set, as the lit tones fall together as `k` drops.
 
 - **TN1, TN3:** T1 and T3 against the dimmed grounds, unchanged floors (3.1:1 and 1.5:1). The binding pairs are the cone on yard, the wall and ramp on yard, and yard against pavement and street against verge.
-- **TN2:** both tones of a two-tone object are lit, so the hall against cladding needs 5.5:1 instead of 6:1; the lamp keeps 9:1.
 - **TN-a, night backdrop:** `--scene-night-backdrop` is the top-down clear colour at night, darker than every dimmed ground, 1.5:1 or more against each. The street is the binding one.
 - **TN-b, strokes on the night backdrop:** the night accent core and the contact-marker core (`--scene-marking`) are 3:1 or more against `--scene-night-backdrop`.
 - **Strokes on the dimmed grounds:** the night accent is 3:1 or more against its `--scene-wheel` casing. On every ground the casing or the core reads 3:1 or more: the casing on yard, pavement and verge, the core on the street, where the casing alone falls short. The target outline and the gate ring get a night-only casing, so they read like the other aid strokes; the day outline stays uncased.
 - **Night tracks:** 1.5:1 or more against the dimmed yard and street.
 - **Vehicle parts and contact marker:** the dimmed body keeps 1.5:1 or more against the dimmed yard, street and pavement and against marking; the marker core is 3:1 or more against every dimmed dark surface and the night tracks, the casing against the dimmed yard, body, cab and kerb.
-- **Not rebased:** sky and cladding against sky (the perspective dome, not a top-down face), and the day exceptions above.
+- **Not rebased:** T2 (the hall's cladding is on side faces the orthographic top-down camera never sees, and the lamp's marking band sits under its full-footprint head), cladding against hall and fence (3:1), sky and cladding against sky (the perspective dome), and the day exceptions above.
 - **Legend:** the aid legend swatches follow the night view: the dimmed yard as ground, the night strokes (`hud.css`, keyed on `data-render-lighting`).
 
 ## Perspective-only realism hues
