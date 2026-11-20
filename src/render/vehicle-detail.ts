@@ -8,15 +8,20 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
-import {
-  CONTOUR_STRIP as STRIP,
-  MARKER_HEIGHT,
-  MARKER_LENGTH,
-  MARKER_SPACING,
-  MARKING_END_MARGIN as END_MARGIN,
-} from './body-dims';
+import { CAB_GAP, CONTOUR_STRIP as STRIP, MARKING_END_MARGIN as END_MARGIN } from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
-import { tint } from './environment';
+import { tint } from './tint';
+import { DARK_SLOT, slotOf, withSlot } from './lamp-lens';
+import {
+  type LampLayout,
+  type LampPart,
+  offsetAt,
+  type SideRun,
+  trailerLamps,
+  trailerSideRun,
+  truckLamps,
+  truckSideRun,
+} from './lamp-layout';
 import type { LowLoaderDeck } from './trailer-dims';
 import { PLATE_TEXT, REALISM_HUES as HUE } from './realism-hues';
 import { box, merge, wheelGeometry } from './vehicle-geometry';
@@ -24,11 +29,10 @@ import { box, merge, wheelGeometry } from './vehicle-geometry';
 /*
  * Perspective-only detail, built from the dimensions the visuals already derive from vehicle Params.
  * Everything stands a few centimetres proud of the face it sits on, so no two coplanar faces compete
- * in the depth buffer. The meshes go on SKY_LAYER: the top-down view never sees them.
+ * in the depth buffer. The meshes go on PERSPECTIVE_LAYER: the top-down view never sees them.
  * The cab front (glass, grille, lamps, bumper) is built apart: its back faces would block the cockpit eye.
  */
 
-const RELIEF_OVER = 0.05; // parts laid over a mark
 const WHEEL_RELIEF = [0.01, 0.02, 0.035] as const; // sidewall, rim, hub
 const WHEEL_RATIO = [0.9, 0.62, 0.22] as const; // of the tyre radius
 
@@ -54,8 +58,9 @@ const lateral = (side: number, from: number, to: number): Range =>
   side > 0 ? [from, to] : [-to, -from];
 
 type Sink = {
-  add(geometry: BufferGeometry, hue: number): void;
-  box(x: Range, y: Range, z: Range, hue: number): void;
+  /** `slot` picks the lamp lens emission (lamp-lens.ts); everything else stays dark. */
+  add(geometry: BufferGeometry, hue: number, slot?: number): void;
+  box(x: Range, y: Range, z: Range, hue: number, slot?: number): void;
 };
 
 /** Which build a part belongs to: both, only the procedural one, or only the one shown with a shell. */
@@ -64,10 +69,10 @@ type Only = 'procedural' | 'shell' | null;
 function collector() {
   const parts: { readonly geometry: BufferGeometry; readonly only: Only }[] = [];
   const sink = (only: Only): Sink => {
-    const add = (geometry: BufferGeometry, hue: number): void => {
-      parts.push({ geometry: tint(geometry, new Color(hue)), only });
+    const add = (geometry: BufferGeometry, hue: number, slot = DARK_SLOT): void => {
+      parts.push({ geometry: withSlot(tint(geometry, new Color(hue)), slot), only });
     };
-    return { add, box: (x, y, z, hue) => add(box(x, y, z), hue) };
+    return { add, box: (x, y, z, hue, slot) => add(box(x, y, z), hue, slot) };
   };
   const build = (skip: Only): BufferGeometry =>
     merge(parts.filter((part) => part.only !== skip).map((part) => part.geometry));
@@ -90,23 +95,6 @@ function slopedBox(
   return new BoxGeometry(x1 - x0, height, y1 - y0)
     .applyMatrix4(new Matrix4().makeShear(slope, 0, 0, 0, 0, 0))
     .translate((x0 + x1) / 2, (zc0 + zc1) / 2, -(y0 + y1) / 2);
-}
-
-/** Height offset along x: linear between [x, dz] breakpoints sorted by x, constant beyond them. */
-type Profile = readonly (readonly [number, number])[];
-
-const FLAT: Profile = [];
-
-function offsetAt(profile: Profile, x: number): number {
-  const first = profile[0];
-  if (first === undefined) return 0;
-  let [px, pz] = first;
-  if (x <= px) return pz;
-  for (const [qx, qz] of profile.slice(1)) {
-    if (x <= qx) return pz + ((qz - pz) * (x - px)) / (qx - px);
-    [px, pz] = [qx, qz];
-  }
-  return pz;
 }
 
 /** Sidewall, rim and hub as discs standing proud of both tyre faces; centre at body (x, y, z). */
@@ -157,24 +145,12 @@ function mudflap(
   );
 }
 
-/**
- * A yellow contour strip along both sides, with amber marker lamps straddling it; the strip's
- * centre follows `profile` (zc plus its offset), so it can run down a sloped deck.
- */
-function sideMarking(
-  c: Sink,
-  [x0, x1]: Range,
-  halfWidth: number,
-  zc: number,
-  room: number,
-  profile: Profile = FLAT,
-): void {
+/** A yellow contour strip along both sides; its centre follows the run's profile down a sloped deck. */
+function sideMarking(c: Sink, { span: [x0, x1], zc, profile }: SideRun, halfWidth: number): void {
   profile.reduce((prev, [x]) => {
     if (x <= prev) throw new Error('sideMarking: the profile is not strictly increasing in x');
     return x;
   }, -Infinity);
-  const half = Math.min(MARKER_HEIGHT, room) / 2;
-  const count = Math.max(2, Math.ceil((x1 - x0) / MARKER_SPACING) + 1);
   const inner = profile.map(([x]) => x).filter((x) => x > x0 && x < x1);
   for (const side of [-1, 1]) {
     const across = lateral(side, halfWidth, halfWidth + RELIEF);
@@ -189,21 +165,19 @@ function sideMarking(
         c.add(slopedBox(span, across, ends, STRIP), HUE.contourSide);
       }
     }
-    for (let i = 0; i < count; i++) {
-      const x = x0 + MARKER_LENGTH + ((x1 - x0 - 2 * MARKER_LENGTH) * i) / (count - 1);
-      const z = zc + offsetAt(profile, x);
-      c.box(
-        [x - MARKER_LENGTH / 2, x + MARKER_LENGTH / 2],
-        lateral(side, halfWidth, halfWidth + RELIEF_OVER),
-        [z - half, z + half],
-        HUE.sideMarker,
-      );
-    }
   }
 }
 
+/** The detail's share of `layout` on `parts`: lenses the shell does not draw, and their brackets. */
+function lamps(c: Sink, layout: LampLayout, parts: readonly LampPart[], withShell: boolean): void {
+  const mine = (l: { part: LampPart; shell: boolean }): boolean =>
+    parts.includes(l.part) && !(withShell && l.shell);
+  for (const b of layout.brackets.filter(mine)) c.box(...b.box, HUE.chevronBlack);
+  for (const l of layout.lamps.filter(mine)) c.box(...l.box, l.hue, slotOf(l.fns));
+}
+
 export type TruckDetailParams = {
-  readonly spec: Pick<TruckSpec, 'cab' | 'bumperInset' | 'tailLamp' | 'mudflap'>;
+  readonly spec: TruckSpec;
   readonly halfWidth: number;
   readonly frontX: number;
   readonly rearX: number;
@@ -225,15 +199,15 @@ export function truckDetail(p: TruckDetailParams): {
 } {
   const c = collector();
   const cabFront = collector();
-  const { cab, tailLamp } = p.spec;
+  const { cab } = p.spec;
   const hw = p.halfWidth;
+  const layout = truckLamps(p.spec, p.frontX - p.bodyFront - CAB_GAP);
   const front: Range = [p.frontX, p.frontX + RELIEF];
   const above = (sill: Param, height: Param): Range => [
     p.frameTop + m(sill),
     p.frameTop + m(sill) + m(height),
   ];
   const glass = above(cab.glassSill, cab.glassHeight);
-  const lamps = above(cab.lampSill, cab.lampHeight);
   const windscreen = hw - m(cab.windscreenInset);
 
   cabFront.box(front, [-windscreen, windscreen], glass, HUE.anthracite);
@@ -243,7 +217,6 @@ export function truckDetail(p: TruckDetailParams): {
     above(cab.grilleSill, cab.grilleHeight),
     HUE.chevronBlack,
   );
-  const headlampOuter = hw - m(cab.headlampInset);
   for (const side of [-1, 1]) {
     cabFront.box(
       [
@@ -254,32 +227,15 @@ export function truckDetail(p: TruckDetailParams): {
       glass,
       HUE.anthracite,
     );
-    cabFront.box(
-      front,
-      lateral(side, headlampOuter - m(cab.headlampWidth), headlampOuter),
-      lamps,
-      HUE.plateWhite,
-    );
   }
   const bumper: Range = [p.railBottom, p.frameTop];
   const bumperHalf = hw - m(p.spec.bumperInset);
   cabFront.box(front, [-bumperHalf, bumperHalf], bumper, HUE.chevronBlack);
+  lamps(cabFront, layout, ['cab'], false);
 
-  const floor = p.floorTop - p.frameTop;
-  sideMarking(
-    c,
-    [p.rearX + END_MARGIN, p.bodyFront - END_MARGIN],
-    hw,
-    p.frameTop + floor / 2,
-    floor,
-  );
+  sideMarking(c, truckSideRun(p.spec, p.frontX - p.bodyFront - CAB_GAP), hw);
+  lamps(c, layout, ['body'], false);
   for (const side of [-1, 1]) {
-    c.box(
-      [p.rearX - RELIEF, p.rearX],
-      lateral(side, hw - m(tailLamp.inset) - m(tailLamp.width), hw - m(tailLamp.inset)),
-      above(tailLamp.sill, tailLamp.height),
-      HUE.tailLamp,
-    );
     const half = p.twinOffset + p.twinWidth / 2 + FLAP_MARGIN;
     mudflap(
       c,
@@ -324,7 +280,7 @@ function chevrons(c: Sink, x: Range, halfLength: number, zc: number, height: num
 }
 
 export type TrailerDetailParams = {
-  readonly spec: Pick<TrailerSpec, 'underrunGuard' | 'tailLamp' | 'mudflap'>;
+  readonly spec: TrailerSpec;
   readonly halfWidth: number;
   readonly rearX: number;
   readonly frontX: number;
@@ -358,10 +314,9 @@ export function trailerDetail(p: TrailerDetailParams): {
   const flat = deck === null ? c : replaced;
   const hw = p.halfWidth;
   const rear: Range = [p.rearX - RELIEF, p.rearX];
-  const slab = p.deck - p.underside;
-  const lowerZ = p.isBox ? p.deck + STRIP : (p.deck + p.underside) / 2;
+  const run = trailerSideRun(p.spec, 'procedural');
 
-  const { underrunGuard, tailLamp } = p.spec;
+  const { underrunGuard } = p.spec;
   const guard: Range = [
     m(underrunGuard.lowerEdge),
     m(underrunGuard.lowerEdge) + m(underrunGuard.height),
@@ -389,20 +344,14 @@ export function trailerDetail(p: TrailerDetailParams): {
     guard[1] - guard[0],
   );
 
-  const markingSpan: Range = [p.rearX + END_MARGIN, p.frontX - END_MARGIN];
-  const markingRoom = p.isBox ? p.bodyTop - p.deck : slab;
-  sideMarking(p.isBox ? onBox : flat, markingSpan, hw, lowerZ, markingRoom);
+  sideMarking(p.isBox ? onBox : flat, run, hw);
   const rearContour = (sink: Sink, z: number): void => {
     sink.box(rear, [-(hw - STRIP), hw - STRIP], [z - STRIP / 2, z + STRIP / 2], HUE.contourRear);
   };
   // the lower rear contour stays with a bare chassis: it sits on the lamp carrier
-  rearContour(flat, lowerZ);
+  rearContour(flat, run.zc);
   if (deck !== null) {
-    const drop = deck.rearDeck - p.deck;
-    sideMarking(shellOnly, markingSpan, hw, lowerZ, markingRoom, [
-      [deck.slopeEnd, drop],
-      [deck.slopeStart, 0],
-    ]);
+    sideMarking(shellOnly, trailerSideRun(p.spec, 'shell'), hw);
     rearContour(shellOnly, deck.contourZ);
   }
   if (p.isBox) {
@@ -429,17 +378,14 @@ export function trailerDetail(p: TrailerDetailParams): {
     }
   }
 
-  const tailLamps = (sink: Sink, base: number, side: number): void => {
-    sink.box(
-      [p.rearX - RELIEF_OVER, p.rearX],
-      lateral(side, hw - m(tailLamp.inset) - m(tailLamp.width), hw - m(tailLamp.inset)),
-      [base + m(tailLamp.sill), base + m(tailLamp.sill) + m(tailLamp.height)],
-      HUE.tailLamp,
-    );
-  };
+  const withShell = p.isBox || deck !== null;
+  if (withShell) {
+    lamps(replaced, trailerLamps(p.spec, 'procedural'), ['trailer'], false);
+    lamps(shellOnly, trailerLamps(p.spec, 'shell'), ['trailer'], true);
+  } else {
+    lamps(c, trailerLamps(p.spec, 'procedural'), ['trailer'], false);
+  }
   for (const side of [-1, 1]) {
-    tailLamps(flat, p.deck, side);
-    if (deck !== null) tailLamps(shellOnly, deck.rearDeck, side);
     for (const axleX of p.rearAxleXs) {
       const y = (side * p.track) / 2;
       // the flap ends under the deck rather than standing through it
@@ -459,7 +405,7 @@ export function trailerDetail(p: TrailerDetailParams): {
 
   return {
     geometry: c.build(),
-    shellGeometry: p.isBox || deck !== null ? c.buildShell() : null,
+    shellGeometry: withShell ? c.buildShell() : null,
     plate: {
       x: p.rearX - PLATE_RELIEF,
       y: 0,
@@ -469,15 +415,18 @@ export function trailerDetail(p: TrailerDetailParams): {
   };
 }
 
+/** The dolly's rims, and its lamps of `layout`. */
 export function dollyDetail(
   radius: number,
   width: number,
   frontAxleX: number,
   track: number,
+  layout?: LampLayout,
 ): BufferGeometry {
   const c = collector();
   for (const side of [-1, 1])
     wheelFaces(c, radius, width, [frontAxleX, (side * track) / 2, radius]);
+  if (layout !== undefined) lamps(c, layout, ['dolly'], false);
   return c.build();
 }
 

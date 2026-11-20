@@ -1,5 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
+import { ASSET_REGISTRY } from '../src/render/asset-registry';
+import { QUALITY_FLAGS } from '../src/render/quality';
+import { DEFAULT_GRAPHICS } from '../src/contracts/render';
+import { RUNTIME_ASSETS } from '../src/pwa/config';
+import { collectThreeProblems } from './three-problems';
+import { expectNoFailedAttachment, watchFailedAttachments } from './attachment-markers';
 
 test('loads from the subpath and drives an exercise offline', async ({
   page,
@@ -15,6 +21,7 @@ test('loads from the subpath and drives an exercise offline', async ({
       foreign.push(url);
   });
 
+  const three = collectThreeProblems(page);
   const warnings: string[] = [];
   const errors: string[] = [];
   page.on('console', (m) => {
@@ -44,10 +51,11 @@ test('loads from the subpath and drives an exercise offline', async ({
     }
     return urls;
   });
-  const shells = [
-    ...['arocs-1835-ak', 'man-le-18-280'].flatMap((truck) => [`${truck}-cab`, `${truck}-body`]),
-    ...['krone-azw-18', 'hueffermann-hpa-24-81-l'].map((trailer) => `${trailer}-trailer`),
-  ];
+  const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
+  const shells = Object.entries(ASSET_REGISTRY)
+    .filter(([, { kind, flag }]) => kind === 'glb' && defaults[flag])
+    .map(([stem]) => stem);
+  expect(shells.length).toBeGreaterThan(0);
   for (const key of shells) {
     const shell = new RegExp(`${key}-[\\w-]+\\.glb$`);
     expect(
@@ -77,9 +85,11 @@ test('loads from the subpath and drives an exercise offline', async ({
   );
   expect(warnings.filter((w) => w.includes('Shell '))).toEqual([]);
   expect(errors).toEqual([]);
+  expect(three).toEqual([]);
 });
 
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {
+  const three = collectThreeProblems(page);
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   const reset = page.getByRole('button', { name: en.resetView, exact: true });
@@ -111,9 +121,10 @@ test('zooms and pans the top-down view without disturbing the controls', async (
   await page.mouse.move(free.x - 30, free.y + 20, { steps: 4 });
   await page.mouse.up();
   await expect(reset).toBeEnabled();
+  expect(three).toEqual([]);
 });
 
-test('High graphics caches the ground texture and transcoder on first use and applies them offline', async ({
+test('High graphics caches the ground and sky textures and transcoder on first use and applies them offline', async ({
   page,
   context,
   baseURL,
@@ -126,6 +137,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
       foreign.push(url);
   });
   let offline = false;
+  const three = collectThreeProblems(page);
   const warnings: string[] = [];
   const errors: string[] = [];
   page.on('console', (m) => {
@@ -139,6 +151,7 @@ test('High graphics caches the ground texture and transcoder on first use and ap
       JSON.stringify({ version: 1, graphics: 'high' }),
     );
   });
+  await watchFailedAttachments(page);
 
   await page.goto('./');
   await page.evaluate(async () => {
@@ -157,11 +170,19 @@ test('High graphics caches the ground texture and transcoder on first use and ap
       }
       return urls;
     });
-  const files = [
-    /ground-[\w-]+\.ktx2$/,
-    /basis_transcoder-[\w-]+\.js$/,
-    /basis_transcoder-[\w-]+\.wasm$/,
-  ];
+  const files = RUNTIME_ASSETS.flatMap(([stem, extensions]) =>
+    extensions.map((extension) => new RegExp(`${stem}-[\\w-]+\\.${extension}$`)),
+  );
+  expect(files.map(String).sort()).toEqual(
+    [
+      /basis_transcoder-[\w-]+\.js$/,
+      /basis_transcoder-[\w-]+\.wasm$/,
+      /ground-[\w-]+\.ktx2$/,
+      /sky-[\w-]+\.ktx2$/,
+    ]
+      .map(String)
+      .sort(),
+  );
   const matching = (urls: string[], file: RegExp): string[] => urls.filter((url) => file.test(url));
 
   // Installing does not download them: only High draws the texture, so the other presets skip the cost.
@@ -173,12 +194,16 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/);
   const target = await marker.getAttribute('data-ground-texture');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
+  await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
+  // WebGL 2 stays the default until WebGPU passes its gate (docs/perf.md)
+  await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
   await expect
     .poll(async () => {
       const { runtime } = await cached();
       return files.map((file) => matching(runtime, file).length);
     })
-    .toEqual([1, 1, 1]);
+    .toEqual(files.map(() => 1));
 
   // The marker follows the preset: Balanced draws no reflections, so it is gone.
   await page.getByRole('button', { name: en.finish }).click();
@@ -192,6 +217,8 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
   await expect(page.locator('[data-view="follow"]')).toBeVisible();
   await expect(marker).not.toHaveAttribute('data-vehicle-pbr', /.*/);
+  await expect(marker).not.toHaveAttribute('data-sky-hdri', /.*/);
+  await expect(marker).not.toHaveAttribute('data-perspective-grade', /.*/);
 
   offline = true;
   await context.setOffline(true);
@@ -199,7 +226,15 @@ test('High graphics caches the ground texture and transcoder on first use and ap
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
   await expect(marker).toHaveAttribute('data-ground-texture', target ?? '');
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
-  expect(warnings.filter((w) => /Ground texture|Vehicle reflection/.test(w))).toEqual([]);
+  await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
+  await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
+  expect(
+    warnings.filter((w) =>
+      /Ground texture|Sky texture|Vehicle reflection|Perspective grade/.test(w),
+    ),
+  ).toEqual([]);
   expect(errors).toEqual([]);
+  expect(three).toEqual([]);
   expect(foreign).toEqual([]);
+  await expectNoFailedAttachment(page);
 });

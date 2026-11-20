@@ -15,7 +15,15 @@ export type QualityFlags = {
   /** Dashboard, pillars, header and visor around the cockpit view, and the mirror housings. */
   readonly cockpitInterior: boolean;
   readonly groundTexture: boolean;
+  /** Lit perspective copies of the ground markings; the top-down tokens stay flat. */
+  readonly litMarkings: boolean;
   readonly pbr: boolean;
+  /** HDRI sun and sky light in the perspective views, tone-mapped in their perspective-only materials. */
+  readonly perspectiveLighting: boolean;
+  /** Distance haze in the graded materials; needs `perspectiveLighting`. */
+  readonly aerialPerspective: boolean;
+  /** HDRI sky dome, also what the vehicles reflect; a download. */
+  readonly hdriSky: boolean;
 };
 
 const BALANCED: QualityFlags = {
@@ -27,9 +35,16 @@ const BALANCED: QualityFlags = {
   vehicleGlb: true,
   chaseView: true,
   cockpitInterior: true,
+  litMarkings: true,
   groundTexture: false,
   pbr: false,
+  perspectiveLighting: false,
+  aerialPerspective: false,
+  hdriSky: false,
 };
+
+/** Most draw calls a frame may spend, mirrors included: the requirement for High. */
+export const DRAW_CALL_BUDGET = 300;
 
 export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
   low: {
@@ -41,9 +56,20 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     vehicleGlb: false,
     chaseView: false,
     cockpitInterior: false,
+    litMarkings: false,
     groundTexture: false,
     pbr: false,
+    perspectiveLighting: false,
+    aerialPerspective: false,
+    hdriSky: false,
   },
   balanced: BALANCED,
-  high: { ...BALANCED, groundTexture: true, pbr: true },
+  high: {
+    ...BALANCED,
+    groundTexture: true,
+    pbr: true,
+    perspectiveLighting: true,
+    aerialPerspective: true,
+    hdriSky: true,
+  },
 };

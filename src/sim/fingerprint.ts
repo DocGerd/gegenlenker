@@ -2,32 +2,11 @@ import type { ExerciseDefinition } from '../contracts/exercise';
 import type { Obstacle } from '../contracts/layout';
 import type { Pose2 } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
-import { OVERLAP_EPSILON } from './collision';
-import {
-  ACCEL,
-  BRAKE_DECEL,
-  DECEL,
-  DRAWBAR_WIDTH,
-  DT,
-  EVENT_CLEAR_DISTANCE,
-  V_MAX,
-} from './constants';
+import { SIM_CONSTANTS } from './constants';
 
 // Bump when simulation, collision or scoring behaviour changes, so stored runs and replays of old
 // behaviour are dropped. Not for which result is kept as the best (`recordBest`): a run's outcome is unchanged.
 export const SIM_REVISION = 2;
-
-// A literal, as namespace key order differs between bundle and test runner.
-const constants = {
-  DT,
-  V_MAX,
-  ACCEL,
-  DECEL,
-  BRAKE_DECEL,
-  DRAWBAR_WIDTH,
-  EVENT_CLEAR_DISTANCE,
-  OVERLAP_EPSILON,
-};
 
 export type RunData = {
   readonly params: VehicleParams;
@@ -40,23 +19,17 @@ export type RunData = {
 
 /**
  * FNV-1a over what a run's path and score depend on, so stored runs from other data can be told apart.
- * Visual-only content (markings, surfaces, obstacle heights and kinds) is left out.
+ * Visual-only content (markings, surfaces, obstacle ids, heights and kinds) is left out; obstacle order
+ * is hashed, since the first contact in list order is the one reported.
  */
 export function dataFingerprint({ params, obstacles, start, exercise, scoring }: RunData): string {
   const text = JSON.stringify([
     SIM_REVISION,
     params,
-    obstacles.map(({ id, obb }) => [
-      id,
-      obb.cx,
-      obb.cy,
-      obb.halfLength,
-      obb.halfWidth,
-      obb.heading,
-    ]),
+    obstacles.map(({ obb }) => [obb.cx, obb.cy, obb.halfLength, obb.halfWidth, obb.heading]),
     start,
     exercise && [exercise.target, exercise.tolerances, exercise.waypoint],
-    constants,
+    SIM_CONSTANTS,
     scoring,
   ]);
   let hash = 0x811c9dc5;

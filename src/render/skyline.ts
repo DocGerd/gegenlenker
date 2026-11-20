@@ -1,51 +1,83 @@
 import type { Rect2 } from '../contracts/layout';
-import { SKY_LAYER } from './seams';
+import { PERSPECTIVE_LAYER } from './seams';
 import { createAtlasTexture } from './skyline-atlas';
 import { skylineGeometry } from './skyline-geometry';
 import { skylineBuildings } from './skyline-layout';
-import { Color, Mesh, MeshLambertMaterial } from 'three';
+import { BoxGeometry, Color, DataTexture, Float32BufferAttribute, Mesh } from 'three';
+import { attribute, max, mix, output, uniform, vec4 } from 'three/tsl';
+import { MeshLambertNodeMaterial, type Node } from 'three/webgpu';
+import {
+  fogFactor,
+  GRADE_SHADER_MARKER,
+  hazeColour,
+  setGraded,
+  toneMap,
+  type GradeSample,
+} from './grade';
+import { REALISM_HUES } from './realism-hues';
 
 /**
  * Lambert with a per-vertex haze share mixed towards the haze colour after lighting, so a distant
  * building fades as a whole instead of showing a vertical gradient.
  */
-function hazeMaterial(haze: Color): MeshLambertMaterial {
-  const material = new MeshLambertMaterial({ map: createAtlasTexture() });
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms['hazeColor'] = { value: haze };
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        '#include <common>\nattribute float haze;\nvarying float vHaze;',
-      )
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHaze = haze;');
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        '#include <common>\nuniform vec3 hazeColor;\nvarying float vHaze;',
-      )
-      .replace(
-        '#include <opaque_fragment>',
-        '#include <opaque_fragment>\ngl_FragColor.rgb = mix(gl_FragColor.rgb, hazeColor, vHaze);',
-      );
-  };
-  return material;
-}
+const plainHaze = (haze: Color): Node<'vec4'> =>
+  vec4(mix(output.rgb, uniform(haze), attribute('haze', 'float')), output.a);
 
-export type Skyline = { readonly mesh: Mesh; dispose(): void };
+/** The building's own haze already exceeds the aerial perspective out there, so the larger one wins. */
+const gradedHaze = (): Node<'vec4'> =>
+  vec4(
+    toneMap(mix(output.rgb, hazeColour(), max(attribute('haze', 'float'), fogFactor()))).toVar(
+      GRADE_SHADER_MARKER,
+    ),
+    output.a,
+  );
+
+export type Skyline = {
+  readonly mesh: Mesh;
+  /** Takes the shared haze colour, aerial perspective and tone mapping (`grade.ts`). */
+  setGraded(on: boolean): void;
+  dispose(): void;
+};
 
 /** Solid buildings around `bounds`, lit by the scene lights and fading towards `haze` with distance. */
 export function createSkyline(bounds: Rect2, haze: Color): Skyline {
   const geometry = skylineGeometry(skylineBuildings(bounds));
-  const material = hazeMaterial(haze.clone());
+  const material = new MeshLambertNodeMaterial({ map: createAtlasTexture() });
+  const plain = plainHaze(haze.clone());
+  material.outputNode = plain;
+  const grade = gradedHaze();
   const mesh = new Mesh(geometry, material);
   mesh.frustumCulled = false;
-  mesh.layers.set(SKY_LAYER);
+  mesh.layers.set(PERSPECTIVE_LAYER);
   return {
     mesh,
+    setGraded: (on) => {
+      setGraded(material, on, plain, grade);
+    },
     dispose: () => {
       geometry.dispose();
       material.map?.dispose();
+      material.dispose();
+    },
+  };
+}
+
+/**
+ * The graded skyline material on a box with the same attributes and a 1 × 1 map, for the grade's
+ * shader check: the same program without building the skyline and its atlas on every new renderer.
+ */
+export function skylineGradeSample(): GradeSample {
+  const geometry = new BoxGeometry();
+  geometry.setAttribute('haze', new Float32BufferAttribute(new Float32Array(24), 1));
+  const map = new DataTexture(new Uint8Array(4), 1, 1);
+  map.needsUpdate = true;
+  const material = new MeshLambertNodeMaterial({ map });
+  setGraded(material, true, plainHaze(new Color(REALISM_HUES.skyHaze)), gradedHaze());
+  return {
+    mesh: new Mesh(geometry, material),
+    dispose: () => {
+      geometry.dispose();
+      map.dispose();
       material.dispose();
     },
   };

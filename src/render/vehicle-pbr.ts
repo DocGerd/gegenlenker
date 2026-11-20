@@ -5,20 +5,27 @@ import {
   Layers,
   type Material,
   Mesh,
-  MeshStandardMaterial,
   type Object3D,
   PerspectiveCamera,
-  PMREMGenerator,
+  type RenderTarget,
   Scene,
   type Texture,
-  type WebGLProgramParametersWithUniforms,
-  type WebGLRenderer,
-  type WebGLRenderTarget,
 } from 'three';
+import { distance, float, max, mix, smoothstep, vec3, vertexColor } from 'three/tsl';
+import {
+  MeshStandardNodeMaterial,
+  type Node,
+  type NodeBuilder,
+  PhysicalLightingModel,
+  PMREMGenerator,
+  type WebGPURenderer,
+} from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
-import { createSceneSky } from './environment';
+import { createSceneSky, domeGround } from './scene-sky';
+import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
+import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
-import { enableLayers, TOP_DOWN_LAYERS } from './seams';
+import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
 
 /*
  * Reflective vehicle shading for the High preset (#69). The map goes on each material, never on
@@ -52,63 +59,84 @@ export const ROLE_HUES = {
   metal: REALISM_HUES.whiteAluminium,
 } as const;
 
-const glsl = (hue: number): string => {
-  const c = new Color(hue);
-  return `vec3(${c.r.toFixed(6)}, ${c.g.toFixed(6)}, ${c.b.toFixed(6)})`;
+/** Named in the generated shader, so a shader error can be traced to this material. */
+export const VEHICLE_SHADER_MARKER = 'vehicleGlass';
+
+type LightingContext = {
+  readonly iblIrradiance: Node<'vec3'>;
+  readonly reflectedLight: {
+    readonly directSpecular: Node<'vec3'>;
+    readonly indirectSpecular: Node<'vec3'>;
+  };
 };
 
-const ROLE_ANCHOR = '#include <metalnessmap_fragment>';
-const IBL_ANCHOR = '#include <lights_fragment_maps>';
-const SPECULAR_ANCHOR = '#include <aomap_fragment>';
+/**
+ * No diffuse light from the sky map: the hemisphere light already is the ambient term, so the
+ * diffuse shading stays the Lambert look and the map only adds reflections. Both specular terms
+ * are scaled by `share`. Relies on three internals; vehicle-pbr.test.ts pins them.
+ */
+export class VehicleLightingModel extends PhysicalLightingModel {
+  readonly share: Node<'float'>;
 
-function patch(source: string, anchor: string, addition: string): string {
-  if (!source.includes(anchor)) throw new Error(`Vehicle shader anchor missing: ${anchor}`);
-  return source.replace(anchor, () => addition);
+  constructor(share: Node<'float'>) {
+    super();
+    this.share = share;
+  }
+
+  override start(builder: NodeBuilder): void {
+    super.start(builder);
+    const { reflectedLight } = builder.context as LightingContext;
+    reflectedLight.directSpecular.mulAssign(this.share);
+    reflectedLight.indirectSpecular.mulAssign(this.share);
+  }
+
+  override indirectSpecular(builder: NodeBuilder): void {
+    (builder.context as LightingContext).iblIrradiance.assign(vec3(0));
+    super.indirectSpecular(builder);
+  }
+}
+
+/** Roles from the vertex colour: glass and aluminium get their own roughness, metalness and specular share. */
+export class VehicleNodeMaterial extends MeshStandardNodeMaterial {
+  static override get type(): string {
+    return 'VehicleNodeMaterial';
+  }
+
+  readonly specularShare: Node<'float'>;
+
+  constructor(envMap: Texture) {
+    // the vertex colour is folded into colorNode, so the glass albedo is not multiplied by it again
+    super({ vertexColors: false, roughness: PAINT_ROUGHNESS, metalness: 0, envMap });
+    const [lo, hi] = ROLE_TOLERANCE;
+    const rgb = vertexColor().rgb;
+    const role = (hue: number, near: number, far: number) => {
+      const c = new Color(hue);
+      return float(1).sub(smoothstep(near, far, distance(rgb, vec3(c.r, c.g, c.b))));
+    };
+    const metal = role(ROLE_HUES.metal, lo, hi);
+    const glass = role(ROLE_HUES.glass, lo / 2, hi / 2).toVar(VEHICLE_SHADER_MARKER);
+    this.colorNode = mix(rgb, vec3(GLASS_REFLECTANCE), glass);
+    this.roughnessNode = mix(
+      mix(float(PAINT_ROUGHNESS), GLASS_ROUGHNESS, glass),
+      METAL_ROUGHNESS,
+      metal,
+    );
+    this.metalnessNode = mix(mix(float(0), 1, glass), METAL_METALNESS, metal);
+    this.specularShare = mix(float(PAINT_SPECULAR), 1, max(glass, metal));
+  }
+
+  override setupLightingModel(): VehicleLightingModel {
+    return new VehicleLightingModel(this.specularShare);
+  }
 }
 
 /**
- * Roles from the vertex colour, and no diffuse light from the sky map: the hemisphere light already
- * is the ambient term, so the diffuse shading stays the Lambert look and the map only adds
- * reflections. Throws when three's shader no longer has an anchor.
+ * The one reflective material every perspective-only vehicle mesh shares, so a swap adds no draw
+ * call; it lights the lenses from `lamps` like the detail material does.
  */
-export function roleShader(
-  shader: Pick<WebGLProgramParametersWithUniforms, 'fragmentShader'>,
-): void {
-  const [lo, hi] = ROLE_TOLERANCE;
-  let source = patch(
-    shader.fragmentShader,
-    ROLE_ANCHOR,
-    /* glsl */ `${ROLE_ANCHOR}
-      float roleMetal = 1.0 - smoothstep(${lo}, ${hi}, distance(vColor.rgb, ${glsl(ROLE_HUES.metal)}));
-      float roleGlass = 1.0 - smoothstep(${lo / 2}, ${hi / 2}, distance(vColor.rgb, ${glsl(ROLE_HUES.glass)}));
-      roughnessFactor = mix(mix(roughnessFactor, ${GLASS_ROUGHNESS.toFixed(3)}, roleGlass), ${METAL_ROUGHNESS.toFixed(3)}, roleMetal);
-      metalnessFactor = mix(mix(metalnessFactor, 1.0, roleGlass), ${METAL_METALNESS.toFixed(3)}, roleMetal);
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(${GLASS_REFLECTANCE.toFixed(3)}), roleGlass);`,
-  );
-  source = patch(source, IBL_ANCHOR, `${IBL_ANCHOR}\n iblIrradiance = vec3(0.0);`);
-  source = patch(
-    source,
-    SPECULAR_ANCHOR,
-    /* glsl */ `${SPECULAR_ANCHOR}
-      float specularShare = mix(${PAINT_SPECULAR.toFixed(3)}, 1.0, max(roleGlass, roleMetal));
-      reflectedLight.directSpecular *= specularShare;
-      reflectedLight.indirectSpecular *= specularShare;`,
-  );
-  shader.fragmentShader = source;
-}
-
-const PROGRAM_KEY = 'vehicle-roles';
-
-/** The one reflective material every perspective-only vehicle mesh shares, so a swap adds no draw call. */
-export function createVehicleMaterial(envMap: Texture): MeshStandardMaterial {
-  const material = new MeshStandardMaterial({
-    vertexColors: true,
-    roughness: PAINT_ROUGHNESS,
-    metalness: 0,
-    envMap,
-  });
-  material.onBeforeCompile = roleShader;
-  material.customProgramCacheKey = () => PROGRAM_KEY;
+export function createVehicleMaterial(envMap: Texture, lamps: LampEmission): VehicleNodeMaterial {
+  const material = new VehicleNodeMaterial(envMap);
+  material.emissiveNode = lamps.node;
   return material;
 }
 
@@ -138,36 +166,61 @@ export function replaceMaterial(
   }
 }
 
-/** Compiles the reflective program once and reports whether the GPU accepted it. */
-export function vehicleShaderCompiles(gl: WebGLRenderer, envMap: Texture): boolean {
-  const material = createVehicleMaterial(envMap);
-  const geometry = new BoxGeometry();
+/**
+ * Builds the reflective material once on `gpu` and resolves whether it compiled. three swaps a
+ * material whose node graph throws for a plain one and only logs it, so the built shader must carry
+ * the marker.
+ */
+export function vehicleShaderCompiles(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+  return buildSerially(gpu, () => buildVehicleShader(gpu, envMap));
+}
+
+async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+  const material = createVehicleMaterial(envMap, createLampEmission());
+  // only High reflects, and High grades: check the graded variant the vehicles wear
+  const graded = !gradeDisabled();
+  setGraded(material, graded);
+  const geometry = withSlot(new BoxGeometry());
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
+  const mesh = new Mesh(geometry, material);
   const scene = new Scene();
-  scene.add(new Mesh(geometry, material));
-  const previous = gl.debug.onShaderError;
+  scene.add(mesh);
+  const { debug } = gpu;
+  const previous = debug.onShaderError;
   let accepted = true;
-  gl.debug.onShaderError = (context, program, vertex, fragment) => {
-    accepted = false;
-    console.warn(
-      'Vehicle reflection shader failed',
-      context.getShaderInfoLog(vertex),
-      context.getShaderInfoLog(fragment),
-      context.getProgramInfoLog(program),
-    );
+  // only the WebGL 2 backend reports here; a node build error rejects compileAsync on either
+  const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
+    if (context.getShaderSource(fragment)?.includes(VEHICLE_SHADER_MARKER) === true) {
+      accepted = false;
+      console.warn(
+        'Vehicle reflection shader failed',
+        context.getShaderInfoLog(vertex),
+        context.getShaderInfoLog(fragment),
+        context.getProgramInfoLog(program),
+      );
+    } else if (previous !== null) previous(context, program, vertex, fragment);
+    else
+      console.error(
+        'Shader error',
+        context.getShaderInfoLog(vertex),
+        context.getShaderInfoLog(fragment),
+        context.getProgramInfoLog(program),
+      );
   };
+  debug.onShaderError = watcher;
   try {
-    gl.compile(scene, new PerspectiveCamera());
-    // three checks the link status on first use; this forces it while the hook is installed
-    for (const program of gl.info.programs ?? []) {
-      if (program.cacheKey.includes(PROGRAM_KEY)) program.getUniforms();
+    const { fragmentShader } = await gpu.debug.getShaderAsync(scene, new PerspectiveCamera(), mesh);
+    const markers = graded ? [VEHICLE_SHADER_MARKER, GRADE_SHADER_MARKER] : [VEHICLE_SHADER_MARKER];
+    if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
+      console.warn('Vehicle reflection shader failed to build');
+      return false;
     }
     return accepted;
   } catch (error) {
     console.warn('Vehicle reflection shader failed', error);
     return false;
   } finally {
-    gl.debug.onShaderError = previous;
+    if (debug.onShaderError === watcher) debug.onShaderError = previous;
     material.dispose();
     geometry.dispose();
   }
@@ -176,14 +229,22 @@ export function vehicleShaderCompiles(gl: WebGLRenderer, envMap: Texture): boole
 /** The sky the vehicles reflect, shared by every visual of one renderer. */
 export interface VehicleEnvironment {
   /** Where maps are generated; a different renderer (after a loss) replaces the previous one and drops its map and any failure. */
-  attach(gl: WebGLRenderer): void;
+  attach(gpu: WebGPURenderer): void;
   /**
-   * The reflection map for `palette`, generated and shader-checked on first use; null without a
-   * renderer, while its context is lost, or after a failure (retried only on a new renderer).
+   * The reflection map for `palette`, or null while it is not ready: without a renderer, while its
+   * context is lost, while the map is checked (`onChange` fires when it is ready), or after a
+   * failure (retried only on a new renderer).
    */
   texture(palette: ScenePalette): Texture | null;
+  /** `listener` runs when `texture` may now return something else; returns the unsubscribe. */
+  onChange(listener: () => void): () => void;
   /** A visual reports whether it currently wears the reflective material, for the state. */
   reportApplied(owner: object, on: boolean): void;
+  /**
+   * The HDRI sky texture the map is captured from, or null for the analytic sky. The current map
+   * stays until the new one has passed its check.
+   */
+  setSky(map: Texture | null): void;
   dispose(): void;
 }
 
@@ -191,17 +252,29 @@ export interface VehicleEnvironment {
 export type VehicleEnvironmentState = 'on' | 'failed' | null;
 
 export interface VehicleEnvironmentParts {
-  readonly generate: (gl: WebGLRenderer, palette: ScenePalette) => WebGLRenderTarget;
-  readonly compiles: (gl: WebGLRenderer, map: Texture) => boolean;
+  readonly generate: (
+    gpu: WebGPURenderer,
+    palette: ScenePalette,
+    sky: Texture | null,
+  ) => RenderTarget;
+  readonly compiles: (gpu: WebGPURenderer, map: Texture) => Promise<boolean>;
 }
 
-export function generateSkyMap(gl: WebGLRenderer, palette: ScenePalette): WebGLRenderTarget {
-  const sky = createSceneSky(palette);
-  // the dome sits on SKY_LAYER for the game cameras; the capture camera sees layer 0 only
+export function generateSkyMap(
+  gpu: WebGPURenderer,
+  palette: ScenePalette,
+  hdri: Texture | null = null,
+): RenderTarget {
+  // untoned: the reflective material tone-maps what it reflects
+  const sky = createSceneSky(palette, false);
+  // only High captures, and it lights the perspective views with the split rig
+  sky.setGround(domeGround(palette, true));
+  sky.setHdri(hdri);
+  // the dome sits on PERSPECTIVE_LAYER for the game cameras; the capture camera sees layer 0 only
   sky.mesh.layers.set(0);
   const scene = new Scene();
   scene.add(sky.mesh);
-  const generator = new PMREMGenerator(gl);
+  const generator = new PMREMGenerator(gpu);
   try {
     return generator.fromScene(scene, 0, MAP_NEAR, MAP_FAR, { size: MAP_SIZE });
   } finally {
@@ -217,67 +290,118 @@ export function createVehicleEnvironment(
     compiles: vehicleShaderCompiles,
   },
 ): VehicleEnvironment {
-  let renderer: WebGLRenderer | null = null;
-  let target: WebGLRenderTarget | null = null;
+  let renderer: WebGPURenderer | null = null;
+  let target: RenderTarget | null = null;
+  let skyMap: Texture | null = null;
+  /** The sky `target` was captured from. */
+  let targetSky: Texture | null = null;
+  /** The map being checked; a newer request (palette, renderer) drops it. */
+  let pending: RenderTarget | null = null;
   let key = '';
   let failed = false;
   const wearing = new Set<object>();
+  const listeners = new Set<() => void>();
 
   const publish = (): void => {
     if (failed) onState('failed');
     else onState(wearing.size > 0 && target !== null ? 'on' : null);
   };
+  const changed = (): void => {
+    for (const listener of [...listeners]) listener();
+  };
   const release = (): void => {
+    const had = target !== null;
     target?.dispose();
     target = null;
+    pending?.dispose();
+    pending = null;
+    if (had) changed();
   };
-  const invalidate = (): void => {
-    release();
-    key = '';
-    failed = false;
+  const fail = (error: unknown): void => {
+    failed = true;
     publish();
+    console.warn('Vehicle reflections failed; keeping the plain shading', error);
+  };
+  const check = (gpu: WebGPURenderer, made: RenderTarget, sky: Texture | null): void => {
+    pending = made;
+    compiles(gpu, made.texture).then(
+      (ok) => {
+        if (pending !== made) return;
+        pending = null;
+        // a compile on a lost context passes vacuously; the renderer that replaces it checks again
+        if (gpuLost(gpu)) {
+          made.dispose();
+          return;
+        }
+        if (!ok) {
+          made.dispose();
+          fail(new Error('the reflective shader did not compile'));
+          return;
+        }
+        target?.dispose();
+        target = made;
+        targetSky = sky;
+        publish();
+        changed();
+      },
+      (error: unknown) => {
+        if (pending !== made) return;
+        pending = null;
+        made.dispose();
+        fail(error);
+      },
+    );
   };
 
   return {
-    attach(gl) {
-      if (gl === renderer) return;
-      invalidate();
-      renderer = gl;
+    attach(gpu) {
+      if (gpu === renderer) return;
+      release();
+      key = '';
+      failed = false;
+      publish();
+      renderer = gpu;
     },
     texture(palette) {
-      if (renderer === null || renderer.getContext().isContextLost()) return null;
+      if (renderer === null || gpuLost(renderer)) return null;
       const next = `${palette.sky}/${palette.verge}`;
       if (next !== key) {
         release();
         key = next;
         failed = false;
       }
-      if (target === null && !failed) {
+      if ((target === null || targetSky !== skyMap) && pending === null && !failed) {
         try {
-          const made = generate(renderer, palette);
-          if (!compiles(renderer, made.texture)) {
-            made.dispose();
-            throw new Error('the reflective shader did not compile');
-          }
-          target = made;
-          publish();
+          check(renderer, generate(renderer, palette, skyMap), skyMap);
         } catch (error) {
-          failed = true;
-          publish();
-          console.warn('Vehicle reflections failed; keeping the plain shading', error);
+          fail(error);
         }
       }
       return target?.texture ?? null;
+    },
+    onChange(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
     reportApplied(owner, on) {
       if (on) wearing.add(owner);
       else wearing.delete(owner);
       publish();
     },
+    setSky(map) {
+      if (map === skyMap) return;
+      skyMap = map;
+      pending?.dispose();
+      pending = null;
+      changed();
+    },
     dispose() {
       release();
       renderer = null;
       wearing.clear();
+      listeners.clear();
       publish();
     },
   };

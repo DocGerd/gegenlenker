@@ -4,7 +4,7 @@ import type { ExerciseId } from '../contracts/exercise';
 import { LAYOUT_IDS } from '../contracts/layout';
 import type { Obstacle } from '../contracts/layout';
 import type { ControlVector, Pose2, Simulation, SimSnapshot, Vec2 } from '../contracts/sim';
-import { createContactQuery, obbOverlap } from '../sim/collision';
+import { createContactQuery, obbOverlap, SELF_OBSTACLE_ID } from '../sim/collision';
 import { wrapAngle } from '../sim/angle';
 import { bodyFootprints } from '../sim/geometry';
 import { createSimulation } from '../sim/simulation';
@@ -76,9 +76,11 @@ function driveBy(sim: Simulation, gear: 'D' | 'R'): SimSnapshot {
 }
 
 describe.each(cases)('$name', ({ resolved, start, exercise }) => {
-  it('has unique obstacle ids', () => {
+  // dataFingerprint hashes the ordered OBBs without ids: sound only while contacts are counted by unique ids.
+  it('has unique obstacle ids, none the self id', () => {
     const ids = resolved.obstacles.map((o) => o.id);
     expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).not.toContain(SELF_OBSTACLE_ID);
   });
 
   it.each(pairs)(

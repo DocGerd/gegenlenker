@@ -1,5 +1,5 @@
 import { readFileSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TRAILER_IDS, TRUCK_IDS } from '../../src/contracts/vehicle';
 import { MAX_PRECACHE_FILE_BYTES } from '../../src/pwa/config';
@@ -18,6 +18,25 @@ import {
 } from './glb-build';
 
 const read = (file: string): unknown => JSON.parse(readFileSync(join(ROOT, file), 'utf8'));
+
+/** Helper files a Python script loads with `os.path.join(<dir>, "x.py")`, nested loads included. */
+function loadedHelpers(
+  entry: string,
+  readSource = (file: string): string => readFileSync(join(ROOT, file), 'utf8'),
+): string[] {
+  const found = new Set<string>();
+  const visit = (file: string): void => {
+    for (const [, name] of readSource(file).matchAll(/os\.path\.join\(.*,\s*"(\w+\.py)"\)/g)) {
+      const helper = join(dirname(file), name ?? '');
+      if (!found.has(helper)) {
+        found.add(helper);
+        visit(helper);
+      }
+    }
+  };
+  visit(entry);
+  return [...found].sort();
+}
 
 /** Red means stale inputs: rerun `pnpm glb:params`, the Blender script, `pnpm glb:optimise`, `pnpm glb:manifest`. */
 describe.each(RUNS)('blender params: $key', (run) => {
@@ -51,8 +70,33 @@ describe.each(ASSETS)('glb build: $key', (asset) => {
     });
   });
 
+  it('records the hash of every helper file its script loads', () => {
+    expect(loadedHelpers(asset.script)).toEqual(Object.values(asset.helpers).sort());
+  });
+
   it('fits the Workbox precache limit', () => {
     expect(manifest.glbBytes).toBeLessThanOrEqual(MAX_PRECACHE_FILE_BYTES);
+  });
+});
+
+describe('helper load scan', () => {
+  it('follows nested loads, whatever the directory expression', () => {
+    const sources: Record<string, string> = {
+      'd/entry.py':
+        'HERE = os.path.dirname(__file__)\nA = runpy.run_path(os.path.join(HERE, "a.py"))',
+      'd/a.py': 'B = runpy.run_path(os.path.join(os.path.dirname(__file__), "b.py"))',
+      'd/b.py': 'import os',
+    };
+    expect(loadedHelpers('d/entry.py', (file) => sources[file] ?? '')).toEqual([
+      'd/a.py',
+      'd/b.py',
+    ]);
+  });
+
+  it('finds the kernel from lamp_common.py, which loads it without a directory variable', () => {
+    expect(loadedHelpers('tools/blender/lamp_common.py')).toEqual([
+      'tools/blender/blender_common.py',
+    ]);
   });
 });
 

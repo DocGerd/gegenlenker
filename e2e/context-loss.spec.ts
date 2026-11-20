@@ -1,17 +1,41 @@
 import { createHash } from 'node:crypto';
-import { expect, test, type Page } from '@playwright/test';
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
-import { bareScreenshot, distinctColours, settle, shoot, startPinnedDrive } from './pinned-shoot';
+import { expectNoFailedAttachment, watchFailedAttachments } from './attachment-markers';
+import {
+  bareScreenshot,
+  distinctColours,
+  MIN_DRAWN_COLOURS,
+  settle,
+  shoot,
+  startPinnedDrive,
+} from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const LOST = 'Graphics context lost; starting afresh';
 
-/** Console warnings, errors and page errors; headless Chromium denies the wake lock, which is not about graphics. */
+/**
+ * ANGLE's software GL warns that it split a render pass while High starts up; a performance hint of
+ * the driver CI runs on, not a fault of the app.
+ */
+const DRIVER_PERFORMANCE_HINT =
+  /GL Driver Message \(OpenGL, Performance, [^)]*\): Running out of reserved outsideRenderPass queueSerial/;
+
+/**
+ * Console warnings, errors and page errors; headless Chromium denies the wake lock, which is not
+ * about graphics.
+ */
 function collectProblems(page: Page): string[] {
   const problems: string[] = [];
   page.on('console', (m) => {
-    if ((m.type() === 'error' || m.type() === 'warning') && !m.text().includes('Wake Lock')) {
-      problems.push(m.text());
+    const text = m.text();
+    if (
+      (m.type() === 'error' || m.type() === 'warning') &&
+      !text.includes('Wake Lock') &&
+      !DRIVER_PERFORMANCE_HINT.test(text)
+    ) {
+      problems.push(text);
     }
   });
   page.on('pageerror', (e) => problems.push(e.message));
@@ -49,10 +73,13 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
     },
     [SETTINGS_KEY, JSON.stringify({ version: 1, graphics: 'high' })] as const,
   );
+  await watchFailedAttachments(page);
   await startDrive(page);
   const html = page.locator('html');
   await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
+  // a loss during a load would warn and spend a retry
+  await expect(html).toHaveAttribute('data-sky-hdri', 'on');
   await page.evaluate(() => {
     const seen: (string | null)[] = [];
     Object.assign(window, { pbrSeen: seen });
@@ -81,7 +108,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   if (pane === null) throw new Error('no top-down pane');
   await expect
     .poll(async () => distinctColours(page, await bareScreenshot(page, pane)))
-    .toBeGreaterThan(50);
+    .toBeGreaterThan(MIN_DRAWN_COLOURS);
 
   const speed = page.locator('[data-hud="speed"]');
   await page.keyboard.press('4');
@@ -94,15 +121,16 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await expect(page.locator('[data-hud="resetView"]')).toBeEnabled();
 
   expect(problems).toEqual([LOST]);
+  await expectNoFailedAttachment(page);
 });
 
 test('the cockpit looks the same after a loss as before it', async ({ page }) => {
-  test.setTimeout(90_000);
   const problems = collectProblems(page);
+  await watchFailedAttachments(page);
   await startPinnedDrive(page, 'high', en.exerciseStraightReverse);
   const hash = async (): Promise<string> => {
     const png = await shoot(page, 'cockpit');
-    expect(await distinctColours(page, png)).toBeGreaterThan(50);
+    expect(await distinctColours(page, png)).toBeGreaterThan(MIN_DRAWN_COLOURS);
     return createHash('sha256').update(png).digest('hex');
   };
   const before = await hash();
@@ -111,9 +139,11 @@ test('the cockpit looks the same after a loss as before it', async ({ page }) =>
   await settle(page, 'high');
   expect(await hash()).toBe(before);
   expect(problems).toEqual([LOST]);
+  await expectNoFailedAttachment(page);
 });
 
-test('losses in quick succession end at the reload notice', async ({ page }) => {
+test('losses in quick succession end at the reload notice', async ({ page, allow }) => {
+  allow(/Graphics could not start/);
   const problems = collectProblems(page);
   await startDrive(page);
   for (let i = 0; i < 3; i++) await loseAndReplace(page);

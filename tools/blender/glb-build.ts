@@ -1,23 +1,23 @@
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../../src/contracts/vehicle';
 import { bodyShellParams } from '../../src/render/body-dims';
 import { cabShellParams } from '../../src/render/cab-dims';
+import { bodyLampParams, cabLampParams, trailerLampParams } from '../../src/render/lamp-layout';
+import { TRUCK_LOOKS } from '../../src/render/livery';
 import { trailerShellParams } from '../../src/render/trailer-dims';
 import { trailerById, truckById } from '../../src/vehicles/registry';
 import { cockpitInteriorParams, yardKitParams } from './kit-params';
+import { canonicalJson, fileSha256, type Json, ROOT, sha256 } from '../assets/provenance';
 
-export const ROOT = join(import.meta.dirname, '../..');
+export { canonicalJson, type Json, ROOT, sha256 };
 
-export const COMMON_SCRIPT = 'tools/blender/shell_common.py';
+export const COMMON_SCRIPT = 'tools/blender/blender_common.py';
+export const LAMP_COMMON_SCRIPT = 'tools/blender/lamp_common.py';
 export const KIT_COMMON_SCRIPT = 'tools/blender/kit_common.py';
 export const OPTIMISE_SCRIPT = 'scripts/glb-optimise.mjs';
 
 export type AssetKind = 'cab' | 'body' | 'trailer' | 'kit';
-
-export type Json =
-  null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
 
 /** One run of a Blender script on one params file. */
 export type Run = {
@@ -31,7 +31,7 @@ export type Run = {
 };
 
 export type Asset = Run & {
-  /** `<vehicle id>-<kind>` for the vehicle shells; names the glb and its manifest. */
+  /** `<vehicle id>-<kind>` names the glb and its manifest; the kit is `yard-kit`. */
   readonly kind: AssetKind;
   readonly glb: string;
   readonly manifest: string;
@@ -43,10 +43,9 @@ const SCRIPTS: Readonly<Record<Exclude<AssetKind, 'kit'>, string>> = {
   trailer: 'tools/blender/trailer_shell.py',
 };
 
-const SHELL_HELPERS = { commonSha256: COMMON_SCRIPT };
-const KIT_HELPERS = { commonSha256: COMMON_SCRIPT, kitCommonSha256: KIT_COMMON_SCRIPT };
+const SHELL_HELPERS = { commonSha256: COMMON_SCRIPT, lampCommonSha256: LAMP_COMMON_SCRIPT };
 
-const shell = (
+const asset = (
   vehicleId: TruckId | TrailerId,
   kind: Exclude<AssetKind, 'kit'>,
   build: () => Json,
@@ -64,6 +63,8 @@ const shell = (
   };
 };
 
+const KIT_HELPERS = { commonSha256: COMMON_SCRIPT, kitCommonSha256: KIT_COMMON_SCRIPT };
+
 const kitRun = (key: string, build: () => Json): Run => ({
   key,
   script: `tools/blender/${key.replaceAll('-', '_')}.py`,
@@ -77,10 +78,21 @@ export const COCKPIT_INTERIOR_RUN = kitRun('cockpit-interior', cockpitInteriorPa
 
 export const ASSETS: readonly Asset[] = [
   ...TRUCK_IDS.flatMap((id) => [
-    shell(id, 'cab', () => cabShellParams(truckById(id))),
-    shell(id, 'body', () => bodyShellParams(truckById(id))),
+    asset(id, 'cab', () => ({
+      ...cabShellParams(truckById(id)),
+      ...cabLampParams(truckById(id), TRUCK_LOOKS[id].cab.length),
+    })),
+    asset(id, 'body', () => ({
+      ...bodyShellParams(truckById(id)),
+      ...bodyLampParams(truckById(id), TRUCK_LOOKS[id].cab.length),
+    })),
   ]),
-  ...TRAILER_IDS.map((id) => shell(id, 'trailer', () => trailerShellParams(trailerById(id)))),
+  ...TRAILER_IDS.map((id) =>
+    asset(id, 'trailer', () => ({
+      ...trailerShellParams(trailerById(id)),
+      ...trailerLampParams(trailerById(id)),
+    })),
+  ),
   {
     ...YARD_KIT_RUN,
     kind: 'kit',
@@ -103,6 +115,7 @@ export function assetByKey(key: string): Asset {
 export type GlbManifest = {
   readonly scriptSha256: string;
   readonly commonSha256: string;
+  readonly lampCommonSha256?: string;
   readonly kitCommonSha256?: string;
   readonly paramsSha256: string;
   readonly blenderVersion: string;
@@ -111,26 +124,8 @@ export type GlbManifest = {
   readonly glbBytes: number;
 };
 
-export const sha256 = (data: string | Uint8Array): string =>
-  createHash('sha256').update(data).digest('hex');
-
-/** Line endings differ per checkout, so scripts are hashed LF-normalised. */
-const fileSha256 = (root: string, file: string): string =>
-  sha256(readFileSync(join(root, file), 'utf8').replaceAll('\r\n', '\n'));
-
 export const scriptSha256 = (a: Run, root = ROOT): string => fileSha256(root, a.script);
-export const commonSha256 = (root = ROOT): string => fileSha256(root, COMMON_SCRIPT);
 export const optimiseSha256 = (root = ROOT): string => fileSha256(root, OPTIMISE_SCRIPT);
-
-/** Sorted keys, no whitespace: formatting and key order cannot change the hash. */
-export function canonicalJson(value: Json): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (typeof value === 'object' && value !== null) {
-    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
 
 export const paramsSha256 = (a: Run, root = ROOT): string =>
   sha256(canonicalJson(JSON.parse(readFileSync(join(root, a.params), 'utf8')) as Json));

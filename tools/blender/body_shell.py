@@ -4,16 +4,17 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
   PARAMS_PATH  path of tools/blender/params/<id>.body.json
   PARAMS_JSON  the same JSON as text; wins over PARAMS_PATH (for hosts that cannot read the path)
   OUT_PATH     where the raw .glb is written
-  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ...}; the run aborts on a mismatch
+  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ..., "lampCommonSha256": ...}; the run aborts on a mismatch
 
-One vertex-coloured mesh, "body", in the sim body frame (shell_common.py). Livery is colours only: no
+One vertex-coloured mesh, "body", in the sim body frame (blender_common.py). Livery is colours only: no
 lettering, emblems or maker logos. Kinds: "tipper" (three-way tipper body: low drop sides, a taller
 headboard, a tailgate hung from a top hinge bar, on a black subframe) and "tarp" (flatbed with drop
 sides under a tarpaulin).
 
 The shell stays inside the procedural body's footprint and out of the bands the procedural detail
-owns: the yellow side marking and amber markers at the floor height, and the tail lamps on the rear
-face. Both need a face of the shell to sit on.
+owns: the yellow side marking and amber markers at the floor height, and the lamps on the rear face.
+The marking and the detail's lamps (`mounts`, src/render/lamp-layout.ts) need a face of the shell to
+sit on.
 
 Tested Blender version: 5.3.0 (bpy.app.version_string is printed and recorded in the manifest).
 """
@@ -21,8 +22,11 @@ Tested Blender version: 5.3.0 (bpy.app.version_string is printed and recorded in
 import os
 import runpy
 
-COMMON_FILE = os.path.join(os.path.dirname(__file__), "shell_common.py")
+HERE = os.path.dirname(__file__)
+COMMON_FILE = os.path.join(HERE, "blender_common.py")
+LAMP_FILE = os.path.join(HERE, "lamp_common.py")
 COMMON = runpy.run_path(COMMON_FILE)
+LAMP = runpy.run_path(LAMP_FILE)
 Shape = COMMON["Shape"]
 srgb = COMMON["srgb_to_linear"]
 
@@ -218,7 +222,7 @@ def covered(intervals, lo, hi):
 
 def check_bands(p, shape):
     """Nothing may share a face with what the procedural detail draws, nor leave the body; the
-    side marking and the tail lamps each keep a face to sit on."""
+    side marking and the detail's lamps each keep a face to sit on."""
     hw = p["width"] / 2
     mark = p["marking"]
     lo, hi = mark["zLow"], mark["zHigh"]
@@ -235,21 +239,16 @@ def check_bands(p, shape):
         spans = [x for x, (y0, y1), (z0, z1) in faces if abs(y0 - side * hw) < EPS and abs(y1 - side * hw) < EPS and z0 <= lo + EPS and z1 >= hi - EPS]
         if not covered(spans, rear + mark["endMargin"], front - mark["endMargin"]):
             raise ValueError("the side marking has no face to sit on")
-    lamp = p["tailLamp"]
-    z_low = p["frameTop"] + lamp["sill"]
-    z_high = z_low + lamp["height"]
-    for side in (-1, 1):
-        want = mirror(side, hw - lamp["inset"] - lamp["width"], hw - lamp["inset"])
-        heights = [z for (x0, x1), (y0, y1), z in faces if abs(x0 - rear) < EPS and abs(x1 - rear) < EPS and y0 <= want[0] + EPS and y1 >= want[1] - EPS]
-        if not covered(heights, z_low, z_high):
-            raise ValueError("a tail lamp has no surface to sit on")
+    LAMP["check_seated"](shape, p["mounts"])
 
 
 def main():
     params = COMMON["load_params"](globals())
     if params["kind"] not in ("tipper", "tarp"):
         raise ValueError("unknown body kind " + repr(params["kind"]))
-    hashes = COMMON["provenance"](__file__, COMMON_FILE, params)
+    hashes = COMMON["provenance"](
+        __file__, {"commonSha256": COMMON_FILE, "lampCommonSha256": LAMP_FILE}, params
+    )
     COMMON["check_expected"](hashes, globals().get("EXPECTED_SHA256"))
     hues = {key: srgb(value) for key, value in sorted(params["hues"].items())}
 

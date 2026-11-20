@@ -1,36 +1,68 @@
 import { describe, expect, it } from 'vitest';
-import { exerciseById, layouts } from '../content/registry';
-import { resolveLayout } from '../content/resolve-layout';
+import { resolveRun } from '../content/run';
 import type { Obstacle } from '../contracts/layout';
-import { trailerById, truckById } from '../vehicles/registry';
-import { resolveCombination } from '../vehicles/resolve';
+import { SCORING_THRESHOLDS } from '../scoring/score';
 import { dataFingerprint, type RunData } from './fingerprint';
 
-const exercise = exerciseById('reverse-bay');
+const ids = {
+  layoutId: 'logistics',
+  exerciseId: 'reverse-bay',
+  truckId: 'man-le-18-280',
+  trailerId: 'krone-azw-18',
+} as const;
+const run = resolveRun(ids);
+const { exercise } = run;
+if (exercise === null) throw new Error('exercise expected');
 const data: RunData = {
-  params: resolveCombination(truckById('man-le-18-280'), trailerById('krone-azw-18')),
-  obstacles: resolveLayout(layouts[exercise.layout], exercise).obstacles,
-  start: exercise.start,
+  params: run.params,
+  obstacles: run.layout.obstacles,
+  start: run.start,
   exercise,
-  scoring: { waypointRadius: 3, stoppedSpeed: 0.05 },
+  scoring: SCORING_THRESHOLDS,
 };
-const base = dataFingerprint(data);
+const base = run.fingerprint;
 
 const editFirst = (edit: (o: Obstacle) => Obstacle): readonly Obstacle[] =>
   data.obstacles.map((o, i) => (i === 0 ? edit(o) : o));
 
 describe('data fingerprint', () => {
-  it('is stable for the same data', () => {
-    const params = resolveCombination(truckById('man-le-18-280'), trailerById('krone-azw-18'));
-    expect(dataFingerprint({ ...data, params })).toBe(base);
+  it('is what resolveRun reports, and stable for the same ids', () => {
+    expect(dataFingerprint(data)).toBe(base);
+    expect(resolveRun({ ...ids }).fingerprint).toBe(base);
+  });
+
+  // Changes only with the data or SIM_REVISION; an accidental key reorder in the hashed constants would show here.
+  it('is pinned for one combination', () => {
+    expect(base).toBe('7571e692');
+  });
+
+  it('differs per vehicle pair, exercise and layout', () => {
+    const others = [
+      { ...ids, trailerId: 'hueffermann-hpa-24-81-l' },
+      { ...ids, truckId: 'arocs-1835-ak' },
+      { ...ids, exerciseId: null },
+      { ...ids, layoutId: 'depot', exerciseId: null },
+    ] as const;
+    for (const other of others) expect(resolveRun(other).fingerprint).not.toBe(base);
   });
 
   it('ignores visual-only content', () => {
     const stop = { kind: 'stop', from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, width: 0.3 } as const;
     const markings = [...exercise.markings, { ...stop, dashed: false }];
     expect(dataFingerprint({ ...data, exercise: { ...exercise, markings } })).toBe(base);
-    const taller = editFirst((o) => ({ ...o, height: o.height + 1, kind: 'wall' }));
+    const taller = editFirst((o) => ({
+      ...o,
+      id: 'renamed-1',
+      height: o.height + 1,
+      kind: 'wall',
+    }));
     expect(dataFingerprint({ ...data, obstacles: taller })).toBe(base);
+  });
+
+  it('depends on obstacle order, which decides the first contact', () => {
+    const [first, second, ...rest] = data.obstacles;
+    if (!first || !second) throw new Error('two obstacles expected');
+    expect(dataFingerprint({ ...data, obstacles: [second, first, ...rest] })).not.toBe(base);
   });
 
   it('changes with what moves the run or its score', () => {
@@ -41,7 +73,7 @@ describe('data fingerprint', () => {
       { ...data, obstacles: moved },
       { ...data, exercise: { ...exercise, tolerances } },
       { ...data, start: { ...data.start, x: data.start.x + 0.001 } },
-      { ...data, scoring: { ...data.scoring, waypointRadius: 4 } },
+      { ...data, scoring: { ...data.scoring, WAYPOINT_RADIUS: 4 } },
     ];
     for (const variant of variants) expect(dataFingerprint(variant)).not.toBe(base);
   });

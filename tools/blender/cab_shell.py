@@ -4,10 +4,11 @@ Run inside Blender with runpy.run_path(<this file>, init_globals={...}):
   PARAMS_PATH  path of tools/blender/params/<id>.cab.json
   PARAMS_JSON  the same JSON as text; wins over PARAMS_PATH (for hosts that cannot read the path)
   OUT_PATH     where the raw .glb is written
-  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ...}; the run aborts on a mismatch
+  EXPECTED_SHA256  optional {"scriptSha256": ..., "commonSha256": ..., "lampCommonSha256": ...}; the run aborts on a mismatch
 
-One vertex-coloured mesh, "cab", in the sim body frame (shell_common.py). Livery is colours only: no
-lettering, emblems or maker logos. Styles: "day" (short day cab) and "crew" (double cab with a second
+Two vertex-coloured meshes in the sim body frame (blender_common.py): "cab", and "cab-lens" with the
+lamp lenses of `lenses` (src/render/lamp-layout.ts). Livery is colours only: no lettering, emblems or
+maker logos. Styles: "day" (short day cab) and "crew" (double cab with a second
 side window row, a roof rack and a front tow coupling).
 
 Tested Blender version: 5.3.0 (bpy.app.version_string is printed and recorded in the manifest).
@@ -16,8 +17,11 @@ Tested Blender version: 5.3.0 (bpy.app.version_string is printed and recorded in
 import os
 import runpy
 
-COMMON_FILE = os.path.join(os.path.dirname(__file__), "shell_common.py")
+HERE = os.path.dirname(__file__)
+COMMON_FILE = os.path.join(HERE, "blender_common.py")
+LAMP_FILE = os.path.join(HERE, "lamp_common.py")
 COMMON = runpy.run_path(COMMON_FILE)
+LAMP = runpy.run_path(LAMP_FILE)
 Shape = COMMON["Shape"]
 srgb = COMMON["srgb_to_linear"]
 
@@ -76,7 +80,6 @@ def front_fittings(p, shape, hues):
         return (z, z + height)
 
     glass_z = above(c["glassSill"], c["glassHeight"])
-    lamp_z = above(c["lampSill"], c["lampHeight"])
     ws = hw - c["windscreenInset"]
     shape.box(ahead, (-ws, ws), glass_z, hues["glass"])
     shape.box(
@@ -85,15 +88,11 @@ def front_fittings(p, shape, hues):
         above(c["grilleSill"], c["grilleHeight"]),
         hues["grille"],
     )
-    outer = hw - c["headlampInset"]
-    inner = outer - c["headlampWidth"]
     side_x = (
         front - c["sideGlassSetback"] - c["sideGlassLength"],
         front - c["sideGlassSetback"],
     )
     for side in (-1, 1):
-        lateral = (inner, outer) if side > 0 else (-outer, -inner)
-        shape.box(ahead, lateral, lamp_z, hues["lamp"])
         edge = (hw, hw + relief) if side > 0 else (-hw - relief, -hw)
         shape.box(side_x, edge, glass_z, hues["glass"])
         if p["style"] == "crew":
@@ -190,13 +189,25 @@ def check_envelope(p, shape):
             raise ValueError("a face stands ahead of the bumper face above the plate's rail line")
 
 
+def check_lenses(p, shape, lens):
+    """Each lens sits on a face of the cab and stays behind the plate's face."""
+    LAMP["check_seated"](shape, p["lenses"])
+    for (x0, x1), _, _ in lens.extents():
+        if x1 > p["frontX"] + p["plateRelief"] - EPS:
+            raise ValueError("a lamp lens reaches the plate's face")
+        if x0 < p["frontX"] - p["cabLength"] - EPS:
+            raise ValueError("a lamp lens reaches behind the cab")
+
+
 def main():
     params = COMMON["load_params"](globals())
     if params["relief"] >= params["plateRelief"]:
         raise ValueError("the bumper face must stay behind the plate")
     if params["style"] not in ("day", "crew"):
         raise ValueError("unknown cab style " + repr(params["style"]))
-    hashes = COMMON["provenance"](__file__, COMMON_FILE, params)
+    hashes = COMMON["provenance"](
+        __file__, {"commonSha256": COMMON_FILE, "lampCommonSha256": LAMP_FILE}, params
+    )
     COMMON["check_expected"](hashes, globals().get("EXPECTED_SHA256"))
     hues = {key: srgb(value) for key, value in sorted(params["hues"].items())}
 
@@ -208,7 +219,9 @@ def main():
     if params["style"] == "crew":
         tow_coupling(params, shape, hues)
     check_envelope(params, shape)
-    return COMMON["export"](OUT_PATH, "cab-shell", hashes, [("cab", shape)])
+    lens = LAMP["lens_shape"](params["lenses"])
+    check_lenses(params, shape, lens)
+    return COMMON["export"](OUT_PATH, "cab-shell", hashes, [("cab", shape), ("cab-lens", lens)])
 
 
 RESULT = main()

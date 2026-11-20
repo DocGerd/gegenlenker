@@ -27,7 +27,7 @@ import {
   CHASE_LAYERS,
   COCKPIT_LAYERS,
   enableLayers,
-  SKY_LAYER,
+  PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
 } from './seams';
 import { proceduralTruck } from './vehicle-visual';
@@ -154,7 +154,7 @@ describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
 
   it.each(['cab', 'body'] as const)('rejects the %s shell under the other name', async (kind) => {
     const other = kind === 'cab' ? 'body' : 'cab';
-    await expect(parseShell(glb(`${id}-${kind}`), other)).rejects.toThrow(`expected "${other}"`);
+    await expect(parseShell(glb(`${id}-${kind}`), other)).rejects.toThrow(`expected [${other}]`);
   });
 });
 
@@ -267,7 +267,7 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     applyAll(d);
 
     const added = meshesOf(group).filter((m) => !before.some(([b]) => b === m));
-    const shell = added.find((m) => m.layers.mask === 1 << SKY_LAYER);
+    const shell = added.find((m) => m.layers.mask === 1 << PERSPECTIVE_LAYER);
     expect(shell).toBeDefined();
     const layers = shell?.layers ?? new Layers();
     expect(sees.cockpit.test(layers)).toBe(true);
@@ -286,9 +286,9 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     applyAll(d);
     const removed = before.filter((m) => !group.children.includes(m));
     const added = group.children.filter((m) => !before.includes(m));
-    // cab shell replaces the cab front; the body shell adds one mesh, plus the detail swap when linked
+    // cab shell and its lenses replace the cab front; the body shell adds one mesh, plus the detail swap when linked
     expect(removed).toHaveLength(linked ? 2 : 1);
-    expect(added).toHaveLength(linked ? 3 : 2);
+    expect(added).toHaveLength(linked ? 4 : 3);
   });
 
   it('draws no more meshes with the shells than without, apart from the shells themselves', async () => {
@@ -296,8 +296,8 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const group = proceduralTruck(spec, palette, d.shells).object;
     const before = group.children.length;
     applyAll(d);
-    // cab shell replaces the cab front, the body shell is added
-    expect(group.children.length).toBe(before + 1);
+    // cab shell replaces the cab front; its lenses and the body shell are added
+    expect(group.children.length).toBe(before + 2);
   });
 
   it('restores the procedural meshes, layers and order when switched off, and reproduces the swap when switched on again', async () => {

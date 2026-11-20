@@ -1,4 +1,4 @@
-"""Helpers shared by the Gegenlenker glb shell scripts (cab_shell.py, body_shell.py, trailer_shell.py; issue #133).
+"""Kernel shared by the Gegenlenker Blender scripts (cab_shell.py, body_shell.py, trailer_shell.py and the kit scripts; issues #133, #198).
 
 Loaded by the entry scripts with runpy.run_path, never imported: the host's MCP session caches modules.
 Authored in the sim body frame: metres, +X forward, +Y left, +Z up. The glTF exporter's default Y-up
@@ -15,7 +15,7 @@ import os
 
 import bpy
 
-KNOWN_SCENES = ("cab-shell", "body-shell", "trailer-shell")
+KNOWN_SCENES = ("cab-shell", "body-shell", "trailer-shell", "yard-kit", "cockpit-interior")
 DECIMALS = 6
 
 GLTF_OPTIONS = {
@@ -237,19 +237,18 @@ def file_sha256(path):
         return hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()
 
 
-def provenance(entry_file, common_file, params):
-    """Hashes of both scripts and the params, as glb-build.ts computes them.
+def provenance(entry_file, helpers, params):
+    """Hashes of the entry script, its helper files ({key: path}) and the params, as glb-build.ts computes them.
 
     The params hash relies on json.dumps and JSON.stringify printing the same numbers: the params
     file is written by JavaScript, so whole numbers load as ints, and glb-build.test.ts keeps every
     number out of the range below 1e-4.
     """
     canonical = json.dumps(params, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return {
-        "commonSha256": file_sha256(common_file),
-        "paramsSha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
-        "scriptSha256": file_sha256(entry_file),
-    }
+    hashes = {key: file_sha256(path) for key, path in helpers.items()}
+    hashes["paramsSha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    hashes["scriptSha256"] = file_sha256(entry_file)
+    return dict(sorted(hashes.items()))
 
 
 def check_expected(hashes, expected):

@@ -8,10 +8,10 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshLambertMaterial,
-  MeshStandardMaterial,
   type Object3D,
   type Texture,
 } from 'three';
+import { MeshLambertNodeMaterial } from 'three/webgpu';
 import type { ScenePalette } from '../contracts/render';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
@@ -35,10 +35,14 @@ import {
   type TrailerShell,
   type TruckShells,
 } from './glb-shells';
+import { setGraded } from './grade';
+import { trailerLamps, truckLamps } from './lamp-layout';
+import { createDetailMaterial, createLampEmission, slotShell } from './lamp-lens';
+import { lampState } from './lamp-state';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
-import { CAB_LAYER, SKY_LAYER, type VehicleVisual } from './seams';
+import { CAB_LAYER, PERSPECTIVE_LAYER, type VehicleVisual } from './seams';
 import {
   ARM_HEIGHT,
   ARM_WIDTH,
@@ -68,7 +72,12 @@ import {
   type PlateSpot,
 } from './vehicle-detail';
 import { box, merge, WHEEL_SEGMENTS, wheelGeometry } from './vehicle-geometry';
-import { createVehicleMaterial, replaceMaterial, type VehicleEnvironment } from './vehicle-pbr';
+import {
+  createVehicleMaterial,
+  replaceMaterial,
+  type VehicleEnvironment,
+  type VehicleNodeMaterial,
+} from './vehicle-pbr';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
 export const SHADOW_NAME = 'blob-shadow';
@@ -128,8 +137,12 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const materials: Material[] = [];
   const textures: Texture[] = [];
   const detailMeshes: Mesh[] = [];
-  let detailMaterial: MeshLambertMaterial | null = null;
-  let pbrMaterial: MeshStandardMaterial | null = null;
+  const lamps = createLampEmission();
+  let detailMaterial: MeshLambertNodeMaterial | null = null;
+  const plateMaterials: MeshLambertNodeMaterial[] = [];
+  let gradeOn = false;
+  let pbrMaterial: VehicleNodeMaterial | null = null;
+  let pbrRoot: Object3D | null = null;
   const pbrToken = {};
   let pbrWanted = false;
   let pbrOn = false;
@@ -137,6 +150,36 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
     return material;
+  };
+  // the map is checked asynchronously: wear it once it is ready, and drop it when it goes
+  const stopWatching = env?.onChange(() => {
+    if (pbrRoot !== null) setPbr(pbrRoot);
+  });
+  /**
+   * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
+   * has taken out of it; without `on` it repeats the last request, for shells that attach later.
+   */
+  const setPbr = (root: Object3D, on = pbrWanted): void => {
+    pbrRoot = root;
+    pbrWanted = on;
+    const map = on ? (env?.texture(palette) ?? null) : null;
+    if (map !== null) {
+      if (pbrMaterial === null) {
+        pbrMaterial = track(createVehicleMaterial(map, lamps));
+        setGraded(pbrMaterial, gradeOn);
+      }
+      pbrMaterial.envMap = map;
+    } else if (pbrMaterial !== null) {
+      pbrMaterial.envMap = null;
+    }
+    pbrOn = map !== null;
+    env?.reportApplied(pbrToken, pbrOn);
+    if (detailMaterial === null || pbrMaterial === null) return;
+    replaceMaterial(
+      [root, ...detailMeshes],
+      [detailMaterial, pbrMaterial],
+      pbrOn ? pbrMaterial : detailMaterial,
+    );
   };
   return {
     material(color: number): MeshLambertMaterial {
@@ -149,37 +192,28 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     /** Perspective-only detail: vertex colours in one shared material, off the top-down camera. */
     detail(geometry: BufferGeometry): Mesh {
       const mesh = this.mesh(geometry, this.detailMaterial());
-      mesh.layers.set(SKY_LAYER);
+      mesh.layers.set(PERSPECTIVE_LAYER);
       detailMeshes.push(mesh);
       return mesh;
     },
     /** The material of every `detail` mesh; shells use it too, so a swap adds no state change. */
     detailMaterial(): Material {
-      detailMaterial ??= track(new MeshLambertMaterial({ vertexColors: true }));
+      if (detailMaterial === null) {
+        detailMaterial = track(createDetailMaterial(lamps));
+        setGraded(detailMaterial, gradeOn);
+      }
       return pbrOn && pbrMaterial !== null ? pbrMaterial : detailMaterial;
     },
-    /**
-     * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
-     * has taken out of it; without `on` it repeats the last request, for shells that attach later.
-     */
-    setPbr(root: Object3D, on = pbrWanted): void {
-      pbrWanted = on;
-      const map = on ? (env?.texture(palette) ?? null) : null;
-      if (map !== null) {
-        pbrMaterial ??= track(createVehicleMaterial(map));
-        pbrMaterial.envMap = map;
-      } else if (pbrMaterial !== null) {
-        pbrMaterial.envMap = null;
-      }
-      pbrOn = map !== null;
-      env?.reportApplied(pbrToken, pbrOn);
-      if (detailMaterial === null || pbrMaterial === null) return;
-      replaceMaterial(
-        [root, ...detailMeshes],
-        [detailMaterial, pbrMaterial],
-        pbrOn ? pbrMaterial : detailMaterial,
-      );
+    setPbr,
+    /** The perspective grade (`grade.ts`) on the perspective-only detail, plate and reflective materials. */
+    setGrade(on: boolean): void {
+      gradeOn = on;
+      for (const material of plateMaterials) setGraded(material, on);
+      if (detailMaterial !== null) setGraded(detailMaterial, on);
+      if (pbrMaterial !== null) setGraded(pbrMaterial, on);
     },
+    /** The lamp lenses of the detail and the shells, switched per snapshot. */
+    lamps,
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
       const mesh = this.detail(geometry);
@@ -202,22 +236,25 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       );
       const mesh = this.mesh(geometry, shadowMaterial);
       mesh.name = SHADOW_NAME;
-      mesh.layers.set(SKY_LAYER);
+      mesh.layers.set(PERSPECTIVE_LAYER);
       return mesh;
     },
     plate(spot: PlateSpot): Mesh {
       const texture = plateTexture();
       if (texture !== null) textures.push(texture);
       const material = track(
-        new MeshLambertMaterial(
+        new MeshLambertNodeMaterial(
           texture === null ? { color: REALISM_HUES.plateWhite } : { map: texture },
         ),
       );
+      plateMaterials.push(material);
+      setGraded(material, gradeOn);
       const mesh = this.mesh(plateGeometry(spot), material);
-      mesh.layers.set(SKY_LAYER);
+      mesh.layers.set(PERSPECTIVE_LAYER);
       return mesh;
     },
     dispose(): void {
+      stopWatching?.();
       env?.reportApplied(pbrToken, false);
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
@@ -378,6 +415,10 @@ export function proceduralTruck(
   const bodyOn = (): boolean => (linked ? cabGlb && vehicleGlb : vehicleGlb);
 
   const attachCab = (shell: Shell): void => {
+    slotShell(
+      shell,
+      truckLamps(spec, look.cab.length).lamps.filter((l) => l.part === 'cab'),
+    );
     cabShell = applyShell(
       group,
       shell,
@@ -391,6 +432,7 @@ export function proceduralTruck(
     res.setPbr(group);
   };
   const attachBody = (shell: Shell): void => {
+    slotShell(shell, []);
     // the marking is part of the detail mesh, so the shortened one replaces the whole mesh
     const shortened = linked
       ? res.detail(
@@ -405,7 +447,7 @@ export function proceduralTruck(
         toAids: [bodyBox],
         remove: shortened === null ? [] : [detailMesh],
         add: shortened === null ? [] : [shortened],
-        layer: SKY_LAYER,
+        layer: PERSPECTIVE_LAYER,
       },
       {
         material: res.detailMaterial(),
@@ -443,12 +485,14 @@ export function proceduralTruck(
       placePose(group, snapshot.truck);
       pivotRight.rotation.y = snapshot.roadWheelAngle;
       pivotLeft.rotation.y = snapshot.roadWheelAngle;
+      res.lamps.update(lampState(snapshot));
     },
     setQuality(flags) {
       cabGlb = flags.cabGlb;
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
+      res.setGrade(flags.perspectiveLighting);
       res.setPbr(group, flags.pbr);
     },
     dispose() {
@@ -566,7 +610,13 @@ export function proceduralTrailer(
     frontX: a.frontX,
   });
 
-  const dollyRims = dollyDetail(radius, TRAILER_WHEEL_WIDTH, a.frontAxle.x, track);
+  const dollyRims = dollyDetail(
+    radius,
+    TRAILER_WHEEL_WIDTH,
+    a.frontAxle.x,
+    track,
+    trailerLamps(spec, 'procedural'),
+  );
   const trailerRig = trailerDetail({
     spec,
     halfWidth: hw,
@@ -654,6 +704,12 @@ export function proceduralTrailer(
     shells?.attached(key, on);
   };
   const attach = (shell: TrailerShell): void => {
+    const shellLamps = trailerLamps(spec, 'shell').lamps;
+    slotShell(
+      shell.trailer,
+      shellLamps.filter((l) => l.shell && l.part === 'trailer'),
+    );
+    slotShell(shell.dolly, []);
     const material = res.detailMaterial();
     // a bare chassis drops the swap body's marking; a low-loader's detail follows its deck
     const bare = trailerRig.shellGeometry === null ? null : res.detail(trailerRig.shellGeometry);
@@ -665,14 +721,14 @@ export function proceduralTrailer(
         toAids: [bodyMesh, frameMesh],
         remove: bare === null ? [] : [detailMesh],
         add: bare === null ? [] : [bare],
-        layer: SKY_LAYER,
+        layer: PERSPECTIVE_LAYER,
       },
       { material, enabled: false },
     );
     const onDolly = applyShell(
       dolly,
       shell.dolly,
-      { toAids: [dollyChassisMesh], remove: [], layer: SKY_LAYER },
+      { toAids: [dollyChassisMesh], remove: [], layer: PERSPECTIVE_LAYER },
       { material, enabled: false },
     );
     applied = { trailer: onBody, dolly: onDolly };
@@ -686,10 +742,12 @@ export function proceduralTrailer(
     update(snapshot) {
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
+      res.lamps.update(lampState(snapshot));
     },
     setQuality(flags) {
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
+      res.setGrade(flags.perspectiveLighting);
       res.setPbr(group, flags.pbr);
     },
     dispose() {
