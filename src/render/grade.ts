@@ -1,7 +1,9 @@
 import {
   BoxGeometry,
   Color,
+  DirectionalLight,
   Float32BufferAttribute,
+  type Light,
   Mesh,
   PerspectiveCamera,
   Scene,
@@ -184,8 +186,12 @@ export function buildSerially<T>(gpu: WebGPURenderer, build: () => Promise<T>): 
   return turn;
 }
 
-/** A mesh the grade check compiles, and what releases it. */
-export type GradeSample = { readonly mesh: Mesh; dispose(): void };
+/** A mesh the grade check compiles, the lights it is lit by, and what releases it. */
+export type GradeSample = {
+  readonly mesh: Mesh;
+  readonly lights?: readonly Light[];
+  dispose(): void;
+};
 
 function lambertSample(): GradeSample {
   const geometry = new BoxGeometry();
@@ -201,8 +207,24 @@ function lambertSample(): GradeSample {
   };
 }
 
+/** The graded Lambert material on a shadow receiver under a casting sun: the program the lit views build on High. */
+export function shadowReceiverSample(): GradeSample {
+  const sample = lambertSample();
+  sample.mesh.receiveShadow = true;
+  const sun = new DirectionalLight();
+  sun.castShadow = true;
+  return {
+    mesh: sample.mesh,
+    lights: [sun],
+    dispose: () => {
+      sun.shadow.dispose();
+      sample.dispose();
+    },
+  };
+}
+
 /**
- * Builds a graded Lambert material and every `extra` sample on `gpu`; rejects unless each shader
+ * Builds a graded Lambert material, a shadow receiver and every `extra` sample on `gpu`; rejects unless each shader
  * carries the grade marker. three swaps a material whose node graph throws for a plain one and
  * only logs it, and the WebGL 2 backend reports GLSL errors through a hook only.
  */
@@ -236,11 +258,11 @@ async function buildGrade(
   };
   debug.onShaderError = watcher;
   try {
-    for (const make of [lambertSample, ...extra]) {
+    for (const make of [lambertSample, shadowReceiverSample, ...extra]) {
       const sample = make();
       samples.push(sample);
       const scene = new Scene();
-      scene.add(sample.mesh);
+      scene.add(sample.mesh, ...(sample.lights ?? []));
       const { fragmentShader } = await debug.getShaderAsync(
         scene,
         new PerspectiveCamera(),

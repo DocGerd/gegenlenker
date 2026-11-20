@@ -371,6 +371,30 @@ describe('environment quality wiring', () => {
     env.dispose();
   });
 
+  it('lets the props cast and every lit ground and marking copy receive, never the sky or the skyline', () => {
+    expect(layout).toBeDefined();
+    if (layout === undefined) return;
+    const env = proceduralEnvironment(layout, palette);
+    env.setQuality(QUALITY_FLAGS.high);
+    const all: Mesh[] = [];
+    env.object.traverse((o) => {
+      if (isMesh(o)) all.push(o);
+    });
+    const casters = all.filter((m) => m.castShadow);
+    expect(casters.length).toBeGreaterThan(0);
+    for (const m of casters) {
+      expect((m.material as { vertexColors?: boolean }).vertexColors, 'casts only solids').toBe(
+        true,
+      );
+      expect(isMarking(m), 'no marking casts').toBe(false);
+      expect(m.receiveShadow).toBe(true);
+    }
+    const markings = all.filter(isMarking);
+    expect(markings.length).toBeGreaterThan(0);
+    for (const m of markings.filter(isNodeMaterial)) expect(m.receiveShadow).toBe(true);
+    env.dispose();
+  });
+
   it('follows the flags through high, balanced, low and high again', () => {
     expect(layout).toBeDefined();
     if (layout === undefined) return;
@@ -416,6 +440,7 @@ describe('environment quality wiring', () => {
     ] as const) {
       env.setQuality(flags);
       expectGraded(flags.perspectiveLighting, label);
+      expect(hdriSun?.castShadow, label).toBe(flags.sunShadow);
       expect(GRADE.fogDensity.value, label).toBe(flags.aerialPerspective ? FOG_DENSITY : 0);
       expect(hazeToward(), label).toBe(flags.hdriSky ? sunHaze : plainHaze);
     }
@@ -659,13 +684,14 @@ describe('environment PBR ground', () => {
     pbr: { ...QUALITY_FLAGS.high, litMarkings: false },
     detail: { ...QUALITY_FLAGS.high, litMarkings: false, groundPbr: false },
   };
-  const groundMaterial = (env: { object: Object3D }): unknown => {
+  const groundMesh = (env: { object: Object3D }): Mesh => {
     const meshes = env.object.children.filter(
       (o): o is Mesh => 'geometry' in o && (o as Mesh).geometry.hasAttribute('groundSelect'),
     );
     expect(meshes).toHaveLength(1);
-    return meshes[0]?.material;
+    return meshes[0] as Mesh;
   };
+  const groundMaterial = (env: { object: Object3D }): unknown => groundMesh(env).material;
 
   it('puts the PBR material on the perspective ground copy over the detail one, and takes it off below High', () => {
     if (layout === undefined) return;
@@ -685,6 +711,22 @@ describe('environment PBR ground', () => {
     expect(pbr.applied).toEqual([true, false, true]);
     // the detail set is still the one reported as drawn
     expect(detail.applied).toEqual([true]);
+    env.dispose();
+  });
+
+  it('lets the detail and the PBR ground copies receive shadows', () => {
+    if (layout === undefined) return;
+    const detail = fakeTextures();
+    const pbr = fakePbrTextures();
+    const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
+    env.setQuality(flags.pbr);
+    detail.deliver();
+    expect(groundMesh(env).material).toBeInstanceOf(MeshLambertNodeMaterial);
+    expect(groundMesh(env).receiveShadow).toBe(true);
+    pbr.deliver();
+    expect(groundMesh(env).material).toBeInstanceOf(MeshStandardNodeMaterial);
+    expect(groundMesh(env).receiveShadow).toBe(true);
+    expect(groundMesh(env).castShadow).toBe(false);
     env.dispose();
   });
 

@@ -9,6 +9,7 @@ import {
   precompileGrade,
   setGraded,
   setGradeDisabled,
+  shadowReceiverSample,
   toneMapRgb,
   type GradeSample,
   type GradeState,
@@ -162,6 +163,14 @@ describe('buildSerially', () => {
 });
 
 describe('precompileGrade', () => {
+  it('compiles a graded shadow receiver lit by a casting sun', () => {
+    const sample = shadowReceiverSample();
+    expect(sample.mesh.receiveShadow).toBe(true);
+    expect((sample.mesh.material as MeshLambertNodeMaterial).outputNode).not.toBeNull();
+    expect(sample.lights?.map((l) => l.castShadow)).toEqual([true]);
+    sample.dispose();
+  });
+
   const built = `vec3 ${GRADE_SHADER_MARKER};`;
 
   it('passes shaders that built with the marker, and restores the hook', async () => {
