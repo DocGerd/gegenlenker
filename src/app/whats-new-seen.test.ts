@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSeen, unseenAmong } from './whats-new-seen';
+import { parseSeen, seenOrSeed, unseenAmong } from './whats-new-seen';
 
 describe('parseSeen', () => {
   it('reads a list of ids', () => {
@@ -27,7 +27,12 @@ describe('unseenAmong', () => {
   });
 
   it('flags nothing on a first visit', () => {
-    expect(unseenAmong(ids, null)).toEqual([]);
+    expect(unseenAmong(ids, seenOrSeed(null, ids))).toEqual([]);
+  });
+
+  it('keeps a stored set as it is', () => {
+    const stored = new Set(['1.added']);
+    expect(seenOrSeed(stored, ids)).toBe(stored);
   });
 
   it('flags everything for an empty stored set', () => {

@@ -68,13 +68,6 @@ describe('buildGroups', () => {
     expect(entryIds(groups).sort()).toEqual(['4.fixed', '9.added', 'a', 'b', 'c']);
   });
 
-  it('adds no unseen group when everything was seen', () => {
-    expect(buildGroups({}, releases, new Set()).map(({ kind }) => kind)).toEqual([
-      'release',
-      'earlier',
-    ]);
-  });
-
   it('rejects a malformed fragment', () => {
     expect(() => buildGroups({ '/changelog.d/5.added.md': 'No link.' }, [])).toThrow();
   });

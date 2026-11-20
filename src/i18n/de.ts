@@ -144,7 +144,7 @@ export const de: Record<MessageKey, string> = {
   panView: 'Verschieben / drehen',
   whatsNew: 'Neuigkeiten',
   whatsNewBadge: 'Neu',
-  whatsNewSince: 'Seit deinem letzten Besuch',
+  whatsNewSince: 'Seit dem letzten Besuch',
   whatsNewLatest: 'Aktuell',
   whatsNewEarlier: 'Frühere Änderungen',
   changeAdded: 'Neu',

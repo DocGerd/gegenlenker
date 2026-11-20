@@ -5,19 +5,16 @@ import { en } from '../src/i18n/en';
 import { loadFragments, loadReleases } from '../tools/changelog';
 
 const dir = resolve(import.meta.dirname, '../changelog.d');
-const entryCount =
-  loadFragments(dir).length +
-  (loadReleases(dir) as { entries: unknown[] }[]).reduce((n, { entries }) => n + entries.length, 0);
-
 const SEEN_KEY = 'gegenlenker.whatsNewSeen.v1';
-const fragments = loadFragments(dir);
-const allIds = [
-  ...fragments.map(({ id }) => id),
-  ...(loadReleases(dir) as { entries: { id: string }[] }[]).flatMap(({ entries }) =>
-    entries.map(({ id }) => id),
+const allEntries = [
+  ...loadFragments(dir),
+  ...(loadReleases(dir) as { entries: { id: string; en: string }[] }[]).flatMap(
+    ({ entries }) => entries,
   ),
 ];
-const newest = fragments.reduce((a, b) => ((a.prs[0] ?? 0) > (b.prs[0] ?? 0) ? a : b));
+const entryCount = allEntries.length;
+const withheld = allEntries[0];
+if (withheld === undefined) throw new Error('the changelog has no entries');
 
 const locales = [
   { locale: 'en-US', messages: en },
@@ -104,7 +101,7 @@ for (const { locale, messages } of locales) {
           // Opaque frames have no storage.
         }
       },
-      [SEEN_KEY, allIds.filter((id) => id !== newest.id)] as const,
+      [SEEN_KEY, allEntries.filter(({ id }) => id !== withheld.id).map(({ id }) => id)] as const,
     );
     const page = await context.newPage();
     await page.goto('./');
@@ -119,7 +116,7 @@ for (const { locale, messages } of locales) {
       has: page.getByRole('heading', { level: 2, name: messages.whatsNewSince }),
     });
     await expect(since.getByRole('listitem')).toHaveCount(1);
-    await expect(since.getByRole('listitem')).toContainText(newest.en.replace(/`/g, ''));
+    await expect(since.getByRole('listitem')).toContainText(withheld.en.replace(/`/g, ''));
     await expect(page.getByRole('listitem')).toHaveCount(entryCount);
 
     await page.goBack();
@@ -142,6 +139,7 @@ for (const { locale, messages } of locales) {
       .not.toBeNull();
     await expect(open.getByText(messages.whatsNewBadge, { exact: true })).toBeHidden();
     await open.click();
+    await expect(page.getByRole('heading', { level: 1, name: messages.whatsNew })).toBeVisible();
     await expect(page.getByRole('heading', { name: messages.whatsNewSince })).toHaveCount(0);
     await context.close();
   });

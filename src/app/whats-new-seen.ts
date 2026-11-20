@@ -14,21 +14,29 @@ export const parseSeen = (raw: string | null): ReadonlySet<string> | null => {
 };
 
 /** Without a stored set every current entry counts as seen, so a fresh install shows no badge. */
-export const unseenAmong = (ids: readonly string[], seen: ReadonlySet<string> | null): string[] =>
-  seen === null ? [] : ids.filter((id) => !seen.has(id));
+export const seenOrSeed = (
+  stored: ReadonlySet<string> | null,
+  ids: readonly string[],
+): ReadonlySet<string> => stored ?? new Set(ids);
+
+export const unseenAmong = (ids: readonly string[], seen: ReadonlySet<string>): string[] =>
+  ids.filter((id) => !seen.has(id));
 
 // Held in memory as well, so nothing is flagged when storage is unavailable.
-let seen: ReadonlySet<string> | null | undefined;
+let seen: ReadonlySet<string> | undefined;
 
-const remember = (ids: Iterable<string>): void => {
+const remember = (ids: Iterable<string>): ReadonlySet<string> => {
   seen = new Set(ids);
   writeText(WHATS_NEW_SEEN_KEY, JSON.stringify([...seen]));
+  return seen;
 };
 
-const current = (ids: readonly string[]): ReadonlySet<string> | null => {
-  seen ??= parseSeen(readText(WHATS_NEW_SEEN_KEY));
-  if (seen === null) remember(ids);
-  return seen;
+const current = (ids: readonly string[]): ReadonlySet<string> => {
+  if (seen !== undefined) return seen;
+  const stored = parseSeen(readText(WHATS_NEW_SEEN_KEY));
+  if (stored === null) return remember(seenOrSeed(stored, ids));
+  seen = stored;
+  return stored;
 };
 
 const allIds = (): string[] => entryIds(whatsNewGroups());
@@ -42,5 +50,5 @@ export const hasUnseen = (): boolean => unseenIds().size > 0;
 
 export const markAllSeen = (): void => {
   const ids = allIds();
-  remember([...(current(ids) ?? []), ...ids]);
+  remember([...current(ids), ...ids]);
 };

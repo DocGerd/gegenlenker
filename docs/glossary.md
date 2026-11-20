@@ -28,4 +28,4 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Legend: reset both view and view size           | reset view / size     | Standardansicht                              |
 | Menu screen listing the app's changes           | what's new            | Neuigkeiten                                  |
 | Badge on what's new while entries are unseen    | new                   | Neu                                          |
-| Group of entries not seen on the last visit     | since your last visit | Seit deinem letzten Besuch                   |
+| Group of entries not seen on the last visit     | since your last visit | Seit dem letzten Besuch                      |
