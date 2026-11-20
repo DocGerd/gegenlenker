@@ -293,7 +293,7 @@ describe('environment lit aids', () => {
       [true, 0x00ff00],
       [false, 0xff0000],
     ] as const) {
-      env.update(frame(visited));
+      env.update(frame(visited), { x: 0, y: 0, radius: 10 });
       expect((copy.material as unknown as { color: Color }).color.getHex(), String(visited)).toBe(
         hex,
       );
@@ -345,6 +345,19 @@ describe('environment quality wiring', () => {
         const aidsOnly = l.layers.mask === only(AIDS_LAYER);
         const everywhere = perspective.every((c) => (c.mask & l.layers.mask) === l.layers.mask);
         expect(aidsOnly || everywhere).toBe(true);
+      }
+    }
+    env.dispose();
+  });
+
+  it('lets no light the top-down camera sees cast, at any flags', () => {
+    expect(layout).toBeDefined();
+    if (layout === undefined) return;
+    const env = proceduralEnvironment(layout, palette);
+    for (const flags of Object.values(QUALITY_FLAGS)) {
+      env.setQuality(flags);
+      for (const l of lightsOf(env.object)) {
+        if (cameras.topDown.test(l.layers)) expect(l.castShadow).toBe(false);
       }
     }
     env.dispose();

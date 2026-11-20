@@ -39,6 +39,7 @@ test('every view stays within the draw-call budget at every preset', async ({ co
       expect(drawnBackend(reading.gl), `${preset} ${view} backend`).toBe('webgl2');
       const { calls } = reading;
       expect(calls, `${preset} ${view} drew nothing`).toBeGreaterThan(0);
+      expect(reading.shadow, `${preset} ${view} shadow passes`).toBe(0);
       if (calls > DRAW_CALL_BUDGET) over.push(`${preset} ${view}: ${calls}`);
     }
     threeProblems.push(...three);

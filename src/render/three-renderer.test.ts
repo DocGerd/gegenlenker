@@ -11,6 +11,7 @@ import { QUALITY_FLAGS } from './quality';
 import { createThreeSceneRenderer } from './three-renderer';
 
 type Made = {
+  shadowMap: { enabled: boolean };
   dispose: () => void;
   onDeviceLost: () => void;
   onError: (info: string) => void;
@@ -28,6 +29,7 @@ vi.mock('three/webgpu', async (importOriginal) => {
     autoClear = true;
     backend: { isWebGLBackend: boolean };
     info = { autoReset: true };
+    shadowMap = { enabled: false };
     onDeviceLost = (): void => undefined;
     onError = threeOnError;
     dispose = vi.fn(() => Promise.resolve());
@@ -145,6 +147,7 @@ describe('renderer start', () => {
     await started;
     expect(onRenderer).toHaveBeenCalledOnce();
     for (const log of applied) expect(log).toHaveLength(2);
+    expect(made[0]?.shadowMap.enabled).toBe(true);
   });
 
   const superseded = new GraphicsStartError('superseded');
