@@ -3,14 +3,15 @@ import {
   Layers,
   Matrix4,
   MathUtils,
+  type Object3D,
   Raycaster,
   Vector2,
   Vector3,
-  type Mesh,
+  Mesh,
   type PerspectiveCamera,
 } from 'three';
 import { describe, expect, it } from 'vitest';
-import type { LegendBox, Rect } from '../contracts/render';
+import type { LegendBox, Rect, ScenePalette } from '../contracts/render';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById } from '../vehicles/registry';
 import { createChaseCamera } from './chase-camera';
@@ -20,40 +21,63 @@ import {
   CONE_GAP,
   coneEdge,
   createCockpitInterior,
+  type FlatInterior,
   interiorLayout,
   MIN_PILLAR_WIDTH,
   MIRROR_GAP,
   pillarSpan,
 } from './cockpit-interior';
 import { createMirror } from './mirror';
-import { QUALITY_FLAGS } from './quality';
-import { enableLayers, INTERIOR_LAYER, PERSPECTIVE_LAYER, TOP_DOWN_LAYERS } from './seams';
+import { KEYS } from './palette';
+import { QUALITY_FLAGS, type QualityFlags } from './quality';
+import {
+  enableLayers,
+  INTERIOR_LAYER,
+  PERSPECTIVE_LAYER,
+  SHADOW_CASTER_LAYERS,
+  TOP_DOWN_LAYERS,
+  type CockpitInterior,
+  type RendererParts,
+} from './seams';
 import { computeViewports } from './viewports';
 
-const eye = truckAnchors(truckById('man-le-18-280')).eye;
+const truck = truckById('man-le-18-280');
+const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
+const eye = truckAnchors(truck).eye;
 
-type Shot = {
+type Shot<I extends CockpitInterior = FlatInterior> = {
   readonly camera: PerspectiveCamera;
-  readonly interior: ReturnType<typeof createCockpitInterior>;
+  readonly interior: I;
   readonly cockpit: Rect;
   readonly left: Rect;
   readonly right: Rect;
 };
 
-/** The real cockpit camera and the interior placed for a window of `width` x `height` CSS px. */
+/** The real cockpit camera and `interior` placed for a window of `width` x `height` CSS px. */
+function shootWith<I extends CockpitInterior>(
+  interior: I,
+  width: number,
+  height: number,
+  heading: number,
+  legend: LegendBox | null,
+  flags: QualityFlags,
+): Shot<I> {
+  const { cockpit, mirrorLeft, mirrorRight } = computeViewports(width, height, 'drive', legend);
+  if (cockpit === null || mirrorLeft === null || mirrorRight === null) throw new Error('no views');
+  const camera = createCockpitCamera();
+  placeCockpitCamera(camera, { x: 12, y: -7, heading }, eye, cockpit);
+  interior.setQuality(flags);
+  interior.place({ camera, cockpit, mirrorLeft, mirrorRight });
+  return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight };
+}
+
 function shoot(
   width: number,
   height: number,
   heading = 0.7,
   legend: LegendBox | null = null,
 ): Shot {
-  const { cockpit, mirrorLeft, mirrorRight } = computeViewports(width, height, 'drive', legend);
-  if (cockpit === null || mirrorLeft === null || mirrorRight === null) throw new Error('no views');
-  const camera = createCockpitCamera();
-  const interior = createCockpitInterior();
-  placeCockpitCamera(camera, { x: 12, y: -7, heading }, eye, cockpit);
-  interior.place(camera, cockpit, mirrorLeft, mirrorRight);
-  return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight };
+  return shootWith(createCockpitInterior(), width, height, heading, legend, QUALITY_FLAGS.balanced);
 }
 
 /** Windows whose pillars must show: landscape desktop and tablet sizes. */
@@ -129,22 +153,57 @@ const layersOf = (ids: readonly number[]): Layers => {
   return layers;
 };
 
-describe('cockpit interior layers', () => {
-  const { meshes } = createCockpitInterior();
+/** Every route that implements the seam; a new interior joins here and inherits the checks below. */
+const ROUTES: readonly (readonly [string, RendererParts['interior']])[] = [
+  ['flat overlay', createCockpitInterior],
+];
 
-  it('is on INTERIOR_LAYER alone, which only the cockpit camera enables', () => {
-    expect(meshes.length).toBeGreaterThan(0);
+/** Everything under `interior` that draws or lights; bare containers do not. */
+function renderables(interior: CockpitInterior): Object3D[] {
+  const found: Object3D[] = [];
+  interior.object.traverse((o) => {
+    if (o.type !== 'Group' && o.type !== 'Object3D') found.push(o);
+  });
+  return found;
+}
+
+function drawn(interior: CockpitInterior): Mesh[] {
+  const found: Mesh[] = [];
+  interior.object.traverseVisible((o) => {
+    if (o instanceof Mesh) found.push(o as Mesh);
+  });
+  return found;
+}
+
+describe.each(ROUTES)('cockpit interior seam: %s', (_name, make) => {
+  const build = (flags: QualityFlags = QUALITY_FLAGS.balanced) => {
+    const interior = make(truck, palette);
+    interior.setQuality(flags);
+    return interior;
+  };
+  const shootRoute = (width: number, height: number, heading = 0.7) =>
+    shootWith(make(truck, palette), width, height, heading, null, QUALITY_FLAGS.balanced);
+
+  it('is on INTERIOR_LAYER alone throughout, which only the cockpit camera enables', () => {
+    const found = renderables(build());
+    expect(found.length).toBeGreaterThan(0);
     const cockpit = createCockpitCamera().layers;
     const mirror = createMirror().camera.layers;
     const chase = createChaseCamera().layers;
     const topDown = layersOf(TOP_DOWN_LAYERS);
-    for (const m of meshes) {
-      expect(m.layers.mask, m.name).toBe(1 << INTERIOR_LAYER);
-      expect(m.layers.test(cockpit), m.name).toBe(true);
-      expect(m.layers.test(mirror), m.name).toBe(false);
-      expect(m.layers.test(chase), m.name).toBe(false);
-      expect(m.layers.test(topDown), m.name).toBe(false);
+    for (const o of found) {
+      const name = `${o.type} ${o.name}`;
+      expect(o.layers.mask, name).toBe(1 << INTERIOR_LAYER);
+      expect(o.layers.test(cockpit), name).toBe(true);
+      expect(o.layers.test(mirror), name).toBe(false);
+      expect(o.layers.test(chase), name).toBe(false);
+      expect(o.layers.test(topDown), name).toBe(false);
     }
+  });
+
+  it('is not drawn into the sun shadow', () => {
+    const shadow = layersOf(SHADOW_CASTER_LAYERS);
+    for (const o of renderables(build())) expect(o.layers.test(shadow), o.name).toBe(false);
   });
 
   it('keeps the cockpit camera on the perspective layer too, and no other camera on the interior', () => {
@@ -154,13 +213,44 @@ describe('cockpit interior layers', () => {
       expect(layers.isEnabled(INTERIOR_LAYER)).toBe(false);
     }
   });
-});
 
-describe('cockpit interior quality', () => {
-  it.each(['low', 'balanced', 'high'] as const)('is drawn only when the %s preset says so', (p) => {
-    const interior = createCockpitInterior();
-    interior.setQuality(QUALITY_FLAGS[p]);
-    expect(interior.object.visible).toBe(p !== 'low');
+  it('is not drawn on the Low preset', () => {
+    expect(drawn(build(QUALITY_FLAGS.low))).toEqual([]);
+    expect(drawn(build()).length).toBeGreaterThan(0);
+  });
+
+  describe('keeps the training view clear', () => {
+    // Landscape and portrait windows from phone to desktop, the layouts of `computeViewports`.
+    const windows: (readonly [number, number])[] = [];
+    for (let w = 360; w <= 1920; w += 60) {
+      for (let h = 360; h <= 1280; h += 80) windows.push([w, h]);
+    }
+    windows.push(...REQUIRED, [1024, 768], [390, 844], [844, 390]);
+    const cone = MathUtils.degToRad(CLEAR_CONE_DEG);
+
+    it('leaves a central forward sight cone free of every part', () => {
+      for (const [w, h] of windows) {
+        const { camera, interior } = shootRoute(w, h);
+        const parts = drawn(interior);
+        for (let az = -cone; az <= cone + 1e-9; az += cone / 6) {
+          for (let el = -cone; el <= cone + 1e-9; el += cone / 6) {
+            if (Math.hypot(az, el) > cone) continue;
+            expect(hitsAlong(camera, parts, az, el), `${w}x${h} ${az} ${el}`).toEqual([]);
+          }
+        }
+      }
+    });
+
+    it('keeps every part off the centre of each mirror rect', () => {
+      for (const [w, h] of windows) {
+        const { camera, interior, cockpit, left, right } = shootRoute(w, h);
+        const parts = drawn(interior);
+        for (const rect of [left, right]) {
+          const [x, y] = rectToNdc(cockpit, rect, 0.5, 0.5);
+          expect(hits(camera, parts, x, y), `${w}x${h}`).toEqual([]);
+        }
+      }
+    });
   });
 });
 
@@ -248,13 +338,12 @@ describe('cockpit interior pillars', () => {
   });
 });
 
-describe('cockpit interior keeps the training view clear', () => {
+describe('flat overlay pillars keep the training view clear', () => {
   // Landscape and portrait windows from phone to desktop, the layouts of `computeViewports`.
   const windows: (readonly [number, number])[] = [];
   for (let w = 360; w <= 1920; w += 60) for (let h = 360; h <= 1280; h += 80) windows.push([w, h]);
   windows.push(...REQUIRED, [1024, 768], [390, 844], [844, 390]);
 
-  const cone = MathUtils.degToRad(CLEAR_CONE_DEG);
   /** Fresh each time: `forcedPillars` moves the pillars. */
   const sweep = () => windows.map(([w, h]) => ({ w, h, shot: shoot(w, h) }));
   const shown = (s: Shot): Mesh[] =>
@@ -265,20 +354,6 @@ describe('cockpit interior keeps the training view clear', () => {
     const withPillars = shots.filter(({ shot }) => shown(shot).length === 2).length;
     expect(withPillars).toBeGreaterThan(0);
     expect(withPillars).toBeLessThan(shots.length);
-  });
-
-  it('leaves a central forward sight cone free of every part', () => {
-    for (const { w, h, shot } of sweep()) {
-      for (let az = -cone; az <= cone + 1e-9; az += cone / 6) {
-        for (let el = -cone; el <= cone + 1e-9; el += cone / 6) {
-          if (Math.hypot(az, el) > cone) continue;
-          expect(
-            hitsAlong(shot.camera, shot.interior.meshes, az, el),
-            `${w}x${h} ${az} ${el}`,
-          ).toEqual([]);
-        }
-      }
-    }
   });
 
   it('keeps the A-pillars out of the lines of sight from the eye to each mirror rect', () => {
@@ -292,17 +367,6 @@ describe('cockpit interior keeps the training view clear', () => {
             expect(hits(camera, pillars, x, y), `${w}x${h} (${u}, ${v})`).toEqual([]);
           }
         }
-      }
-    }
-  });
-
-  it('keeps every part off the centre of each mirror rect', () => {
-    for (const { w, h, shot } of sweep()) {
-      const { camera, interior, cockpit, left, right } = shot;
-      forcedPillars(shot);
-      for (const rect of [left, right]) {
-        const [x, y] = rectToNdc(cockpit, rect, 0.5, 0.5);
-        expect(hits(camera, interior.meshes, x, y), `${w}x${h}`).toEqual([]);
       }
     }
   });

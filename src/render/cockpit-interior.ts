@@ -7,13 +7,11 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
-  type PerspectiveCamera,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Rect } from '../contracts/render';
-import type { QualityFlags } from './quality';
 import { REALISM_HUES, type RealismHueKey } from './realism-hues';
-import { INTERIOR_LAYER } from './seams';
+import { INTERIOR_LAYER, type CockpitInterior } from './seams';
 import { tint } from './tint';
 
 /**
@@ -121,22 +119,14 @@ function quad(corners: readonly (readonly [number, number])[], hue: RealismHueKe
   );
 }
 
-export type CockpitInterior = {
+/** The flat overlay: the `CockpitInterior` the Balanced preset draws, with its parts exposed. */
+export type FlatInterior = CockpitInterior & {
   readonly object: Group;
   readonly meshes: readonly Mesh[];
   readonly pillars: { readonly left: Mesh; readonly right: Mesh };
-  /** Fixes the parts to `camera`'s current pose and field of view; the rects are in CSS px. */
-  place(
-    camera: PerspectiveCamera,
-    cockpit: Rect,
-    mirrorLeft: Rect | null,
-    mirrorRight: Rect | null,
-  ): void;
-  setQuality(flags: QualityFlags): void;
-  dispose(): void;
 };
 
-export function createCockpitInterior(): CockpitInterior {
+export function createCockpitInterior(): FlatInterior {
   const object = new Group();
   object.name = 'cockpit-interior';
   const material = new MeshBasicMaterial({
@@ -226,9 +216,10 @@ export function createCockpitInterior(): CockpitInterior {
 
   return {
     object,
+    frame: 'eye',
     meshes,
     pillars: { left, right },
-    place(camera, cockpit, mirrorLeft, mirrorRight) {
+    place({ camera, cockpit, mirrorLeft, mirrorRight }) {
       const tanV = Math.tan(MathUtils.degToRad(camera.fov / 2));
       object.position.copy(camera.position);
       object.quaternion.copy(camera.quaternion);
