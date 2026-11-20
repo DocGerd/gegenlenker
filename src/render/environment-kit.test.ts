@@ -7,6 +7,7 @@ import type { KitPiece } from '../contracts/layout';
 import type { ScenePalette } from '../contracts/render';
 import { proceduralEnvironment } from './environment';
 import { KEYS } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { COCKPIT_LAYERS, DEFAULT_LAYER, enableLayers, TOP_DOWN_LAYERS } from './seams';
 import type { VehicleEnvironment } from './vehicle-pbr';
@@ -101,7 +102,7 @@ describe('the yard kit props', () => {
   const setup = () => {
     const { parts, load, reject } = fakeKit();
     const env = proceduralEnvironment(layout, palette, undefined, undefined, undefined, parts);
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     return { env, load, reject, off: seen(env.object, cockpit) };
   };
 
@@ -110,7 +111,7 @@ describe('the yard kit props', () => {
     const top = seen(env.object, topDown);
     const now = (): Set<Object3D> => seen(env.object, cockpit);
 
-    env.setQuality(draws);
+    env.setLook(lookFor(draws, 'day'));
     expect(now(), 'loading').toEqual(off);
     load();
     const applied = now();
@@ -121,9 +122,9 @@ describe('the yard kit props', () => {
     for (const mesh of standIns) expect(mesh.parent).not.toBe(env.object);
     expect(seen(env.object, topDown), 'top-down').toEqual(top);
 
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(now(), 'off again').toEqual(off);
-    env.setQuality(draws);
+    env.setLook(lookFor(draws, 'day'));
     expect(now(), 'applied again').toEqual(applied);
 
     reject();
