@@ -14,6 +14,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { ResolvedLayout } from '../src/contracts/layout';
 import type { ScenePalette, ScenePaletteKey } from '../src/contracts/render';
 import type { Param, TrailerSpec, TruckSpec } from '../src/contracts/vehicle';
+import { createCockpitInterior } from '../src/render/cockpit-interior';
 import { placePose } from '../src/render/coords';
 import { neutralSky } from '../src/render/sky';
 import type { AidsLayer, Environment, RendererParts, VehicleVisual } from '../src/render/seams';
@@ -235,5 +236,6 @@ export const placeholderParts: RendererParts = {
   truck: truckVisual,
   trailer: trailerVisual,
   environment,
+  interior: createCockpitInterior,
   aids,
 };
