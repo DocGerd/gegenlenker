@@ -62,9 +62,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { suite: heavy, shard: 1, shards: 3, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 2, shards: 3, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 3, shards: 3, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 1, shards: 4, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 2, shards: 4, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 3, shards: 4, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 4, shards: 4, filter: '--grep @heavy' }
           - { suite: light, shard: 1, shards: 6, filter: '--grep-invert @heavy' }
           - { suite: light, shard: 2, shards: 6, filter: '--grep-invert @heavy' }
           - { suite: light, shard: 3, shards: 6, filter: '--grep-invert @heavy' }
