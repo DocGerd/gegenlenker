@@ -22,7 +22,7 @@ import { startSkyTexture } from './sky-texture';
 import { skylineGradeSample } from './skyline';
 import { createThreeSceneRenderer } from './three-renderer';
 import { createVehicleEnvironment } from './vehicle-pbr';
-import { startYardKit } from './yard-kit';
+import { KIT_SHADOW_SAMPLES, startYardKit } from './yard-kit';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
 /** Whether the preset offers the outside view. */
@@ -105,7 +105,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       syncReflection();
       publishGrade(state);
     },
-    (gpu) => precompileGrade(gpu, [skylineGradeSample]),
+    (gpu) => precompileGrade(gpu, [skylineGradeSample, ...KIT_SHADOW_SAMPLES]),
   );
   const renderer = createThreeSceneRenderer({
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),

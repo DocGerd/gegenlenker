@@ -132,6 +132,21 @@ describe('the yard kit props', () => {
     env.dispose();
   });
 
+  it('cast the sun shadow only where the sun does', () => {
+    const { env, load, off } = setup();
+    load();
+    const casters = (flags: typeof draws): boolean[] => {
+      env.setLook(lookFor(flags, 'day'));
+      return minus(seen(env.object, cockpit), off).map((m) => m.castShadow);
+    };
+    expect(casters(draws), 'no sun shadow').not.toContain(true);
+    const high = casters(QUALITY_FLAGS.high);
+    expect(high.length).toBeGreaterThan(0);
+    expect(high).not.toContain(false);
+    expect(casters(draws), 'off again').not.toContain(true);
+    env.dispose();
+  });
+
   it('stay stand-ins while the preset does not draw the kit, however it has loaded', () => {
     const { env, load, off } = setup();
     load();
