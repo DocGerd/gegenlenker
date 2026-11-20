@@ -1,0 +1,163 @@
+[
+  {
+    "version": null,
+    "entries": [
+      {
+        "id": "13.added",
+        "category": "added",
+        "prs": [13, 6, 8],
+        "en": "Trainer for two trucks and two turntable drawbar trailers (four combinations) with realistic coupling behavior and collisions."
+      },
+      {
+        "id": "18.added",
+        "category": "added",
+        "prs": [18],
+        "en": "The app with its menu and driving screen."
+      },
+      {
+        "id": "11.added",
+        "category": "added",
+        "prs": [11, 16],
+        "en": "A yard with a street and five exercises, plus a free yard mode."
+      },
+      {
+        "id": "12.added",
+        "category": "added",
+        "prs": [12, 14],
+        "en": "Four views (cockpit, two mirrors, top-down) that lower their resolution on weak devices, and a display with angle gauges."
+      },
+      {
+        "id": "9.added",
+        "category": "added",
+        "prs": [9, 85],
+        "en": "Touch, keyboard and mouse controls, including a speed lever that ramps up on W/S and Up/Down."
+      },
+      {
+        "id": "7.added",
+        "category": "added",
+        "prs": [7, 20, 84],
+        "en": "Scoring with per-criterion results, bests with and without aids, a result screen, and a top-down replay with a timeline, event markers and speed control."
+      },
+      {
+        "id": "1.added",
+        "category": "added",
+        "prs": [1],
+        "en": "German and English UI."
+      },
+      {
+        "id": "5.added",
+        "category": "added",
+        "prs": [5, 73, 124],
+        "en": "Installable offline app with an update prompt, update check, a screen that stays on while driving, an offline status and a notice when the device cannot show the graphics."
+      },
+      {
+        "id": "75.added",
+        "category": "added",
+        "prs": [75],
+        "en": "Pause sheet with an unscored restart when leaving a run."
+      },
+      {
+        "id": "50.added",
+        "category": "added",
+        "prs": [50, 37, 74, 92],
+        "en": "Top-down aids: zoom and pan, the predicted path for truck and trailer, a marked slalom turn point, and a contact marker naming the body part."
+      },
+      {
+        "id": "82.added",
+        "category": "added",
+        "prs": [82],
+        "en": "Clearer exercise goals while driving."
+      },
+      {
+        "id": "15.added",
+        "category": "added",
+        "prs": [15, 49, 77, 80, 81, 120, 83, 91, 125],
+        "en": "More realistic cockpit and mirror views: vehicle detail, a sky gradient, contact shadows, haze with an industrial skyline, road markings per the German RMS guidelines, a German industrial yard and the remaining yard props."
+      },
+      {
+        "id": "86.added",
+        "category": "added",
+        "prs": [86],
+        "en": "Loading is retried after a failure, borders are easier to see and the speed lever has a rail."
+      },
+      {
+        "id": "134.added",
+        "category": "added",
+        "prs": [134],
+        "en": "Graphics quality presets Low, Balanced and High in settings, defaulting to Balanced."
+      },
+      {
+        "id": "71.changed",
+        "category": "changed",
+        "prs": [71],
+        "en": "Smoother edges in the mirrors."
+      },
+      {
+        "id": "128.changed",
+        "category": "changed",
+        "prs": [128, 47],
+        "en": "Content keeps clear of notches and screen edges, mirrors are bigger and narrow windows lay out correctly; on shorter screens the mirrors stay above the controls."
+      },
+      {
+        "id": "102.changed",
+        "category": "changed",
+        "prs": [102],
+        "en": "The desktop key legend is collapsed and the top view panels are slimmer."
+      },
+      {
+        "id": "94.fixed",
+        "category": "fixed",
+        "prs": [94],
+        "en": "Holding W/Up or S/Down ramps the speed lever."
+      },
+      {
+        "id": "34.fixed",
+        "category": "fixed",
+        "prs": [34, 31],
+        "en": "Cockpit, mirrors and top-down are clearly separated, and grounds, obstacles and halls are distinguishable."
+      },
+      {
+        "id": "35.fixed",
+        "category": "fixed",
+        "prs": [35, 76, 114, 78, 106],
+        "en": "The top-down view draws wheels, axles, turntable and drawbar, keeps a dark outline under aid lines, and frames the whole yard and the follow view clear of the display panels."
+      },
+      {
+        "id": "32.fixed",
+        "category": "fixed",
+        "prs": [32],
+        "en": "The steering wheel shows its position and the straight state, and the controls layout is corrected."
+      },
+      {
+        "id": "93.fixed",
+        "category": "fixed",
+        "prs": [93, 117],
+        "en": "The forward view from the cockpit is no longer blocked by opaque cab glass, and the skyline draws a quay crane."
+      },
+      {
+        "id": "113.fixed",
+        "category": "fixed",
+        "prs": [113, 103],
+        "en": "The slalom requires weaving between the obstacles, and exercise order and result details are corrected."
+      },
+      {
+        "id": "96.fixed",
+        "category": "fixed",
+        "prs": [96, 118],
+        "en": "The run clock and the with-aids mark start with the first driving input, and the last moment counts when a run ends in the target."
+      },
+      {
+        "id": "95.fixed",
+        "category": "fixed",
+        "prs": [95, 101],
+        "en": "Result screen comparison to the best, keyboard use and leaving a run unscored are corrected; the keyboard keeps working after the pause sheet closes."
+      },
+      {
+        "id": "112.fixed",
+        "category": "fixed",
+        "prs": [112, 107],
+        "en": "The clock rounds correctly and a double click no longer selects text; the cockpit layout fits 1280-pixel-wide windows, and Stop no longer covers the counters at 1024x700."
+      }
+    ]
+  }
+]
