@@ -37,7 +37,7 @@ import { AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
 import { createSceneSky, domeGround } from './scene-sky';
-import { addMarkBox, createWornMarkingMaterial } from './marking-wear';
+import { createWornMarkingMaterial, MarkingChunks, wearableMarkings } from './marking-wear';
 import { tint } from './tint';
 import { addMarking, addObstacle } from './yard-tokens';
 import { tokenCopy } from './token-copy';
@@ -93,7 +93,7 @@ export function proceduralEnvironment(
   // High, over the PBR ground: the marking copies wear paint instead of the shared lit flat look.
   const markingCopies: Mesh[] = [];
   let wornMaterial: MeshLambertNodeMaterial | null = null;
-  let wearable = false;
+  let wearable = true;
   /** Whether the textured copy is the one drawn: the PBR ground is only drawn through it. */
   let groundDrawn = false;
   const syncGroundPbr = (): void => {
@@ -207,9 +207,13 @@ export function proceduralEnvironment(
   propSwap.set(true); // detail on until the first setQuality
   propSwap.setCopies(props);
 
-  const markings = new Chunks(layout.bounds);
+  const markings = new MarkingChunks(layout.bounds);
   color.set(palette.marking);
-  for (const m of layout.markings) addMarking(m, markings, color);
+  const wearing = wearableMarkings(layout.markings);
+  layout.markings.forEach((m, i) => {
+    markings.worn = wearing[i] === true;
+    addMarking(m, markings, color);
+  });
   const markingTokens = markings.meshes(flat, geometries);
   for (const mesh of markingTokens) group.add(mesh);
   // Perspective cameras draw lit copies of every flat token; the tokens keep the top-down view, unlit.
@@ -230,7 +234,6 @@ export function proceduralEnvironment(
     return copy;
   };
   for (const token of markingTokens) markingCopies.push(litCopy(token, litFlat));
-  wearable = markingTokens.every((token) => addMarkBox(token.geometry));
 
   let yardBand: Group | null = null;
   const { target } = layout;
