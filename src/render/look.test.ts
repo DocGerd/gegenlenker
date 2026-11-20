@@ -32,6 +32,7 @@ describe('lookFor', () => {
     expect(look.sky).toBe('day');
     expect(look.lamps).toBe(false);
     expect(look.shadow).toBe(flags.sunShadow && flags.perspectiveLighting);
+    expect(look.interior).toEqual({ light: 1, unlit: [1, 1, 1] });
   });
 
   it.each(GRAPHICS_PRESETS)(
@@ -109,7 +110,10 @@ describe('applyLook', () => {
   it('keeps the cab interior at full light by day', () => {
     const look = lookFor(QUALITY_FLAGS.high, 'day');
     expect(look.interior.light).toBe(1);
-    applyLook({ ...look, interior: { light: 0.25 } }, { toward: new Color(), away: new Color() });
+    applyLook(
+      { ...look, interior: { ...look.interior, light: 0.25 } },
+      { toward: new Color(), away: new Color() },
+    );
     expect(GRADE.interiorLight.value).toBe(0.25);
     applyLook(look, { toward: new Color(), away: new Color() });
     expect(GRADE.interiorLight.value).toBe(1);

@@ -18,6 +18,7 @@ import {
   type InteriorShell,
   interiorShellFrom,
 } from './interior-glb';
+import { NIGHT_AMBIENT, NIGHT_TINT } from './light-rig';
 import { lookFor } from './look';
 import {
   createInteriorCheck,
@@ -183,6 +184,36 @@ describe.each(trucks)('lit interior of $id', (spec) => {
     expect(interior.meshes.every((m) => m.receiveShadow)).toBe(true);
     interior.setLook(day(QUALITY_FLAGS.balanced));
     expect(interior.material).toBeInstanceOf(MeshBasicMaterial);
+  });
+
+  it('multiplies the unlit interior, glb and flat overlay, by the night ambient and by 1 by day', async () => {
+    const dim = NIGHT_TINT.map((t) => t * NIGHT_AMBIENT);
+    const flatColour = (i: { flat: { object: Group } }): number[] => {
+      const colours = new Set<string>();
+      i.flat.object.traverse((o) => {
+        const m = (o as { material?: unknown }).material;
+        if (m instanceof MeshBasicMaterial) colours.add(m.color.toArray().join());
+      });
+      expect(colours.size).toBe(1);
+      return [...colours][0]?.split(',').map(Number) ?? [];
+    };
+    const unlit = createGlbInterior(spec);
+    const plain = createGlbInterior(spec);
+    plain.attach(await glb(spec.id));
+    for (const [mode, want] of [
+      ['night', dim],
+      ['day', [1, 1, 1]],
+    ] as const) {
+      unlit.setLook(lookFor(QUALITY_FLAGS.balanced, mode));
+      plain.setLook(lookFor(QUALITY_FLAGS.balanced, mode));
+      const { material } = plain;
+      if (!(material instanceof MeshBasicMaterial)) throw new Error('not the plain material');
+      const glbColour = material.color.toArray();
+      want.forEach((w, i) => {
+        expect(flatColour(unlit)[i], `flat ${mode}`).toBeCloseTo(w, 6);
+        expect(glbColour[i], `plain ${mode}`).toBeCloseTo(w, 6);
+      });
+    }
   });
 
   describe('with the vehicles sky map', () => {

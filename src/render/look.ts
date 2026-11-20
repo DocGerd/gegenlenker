@@ -30,8 +30,10 @@ export type Look = {
     readonly sunDirection: Vector3;
   };
   readonly interior: {
-    /** Scales the lit cab interior's albedo; 1 by day. */
+    /** Scales the lit cab interior's albedo; 1 by day and at night, where the rig dims it. */
     readonly light: number;
+    /** Linear colour the unlit interior (flat overlay, plain glb) is multiplied by: the night ambient's, white by day. */
+    readonly unlit: readonly [number, number, number];
   };
 };
 
@@ -57,7 +59,12 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
       skyHdri: night ? 0 : 1,
       sunDirection: perspectiveSunDirection(),
     },
-    interior: { light: 1 },
+    interior: {
+      light: 1,
+      unlit: night
+        ? (NIGHT_TINT.map((t) => t * NIGHT_AMBIENT) as [number, number, number])
+        : [1, 1, 1],
+    },
   };
 }
 

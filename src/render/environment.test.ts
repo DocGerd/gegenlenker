@@ -1,4 +1,5 @@
 import {
+  BackSide,
   Color,
   DataTexture,
   DirectionalLight,
@@ -10,7 +11,13 @@ import {
   type Object3D,
   type Texture,
 } from 'three';
-import { MeshLambertNodeMaterial, MeshStandardNodeMaterial } from 'three/webgpu';
+import {
+  type MeshBasicNodeMaterial,
+  MeshLambertNodeMaterial,
+  MeshStandardNodeMaterial,
+  type Node,
+  UniformNode,
+} from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
@@ -26,6 +33,7 @@ import { GROUND_SURFACES } from './ground-texture-spec';
 import { KEYS } from './palette';
 import { FOG_DENSITY, GRADE } from './grade';
 import { NIGHT_AMBIENT, perspectiveLight } from './light-rig';
+import { nightDomeGround, skyColours } from './scene-sky';
 import { MARK_BOX } from './marking-wear';
 import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
@@ -416,6 +424,56 @@ describe('environment at night', () => {
       expect(sun?.castShadow, preset).toBe(false);
       expect(probe?.intensity, preset).toBe(NIGHT_AMBIENT);
     }
+    env.dispose();
+  });
+
+  it('draws the dome, the ground below it and the skyline haze from the night colours, and the day ones back', () => {
+    const env = build();
+    const colours = (root: Node): Set<number> => {
+      const found = new Set<number>();
+      const walk = (n: Node): void => {
+        if (n instanceof UniformNode && n.value instanceof Color) found.add(n.value.getHex());
+        for (const child of n.getChildren()) walk(child);
+      };
+      walk(root);
+      return found;
+    };
+    const parts = (): { sky: Set<number>; skyline: Set<number> } => {
+      const out = { sky: new Set<number>(), skyline: new Set<number>() };
+      env.object.traverse((o) => {
+        if (!isMesh(o)) return;
+        const m = o.material as MeshBasicNodeMaterial & MeshLambertNodeMaterial;
+        if (m.side === BackSide && m.colorNode !== null) out.sky = colours(m.colorNode);
+        if ('haze' in o.geometry.attributes && m.outputNode !== null) {
+          out.skyline = colours(m.outputNode);
+        }
+      });
+      return out;
+    };
+    const hex = (c: Color): number => c.getHex();
+    const night = skyColours(palette, 'night');
+    const day = skyColours(palette, 'day');
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+    let now = parts();
+    for (const c of [
+      night.horizon,
+      night.zenith,
+      night.haze,
+      night.halo,
+      nightDomeGround(palette),
+    ]) {
+      expect(now.sky.has(hex(c)), `night dome ${hex(c).toString(16)}`).toBe(true);
+    }
+    expect(now.skyline.has(hex(night.haze))).toBe(true);
+    for (const c of [day.haze, day.halo]) expect(now.sky.has(hex(c))).toBe(false);
+    expect(now.skyline.has(hex(day.haze))).toBe(false);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    now = parts();
+    for (const c of [day.horizon, day.haze, day.halo]) {
+      expect(now.sky.has(hex(c)), `day dome ${hex(c).toString(16)}`).toBe(true);
+    }
+    expect(now.sky.has(hex(night.horizon))).toBe(false);
+    expect(now.skyline.has(hex(day.haze))).toBe(true);
     env.dispose();
   });
 

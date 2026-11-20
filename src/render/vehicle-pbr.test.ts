@@ -243,6 +243,33 @@ describe('vehicle environment', () => {
     expect(disposed(made[0])).toHaveBeenCalledOnce();
   });
 
+  it('gives each lighting mode its own capture when a listener still asks for the old mode on release', async () => {
+    const made: RenderTarget[] = [];
+    const { env, generate } = setup({
+      generate: () => made[made.push(target()) - 1] as never,
+    });
+    env.attach(renderer());
+    const day = await ready(env);
+    let stale = true;
+    // a vehicle that has not been given the night look yet re-asks for the day map when told of the release
+    env.onChange(() => {
+      if (!stale) return;
+      stale = false;
+      env.texture(palette, 'day');
+    });
+    const night = await ready(env, palette, 'night');
+    expect(generate.mock.calls.map((call) => (call as unknown[])[3])).toEqual(['day', 'night']);
+    expect(night).toBe(made[1]?.texture);
+    expect(night).not.toBe(day);
+    const again = await ready(env, palette, 'day');
+    expect(generate.mock.calls.map((call) => (call as unknown[])[3])).toEqual([
+      'day',
+      'night',
+      'day',
+    ]);
+    expect(again).toBe(made[2]?.texture);
+  });
+
   it('captures the night dome without the HDRI, whatever sky the day map follows', async () => {
     const sky = new Texture();
     const { env, generate } = setup();

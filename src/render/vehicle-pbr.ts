@@ -303,6 +303,8 @@ export function createVehicleEnvironment(
   let pending: RenderTarget | null = null;
   let key = '';
   let failed = false;
+  /** `release` is running, so its listeners' own `texture` calls must not start a capture. */
+  let releasing = false;
   const wearing = new Set<object>();
   const listeners = new Set<() => void>();
 
@@ -368,13 +370,20 @@ export function createVehicleEnvironment(
     },
     texture(palette, mode) {
       if (renderer === null || gpuLost(renderer)) return null;
+      // a listener told of a release asks again, with the look it has not been given yet
+      if (releasing) return null;
       const next = `${palette.sky}/${palette.verge}/${mode}`;
       // the night dome has no HDRI to follow
       const sky = mode === 'night' ? null : skyMap;
       if (next !== key) {
-        release();
         key = next;
         failed = false;
+        releasing = true;
+        try {
+          release();
+        } finally {
+          releasing = false;
+        }
       }
       if ((target === null || targetSky !== sky) && pending === null && !failed) {
         try {

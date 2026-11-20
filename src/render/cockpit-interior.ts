@@ -286,6 +286,7 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
     },
     setLook(look) {
       object.visible = look.flags.cockpitInterior;
+      material.color.setRGB(...look.interior.unlit);
     },
     dispose() {
       geometries.forEach((g) => g.dispose());
