@@ -2,7 +2,14 @@ import { Box3, Mesh } from 'three';
 import { describe, expect, it } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
-import type { Collider, Fixture, ObstacleKind, Prop, ResolvedLayout } from '../contracts/layout';
+import {
+  isKitDecor,
+  type Collider,
+  type Fixture,
+  type ObstacleKind,
+  type Prop,
+  type ResolvedLayout,
+} from '../contracts/layout';
 import { OVERLAY } from './yard-concrete';
 import { cornerHoops, decorPieces, RESTYLED_KINDS, yardProps } from './yard-props';
 
@@ -81,8 +88,14 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
     }
   });
 
+  it('leave the yard kit to its glb', () => {
+    const kit = resolved.decor.filter(isKitDecor);
+    expect(kit.length).toBeGreaterThan(0);
+    expect(decorPieces(kit)).toEqual([]);
+  });
+
   it('draw decor within its footprint, apart from thin relief', () => {
-    for (const d of resolved.decor) {
+    for (const d of resolved.decor.filter((d) => !isKitDecor(d))) {
       const [piece] = decorPieces([d]);
       const b = new Box3().setFromObject(new Mesh(piece?.geometry));
       const { cx, cy, heading, halfLength, halfWidth } = d.footprint;

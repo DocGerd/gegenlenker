@@ -74,6 +74,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
   balanced: BALANCED,
   high: {
     ...BALANCED,
+    yardKit: true,
     groundTexture: true,
     groundPbr: true,
     pbr: true,

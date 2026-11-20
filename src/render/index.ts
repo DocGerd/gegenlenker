@@ -20,6 +20,7 @@ import { startSkyTexture } from './sky-texture';
 import { skylineGradeSample } from './skyline';
 import { createThreeSceneRenderer } from './three-renderer';
 import { createVehicleEnvironment } from './vehicle-pbr';
+import { startYardKit } from './yard-kit';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
 /** Whether the preset offers the outside view. */
@@ -71,6 +72,8 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   const groundTextures = startGroundTextures(undefined, publishState('ground'));
   // The PBR ground draws over the detail ground; its state is the transcode target while it is drawn.
   const groundPbr = startGroundPbrTextures(undefined, publishState('groundPbr'));
+  // `on` while the yard kit's surroundings are drawn.
+  const yardKit = startYardKit(publishState('yardKit'));
   // `on` once the vehicle reflections are built, `failed` if they fell back.
   const vehicleEnvironment = createVehicleEnvironment(publishState('pbr'));
   // `on` while the HDRI sky is drawn.
@@ -107,6 +110,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     onRenderer: (gpu) => {
       groundTextures.attach(gpu);
       groundPbr.attach(gpu);
+      yardKit.attach(gpu);
       skyTexture.attach(gpu);
       vehicleEnvironment.attach(gpu);
       gradeCheck.attach(gpu);
@@ -115,7 +119,10 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     trailer: (spec, palette) =>
       proceduralTrailer(spec, palette, shells.trailer, vehicleEnvironment),
     environment: (layout, palette) =>
-      proceduralEnvironment(layout, palette, groundTextures, skyTexture, groundPbr),
+      proceduralEnvironment(layout, palette, groundTextures, skyTexture, groundPbr, {
+        kit: yardKit,
+        reflections: vehicleEnvironment,
+      }),
     aids: proceduralAids,
   });
   // Read by the e2e: the GPU API of the live renderer and why it is not WebGPU when that was asked
@@ -145,6 +152,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       shells.trailer.setEnabled(flags.vehicleGlb);
       groundTextures.setEnabled(flags.groundTexture);
       groundPbr.setEnabled(flags.groundTexture && flags.groundPbr);
+      yardKit.setEnabled(flags.yardKit);
       skyTexture.setEnabled(flags.hdriSky);
       gradeCheck.setWanted(flags.perspectiveLighting);
       renderer.setQuality(preset);
@@ -154,6 +162,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       renderer.dispose();
       groundTextures.dispose();
       groundPbr.dispose();
+      yardKit.dispose();
       skyTexture.dispose();
       vehicleEnvironment.dispose();
       gradeCheck.dispose();

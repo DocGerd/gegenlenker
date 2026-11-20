@@ -4,6 +4,8 @@ import {
   type Collider,
   type Decor,
   type Fixture,
+  isKitDecor,
+  type KitDecor,
   type Marking,
   type ObstacleKind,
   type Prop,
@@ -500,7 +502,7 @@ function gatehouseMirror(o: Collider): PropPiece {
 const GRID_ITEM = { pallets: 0.6, 'mesh-boxes': 0.62 };
 
 /** Swap bodies, skips, pallets and mesh boxes on the plot behind the yard's north edge. */
-function decorPiece({ asset, footprint: f, variant }: Decor): PropPiece {
+function decorPiece({ asset, footprint: f, variant }: Exclude<Decor, KitDecor>): PropPiece {
   const p = new Parts();
   const origin = { x: 0, y: 0, z: 0 };
   let lead = 0;
@@ -543,7 +545,9 @@ function decorPiece({ asset, footprint: f, variant }: Decor): PropPiece {
   return { x, y, geometry: p.place(x, y, f.heading) };
 }
 
-export const decorPieces = (decor: readonly Decor[]): PropPiece[] => decor.map(decorPiece);
+/** The yard kit's pieces are drawn from its glb (`yard-kit.ts`), on High only. */
+export const decorPieces = (decor: readonly Decor[]): PropPiece[] =>
+  decor.filter((d): d is Exclude<Decor, KitDecor> => !isKitDecor(d)).map(decorPiece);
 
 /** Curtain-sider semitrailer: frame, strapped curtain, headboard, underrun bar, tandem-plus axles. */
 function curtainSider(o: Collider, index: number): PropPiece {

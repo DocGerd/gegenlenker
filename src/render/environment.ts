@@ -34,6 +34,7 @@ import type { QualityFlags } from './quality';
 import { AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
+import { createYardKitLayer, type YardKitParts } from './yard-kit';
 import { createSceneSky, domeGround } from './scene-sky';
 import { tint } from './tint';
 import { addMarking, addObstacle } from './yard-tokens';
@@ -58,6 +59,7 @@ export function proceduralEnvironment(
   groundTextures?: GroundTextures,
   skyTexture?: SkyTextures,
   groundPbr?: GroundPbrTextures,
+  yardKit?: YardKitParts,
 ): Environment {
   const group = new Group();
   const geometries: BufferGeometry[] = [];
@@ -303,7 +305,8 @@ export function proceduralEnvironment(
   const legacyGround = domeGround(palette, false);
   const splitGround = domeGround(palette, true);
   const skyline = createSkyline(layout.bounds, haze);
-  group.add(sky.mesh, skyline.mesh);
+  const kit = createYardKitLayer(layout, palette, yardKit);
+  group.add(sky.mesh, skyline.mesh, kit.object);
 
   let graded = false;
   let hdriOn = false;
@@ -362,6 +365,7 @@ export function proceduralEnvironment(
       if (gate !== null) setGraded(gate.materials[1], graded);
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
+      kit.setQuality(flags);
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
       flatSwap.set(flags.litMarkings);
@@ -385,6 +389,7 @@ export function proceduralEnvironment(
       litFlat.dispose();
       sky.dispose();
       skyline.dispose();
+      kit.dispose();
     },
   };
 }

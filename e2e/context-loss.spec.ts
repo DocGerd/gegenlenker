@@ -81,6 +81,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await expect(html).toHaveAttribute('data-ground-pbr', /^ktx2:/);
   // a loss during a load would warn and spend a retry
   await expect(html).toHaveAttribute('data-sky-hdri', 'on');
+  await expect(html).toHaveAttribute('data-yard-kit', 'on');
   await page.evaluate(() => {
     const seen: (string | null)[] = [];
     Object.assign(window, { pbrSeen: seen });
@@ -94,6 +95,7 @@ test('a lost GPU context comes back on a fresh canvas and the drive goes on', as
   await expect(page.locator('.drive-surface > canvas')).toHaveCount(1);
   await expect(html).toHaveAttribute('data-render-backend', 'webgl2');
   await expect(page.getByText(en.contextLost)).toHaveCount(0);
+  await expect(html).toHaveAttribute('data-yard-kit', 'on');
   // The reflections were rebuilt for the new renderer, not left over from the old one.
   await expect
     .poll(() =>

@@ -66,6 +66,7 @@ describe('readyMarkers', () => {
     'data-vehicle-shells': shells,
     'data-ground-texture': 'ktx2:bc7',
     'data-ground-pbr': 'ktx2:bc7',
+    'data-yard-kit': 'on',
     'data-vehicle-pbr': 'on',
     'data-sky-hdri': 'on',
     'data-perspective-grade': 'on',
@@ -88,5 +89,6 @@ describe('readyMarkers', () => {
     expect(ready('high', { ...all, 'data-ground-texture': 'failed' })).toBe(false);
     expect(ready('high', { ...all, 'data-ground-pbr': 'failed' })).toBe(false);
     expect(ready('high', { ...all, 'data-sky-hdri': '' })).toBe(false);
+    expect(ready('high', { ...all, 'data-yard-kit': 'failed' })).toBe(false);
   });
 });
