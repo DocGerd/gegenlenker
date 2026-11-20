@@ -11,6 +11,14 @@ export type Preset = 'low' | 'balanced' | 'high';
 export type RenderConfig = { readonly preset: Preset; readonly lighting: LightingMode };
 export type Shot = 'cockpit' | 'mirrorLeft' | 'mirrorRight' | 'follow' | 'yard' | 'chase';
 
+/**
+ * Tag of the specs that step several presets or views on software GL: the slowest frames, so CI runs
+ * them in shards of their own (`--grep @heavy`) apart from the rest (`--grep-invert @heavy`).
+ */
+export const HEAVY = '@heavy';
+/** Wall-clock bound for a heavy spec that drives one preset. */
+export const PRESET_TIMEOUT_MS = 120_000;
+
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const FRAME_MS = 16;
 /** Frames stepped after the scene is ready, so every lazily built resource is in place. */

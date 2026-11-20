@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import {
+  HEAVY,
+  PRESET_TIMEOUT_MS,
   diffShot,
   distinctColours,
   renderScale,
@@ -49,68 +51,72 @@ const MIN_TOKEN_SHARE: Readonly<
 };
 
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
-test('the top-down view is the same at every graphics preset', async ({ context }, testInfo) => {
-  test.setTimeout(360_000);
-  const errors: string[] = [];
-  const threeProblems: string[] = [];
-  const mismatches: string[] = [];
-  const scales: { label: string; scale: number }[] = [];
-  // One exercise per yard, so each yard's restyled props are covered.
-  for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
-    const shots = { follow: new Map<Preset, Buffer>(), yard: new Map<Preset, Buffer>() };
-    for (const preset of PRESETS) {
-      const page = await context.newPage();
-      page.on('console', (m) => {
-        if (m.type() === 'error') errors.push(m.text());
+// One exercise per yard, so each yard's restyled props are covered.
+for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
+  test(
+    `the top-down view is the same at every graphics preset: ${exercise}`,
+    { tag: HEAVY },
+    async ({ context }, testInfo) => {
+      test.setTimeout(PRESET_TIMEOUT_MS * PRESETS.length);
+      const errors: string[] = [];
+      const threeProblems: string[] = [];
+      const mismatches: string[] = [];
+      const scales: { label: string; scale: number }[] = [];
+      const shots = { follow: new Map<Preset, Buffer>(), yard: new Map<Preset, Buffer>() };
+      for (const preset of PRESETS) {
+        const page = await context.newPage();
+        page.on('console', (m) => {
+          if (m.type() === 'error') errors.push(m.text());
+        });
+        page.on('pageerror', (e) => errors.push(e.message));
+        const three = collectThreeProblems(page);
+        await startPinnedDrive(page, { preset, lighting: 'day' }, exercise);
+        scales.push({ label: `${exercise} ${preset} before`, scale: await renderScale(page) });
+        for (const shot of ['follow', 'yard'] as const) {
+          const png = await shoot(page, shot);
+          const name = `${exercise} ${preset} ${shot}`;
+          await testInfo.attach(`${name}.png`, { body: png, contentType: 'image/png' });
+          expect(await distinctColours(page, png), name).toBeGreaterThan(MIN_DRAWN_COLOURS);
+          for (const [token, min] of MIN_TOKEN_SHARE[shot]) {
+            const share = await tokenShare(page, png, token, TOKEN_TOLERANCE[token] ?? 0);
+            expect(share, `${name}: ${token}`).toBeGreaterThan(min);
+          }
+          shots[shot].set(preset, png);
+        }
+        scales.push({ label: `${exercise} ${preset} after`, scale: await renderScale(page) });
+        threeProblems.push(...three);
+        await page.close();
+      }
+      const scratch = await context.newPage();
+      for (const [shot, byPreset] of Object.entries(shots)) {
+        const [first, ...rest] = PRESETS;
+        const base = first === undefined ? undefined : byPreset.get(first);
+        if (first === undefined || base === undefined) throw new Error(`no ${shot} shot`);
+        for (const preset of rest) {
+          const png = byPreset.get(preset);
+          if (png === undefined) throw new Error(`no ${shot} shot at ${preset}`);
+          if (sha(png) === sha(base)) continue;
+          const pair = `${exercise} ${shot}: ${first} vs ${preset}`;
+          const diff = await diffShot(scratch, base, png);
+          if (diff === null) {
+            mismatches.push(`${pair} differ in size`);
+            continue;
+          }
+          const { heatmap, ...counts } = diff;
+          await testInfo.attach(`${pair} diff.png`, { body: heatmap, contentType: 'image/png' });
+          mismatches.push(`${pair} ${JSON.stringify(counts)}`);
+        }
+      }
+      await scratch.close();
+      const scaleLines = scales.map((e) => `${e.label} ${e.scale}`);
+      await testInfo.attach('render scales', {
+        body: scaleLines.join('\n'),
+        contentType: 'text/plain',
       });
-      page.on('pageerror', (e) => errors.push(e.message));
-      const three = collectThreeProblems(page);
-      await startPinnedDrive(page, { preset, lighting: 'day' }, exercise);
-      scales.push({ label: `${exercise} ${preset} before`, scale: await renderScale(page) });
-      for (const shot of ['follow', 'yard'] as const) {
-        const png = await shoot(page, shot);
-        const name = `${exercise} ${preset} ${shot}`;
-        await testInfo.attach(`${name}.png`, { body: png, contentType: 'image/png' });
-        expect(await distinctColours(page, png), name).toBeGreaterThan(MIN_DRAWN_COLOURS);
-        for (const [token, min] of MIN_TOKEN_SHARE[shot]) {
-          const share = await tokenShare(page, png, token, TOKEN_TOLERANCE[token] ?? 0);
-          expect(share, `${name}: ${token}`).toBeGreaterThan(min);
-        }
-        shots[shot].set(preset, png);
-      }
-      scales.push({ label: `${exercise} ${preset} after`, scale: await renderScale(page) });
-      threeProblems.push(...three);
-      await page.close();
-    }
-    const scratch = await context.newPage();
-    for (const [shot, byPreset] of Object.entries(shots)) {
-      const [first, ...rest] = PRESETS;
-      const base = first === undefined ? undefined : byPreset.get(first);
-      if (first === undefined || base === undefined) throw new Error(`no ${shot} shot`);
-      for (const preset of rest) {
-        const png = byPreset.get(preset);
-        if (png === undefined) throw new Error(`no ${shot} shot at ${preset}`);
-        if (sha(png) === sha(base)) continue;
-        const pair = `${exercise} ${shot}: ${first} vs ${preset}`;
-        const diff = await diffShot(scratch, base, png);
-        if (diff === null) {
-          mismatches.push(`${pair} differ in size`);
-          continue;
-        }
-        const { heatmap, ...counts } = diff;
-        await testInfo.attach(`${pair} diff.png`, { body: heatmap, contentType: 'image/png' });
-        mismatches.push(`${pair} ${JSON.stringify(counts)}`);
-      }
-    }
-    await scratch.close();
-  }
-  const scaleLines = scales.map((e) => `${e.label} ${e.scale}`);
-  await testInfo.attach('render scales', {
-    body: scaleLines.join('\n'),
-    contentType: 'text/plain',
-  });
-  expect(new Set(scales.map((e) => e.scale)).size, scaleLines.join('; ')).toBe(1);
-  expect(mismatches, 'top-down shots differ between presets').toEqual([]);
-  expect(errors).toEqual([]);
-  expect(threeProblems).toEqual([]);
-});
+      expect(new Set(scales.map((e) => e.scale)).size, scaleLines.join('; ')).toBe(1);
+      expect(mismatches, 'top-down shots differ between presets').toEqual([]);
+      expect(errors).toEqual([]);
+      expect(threeProblems).toEqual([]);
+    },
+  );
+}
