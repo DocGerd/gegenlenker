@@ -78,6 +78,7 @@ const part = () => ({
   object: new Group(),
   update: () => undefined,
   setQuality: () => undefined,
+  setLook: () => undefined,
   dispose: () => undefined,
 });
 

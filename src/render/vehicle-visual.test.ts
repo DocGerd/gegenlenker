@@ -19,6 +19,7 @@ import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
 import { KEYS } from './palette';
+import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { applyShell } from './glb-shells';
 import { createMirror } from './mirror';
@@ -271,7 +272,7 @@ describe('number plate grade', () => {
       [QUALITY_FLAGS.low, false],
       [QUALITY_FLAGS.high, true],
     ] as const) {
-      visual.setQuality(flags);
+      visual.setLook(lookFor(flags, 'day'));
       expect(graded().every((g) => g === on)).toBe(true);
     }
     visual.dispose();
@@ -330,7 +331,7 @@ describe('sun shadow', () => {
         QUALITY_FLAGS.low,
         QUALITY_FLAGS.high,
       ]) {
-        visual.setQuality(flags);
+        visual.setLook(lookFor(flags, 'day'));
         for (const opacity of opacities()) {
           if (flags.sunShadow) {
             expect(opacity).toBeGreaterThan(0);
@@ -343,7 +344,7 @@ describe('sun shadow', () => {
 
   it('restores the blobs once a failed grade stops the sun casting', () => {
     const visual = proceduralTruck(truckById(TRUCK_IDS[0]), palette);
-    visual.setQuality(QUALITY_FLAGS.high);
+    visual.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const opacity = (): number => (shadowsOf(visual.object)[0]?.material as Material).opacity;
     expect(opacity()).toBeLessThan(1);
     setGradeDisabled(true);

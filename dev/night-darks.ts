@@ -47,6 +47,7 @@ import { GRADE } from '../src/render/grade';
 import { startGroundPbrTextures } from '../src/render/ground-pbr';
 import { startGroundTextures } from '../src/render/ground-texture';
 import { readScenePalette } from '../src/render/palette';
+import { lookFor } from '../src/render/look';
 import { QUALITY_FLAGS, type QualityFlags } from '../src/render/quality';
 import { enableLayers, PERSPECTIVE_LAYER, type Environment } from '../src/render/seams';
 
@@ -266,7 +267,7 @@ async function groundSubject(name: 'balanced' | 'high', share: number): Promise<
   );
   groundTextures.setEnabled(flags.groundTexture);
   groundPbr.setEnabled(flags.groundTexture && flags.groundPbr);
-  environment.setQuality(flags);
+  environment.setLook(lookFor(flags, 'day'));
   if (flags.groundTexture) {
     const deadline = performance.now() + 60_000;
     while (states.ground === null || (flags.groundPbr && states.pbr === null)) {

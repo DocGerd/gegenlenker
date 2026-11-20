@@ -27,6 +27,7 @@ import { KEYS } from './palette';
 import { FOG_DENSITY, GRADE } from './grade';
 import { perspectiveLight } from './light-rig';
 import { MARK_BOX } from './marking-wear';
+import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { REALISM_HUES } from './realism-hues';
 vi.mock('./ground-pbr-material', async (importOriginal) => {
@@ -94,12 +95,12 @@ describe('environment quality', () => {
     expect(layout).toBeDefined();
     if (layout === undefined) return;
     const env = proceduralEnvironment(layout, palette);
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     const balanced = Object.fromEntries(
       Object.entries(cameras).map(([k, c]) => [k, seen(env.object, c)]),
     );
 
-    env.setQuality(QUALITY_FLAGS.low);
+    env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     for (const view of ['cockpit', 'mirror'] as const) {
       const low = seen(env.object, cameras[view]);
       const tokens = only(low, balanced[view] ?? new Set());
@@ -109,7 +110,7 @@ describe('environment quality', () => {
     }
     expect(seen(env.object, cameras.topDown)).toEqual(balanced['topDown']);
 
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     for (const [view, meshes] of Object.entries(balanced)) {
       expect(seen(env.object, cameras[view as keyof typeof cameras]), view).toEqual(meshes);
     }
@@ -126,10 +127,10 @@ describe('environment lit markings', () => {
   it('leaves the top-down meshes and materials as on low, at every preset', () => {
     const env = build();
     if (env === null) return;
-    env.setQuality(QUALITY_FLAGS.low);
+    env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     const low = topDown(env);
     for (const preset of ['balanced', 'high'] as const) {
-      env.setQuality(QUALITY_FLAGS[preset]);
+      env.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
       expect(topDown(env), preset).toEqual(low);
     }
     env.dispose();
@@ -138,11 +139,11 @@ describe('environment lit markings', () => {
   it('swaps each marking for a lit copy in perspective only, keeping the polygon offset', () => {
     const env = build();
     if (env === null) return;
-    env.setQuality({ ...QUALITY_FLAGS.balanced, litMarkings: false });
+    env.setLook(lookFor({ ...QUALITY_FLAGS.balanced, litMarkings: false }, 'day'));
     const off = Object.fromEntries(
       Object.entries(cameras).map(([k, c]) => [k, seen(env.object, c)]),
     );
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     for (const view of ['cockpit', 'mirror'] as const) {
       const now = seen(env.object, cameras[view]);
       const gone = only(off[view] ?? new Set(), now);
@@ -182,7 +183,7 @@ describe('environment lit markings', () => {
       ['low', QUALITY_FLAGS.low],
       ['high again', QUALITY_FLAGS.high],
     ] as const) {
-      env.setQuality(flags);
+      env.setLook(lookFor(flags, 'day'));
       const shown = copies();
       expect(shown.length > 0, label).toBe(flags.litMarkings);
       expect(new Set(shown.map((m) => m.material)).size, label).toBe(flags.litMarkings ? 1 : 0);
@@ -197,7 +198,7 @@ describe('environment lit markings', () => {
   it('frees the copy material and each shared geometry once', () => {
     const env = build();
     if (env === null) return;
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const copies = [...seen(env.object, cameras.cockpit)].filter(
       (m): m is Mesh => m instanceof Mesh && isMarking(m) && isNodeMaterial(m),
     );
@@ -234,11 +235,11 @@ describe('environment lit aids', () => {
 
   it('shows no flat mesh to a perspective camera while lit copies are on, aids included', () => {
     const env = build();
-    env.setQuality(off);
+    env.setLook(lookFor(off, 'day'));
     for (const [view, c] of Object.entries(perspectiveViews)) {
       expect([...seen(env.object, c)].filter(isFlat).some(isGate), view).toBe(true);
     }
-    env.setQuality(on);
+    env.setLook(lookFor(on, 'day'));
     for (const [view, c] of Object.entries(perspectiveViews)) {
       expect([...seen(env.object, c)].filter(isFlat), view).toEqual([]);
     }
@@ -248,15 +249,15 @@ describe('environment lit aids', () => {
   it('swaps every flat token one for one in each perspective view, outline, band and gate too', () => {
     const env = build();
     const plain = layout === undefined ? null : proceduralEnvironment(layout, aidPalette);
-    env.setQuality(off);
-    plain?.setQuality(off);
+    env.setLook(lookFor(off, 'day'));
+    plain?.setLook(lookFor(off, 'day'));
     const flat = (e: { object: Object3D }, c: Layers): Mesh[] =>
       [...seen(e.object, c)].filter(isFlat).map(asMesh);
     for (const [view, c] of Object.entries(perspectiveViews)) {
       const before = flat(env, c);
       // outline, casing, band and gate sit on top of the markings
       expect(before.length - (plain === null ? 0 : flat(plain, c).length), view).toBe(4);
-      env.setQuality(on);
+      env.setLook(lookFor(on, 'day'));
       const copies = [...seen(env.object, c)].filter(isMesh).filter(isMarking);
       expect(copies, view).toHaveLength(before.length);
       for (const token of before) {
@@ -265,7 +266,7 @@ describe('environment lit aids', () => {
           view,
         ).toHaveLength(1);
       }
-      env.setQuality(off);
+      env.setLook(lookFor(off, 'day'));
     }
     env.dispose();
     plain?.dispose();
@@ -275,10 +276,10 @@ describe('environment lit aids', () => {
     const env = build();
     const topDown = (): Map<Object3D, unknown> =>
       new Map([...seen(env.object, cameras.topDown)].map((m) => [m, asMesh(m).material]));
-    env.setQuality(QUALITY_FLAGS.low);
+    env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     const low = topDown();
     for (const preset of ['balanced', 'high'] as const) {
-      env.setQuality(QUALITY_FLAGS[preset]);
+      env.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
       expect(topDown(), preset).toEqual(low);
     }
     env.dispose();
@@ -286,7 +287,7 @@ describe('environment lit aids', () => {
 
   it('colours the gate copy with its token as the gate is passed', () => {
     const env = build();
-    env.setQuality(on);
+    env.setLook(lookFor(on, 'day'));
     const gate = (c: Layers): Mesh => {
       const found = [...seen(env.object, c)].filter(isMesh).filter(isGate);
       expect(found).toHaveLength(1);
@@ -314,13 +315,13 @@ describe('environment lit aids', () => {
 
   it('grades the gate copy with the lighting and frees it once, sharing the ring geometry', () => {
     const env = build();
-    env.setQuality(on);
+    env.setLook(lookFor(on, 'day'));
     const lit = [...seen(env.object, cameras.cockpit)].filter(isMesh).find(isGate);
     expect(lit).toBeDefined();
     if (lit === undefined) return;
     const material = lit.material as unknown as { outputNode: unknown; dispose(): void };
     expect(material.outputNode !== null).toBe(on.perspectiveLighting);
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(material.outputNode !== null).toBe(true);
     const disposeMaterial = vi.spyOn(material, 'dispose');
     const disposeGeometry = vi.spyOn(lit.geometry, 'dispose');
@@ -346,7 +347,7 @@ describe('environment quality wiring', () => {
     const env = proceduralEnvironment(layout, palette);
     const perspective = [cameras.cockpit, cameras.mirror, camera(CHASE_LAYERS)];
     for (const flags of [QUALITY_FLAGS.high, QUALITY_FLAGS.low]) {
-      env.setQuality(flags);
+      env.setLook(lookFor(flags, 'day'));
       const lights = lightsOf(env.object);
       expect(lights.length).toBeGreaterThan(0);
       for (const l of lights) {
@@ -363,7 +364,7 @@ describe('environment quality wiring', () => {
     if (layout === undefined) return;
     const env = proceduralEnvironment(layout, palette);
     for (const flags of Object.values(QUALITY_FLAGS)) {
-      env.setQuality(flags);
+      env.setLook(lookFor(flags, 'day'));
       for (const l of lightsOf(env.object)) {
         if (cameras.topDown.test(l.layers)) expect(l.castShadow).toBe(false);
       }
@@ -375,7 +376,7 @@ describe('environment quality wiring', () => {
     expect(layout).toBeDefined();
     if (layout === undefined) return;
     const env = proceduralEnvironment(layout, palette);
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const all: Mesh[] = [];
     env.object.traverse((o) => {
       if (isMesh(o)) all.push(o);
@@ -438,7 +439,7 @@ describe('environment quality wiring', () => {
       ['low', QUALITY_FLAGS.low],
       ['high again', QUALITY_FLAGS.high],
     ] as const) {
-      env.setQuality(flags);
+      env.setLook(lookFor(flags, 'day'));
       expectGraded(flags.perspectiveLighting, label);
       expect(hdriSun?.castShadow, label).toBe(flags.sunShadow);
       expect(GRADE.fogDensity.value, label).toBe(flags.aerialPerspective ? FOG_DENSITY : 0);
@@ -513,7 +514,7 @@ describe('environment ground texture', () => {
       Object.entries(cameras).map(([k, c]) => [k, seen(env.object, c)]),
     );
 
-    env.setQuality(ground.high);
+    env.setLook(lookFor(ground.high, 'day'));
     deliver();
     const now = (k: keyof typeof cameras): Set<Object3D> => seen(env.object, cameras[k]);
     expect(now('topDown')).toEqual(before['topDown']);
@@ -525,11 +526,11 @@ describe('environment ground texture', () => {
       expect(now('topDown').has(gone[0] as Object3D)).toBe(true);
     }
 
-    env.setQuality(ground.balanced);
+    env.setLook(lookFor(ground.balanced, 'day'));
     for (const [view, meshes] of Object.entries(before)) {
       expect(now(view as keyof typeof cameras), view).toEqual(meshes);
     }
-    env.setQuality(ground.high);
+    env.setLook(lookFor(ground.high, 'day'));
     expect(now('cockpit').size).toBe(before['cockpit']?.size);
     expect(only(now('cockpit'), before['cockpit'] ?? new Set())).toHaveLength(1);
     env.dispose();
@@ -540,9 +541,9 @@ describe('environment ground texture', () => {
     const { textures, deliver } = fakeTextures();
     const env = proceduralEnvironment(layout, palette, textures);
     const before = seen(env.object, cameras.cockpit);
-    env.setQuality(ground.high);
+    env.setLook(lookFor(ground.high, 'day'));
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
-    env.setQuality(ground.balanced);
+    env.setLook(lookFor(ground.balanced, 'day'));
     deliver();
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
     env.dispose();
@@ -592,7 +593,7 @@ describe('environment ground texture', () => {
     const env = proceduralEnvironment(layout, palette, textures);
     const before = seen(env.object, cameras.cockpit);
     const children = env.object.children.length;
-    env.setQuality(ground.high);
+    env.setLook(lookFor(ground.high, 'day'));
     deliver();
     expect(warn).toHaveBeenCalledOnce();
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
@@ -606,14 +607,14 @@ describe('environment ground texture', () => {
     const { textures, deliver, reject, applied } = fakeTextures();
     const env = proceduralEnvironment(layout, palette, textures);
     const before = seen(env.object, cameras.cockpit);
-    env.setQuality(ground.high);
+    env.setLook(lookFor(ground.high, 'day'));
     deliver();
     expect(seen(env.object, cameras.cockpit)).not.toEqual(before);
     expect(applied).toEqual([true]);
     reject();
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
-    env.setQuality(ground.balanced);
-    env.setQuality(ground.high);
+    env.setLook(lookFor(ground.balanced, 'day'));
+    env.setLook(lookFor(ground.high, 'day'));
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
     expect(applied).toEqual([true, false]);
     env.dispose();
@@ -623,10 +624,10 @@ describe('environment ground texture', () => {
     if (layout === undefined) return;
     const { textures, deliver, applied } = fakeTextures();
     const env = proceduralEnvironment(layout, palette, textures);
-    env.setQuality(ground.high);
+    env.setLook(lookFor(ground.high, 'day'));
     deliver();
-    env.setQuality(ground.balanced);
-    env.setQuality(ground.high);
+    env.setLook(lookFor(ground.balanced, 'day'));
+    env.setLook(lookFor(ground.high, 'day'));
     env.dispose();
     expect(applied).toEqual([true, false, true, false]);
   });
@@ -698,15 +699,15 @@ describe('environment PBR ground', () => {
     const detail = fakeTextures();
     const pbr = fakePbrTextures();
     const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
-    env.setQuality(flags.pbr);
+    env.setLook(lookFor(flags.pbr, 'day'));
     detail.deliver();
     expect(groundMaterial(env)).toBeInstanceOf(MeshLambertNodeMaterial);
     pbr.deliver();
     expect(groundMaterial(env)).toBeInstanceOf(MeshStandardNodeMaterial);
     expect(pbr.applied).toEqual([true]);
-    env.setQuality(flags.detail);
+    env.setLook(lookFor(flags.detail, 'day'));
     expect(groundMaterial(env)).toBeInstanceOf(MeshLambertNodeMaterial);
-    env.setQuality(flags.pbr);
+    env.setLook(lookFor(flags.pbr, 'day'));
     expect(groundMaterial(env)).toBeInstanceOf(MeshStandardNodeMaterial);
     expect(pbr.applied).toEqual([true, false, true]);
     // the detail set is still the one reported as drawn
@@ -719,7 +720,7 @@ describe('environment PBR ground', () => {
     const detail = fakeTextures();
     const pbr = fakePbrTextures();
     const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
-    env.setQuality(flags.pbr);
+    env.setLook(lookFor(flags.pbr, 'day'));
     detail.deliver();
     expect(groundMesh(env).material).toBeInstanceOf(MeshLambertNodeMaterial);
     expect(groundMesh(env).receiveShadow).toBe(true);
@@ -735,7 +736,7 @@ describe('environment PBR ground', () => {
     const detail = fakeTextures();
     const pbr = fakePbrTextures();
     const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
-    env.setQuality(flags.pbr);
+    env.setLook(lookFor(flags.pbr, 'day'));
     pbr.deliver();
     detail.deliver();
     expect(groundMaterial(env)).toBeInstanceOf(MeshStandardNodeMaterial);
@@ -747,7 +748,7 @@ describe('environment PBR ground', () => {
     const detail = fakeTextures();
     const pbr = fakePbrTextures();
     const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
-    env.setQuality(flags.pbr);
+    env.setLook(lookFor(flags.pbr, 'day'));
     detail.deliver();
     pbr.deliver();
     pbr.reject();
@@ -761,7 +762,7 @@ describe('environment PBR ground', () => {
     const detail = fakeTextures();
     const pbr = fakePbrTextures();
     const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
-    env.setQuality(flags.pbr);
+    env.setLook(lookFor(flags.pbr, 'day'));
     detail.deliver();
     pbr.deliver();
     expect(pbr.applied).toEqual([true]);
@@ -774,7 +775,7 @@ describe('environment PBR ground', () => {
     const detail = fakeTextures();
     const pbr = fakePbrTextures();
     const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
-    env.setQuality(flags.pbr);
+    env.setLook(lookFor(flags.pbr, 'day'));
     detail.deliver();
     pbr.deliver();
     detail.reject();
@@ -791,7 +792,7 @@ describe('environment PBR ground', () => {
     const detail = fakeTextures();
     const pbr = fakePbrTextures();
     const env = proceduralEnvironment(layout, palette, detail.textures, undefined, pbr.textures);
-    env.setQuality(flags.pbr);
+    env.setLook(lookFor(flags.pbr, 'day'));
     detail.deliver();
     pbr.deliver();
     expect(warn).toHaveBeenCalledOnce();
@@ -854,10 +855,10 @@ describe('environment worn markings', () => {
 
   it('wears the paint on High over the PBR ground and leaves the aids on the lit flat look', () => {
     const env = setUp();
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     const { paint: plain, aids: plainAids } = copies(env);
     expect([...plain][0]).toBeInstanceOf(MeshLambertNodeMaterial);
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     const { paint, aids } = copies(env);
     expect(paint.size).toBe(1);
     const [worn] = [...paint];
@@ -869,21 +870,21 @@ describe('environment worn markings', () => {
 
   it('gives Balanced and Low nothing, and the same shared material back after High', () => {
     const env = setUp();
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     const before = copies(env);
-    env.setQuality(QUALITY_FLAGS.high);
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     expect(copies(env)).toEqual(before);
     env.dispose();
   });
 
   it('keeps the unworn markings when the PBR ground is off or rejected', () => {
     const env = setUp();
-    env.setQuality(QUALITY_FLAGS.balanced);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     const { paint: plain } = copies(env);
-    env.setQuality({ ...QUALITY_FLAGS.high, groundPbr: false });
+    env.setLook(lookFor({ ...QUALITY_FLAGS.high, groundPbr: false }, 'day'));
     expect(copies(env).paint).toEqual(plain);
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(copies(env).paint).not.toEqual(plain);
     env.pbr.reject();
     expect(copies(env).paint).toEqual(plain);
@@ -894,9 +895,9 @@ describe('environment worn markings', () => {
     const env = setUp();
     const tokens = (): Map<Object3D, unknown> =>
       new Map([...seen(env.object, cameras.topDown)].map((m) => [m, asMesh(m).material]));
-    env.setQuality(QUALITY_FLAGS.low);
+    env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     const low = tokens();
-    env.setQuality(QUALITY_FLAGS.high);
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
     expect(tokens()).toEqual(low);
     for (const m of low.keys()) {
       const geometry = asMesh(m).geometry;
