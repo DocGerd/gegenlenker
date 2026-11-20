@@ -20,7 +20,6 @@ import { truckAnchors } from '../vehicles/anchors';
 import { resolveCombination } from '../vehicles/resolve';
 import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './chase-camera';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
-import { createCockpitInterior } from './cockpit-interior';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { describeAdapter } from './gpu-backend';
@@ -34,6 +33,7 @@ import {
   markLost,
   TOP_DOWN_LAYERS,
   type AidsLayer,
+  type CockpitInterior,
   type Environment,
   type RendererParts,
   type VehicleVisual,
@@ -56,6 +56,7 @@ type Built = {
   readonly trailer: VehicleVisual;
   readonly environment: Environment;
   readonly aids: AidsLayer;
+  readonly interior: CockpitInterior;
   readonly anchors: TruckAnchors;
   readonly cabFront: CabFront;
   readonly palette: ScenePalette;
@@ -193,7 +194,6 @@ export function createThreeSceneRenderer(
 ): SceneRenderer & { warmUp: () => void } {
   const timer = createFrameTimer();
   const cockpitCamera = createCockpitCamera();
-  const interior = createCockpitInterior();
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
   enableLayers(topDownCamera.layers, TOP_DOWN_LAYERS);
   const chaseCamera = createChaseCamera();
@@ -258,7 +258,7 @@ export function createThreeSceneRenderer(
     b.environment.setQuality(quality);
     b.truck.setQuality(quality);
     b.trailer.setQuality(quality);
-    interior.setQuality(quality);
+    b.interior.setQuality(quality);
   }
 
   function disposeBuilt(): void {
@@ -267,6 +267,7 @@ export function createThreeSceneRenderer(
     built.trailer.dispose();
     built.environment.dispose();
     built.aids.dispose();
+    built.interior.dispose();
     built.scene.clear();
     built = null;
   }
@@ -430,20 +431,17 @@ export function createThreeSceneRenderer(
       const trailerVisual = parts.trailer(trailer, palette);
       const environment = parts.environment(nextLayout, palette);
       const aids = parts.aids(truck, trailer, nextLayout, palette);
+      const interior = parts.interior(truck, palette);
       setAidsLayer(aids.object);
-      scene.add(
-        environment.object,
-        truckVisual.object,
-        trailerVisual.object,
-        aids.object,
-        interior.object,
-      );
+      scene.add(environment.object, truckVisual.object, trailerVisual.object, aids.object);
+      (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
       built = {
         scene,
         truck: truckVisual,
         trailer: trailerVisual,
         environment,
         aids,
+        interior,
         anchors: truckAnchors(truck),
         cabFront: cabFront(truck),
         palette,
@@ -531,7 +529,12 @@ export function createThreeSceneRenderer(
 
       if (cockpit !== null) {
         placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit);
-        interior.place(cockpitCamera, cockpit, leftRect, rightRect);
+        b.interior.place({
+          camera: cockpitCamera,
+          cockpit,
+          mirrorLeft: leftRect,
+          mirrorRight: rightRect,
+        });
         viewRect(gl, cockpit);
         gl.render(b.scene, cockpitCamera);
       }
@@ -608,7 +611,6 @@ export function createThreeSceneRenderer(
 
     dispose() {
       disposeBuilt();
-      interior.dispose();
       mirrorLeft.dispose();
       mirrorRight.dispose();
       generation++;

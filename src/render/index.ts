@@ -1,6 +1,7 @@
 import type { GraphicsPreset, SceneRenderer } from '../contracts/render';
 import type { Texture } from 'three';
 import { proceduralAids } from './aids';
+import { createCockpitInterior } from './cockpit-interior';
 import { proceduralEnvironment } from './environment';
 import {
   BODY_SHELL_URLS,
@@ -116,6 +117,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       proceduralTrailer(spec, palette, shells.trailer, vehicleEnvironment),
     environment: (layout, palette) =>
       proceduralEnvironment(layout, palette, groundTextures, skyTexture, groundPbr),
+    interior: createCockpitInterior,
     aids: proceduralAids,
   });
   // Read by the e2e: the GPU API of the live renderer and why it is not WebGPU when that was asked

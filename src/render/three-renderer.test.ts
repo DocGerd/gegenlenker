@@ -101,6 +101,7 @@ function stubParts(
       truck: () => part({}),
       trailer: () => part({}),
       environment: () => part({}),
+      interior: () => part({ frame: 'eye' as const, place: () => undefined }),
       aids: () => ({ object: new Group(), update: () => undefined, dispose: () => undefined }),
     });
   return { applied, renderer: create() };
@@ -111,12 +112,56 @@ describe('renderer quality', () => {
     const { applied, renderer } = stubParts();
     renderer.setQuality('low');
     renderer.setScene(layout, truckById('man-le-18-280'), trailerById('krone-azw-18'));
-    expect(applied).toHaveLength(3);
+    expect(applied).toHaveLength(4);
     for (const log of applied) expect(log).toEqual([QUALITY_FLAGS.low]);
 
     renderer.setQuality('high');
     renderer.setQuality('high');
     for (const log of applied) expect(log).toEqual([QUALITY_FLAGS.low, QUALITY_FLAGS.high]);
+  });
+});
+
+describe('renderer interior', () => {
+  it('builds one interior per scene, hangs a truck-frame one on the truck, and disposes it with the scene', () => {
+    const interiors: { object: Group; dispose: ReturnType<typeof vi.fn> }[] = [];
+    const trucks: Group[] = [];
+    const part = () => ({
+      object: new Group(),
+      update: () => undefined,
+      setQuality: () => undefined,
+      dispose: () => undefined,
+    });
+    const renderer = createThreeSceneRenderer({
+      truck: () => {
+        const truck = part();
+        trucks.push(truck.object);
+        return truck;
+      },
+      trailer: part,
+      environment: part,
+      interior: () => {
+        const interior = {
+          object: new Group(),
+          frame: 'truck' as const,
+          place: () => undefined,
+          setQuality: () => undefined,
+          dispose: vi.fn(),
+        };
+        interiors.push(interior);
+        return interior;
+      },
+      aids: () => ({ object: new Group(), update: () => undefined, dispose: () => undefined }),
+    });
+    const set = () =>
+      renderer.setScene(layout, truckById('man-le-18-280'), trailerById('krone-azw-18'));
+    set();
+    expect(interiors[0]?.object.parent).toBe(trucks[0]);
+    set();
+    expect(interiors).toHaveLength(2);
+    expect(interiors[0]?.dispose).toHaveBeenCalledOnce();
+    expect(interiors[1]?.dispose).not.toHaveBeenCalled();
+    renderer.dispose();
+    expect(interiors[1]?.dispose).toHaveBeenCalledOnce();
   });
 });
 
