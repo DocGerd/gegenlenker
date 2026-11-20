@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   skyOnLoaded: vi.fn(),
   groundAttach: vi.fn(),
   groundPbrAttach: vi.fn(),
+  yardKitAttach: vi.fn(),
+  yardKitSetEnabled: vi.fn(),
+  yardKit: null as ((state: string | null) => void) | null,
   pbrAttach: vi.fn(),
   setSky: vi.fn(),
   setQuality: vi.fn(),
@@ -51,6 +54,16 @@ vi.mock('./ground-pbr', () => ({
     setEnabled: vi.fn(),
     dispose: vi.fn(),
   }),
+}));
+vi.mock('./yard-kit', () => ({
+  startYardKit: (onApplied: (state: string | null) => void) => {
+    mocks.yardKit = onApplied;
+    return {
+      attach: mocks.yardKitAttach,
+      setEnabled: mocks.yardKitSetEnabled,
+      dispose: vi.fn(),
+    };
+  },
 }));
 vi.mock('./sky-texture', () => ({
   startSkyTexture: (_load: unknown, onApplied: (state: string | null) => void) => {
@@ -113,6 +126,8 @@ describe('scene renderer attach hooks', () => {
       mocks.skyOnLoaded,
       mocks.groundAttach,
       mocks.groundPbrAttach,
+      mocks.yardKitAttach,
+      mocks.yardKitSetEnabled,
       mocks.pbrAttach,
       mocks.setSky,
       mocks.setQuality,
@@ -165,6 +180,7 @@ describe('scene renderer attach hooks', () => {
     mocks.onRenderer?.(gpu);
     expect(mocks.groundAttach).toHaveBeenCalledWith(gpu);
     expect(mocks.groundPbrAttach).toHaveBeenCalledWith(gpu);
+    expect(mocks.yardKitAttach).toHaveBeenCalledWith(gpu);
     expect(mocks.skyAttach).toHaveBeenCalledWith(gpu);
     expect(mocks.pbrAttach).toHaveBeenCalledWith(gpu);
   });
@@ -178,6 +194,26 @@ describe('scene renderer attach hooks', () => {
     }
     expect(QUALITY_FLAGS.high.hdriSky).toBe(true);
     expect(QUALITY_FLAGS.low.hdriSky).toBe(false);
+  });
+
+  it('enables the yard kit per preset flag', () => {
+    const renderer = createSceneRenderer();
+    for (const preset of ['low', 'balanced', 'high'] as const) {
+      renderer.setQuality(preset);
+      expect(mocks.yardKitSetEnabled).toHaveBeenLastCalledWith(QUALITY_FLAGS[preset].yardKit);
+    }
+    expect(QUALITY_FLAGS.high.yardKit).toBe(true);
+    expect(QUALITY_FLAGS.balanced.yardKit).toBe(false);
+  });
+
+  it('publishes the yard kit state, warming up for a new drawn one but not for failed', () => {
+    createSceneRenderer();
+    mocks.yardKit?.('on');
+    expect(attribute(ATTACHMENTS.yardKit.marker)).toBe('on');
+    expect(mocks.warmUp).toHaveBeenCalledTimes(1);
+    mocks.yardKit?.('failed');
+    expect(attribute(ATTACHMENTS.yardKit.marker)).toBe('failed');
+    expect(mocks.warmUp).toHaveBeenCalledTimes(1);
   });
 
   it('gives the vehicles the loaded sky, and takes it away when the sky is reverted', () => {

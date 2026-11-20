@@ -124,7 +124,7 @@ test('zooms and pans the top-down view without disturbing the controls', async (
   expect(three).toEqual([]);
 });
 
-test('High graphics caches the ground and sky textures and transcoder on first use and applies them offline', async ({
+test('High graphics caches the ground, sky and yard kit assets and transcoder on first use and applies them offline', async ({
   page,
   context,
   baseURL,
@@ -193,6 +193,10 @@ test('High graphics caches the ground and sky textures and transcoder on first u
       /pavers-albedo-[\w-]+\.ktx2$/,
       /pavers-packed-[\w-]+\.ktx2$/,
       /sky-[\w-]+\.ktx2$/,
+      /yard-kit-[\w-]+\.glb$/,
+      /yard-kit-atlas-a-[\w-]+\.ktx2$/,
+      /yard-kit-atlas-b-[\w-]+\.ktx2$/,
+      /yard-kit-leaves-[\w-]+\.ktx2$/,
     ]
       .map(String)
       .sort(),
@@ -211,6 +215,7 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   await expect(marker).toHaveAttribute('data-ground-pbr', /^ktx2:[a-z0-9-]+$/);
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
+  await expect(marker).toHaveAttribute('data-yard-kit', 'on');
   await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
   // WebGL 2 stays the default until WebGPU passes its gate (docs/perf.md)
   await expect(marker).toHaveAttribute('data-render-backend', 'webgl2');
@@ -235,6 +240,7 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   await expect(marker).not.toHaveAttribute('data-ground-pbr', /.*/);
   await expect(marker).not.toHaveAttribute('data-vehicle-pbr', /.*/);
   await expect(marker).not.toHaveAttribute('data-sky-hdri', /.*/);
+  await expect(marker).not.toHaveAttribute('data-yard-kit', /.*/);
   await expect(marker).not.toHaveAttribute('data-perspective-grade', /.*/);
 
   offline = true;
@@ -245,10 +251,11 @@ test('High graphics caches the ground and sky textures and transcoder on first u
   await expect(marker).toHaveAttribute('data-ground-pbr', /^ktx2:[a-z0-9-]+$/);
   await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on');
   await expect(marker).toHaveAttribute('data-sky-hdri', 'on');
+  await expect(marker).toHaveAttribute('data-yard-kit', 'on');
   await expect(marker).toHaveAttribute('data-perspective-grade', 'on');
   expect(
     warnings.filter((w) =>
-      /Ground texture|PBR ground|Sky texture|Vehicle reflection|Perspective grade/.test(w),
+      /Ground texture|PBR ground|Sky texture|Yard kit|Vehicle reflection|Perspective grade/.test(w),
     ),
   ).toEqual([]);
   expect(errors).toEqual([]);
