@@ -8,6 +8,7 @@ import {
   bareScreenshot,
   HIGH_WAIT_MS,
   distinctColours,
+  HEAVY,
   MIN_DRAWN_COLOURS,
   settle,
   shoot,
@@ -61,72 +62,76 @@ async function startDrive(page: Page): Promise<void> {
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
 }
 
-test('a lost GPU context comes back on a fresh canvas and the drive goes on', async ({ page }) => {
-  test.setTimeout(180_000);
-  const problems = collectProblems(page);
-  await page.addInitScript(
-    ([key, value]) => {
-      if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
-    },
-    [SETTINGS_KEY, JSON.stringify({ version: 1, graphics: 'high' })] as const,
-  );
-  await watchFailedAttachments(page);
-  await startDrive(page);
-  const html = page.locator('html');
-  await expect(html).toHaveAttribute('data-vehicle-pbr', 'on', high);
-  await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/, high);
-  await expect(html).toHaveAttribute('data-ground-pbr', /^ktx2:/, high);
-  // a loss during a load would warn and spend a retry
-  await expect(html).toHaveAttribute('data-sky-hdri', 'on', high);
-  await expect(html).toHaveAttribute('data-yard-kit', 'on', high);
-  await page.evaluate(() => {
-    const seen: (string | null)[] = [];
-    Object.assign(window, { pbrSeen: seen });
-    const root = document.documentElement;
-    new MutationObserver((records) => {
-      for (const r of records) seen.push(r.oldValue);
-    }).observe(root, { attributeFilter: ['data-vehicle-pbr'], attributeOldValue: true });
-  });
+test(
+  'a lost GPU context comes back on a fresh canvas and the drive goes on',
+  { tag: HEAVY },
+  async ({ page }) => {
+    test.setTimeout(180_000);
+    const problems = collectProblems(page);
+    await page.addInitScript(
+      ([key, value]) => {
+        if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
+      },
+      [SETTINGS_KEY, JSON.stringify({ version: 1, graphics: 'high' })] as const,
+    );
+    await watchFailedAttachments(page);
+    await startDrive(page);
+    const html = page.locator('html');
+    await expect(html).toHaveAttribute('data-vehicle-pbr', 'on', high);
+    await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/, high);
+    await expect(html).toHaveAttribute('data-ground-pbr', /^ktx2:/, high);
+    // a loss during a load would warn and spend a retry
+    await expect(html).toHaveAttribute('data-sky-hdri', 'on', high);
+    await expect(html).toHaveAttribute('data-yard-kit', 'on', high);
+    await page.evaluate(() => {
+      const seen: (string | null)[] = [];
+      Object.assign(window, { pbrSeen: seen });
+      const root = document.documentElement;
+      new MutationObserver((records) => {
+        for (const r of records) seen.push(r.oldValue);
+      }).observe(root, { attributeFilter: ['data-vehicle-pbr'], attributeOldValue: true });
+    });
 
-  await loseAndReplace(page);
-  await expect(page.locator('.drive-surface > canvas')).toHaveCount(1, high);
-  await expect(html).toHaveAttribute('data-render-backend', 'webgl2', high);
-  await expect(page.getByText(en.contextLost)).toHaveCount(0);
-  await expect(html).toHaveAttribute('data-yard-kit', 'on', high);
-  // The reflections were rebuilt for the new renderer, not left over from the old one.
-  await expect
-    .poll(
-      () =>
-        page.evaluate(() => {
-          // A null old value: the attribute was set again after it had been removed.
-          const seen = (window as unknown as { pbrSeen: (string | null)[] }).pbrSeen;
-          return seen.includes(null) && document.documentElement.dataset['vehiclePbr'] === 'on';
-        }),
-      high,
-    )
-    .toBe(true);
+    await loseAndReplace(page);
+    await expect(page.locator('.drive-surface > canvas')).toHaveCount(1, high);
+    await expect(html).toHaveAttribute('data-render-backend', 'webgl2', high);
+    await expect(page.getByText(en.contextLost)).toHaveCount(0);
+    await expect(html).toHaveAttribute('data-yard-kit', 'on', high);
+    // The reflections were rebuilt for the new renderer, not left over from the old one.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            // A null old value: the attribute was set again after it had been removed.
+            const seen = (window as unknown as { pbrSeen: (string | null)[] }).pbrSeen;
+            return seen.includes(null) && document.documentElement.dataset['vehiclePbr'] === 'on';
+          }),
+        high,
+      )
+      .toBe(true);
 
-  const pane = await page.locator('[data-hud="topDown"]').boundingBox();
-  if (pane === null) throw new Error('no top-down pane');
-  await expect
-    .poll(async () => distinctColours(page, await bareScreenshot(page, pane)), high)
-    .toBeGreaterThan(MIN_DRAWN_COLOURS);
+    const pane = await page.locator('[data-hud="topDown"]').boundingBox();
+    if (pane === null) throw new Error('no top-down pane');
+    await expect
+      .poll(async () => distinctColours(page, await bareScreenshot(page, pane)), high)
+      .toBeGreaterThan(MIN_DRAWN_COLOURS);
 
-  const speed = page.locator('[data-hud="speed"]');
-  await page.keyboard.press('4');
-  for (let i = 0; i < 5; i++) await page.keyboard.press('w');
-  await expect(speed).not.toHaveText('0.0 km/h', high);
+    const speed = page.locator('[data-hud="speed"]');
+    await page.keyboard.press('4');
+    for (let i = 0; i < 5; i++) await page.keyboard.press('w');
+    await expect(speed).not.toHaveText('0.0 km/h', high);
 
-  // Pan and zoom listen on the surface, which outlives the canvas.
-  await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
-  await page.mouse.wheel(0, -300);
-  await expect(page.locator('[data-hud="resetView"]')).toBeEnabled();
+    // Pan and zoom listen on the surface, which outlives the canvas.
+    await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+    await page.mouse.wheel(0, -300);
+    await expect(page.locator('[data-hud="resetView"]')).toBeEnabled();
 
-  expect(problems).toEqual([LOST]);
-  await expectNoFailedAttachment(page);
-});
+    expect(problems).toEqual([LOST]);
+    await expectNoFailedAttachment(page);
+  },
+);
 
-test('the cockpit looks the same after a loss as before it', async ({ page }) => {
+test('the cockpit looks the same after a loss as before it', { tag: HEAVY }, async ({ page }) => {
   test.setTimeout(180_000);
   const problems = collectProblems(page);
   await watchFailedAttachments(page);

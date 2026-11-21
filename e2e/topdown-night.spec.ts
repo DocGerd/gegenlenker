@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import type { Page } from '@playwright/test';
+import type { BrowserContext, Page, TestInfo } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { exercises, layouts } from '../src/content/registry';
 import { resolveLayout } from '../src/content/resolve-layout';
 import { en } from '../src/i18n/en';
 import {
+  colourBorder,
   colourBox,
   colourShare,
   HEAVY,
@@ -18,15 +19,15 @@ import {
   startPinnedDrive,
   tokenShare,
   type Preset,
+  type RenderConfig,
   type Shot,
 } from './pinned-shoot';
 import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
-import type { LightingMode, ScenePalette, ScenePaletteKey } from '../src/contracts/render';
+import type { ScenePalette, ScenePaletteKey } from '../src/contracts/render';
 import { legacyIrradiance } from '../src/render/light-rig';
 import { TOP_DOWN_NIGHT_LIGHT } from '../src/render/look';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
-const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 const SHOTS = ['follow', 'yard'] as const satisfies readonly Shot[];
 
 /** Per channel, how far a lit flat region may sit from its dimmed night colour. */
@@ -112,13 +113,15 @@ const ACCENT_MATCH = 0.05;
 const ACCENT_SLACK_PX = 2;
 /** Accent pixels a zoom on a stroke must hold (the zoomed outline and gate hold several thousand), so a miss of the stroke fails. */
 const MIN_ZOOM_ACCENT_PX = 2000;
+/** The ring of pixels this close around a stroke's core: the edge blend and the casing, which is a pixel or two wide at the zoom. */
+const CASING_FROM_PX = 0;
+const CASING_TO_PX = 2;
 /**
- * Pixels of the wheel colour the night zoom must hold over the day zoom: the night casings of the
- * outline and the gate ring, about 2700 px at the yard view's maximum zoom, of which at least a
- * quarter are the pure colour. The lit wheels of a vehicle in frame drop out at night, so a zoom
- * without a casing falls short.
+ * Share of that ring that may be anything but casing, by day and at night. The edge blend and the
+ * ground take about 0.35 to 0.45 of it when every stroke is cased; the outline or the gate ring
+ * drawn without its casing takes 0.53 or more, in the bay zoom as in the slalom's.
  */
-const MIN_CASING_PX = 800;
+const MAX_BARE_RING = 0.49;
 /** The two yards' exercises: slalom's depot has a gate, the bay's logistics yard has none. */
 const EXERCISES = [
   { id: 'slalom', name: en.exerciseSlalom, zooms: ['target', 'gate'] },
@@ -145,118 +148,129 @@ async function paneMapper(
   });
 }
 
+const DAY_LOW: RenderConfig = { preset: 'low', lighting: 'day' };
+const NIGHT_LOW: RenderConfig = { preset: 'low', lighting: 'night' };
+/** The presets compared with Low at night, one test each, so no test drives all three. */
+const COMPARED = ['balanced', 'high'] as const satisfies readonly Preset[];
+
+type Run = {
+  /** The shots each drive took, by name. */
+  readonly names: readonly string[];
+  readonly png: (config: RenderConfig, shot: string) => Buffer;
+  readonly tokens: Record<'accent' | 'nightAccent' | 'wheel', [number, number, number]>;
+  readonly errors: readonly string[];
+  readonly threeProblems: readonly string[];
+};
+
+/** Drives `drives` in turn, each on a fresh page, and keeps their shots; the timeout is the sum of the drives'. */
+async function runDrives(
+  context: BrowserContext,
+  testInfo: TestInfo,
+  { id, name: exercise, zooms }: (typeof EXERCISES)[number],
+  drives: readonly RenderConfig[],
+): Promise<Run> {
+  const found = exercises.find((e) => e.id === id);
+  if (found === undefined) throw new Error(`no exercise ${id}`);
+  const layout = resolveLayout(layouts[found.layout], found);
+  const world: Record<Zoom, { x: number; y: number } | null> = {
+    target: layout.target?.pose ?? null,
+    gate: layout.waypoint,
+  };
+  const names: readonly string[] = [...SHOTS, ...zooms];
+  test.setTimeout(drives.reduce((sum, { preset }) => sum + PRESET_TIMEOUT_MS[preset], 0));
+  const errors: string[] = [];
+  const threeProblems: string[] = [];
+  const shots = new Map<string, Buffer>();
+  const keyOf = ({ preset, lighting }: RenderConfig, shot: string): string =>
+    `${lighting} ${preset} ${shot}`;
+  const tokens = {} as Run['tokens'];
+  for (const config of drives) {
+    const { preset, lighting } = config;
+    const page = await context.newPage();
+    page.on('console', (m) => {
+      if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
+    });
+    page.on('pageerror', (e) => errors.push(e.message));
+    const three = collectThreeProblems(page);
+    await startPinnedDrive(page, config, exercise);
+    for (const key of ['accent', 'nightAccent', 'wheel'] as const) {
+      tokens[key] = await sceneRgb(page, key);
+    }
+    const share = lighting === 'night' ? TOP_DOWN_NIGHT_LIGHT : 1;
+    const taken = async (shot: string, png: Buffer, drawn: boolean): Promise<string> => {
+      const label = `${exercise} ${preset} ${lighting} ${shot}`;
+      await testInfo.attach(`${label}.png`, { body: png, contentType: 'image/png' });
+      if (drawn) {
+        expect(await distinctColours(page, png), label).toBeGreaterThan(MIN_DRAWN_COLOURS);
+      }
+      shots.set(keyOf(config, shot), png);
+      return label;
+    };
+    let yardPng: Buffer | null = null;
+    for (const shot of SHOTS) {
+      const png = await shoot(page, shot);
+      const label = await taken(shot, png, true);
+      if (shot === 'yard') yardPng = png;
+      if (lighting !== 'night') continue;
+      for (const [token, min] of MIN_SHARE[shot]) {
+        const found =
+          token === 'nightBackdrop'
+            ? await tokenShare(page, png, token, 0)
+            : await colourShare(page, png, await nightCode(page, token, share), LIT_TOLERANCE);
+        expect(found, `${label}: ${token}`).toBeGreaterThan(min);
+      }
+      // the strokes are unlit: the night accent draws, the day accent does not
+      expect(await tokenShare(page, png, 'accent', 2), `${label}: day accent`).toBe(0);
+    }
+    if (yardPng === null) throw new Error('no yard shot');
+    const paneAt = await paneMapper(
+      page,
+      yardPng,
+      await nightCode(page, 'yard', share),
+      layout.yard,
+    );
+    for (const zoom of zooms) {
+      const at = world[zoom];
+      if (at === null) throw new Error(`${exercise} has no ${zoom}`);
+      // a zoom on a stroke is mostly flat ground: the accent count below says it drew
+      await taken(zoom, await shootYardZoomed(page, paneAt(at), ZOOM_WHEEL), false);
+    }
+    threeProblems.push(...three);
+    await page.close();
+  }
+  const png = (config: RenderConfig, shot: string): Buffer => {
+    const found = shots.get(keyOf(config, shot));
+    if (found === undefined)
+      throw new Error(`no ${shot} shot at ${config.preset} ${config.lighting}`);
+    return found;
+  };
+  return { names, png, tokens, errors, threeProblems };
+}
+
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
 // One exercise per yard, so each yard's restyled props are covered, and the slalom's gate renders.
-for (const { id, name: exercise, zooms } of EXERCISES) {
+// Each test drives Low at night as its baseline, so the High drive, the slowest, runs apart from the rest.
+for (const kind of EXERCISES) {
+  const { name: exercise } = kind;
   test(
-    `the top-down view at night is the same at every graphics preset and never brighter than by day: ${exercise}`,
+    `the top-down view at night is never brighter than by day: ${exercise}`,
     { tag: HEAVY },
     async ({ context }, testInfo) => {
-      const found = exercises.find((e) => e.id === id);
-      if (found === undefined) throw new Error(`no exercise ${id}`);
-      const layout = resolveLayout(layouts[found.layout], found);
-      const world: Record<Zoom, { x: number; y: number } | null> = {
-        target: layout.target?.pose ?? null,
-        gate: layout.waypoint,
-      };
-      const names: readonly string[] = [...SHOTS, ...zooms];
-      // the three night presets and the day shot of the cheapest one
-      test.setTimeout(
-        PRESETS.reduce((sum, preset) => sum + PRESET_TIMEOUT_MS[preset], PRESET_TIMEOUT_MS.low),
-      );
-      const errors: string[] = [];
-      const threeProblems: string[] = [];
-      const shots = {
-        night: new Map<string, Map<Preset, Buffer>>(names.map((n) => [n, new Map()])),
-        day: new Map<string, Map<Preset, Buffer>>(names.map((n) => [n, new Map()])),
-      };
-      const tokens = {} as Record<'accent' | 'nightAccent' | 'wheel', [number, number, number]>;
-      const drive = async (preset: Preset, lighting: LightingMode): Promise<void> => {
-        const page = await context.newPage();
-        page.on('console', (m) => {
-          if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text()))
-            errors.push(m.text());
-        });
-        page.on('pageerror', (e) => errors.push(e.message));
-        const three = collectThreeProblems(page);
-        await startPinnedDrive(page, { preset, lighting }, exercise);
-        for (const key of ['accent', 'nightAccent', 'wheel'] as const) {
-          tokens[key] = await sceneRgb(page, key);
-        }
-        const share = lighting === 'night' ? TOP_DOWN_NIGHT_LIGHT : 1;
-        const taken = async (shot: string, png: Buffer, drawn: boolean): Promise<string> => {
-          const label = `${exercise} ${preset} ${lighting} ${shot}`;
-          await testInfo.attach(`${label}.png`, { body: png, contentType: 'image/png' });
-          if (drawn) {
-            expect(await distinctColours(page, png), label).toBeGreaterThan(MIN_DRAWN_COLOURS);
-          }
-          shots[lighting].get(shot)?.set(preset, png);
-          return label;
-        };
-        let yardPng: Buffer | null = null;
-        for (const shot of SHOTS) {
-          const png = await shoot(page, shot);
-          const label = await taken(shot, png, true);
-          if (shot === 'yard') yardPng = png;
-          if (lighting !== 'night') continue;
-          for (const [token, min] of MIN_SHARE[shot]) {
-            const found =
-              token === 'nightBackdrop'
-                ? await tokenShare(page, png, token, 0)
-                : await colourShare(page, png, await nightCode(page, token, share), LIT_TOLERANCE);
-            expect(found, `${label}: ${token}`).toBeGreaterThan(min);
-          }
-          // the strokes are unlit: the night accent draws, the day accent does not
-          expect(await tokenShare(page, png, 'accent', 2), `${label}: day accent`).toBe(0);
-        }
-        if (yardPng === null) throw new Error('no yard shot');
-        const paneAt = await paneMapper(
-          page,
-          yardPng,
-          await nightCode(page, 'yard', share),
-          layout.yard,
-        );
-        for (const zoom of zooms) {
-          const at = world[zoom];
-          if (at === null) throw new Error(`${exercise} has no ${zoom}`);
-          // a zoom on a stroke is mostly flat ground: the accent count below says it drew
-          await taken(zoom, await shootYardZoomed(page, paneAt(at), ZOOM_WHEEL), false);
-        }
-        threeProblems.push(...three);
-        await page.close();
-      };
-      await drive('low', 'day');
-      for (const preset of PRESETS) await drive(preset, 'night');
-
+      const run = await runDrives(context, testInfo, kind, [DAY_LOW, NIGHT_LOW]);
       const scratch = await context.newPage();
       const mismatches: string[] = [];
-      for (const shot of names) {
-        const base = shots.night.get(shot)?.get('low');
-        const day = shots.day.get(shot)?.get('low');
-        if (base === undefined || day === undefined) throw new Error(`no ${shot} shot`);
-        for (const preset of PRESETS.slice(1)) {
-          const png = shots.night.get(shot)?.get(preset);
-          if (png === undefined) throw new Error(`no ${shot} shot at ${preset}`);
-          if (sha(png) === sha(base)) continue;
-          const pair = `${exercise} ${shot} at night: low vs ${preset}`;
-          const diff = await diffShot(scratch, base, png);
-          if (diff === null) {
-            mismatches.push(`${pair} differ in size`);
-            continue;
-          }
-          const { heatmap, ...counts } = diff;
-          await testInfo.attach(`${pair} diff.png`, { body: heatmap, contentType: 'image/png' });
-          mismatches.push(`${pair} ${JSON.stringify(counts)}`);
-        }
-        const { pixels, brighter } = await brighterThanDay(scratch, day, base);
+      for (const shot of run.names) {
+        const day = run.png(DAY_LOW, shot);
+        const night = run.png(NIGHT_LOW, shot);
+        const { pixels, brighter } = await brighterThanDay(scratch, day, night);
         const count = async (
           png: Buffer,
           rgb: readonly [number, number, number],
         ): Promise<number> =>
           Math.round((await colourShare(scratch, png, rgb, ACCENT_TOLERANCE)) * pixels);
         const [dayAccent, nightAccent] = [
-          await count(day, tokens.accent),
-          await count(base, tokens.nightAccent),
+          await count(day, run.tokens.accent),
+          await count(night, run.tokens.nightAccent),
         ];
         const label = `${exercise} ${shot}`;
         if (
@@ -277,17 +291,61 @@ for (const { id, name: exercise, zooms } of EXERCISES) {
             `${label}: only ${nightAccent} night accent pixels, the stroke is not in frame`,
           );
         }
-        const casing = (await count(base, tokens.wheel)) - (await count(day, tokens.wheel));
-        if (casing < MIN_CASING_PX) {
-          mismatches.push(
-            `${label}: ${casing} more casing pixels than by day, under ${MIN_CASING_PX}`,
+        for (const [when, png, core] of [
+          ['day', day, run.tokens.accent],
+          ['night', night, run.tokens.nightAccent],
+        ] as const) {
+          const { bare, band } = await colourBorder(
+            scratch,
+            png,
+            core,
+            run.tokens.wheel,
+            ACCENT_TOLERANCE,
+            CASING_FROM_PX,
+            CASING_TO_PX,
           );
+          if (bare > MAX_BARE_RING * band) {
+            mismatches.push(
+              `${label}: ${bare} of ${band} pixels around the stroke are not casing by ${when}`,
+            );
+          }
         }
       }
       await scratch.close();
-      expect(mismatches, 'top-down shots at night').toEqual([]);
-      expect(errors).toEqual([]);
-      expect(threeProblems).toEqual([]);
+      expect(mismatches, 'top-down shots at night against day').toEqual([]);
+      expect(run.errors).toEqual([]);
+      expect(run.threeProblems).toEqual([]);
     },
   );
+
+  for (const preset of COMPARED) {
+    test(
+      `the top-down view at night is the same at ${preset} as at low: ${exercise}`,
+      { tag: HEAVY },
+      async ({ context }, testInfo) => {
+        const compared: RenderConfig = { preset, lighting: 'night' };
+        const run = await runDrives(context, testInfo, kind, [NIGHT_LOW, compared]);
+        const scratch = await context.newPage();
+        const mismatches: string[] = [];
+        for (const shot of run.names) {
+          const base = run.png(NIGHT_LOW, shot);
+          const png = run.png(compared, shot);
+          if (sha(png) === sha(base)) continue;
+          const pair = `${exercise} ${shot} at night: low vs ${preset}`;
+          const diff = await diffShot(scratch, base, png);
+          if (diff === null) {
+            mismatches.push(`${pair} differ in size`);
+            continue;
+          }
+          const { heatmap, ...counts } = diff;
+          await testInfo.attach(`${pair} diff.png`, { body: heatmap, contentType: 'image/png' });
+          mismatches.push(`${pair} ${JSON.stringify(counts)}`);
+        }
+        await scratch.close();
+        expect(mismatches, 'top-down shots at night differ between presets').toEqual([]);
+        expect(run.errors).toEqual([]);
+        expect(run.threeProblems).toEqual([]);
+      },
+    );
+  }
 }
