@@ -220,6 +220,7 @@ describe('the aids layer corridor', () => {
         cockpit: null,
         mirrorLeft: null,
         mirrorRight: null,
+        front: null,
         topDown: { x: 0, y: 0, width: 1, height: 1 },
       },
       topDown: 'follow',

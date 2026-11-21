@@ -28,7 +28,7 @@ import { collectThreeProblems } from '../e2e/three-problems.ts';
 import { QUALITY_FLAGS } from '../src/render/quality.ts';
 
 const PRESETS = ['low', 'balanced', 'high'];
-const SHOTS = ['cockpit', 'mirrorLeft', 'mirrorRight', 'follow', 'yard', 'chase'];
+const SHOTS = ['cockpit', 'mirrorLeft', 'mirrorRight', 'front', 'follow', 'yard', 'chase'];
 /** Views whose flat regions must survive a renderer change; the perspective ones are judged by eye. */
 const TOP_DOWN = new Set(['follow', 'yard']);
 /** Largest step a flat pixel may move: an 8-bit linear intermediate rounds sRGB tokens, dark ones by more. */

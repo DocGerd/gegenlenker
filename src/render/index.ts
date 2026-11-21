@@ -1,6 +1,7 @@
 import {
   DEFAULT_GRAPHICS,
   DEFAULT_LIGHTING,
+  type ExtraMirrors,
   type GraphicsPreset,
   type LightingMode,
   type SceneRenderer,
@@ -40,6 +41,11 @@ import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 /** Whether the preset offers the outside view. */
 export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].chaseView;
+
+/** The mirrors beyond class II that the preset draws; `computeViewports` makes room for them. */
+export const extraMirrors = (preset: GraphicsPreset): ExtraMirrors => ({
+  front: QUALITY_FLAGS[preset].frontMirror,
+});
 
 /** Whether the preset draws the cab interior and the mirror housings. */
 export const interiorAvailable = (preset: GraphicsPreset): boolean =>

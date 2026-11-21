@@ -91,7 +91,10 @@ async function blankRows(page: Page, x: number): Promise<number> {
 
 /** Waits until the HUD, gauges and controls are laid out, so measuring never sees an empty set. */
 async function hudReady(page: Page): Promise<void> {
-  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
+  // the two side mirrors always; the front mirror where the window has room for it
+  await expect
+    .poll(() => page.locator('.hud-mirror:not([hidden])').count())
+    .toBeGreaterThanOrEqual(2);
   const gauges = page.locator('.hud-gauge');
   await expect(gauges).toHaveCount(2);
   await expect(gauges.first()).toBeVisible();
@@ -120,6 +123,16 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
       expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
     }
   }
+  // nor does a mirror meet another, the cockpit label or the gear and speed readouts
+  const readouts = await boxes(
+    page.locator('.hud-cockpit > .hud-view-label, .hud-gear, .hud-speed'),
+  );
+  mirrorBoxes.forEach((m, i) => {
+    for (const r of readouts) expect(overlaps(m, r), `${r.name} overlaps a mirror`).toBe(false);
+    for (const other of mirrorBoxes.slice(i + 1)) {
+      expect(overlaps(m, other), 'two mirrors overlap').toBe(false);
+    }
+  });
 
   // Balanced is the default preset, so the housings are drawn: the arms stay clear too.
   await expect(page.locator('.hud[data-interior]')).toHaveCount(1);
@@ -138,6 +151,20 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
     for (const c of controlBoxes) {
       expect(overlaps(m, c), `${c.name} overlaps a mirror housing`).toBe(false);
     }
+  }
+
+  // The front mirror hangs from a bracket above it, which stays inside the cockpit.
+  const front = page.locator('[data-hud="front"]:not([hidden])');
+  if ((await front.count()) > 0) {
+    const [frontBox] = await boxes(front);
+    const [cockpitBox] = await boxes(page.locator('.hud-cockpit'));
+    const bracket = await front.evaluate((el) =>
+      Math.max(0, -parseFloat(getComputedStyle(el, '::before').top)),
+    );
+    expect(bracket, 'bracket is drawn').toBeGreaterThan(0);
+    expect((frontBox?.top ?? 0) - bracket, 'bracket inside the cockpit').toBeGreaterThanOrEqual(
+      cockpitBox?.top ?? 0,
+    );
   }
 
   // The lamp row must not make the gear column taller than the gears and their label were alone.
@@ -349,7 +376,8 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
       ),
     );
     const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
-    expect(mirrors).toHaveLength(2);
+    // the front mirror comes with the two side mirrors where the window has room for it
+    expect(mirrors.length).toBeGreaterThanOrEqual(2);
     expect(divider).toHaveLength(2);
     for (const m of mirrors) {
       for (const c of [...controls, ...divider]) {
@@ -373,6 +401,25 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
   }
 }
 
+/** A toast and the goal cue end left of the front mirror, which hangs in the cockpit's top centre. */
+async function expectMessagesClearFront(page: Page, goal: string): Promise<void> {
+  await page.keyboard.press('w');
+  await expect(page.locator('[data-hud="toast"]')).toBeVisible();
+  await page.evaluate((text) => {
+    const cue = document.querySelector('[data-hud="goalCue"]');
+    if (!(cue instanceof HTMLElement)) throw new Error('no goal cue');
+    cue.textContent = text;
+    cue.hidden = false;
+  }, goal);
+  const front = await boxes(page.locator('[data-hud="front"]:not([hidden])'));
+  const messages = await boxes(page.locator('[data-hud="toast"], [data-hud="goalCue"]'));
+  expect(messages).toHaveLength(2);
+  for (const f of front) {
+    for (const m of messages)
+      expect(overlaps(m, f), `${m.name} overlaps the front mirror`).toBe(false);
+  }
+}
+
 for (const { locale, messages } of locales) {
   for (const size of splitSizes) {
     const at = `${locale} ${size.width}x${size.height}`;
@@ -389,6 +436,8 @@ for (const { locale, messages } of locales) {
             expectMirrorsClearControls(page, size));
           await test.step('the cockpit view has no blank band', () =>
             expectNoBlankBand(page, size));
+          await test.step('a toast and the goal cue keep left of the front mirror', () =>
+            expectMessagesClearFront(page, messages.goalInside));
         }
         // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>

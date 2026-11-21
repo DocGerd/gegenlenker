@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TOP_DOWN_LAYOUT } from '../contracts/render';
+import { DEFAULT_TOP_DOWN_LAYOUT, type Rect } from '../contracts/render';
+import { COCKPIT_FOV, coneTop, CONE_GAP, frontBand, VISOR } from './cockpit-band';
 import {
   computeViewports,
   controlsHeight,
+  FRONT_ASPECT,
+  MIN_FRONT_WIDTH,
   MIN_MIRROR_HEIGHT,
   NO_INSETS,
   topDownSplit,
@@ -249,5 +252,121 @@ describe('top-down split', () => {
       width: 1280,
       height: 720,
     });
+  });
+});
+
+describe('computeViewports front mirror', () => {
+  const FRONT = { front: true };
+  const apart = (a: Rect, b: Rect): boolean =>
+    a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+  const sizes: (readonly [number, number])[] = [
+    [390, 844],
+    [844, 390],
+    [1280, 800],
+  ];
+  for (let w = 320; w <= 2000; w += 40) {
+    for (let h = 320; h <= 2000; h += 40) sizes.push([w, h]);
+  }
+
+  it('is only there when asked for, and moves nothing else', () => {
+    for (const [w, h] of sizes) {
+      const plain = computeViewports(w, h, 'drive');
+      const extra = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
+      expect(plain.front, `${w}x${h}`).toBeNull();
+      expect({ ...extra, front: null }, `${w}x${h}`).toEqual(plain);
+    }
+  });
+
+  it('keeps the top-down rect and the split the same with it on or off', () => {
+    for (const [w, h] of sizes) {
+      for (const legend of [null, { right: 300, height: 260 }]) {
+        const plain = computeViewports(w, h, 'drive', legend);
+        const extra = computeViewports(w, h, 'drive', legend, undefined, undefined, null, FRONT);
+        expect(extra.topDown, `${w}x${h}`).toEqual(plain.topDown);
+        expect(extra.cockpit, `${w}x${h}`).toEqual(plain.cockpit);
+        expect(extra.mirrorLeft, `${w}x${h}`).toEqual(plain.mirrorLeft);
+        expect(extra.mirrorRight, `${w}x${h}`).toEqual(plain.mirrorRight);
+      }
+    }
+  });
+
+  it('is shown at the required landscape sizes', () => {
+    for (const [w, h] of [
+      [1350, 600],
+      [1280, 800],
+      [1280, 720],
+      [1920, 1080],
+    ] as const) {
+      const { front } = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
+      expect(front, `${w}x${h}`).not.toBeNull();
+    }
+  });
+
+  it('is replaced by nothing in replay', () => {
+    expect(
+      computeViewports(800, 600, 'replay', null, undefined, undefined, null, FRONT).front,
+    ).toBeNull();
+  });
+
+  it('lies in the windscreen band, clear of the mirrors, the controls and the legend, at every size', () => {
+    let shown = 0;
+    for (const [w, h] of sizes) {
+      for (const legend of [null, { right: 300, height: 260 }, { right: w - 40, height: 260 }]) {
+        const views = computeViewports(w, h, 'drive', legend, undefined, undefined, null, FRONT);
+        const { cockpit, mirrorLeft, mirrorRight, front } = views;
+        if (front === null) continue;
+        shown++;
+        if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
+          throw new Error('drive mode has mirrors');
+        }
+        const at = `${w}x${h} ${JSON.stringify(legend)}`;
+        expect(front.width, at).toBeGreaterThanOrEqual(MIN_FRONT_WIDTH);
+        expect(front.width, at).toBe(FRONT_ASPECT * front.height);
+        expect(front.x, at).toBeGreaterThanOrEqual(cockpit.x);
+        expect(front.x + front.width, at).toBeLessThanOrEqual(cockpit.x + cockpit.width);
+        expect(front.y, at).toBeGreaterThanOrEqual(cockpit.y);
+        expect(front.y + front.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h));
+        expect(apart(front, mirrorLeft), at).toBe(true);
+        expect(apart(front, mirrorRight), at).toBe(true);
+        if (legend !== null && legend.right > front.x) {
+          expect(front.y + front.height, at).toBeLessThanOrEqual(h - legend.height);
+        }
+        // in the cockpit camera's NDC: right of the visor, above the sight cone's top
+        const ndcX = (x: number): number => (2 * (x - cockpit.x)) / cockpit.width - 1;
+        const ndcY = (y: number): number => 1 - (2 * (y - cockpit.y)) / cockpit.height;
+        expect(ndcX(front.x), at).toBeGreaterThanOrEqual(VISOR.right);
+        expect(ndcY(front.y + front.height), at).toBeGreaterThanOrEqual(
+          coneTop(COCKPIT_FOV) + CONE_GAP - 1e-6,
+        );
+        const band = frontBand(cockpit.width / cockpit.height, ndcX(mirrorRight.x));
+        if (band === null) throw new Error(`${at}: a rect without a band`);
+        expect(ndcX(front.x + front.width), at).toBeLessThanOrEqual(band.right + 1e-6);
+        expect(ndcY(front.y), at).toBeLessThanOrEqual(band.top + 1e-6);
+      }
+    }
+    expect(shown).toBeGreaterThan(100);
+  });
+
+  it('stays below the display cut-out and inside the safe area', () => {
+    const insets = { top: 40, right: 48, bottom: 20, left: 48 };
+    for (const [w, h] of [
+      [1280, 720],
+      [1024, 600],
+      [1920, 1080],
+    ] as const) {
+      const { cockpit, front } = computeViewports(
+        w,
+        h,
+        'drive',
+        null,
+        insets,
+        undefined,
+        null,
+        FRONT,
+      );
+      if (cockpit === null || front === null) throw new Error('no front mirror');
+      expect(front.y, `${w}x${h}`).toBeGreaterThanOrEqual(insets.top);
+      expect(front.x + front.width, `${w}x${h}`).toBeLessThanOrEqual(cockpit.x + cockpit.width);
+    }
   });
 });

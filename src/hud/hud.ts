@@ -130,6 +130,8 @@ const VIEW_OF: Partial<Record<Action, TopDownMode>> = {
 /** Aids drawn in the top-down view only; the outside view shows none of them. */
 const TOP_DOWN_AIDS: readonly (keyof AidFlags)[] = ['path', 'tracks', 'ghost'];
 const MS_TO_KMH = 3.6;
+/** CSS px between a toast or the goal cue and the front mirror they keep left of. */
+const FRONT_CLEAR = 8;
 /**
  * Cockpit widths below which the legend drops to one column: it must fit right of the wheel and
  * gears, and where the cockpit reaches the screen's right edge, left of the lever as well.
@@ -184,6 +186,7 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
   </div>
   <div class="hud-mirror" data-hud="mirrorLeft" hidden></div>
   <div class="hud-mirror" data-hud="mirrorRight" hidden></div>
+  <div class="hud-mirror" data-hud="front" hidden></div>
   <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
@@ -253,7 +256,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   const cockpit = query(hud, 'cockpit', HTMLElement);
   const legend = query(hud, 'legend', HTMLElement);
-  const mirrors = [query(hud, 'mirrorLeft', HTMLElement), query(hud, 'mirrorRight', HTMLElement)];
+  const mirrors = [
+    query(hud, 'mirrorLeft', HTMLElement),
+    query(hud, 'mirrorRight', HTMLElement),
+    query(hud, 'front', HTMLElement),
+  ];
   const toastWrap = query(hud, 'toastWrap', HTMLElement);
   const toast = query(hud, 'toast', HTMLElement);
   const topDown = query(hud, 'topDown', HTMLElement);
@@ -669,7 +676,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
           c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH),
         );
       }
-      const mirrorRects = [views.mirrorLeft, views.mirrorRight];
+      const mirrorRects = [views.mirrorLeft, views.mirrorRight, views.front];
       mirrors.forEach((el, i) => {
         const r = mirrorRects[i];
         setHidden(el, !r);
@@ -678,7 +685,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       const base = c ?? views.topDown;
       toastWrap.style.left = `${base.x}px`;
       toastWrap.style.top = `${base.y}px`;
-      toastWrap.style.width = `${base.width}px`;
+      // The front mirror hangs in the top centre: messages end left of it.
+      const toastEnd = views.front === null ? base.x + base.width : views.front.x - FRONT_CLEAR;
+      toastWrap.style.width = `${Math.max(0, toastEnd - base.x)}px`;
       place(topDown, views.topDown);
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', base.y < 1 && spansRight(base));

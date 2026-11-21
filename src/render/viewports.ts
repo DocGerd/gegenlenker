@@ -1,5 +1,7 @@
 import {
   DEFAULT_TOP_DOWN_LAYOUT,
+  type ExtraMirrors,
+  NO_EXTRA_MIRRORS,
   TOP_DOWN_SHARE_LIMITS,
   type LegendBox,
   type Orientation,
@@ -9,6 +11,7 @@ import {
   type ViewMode,
   type ViewRects,
 } from '../contracts/render';
+import { frontBand } from './cockpit-band';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -26,6 +29,11 @@ export const HUD_BAND_SHARE = 0.18;
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
 /** Smallest mirror height; where even this cannot clear the controls, it wins. */
 export const MIN_MIRROR_HEIGHT = 48;
+/** Narrowest and widest the front mirror gets, in CSS px; where the band cannot hold the narrowest, there is none. */
+export const MIN_FRONT_WIDTH = 80;
+const MAX_FRONT_WIDTH = 240;
+/** The front mirror's width over its height. */
+export const FRONT_ASPECT = 2;
 
 /** Screen areas the display cuts into, in CSS px; read from `--safe-*` in tokens.css. */
 export type Insets = {
@@ -158,10 +166,11 @@ export function computeViewports(
   safeInsets?: Insets,
   layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
   panels: PanelStack | null = null,
+  extra: ExtraMirrors = NO_EXTRA_MIRRORS,
 ): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
-    return { cockpit: null, mirrorLeft: null, mirrorRight: null, topDown: full };
+    return { cockpit: null, mirrorLeft: null, mirrorRight: null, front: null, topDown: full };
   }
   const insets = safeInsets ?? readSafeInsets();
   const { share } = topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
@@ -211,10 +220,52 @@ export function computeViewports(
     mirror = !fits || above.width * above.height >= beside.width * beside.height ? above : beside;
   }
   const { y, width: mw, height: mh } = mirror;
+  const mirrorRight: Rect = { x: right - mw, y, width: mw, height: mh };
   return {
     cockpit,
     mirrorLeft: { x: left, y, width: mw, height: mh },
-    mirrorRight: { x: right - mw, y, width: mw, height: mh },
+    mirrorRight,
+    front: extra.front
+      ? frontRect(cockpit, mirrorRight, cockpit.y + top, cssHeight, controls, legend)
+      : null,
     topDown,
   };
+}
+
+/**
+ * The front mirror in the windscreen band of `cockpit` (`frontBand`), hung from the header at the
+ * band's right; null where it would be narrower than `MIN_FRONT_WIDTH` or would reach the controls or
+ * the key legend. `ceiling` is the least y the screen's display cut-out leaves.
+ */
+function frontRect(
+  cockpit: Rect,
+  mirrorRight: Rect,
+  ceiling: number,
+  cssHeight: number,
+  controls: number,
+  legend: LegendBox | null,
+): Rect | null {
+  const band = frontBand(
+    cockpit.width / cockpit.height,
+    (2 * (mirrorRight.x - cockpit.x)) / cockpit.width - 1,
+  );
+  if (band === null) return null;
+  const toX = (ndc: number): number => cockpit.x + ((ndc + 1) / 2) * cockpit.width;
+  const toY = (ndc: number): number => cockpit.y + ((1 - ndc) / 2) * cockpit.height;
+  const top = Math.ceil(Math.max(toY(band.top), ceiling));
+  const right = Math.floor(toX(band.right));
+  const height = Math.floor(
+    Math.min(
+      toY(band.bottom) - top,
+      (right - toX(band.left)) / FRONT_ASPECT,
+      MAX_FRONT_WIDTH / FRONT_ASPECT,
+    ),
+  );
+  const width = FRONT_ASPECT * height;
+  if (width < MIN_FRONT_WIDTH) return null;
+  const rect = { x: right - width, y: top, width, height };
+  const bottom = rect.y + rect.height + MIRROR_GAP;
+  if (bottom > cssHeight - controls) return null;
+  if (legend !== null && legend.right > rect.x && bottom > cssHeight - legend.height) return null;
+  return rect;
 }

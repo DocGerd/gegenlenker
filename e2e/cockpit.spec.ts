@@ -47,7 +47,7 @@ function collectErrors(page: Page): string[] {
 
 async function drive(page: Page): Promise<void> {
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
-  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(3);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }
 
@@ -200,9 +200,9 @@ test(
     await page.goto('./');
     await drive(page);
     const cockpit = await boxOf(page, '.hud-cockpit');
-    // Between the pillars, above the skyline: just under the header, and just above the horizon.
+    // Between the pillars, above the skyline: just under the front mirror, and just above the horizon.
     const x = Math.round(cockpit.width * 0.58);
-    const points = [0.14, 0.31].map((f) => [x, Math.round(cockpit.height * f)] as const);
+    const points = [0.24, 0.31].map((f) => [x, Math.round(cockpit.height * f)] as const);
     await expect
       .poll(async () => isSky((await panePixels(page, '.hud-cockpit', points))[0]))
       .toBe(true);
@@ -329,6 +329,61 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
         expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
         expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
       }
+      expect(errors).toEqual([]);
+    },
+  );
+}
+
+/** Probe points of the front mirror as fractions of its box: across the top edge, the middle and the bottom edge. */
+function frontPoints(box: Box) {
+  const at = (u: number, v: number) =>
+    [Math.round(box.width * u), Math.round(box.height * v)] as const;
+  return {
+    // the cab front lies along the top edge on the driver's (left) side, past the passenger side's ground
+    cab: [0.1, 0.2, 0.3].map((u) => at(u, 0.03)),
+    passenger: [0.85, 0.9, 0.95].map((u) => at(u, 0.03)),
+    // the far edge of the field, all ground
+    far: [0.1, 0.3, 0.5, 0.7, 0.9].map((u) => at(u, 0.95)),
+  };
+}
+
+for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Preset[]) {
+  test(
+    `the front mirror shows the cab on its top edge at the driver's side and ground beyond on ${preset}`,
+    heavyAt(preset),
+    async ({ page }) => {
+      if (preset === 'high') test.setTimeout(PRESET_TIMEOUT_MS.high);
+      const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
+      const errors = collectErrors(page);
+      await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
+        SETTINGS_KEY,
+        JSON.stringify({ version: 1, graphics: preset }),
+      ] as const);
+      await page.goto('./');
+      await drive(page);
+      await expect.poll(() => attachmentsReady(page, preset), wait).toBe(true);
+      const box = await boxOf(page, '[data-hud="front"]');
+      const points = frontPoints(box);
+      const sample = async () => {
+        const pixels = await pixelsAt(page, box, [
+          ...points.cab,
+          ...points.passenger,
+          ...points.far,
+        ]);
+        const cab = pixels.slice(0, points.cab.length);
+        const passenger = pixels.slice(cab.length, cab.length + points.passenger.length);
+        const far = pixels.slice(cab.length + passenger.length);
+        return {
+          // ground along the far edge first: only a drawn frame can pass, so the rest means something
+          drawn: far.every(isYard) && !far.some(isSky),
+          cabShare: cab.filter((p) => !isYard(p) && !isSky(p)).length / cab.length,
+          passengerYard: yardShare(passenger),
+        };
+      };
+      await expect.poll(async () => (await sample()).drawn, wait).toBe(true);
+      const seen = await sample();
+      expect(seen.cabShare, 'cab at the top left').toBeGreaterThan(0.6);
+      expect(seen.passengerYard, 'ground at the top right').toBeGreaterThan(0.6);
       expect(errors).toEqual([]);
     },
   );

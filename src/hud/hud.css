@@ -91,6 +91,16 @@
   right: calc(-1 * var(--hud-mirror-arm) - 2 * var(--hud-stroke));
 }
 
+/* The front mirror hangs from a bracket on the header above it. */
+.hud[data-interior] .hud-mirror[data-hud='front']::before {
+  top: calc(-1 * var(--hud-mirror-arm) - 2 * var(--hud-stroke));
+  bottom: auto;
+  left: 38%;
+  right: 38%;
+  width: auto;
+  height: var(--hud-mirror-arm);
+}
+
 .hud-label {
   font-size: var(--text-2xs);
   line-height: var(--leading-2xs);
