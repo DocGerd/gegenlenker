@@ -81,7 +81,7 @@ The night tokens are the day hues scaled to the darkest set that meets every tar
 | `--scene-night-band`     | `#020202` | TN1 on yard and verge: yard kerbs, plot fences, cone base plate |
 | `--scene-night-wall`     | `#3f4449` | TN1 on yard                                                     |
 | `--scene-night-fence`    | `#30353a` | TN1 on yard                                                     |
-| `--scene-night-hall`     | `#282c31` | TN1 on yard; roof                                               |
+| `--scene-night-hall`     | `#24282c` | TN1 on yard; roof                                               |
 | `--scene-night-ramp`     | `#3f4449` | TN1 on yard                                                     |
 | `--scene-night-lamp`     | `#2b2f34` | TN1 on yard and pavement                                        |
 | `--scene-night-parked`   | `#30353a` | TN1 on yard                                                     |

@@ -471,6 +471,19 @@ describe('scene tokens', () => {
       },
     );
 
+    // The night top-down view is never brighter than the day one: each night token, dimmed, stays under its day token, dimmed by the day light, per channel.
+    it.each(Object.entries(NIGHT_KEY))('the lit %s is no brighter than by day', (key, nightKey) => {
+      const channels = (hex: string): number[] =>
+        [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const linear = (c: number): number =>
+        c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      const night = channels(scene(nightKey)).map((c) => linear(c) * dim);
+      const day = channels(scene(key)).map(
+        (c) => linear(c) * (legacyIrradiance(palette) / Math.PI),
+      );
+      night.forEach((c, i) => expect(c, `channel ${i}`).toBeLessThanOrEqual(day[i] ?? 0));
+    });
+
     // TN-a: the night clear colour is darker than every lit ground, so the yard's edge reads against it.
     it.each(grounds)('TN-a: nightBackdrop is darker than %s with 1.5:1 or more', (ground) => {
       expect(flat('nightBackdrop'), 'darker').toBeLessThan(lit(ground));
