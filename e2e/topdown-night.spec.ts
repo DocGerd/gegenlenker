@@ -9,7 +9,6 @@ import {
   colourBox,
   colourShare,
   HEAVY,
-  PRESET_TIMEOUT_MS,
   diffShot,
   distinctColours,
   MIN_DRAWN_COLOURS,
@@ -149,6 +148,19 @@ async function paneMapper(
   });
 }
 
+/** Wall-clock bound per drive, above `PRESET_TIMEOUT_MS`: each drive also takes several shots and compares them. */
+const DRIVE_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
+  low: 90_000,
+  balanced: 210_000,
+  high: 450_000,
+};
+/** Bound on each phase of `settle` for a drive; High loads its KTX2 files one after another. */
+const SETTLE_DEADLINE_MS: Readonly<Record<Preset, number>> = {
+  low: 30_000,
+  balanced: 30_000,
+  high: 120_000,
+};
+
 const DAY_LOW: RenderConfig = { preset: 'low', lighting: 'day' };
 const NIGHT_LOW: RenderConfig = { preset: 'low', lighting: 'night' };
 const NIGHT_BALANCED: RenderConfig = { preset: 'balanced', lighting: 'night' };
@@ -185,7 +197,7 @@ async function runDrives(
     gate: layout.waypoint,
   };
   const names: readonly string[] = [...SHOTS, ...zooms];
-  test.setTimeout(drives.reduce((sum, { preset }) => sum + PRESET_TIMEOUT_MS[preset], 0));
+  test.setTimeout(drives.reduce((sum, { preset }) => sum + DRIVE_TIMEOUT_MS[preset], 0));
   const errors: string[] = [];
   const threeProblems: string[] = [];
   const shots = new Map<string, Buffer>();
@@ -237,7 +249,7 @@ async function runDrives(
       // the lamps are perspective-only: switching the lights off and the hazard lights on changes no top-down pixel
       await page.keyboard.press('h');
       await page.keyboard.press('x');
-      await settle(page, preset);
+      await settle(page, preset, SETTLE_DEADLINE_MS[preset]);
       await expect(page.locator('[data-ctl="lights"]')).toHaveAttribute('aria-pressed', 'false');
       await expect(page.locator('[data-ctl="hazard"]')).toHaveAttribute('aria-pressed', 'true');
       for (const shot of SHOTS) {

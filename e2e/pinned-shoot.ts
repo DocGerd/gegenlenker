@@ -23,8 +23,8 @@ export const heavyAt = (preset: Preset): { tag?: string } =>
 /** Wall-clock bound for a test that drives one preset; High loads the most and draws slowest on software GL. */
 export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
   low: 90_000,
-  balanced: 210_000,
-  high: 450_000,
+  balanced: 150_000,
+  high: 360_000,
 };
 /** How long a web-first wait for a High first-load marker may take on software GL, against the 30 s default. */
 export const HIGH_WAIT_MS = 60_000;
@@ -33,12 +33,8 @@ const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const FRAME_MS = 16;
 /** Frames stepped after the scene is ready, so every lazily built resource is in place. */
 const SETTLE_FRAMES = 30;
-/** Wall-clock bound on each phase of `settle`, so a preset that never readies fails by name, not by the test timeout; High loads its KTX2 files one after another. */
-const SETTLE_DEADLINE_MS: Readonly<Record<Preset, number>> = {
-  low: 30_000,
-  balanced: 30_000,
-  high: 2 * HIGH_WAIT_MS,
-};
+/** Wall-clock bound on each phase of `settle`, so a preset that never readies fails by name, not by the test timeout. */
+const SETTLE_DEADLINE_MS = 30_000;
 /** Consecutive frames the framing input must hold before a shot, so a late chrome measurement cannot move it. */
 const STABLE_FRAMES = 5;
 const HIDE_ID = 'pinned-shoot-bare';
@@ -218,7 +214,7 @@ async function framingBox(page: Page): Promise<string | null> {
 export async function settle(
   page: Page,
   preset: Preset,
-  deadlineMs = SETTLE_DEADLINE_MS[preset],
+  deadlineMs = SETTLE_DEADLINE_MS,
 ): Promise<void> {
   const notReady = (what: unknown): Error =>
     new Error(`${preset} not ready: ${JSON.stringify(what)}`);
