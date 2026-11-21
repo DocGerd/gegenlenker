@@ -36,6 +36,8 @@ export type QualityFlags = {
   readonly lampLight: boolean;
   /** At night the dipped beam and the trailer's rear light cast shadows; needs `lampLight`. */
   readonly lampShadow: boolean;
+  /** At night the yard's floodlights and street lamps throw pools on the ground, and their heads glow. */
+  readonly yardLight: boolean;
 };
 
 const BALANCED: QualityFlags = {
@@ -59,6 +61,7 @@ const BALANCED: QualityFlags = {
   hdriSky: false,
   lampLight: true,
   lampShadow: false,
+  yardLight: true,
 };
 
 /** Most draw calls a frame may spend, mirrors included: the requirement for High. */
@@ -86,6 +89,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     hdriSky: false,
     lampLight: false,
     lampShadow: false,
+    yardLight: false,
   },
   balanced: BALANCED,
   high: {

@@ -18,6 +18,7 @@ import {
 } from './glb-shells';
 import { createGradeCheck, precompileGrade } from './grade';
 import { lampLitSample } from './lamp-light';
+import { floodLitSample } from './yard-lights';
 import { createRetroCheck, retroLitSample } from './retro';
 import { createInteriorCheck } from './interior-material';
 import { createGlbInterior, INTERIOR_URLS, interiorShellFrom } from './interior-glb';
@@ -136,6 +137,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
         lampLitSample,
         () => lampLitSample(true),
         pbrGroundNightSample,
+        floodLitSample,
         retroLitSample,
       ]),
   );

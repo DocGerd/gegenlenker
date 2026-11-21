@@ -7,6 +7,7 @@ import {
   Layers,
   LightProbe,
   Mesh,
+  SpotLight,
   type Light,
   type Material,
   type Object3D,
@@ -58,6 +59,7 @@ import {
   TOP_DOWN_LAYERS,
 } from './seams';
 import { RESTYLED_KINDS } from './yard-props';
+import { FLOOD_POOL_NAME, STREET_POOL_NAME, yardLightSpecs } from './yard-lights';
 import { RetroNodeMaterial, type RetroCheck, type RetroVerdict } from './retro';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -98,7 +100,9 @@ const asMesh = (object: Object3D): Mesh => {
 };
 const materialOf = (mesh: Object3D): { polygonOffset?: boolean } =>
   asMesh(mesh).material as { polygonOffset?: boolean };
-const isMarking = (mesh: Object3D): boolean => materialOf(mesh).polygonOffset === true;
+const POOLS = new Set([FLOOD_POOL_NAME, STREET_POOL_NAME]);
+const isMarking = (mesh: Object3D): boolean =>
+  materialOf(mesh).polygonOffset === true && !POOLS.has(mesh.name);
 
 describe('environment quality', () => {
   it('shows the obstacle tokens to every camera on low, in place of the hidden props', () => {
@@ -1292,6 +1296,78 @@ describe('reflector props at night', () => {
     expect(reflective(env)).toBeGreaterThan(0);
     settle('failed');
     expect(reflective(env)).toBe(0);
+    env.dispose();
+  });
+});
+
+describe('yard lamps at night', () => {
+  const lamps = (env: { object: Object3D }, c: Layers): Object3D[] =>
+    [...seen(env.object, c)].filter((o) => POOLS.has(o.name));
+  const spots = (env: { object: Object3D }, c: Layers): SpotLight[] => {
+    const out: SpotLight[] = [];
+    const walk = (o: Object3D): void => {
+      if (!o.visible) return;
+      if (o instanceof SpotLight && c.test(o.layers)) out.push(o);
+      o.children.forEach(walk);
+    };
+    walk(env.object);
+    return out;
+  };
+  const build = (): ReturnType<typeof proceduralEnvironment> => {
+    if (layout === undefined) throw new Error('no layout');
+    return proceduralEnvironment(layout, palette);
+  };
+  const masts =
+    layout === undefined ? 0 : yardLightSpecs(layout).filter((s) => s.kind === 'flood').length;
+
+  it('has masts in the layout under test', () => {
+    expect(masts).toBeGreaterThan(0);
+  });
+
+  it.each([
+    ['low', 0, 0],
+    ['balanced', 0, 2],
+    ['high', masts, 1],
+  ] as const)('draws %s with %i mast lights and %i pool meshes', (preset, lights, pools) => {
+    const env = build();
+    env.setLook(lookFor(QUALITY_FLAGS[preset], 'night'));
+    for (const c of [cameras.cockpit, cameras.mirror, camera(CHASE_LAYERS)]) {
+      expect(spots(env, c).filter((l) => l.name === 'yard-flood')).toHaveLength(lights);
+      expect(lamps(env, c)).toHaveLength(pools);
+    }
+    env.dispose();
+  });
+
+  it('shows no yard lamp by day, and none to the top-down camera at any look', () => {
+    const env = build();
+    for (const preset of ['low', 'balanced', 'high'] as const) {
+      env.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
+      expect(lamps(env, cameras.cockpit)).toHaveLength(0);
+      expect(spots(env, cameras.cockpit)).toHaveLength(0);
+      env.setLook(lookFor(QUALITY_FLAGS[preset], 'night'));
+      expect(lamps(env, cameras.topDown)).toHaveLength(0);
+      expect(spots(env, cameras.topDown)).toHaveLength(0);
+    }
+    env.dispose();
+  });
+
+  it('lets the lamp heads glow in the night material only', () => {
+    const env = build();
+    const emitting = (): number =>
+      [...seen(env.object, cameras.cockpit)].filter((m) => {
+        const material = asMesh(m).material as { emissiveNode?: unknown };
+        return material.emissiveNode !== null && material.emissiveNode !== undefined;
+      }).length;
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
+    expect(emitting()).toBe(0);
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+    expect(emitting()).toBeGreaterThan(0);
+    for (const m of seen(env.object, cameras.cockpit)) {
+      const { material } = asMesh(m);
+      if (material instanceof RetroNodeMaterial) expect(material.emissiveNode).not.toBeNull();
+    }
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    expect(emitting()).toBe(0);
     env.dispose();
   });
 });

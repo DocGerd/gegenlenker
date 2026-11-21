@@ -36,6 +36,11 @@ const MIN_BEAM_POOL = 0.01;
 /** Share of a shot the dark phase of the hazard lights may brighten against the lights-on look: nothing but noise. */
 const MAX_DARK_PHASE_ADDED = 0.0005;
 
+/** Channel level (0-255) above which a mirror pixel is lit ground: the ambient-lit yard stays below it, the floodlit one passes it. */
+const YARD_LIT = 80;
+/** Least share of a mirror the floodlit yard must light with the lamp switches off. */
+const MIN_YARD_LIT = 0.25;
+
 for (const preset of PRESETS) {
   test(
     `every perspective view draws at night without errors at ${preset}`,
@@ -78,6 +83,22 @@ for (const preset of PRESETS) {
           if (before === undefined) throw new Error(`no ${shot} shot in P`);
           const share = await brightenedShare(page, before, await shoot(page, shot), LAMP_STEP);
           expect(share, `${preset} ${shot} in R`).toBeGreaterThan(MIN_REVERSING_POOL);
+        }
+      }
+      if (QUALITY_FLAGS[preset].yardLight) {
+        // the yard's own lamps stay on with the vehicle's switched off
+        await page.keyboard.press('h');
+        await settle(page, preset);
+        for (const shot of ['mirrorLeft', 'mirrorRight'] as const) {
+          const png = await shoot(page, shot);
+          expect(
+            await brightShare(page, png, YARD_LIT),
+            `${preset} ${shot} floodlit yard, lights off`,
+          ).toBeGreaterThan(MIN_YARD_LIT);
+          expect(
+            await brightShare(page, png, DAY_BRIGHT),
+            `${preset} ${shot} bright pixels, lights off`,
+          ).toBeLessThan(MAX_MIRROR_BRIGHT);
         }
       }
       expect(errors).toEqual([]);
