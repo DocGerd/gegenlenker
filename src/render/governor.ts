@@ -18,15 +18,164 @@ const P95_WINDOW = 120;
 // An isolated interval this long is a pause or hidden tab; a run of them is real load.
 const MAX_GAP_MS = 500;
 
-export function createResolutionGovernor(): {
+const EVENT_CAP = 256;
+const INTERVAL_CAP = 8192;
+
+export type GovernorEventKind =
+  'down' | 'up' | 'probe-failed' | 'probe-held' | 'warmup' | 'discard' | 'restart' | 'reset';
+const KINDS: readonly GovernorEventKind[] = [
+  'down',
+  'up',
+  'probe-failed',
+  'probe-held',
+  'warmup',
+  'discard',
+  'restart',
+  'reset',
+];
+/** The decisions: kept in a ring of their own, so a burst of causes cannot evict them. */
+const DECISIONS: ReadonlySet<GovernorEventKind> = new Set([
+  'down',
+  'up',
+  'probe-failed',
+  'probe-held',
+]);
+
+export type GovernorEvent = {
+  kind: GovernorEventKind;
+  /** What caused a `warmup`, `discard`, `restart` or `reset`: `init`, `scene`, `quality`, `lighting`, `resize`, `visibility`, `attach:<key>`. */
+  tag: string;
+  /** Timestamp of the last frame seen, on the `performance.now()` clock. */
+  t: number;
+  /** Samples the governor had taken when the event happened; indexes `intervals` (offset by `dropped`). */
+  sample: number;
+  level: number;
+  /** The last window's p90 in ms; 0 before the first window. */
+  p90: number;
+  hold: number;
+  /** Failed probes of the level that gates a step up: the sharper level of a transition, else the one above the current. */
+  failedProbes: number;
+  /** ms of headroom accumulated towards a step up when the event happened. */
+  steady: number;
+};
+
+export type GovernorTrace = {
+  /** Oldest first, decisions and causes interleaved; a `restart` or `reset` carries the state it replaced. */
+  events: GovernorEvent[];
+  /** The frame intervals the governor was fed, oldest first. */
+  intervals: number[];
+  /** Intervals fed before the oldest one kept. */
+  dropped: number;
+};
+
+type EventState = {
+  level: number;
+  p90: number;
+  hold: number;
+  failedProbes: number;
+  steady: number;
+};
+
+/** A bounded ring of events, written without allocating. */
+function createEventRing() {
+  const order = new Float64Array(EVENT_CAP);
+  const kind = new Uint8Array(EVENT_CAP);
+  const tag: string[] = new Array<string>(EVENT_CAP).fill('');
+  const time = new Float64Array(EVENT_CAP);
+  const sampleAt = new Float64Array(EVENT_CAP);
+  const level = new Uint8Array(EVENT_CAP);
+  const p90 = new Float32Array(EVENT_CAP);
+  const hold = new Float32Array(EVENT_CAP);
+  const failed = new Uint8Array(EVENT_CAP);
+  const steady = new Float32Array(EVENT_CAP);
+  let written = 0;
+  return {
+    push(
+      seq: number,
+      k: GovernorEventKind,
+      label: string,
+      t: number,
+      sample: number,
+      state: EventState,
+    ): void {
+      const i = written % EVENT_CAP;
+      order[i] = seq;
+      kind[i] = KINDS.indexOf(k);
+      tag[i] = label;
+      time[i] = t;
+      sampleAt[i] = sample;
+      level[i] = state.level;
+      p90[i] = state.p90;
+      hold[i] = state.hold;
+      failed[i] = state.failedProbes;
+      steady[i] = state.steady;
+      written++;
+    },
+    read(): { seq: number; event: GovernorEvent }[] {
+      const out: { seq: number; event: GovernorEvent }[] = [];
+      for (let n = Math.max(0, written - EVENT_CAP); n < written; n++) {
+        const i = n % EVENT_CAP;
+        out.push({
+          seq: order[i] ?? 0,
+          event: {
+            kind: KINDS[kind[i] ?? 0] ?? 'down',
+            tag: tag[i] ?? '',
+            t: time[i] ?? 0,
+            sample: sampleAt[i] ?? 0,
+            level: level[i] ?? 0,
+            p90: p90[i] ?? 0,
+            hold: hold[i] ?? 0,
+            failedProbes: failed[i] ?? 0,
+            steady: steady[i] ?? 0,
+          },
+        });
+      }
+      return out;
+    },
+  };
+}
+
+/** Bounded rings written without allocating; `read` copies them out. */
+function createTrace() {
+  const decisions = createEventRing();
+  const causes = createEventRing();
+  const intervals = new Float32Array(INTERVAL_CAP);
+  let events = 0;
+  let samples = 0;
+  let now = 0;
+  return {
+    setTime(t: number): void {
+      now = t;
+    },
+    interval(ms: number): void {
+      intervals[samples % INTERVAL_CAP] = ms;
+      samples++;
+    },
+    event(k: GovernorEventKind, label: string, state: EventState): void {
+      (DECISIONS.has(k) ? decisions : causes).push(events++, k, label, now, samples, state);
+    },
+    read(): GovernorTrace {
+      const merged = [...decisions.read(), ...causes.read()].sort((x, y) => x.seq - y.seq);
+      const dropped = Math.max(0, samples - INTERVAL_CAP);
+      const kept: number[] = [];
+      for (let n = dropped; n < samples; n++) kept.push(intervals[n % INTERVAL_CAP] ?? 0);
+      return { events: merged.map((m) => m.event), intervals: kept, dropped };
+    },
+  };
+}
+
+type Trace = ReturnType<typeof createTrace>;
+
+export function createResolutionGovernor(trace: Trace = createTrace()): {
   sample(frameMs: number): number;
-  /** Drops the samples of the window in progress, keeping the scale. */
-  discardWindow: () => void;
+  /** Drops the samples of the window in progress, keeping the scale. `tag` names the cause in the trace. */
+  discardWindow: (tag?: string) => void;
   /** Back to full resolution, remembering the hold and the failed probes. */
-  restart: () => void;
+  restart: (tag?: string) => void;
   /** Back to full resolution and forgets everything learnt about the device. */
-  reset: () => void;
+  reset: (tag?: string) => void;
   scale: () => number;
+  trace: () => GovernorTrace;
 } {
   let level = 0;
   let count = 0;
@@ -36,11 +185,12 @@ export function createResolutionGovernor(): {
   let hold = HOLD_MS;
   let probing = false;
   let settle = 0;
+  let lastP90 = 0;
   const failedProbes = new Uint8Array(MAX_LEVEL + 1);
   const ring = new Float64Array(WINDOW);
   const scratch = new Float64Array(WINDOW);
   const scale = (): number => Math.max(FLOOR, 1 - level * STEP);
-  const restart = (): void => {
+  const toFull = (): void => {
     level = 0;
     count = 0;
     steady = 0;
@@ -48,13 +198,29 @@ export function createResolutionGovernor(): {
     probing = false;
     settle = 0;
   };
+  const note = (
+    k: GovernorEventKind,
+    tag: string,
+    failedLevel = Math.max(level - 1, 0),
+    held = steady,
+  ): void => {
+    trace.event(k, tag, {
+      level,
+      p90: lastP90,
+      hold,
+      failedProbes: failedProbes[failedLevel] ?? 0,
+      steady: held,
+    });
+  };
   return {
     sample(frameMs) {
+      trace.interval(frameMs);
       sinceUp += frameMs;
       if (probing && sinceUp >= hold) {
         probing = false;
         failedProbes[level] = 0;
         hold = HOLD_MS;
+        note('probe-held', '', level);
       }
       if (settle > 0) {
         settle--;
@@ -67,14 +233,18 @@ export function createResolutionGovernor(): {
       scratch.set(ring);
       scratch.sort();
       const p90 = scratch[Math.ceil(0.9 * WINDOW) - 1] ?? 0;
+      lastP90 = p90;
       if (p90 > P90_LIMIT_MS) {
         if (level < MAX_LEVEL) {
-          if (probing) {
+          const failedProbe = probing;
+          const left = level;
+          if (failedProbe) {
             // The step up did not hold: the headroom was borrowed, so wait longer and count the failure.
             failedProbes[level] = (failedProbes[level] ?? 0) + 1;
             hold = Math.min(hold * 2, MAX_HOLD_MS);
           }
           level++;
+          note(failedProbe ? 'probe-failed' : 'down', '', left);
         }
         probing = false;
         steady = 0;
@@ -86,29 +256,38 @@ export function createResolutionGovernor(): {
       ) {
         steady += frameMs;
         if (steady >= hold) {
+          const held = steady;
           level--;
           steady = 0;
           sinceUp = 0;
           count = 0;
           probing = true;
           settle = SETTLE_FRAMES;
+          note('up', '', level, held);
         }
       } else {
         steady = 0;
       }
       return scale();
     },
-    discardWindow() {
+    discardWindow(tag = '') {
+      note('warmup', tag);
+      if (count > 0 || steady > 0) note('discard', tag);
       count = 0;
       steady = 0;
     },
-    restart,
-    reset() {
-      restart();
+    restart(tag = '') {
+      note('restart', tag);
+      toFull();
+    },
+    reset(tag = '') {
+      note('reset', tag);
+      toFull();
       hold = HOLD_MS;
       failedProbes.fill(0);
     },
     scale,
+    trace: () => trace.read(),
   };
 }
 
@@ -118,15 +297,18 @@ export function createResolutionGovernor(): {
  */
 export function createFrameTimer(): {
   frame(now: number): void;
-  resetTiming(): void;
+  resetTiming(tag?: string): void;
   /** Ignores the governor for a while: the next frames carry startup hitches, not steady load. */
-  warmUp(): void;
-  resetScale(): void;
+  warmUp(tag?: string): void;
+  resetScale(tag?: string): void;
   scale: () => number;
   fps(): number;
   p95Ms(): number;
+  /** What the governor did and the intervals it saw; copies the rings, so call it on demand. */
+  trace: () => GovernorTrace;
 } {
-  const governor = createResolutionGovernor();
+  const trace = createTrace();
+  const governor = createResolutionGovernor(trace);
   const ring = new Float64Array(P95_WINDOW);
   const scratch = new Float64Array(P95_WINDOW);
   let last = -1;
@@ -136,8 +318,8 @@ export function createFrameTimer(): {
   let ema = 0;
   let count = 0;
   let next = 0;
-  const warmUp = (): void => {
-    governor.discardWindow();
+  const warmUp = (tag?: string): void => {
+    governor.discardWindow(tag);
     // Armed from the next frame: an attach can block the thread past any fixed grace.
     graceFromNextFrame = true;
     graceEnd = Infinity;
@@ -145,6 +327,7 @@ export function createFrameTimer(): {
   return {
     frame(now) {
       if (!Number.isFinite(now)) return;
+      trace.setTime(now);
       if (graceFromNextFrame) {
         graceEnd = now + WARM_UP_MS;
         graceFromNextFrame = false;
@@ -162,18 +345,19 @@ export function createFrameTimer(): {
       last = now;
     },
     /** Drops the previous timestamp too, so a gap (pause, hidden tab, new scene) is never sampled. */
-    resetTiming() {
+    resetTiming(tag) {
       last = -1;
       longBefore = false;
       ema = 0;
       count = 0;
       next = 0;
-      governor.restart();
-      warmUp();
+      governor.restart(tag);
+      warmUp(tag);
     },
     warmUp,
     resetScale: governor.reset,
     scale: governor.scale,
+    trace: governor.trace,
     fps: () => (ema === 0 ? 0 : 1000 / ema),
     p95Ms() {
       if (count === 0) return 0;

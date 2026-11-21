@@ -30,6 +30,8 @@ import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { startSkyTexture } from './sky-texture';
 import { skylineGradeSample } from './skyline';
+import type { GovernorTrace } from './governor';
+import { perfRequested } from './perf-overlay';
 import { createThreeSceneRenderer } from './three-renderer';
 import { createVehicleEnvironment } from './vehicle-pbr';
 import { KIT_SHADOW_SAMPLES, startYardKit } from './yard-kit';
@@ -43,13 +45,23 @@ export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
 export const interiorAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].cockpitInterior;
 
+declare global {
+  interface Window {
+    /** Under `?perf=1`: what the resolution governor did, read by the tablet harness. */
+    __governor?: { trace: () => GovernorTrace };
+  }
+}
+
 /** `backend` defaults to the page's `?backend=`. */
 export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   // The attach callbacks may fire before the renderer exists; a call made then is replayed once it does.
-  const warm: { target: (() => void) | null; pending: boolean } = { target: null, pending: false };
-  const warmUp = (): void => {
-    if (warm.target === null) warm.pending = true;
-    else warm.target();
+  const warm: { target: ((tag: string) => void) | null; pending: string | null } = {
+    target: null,
+    pending: null,
+  };
+  const warmUp = (tag: string): void => {
+    if (warm.target === null) warm.pending = tag;
+    else warm.target(tag);
   };
   // The attachment markers on `<html>` (`ATTACHMENTS`) are read by the e2e: the state while drawn,
   // `failed` once given up on, absent otherwise. A new state other than `failed` warms up.
@@ -61,7 +73,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       if (state === null) root.removeAttribute(marker);
       else {
         root.setAttribute(marker, state);
-        if (state !== 'failed' && state !== last) warmUp();
+        if (state !== 'failed' && state !== last) warmUp(`attach:${key}`);
       }
       last = state;
     };
@@ -142,6 +154,9 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       ]),
   );
   const renderer = createThreeSceneRenderer({
+    onGovernor: (trace) => {
+      if (perfRequested(location.search)) window.__governor = { trace };
+    },
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
     onRenderer: (gpu) => {
       groundTextures.attach(gpu);
@@ -190,7 +205,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   let lighting: LightingMode = DEFAULT_LIGHTING;
   const { warmUp: warmTarget, ...sceneRenderer } = renderer;
   warm.target = warmTarget;
-  if (warm.pending) warmTarget();
+  if (warm.pending !== null) warmTarget(warm.pending);
   return {
     ...sceneRenderer,
     async init(canvas) {

@@ -4,6 +4,7 @@ import type { ResolvedLayout } from '../contracts/layout';
 import type { LampSwitches, Rect, RenderFrame, ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
+import type { GovernorTrace } from './governor';
 import type { GpuOffer } from './gpu-backend';
 import type { Look } from './look';
 /** three.js default layer: every camera sees it. */
@@ -109,6 +110,8 @@ export interface CockpitInterior {
 export type RendererParts = {
   /** Called each time a GPU renderer is ready, again after a loss with the new one; parts move to the latest. */
   readonly onRenderer?: (renderer: WebGPURenderer) => void;
+  /** Called on each start with a reader of the resolution governor's trace. */
+  readonly onGovernor?: (trace: () => GovernorTrace) => void;
   /** A device to start WebGPU on, or none for WebGL 2; absent means WebGL 2. */
   readonly gpuDevice?: () => Promise<GpuOffer>;
   readonly truck: (spec: TruckSpec, palette: ScenePalette) => VehicleVisual;

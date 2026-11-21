@@ -197,7 +197,7 @@ function describeGl(gpu: WebGPURenderer): string {
 /** `warmUp` holds the resolution governor off while something heavy (a shell, the ground texture) attaches. */
 export function createThreeSceneRenderer(
   parts: RendererParts,
-): SceneRenderer & { warmUp: () => void } {
+): SceneRenderer & { warmUp: (tag?: string) => void } {
   const timer = createFrameTimer();
   const cockpitCamera = createCockpitCamera();
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
@@ -242,12 +242,12 @@ export function createThreeSceneRenderer(
     for (const listener of [...lostListeners]) listener();
   };
   const onVisibility = (): void => {
-    if (document.visibilityState === 'visible') resetTiming();
+    if (document.visibilityState === 'visible') resetTiming('visibility');
   };
 
   /** A long gap between frames (restore, hidden tab, new scene) must not count as slow rendering. */
-  function resetTiming(): void {
-    timer.resetTiming();
+  function resetTiming(tag: string): void {
+    timer.resetTiming(tag);
     appliedRatio = 0;
   }
 
@@ -408,7 +408,8 @@ export function createThreeSceneRenderer(
       glRenderer = nextDevice === null ? describeGl(next) : describeAdapter(nextDevice.adapterInfo);
       backend = backendOf(next);
       document.addEventListener('visibilitychange', onVisibility);
-      resetTiming();
+      resetTiming('init');
+      parts.onGovernor?.(timer.trace);
       parts.onRenderer?.(next);
       applySize();
       if (built !== null) applyLookTo(built);
@@ -426,8 +427,8 @@ export function createThreeSceneRenderer(
 
     setScene(nextLayout, truck, trailer) {
       disposeBuilt();
-      resetTiming();
-      timer.resetScale();
+      timer.resetScale('scene');
+      resetTiming('scene');
       leadAt = -1;
       const palette = readScenePalette();
       const scene = new Scene();
@@ -468,7 +469,7 @@ export function createThreeSceneRenderer(
       mirrorRight.setSamples(quality.mirrorMsaa);
       if (built !== null) {
         applyLookTo(built);
-        timer.warmUp();
+        timer.warmUp('quality');
       }
     },
 
@@ -477,14 +478,14 @@ export function createThreeSceneRenderer(
       lighting = mode;
       if (built !== null) {
         applyLookTo(built);
-        timer.warmUp();
+        timer.warmUp('lighting');
       }
     },
 
     resize(width, height) {
       cssWidth = width;
       cssHeight = height;
-      timer.warmUp();
+      timer.warmUp('resize');
       applySize();
     },
 
@@ -620,8 +621,8 @@ export function createThreeSceneRenderer(
       };
     },
 
-    warmUp() {
-      timer.warmUp();
+    warmUp(tag) {
+      timer.warmUp(tag);
     },
 
     skipFrame() {
