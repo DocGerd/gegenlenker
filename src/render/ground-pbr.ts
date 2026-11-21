@@ -9,6 +9,7 @@ import {
   RepeatWrapping,
   RGFormat,
   Scene,
+  SpotLight,
   type Texture,
   UnsignedByteType,
 } from 'three';
@@ -145,9 +146,12 @@ function groundStandIn(maps: TextureMaps<PbrKey>) {
   };
 }
 
+/** Floodlight masts the yard has at night on High. */
+const YARD_MASTS = 4;
+
 /**
  * The PBR ground on stand-in maps under the whole light set High has at night: the HDRI sun
- * without a shadow, the sky probe and the lamp lights, the beam and the trailer's light mapped and
+ * without a shadow, the sky probe, the yard's mast lights and the lamp lights, the beam and the trailer's light mapped and
  * casting. Rejects when its fragment shader declares more than `SAMPLER_CEILING` samplers.
  */
 export function pbrGroundNightSample(): GradeSample {
@@ -169,13 +173,16 @@ export function pbrGroundNightSample(): GradeSample {
   const mesh = new Mesh(standIn.geometry, standIn.material);
   mesh.receiveShadow = true;
   const lamps = sampleLampLights();
+  // the yard's mast lights: spots with neither a map nor a shadow, so they add no sampler
+  const masts = Array.from({ length: YARD_MASTS }, () => new SpotLight());
   return {
     mesh,
-    lights: [new DirectionalLight(), new LightProbe(), ...lamps.lights],
+    lights: [new DirectionalLight(), new LightProbe(), ...lamps.lights, ...masts],
     markers: [GROUND_PBR_MARKER, GRADE_SHADER_MARKER],
     maxSamplers: SAMPLER_CEILING,
     dispose: () => {
       lamps.dispose();
+      for (const mast of masts) mast.dispose();
       standIn.material.dispose();
       standIn.dispose();
       for (const map of Object.values(maps)) map.dispose();

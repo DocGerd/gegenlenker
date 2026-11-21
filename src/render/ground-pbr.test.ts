@@ -129,7 +129,8 @@ describe('the PBR ground at night', () => {
     ]);
     expect(lights.filter((l) => l instanceof LightProbe)).toHaveLength(1);
     const spots = lights.filter((l): l is SpotLight => l instanceof SpotLight);
-    expect(spots).toHaveLength(3);
+    // three lamp lights and the yard's four masts
+    expect(spots).toHaveLength(7);
     const mapped = spots.filter((l) => l.map !== null);
     const casting = spots.filter((l) => l.castShadow);
     // a map and a shadow each add a sampler to every receiver
