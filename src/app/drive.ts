@@ -200,6 +200,7 @@ export function startDrive(
   const controls = createControls(stage, {
     lockToLockTurns: truck.steering.lockToLockTurns.value,
     steerRate: params.steerRate,
+    lights: lighting === 'night',
   });
   live.push(() => controls.dispose());
   // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
@@ -395,6 +396,7 @@ export function startDrive(
       frame.waypointVisited = tracker?.waypointVisited() ?? false;
       frame.topDown = topDown;
       frame.aids = aids;
+      frame.lamps = controls.lamps();
       renderer.render(frame);
       hud.update(snapshot, warnContact);
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);

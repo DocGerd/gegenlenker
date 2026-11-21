@@ -391,6 +391,29 @@ describe('lamp light in the vehicle visuals', () => {
     truck.dispose();
   });
 
+  it('darkens the beam and the tail light with the lights off, by intensity alone', () => {
+    const truck = proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env);
+    truck.setLook(night('balanced'));
+    const [front, rear] = spotsOf(truck.object);
+    if (front === undefined || rear === undefined) throw new Error('no truck lights');
+    const snapshot = (control: Partial<SimSnapshot['control']>, lights: boolean): void =>
+      truck.update(snapshotWith(TRUCK_IDS[0], TRAILER_IDS[0], control), {
+        lights,
+        hazard: false,
+      });
+    snapshot({ gear: 'P', brake: false }, false);
+    expect([front.intensity, rear.intensity]).toEqual([0, 0]);
+    snapshot({ gear: 'R', brake: false }, false);
+    expect(rear.intensity, 'reversing stays automatic').toBeGreaterThan(0);
+    snapshot({ gear: 'P', brake: true }, false);
+    expect(rear.intensity, 'stop stays automatic').toBeGreaterThan(0);
+    expect(front.intensity).toBe(0);
+    expect(front.visible && rear.visible, 'the light set is untouched').toBe(true);
+    snapshot({ gear: 'P', brake: false }, true);
+    expect(front.intensity).toBeGreaterThan(0);
+    truck.dispose();
+  });
+
   const camera = (ids: readonly number[]): Layers => {
     const layers = new Layers();
     layers.set(DEFAULT_LAYER);

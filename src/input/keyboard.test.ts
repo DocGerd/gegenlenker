@@ -88,6 +88,17 @@ describe('keyboard', () => {
     expect(state.gear).toBe('R');
   });
 
+  it('toggles the lights on H and the hazard lights on X, not on repeat, and leaves the lever alone', () => {
+    expect([state.lights, state.hazard]).toEqual([false, false]);
+    expect(down('KeyH')).toBe(true);
+    down('KeyH', { repeat: true });
+    expect([state.lights, state.hazard]).toEqual([true, false]);
+    down('KeyX');
+    down('KeyH');
+    expect([state.lights, state.hazard]).toEqual([false, true]);
+    expect(state.lever).toBe(0);
+  });
+
   it('keeps steering and resetting on key-repeat', () => {
     down('KeyC');
     expect(state.resetting).toBe(true);

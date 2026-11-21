@@ -24,6 +24,8 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Point to drive through before the target        | turn point                | Wendepunkt                                   |
 | Day or night of a drive                         | time of day (Day / Night) | Tageszeit (Tag / Nacht)                      |
 | Render quality setting (Low / Balanced / High)  | graphics quality          | Grafikqualität (Niedrig / Ausgewogen / Hoch) |
+| Vehicle lamps switch (key H, touch button)      | lights                    | Licht                                        |
+| Hazard flashers switch (key X, touch button)    | hazard lights             | Warnblinker                                  |
 | Orbit view of the truck from outside            | outside view              | Außenansicht                                 |
 | Split of the screen into cockpit and top view   | view size                 | Ansichtsgröße                                |
 | Legend: reset both view and view size           | reset view / size         | Standardansicht                              |

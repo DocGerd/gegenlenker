@@ -7,6 +7,9 @@ export type InputState = {
   gear: Gear;
   /** While set, the steer target ramps back to 0; wheel and steer-key input clear it. */
   resetting: boolean;
+  /** Lamp switches: not part of the control vector, so the sim and the input log never see them. */
+  lights: boolean;
+  hazard: boolean;
 };
 
 export const LEVER_STEP = 0.1;
@@ -21,8 +24,8 @@ export const POINTER_SWEEP_DEG = 75;
 export const CENTRED_ENTER_DEG = 6;
 export const CENTRED_LEAVE_DEG = 8;
 
-export function createInputState(): InputState {
-  return { steer: 0, lever: 0, brake: false, gear: 'P', resetting: false };
+export function createInputState(lights = false): InputState {
+  return { steer: 0, lever: 0, brake: false, gear: 'P', resetting: false, lights, hazard: false };
 }
 
 export function clamp(value: number, min: number, max: number): number {
