@@ -327,29 +327,62 @@ describe('frame timer', () => {
       const timer = createFrameTimer();
       const { end } = run(timer, 40, 30);
       timer.warmUp('resize');
-      timer.resetTiming('scene');
       timer.warmUp();
       const { events } = timer.trace();
       expect(events.map((e) => [e.kind, e.tag])).toEqual([
         ['warmup', 'resize'],
         ['discard', 'resize'],
-        ['warmup', 'scene'],
         ['warmup', ''],
       ]);
       expect(events[0]?.t).toBe(end);
     });
 
+    it('records a scene change with the state it replaced, then the state after', () => {
+      const timer = createFrameTimer();
+      const end = driveSlowFull(timer, 600);
+      const before = timer.trace().events.length;
+      timer.resetScale('scene');
+      timer.resetTiming('scene');
+      const [reset, restart, warm] = timer.trace().events.slice(before);
+      expect([reset?.kind, restart?.kind, warm?.kind]).toEqual(['reset', 'restart', 'warmup']);
+      expect([reset?.tag, restart?.tag, warm?.tag]).toEqual(['scene', 'scene', 'scene']);
+      expect(reset).toMatchObject({ level: 1, hold: 16000, failedProbes: 2 });
+      expect(warm).toMatchObject({ level: 0, hold: 4000, failedProbes: 0 });
+      expect(reset?.t).toBe(end);
+    });
+
     it('keeps the newest events and intervals within fixed bounds', () => {
       const timer = createFrameTimer();
+      // The cadence alternates so the order of the intervals is observable.
+      let now = 1000;
+      const frames = 9000;
+      for (let i = 0; i < frames; i++) {
+        now += i % 2 === 0 ? 10 : 12;
+        timer.frame(now);
+      }
       for (let i = 0; i < 1000; i++) timer.warmUp(String(i));
-      const { end } = run(timer, 90, 9000);
       const trace = timer.trace();
+      // The first frame only sets the previous timestamp.
+      const fed = frames - 1;
+      expect(trace.dropped).toBe(fed - 8192);
+      expect(trace.intervals).toEqual(
+        Array.from({ length: 8192 }, (_, k) => ((trace.dropped + k) % 2 === 0 ? 12 : 10)),
+      );
       expect(trace.events).toHaveLength(256);
-      expect(trace.events.at(-1)?.tag).toBe('999');
-      expect(trace.intervals).toHaveLength(8192);
-      expect(trace.dropped).toBeGreaterThan(0);
-      expect(trace.intervals.at(-1)).toBeCloseTo(1000 / 90, 3);
-      expect(end).toBeGreaterThan(0);
+      expect(trace.events.map((e) => e.tag)).toEqual(
+        Array.from({ length: 256 }, (_, k) => String(744 + k)),
+      );
+    });
+
+    it('keeps decisions when a burst of causes fills the ring', () => {
+      const timer = createFrameTimer();
+      driveSlowFull(timer, 600);
+      for (let i = 0; i < 1000; i++) timer.warmUp('resize');
+      const kinds = timer.trace().events.map((e) => e.kind);
+      expect(kinds.filter((k) => k === 'down' || k === 'up' || k === 'probe-failed')).toHaveLength(
+        5,
+      );
+      expect(kinds).toHaveLength(5 + 256);
     });
   });
 });

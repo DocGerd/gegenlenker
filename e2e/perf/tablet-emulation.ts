@@ -222,6 +222,29 @@ async function readOverlay(page: Page): Promise<Reading | null> {
   return parseOverlay(text);
 }
 
+/** Keeps the governor trace of a run that ended below full resolution; a failure here warns and never fails the run. */
+async function keepTrace(
+  page: Page,
+  traces: TraceSink,
+  label: string,
+  context: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const trace = await page.evaluate(() => {
+      const governor = Reflect.get(window, '__governor') as { trace: () => unknown } | undefined;
+      return governor?.trace() ?? null;
+    });
+    if (trace === null) {
+      console.warn(`${label}: no governor trace (window.__governor is absent)`);
+      return;
+    }
+    const path = traces.write(label, { ...context, trace });
+    console.log(`${label}: ended below scale 1.00, governor trace ${path}`);
+  } catch (e) {
+    console.warn(`${label}: could not keep the governor trace: ${message(e)}`);
+  }
+}
+
 async function measure(
   browser: Browser,
   base: string,
@@ -285,22 +308,16 @@ async function measure(
     const wrongBackend = backendProblem(opts.backend, final.gl);
     if (wrongBackend !== null) errors.push(wrongBackend);
     if (final.scale < 1) {
-      const trace = await page.evaluate(() => {
-        const governor = Reflect.get(window, '__governor') as { trace: () => unknown } | undefined;
-        return governor?.trace() ?? null;
-      });
       const label = `${preset}-${truckId}-${trailerId}-run${String(index + 1)}`;
       const { throttle, lighting, backend } = opts;
-      const path = traces.write(label, {
+      await keepTrace(page, traces, label, {
         preset,
         pair: [truckId, trailerId],
         throttle,
         lighting,
         backend,
         reading: final,
-        trace,
       });
-      console.log(`${label}: ended at scale ${final.scale.toFixed(2)}, governor trace ${path}`);
     }
     return {
       reading: {

@@ -17,7 +17,7 @@ import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
 import { chaseViewAvailable, interiorAvailable } from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
-import { mountPerfOverlay } from '../render/perf-overlay';
+import { mountPerfOverlay, perfRequested } from '../render/perf-overlay';
 import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
 import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
@@ -409,7 +409,7 @@ export function startDrive(
     },
   });
 
-  if (new URLSearchParams(location.search).get('perf') === '1') {
+  if (perfRequested(location.search)) {
     cleanups.push(mountPerfOverlay(stage, () => renderer.stats()));
   }
 

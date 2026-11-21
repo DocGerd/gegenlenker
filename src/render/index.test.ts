@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   warmUp: vi.fn(),
@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   setQuality: vi.fn(),
   setLighting: vi.fn(),
   onRenderer: null as ((gpu: unknown) => void) | null,
+  onGovernor: null as ((trace: () => unknown) => void) | null,
 }));
 
 vi.mock('./glb-shells', () => ({
@@ -97,8 +98,12 @@ vi.mock('./vehicle-pbr', () => ({
   },
 }));
 vi.mock('./three-renderer', () => ({
-  createThreeSceneRenderer: (options: { onRenderer: (gpu: unknown) => void }) => {
+  createThreeSceneRenderer: (options: {
+    onRenderer: (gpu: unknown) => void;
+    onGovernor: (trace: () => unknown) => void;
+  }) => {
     mocks.onRenderer = options.onRenderer;
+    mocks.onGovernor = options.onGovernor;
     return {
       warmUp: mocks.warmUp,
       onLost: vi.fn(),
@@ -324,5 +329,30 @@ describe('scene renderer attach hooks', () => {
       onAttached('arocs-1835-ak-interior', false);
       expect(marker()).toBeUndefined();
     });
+  });
+});
+
+describe('governor trace exposure', () => {
+  const exposed = (search: string, trace: () => unknown): unknown => {
+    const win: { __governor?: unknown } = {};
+    vi.stubGlobal('window', win);
+    vi.stubGlobal('location', { search });
+    vi.stubGlobal('document', { documentElement: { dataset: {}, setAttribute: vi.fn() } });
+    createSceneRenderer();
+    mocks.onGovernor?.(trace);
+    return win.__governor;
+  };
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('is absent without ?perf=1', () => {
+    expect(exposed('', () => null)).toBeUndefined();
+    expect(exposed('?perf=0', () => null)).toBeUndefined();
+  });
+
+  it('reads the live trace under ?perf=1', () => {
+    const trace = () => ({ events: [] });
+    expect(exposed('?perf=1', trace)).toEqual({ trace });
   });
 });

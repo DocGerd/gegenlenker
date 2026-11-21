@@ -427,8 +427,8 @@ export function createThreeSceneRenderer(
 
     setScene(nextLayout, truck, trailer) {
       disposeBuilt();
+      timer.resetScale('scene');
       resetTiming('scene');
-      timer.resetScale();
       leadAt = -1;
       const palette = readScenePalette();
       const scene = new Scene();

@@ -31,6 +31,7 @@ import { QUALITY_FLAGS } from './quality';
 import { startSkyTexture } from './sky-texture';
 import { skylineGradeSample } from './skyline';
 import type { GovernorTrace } from './governor';
+import { perfRequested } from './perf-overlay';
 import { createThreeSceneRenderer } from './three-renderer';
 import { createVehicleEnvironment } from './vehicle-pbr';
 import { KIT_SHADOW_SAMPLES, startYardKit } from './yard-kit';
@@ -154,7 +155,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   );
   const renderer = createThreeSceneRenderer({
     onGovernor: (trace) => {
-      if (new URLSearchParams(location.search).get('perf') === '1') window.__governor = { trace };
+      if (perfRequested(location.search)) window.__governor = { trace };
     },
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
     onRenderer: (gpu) => {

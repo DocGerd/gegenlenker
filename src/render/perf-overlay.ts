@@ -2,6 +2,10 @@ import type { RenderStats } from '../contracts/render';
 
 const REFRESH_MS = 250;
 
+/** Whether the page asks for the performance overlay and its governor trace (`?perf=1`). */
+export const perfRequested = (search: string): boolean =>
+  new URLSearchParams(search).get('perf') === '1';
+
 export function mountPerfOverlay(root: HTMLElement, stats: () => RenderStats): () => void {
   const el = document.createElement('div');
   el.className = 'mono';

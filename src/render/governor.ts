@@ -22,7 +22,7 @@ const EVENT_CAP = 256;
 const INTERVAL_CAP = 8192;
 
 export type GovernorEventKind =
-  'down' | 'up' | 'probe-failed' | 'probe-held' | 'warmup' | 'discard';
+  'down' | 'up' | 'probe-failed' | 'probe-held' | 'warmup' | 'discard' | 'restart' | 'reset';
 const KINDS: readonly GovernorEventKind[] = [
   'down',
   'up',
@@ -30,11 +30,20 @@ const KINDS: readonly GovernorEventKind[] = [
   'probe-held',
   'warmup',
   'discard',
+  'restart',
+  'reset',
 ];
+/** The decisions: kept in a ring of their own, so a burst of causes cannot evict them. */
+const DECISIONS: ReadonlySet<GovernorEventKind> = new Set([
+  'down',
+  'up',
+  'probe-failed',
+  'probe-held',
+]);
 
 export type GovernorEvent = {
   kind: GovernorEventKind;
-  /** What caused a `warmup` or `discard`: `init`, `scene`, `quality`, `lighting`, `resize`, `attach:<key>`. */
+  /** What caused a `warmup`, `discard`, `restart` or `reset`: `init`, `scene`, `quality`, `lighting`, `resize`, `visibility`, `attach:<key>`. */
   tag: string;
   /** Timestamp of the last frame seen, on the `performance.now()` clock. */
   t: number;
@@ -44,13 +53,14 @@ export type GovernorEvent = {
   /** The last window's p90 in ms; 0 before the first window. */
   p90: number;
   hold: number;
-  /** Failed probes of the more demanding level in the transition; of the current level for the other kinds. */
+  /** Failed probes of the level that gates a step up: the sharper level of a transition, else the one above the current. */
   failedProbes: number;
   /** ms of headroom accumulated towards a step up when the event happened. */
   steady: number;
 };
 
 export type GovernorTrace = {
+  /** Oldest first, decisions and causes interleaved; a `restart` or `reset` carries the state it replaced. */
   events: GovernorEvent[];
   /** The frame intervals the governor was fed, oldest first. */
   intervals: number[];
@@ -58,8 +68,17 @@ export type GovernorTrace = {
   dropped: number;
 };
 
-/** Bounded rings written without allocating; `read` copies them out. */
-function createTrace() {
+type EventState = {
+  level: number;
+  p90: number;
+  hold: number;
+  failedProbes: number;
+  steady: number;
+};
+
+/** A bounded ring of events, written without allocating. */
+function createEventRing() {
+  const order = new Float64Array(EVENT_CAP);
   const kind = new Uint8Array(EVENT_CAP);
   const tag: string[] = new Array<string>(EVENT_CAP).fill('');
   const time = new Float64Array(EVENT_CAP);
@@ -69,6 +88,57 @@ function createTrace() {
   const hold = new Float32Array(EVENT_CAP);
   const failed = new Uint8Array(EVENT_CAP);
   const steady = new Float32Array(EVENT_CAP);
+  let written = 0;
+  return {
+    push(
+      seq: number,
+      k: GovernorEventKind,
+      label: string,
+      t: number,
+      sample: number,
+      state: EventState,
+    ): void {
+      const i = written % EVENT_CAP;
+      order[i] = seq;
+      kind[i] = KINDS.indexOf(k);
+      tag[i] = label;
+      time[i] = t;
+      sampleAt[i] = sample;
+      level[i] = state.level;
+      p90[i] = state.p90;
+      hold[i] = state.hold;
+      failed[i] = state.failedProbes;
+      steady[i] = state.steady;
+      written++;
+    },
+    read(): { seq: number; event: GovernorEvent }[] {
+      const out: { seq: number; event: GovernorEvent }[] = [];
+      for (let n = Math.max(0, written - EVENT_CAP); n < written; n++) {
+        const i = n % EVENT_CAP;
+        out.push({
+          seq: order[i] ?? 0,
+          event: {
+            kind: KINDS[kind[i] ?? 0] ?? 'down',
+            tag: tag[i] ?? '',
+            t: time[i] ?? 0,
+            sample: sampleAt[i] ?? 0,
+            level: level[i] ?? 0,
+            p90: p90[i] ?? 0,
+            hold: hold[i] ?? 0,
+            failedProbes: failed[i] ?? 0,
+            steady: steady[i] ?? 0,
+          },
+        });
+      }
+      return out;
+    },
+  };
+}
+
+/** Bounded rings written without allocating; `read` copies them out. */
+function createTrace() {
+  const decisions = createEventRing();
+  const causes = createEventRing();
   const intervals = new Float32Array(INTERVAL_CAP);
   let events = 0;
   let samples = 0;
@@ -81,43 +151,15 @@ function createTrace() {
       intervals[samples % INTERVAL_CAP] = ms;
       samples++;
     },
-    event(
-      k: GovernorEventKind,
-      label: string,
-      state: { level: number; p90: number; hold: number; failedProbes: number; steady: number },
-    ): void {
-      const i = events % EVENT_CAP;
-      kind[i] = KINDS.indexOf(k);
-      tag[i] = label;
-      time[i] = now;
-      sampleAt[i] = samples;
-      level[i] = state.level;
-      p90[i] = state.p90;
-      hold[i] = state.hold;
-      failed[i] = state.failedProbes;
-      steady[i] = state.steady;
-      events++;
+    event(k: GovernorEventKind, label: string, state: EventState): void {
+      (DECISIONS.has(k) ? decisions : causes).push(events++, k, label, now, samples, state);
     },
     read(): GovernorTrace {
-      const out: GovernorEvent[] = [];
-      for (let n = Math.max(0, events - EVENT_CAP); n < events; n++) {
-        const i = n % EVENT_CAP;
-        out.push({
-          kind: KINDS[kind[i] ?? 0] ?? 'down',
-          tag: tag[i] ?? '',
-          t: time[i] ?? 0,
-          sample: sampleAt[i] ?? 0,
-          level: level[i] ?? 0,
-          p90: p90[i] ?? 0,
-          hold: hold[i] ?? 0,
-          failedProbes: failed[i] ?? 0,
-          steady: steady[i] ?? 0,
-        });
-      }
+      const merged = [...decisions.read(), ...causes.read()].sort((x, y) => x.seq - y.seq);
       const dropped = Math.max(0, samples - INTERVAL_CAP);
       const kept: number[] = [];
       for (let n = dropped; n < samples; n++) kept.push(intervals[n % INTERVAL_CAP] ?? 0);
-      return { events: out, intervals: kept, dropped };
+      return { events: merged.map((m) => m.event), intervals: kept, dropped };
     },
   };
 }
@@ -129,9 +171,9 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   /** Drops the samples of the window in progress, keeping the scale. `tag` names the cause in the trace. */
   discardWindow: (tag?: string) => void;
   /** Back to full resolution, remembering the hold and the failed probes. */
-  restart: () => void;
+  restart: (tag?: string) => void;
   /** Back to full resolution and forgets everything learnt about the device. */
-  reset: () => void;
+  reset: (tag?: string) => void;
   scale: () => number;
   trace: () => GovernorTrace;
 } {
@@ -148,7 +190,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   const ring = new Float64Array(WINDOW);
   const scratch = new Float64Array(WINDOW);
   const scale = (): number => Math.max(FLOOR, 1 - level * STEP);
-  const restart = (): void => {
+  const toFull = (): void => {
     level = 0;
     count = 0;
     steady = 0;
@@ -156,7 +198,12 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
     probing = false;
     settle = 0;
   };
-  const note = (k: GovernorEventKind, tag: string, failedLevel = level, held = steady): void => {
+  const note = (
+    k: GovernorEventKind,
+    tag: string,
+    failedLevel = Math.max(level - 1, 0),
+    held = steady,
+  ): void => {
     trace.event(k, tag, {
       level,
       p90: lastP90,
@@ -173,7 +220,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
         probing = false;
         failedProbes[level] = 0;
         hold = HOLD_MS;
-        note('probe-held', '');
+        note('probe-held', '', level);
       }
       if (settle > 0) {
         settle--;
@@ -229,9 +276,13 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       count = 0;
       steady = 0;
     },
-    restart,
-    reset() {
-      restart();
+    restart(tag = '') {
+      note('restart', tag);
+      toFull();
+    },
+    reset(tag = '') {
+      note('reset', tag);
+      toFull();
       hold = HOLD_MS;
       failedProbes.fill(0);
     },
@@ -249,7 +300,7 @@ export function createFrameTimer(): {
   resetTiming(tag?: string): void;
   /** Ignores the governor for a while: the next frames carry startup hitches, not steady load. */
   warmUp(tag?: string): void;
-  resetScale(): void;
+  resetScale(tag?: string): void;
   scale: () => number;
   fps(): number;
   p95Ms(): number;
@@ -300,7 +351,7 @@ export function createFrameTimer(): {
       ema = 0;
       count = 0;
       next = 0;
-      governor.restart();
+      governor.restart(tag);
       warmUp(tag);
     },
     warmUp,
