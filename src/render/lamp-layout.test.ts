@@ -12,6 +12,7 @@ import {
   truckLamps,
 } from './lamp-layout';
 import { TRUCK_LOOKS } from './livery';
+import { REALISM_HUES as HUE } from './realism-hues';
 
 /*
  * UN R48 (06 series, Supplement 10), https://eur-lex.europa.eu/eli/reg/2019/57/oj/eng, for an N3
@@ -252,10 +253,7 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
   it('flash every amber side marker with the indicators, at least three per side (6.18.7, 6.5.3.1)', () => {
     for (const l of withFn(v, 'side-marker')) {
       expect(l.fns, l.id).toContain('side-indicator');
-      expect(
-        l.fns.map((fn) => LAMP_COLOURS[fn]),
-        l.id,
-      ).toEqual(l.fns.map(() => 'amber'));
+      expect(l.hue, l.id).toBe(HUE.sideMarker);
     }
     for (const side of [1, -1]) {
       const flashing = v.lamps.filter(
