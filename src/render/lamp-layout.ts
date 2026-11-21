@@ -386,11 +386,7 @@ export function trailerSideRun(spec: TrailerSpec, variant: LampVariant): SideRun
   };
 }
 
-/**
- * Trailer lamps in `variant`: the procedural trailer, or its shell (a lafette or a low-loader deck).
- * Amber side markers flash with the indicators (R48 6.18.7), which 6.5.3.1(c) accepts instead of an
- * O4's three category 5 lamps per side.
- */
+/** Trailer lamps in `variant`: the procedural trailer, or its shell (a lafette or a low-loader deck). */
 export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayout {
   const f = trailerFrame(spec);
   const { a, hw, deck, underside, isBox } = f;
@@ -398,7 +394,7 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
   const lafette = variant === 'shell' && kind === 'lafette';
   const lowDeck = variant === 'shell' && kind === 'low-loader' ? lowLoaderDeck(spec) : null;
   const sink: Sink = { lamps: [], brackets: [] };
-  const markerFns = ['side-marker', 'side-indicator'] as const;
+  const markerFns = ['side-marker'] as const;
   const lamp = (l: Omit<Lamp, 'shell' | 'seat'> & Partial<Pick<Lamp, 'shell' | 'seat'>>): void => {
     sink.lamps.push({ shell: false, seat: 'part', ...l });
   };

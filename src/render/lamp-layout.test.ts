@@ -166,9 +166,8 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
 
   it.each(PAIRS)('place the $fn pair ($paragraph)', (rule) => {
     if ((rule.truckOnly && v.trailer) || (rule.trailerOnly && !v.trailer)) {
-      // an O4 has no category 5 or 6 pair (6.5.3 B); its flashing side markers are checked below
-      if (rule.fn !== 'side-indicator') expect(withFn(v, rule.fn)).toHaveLength(0);
-      else expect(withFn(v, rule.fn).every((l) => l.fns.includes('side-marker'))).toBe(true);
+      // an O4 has no category 5 or 6 pair (6.5.3 B)
+      expect(withFn(v, rule.fn)).toHaveLength(0);
       return;
     }
     const lamps = pair(v, rule.fn);
@@ -213,7 +212,7 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
   });
 
   it('fit the cat 6 side indicators within 1,800 mm of the front (6.5.4.3)', () => {
-    for (const l of withFn(v, 'side-indicator').filter((l) => !l.fns.includes('side-marker'))) {
+    for (const l of withFn(v, 'side-indicator')) {
       expect(v.front - l.box[0][0], l.id).toBeLessThanOrEqual(1.8 + EPS);
     }
   });
@@ -245,19 +244,8 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     );
   });
 
-  // 6.5.3.1(c): an O4 needs three category 5 lamps per side unless at least three amber side
-  // markers flash with the indicators, which 6.18.7 permits; (b) asks the same of an N3 over 9 m.
-  it('flash at least three amber side markers per side on a trailer, for want of cat 5 lamps (6.5.3.1)', () => {
-    if (!v.trailer) {
-      expect(v.front - v.rear).toBeLessThanOrEqual(9);
-      return;
-    }
-    for (const side of [1, -1]) {
-      const flashing = v.lamps.filter(
-        (l) => l.side === side && l.fns.includes('side-marker') && l.fns.includes('side-indicator'),
-      );
-      expect(flashing.length).toBeGreaterThanOrEqual(3);
-    }
+  it('keep every side marker a steady lamp: no other function shares its lens', () => {
+    for (const l of withFn(v, 'side-marker')) expect(l.fns, l.id).toEqual(['side-marker']);
   });
 
   it('pair every lamp with its mirror image across the centreline', () => {

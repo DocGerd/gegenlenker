@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ControlVector } from '../contracts/sim';
+import type { LampFn } from './lamp-layout';
 import { DAY, FLASH_PERIOD, lampState, lensLevel } from './lamp-state';
 
 const control: ControlVector = { steer: 0, lever: 0, brake: false, gear: 'D' };
@@ -78,14 +79,18 @@ describe('lampState', () => {
     ).toBeLessThan(1);
   });
 
-  it('flashes a side marker that carries an indicator with the hazards at night, and keeps the others steady', () => {
-    const night = { lights: true, hazard: true };
-    const on = lampState(at(0.01), night);
-    const off = lampState(at(FLASH_PERIOD * 0.75), night);
-    const combined = ['side-marker', 'side-indicator'] as const;
-    expect([lensLevel(on, combined), lensLevel(off, combined)]).toEqual([1, 0]);
-    expect([lensLevel(on, ['side-marker']), lensLevel(off, ['side-marker'])]).toEqual([1, 1]);
-    expect(lensLevel(off, ['rear-position', 'stop'])).toBeGreaterThan(0);
-    expect(lensLevel(lampState(at(0), { lights: true, hazard: false }), combined)).toBe(1);
+  it('keeps the side markers steady with the hazards, and only the indicators flash', () => {
+    for (const lights of [true, false]) {
+      const phase = (share: number) =>
+        lampState(at(FLASH_PERIOD * share), { lights, hazard: true });
+      const [on, off] = [phase(0.25), phase(0.75)];
+      expect([lensLevel(on, ['side-marker']), lensLevel(off, ['side-marker'])]).toEqual(
+        lights ? [1, 1] : [0, 0],
+      );
+      const changed = (Object.keys(on.levels) as LampFn[]).filter(
+        (fn) => on.levels[fn] !== off.levels[fn],
+      );
+      expect(changed.sort()).toEqual(['front-indicator', 'rear-indicator', 'side-indicator']);
+    }
   });
 });

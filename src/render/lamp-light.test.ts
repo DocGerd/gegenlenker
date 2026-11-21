@@ -371,25 +371,28 @@ describe('lamp light in the vehicle visuals', () => {
     visual.dispose();
   });
 
-  it('lights the rear lights from the reversing and stop lamps, and the beam always at night', () => {
-    const truck = proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env);
-    truck.setLook(night('balanced'));
-    const [front, rear] = spotsOf(truck.object);
-    if (front === undefined || rear === undefined) throw new Error('no truck lights');
-    const intensity = (control: Partial<SimSnapshot['control']>): number[] => {
-      truck.update(snapshotWith(TRUCK_IDS[0], TRAILER_IDS[0], control));
-      return [front.intensity, rear.intensity];
-    };
-    const parked = intensity({ gear: 'P', brake: false });
-    const reversing = intensity({ gear: 'R', brake: false });
-    const braking = intensity({ gear: 'P', brake: true });
-    expect(parked[0]).toBeGreaterThan(0);
-    expect(reversing[0]).toBe(parked[0]);
-    expect(parked[1], 'the tail lamp').toBeGreaterThan(0);
-    expect(reversing[1]).toBeGreaterThan(parked[1] ?? 0);
-    expect(braking[1]).toBeGreaterThan(parked[1] ?? 0);
-    truck.dispose();
-  });
+  it.each(PAIRS)(
+    'lights the %s truck rear light in R and braking, and the beam at night, towing the %s',
+    (truckId, trailerId) => {
+      const truck = proceduralTruck(truckById(truckId), palette, undefined, env);
+      truck.setLook(night('balanced'));
+      const [front, rear] = spotsOf(truck.object);
+      if (front === undefined || rear === undefined) throw new Error('no truck lights');
+      const intensity = (control: Partial<SimSnapshot['control']>): number[] => {
+        truck.update(snapshotWith(truckId, trailerId, control));
+        return [front.intensity, rear.intensity];
+      };
+      const parked = intensity({ gear: 'P', brake: false });
+      const reversing = intensity({ gear: 'R', brake: false });
+      const braking = intensity({ gear: 'P', brake: true });
+      expect(parked[0]).toBeGreaterThan(0);
+      expect(reversing[0]).toBe(parked[0]);
+      expect(parked[1], 'the tail lamp').toBeGreaterThan(0);
+      expect(reversing[1]).toBeGreaterThan(parked[1] ?? 0);
+      expect(braking[1]).toBeGreaterThan(parked[1] ?? 0);
+      truck.dispose();
+    },
+  );
 
   it('darkens the beam and the tail light with the lights off, by intensity alone', () => {
     const truck = proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env);

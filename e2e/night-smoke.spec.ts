@@ -35,6 +35,8 @@ const MIN_REVERSING_POOL = 0.01;
 const MIN_BEAM_POOL = 0.01;
 /** Share of a shot the dark phase of the hazard lights may brighten against the lights-on look: nothing but noise. */
 const MAX_DARK_PHASE_ADDED = 0.0005;
+/** Share of a mirror the hazard lights may darken against the lights-on look: the side markers stay lit, so nothing but noise. */
+const MAX_HAZARD_DARKENED = 0.0005;
 
 /** Channel level (0-255) above which a mirror pixel is lit ground: the ambient-lit yard stays below it, the floodlit one passes it. */
 const YARD_LIT = 80;
@@ -172,20 +174,28 @@ test(
     const { hazard, errors, three } = await nightDrive(page, 'balanced');
     const litShot = await shoot(page, 'chase');
     const lit = hash(litShot);
+    const litMirrors = [await shoot(page, 'mirrorLeft'), await shoot(page, 'mirrorRight')];
 
     // the hazard lights flash with sim time: half a period apart they show both phases
     await hazard.click();
     await settle(page, 'balanced');
     await expect(hazard).toHaveAttribute('aria-pressed', 'true');
     const phases = new Map<string, Buffer>();
+    const darkened: number[] = [];
     for (let i = 0; i < 3; i++) {
       const png = await shoot(page, 'chase');
       phases.set(hash(png), png);
+      for (const [k, side] of (['mirrorLeft', 'mirrorRight'] as const).entries()) {
+        // the mirrors show the trailer's side markers: only the indicators flash, so no phase may darken them
+        darkened.push(
+          await brightenedShare(page, await shoot(page, side), litMirrors[k] as Buffer, LAMP_STEP),
+        );
+      }
       await page.clock.runFor(HALF_FLASH_MS);
     }
     expect(phases.size, 'the hazard lights flash').toBeGreaterThan(1);
-    // the dark phase adds no light to the lights-on look: the indicators are off, and the
-    // side markers they flash with (and their ground glow) are dark too
+    expect(Math.max(...darkened), 'the side markers stay lit').toBeLessThan(MAX_HAZARD_DARKENED);
+    // the dark phase adds no light to the lights-on look: the indicators are off, and nothing else changes
     const added: number[] = [];
     for (const png of phases.values())
       added.push(await brightenedShare(page, litShot, png, LAMP_STEP));

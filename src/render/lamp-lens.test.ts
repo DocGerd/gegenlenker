@@ -34,12 +34,12 @@ import {
   tagShellLenses,
   withSlot,
 } from './lamp-lens';
-import { lampState } from './lamp-state';
+import { FLASH_PERIOD, lampState } from './lamp-state';
 import { TRUCK_LOOKS } from './livery';
 import { KEYS } from './palette';
 import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
-import { enableLayers, TOP_DOWN_LAYERS } from './seams';
+import { enableLayers, TOP_DOWN_LAYERS, type VehicleVisual } from './seams';
 import { VehicleNodeMaterial } from './vehicle-pbr';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
@@ -152,7 +152,7 @@ describe('lamp lenses', () => {
   it('light each slot in its R48 colour', () => {
     const lamps = createLampEmission();
     const levels = Object.fromEntries(Object.keys(LAMP_COLOURS).map((fn) => [fn, 1]));
-    lamps.update({ levels: levels as Record<LampFn, number>, flashing: false });
+    lamps.update({ levels: levels as Record<LampFn, number> });
     const looks: Record<LampColour, (c: Color) => boolean> = {
       white: (c) => Math.min(c.r, c.g, c.b) > 0.8,
       red: (c) => c.r > 0.5 && Math.max(c.g, c.b) < 0.05,
@@ -293,6 +293,29 @@ function litSlots(root: Object3D): number[] {
 }
 
 const STOP_AND_REVERSE = [slotOf(['rear-position', 'stop']), slotOf(['reversing'])];
+const INDICATORS = (['front-indicator', 'side-indicator', 'rear-indicator'] as const).map((fn) =>
+  slotOf([fn]),
+);
+
+/** The hazard lights flash the indicator lenses and nothing else, with the lights on or off. */
+function expectHazardFlashesIndicatorsOnly(visual: VehicleVisual, driving: SimSnapshot): void {
+  for (const lights of [true, false]) {
+    const phase = (share: number): number[] => {
+      visual.update({ ...driving, time: FLASH_PERIOD * share }, { lights, hazard: true });
+      return litSlots(visual.object);
+    };
+    const [on, off] = [phase(0.25), phase(0.75)];
+    const flashed = on.filter((slot) => !off.includes(slot));
+    expect(flashed.length, `lights ${lights}`).toBeGreaterThan(0);
+    expect(
+      flashed.every((slot) => INDICATORS.includes(slot)),
+      `lights ${lights}`,
+    ).toBe(true);
+    expect(off.every((slot) => on.includes(slot))).toBe(true);
+    expect(on.includes(slotOf(['side-marker'])), `lights ${lights}`).toBe(lights);
+    expect(off.includes(slotOf(['side-marker'])), `lights ${lights}`).toBe(lights);
+  }
+}
 
 /** A standstill snapshot of the combination with the brake held in R, and one in D without it. */
 function snapshots(truck: TruckId, trailer: TrailerId): [SimSnapshot, SimSnapshot] {
@@ -340,6 +363,12 @@ describe.each(TRUCK_IDS)('lamp slots of the %s truck', (id) => {
     expect(litSlots(visual.object)).toEqual(STOP_AND_REVERSE);
     visual.update(driving);
     expect(litSlots(visual.object)).toEqual([]);
+    visual.dispose();
+  });
+
+  it('flash only the indicators with the hazard lights, steady markers included', () => {
+    const visual = proceduralTruck(spec, palette, undefined, env);
+    expectHazardFlashesIndicatorsOnly(visual, snapshots(id, TRAILER_IDS[0])[1]);
     visual.dispose();
   });
 
@@ -393,6 +422,12 @@ describe.each(TRAILER_IDS)('lamp slots of the %s trailer', (id) => {
     expect(litSlots(visual.object)).toEqual(STOP_AND_REVERSE);
     visual.update(driving);
     expect(litSlots(visual.object)).toEqual([]);
+    visual.dispose();
+  });
+
+  it('flash only the indicators with the hazard lights, steady markers included', () => {
+    const visual = proceduralTrailer(spec, palette, undefined, env);
+    expectHazardFlashesIndicatorsOnly(visual, snapshots(TRUCK_IDS[0], id)[1]);
     visual.dispose();
   });
 
