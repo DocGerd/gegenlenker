@@ -39,6 +39,15 @@ export const SETTLE_DEADLINE_MS: Readonly<Record<Preset, number>> = {
   balanced: 30_000,
   high: 120_000,
 };
+/**
+ * A test timeout that outlasts the worst case of `settles` calls to `settle` (two phases each),
+ * so a preset that never readies fails by name first. `workMs` is everything besides settling.
+ */
+export const timeoutWithSettles = (
+  preset: Preset,
+  settles: number,
+  workMs: number = PRESET_TIMEOUT_MS[preset],
+): number => workMs + settles * 2 * SETTLE_DEADLINE_MS[preset];
 /** Consecutive frames the framing input must hold before a shot, so a late chrome measurement cannot move it. */
 const STABLE_FRAMES = 5;
 const HIDE_ID = 'pinned-shoot-bare';

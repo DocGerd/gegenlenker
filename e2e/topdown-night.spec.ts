@@ -17,6 +17,7 @@ import {
   shoot,
   shootYardZoomed,
   startPinnedDrive,
+  timeoutWithSettles,
   tokenShare,
   type Preset,
   type RenderConfig,
@@ -191,7 +192,12 @@ async function runDrives(
     gate: layout.waypoint,
   };
   const names: readonly string[] = [...SHOTS, ...zooms];
-  test.setTimeout(drives.reduce((sum, { preset }) => sum + DRIVE_TIMEOUT_MS[preset], 0));
+  test.setTimeout(
+    drives.reduce(
+      (sum, { preset }) => sum + timeoutWithSettles(preset, 2, DRIVE_TIMEOUT_MS[preset]),
+      0,
+    ),
+  );
   const errors: string[] = [];
   const threeProblems: string[] = [];
   const shots = new Map<string, Buffer>();
