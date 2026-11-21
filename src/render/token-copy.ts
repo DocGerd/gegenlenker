@@ -9,7 +9,7 @@ export interface TokenCopy {
   set(wanted: boolean): void;
   /** Whether the top-down view draws the twins in place of the tokens. */
   setTopDown(on: boolean): void;
-  /** Permanent: the tokens go back to every camera. */
+  /** Permanent: the copies stay off, so the perspective cameras draw the tokens. */
   disable(): void;
 }
 

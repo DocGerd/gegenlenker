@@ -24,9 +24,10 @@ import {
   type Shot,
 } from './pinned-shoot';
 import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
-import type { ScenePalette, ScenePaletteKey } from '../src/contracts/render';
+import type { NightLitKey, ScenePalette } from '../src/contracts/render';
 import { legacyIrradiance } from '../src/render/light-rig';
 import { TOP_DOWN_NIGHT_LIGHT } from '../src/render/look';
+import { NIGHT_KEY } from '../src/render/palette';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
 const SHOTS = ['follow', 'yard'] as const satisfies readonly Shot[];
@@ -35,7 +36,7 @@ const SHOTS = ['follow', 'yard'] as const satisfies readonly Shot[];
 const LIT_TOLERANCE = 2;
 /** What the night top-down shots must hold: the lit grounds and body at their night colour, the clear colour exact. */
 const MIN_SHARE: Readonly<
-  Record<(typeof SHOTS)[number], readonly (readonly [ScenePaletteKey, number])[]>
+  Record<(typeof SHOTS)[number], readonly (readonly [NightLitKey | 'nightBackdrop', number])[]>
 > = {
   follow: [
     ['yard', 0.5],
@@ -56,16 +57,20 @@ const linear = (c: number): number =>
 const encode = (l: number): number =>
   Math.round(255 * (l <= 0.0031308 ? 12.92 * l : 1.055 * l ** (1 / 2.4) - 0.055));
 
-/** The sRGB code a lit upward surface of `key` stores under `share` of the day light: lin(token) times the legacy irradiance over pi times `share`. */
-async function nightCode(
+/**
+ * The sRGB code a lit upward surface of `key` stores under `lighting`: lin(token) times the legacy irradiance over pi,
+ * times TOP_DOWN_NIGHT_LIGHT at night, where the token is the night one.
+ */
+async function litCode(
   page: Page,
-  key: ScenePaletteKey,
-  share: number,
+  key: NightLitKey,
+  lighting: RenderConfig['lighting'],
 ): Promise<[number, number, number]> {
+  const share = lighting === 'night' ? TOP_DOWN_NIGHT_LIGHT : 1;
   const [sr, sg, sb] = await sceneRgb(page, 'sky');
   const dim =
     (legacyIrradiance({ sky: (sr << 16) | (sg << 8) | sb } as ScenePalette) / Math.PI) * share;
-  const [r, g, b] = await sceneRgb(page, key);
+  const [r, g, b] = await sceneRgb(page, lighting === 'night' ? NIGHT_KEY[key] : key);
   return [encode(linear(r) * dim), encode(linear(g) * dim), encode(linear(b) * dim)];
 }
 
@@ -216,7 +221,6 @@ async function runDrives(
     for (const key of ['accent', 'nightAccent', 'wheel'] as const) {
       tokens[key] = await sceneRgb(page, key);
     }
-    const share = lighting === 'night' ? TOP_DOWN_NIGHT_LIGHT : 1;
     const taken = async (shot: string, png: Buffer, drawn: boolean): Promise<string> => {
       const label = `${exercise} ${preset} ${lighting} ${shot}`;
       await testInfo.attach(`${label}.png`, { body: png, contentType: 'image/png' });
@@ -238,7 +242,7 @@ async function runDrives(
         const found =
           token === 'nightBackdrop'
             ? await tokenShare(page, png, token, 0)
-            : await colourShare(page, png, await nightCode(page, token, share), LIT_TOLERANCE);
+            : await colourShare(page, png, await litCode(page, token, lighting), LIT_TOLERANCE);
         expect(found, `${label}: ${token}`).toBeGreaterThan(min);
       }
       // the strokes are unlit: the night accent draws, the day accent does not
@@ -262,7 +266,7 @@ async function runDrives(
     const paneAt = await paneMapper(
       page,
       yardPng,
-      await nightCode(page, 'yard', share),
+      await litCode(page, 'yard', lighting),
       layout.yard,
     );
     for (const zoom of zooms) {

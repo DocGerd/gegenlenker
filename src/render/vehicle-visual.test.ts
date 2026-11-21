@@ -117,6 +117,25 @@ function expectDetailFollowsWidth<T extends { width: Param }>(
   expect(detailHalfWidth(wide)).toBeCloseTo(narrow + 0.2, 5);
 }
 
+describe('night twins', () => {
+  // the twins draw the night tokens, the schematic keeps the day ones
+  const tones = { ...palette, nightCab: 0x111111, nightBody: 0x222222, nightChassis: 0x333333 };
+  const twinColours = (root: Object3D): number[] =>
+    meshes(root)
+      .filter((m) => m.name === TWIN_NAME)
+      .map((m) => (m.material as MeshBasicMaterial).color.getHex());
+
+  it('colours the truck twins from the night cab, chassis and body', () => {
+    const colours = twinColours(proceduralTruck(truckById(TRUCK_IDS[0]), tones).object);
+    expect(colours.sort()).toEqual([0x111111, 0x222222, 0x333333]);
+  });
+
+  it('colours the trailer twins from the night body and chassis', () => {
+    const colours = twinColours(proceduralTrailer(trailerById(TRAILER_IDS[0]), tones).object);
+    expect([...new Set(colours)].sort()).toEqual([0x222222, 0x333333]);
+  });
+});
+
 describe('perspective detail', () => {
   it.each(TRUCK_IDS)('stays off the top-down camera and follows the width Param (%s)', (id) => {
     expectDetailFollowsWidth(truckById(id), (s) => proceduralTruck(s, palette).object);

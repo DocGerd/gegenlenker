@@ -84,6 +84,24 @@ export const DEFAULT_GRAPHICS: GraphicsPreset = 'balanced';
 export type LightingMode = 'day' | 'night';
 export const LIGHTING_MODES: readonly LightingMode[] = ['day', 'night'];
 export const DEFAULT_LIGHTING: LightingMode = 'day';
+/** The lit tokens the top-down view draws darker at night; each has a `night<Key>` token. */
+export type NightLitKey =
+  | 'yard'
+  | 'pavement'
+  | 'street'
+  | 'verge'
+  | 'kerb'
+  | 'cone'
+  | 'band'
+  | 'wall'
+  | 'fence'
+  | 'hall'
+  | 'ramp'
+  | 'lamp'
+  | 'parked'
+  | 'body'
+  | 'cab'
+  | 'chassis';
 export type ScenePaletteKey =
   | 'sky'
   | 'backdrop'
@@ -110,7 +128,8 @@ export type ScenePaletteKey =
   | 'nightAccent'
   | 'nightTracks'
   | 'band'
-  | 'cladding';
+  | 'cladding'
+  | `night${Capitalize<NightLitKey>}`;
 export type ScenePalette = Readonly<Record<ScenePaletteKey, number>>;
 /** The driver's lamp switches; the lamps' own state follows from them and the controls. */
 export type LampSwitches = {
