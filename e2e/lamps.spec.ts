@@ -3,7 +3,7 @@ import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import {
   heavyAt,
-  PRESET_TIMEOUT_MS,
+  timeoutWithSettles,
   type Preset,
   settle,
   shoot,
@@ -22,7 +22,7 @@ for (const preset of PRESETS) {
     `lighting the stop lamps leaves the top-down view unchanged at ${preset}`,
     heavyAt(preset),
     async ({ context }) => {
-      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
+      test.setTimeout(timeoutWithSettles(preset, 2));
       const errors: string[] = [];
       const page = await context.newPage();
       page.on('console', (m) => {
