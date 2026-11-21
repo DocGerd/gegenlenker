@@ -29,7 +29,14 @@ import {
   type Shells,
   type TrailerShell,
 } from './glb-shells';
-import { CASTING_LIGHTS, SHADOW_NEAR } from './lamp-light';
+import {
+  CASTING_LIGHTS,
+  LAMP_SHADOW,
+  type LampLightSpec,
+  SHADOW_NEAR,
+  trailerLampLight,
+  truckLampLights,
+} from './lamp-light';
 import { lookFor } from './look';
 import { KEYS } from './palette';
 import { QUALITY_FLAGS } from './quality';
@@ -173,6 +180,7 @@ describe('which lamp lights cast', () => {
         light.shadow.updateMatrices(light);
         const { near, far } = light.shadow.camera;
         expect(far, light.name).toBeLessThanOrEqual(light.distance);
+        expect(near, light.name).toBe(SHADOW_NEAR);
         expect(near, light.name).toBeLessThan(far);
       }
       visual.dispose();
@@ -204,6 +212,27 @@ describe('which lamp lights cast', () => {
     for (const light of spots(truck.object)) expect(light.shadow.needsUpdate).toBe(false);
     truck.dispose();
   });
+});
+
+/** Most a shadow may stand off its caster, at the far end of its beam (m). */
+const MAX_DETACH = 0.2;
+
+describe("the casting lamps' shadow depth", () => {
+  const specs: readonly LampLightSpec[] = [
+    ...TRUCK_IDS.flatMap((id) => truckLampLights(truckById(id))),
+    ...TRAILER_IDS.map((id) => trailerLampLight(trailerById(id))),
+  ].filter((spec) => CASTING_LIGHTS.includes(spec.id));
+
+  it.each(specs.map((spec) => [spec.id, spec] as const))(
+    'keeps the %s shadow attached out to the end of its beam, with the near plane under its mounting height',
+    (_id, spec) => {
+      // the bias moves a shadow by about |bias| d² / near metres in perspective depth
+      const detach = (Math.abs(LAMP_SHADOW.bias) * spec.distance ** 2) / SHADOW_NEAR;
+      expect(detach).toBeLessThanOrEqual(MAX_DETACH);
+      // nothing standing on the ground stands nearer to the light than its height
+      expect(SHADOW_NEAR).toBeLessThanOrEqual(spec.position.z);
+    },
+  );
 });
 
 const ABOVE = 1e-4;

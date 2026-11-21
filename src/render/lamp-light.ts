@@ -93,11 +93,18 @@ export const GROUND = { dipped: 1.1, reversing: 1.2, stop: 0.8 } as const;
  */
 export const CASTING_LIGHTS: readonly LampLightId[] = ['truck-front', 'trailer-rear'];
 
-/** Shadow map of a casting lamp: its own size, and biases for a beam that grazes the ground. */
-export const LAMP_SHADOW = { mapSize: 1024, bias: -0.0005, normalBias: 0.04 } as const;
+/**
+ * Shadow map of a casting lamp: its own size, and biases for a beam that grazes the ground. The
+ * bias is in the shadow camera's perspective depth, where it reaches about `|bias| d² / near` metres
+ * at distance d, so a shadow detaches from its caster by that much.
+ */
+export const LAMP_SHADOW = { mapSize: 1024, bias: -0.00005, normalBias: 0.04 } as const;
 
 /** Nearest a caster may stand to a casting light (m); the shadow camera clips what is closer. */
-export const SHADOW_NEAR = 0.05;
+export const SHADOW_NEAR = 0.5;
+
+/** Near plane of a light that does not cast, which only projects its map. */
+const MAP_NEAR = 0.05;
 
 /** A light stands this far outside its lenses, so it does not light the housing it sits in. */
 const STANDOFF = 0.03;
@@ -317,10 +324,10 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
     light.map = maps[i] ?? null;
     if (CASTING_LIGHTS.includes(spec.id)) {
       prepareShadow(light, LAMP_SHADOW.mapSize);
-      light.shadow.camera.near = SHADOW_NEAR;
       light.shadow.bias = LAMP_SHADOW.bias;
       light.shadow.normalBias = LAMP_SHADOW.normalBias;
     }
+    light.shadow.camera.near = MAP_NEAR;
     light.layers.set(PERSPECTIVE_LAYER);
     light.visible = false;
     light.name = spec.id;
@@ -334,6 +341,8 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
       const light = lights[i];
       if (light !== undefined && CASTING_LIGHTS.includes(spec.id)) {
         light.castShadow = wanted && !gradeDisabled();
+        // the map's projection does not depend on near; only a shadow wants the depth range
+        light.shadow.camera.near = light.castShadow ? SHADOW_NEAR : MAP_NEAR;
       }
     });
   };
@@ -445,8 +454,11 @@ export function sampleLampLights(): { readonly lights: readonly SpotLight[]; dis
   };
 }
 
-/** A graded Lambert surface under the casting beam with its map: the program the lit views build at High at night. */
-export function lampLitSample(): GradeSample {
+/**
+ * A graded Lambert surface under the beam with its map: the program the lit views build at night.
+ * With `casting` it is a shadow receiver under the casting beam, as at High; without, as at Balanced and Low.
+ */
+export function lampLitSample(casting = false): GradeSample {
   const geometry = new BoxGeometry();
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   const material = new MeshLambertNodeMaterial({ vertexColors: true });
@@ -454,9 +466,9 @@ export function lampLitSample(): GradeSample {
   const map = patternMap(beamPattern);
   const light = new SpotLight(0xffffff, 1, BEAM.distance, BEAM.angle, BEAM.penumbra, 2);
   light.map = map;
-  light.castShadow = true;
+  light.castShadow = casting;
   const mesh = new Mesh(geometry, material);
-  mesh.receiveShadow = true;
+  mesh.receiveShadow = casting;
   return {
     mesh,
     lights: [light],

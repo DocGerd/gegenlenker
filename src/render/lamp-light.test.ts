@@ -442,12 +442,16 @@ describe('lamp light in the vehicle visuals', () => {
 });
 
 describe('lampLitSample', () => {
-  it('is a graded shadow receiver under the casting spot light with the beam map', () => {
-    const sample = lampLitSample();
-    expect(sample.lights).toHaveLength(1);
-    const [light] = sample.lights ?? [];
-    expect(light instanceof SpotLight && light.map !== null && light.castShadow).toBe(true);
-    expect(sample.mesh.receiveShadow).toBe(true);
-    sample.dispose();
-  });
+  it.each([true, false])(
+    'is a graded surface under the spot light with the beam map, casting %s',
+    (casting) => {
+      const sample = lampLitSample(casting);
+      expect(sample.lights).toHaveLength(1);
+      const [light] = sample.lights ?? [];
+      expect(light instanceof SpotLight && light.map !== null).toBe(true);
+      expect(light?.castShadow).toBe(casting);
+      expect(sample.mesh.receiveShadow).toBe(casting);
+      sample.dispose();
+    },
+  );
 });

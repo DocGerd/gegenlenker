@@ -37,10 +37,10 @@ export const SHADOW_SAMPLERS = 1;
 /** Fragment samplers per stage that WebGL2 and the WebGPU default both guarantee. */
 export const SAMPLER_CEILING = 16;
 
-/** Texture declarations in a fragment shader, GLSL or WGSL. */
+/** Texture declarations in a fragment shader, GLSL or WGSL; WGSL depth textures (shadow maps) declare no type parameter. */
 export function countSamplers(fragment: string): number {
   const glsl = fragment.match(/\buniform\s+(?:\w+\s+)?sampler\w+\s+\w+/g)?.length ?? 0;
-  const wgsl = fragment.match(/\bvar\s+\w+\s*:\s*texture_\w+</g)?.length ?? 0;
+  const wgsl = fragment.match(/\bvar\s+\w+\s*:\s*texture_\w+/g)?.length ?? 0;
   return glsl + wgsl;
 }
 

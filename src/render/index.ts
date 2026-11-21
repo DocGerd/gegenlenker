@@ -134,6 +134,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
         skylineGradeSample,
         ...KIT_SHADOW_SAMPLES,
         lampLitSample,
+        () => lampLitSample(true),
         pbrGroundNightSample,
         retroLitSample,
       ]),
