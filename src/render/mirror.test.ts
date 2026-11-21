@@ -1,7 +1,14 @@
-import { type Mesh, type Object3D, type RenderTarget, Scene, SRGBColorSpace } from 'three';
+import {
+  MathUtils,
+  type Mesh,
+  type Object3D,
+  type RenderTarget,
+  Scene,
+  SRGBColorSpace,
+  Vector3,
+} from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
-import { MathUtils, Vector3 } from 'three';
 import { CLASS_II_LEFT, createMirror, type MirrorSpec, mirrorSamples } from './mirror';
 
 /** Records the render targets a mirror binds and the scenes it draws; the fake accepts what three's renderer would. */
@@ -39,13 +46,13 @@ describe('mirror samples', () => {
 
   it('captures into an sRGB target, so a dark reflection keeps its codes', () => {
     const { gl, bound } = fakeRenderer();
-    createMirror().capture(gl, new Scene(), 64, 32, 0);
+    createMirror().capture(gl, new Scene(), 64, 32, 0, 0);
     expect(bound[0]?.texture.colorSpace).toBe(SRGBColorSpace);
   });
 
   it('clears inside the capture pass, so the multisample target resolves once', () => {
     const { gl, clearedWith } = fakeRenderer();
-    createMirror().capture(gl, new Scene(), 64, 32, 0);
+    createMirror().capture(gl, new Scene(), 64, 32, 0, 0);
     expect(clearedWith).toEqual([true]);
     expect(gl.autoClear).toBe(false);
   });
@@ -54,7 +61,7 @@ describe('mirror samples', () => {
     const { gl, bound } = fakeRenderer();
     const mirror = createMirror(CLASS_II_LEFT, 4);
     const scene = new Scene();
-    mirror.capture(gl, scene, 64, 32, 0);
+    mirror.capture(gl, scene, 64, 32, 0, 0);
     const first = bound[0];
     expect(first?.samples).toBe(4);
     const dispose = vi.spyOn(first as RenderTarget, 'dispose');
@@ -65,7 +72,7 @@ describe('mirror samples', () => {
 
     mirror.setSamples(2);
     expect(dispose).toHaveBeenCalledOnce();
-    mirror.capture(gl, scene, 64, 32, 0);
+    mirror.capture(gl, scene, 64, 32, 0, 0);
     expect(bound[1]).not.toBe(first);
     expect(bound[1]?.samples).toBe(0);
   });
@@ -103,28 +110,56 @@ describe('mirror spec', () => {
     expect(drawn).toHaveLength(3);
   });
 
+  it('captures off its parity after a change of samples, not after an unchanged request', () => {
+    const { gl } = fakeRenderer();
+    const mirror = createMirror(spec({ cadence: 2, parity: 1 }), 4);
+    const scene = new Scene();
+    mirror.capture(gl, scene, 64, 32, 0, 1);
+
+    mirror.setSamples(8);
+    expect(mirror.capture(gl, scene, 64, 32, 0, 2)).toBe(false);
+    mirror.setSamples(1);
+    expect(mirror.capture(gl, scene, 64, 32, 0, 2)).toBe(true);
+  });
+
+  it('captures off its parity once invalidated', () => {
+    const { gl } = fakeRenderer();
+    const mirror = createMirror(spec({ cadence: 2, parity: 1 }));
+    const scene = new Scene();
+    mirror.capture(gl, scene, 64, 32, 0, 1);
+
+    expect(mirror.capture(gl, scene, 64, 32, 0, 2)).toBe(false);
+    mirror.invalidate();
+    expect(mirror.capture(gl, scene, 64, 32, 0, 2)).toBe(true);
+    expect(mirror.capture(gl, scene, 64, 32, 0, 4)).toBe(false);
+  });
+
+  it('rejects a parity the cadence never reaches', () => {
+    expect(() => createMirror(spec({ cadence: 1, parity: 1 }))).toThrow();
+  });
+
   it('applies roll, pitch and field of view to the camera, and scales the target', () => {
     const { gl, bound } = fakeRenderer();
     const mirror = createMirror(
       spec({ roll: Math.PI, pitch: 0.1, fov: 70, aspect: 2, targetScale: 0.5 }),
     );
     mirror.place(new Vector3(), 0);
-    mirror.capture(gl, new Scene(), 64, 32, 0);
+    mirror.capture(gl, new Scene(), 64, 48, 0, 0);
     expect(mirror.camera.rotation.z).toBe(Math.PI);
     expect(mirror.camera.rotation.x).toBe(0.1);
     expect(mirror.camera.fov).toBe(70);
     expect(mirror.camera.aspect).toBe(2);
-    expect([bound[0]?.width, bound[0]?.height]).toEqual([32, 16]);
+    expect([bound[0]?.width, bound[0]?.height]).toEqual([32, 24]);
   });
 
   it('keeps the class II camera unrolled and following its target', () => {
     const { gl } = fakeRenderer();
     const mirror = createMirror();
     mirror.place(new Vector3(), 0);
-    mirror.capture(gl, new Scene(), 64, 32, 0);
+    mirror.capture(gl, new Scene(), 64, 48, 0, 0);
     expect(mirror.camera.rotation.z).toBe(0);
     expect(mirror.camera.rotation.x).toBe(MathUtils.degToRad(-4));
     expect(mirror.camera.fov).toBe(46);
-    expect(mirror.camera.aspect).toBe(2);
+    expect(mirror.camera.aspect).toBeCloseTo(4 / 3);
   });
 });

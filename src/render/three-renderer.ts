@@ -27,7 +27,7 @@ import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createFrame, type Frame } from './frame-target';
 import { describeAdapter } from './gpu-backend';
-import { CLASS_II_MIRRORS, createMirror, mirrorAnchor, mirrorPose } from './mirror';
+import { CLASS_II_MIRRORS, createMirror, mirrorAnchor, mirrorFacing } from './mirror';
 import { readScenePalette } from './palette';
 import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
@@ -210,7 +210,7 @@ export function createThreeSceneRenderer(
   let lighting: LightingMode = DEFAULT_LIGHTING;
   const mirrors = CLASS_II_MIRRORS.map((spec) => ({
     mirror: createMirror(spec, quality.mirrorMsaa),
-    rect: (views: ViewRects): Rect | null => views[spec.anchor],
+    rect: (views: ViewRects): Rect | null => views[spec.view],
   }));
   const mirrorPosition = new Vector3();
   const projected = new Vector3();
@@ -275,6 +275,7 @@ export function createThreeSceneRenderer(
     b.truck.setLook(look);
     b.trailer.setLook(look);
     b.interior.setLook(look);
+    for (const { mirror } of mirrors) mirror.invalidate();
   }
 
   function disposeBuilt(): void {
@@ -524,14 +525,16 @@ export function createThreeSceneRenderer(
       const mirrorCallsBefore = gl.info.render.drawCalls;
       for (const { mirror, rect } of mirrors) {
         const r = rect(views);
-        if (r === null) continue;
+        if (r === null) {
+          mirror.invalidate();
+          continue;
+        }
         const { spec } = mirror;
-        const facing = mirrorPose(
+        const facing = mirrorFacing(
           snapshot.truck,
           mirrorAnchor(spec, anchors),
-          spec.side,
-          mirrorPosition,
           spec.yaw,
+          mirrorPosition,
         );
         mirror.place(mirrorPosition, facing);
         mirror.capture(gl, b.scene, r.width * pixelRatio, r.height * pixelRatio, sky, frameIndex);

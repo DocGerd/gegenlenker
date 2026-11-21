@@ -23,10 +23,11 @@ export const MIRROR_YAW = MathUtils.degToRad(7);
 
 /** One mirror's camera and capture schedule; angles in radians, `fov` in degrees (three's convention). */
 export type MirrorSpec = {
-  /** The body-frame anchor the camera sits at. */
+  /** The truck anchor the camera sits at. */
   readonly anchor: 'mirrorLeft' | 'mirrorRight';
-  readonly side: 'left' | 'right';
-  /** Outward of straight back. */
+  /** The view rect the mirror fills. */
+  readonly view: 'mirrorLeft' | 'mirrorRight';
+  /** From straight back; positive turns toward the truck's right. */
   readonly yaw: number;
   readonly pitch: number;
   readonly roll: number;
@@ -36,13 +37,12 @@ export type MirrorSpec = {
   readonly aspect: number | null;
   /** Target resolution relative to the rect it fills. */
   readonly targetScale: number;
-  /** Captures every `cadence`-th frame, on frames where `frame % cadence === parity`. */
-  readonly cadence: number;
-  readonly parity: number;
+  /** Captures on frames where `frame % cadence === parity`. */
+  readonly cadence: 1 | 2;
+  readonly parity: 0 | 1;
 };
 
 const CLASS_II = {
-  yaw: MIRROR_YAW,
   pitch: MathUtils.degToRad(-4),
   roll: 0,
   fov: 46,
@@ -52,26 +52,38 @@ const CLASS_II = {
   parity: 0,
 } as const;
 
-export const CLASS_II_LEFT: MirrorSpec = { ...CLASS_II, anchor: 'mirrorLeft', side: 'left' };
-export const CLASS_II_RIGHT: MirrorSpec = { ...CLASS_II, anchor: 'mirrorRight', side: 'right' };
+export const CLASS_II_LEFT: MirrorSpec = {
+  ...CLASS_II,
+  anchor: 'mirrorLeft',
+  view: 'mirrorLeft',
+  yaw: -MIRROR_YAW,
+};
+export const CLASS_II_RIGHT: MirrorSpec = {
+  ...CLASS_II,
+  anchor: 'mirrorRight',
+  view: 'mirrorRight',
+  yaw: MIRROR_YAW,
+};
 export const CLASS_II_MIRRORS: readonly MirrorSpec[] = [CLASS_II_LEFT, CLASS_II_RIGHT];
 
 export const mirrorAnchor = (spec: MirrorSpec, anchors: TruckAnchors): Vec3 => anchors[spec.anchor];
 
 /**
  * Writes the position of the mirror at the body-frame `anchor` of a truck at `pose` into `out` and
- * returns the world heading it looks along.
+ * returns the world heading it looks along, `yaw` from straight back.
  */
-export function mirrorPose(
+export function mirrorFacing(pose: Pose2, anchor: Vec3, yaw: number, out: Vector3): number {
+  bodyToThree(pose, anchor, out);
+  return pose.heading + Math.PI + yaw;
+}
+
+/** `mirrorFacing` for a class II mirror on `side`. */
+export const mirrorPose = (
   pose: Pose2,
   anchor: Vec3,
   side: 'left' | 'right',
   out: Vector3,
-  yaw = MIRROR_YAW,
-): number {
-  bodyToThree(pose, anchor, out);
-  return pose.heading + Math.PI + (side === 'left' ? -yaw : yaw);
-}
+): number => mirrorFacing(pose, anchor, side === 'left' ? -MIRROR_YAW : MIRROR_YAW, out);
 
 /** WebGPU takes 1 or 4 samples and WebGL 2 guarantees at least 4, so any request maps to 0 or 4. */
 export const mirrorSamples = (requested: number): number => (requested >= 4 ? 4 : 0);
@@ -84,6 +96,7 @@ export function createMirror(
   spec: MirrorSpec = CLASS_II_LEFT,
   requestedSamples = QUALITY_FLAGS.balanced.mirrorMsaa,
 ) {
+  if (spec.parity >= spec.cadence) throw new Error('mirror parity must be below its cadence');
   const camera = new PerspectiveCamera(spec.fov, 1, NEAR, CAMERA_FAR);
   camera.rotation.order = 'YXZ';
   enableLayers(camera.layers, MIRROR_LAYERS);
@@ -98,6 +111,7 @@ export function createMirror(
 
   let target: RenderTarget | null = null;
   let samples = mirrorSamples(requestedSamples);
+  let invalid = false;
 
   return {
     camera,
@@ -115,9 +129,13 @@ export function createMirror(
       target = null;
       material.map = null;
     },
+    /** Makes the next capture render whatever its frame: the picture is stale (rect hidden, scene or look changed). */
+    invalidate(): void {
+      invalid = true;
+    },
     /**
      * Renders the scene into the target unless `frame` is off this mirror's cadence, which keeps the
-     * last capture; a missing or resized target always renders. Returns whether it rendered.
+     * last capture; a missing, resized or invalidated target always renders. Returns whether it rendered.
      */
     capture(
       renderer: WebGPURenderer,
@@ -125,11 +143,11 @@ export function createMirror(
       widthPx: number,
       heightPx: number,
       sky: number,
-      frame = 0,
+      frame: number,
     ): boolean {
       const w = Math.max(1, Math.round(widthPx * spec.targetScale));
       const h = Math.max(1, Math.round(heightPx * spec.targetScale));
-      let stale = false;
+      let stale = invalid;
       if (target === null) {
         target = new RenderTarget(w, h, { samples, colorSpace: SRGBColorSpace });
         material.map = target.texture;
@@ -140,6 +158,7 @@ export function createMirror(
         stale = true;
       }
       if (!stale && frame % spec.cadence !== spec.parity) return false;
+      invalid = false;
       camera.aspect = spec.aspect ?? w / h;
       camera.updateProjectionMatrix();
       // three resolves the clear colour against the target bound when it is set. The clear is part of
