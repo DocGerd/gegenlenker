@@ -1,5 +1,5 @@
 const WINDOW = 60;
-/** Past this a window is slow: a 60 Hz cadence jitters to about 18.8 ms at p90 even when every frame is on time. */
+/** Past this a window is slow: the limit sits above the p90 of an on-time but jittery 60 Hz cadence. */
 const P90_LIMIT_MS = 19.5;
 /** A window this fast counts towards stepping the scale back up; the gap to the limit is the hysteresis. */
 const P90_HEADROOM_MS = 19;

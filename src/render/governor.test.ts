@@ -388,7 +388,7 @@ describe('frame timer', () => {
 });
 
 describe('a 60 Hz cadence with frame jitter', () => {
-  /** Frame intervals (0.1 ms) of a 60 Hz display under CPU throttling: median 16.7 ms, no frame is late. */
+  /** Frame intervals (0.1 ms) of one CPU-throttled 60 Hz run on a desktop GPU, with a few skipped vsyncs. */
   const JITTER = [
     '167 177 160 162 160 175 163 180 167 163 154 165 178 165 171 168 151 175 182 140 186 161 170',
     '156 181 158 165 179 146 200 156 163 158 163 157 181 166 158 162 184 151 186 150 180 154 185',
@@ -447,6 +447,15 @@ describe('a 60 Hz cadence with frame jitter', () => {
     expect(governor.scale()).toBeCloseTo(0.85, 10);
     feed(governor, JITTER);
     expect(governor.scale()).toBe(1);
+  });
+
+  it('steps down when the same jitter runs 1.5 ms slower', () => {
+    const governor = createResolutionGovernor();
+    feed(
+      governor,
+      JITTER.map((ms) => ms + 1.5),
+    );
+    expect(governor.scale()).toBeLessThan(1);
   });
 
   it.each([20, 21, 25])('steps down when every frame takes %ims', (ms) => {
