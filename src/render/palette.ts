@@ -45,3 +45,6 @@ export function readScenePalette(el: Element = document.documentElement): SceneP
   }
   return palette as ScenePalette;
 }
+
+/** The tokens the top-down view draws its lit surfaces in at night. */
+export const nightPalette = (palette: ScenePalette): ScenePalette => palette;

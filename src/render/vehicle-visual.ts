@@ -52,7 +52,15 @@ import { markerGlowGeometry } from './marker-glow';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
-import { CAB_LAYER, PERSPECTIVE_LAYER, SHADOW_ONLY_LAYER, type VehicleVisual } from './seams';
+import {
+  AIDS_LAYER,
+  CAB_LAYER,
+  PERSPECTIVE_LAYER,
+  SHADOW_ONLY_LAYER,
+  type VehicleVisual,
+} from './seams';
+import { nightPalette } from './palette';
+import { placeToken } from './token-copy';
 import {
   ARM_HEIGHT,
   ARM_WIDTH,
@@ -90,6 +98,8 @@ import {
 } from './vehicle-pbr';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
 
+/** The mesh name of a night twin: top-down only, so never a caster. */
+export const TWIN_NAME = 'night-twin';
 export const SHADOW_NAME = 'blob-shadow';
 /** Share of the contact blobs' opacity kept while the sun casts a shadow. */
 const BLOB_OPACITY_UNDER_SUN = 0.5;
@@ -171,6 +181,8 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     readonly fns: readonly LampFn[];
   };
   const glows: Glow[] = [];
+  const twins: { token: Mesh; shelled: () => boolean; twin: Mesh }[] = [];
+  let twinsOn = false;
   let glowOn = false;
   let glowState: LampState | null = null;
   const syncGlow = (): void => {
@@ -178,6 +190,13 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       const level = glowState === null ? 0 : lensLevel(glowState, fns);
       material.color.setScalar(level);
       mesh.visible = glowOn && level > 0;
+    }
+  };
+  /** Puts each token and its twin on the layers the shell and night states call for. */
+  const syncTwins = (): void => {
+    for (const { token, shelled, twin } of twins) {
+      placeToken(token, shelled(), twinsOn);
+      twin.visible = twinsOn;
     }
   };
   const track = <M extends Material>(material: M): M => {
@@ -226,6 +245,25 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       return mesh;
+    },
+    /**
+     * A top-down-only copy of `token` in `material`, drawn at night in its place; `shelled` says
+     * whether a shell has taken the token's perspective drawing.
+     */
+    twin(token: Mesh, material: Material, shelled: () => boolean = () => false): Mesh {
+      const mesh = this.mesh(token.geometry, material);
+      mesh.castShadow = false;
+      mesh.name = TWIN_NAME;
+      mesh.layers.set(AIDS_LAYER);
+      mesh.visible = false;
+      twins.push({ token, shelled, twin: mesh });
+      return mesh;
+    },
+    syncTwins,
+    /** Night: the top-down view draws the twins and the tokens leave it. */
+    setNight(night: boolean): void {
+      twinsOn = night;
+      syncTwins();
     },
     /** Perspective-only detail: vertex colours in one shared material, off the top-down camera. */
     detail(geometry: BufferGeometry): Mesh {
@@ -489,6 +527,7 @@ export function proceduralTruck(
 
   const cabBox = res.mesh(merge(cab), cabMaterial);
   const cabFront = res.cabFront(detail.cabFront);
+  const chassisBox = res.mesh(merge(chassis), chassisMaterial);
   const bodyBox = res.mesh(merge(body), bodyMaterial);
   const detailMesh = res.detail(detail.geometry);
   const group = new Group();
@@ -499,12 +538,20 @@ export function proceduralTruck(
     schematic.rear,
     res.shadow(blobShadow(truckBlobs, SHADOW_HEIGHT)),
     cabBox,
-    res.mesh(merge(chassis), chassisMaterial),
+    chassisBox,
     bodyBox,
     res.mesh(merge(rearWheels), wheelMaterial),
     detailMesh,
     cabFront,
     res.plate(detail.plate),
+  );
+  let cabShown = false;
+  let bodyShown = false;
+  const night = nightPalette(palette);
+  group.add(
+    res.twin(cabBox, res.material(night.cab), () => cabShown),
+    res.twin(chassisBox, res.material(night.chassis)),
+    res.twin(bodyBox, res.material(night.body), () => bodyShown),
   );
 
   // each front wheel yaws about its own kingpin, so the two share one geometry
@@ -553,7 +600,11 @@ export function proceduralTruck(
       {
         material: res.detailMaterial(),
         enabled: cabOn(),
-        onChange: (on) => shells?.cab.attached(cabKey, on),
+        onChange: (on) => {
+          cabShown = on;
+          res.syncTwins();
+          shells?.cab.attached(cabKey, on);
+        },
       },
     );
     res.setPbr(group);
@@ -579,7 +630,11 @@ export function proceduralTruck(
       {
         material: res.detailMaterial(),
         enabled: bodyOn(),
-        onChange: (on) => shells?.body.attached(bodyKey, on),
+        onChange: (on) => {
+          bodyShown = on;
+          res.syncTwins();
+          shells?.body.attached(bodyKey, on);
+        },
       },
     );
     res.setPbr(group);
@@ -625,6 +680,7 @@ export function proceduralTruck(
       res.setLamps(lamps);
       res.setLampLight(lampLight, lampShadow);
       res.setPbr(group, flags.pbr, mode);
+      res.setNight(mode === 'night');
     },
     dispose() {
       cancelCab?.();
@@ -808,6 +864,14 @@ export function proceduralTrailer(
     detailMesh,
     res.plate(trailerRig.plate),
   );
+  let shown = false;
+  const night = nightPalette(palette);
+  const nightChassis = res.material(night.chassis);
+  trailer.add(
+    res.twin(bodyMesh, res.material(night.body), () => shown),
+    res.twin(frameMesh, nightChassis, () => shown),
+  );
+  dolly.add(res.twin(dollyChassisMesh, nightChassis, () => shown));
   const group = new Group();
   group.add(dolly, trailer);
   res.attachLampLights([trailerLampLight(spec)], trailer);
@@ -822,7 +886,6 @@ export function proceduralTrailer(
 
   type Applied = ReturnType<typeof applyShell>;
   let applied: { readonly trailer: Applied; readonly dolly: Applied } | null = null;
-  let shown = false;
   let vehicleGlb = true;
   const key = `${spec.id}-trailer`;
   /** Both halves switch together or not at all; the shell counts as attached only while both show. */
@@ -838,9 +901,11 @@ export function proceduralTrailer(
       } catch (undoError) {
         console.warn(`Shell ${key} could not be restored`, undoError);
       }
+      res.syncTwins();
       return;
     }
     shown = on;
+    res.syncTwins();
     shells?.attached(key, on);
   };
   const attach = (shell: TrailerShell): void => {
@@ -893,6 +958,7 @@ export function proceduralTrailer(
       res.setLamps(lamps);
       res.setLampLight(lampLight, lampShadow);
       res.setPbr(group, flags.pbr, mode);
+      res.setNight(mode === 'night');
     },
     dispose() {
       cancel?.();
