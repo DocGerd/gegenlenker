@@ -34,9 +34,9 @@ const rad = (deg: number): number => (deg * Math.PI) / 180;
 
 export type LampLightId = 'truck-front' | 'truck-rear' | 'trailer-rear';
 
-export type LampLightSpec = {
-  readonly id: LampLightId;
-  /** In the body frame of the part that carries the light: x forward, y left, z up. */
+/** A spot's cone, in the frame of whatever carries it: what the ground analysis needs of a light. */
+export type Cone = {
+  /** x forward, y left, z up. */
   readonly position: Vec3;
   /** Unit vector of the cone's axis. */
   readonly aim: Vec3;
@@ -45,7 +45,12 @@ export type LampLightSpec = {
   readonly penumbra: number;
   /** Where the light ends (m), reached from `position`. */
   readonly distance: number;
+  /** Exponent of the fall-off with distance; 2 where absent, the inverse square. */
+  readonly decay?: number;
 };
+
+/** Positions are in the body frame of the part that carries the light. */
+export type LampLightSpec = Cone & { readonly id: LampLightId };
 
 /** The dipped beam: asymmetric, with a cut-off, and shaped by `beamPattern`. */
 export const BEAM = {
@@ -205,7 +210,7 @@ export function trailerPattern(u: number, v: number): number {
 
 type Pattern = (u: number, v: number) => number;
 
-const patternOf = (id: LampLightId): Pattern | null =>
+const patternOf = (id: LampLightId | undefined): Pattern | null =>
   id === 'truck-front' ? beamPattern : id === 'trailer-rear' ? trailerPattern : null;
 
 const MAP_SIZE = 64;
@@ -324,14 +329,14 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
   };
 }
 
-/** Irradiance a light of `cd` candela puts on a surface facing it at `distance` (three's inverse-square with its cut-off window). */
-export function facingIrradiance(cd: number, distance: number, reach: number): number {
+/** Irradiance a light of `cd` candela puts on a surface facing it at `distance` (three's fall-off with its cut-off window; the inverse square unless `decay` says otherwise). */
+export function facingIrradiance(cd: number, distance: number, reach: number, decay = 2): number {
   const window = Math.max(0, 1 - (distance / reach) ** 4) ** 2;
-  return (cd * window) / Math.max(distance ** 2, 0.01);
+  return (cd * window) / Math.max(distance ** decay, 0.01);
 }
 
 /** Share of the peak the cone gives along a ray at `cosine` to the axis (three's spot attenuation). */
-export function coneShare(spec: LampLightSpec, cosine: number): number {
+export function coneShare(spec: Cone, cosine: number): number {
   const outer = Math.cos(spec.angle);
   const inner = Math.cos(spec.angle * (1 - spec.penumbra));
   return smoothstep(outer, inner, cosine);
@@ -344,7 +349,7 @@ export type LitGround = { readonly x: number; readonly y: number; readonly irrad
  * The ground under the light's cone, sampled over a `steps` grid of rays. Faces turned to the beam
  * are not counted: they clip, as a lit wall does at a headlamp's range.
  */
-export function litGround(spec: LampLightSpec, steps = 120): LitGround[] {
+export function litGround(spec: Cone & { readonly id?: LampLightId }, steps = 120): LitGround[] {
   const axis = new Vector3(spec.aim.x, spec.aim.y, spec.aim.z);
   // the cone's frame as the shadow camera sees it: right and up for a viewer along the axis
   const right = new Vector3().crossVectors(axis, new Vector3(0, 0, 1)).normalize();
@@ -367,7 +372,7 @@ export function litGround(spec: LampLightSpec, steps = 120): LitGround[] {
       out.push({
         x: spec.position.x + t * ray.x,
         y: spec.position.y + t * ray.y,
-        irradiance: share * pattern * facingIrradiance(1, t, spec.distance) * -ray.z,
+        irradiance: share * pattern * facingIrradiance(1, t, spec.distance, spec.decay) * -ray.z,
       });
     }
   }
@@ -375,7 +380,10 @@ export function litGround(spec: LampLightSpec, steps = 120): LitGround[] {
 }
 
 /** Peak irradiance per candela of the light's peak that the light puts on the ground. */
-export function groundIrradiancePerCandela(spec: LampLightSpec, steps = 120): number {
+export function groundIrradiancePerCandela(
+  spec: Cone & { readonly id?: LampLightId },
+  steps = 120,
+): number {
   return Math.max(...litGround(spec, steps).map((p) => p.irradiance));
 }
 

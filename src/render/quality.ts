@@ -34,6 +34,8 @@ export type QualityFlags = {
   readonly hdriSky: boolean;
   /** At night the lamps light the ground and the yard around the vehicles. */
   readonly lampLight: boolean;
+  /** At night the yard's floodlights and street lamps throw pools on the ground, and their heads glow. */
+  readonly yardLight: boolean;
 };
 
 const BALANCED: QualityFlags = {
@@ -56,6 +58,7 @@ const BALANCED: QualityFlags = {
   sunShadow: false,
   hdriSky: false,
   lampLight: true,
+  yardLight: true,
 };
 
 /** Most draw calls a frame may spend, mirrors included: the requirement for High. */
@@ -82,6 +85,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     sunShadow: false,
     hdriSky: false,
     lampLight: false,
+    yardLight: false,
   },
   balanced: BALANCED,
   high: {

@@ -1,4 +1,4 @@
-import { Box3, Mesh } from 'three';
+import { Box3, Mesh, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
@@ -12,7 +12,8 @@ import {
   type ResolvedLayout,
 } from '../contracts/layout';
 import { OVERLAY } from './yard-concrete';
-import { RETRO_ATTRIBUTE } from './tint';
+import { EMIT_ATTRIBUTE, RETRO_ATTRIBUTE } from './tint';
+import { yardLightSpec } from './yard-lights';
 import { cornerHoops, decorPieces, type PropPiece, RESTYLED_KINDS, yardProps } from './yard-props';
 
 const TOLERANCE = 0.05;
@@ -249,6 +250,94 @@ describe('lamp fixtures', () => {
     expect(east.min.x).toBeGreaterThan(-0.3);
     expect(west.min.x).toBeLessThan(-0.3);
     expect(west.max.x).toBeLessThan(0.3);
+  });
+});
+
+describe('lamp heads', () => {
+  const height = 9;
+  const post = { x: 0, y: 0, height };
+  const piece = (fixture: Fixture): PropPiece => {
+    const pieces = yardProps(
+      withProps([
+        {
+          id: 'lamp-1',
+          asset: 'lamp',
+          colliders: [
+            {
+              kind: 'lamp',
+              obb: { cx: 0, cy: 0, halfLength: 0.15, halfWidth: 0.15, heading: 0 },
+              height,
+            },
+          ],
+          fixture,
+        },
+      ]),
+    );
+    const [first] = pieces;
+    if (first === undefined) throw new Error('no piece');
+    return first;
+  };
+  /** The box (three space) of the vertices that glow. */
+  const lens = (p: PropPiece): Box3 => {
+    const position = p.geometry.getAttribute('position');
+    const emit = p.geometry.getAttribute(EMIT_ATTRIBUTE);
+    const box = new Box3();
+    for (let i = 0; i < position.count; i++) {
+      if (emit.getX(i) + emit.getY(i) + emit.getZ(i) > 0)
+        box.expandByPoint(new Vector3().fromBufferAttribute(position, i));
+    }
+    return box;
+  };
+
+  it.each(['flood', 'street'] as const)(
+    'glow on the lens of a %s fixture and nowhere else',
+    (kind) => {
+      const p = piece({ kind, aim: { x: 10, y: 0 } });
+      const box = lens(p);
+      expect(box.isEmpty()).toBe(false);
+      // the lens is a small part of the post's height, near its top
+      expect(box.min.y).toBeGreaterThan(height - 1);
+    },
+  );
+
+  it('hold a mast light just in front of its lens, at its height', () => {
+    const fixture: Fixture = { kind: 'flood', aim: { x: 10, y: 0 } };
+    const box = lens(piece(fixture));
+    const at = yardLightSpec(post, fixture).position;
+    // aimed along +x: three x is sim x, three y is sim z
+    expect(at.x).toBeGreaterThan(box.max.x);
+    expect(at.x - box.max.x).toBeLessThanOrEqual(0.05);
+    expect(at.z).toBeGreaterThan(box.min.y);
+    expect(at.z).toBeLessThan(box.max.y);
+  });
+
+  it('hold a street light just under its downward lens, across its middle', () => {
+    const fixture: Fixture = { kind: 'street', aim: { x: 10, y: 0 } };
+    const box = lens(piece(fixture));
+    const at = yardLightSpec(post, fixture).position;
+    expect(at.x).toBeGreaterThan(box.min.x);
+    expect(at.x).toBeLessThan(box.max.x);
+    expect(box.min.y - at.z).toBeGreaterThan(0);
+    expect(box.min.y - at.z).toBeLessThanOrEqual(0.05);
+  });
+
+  it('carry an emit attribute on every piece of every layout, as one chunk merges them', () => {
+    for (const { resolved } of cases) {
+      for (const p of yardProps(resolved)) {
+        expect(p.geometry.hasAttribute(EMIT_ATTRIBUTE)).toBe(true);
+      }
+    }
+  });
+
+  it('are the only vertices that glow', () => {
+    for (const { resolved } of cases) {
+      const lamps = resolved.props.filter((p) => p.fixture !== undefined).length;
+      const glowing = yardProps(resolved).filter((p) => {
+        const emit = p.geometry.getAttribute(EMIT_ATTRIBUTE);
+        return emit.array.some((v) => v > 0);
+      });
+      expect(glowing).toHaveLength(lamps);
+    }
   });
 });
 

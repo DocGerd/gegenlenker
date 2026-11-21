@@ -1,5 +1,5 @@
 import { BoxGeometry, type BufferGeometry, Color, SpotLight, Vector3 } from 'three';
-import { PhongLightingModel, type WebGPURenderer } from 'three/webgpu';
+import { MeshLambertNodeMaterial, PhongLightingModel, type WebGPURenderer } from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
 import { trucks } from '../vehicles/registry';
 import { truckAnchors } from '../vehicles/anchors';
@@ -14,6 +14,7 @@ import {
 } from './lamp-light';
 import { REALISM_HUES } from './realism-hues';
 import {
+  EMIT_SHADER_MARKER,
   RETRO,
   RETRO_SHADER_MARKER,
   RetroNodeMaterial,
@@ -23,7 +24,7 @@ import {
   retroLitSample,
   retroLobe,
 } from './retro';
-import { RETRO_ATTRIBUTE, withRetro } from './tint';
+import { EMIT_ATTRIBUTE, RETRO_ATTRIBUTE, withRetro } from './tint';
 
 describe('retroLobe', () => {
   it('is full at zero observation angle and falls as the viewer leaves the light', () => {
@@ -67,12 +68,18 @@ describe('the reflector material', () => {
     expect(Object.hasOwn(Object.getPrototypeOf(model) as object, 'direct')).toBe(true);
   });
 
-  it('has a shader check sample: graded retro surface under a spot light, named by both markers', () => {
+  it('glows with the emit attribute, which the plain Lambert material does not read', () => {
+    expect(new RetroNodeMaterial().emissiveNode).not.toBeNull();
+    expect(new MeshLambertNodeMaterial().emissiveNode).toBeNull();
+  });
+
+  it('has a shader check sample: graded retro surface under a spot light, named by its markers', () => {
     const sample = retroLitSample();
     expect(sample.mesh.material).toBeInstanceOf(RetroNodeMaterial);
     expect(sample.mesh.geometry.hasAttribute(RETRO_ATTRIBUTE)).toBe(true);
     expect(sample.lights?.every((l) => l instanceof SpotLight)).toBe(true);
-    expect(sample.markers).toEqual([RETRO_SHADER_MARKER, GRADE_SHADER_MARKER]);
+    expect(sample.markers).toEqual([RETRO_SHADER_MARKER, EMIT_SHADER_MARKER, GRADE_SHADER_MARKER]);
+    expect(sample.mesh.geometry.hasAttribute(EMIT_ATTRIBUTE)).toBe(true);
     sample.dispose();
   });
 });
@@ -181,7 +188,7 @@ describe('the reflector shader check', () => {
     const check = createRetroCheck();
     const seen: RetroVerdict[] = [];
     check.onChange(() => seen.push(check.verdict()));
-    check.attach(gpu(`float ${RETRO_SHADER_MARKER} = 1.0;`));
+    check.attach(gpu(`float ${RETRO_SHADER_MARKER} = 1.0; vec3 ${EMIT_SHADER_MARKER};`));
     expect(check.verdict()).toBe('pending');
     await flush();
     expect(check.verdict()).toBe('ok');
