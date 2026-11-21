@@ -17,17 +17,18 @@ import { MeshLambertNodeMaterial } from 'three/webgpu';
 import type { TrailerSpec, TruckSpec, Vec3 } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailers } from '../vehicles/registry';
-import { setGraded, type GradeSample } from './grade';
+import { gradeDisabled, setGraded, type GradeSample } from './grade';
 import { type Lamp, trailerLamps, truckLamps } from './lamp-layout';
 import { type LampState } from './lamp-state';
 import { PERSPECTIVE_LAYER } from './seams';
+import { prepareShadow, queueShadow } from './sun-shadow';
 
 /*
  * The lamps' light at night: one SpotLight for the truck's dipped beams, one behind the truck and one
- * behind the trailer for the reversing and stop/tail lamps. No shadows: a surface the beam can
- * reach is lit through whatever stands in front of it. The lights are on the perspective layer, and
- * a look switches them on or off once; driving only changes their intensity and colour, so the
- * lit shaders never rebuild.
+ * behind the trailer for the reversing and stop/tail lamps. Without shadows a surface the beam can
+ * reach is lit through whatever stands in front of it; where `LAMP_SHADOW` applies the beam and the
+ * trailer's light cast. The lights are on the perspective layer, and a look switches them on or off
+ * (and the casting) once; driving only changes their intensity and colour, so the lit shaders never rebuild.
  */
 
 const rad = (deg: number): number => (deg * Math.PI) / 180;
@@ -90,6 +91,25 @@ export const REAR = {
  * `TAIL_LEVEL` of the stop lamp's).
  */
 export const GROUND = { dipped: 1.1, reversing: 1.2, stop: 0.8 } as const;
+
+/**
+ * The lights that cast where the look allows it. The reversing lamps behind the truck light the
+ * drawbar gap, which the trailer's own front would shade; they stay without a map.
+ */
+export const CASTING_LIGHTS: readonly LampLightId[] = ['truck-front', 'trailer-rear'];
+
+/**
+ * Shadow map of a casting lamp: its own size, and biases for a beam that grazes the ground. The
+ * bias is in the shadow camera's perspective depth, where it reaches about `|bias| d² / near` metres
+ * at distance d, so a shadow detaches from its caster by that much.
+ */
+export const LAMP_SHADOW = { mapSize: 1024, bias: -0.00005, normalBias: 0.04 } as const;
+
+/** Nearest a caster may stand to a casting light (m); the shadow camera clips what is closer. */
+export const SHADOW_NEAR = 0.5;
+
+/** Near plane of a light that does not cast, which only projects its map. */
+const MAP_NEAR = 0.05;
 
 /** A light stands this far outside its lenses, so it does not light the housing it sits in. */
 const STANDOFF = 0.03;
@@ -279,9 +299,15 @@ function emission(
 
 export interface LampLights {
   readonly lights: readonly SpotLight[];
-  /** Switches the set on or off; it changes the scene's light set, so call it on a look change only. */
-  setEnabled(on: boolean): void;
-  /** Sets each light's intensity and colour from the lamps' levels; nothing else changes. */
+  /**
+   * Switches the set on or off, and with `shadow` the casting lights' shadows; both change the
+   * scene's light set, so call it on a look change only.
+   */
+  setEnabled(on: boolean, shadow?: boolean): void;
+  /**
+   * Sets each light's intensity and colour from the lamps' levels, and queues a casting light's map
+   * while it shines; a failed grade check stops the casting, as it does the sun's.
+   */
   update(state: LampState): void;
   dispose(): void;
 }
@@ -301,7 +327,12 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
     const aim = toThree(spec.aim);
     light.target.position.copy(light.position).addScaledVector(aim, 10);
     light.map = maps[i] ?? null;
-    light.shadow.camera.near = 0.05;
+    if (CASTING_LIGHTS.includes(spec.id)) {
+      prepareShadow(light, LAMP_SHADOW.mapSize);
+      light.shadow.bias = LAMP_SHADOW.bias;
+      light.shadow.normalBias = LAMP_SHADOW.normalBias;
+    }
+    light.shadow.camera.near = MAP_NEAR;
     light.layers.set(PERSPECTIVE_LAYER);
     light.visible = false;
     light.name = spec.id;
@@ -309,17 +340,33 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
     parent.add(light, light.target);
     return light;
   });
+  let wanted = false;
+  const setCasting = (): void => {
+    specs.forEach((spec, i) => {
+      const light = lights[i];
+      if (light !== undefined && CASTING_LIGHTS.includes(spec.id)) {
+        light.castShadow = wanted && !gradeDisabled();
+        // the map's projection does not depend on near; only a shadow wants the depth range
+        light.shadow.camera.near = light.castShadow ? SHADOW_NEAR : MAP_NEAR;
+      }
+    });
+  };
   return {
     lights,
-    setEnabled(on) {
+    setEnabled(on, shadow = false) {
       for (const light of lights) light.visible = on;
+      wanted = on && shadow;
+      setCasting();
     },
     update(state) {
+      setCasting();
       specs.forEach((spec, i) => {
         const light = lights[i];
         const cd = cds[i];
         if (light === undefined || cd === undefined) return;
         light.intensity = emission(spec.id, cd, state, light.color);
+        // a dark lamp skips its pass and keeps castShadow: flipping it rebuilds every lit program
+        if (light.intensity > 0) queueShadow(light);
       });
     },
     dispose() {
@@ -387,8 +434,39 @@ export function groundIrradiancePerCandela(
   return Math.max(...litGround(spec, steps).map((p) => p.irradiance));
 }
 
-/** A graded Lambert surface under a spot light with the beam map: the program the lit views build at night. */
-export function lampLitSample(): GradeSample {
+/** The lights High has in the set at night: each lamp light as built, with the map and shadow a casting one carries. */
+export function sampleLampLights(): { readonly lights: readonly SpotLight[]; dispose(): void } {
+  const maps: DataTexture[] = [];
+  const make = (id: LampLightId, cone: typeof BEAM | typeof REAR, distance: number): SpotLight => {
+    const light = new SpotLight(0xffffff, 1, distance, cone.angle, cone.penumbra, 2);
+    const pattern = patternOf(id);
+    if (pattern !== null) {
+      const map = patternMap(pattern);
+      maps.push(map);
+      light.map = map;
+    }
+    light.castShadow = CASTING_LIGHTS.includes(id);
+    return light;
+  };
+  const lights = [
+    make('truck-front', BEAM, BEAM.distance),
+    make('truck-rear', REAR, REAR.trailerDistance),
+    make('trailer-rear', REAR, REAR.trailerDistance),
+  ];
+  return {
+    lights,
+    dispose: () => {
+      for (const light of lights) light.dispose();
+      for (const map of maps) map.dispose();
+    },
+  };
+}
+
+/**
+ * A graded Lambert surface under the beam with its map: the program the lit views build at night.
+ * With `casting` it is a shadow receiver under the casting beam, as at High; without, as at Balanced and Low.
+ */
+export function lampLitSample(casting = false): GradeSample {
   const geometry = new BoxGeometry();
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   const material = new MeshLambertNodeMaterial({ vertexColors: true });
@@ -396,8 +474,11 @@ export function lampLitSample(): GradeSample {
   const map = patternMap(beamPattern);
   const light = new SpotLight(0xffffff, 1, BEAM.distance, BEAM.angle, BEAM.penumbra, 2);
   light.map = map;
+  light.castShadow = casting;
+  const mesh = new Mesh(geometry, material);
+  mesh.receiveShadow = casting;
   return {
-    mesh: new Mesh(geometry, material),
+    mesh,
     lights: [light],
     dispose: () => {
       light.dispose();

@@ -353,9 +353,9 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     attachLampLights(specs: readonly LampLightSpec[], parent: Object3D): void {
       lampLights = createLampLights(specs, parent);
     },
-    /** Switches the lamps' lights on or off; it changes the light set, so call it on a look change only. */
-    setLampLight(on: boolean): void {
-      lampLights?.setEnabled(on);
+    /** Switches the lamps' lights, and their casting, on or off; it changes the light set, so call it on a look change only. */
+    setLampLight(on: boolean, shadow = false): void {
+      lampLights?.setEnabled(on, shadow);
       glowOn = on;
       syncGlow();
     },
@@ -670,7 +670,7 @@ export function proceduralTruck(
       res.updateLamps(snapshot, switches);
       res.syncBlobs();
     },
-    setLook({ flags, grade, mode, shadow, lamps, lampLight }) {
+    setLook({ flags, grade, mode, shadow, lamps, lampLight, lampShadow }) {
       cabGlb = flags.cabGlb;
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
@@ -678,7 +678,7 @@ export function proceduralTruck(
       res.setGrade(grade.on);
       res.setSunShadow(shadow);
       res.setLamps(lamps);
-      res.setLampLight(lampLight);
+      res.setLampLight(lampLight, lampShadow);
       res.setPbr(group, flags.pbr, mode);
       res.setNight(mode === 'night');
     },
@@ -950,13 +950,13 @@ export function proceduralTrailer(
       res.updateLamps(snapshot, switches);
       res.syncBlobs();
     },
-    setLook({ flags, grade, mode, shadow, lamps, lampLight }) {
+    setLook({ flags, grade, mode, shadow, lamps, lampLight, lampShadow }) {
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
       res.setGrade(grade.on);
       res.setSunShadow(shadow);
       res.setLamps(lamps);
-      res.setLampLight(lampLight);
+      res.setLampLight(lampLight, lampShadow);
       res.setPbr(group, flags.pbr, mode);
       res.setNight(mode === 'night');
     },

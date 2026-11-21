@@ -9,6 +9,7 @@ import {
   RepeatWrapping,
   RGFormat,
   Scene,
+  SpotLight,
   type Texture,
   UnsignedByteType,
 } from 'three';
@@ -19,9 +20,22 @@ import concreteAlbedoUrl from './assets/concrete-albedo.ktx2?url';
 import concretePackedUrl from './assets/concrete-packed.ktx2?url';
 import paversAlbedoUrl from './assets/pavers-albedo.ktx2?url';
 import paversPackedUrl from './assets/pavers-packed.ktx2?url';
-import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
+import {
+  buildSerially,
+  GRADE_SHADER_MARKER,
+  gradeDisabled,
+  type GradeSample,
+  setGraded,
+} from './grade';
+import { sampleLampLights } from './lamp-light';
 import { createGroundPbrMaterial, GROUND_PBR_MARKER } from './ground-pbr-material';
-import { PBR_SAMPLER_BUDGET, type PbrKey, SHADOW_SAMPLERS } from './ground-pbr-spec';
+import {
+  countSamplers,
+  PBR_SAMPLER_BUDGET,
+  type PbrKey,
+  SAMPLER_CEILING,
+  SHADOW_SAMPLERS,
+} from './ground-pbr-spec';
 import { createWornMarkingMaterial, MARK_BOX, MARKING_WEAR_MARKER } from './marking-wear';
 import { COCKPIT_LAYERS, enableLayers, gpuLost, PERSPECTIVE_LAYER } from './seams';
 import { prepareShadow } from './sun-shadow';
@@ -42,13 +56,6 @@ const ANISOTROPY = 8; // three clamps this to what the GPU offers
 /** The PBR ground's textures: an albedo detail and a packed normal, roughness and occlusion map per surface. */
 export type GroundPbrTextures = TextureSet<PbrKey>;
 
-/** Texture declarations in a fragment shader, GLSL or WGSL. */
-export function countSamplers(fragment: string): number {
-  const glsl = fragment.match(/\buniform\s+(?:\w+\s+)?sampler\w+\s+\w+/g)?.length ?? 0;
-  const wgsl = fragment.match(/\bvar\s+\w+\s*:\s*texture_\w+</g)?.length ?? 0;
-  return glsl + wgsl;
-}
-
 /**
  * Builds the PBR ground material for `maps` before any ground wears it, under the perspective
  * light rig and grade, lit by the sun with and without its shadow, so a node, pipeline or
@@ -61,23 +68,8 @@ export async function precompileGroundPbr(
   renderer: WebGPURenderer,
   maps: TextureMaps<PbrKey>,
 ): Promise<void> {
-  const geometry = new PlaneGeometry();
-  const vertices = geometry.getAttribute('position').count;
-  geometry
-    .setAttribute('color', new Float32BufferAttribute(new Float32Array(vertices * 3), 3))
-    .setAttribute('groundSelect', new Float32BufferAttribute(new Float32Array(vertices * 3), 3))
-    .setAttribute(MARK_BOX, new Float32BufferAttribute(new Float32Array(vertices * 4), 4));
-  const macro = new DataTexture(new Uint8Array(4), 1, 1);
-  macro.needsUpdate = true;
-  const mask = new DataTexture(new Uint8Array(2), 1, 1, RGFormat, UnsignedByteType);
-  mask.unpackAlignment = 1;
-  mask.needsUpdate = true;
-  const material = createGroundPbrMaterial(
-    maps,
-    macro,
-    { x: 0, y: 0 },
-    { texture: mask, width: 1, height: 1 },
-  );
+  const standIn = groundStandIn(maps);
+  const { geometry, material } = standIn;
   const graded = !gradeDisabled();
   setGraded(material, graded);
   const mesh = new Mesh(geometry, material);
@@ -120,10 +112,82 @@ export async function precompileGroundPbr(
   } finally {
     material.dispose();
     wornMaterial.dispose();
-    geometry.dispose();
-    macro.dispose();
-    mask.dispose();
+    standIn.dispose();
   }
+}
+
+/** The PBR ground on 1x1 stand-in maps, with the vertex attributes it reads. */
+function groundStandIn(maps: TextureMaps<PbrKey>) {
+  const geometry = new PlaneGeometry();
+  const vertices = geometry.getAttribute('position').count;
+  geometry
+    .setAttribute('color', new Float32BufferAttribute(new Float32Array(vertices * 3), 3))
+    .setAttribute('groundSelect', new Float32BufferAttribute(new Float32Array(vertices * 3), 3))
+    .setAttribute(MARK_BOX, new Float32BufferAttribute(new Float32Array(vertices * 4), 4));
+  const macro = new DataTexture(new Uint8Array(4), 1, 1);
+  macro.needsUpdate = true;
+  const mask = new DataTexture(new Uint8Array(2), 1, 1, RGFormat, UnsignedByteType);
+  mask.unpackAlignment = 1;
+  mask.needsUpdate = true;
+  const material = createGroundPbrMaterial(
+    maps,
+    macro,
+    { x: 0, y: 0 },
+    { texture: mask, width: 1, height: 1 },
+  );
+  return {
+    geometry,
+    material,
+    dispose: () => {
+      geometry.dispose();
+      macro.dispose();
+      mask.dispose();
+    },
+  };
+}
+
+/** Floodlight masts the yard has at night on High. */
+const YARD_MASTS = 4;
+
+/**
+ * The PBR ground on stand-in maps under the whole light set High has at night: the HDRI sun
+ * without a shadow, the sky probe, the yard's mast lights and the lamp lights, the beam and the trailer's light mapped and
+ * casting. Rejects when its fragment shader declares more than `SAMPLER_CEILING` samplers.
+ */
+export function pbrGroundNightSample(): GradeSample {
+  const unit = (): Texture => {
+    const texture = new DataTexture(new Uint8Array(4), 1, 1);
+    texture.needsUpdate = true;
+    return texture;
+  };
+  const maps: TextureMaps<PbrKey> = {
+    concreteAlbedo: unit(),
+    concretePacked: unit(),
+    asphaltAlbedo: unit(),
+    asphaltPacked: unit(),
+    paversAlbedo: unit(),
+    paversPacked: unit(),
+  };
+  const standIn = groundStandIn(maps);
+  setGraded(standIn.material, true);
+  const mesh = new Mesh(standIn.geometry, standIn.material);
+  mesh.receiveShadow = true;
+  const lamps = sampleLampLights();
+  // the yard's mast lights: spots with neither a map nor a shadow, so they add no sampler
+  const masts = Array.from({ length: YARD_MASTS }, () => new SpotLight());
+  return {
+    mesh,
+    lights: [new DirectionalLight(), new LightProbe(), ...lamps.lights, ...masts],
+    markers: [GROUND_PBR_MARKER, GRADE_SHADER_MARKER],
+    maxSamplers: SAMPLER_CEILING,
+    dispose: () => {
+      lamps.dispose();
+      for (const mast of masts) mast.dispose();
+      standIn.material.dispose();
+      standIn.dispose();
+      for (const map of Object.values(maps)) map.dispose();
+    },
+  };
 }
 
 /**

@@ -1,4 +1,4 @@
-import { Vector3, type Camera, type DirectionalLight } from 'three';
+import { Vector3, type Camera, type DirectionalLight, type SpotLight } from 'three';
 import { KIT_FOOTPRINTS } from '../content/kit';
 import { enableLayers, SHADOW_CASTER_LAYERS, type ShadowFocus } from './seams';
 
@@ -30,24 +30,27 @@ export type SunShadowFit = {
 
 const shadowCameras = new WeakSet<Camera>();
 
-/** Whether `camera` is a sun shadow camera made by `prepareShadow`. */
+/** Whether `camera` is a shadow camera made by `prepareShadow`. */
 export function isShadowCamera(camera: Camera): boolean {
   return shadowCameras.has(camera);
 }
 
 /** One shadow render per queued frame, of the caster layers only. */
-export function prepareShadow(light: DirectionalLight): void {
+export function prepareShadow(
+  light: DirectionalLight | SpotLight,
+  mapSize = SHADOW_MAP_SIZE,
+): void {
   const { shadow } = light;
   shadow.autoUpdate = false;
-  shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+  shadow.mapSize.set(mapSize, mapSize);
   // three copies the viewing camera's layers when only layer 0 is set
   shadow.camera.layers.disableAll();
   enableLayers(shadow.camera.layers, SHADOW_CASTER_LAYERS);
   shadowCameras.add(shadow.camera);
 }
 
-/** Asks for the map to be drawn at the next render that lights with this sun. */
-export function queueShadow(light: DirectionalLight): void {
+/** Asks for the map to be drawn at the next render that lights with this light. */
+export function queueShadow(light: DirectionalLight | SpotLight): void {
   light.shadow.needsUpdate = light.castShadow;
 }
 

@@ -23,6 +23,8 @@ export type Look = {
   readonly lamps: boolean;
   /** The lamps light the ground and the yard: the SpotLights are in the light set. */
   readonly lampLight: boolean;
+  /** The dipped beam and the trailer's rear light cast shadows; needs `lampLight`. */
+  readonly lampShadow: boolean;
   /** The yard's lamps throw their pools: baked ground decals, or real lights where `yardSpots`. */
   readonly yardLight: boolean;
   /** The floodlight masts are SpotLights in the light set, where the preset has the lit rig for them. */
@@ -66,6 +68,7 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
     sky: mode,
     lamps: night,
     lampLight: flags.lampLight && night,
+    lampShadow: flags.lampShadow && flags.lampLight && night,
     yardLight: flags.yardLight && night,
     yardSpots: flags.yardLight && flags.perspectiveLighting && night,
     shadow: flags.sunShadow && flags.perspectiveLighting && !night,

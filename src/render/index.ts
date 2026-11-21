@@ -22,7 +22,7 @@ import { floodLitSample } from './yard-lights';
 import { createRetroCheck, retroLitSample } from './retro';
 import { createInteriorCheck } from './interior-material';
 import { createGlbInterior, INTERIOR_URLS, interiorShellFrom } from './interior-glb';
-import { startGroundPbrTextures } from './ground-pbr';
+import { pbrGroundNightSample, startGroundPbrTextures } from './ground-pbr';
 import { startGroundTextures } from './ground-texture';
 import { readBackendRequest, requestGpuDevice, type BackendRequest } from './gpu-backend';
 import { ATTACHMENTS, type AttachmentKey } from './asset-registry';
@@ -135,6 +135,8 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
         skylineGradeSample,
         ...KIT_SHADOW_SAMPLES,
         lampLitSample,
+        () => lampLitSample(true),
+        pbrGroundNightSample,
         floodLitSample,
         retroLitSample,
       ]),

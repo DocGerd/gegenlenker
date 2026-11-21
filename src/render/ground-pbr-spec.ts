@@ -34,6 +34,15 @@ export const MACRO_BIAS = 6;
 export const PBR_SAMPLER_BUDGET = 9;
 /** What a sun shadow adds to a receiver. */
 export const SHADOW_SAMPLERS = 1;
+/** Fragment samplers per stage that WebGL2 and the WebGPU default both guarantee. */
+export const SAMPLER_CEILING = 16;
+
+/** Texture declarations in a fragment shader, GLSL or WGSL; WGSL depth textures (shadow maps) declare no type parameter. */
+export function countSamplers(fragment: string): number {
+  const glsl = fragment.match(/\buniform\s+(?:\w+\s+)?sampler\w+\s+\w+/g)?.length ?? 0;
+  const wgsl = fragment.match(/\bvar\s+\w+\s*:\s*texture_\w+/g)?.length ?? 0;
+  return glsl + wgsl;
+}
 
 /**
  * Directions in the three frame of the texture axes. u runs along +x and v down the image along +z,

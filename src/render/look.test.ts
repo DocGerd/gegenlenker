@@ -33,6 +33,7 @@ describe('lookFor', () => {
     expect(look.sky).toBe('day');
     expect(look.lamps).toBe(false);
     expect(look.lampLight).toBe(false);
+    expect(look.lampShadow).toBe(false);
     expect(look.yardLight).toBe(false);
     expect(look.yardSpots).toBe(false);
     expect(look.shadow).toBe(flags.sunShadow && flags.perspectiveLighting);
@@ -53,6 +54,7 @@ describe('lookFor', () => {
       expect(look.sky).toBe('night');
       expect(look.lamps).toBe(true);
       expect(look.lampLight).toBe(flags.lampLight);
+      expect(look.lampShadow).toBe(preset === 'high');
       expect(look.yardLight).toBe(flags.yardLight);
       expect(look.yardSpots).toBe(flags.yardLight && flags.perspectiveLighting);
       expect(look.shadow).toBe(false);

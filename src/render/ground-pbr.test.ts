@@ -1,11 +1,16 @@
-import { DataTexture, type Texture } from 'three';
+import { DataTexture, DirectionalLight, LightProbe, SpotLight, type Texture } from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 import { afterEach, describe, expect, it } from 'vitest';
 import { GRADE_SHADER_MARKER, setGradeDisabled } from './grade';
 import { GROUND_PBR_MARKER } from './ground-pbr-material';
-import { precompileGroundPbr } from './ground-pbr';
+import { pbrGroundNightSample, precompileGroundPbr } from './ground-pbr';
 import { MARKING_WEAR_MARKER } from './marking-wear';
-import { PBR_SAMPLER_BUDGET, type PbrKey, SHADOW_SAMPLERS } from './ground-pbr-spec';
+import {
+  PBR_SAMPLER_BUDGET,
+  type PbrKey,
+  SAMPLER_CEILING,
+  SHADOW_SAMPLERS,
+} from './ground-pbr-spec';
 import type { TextureMaps } from './texture-set';
 
 const texture = (): Texture => new DataTexture(new Uint8Array(4), 1, 1);
@@ -112,5 +117,31 @@ describe('PBR ground precompile', () => {
     ['the context is lost', building(built(1, both), true)],
   ])('rejects when %s', async (_, gl) => {
     await expect(precompileGroundPbr(gl, maps)).rejects.toThrow();
+  });
+});
+
+describe('the PBR ground at night', () => {
+  it('is checked under the whole High light set, within the sampler ceiling', () => {
+    const sample = pbrGroundNightSample();
+    const lights = sample.lights ?? [];
+    expect(lights.filter((l) => l instanceof DirectionalLight).map((l) => l.castShadow)).toEqual([
+      false,
+    ]);
+    expect(lights.filter((l) => l instanceof LightProbe)).toHaveLength(1);
+    const spots = lights.filter((l): l is SpotLight => l instanceof SpotLight);
+    // three lamp lights and the yard's four masts
+    expect(spots).toHaveLength(7);
+    const mapped = spots.filter((l) => l.map !== null);
+    const casting = spots.filter((l) => l.castShadow);
+    // a map and a shadow each add a sampler to every receiver
+    expect(mapped).toHaveLength(2);
+    expect(casting).toHaveLength(2);
+    expect(PBR_SAMPLER_BUDGET + mapped.length + casting.length).toBeLessThanOrEqual(
+      SAMPLER_CEILING,
+    );
+    expect(sample.maxSamplers).toBe(SAMPLER_CEILING);
+    expect(sample.mesh.receiveShadow).toBe(true);
+    expect(sample.markers).toEqual([GROUND_PBR_MARKER, GRADE_SHADER_MARKER]);
+    sample.dispose();
   });
 });

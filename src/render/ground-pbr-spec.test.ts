@@ -4,13 +4,13 @@ import { describe, expect, it } from 'vitest';
 import { GROUND_SURFACES } from './ground-texture-spec';
 import { PBR_PACKED } from './ground-pbr-pixels';
 import {
+  countSamplers,
   GROUND_FRAME,
   type Mat2,
   SLAB_PITCH,
   SLAB_UV_TRANSFORMS,
   slabNormalMatrix,
 } from './ground-pbr-spec';
-import { countSamplers } from './ground-pbr';
 
 const apply = ([a, b, c, d]: Mat2, [x, y]: readonly [number, number]): [number, number] => [
   a * x + b * y,
@@ -98,8 +98,11 @@ describe('countSamplers', () => {
     const wgsl = [
       '@binding( 1 ) @group( 1 ) var nodeUniform0 : texture_2d<f32>;',
       '@binding( 2 ) @group( 1 ) var nodeUniform0_sampler : sampler;',
+      '@binding( 3 ) @group( 1 ) var shadowMap : texture_depth_2d;',
+      '@binding( 4 ) @group( 1 ) var shadowMapMs : texture_depth_multisampled_2d;',
+      '@binding( 5 ) @group( 1 ) var shadowCompare : sampler_comparison;',
     ].join('\n');
     expect(countSamplers(glsl)).toBe(2);
-    expect(countSamplers(wgsl)).toBe(1);
+    expect(countSamplers(wgsl)).toBe(3);
   });
 });
