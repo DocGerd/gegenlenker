@@ -240,6 +240,13 @@ export async function settle(
   await step(page, SETTLE_FRAMES);
 }
 
+/** Shifts to reverse. The sim stands still; the reversing lamps light, and the prediction aid and the follow framing move. */
+export async function shiftToReverse(page: Page): Promise<void> {
+  await page.keyboard.press('2');
+  await step(page, 3);
+  await page.locator('[data-gear="R"][aria-pressed="true"]').waitFor();
+}
+
 /** The bare canvas (HUD and controls hidden) under `shot`'s pane, as PNG; switches the view first when needed. */
 export async function shoot(page: Page, shot: Shot): Promise<Buffer> {
   const key = VIEW_KEY[shot];
@@ -526,6 +533,41 @@ export function brightShare(page: Page, png: Buffer, level: number): Promise<num
       return bright / (img.width * img.height);
     },
     [png.toString('base64'), level] as const,
+  );
+}
+
+/** Share of the pixels of two same-size PNGs whose highest channel is `levels` or more (0-255) brighter in `after`. */
+export function brightenedShare(
+  page: Page,
+  before: Buffer,
+  after: Buffer,
+  levels: number,
+): Promise<number> {
+  return page.evaluate(
+    async ([a, b, step]) => {
+      const read = async (data: string): Promise<ImageData> => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${data}`;
+        await img.decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (ctx === null) throw new Error('no 2d context');
+        ctx.drawImage(img, 0, 0);
+        return ctx.getImageData(0, 0, img.width, img.height);
+      };
+      const [x, y] = [await read(a), await read(b)];
+      if (x.width !== y.width || x.height !== y.height) throw new Error('shots differ in size');
+      const high = (d: Uint8ClampedArray, i: number): number =>
+        Math.max(d[i] ?? 0, d[i + 1] ?? 0, d[i + 2] ?? 0);
+      let brighter = 0;
+      for (let i = 0; i < x.data.length; i += 4) {
+        if (high(y.data, i) - high(x.data, i) >= step) brighter++;
+      }
+      return brighter / (x.width * x.height);
+    },
+    [before.toString('base64'), after.toString('base64'), levels] as const,
   );
 }
 

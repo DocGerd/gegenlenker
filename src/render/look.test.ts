@@ -32,6 +32,7 @@ describe('lookFor', () => {
     expect(look.topDownLight).toBe(1);
     expect(look.sky).toBe('day');
     expect(look.lamps).toBe(false);
+    expect(look.lampLight).toBe(false);
     expect(look.shadow).toBe(flags.sunShadow && flags.perspectiveLighting);
     expect(look.interior).toEqual({ light: 1, unlit: [1, 1, 1] });
   });
@@ -49,6 +50,7 @@ describe('lookFor', () => {
       expect(look.topDownLight).toBe(TOP_DOWN_NIGHT_LIGHT);
       expect(look.sky).toBe('night');
       expect(look.lamps).toBe(true);
+      expect(look.lampLight).toBe(flags.lampLight);
       expect(look.shadow).toBe(false);
       expect(look.grade.on).toBe(flags.perspectiveLighting);
       expect(look.grade.exposure).toBe(1);

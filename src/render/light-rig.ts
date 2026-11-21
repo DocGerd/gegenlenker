@@ -73,7 +73,7 @@ export type PerspectiveLight = {
 /** Fibonacci-sphere directions the peak irradiance is searched over. */
 const PEAK_SAMPLES = 4096;
 /** Share of the 8-bit top the brightest normal may reach; covers the gaps between the samples. */
-const PEAK_HEADROOM = 0.99;
+export const PEAK_HEADROOM = 0.99;
 
 /** Highest channel of the irradiance over all normals. */
 function peakIrradiance(

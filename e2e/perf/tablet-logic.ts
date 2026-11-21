@@ -9,9 +9,11 @@ export const PAIRS = [
 ] as const;
 export const MIN_FPS = 58;
 export const BACKENDS = ['webgl2', 'webgpu', 'auto'] as const;
+export const LIGHTINGS = ['day', 'night'] as const;
 
 export type Preset = (typeof PRESETS)[number];
 export type Backend = (typeof BACKENDS)[number];
+export type Lighting = (typeof LIGHTINGS)[number];
 export type Pair = (typeof PAIRS)[number];
 export type Reading = {
   fps: number;
@@ -36,6 +38,7 @@ export type Options = {
   skipBuild: boolean;
   /** The app's `?backend=`; absent leaves the app's default. */
   backend: Backend | null;
+  lighting: Lighting;
 };
 
 const positive = (name: string, raw: string): number => {
@@ -57,6 +60,7 @@ export function parseOptions(argv: readonly string[]): Options {
       'allow-software': { type: 'boolean', default: false },
       'skip-build': { type: 'boolean', default: false },
       backend: { type: 'string' },
+      lighting: { type: 'string', default: 'day' },
       help: { type: 'boolean', default: false },
     },
   });
@@ -64,6 +68,8 @@ export function parseOptions(argv: readonly string[]): Options {
   if (presets.length === 0) throw new Error(`--preset must be one of ${PRESETS.join(', ')}, all`);
   const backend = values.backend === undefined ? null : BACKENDS.find((b) => b === values.backend);
   if (backend === undefined) throw new Error(`--backend must be one of ${BACKENDS.join(', ')}`);
+  const lighting = LIGHTINGS.find((l) => l === values.lighting);
+  if (lighting === undefined) throw new Error(`--lighting must be one of ${LIGHTINGS.join(', ')}`);
   if (values['no-perf'] && !values.functional) {
     throw new Error('--no-perf needs --functional, otherwise nothing runs');
   }
@@ -78,6 +84,7 @@ export function parseOptions(argv: readonly string[]): Options {
     allowSoftware: values['allow-software'],
     skipBuild: values['skip-build'],
     backend,
+    lighting,
   };
 }
 

@@ -17,6 +17,7 @@ import {
   TRAILER_SHELL_URLS,
 } from './glb-shells';
 import { createGradeCheck, precompileGrade } from './grade';
+import { lampLitSample } from './lamp-light';
 import { createInteriorCheck } from './interior-material';
 import { createGlbInterior, INTERIOR_URLS, interiorShellFrom } from './interior-glb';
 import { startGroundPbrTextures } from './ground-pbr';
@@ -125,7 +126,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       syncReflection();
       publishGrade(state);
     },
-    (gpu) => precompileGrade(gpu, [skylineGradeSample, ...KIT_SHADOW_SAMPLES]),
+    (gpu) => precompileGrade(gpu, [skylineGradeSample, ...KIT_SHADOW_SAMPLES, lampLitSample]),
   );
   const renderer = createThreeSceneRenderer({
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
