@@ -130,13 +130,15 @@ function pinResolvePath(): void {
 /**
  * Opens a standstill drive of `exercise` on `config` with `performance.now`, timers and rAF frozen,
  * so the resolution governor and the sim only move when stepped, and pins the multisample resolve
- * to one path. Call on a fresh page; `search` is the app URL's query (`?backend=webgpu`).
+ * to one path. Call on a fresh page; `search` is the app URL's query (`?backend=webgpu`);
+ * `deadlineMs` bounds each phase of the `settle` that waits for the preset.
  */
 export async function startPinnedDrive(
   page: Page,
   { preset, lighting }: RenderConfig,
   exercise: string,
   search = '',
+  deadlineMs = SETTLE_DEADLINE_MS,
 ): Promise<void> {
   await page.addInitScript(pinResolvePath);
   await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
@@ -148,7 +150,7 @@ export async function startPinnedDrive(
   await page.goto(`./${withFramingFlag(search)}`);
   await page.getByRole('button', { name: new RegExp(`^${exercise}`) }).click();
   await page.locator('.hud-mirror:not([hidden])').nth(1).waitFor();
-  await settle(page, preset);
+  await settle(page, preset, deadlineMs);
   const [backend, pinned] = await page.evaluate(() => {
     const html = document.documentElement;
     return [html.getAttribute('data-render-backend'), html.getAttribute('data-resolve-pinned')];

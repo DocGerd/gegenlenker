@@ -217,7 +217,7 @@ async function runDrives(
     });
     page.on('pageerror', (e) => errors.push(e.message));
     const three = collectThreeProblems(page);
-    await startPinnedDrive(page, config, exercise);
+    await startPinnedDrive(page, config, exercise, '', SETTLE_DEADLINE_MS[preset]);
     for (const key of ['accent', 'nightAccent', 'wheel'] as const) {
       tokens[key] = await sceneRgb(page, key);
     }
