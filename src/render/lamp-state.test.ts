@@ -78,13 +78,12 @@ describe('lampState', () => {
     ).toBeLessThan(1);
   });
 
-  it('flashes a side marker that carries an indicator with the hazards at night, and keeps the others steady', () => {
+  it('flashes a side marker with the hazards at night, and keeps a lens without an indicator steady', () => {
     const night = { lights: true, hazard: true };
     const on = lampState(at(0.01), night);
     const off = lampState(at(FLASH_PERIOD * 0.75), night);
     const combined = ['side-marker', 'side-indicator'] as const;
     expect([lensLevel(on, combined), lensLevel(off, combined)]).toEqual([1, 0]);
-    expect([lensLevel(on, ['side-marker']), lensLevel(off, ['side-marker'])]).toEqual([1, 1]);
     expect(lensLevel(off, ['rear-position', 'stop'])).toBeGreaterThan(0);
     expect(lensLevel(lampState(at(0), { lights: true, hazard: false }), combined)).toBe(1);
   });

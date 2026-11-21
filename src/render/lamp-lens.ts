@@ -17,7 +17,6 @@ export const LENS_SLOTS = [
   ['front-position'],
   ['front-indicator'],
   ['side-indicator'],
-  ['side-marker'],
   ['side-marker', 'side-indicator'],
   ['end-outline-front'],
   ['end-outline-rear'],
