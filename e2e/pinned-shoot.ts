@@ -12,16 +12,15 @@ export type RenderConfig = { readonly preset: Preset; readonly lighting: Lightin
 export type Shot = 'cockpit' | 'mirrorLeft' | 'mirrorRight' | 'follow' | 'yard' | 'chase';
 
 /**
- * Tag of the tests that are slow on software GL: they load the High preset, step several presets,
- * or step many frames. CI runs them in shards of their own (`--grep @heavy`) apart from the rest
- * (`--grep-invert @heavy`), so each suite holds tests of similar cost and count-based sharding
- * balances. A test that drives High or compares presets carries it.
+ * Tag of the tests that are slow on software GL: they draw Balanced or High, compare presets, or
+ * step many frames. Playwright shards by test count, so CI runs them apart from the rest and from
+ * the layout spec, whose tests are many and alike (`.github/workflows/ci.yml`).
  */
 export const HEAVY = '@heavy';
-/** `HEAVY` for a test that drives `preset` when that is High, else no tag. */
+/** `HEAVY` for a test that drives `preset` unless that is Low, else no tag. */
 export const heavyAt = (preset: Preset): { tag?: string } =>
-  preset === 'high' ? { tag: HEAVY } : {};
-/** Wall-clock bound for a heavy spec that drives one preset; High loads the most and draws slowest on software GL. */
+  preset === 'low' ? {} : { tag: HEAVY };
+/** Wall-clock bound for a test that drives one preset; High loads the most and draws slowest on software GL. */
 export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
   low: 90_000,
   balanced: 150_000,

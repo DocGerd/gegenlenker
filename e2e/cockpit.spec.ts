@@ -188,29 +188,31 @@ test(
   },
 );
 
-test('the Balanced cockpit sky is blue near the top and fades to haze towards the horizon', async ({
-  page,
-}) => {
-  const errors = collectErrors(page);
-  await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
-    SETTINGS_KEY,
-    JSON.stringify({ version: 1, graphics: 'balanced' }),
-  ] as const);
-  await page.goto('./');
-  await drive(page);
-  const cockpit = await boxOf(page, '.hud-cockpit');
-  // Between the pillars, above the skyline: just under the header, and just above the horizon.
-  const x = Math.round(cockpit.width * 0.58);
-  const points = [0.14, 0.31].map((f) => [x, Math.round(cockpit.height * f)] as const);
-  await expect
-    .poll(async () => isSky((await panePixels(page, '.hud-cockpit', points))[0]))
-    .toBe(true);
-  const [top = [], horizon = []] = await panePixels(page, '.hud-cockpit', points);
-  expect(top[0] ?? 0, 'red channel: the haze is paler than the zenith').toBeLessThan(
-    (horizon[0] ?? 0) - HAZE_STEP,
-  );
-  expect(errors).toEqual([]);
-});
+test(
+  'the Balanced cockpit sky is blue near the top and fades to haze towards the horizon',
+  { tag: HEAVY },
+  async ({ page }) => {
+    const errors = collectErrors(page);
+    await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
+      SETTINGS_KEY,
+      JSON.stringify({ version: 1, graphics: 'balanced' }),
+    ] as const);
+    await page.goto('./');
+    await drive(page);
+    const cockpit = await boxOf(page, '.hud-cockpit');
+    // Between the pillars, above the skyline: just under the header, and just above the horizon.
+    const x = Math.round(cockpit.width * 0.58);
+    const points = [0.14, 0.31].map((f) => [x, Math.round(cockpit.height * f)] as const);
+    await expect
+      .poll(async () => isSky((await panePixels(page, '.hud-cockpit', points))[0]))
+      .toBe(true);
+    const [top = [], horizon = []] = await panePixels(page, '.hud-cockpit', points);
+    expect(top[0] ?? 0, 'red channel: the haze is paler than the zenith').toBeLessThan(
+      (horizon[0] ?? 0) - HAZE_STEP,
+    );
+    expect(errors).toEqual([]);
+  },
+);
 
 /**
  * Bright and not blue: yard ground, where `isGround` alone would also take the sky. High's light

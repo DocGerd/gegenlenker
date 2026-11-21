@@ -114,34 +114,36 @@ const locales = [
 
 for (const { locale, messages } of locales) {
   for (const size of yardSizes) {
-    test(`whole-yard framing keeps the start and the target clear of the chrome at ${locale} ${size.width}x${size.height}`, async ({
-      browser,
-    }) => {
-      const context = await browser.newContext({ locale, viewport: size });
-      const page = await context.newPage();
-      const labels = [
-        messages.exerciseStraightReverse,
-        messages.exerciseReverseBay,
-        messages.exerciseReverseCorner,
-        messages.exerciseDockRamp,
-        messages.exerciseSlalom,
-      ];
-      for (const label of labels) {
-        await page.goto('./?framing=1');
-        await page.getByRole('button', { name: label }).click();
-        await page.getByRole('button', { name: messages.viewYard, exact: true }).click();
-        // The box still shows the last follow frame until a frame drawn after the click.
-        await afterSteps(page, 1);
-        await expect
-          .poll(async () => (await chromeHits(page, await vehicleBox(page))).length, {
-            message: label,
-          })
-          .toBe(0);
-        // The arrow shows only for a target outside the clear rect.
-        await expect(page.locator('[data-hud="targetArrow"]'), label).toBeHidden();
-      }
-      await context.close();
-    });
+    test(
+      `whole-yard framing keeps the start and the target clear of the chrome at ${locale} ${size.width}x${size.height}`,
+      { tag: HEAVY },
+      async ({ browser }) => {
+        const context = await browser.newContext({ locale, viewport: size });
+        const page = await context.newPage();
+        const labels = [
+          messages.exerciseStraightReverse,
+          messages.exerciseReverseBay,
+          messages.exerciseReverseCorner,
+          messages.exerciseDockRamp,
+          messages.exerciseSlalom,
+        ];
+        for (const label of labels) {
+          await page.goto('./?framing=1');
+          await page.getByRole('button', { name: label }).click();
+          await page.getByRole('button', { name: messages.viewYard, exact: true }).click();
+          // The box still shows the last follow frame until a frame drawn after the click.
+          await afterSteps(page, 1);
+          await expect
+            .poll(async () => (await chromeHits(page, await vehicleBox(page))).length, {
+              message: label,
+            })
+            .toBe(0);
+          // The arrow shows only for a target outside the clear rect.
+          await expect(page.locator('[data-hud="targetArrow"]'), label).toBeHidden();
+        }
+        await context.close();
+      },
+    );
   }
 }
 
