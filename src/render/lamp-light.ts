@@ -74,6 +74,9 @@ export const REAR = {
   /** The trailer's light is aimed flatter and reaches this far: nothing stands behind it but the yard. */
   trailerPitch: rad(22),
   trailerDistance: 12,
+  /** Elevation (degrees below the horizon) down to which the trailer's light is at full strength; steeper rays fall with `falloff`, which puts the ground peak a few metres back. */
+  hot: 11,
+  falloff: 3.5,
 } as const;
 
 /**
@@ -164,13 +167,17 @@ const smoothstep = (a: number, b: number, x: number): number => {
   return t * t * (3 - 2 * t);
 };
 
-/** Elevation above the horizon and azimuth to the right of the beam's heading (degrees) of the ray through map point (u, v). */
-export function beamRay(u: number, v: number): { elevation: number; azimuth: number } {
-  const reach = Math.tan(BEAM.angle);
+/** Elevation above the horizon and azimuth to the right of the heading (degrees) of the ray through map point (u, v) of a cone. */
+function rayAt(
+  u: number,
+  v: number,
+  { angle, pitch }: { readonly angle: number; readonly pitch: number },
+): { elevation: number; azimuth: number } {
+  const reach = Math.tan(angle);
   const right = (2 * u - 1) * reach;
   const up = (2 * v - 1) * reach;
-  const forward = Math.cos(BEAM.pitch) + up * Math.sin(BEAM.pitch);
-  const height = -Math.sin(BEAM.pitch) + up * Math.cos(BEAM.pitch);
+  const forward = Math.cos(pitch) + up * Math.sin(pitch);
+  const height = -Math.sin(pitch) + up * Math.cos(pitch);
   return {
     elevation: (Math.atan2(height, Math.hypot(forward, right)) * 180) / Math.PI,
     azimuth: (Math.atan2(right, forward) * 180) / Math.PI,
@@ -183,22 +190,33 @@ export function beamRay(u: number, v: number): { elevation: number; azimuth: num
  * side; below it the intensity falls steeply with the angle, so the pool is brightest near the lamp and fades out.
  */
 export function beamPattern(u: number, v: number): number {
-  const { elevation, azimuth } = beamRay(u, v);
+  const { elevation, azimuth } = rayAt(u, v, BEAM);
   const cut = BEAM.cutLeft + BEAM.kick * smoothstep(0, 6, azimuth);
   const lit = 1 - smoothstep(cut - BEAM.soft, cut, elevation);
   const reach = Math.max(BEAM.hot, -elevation) / BEAM.hot;
   return (lit * Math.exp(-0.5 * (azimuth / BEAM.spread) ** 2)) / reach ** BEAM.falloff;
 }
 
+/** The trailer light's share of its peak: full down to `REAR.hot` below the horizon, then dimming, so the peak is not under the lamp. */
+export function trailerPattern(u: number, v: number): number {
+  const { elevation } = rayAt(u, v, { angle: REAR.angle, pitch: REAR.trailerPitch });
+  return (REAR.hot / Math.max(REAR.hot, -elevation)) ** REAR.falloff;
+}
+
+type Pattern = (u: number, v: number) => number;
+
+const patternOf = (id: LampLightId): Pattern | null =>
+  id === 'truck-front' ? beamPattern : id === 'trailer-rear' ? trailerPattern : null;
+
 const MAP_SIZE = 64;
 
-/** `beamPattern` as the spot light's map: linear data, half floats so the steep fall-off does not band. */
-export function beamMap(): DataTexture {
+/** `pattern` as a spot light's map: linear data, half floats so the steep fall-off does not band. */
+export function patternMap(pattern: Pattern): DataTexture {
   const data = new Uint16Array(MAP_SIZE * MAP_SIZE * 4);
   const one = DataUtils.toHalfFloat(1);
   for (let j = 0; j < MAP_SIZE; j++) {
     for (let i = 0; i < MAP_SIZE; i++) {
-      const f = DataUtils.toHalfFloat(beamPattern((i + 0.5) / MAP_SIZE, (j + 0.5) / MAP_SIZE));
+      const f = DataUtils.toHalfFloat(pattern((i + 0.5) / MAP_SIZE, (j + 0.5) / MAP_SIZE));
       data.set([f, f, f, one], (j * MAP_SIZE + i) * 4);
     }
   }
@@ -267,14 +285,17 @@ const toThree = ({ x, y, z }: Vec3, out = new Vector3()): Vector3 => out.set(x, 
 
 /** Lights for `specs`, children of `parent`, whose frame is the specs' part. Off until `setEnabled`. */
 export function createLampLights(specs: readonly LampLightSpec[], parent: Object3D): LampLights {
-  const map = specs.some((s) => s.id === 'truck-front') ? beamMap() : null;
+  const maps = specs.map((s) => {
+    const pattern = patternOf(s.id);
+    return pattern === null ? null : patternMap(pattern);
+  });
   const cds = specs.map(candela);
-  const lights = specs.map((spec) => {
+  const lights = specs.map((spec, i) => {
     const light = new SpotLight(0xffffff, 0, spec.distance, spec.angle, spec.penumbra, 2);
     toThree(spec.position, light.position);
     const aim = toThree(spec.aim);
     light.target.position.copy(light.position).addScaledVector(aim, 10);
-    if (spec.id === 'truck-front') light.map = map;
+    light.map = maps[i] ?? null;
     light.shadow.camera.near = 0.05;
     light.layers.set(PERSPECTIVE_LAYER);
     light.visible = false;
@@ -298,7 +319,7 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
     },
     dispose() {
       for (const light of lights) light.dispose();
-      map?.dispose();
+      for (const map of maps) map?.dispose();
     },
   };
 }
@@ -340,7 +361,7 @@ export function litGround(spec: LampLightSpec, steps = 120): LitGround[] {
         .normalize();
       if (ray.z >= 0) continue;
       const share = coneShare(spec, ray.dot(axis));
-      const pattern = spec.id === 'truck-front' ? beamPattern(i / steps, j / steps) : 1;
+      const pattern = patternOf(spec.id)?.(i / steps, j / steps) ?? 1;
       if (share * pattern === 0) continue;
       const t = spec.position.z / -ray.z;
       out.push({
@@ -364,7 +385,7 @@ export function lampLitSample(): GradeSample {
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   const material = new MeshLambertNodeMaterial({ vertexColors: true });
   setGraded(material, true);
-  const map = beamMap();
+  const map = patternMap(beamPattern);
   const light = new SpotLight(0xffffff, 1, BEAM.distance, BEAM.angle, BEAM.penumbra, 2);
   light.map = map;
   return {

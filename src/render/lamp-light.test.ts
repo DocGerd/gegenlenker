@@ -1,4 +1,14 @@
-import { Group, Layers, type Light, type Object3D, SpotLight, Texture, Vector4 } from 'three';
+import {
+  Group,
+  HalfFloatType,
+  Layers,
+  LinearFilter,
+  type Light,
+  type Object3D,
+  SpotLight,
+  Texture,
+  Vector4,
+} from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import type { SimSnapshot } from '../contracts/sim';
@@ -14,11 +24,11 @@ import {
   createLampLights,
   drawbarGap,
   groundIrradiancePerCandela,
-  GROUND,
   lampLitSample,
   litGround,
   type LampLightSpec,
   trailerLampLight,
+  trailerPattern,
   truckLampLights,
 } from './lamp-light';
 import { trailerLamps, truckLamps } from './lamp-layout';
@@ -126,16 +136,43 @@ describe('lamp light levels', () => {
     },
   );
 
-  it('sets the lamps to the peaks `GROUND` names', () => {
-    for (const [truck, trailer] of PAIRS) {
-      for (const spec of specsOf(truck, trailer)) {
-        const peak = groundIrradiancePerCandela(spec);
-        const cd = candela(spec);
-        expect(cd.white * peak).toBeCloseTo(
-          spec.id === 'truck-front' ? GROUND.dipped : GROUND.reversing,
-          6,
+  it('puts the trailer light peak a few metres behind the lamp, where the mirrors look', () => {
+    for (const id of TRAILER_IDS) {
+      const spec = trailerLampLight(trailerById(id));
+      const ground = litGround(spec, 200);
+      const peak = Math.max(...ground.map((p) => p.irradiance));
+      const near = ground.filter((p) => spec.position.x - p.x < 1);
+      const pool = ground.filter((p) => {
+        const back = spec.position.x - p.x;
+        return back >= 3 && back <= 6;
+      });
+      const far = ground.filter((p) => spec.position.x - p.x >= 8 && spec.position.x - p.x <= 10);
+      expect(Math.max(...pool.map((p) => p.irradiance)), id).toBeGreaterThan(0.9 * peak);
+      expect(Math.max(...near.map((p) => p.irradiance)), `${id} under the lamp`).toBeLessThan(
+        0.5 * peak,
+      );
+      expect(Math.max(...far.map((p) => p.irradiance)), `${id} 8 to 10 m back`).toBeGreaterThan(
+        0.03 * peak,
+      );
+    }
+  });
+
+  it('lights the headlamp pool along the whole stretch ahead, brightest near the lamp', () => {
+    for (const id of TRUCK_IDS) {
+      const spec = truckLampLights(truckById(id))[0];
+      if (spec === undefined) throw new Error('no front light');
+      const ground = litGround(spec, 200);
+      const ahead = (from: number, to: number): number =>
+        Math.max(
+          ...ground
+            .filter((p) => p.x - spec.position.x >= from && p.x - spec.position.x < to)
+            .map((p) => p.irradiance),
         );
-      }
+      const peak = Math.max(...ground.map((p) => p.irradiance));
+      expect(ahead(2, 5), id).toBeGreaterThan(0.8 * peak);
+      expect(ahead(8, 12), id).toBeGreaterThan(0.25 * peak);
+      expect(ahead(18, 24), id).toBeGreaterThan(0.05 * peak);
+      expect(ahead(30, 100), `${id} past the cut-off`).toBeLessThan(0.05 * peak);
     }
   });
 
@@ -201,14 +238,57 @@ describe('the dipped beam map', () => {
     expect(share(-1, -3), 'right, below the lifted cut-off').toBeGreaterThan(0.1);
   });
 
-  it('is a map the spot light reads linearly, with the near-field gap closed', () => {
+  it('reads its map as linear half floats and lights nothing through the near field unmasked', () => {
     const { lights, light } = build();
-    expect(light.map).not.toBeNull();
-    expect(light.map?.minFilter).toBeDefined();
+    expect(light.map?.minFilter).toBe(LinearFilter);
+    expect(light.map?.magFilter).toBe(LinearFilter);
+    expect(light.map?.type).toBe(HalfFloatType);
     expect(light.shadow.camera.near).toBeLessThan(0.1);
     expect(light.castShadow).toBe(false);
-    expect(BEAM.angle).toBeGreaterThan(0);
     lights.dispose();
+  });
+
+  /** Map point of the ray at `elevation` and `azimuth` degrees, found from the cone's geometry alone. */
+  const mapPoint = (elevation: number, azimuth: number): [number, number] => {
+    const [e, a] = [elevation, azimuth].map((d) => (d * Math.PI) / 180) as [number, number];
+    // frame: x ahead, y to the right, z up
+    const ray = [Math.cos(e) * Math.cos(a), Math.cos(e) * Math.sin(a), Math.sin(e)] as const;
+    const axis = [Math.cos(BEAM.pitch), 0, -Math.sin(BEAM.pitch)] as const;
+    const up = [Math.sin(BEAM.pitch), 0, Math.cos(BEAM.pitch)] as const;
+    const dot = (p: readonly number[], q: readonly number[]): number =>
+      p.reduce((sum, v, i) => sum + v * (q[i] ?? 0), 0);
+    const depth = dot(ray, axis);
+    const reach = Math.tan(BEAM.angle);
+    return [
+      0.5 + dot(ray, [0, 1, 0]) / depth / (2 * reach),
+      0.5 + dot(ray, up) / depth / (2 * reach),
+    ];
+  };
+
+  it('shapes the beam as designed at known directions', () => {
+    const at = (elevation: number, azimuth: number): number =>
+      beamPattern(...mapPoint(elevation, azimuth));
+    // below the cut-off on the axis: (2.5 / 4)^2.5 of the peak
+    expect(at(-4, 0)).toBeCloseTo(0.3, 1);
+    expect(at(-3, 0)).toBeCloseTo(0.63, 1);
+    // low cut-off on the left: lit below -2.8 degrees, dark above -2
+    expect(at(-3.5, -10)).toBeGreaterThan(0.2);
+    expect(at(-1.5, -10)).toBe(0);
+    // the cut-off rises on the right: the same direction is lit there
+    expect(at(-1.5, 10)).toBeGreaterThan(0.5);
+    expect(at(2, 10)).toBe(0);
+    // the sideways spread dims the edge of the cone
+    expect(at(-4, 25)).toBeLessThan(0.5 * at(-4, 0));
+  });
+
+  it('makes the trailer light full strength to 11 degrees below the horizon and dimmer below', () => {
+    const [light] = createLampLights(
+      [trailerLampLight(trailerById(TRAILER_IDS[0]))],
+      new Group(),
+    ).lights;
+    expect(light?.map?.type).toBe(HalfFloatType);
+    expect(trailerPattern(0.5, 0.9)).toBe(1);
+    expect(trailerPattern(0.5, 0.05)).toBeLessThan(0.1);
   });
 });
 
