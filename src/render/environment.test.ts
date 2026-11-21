@@ -8,6 +8,7 @@ import {
   LightProbe,
   Mesh,
   type Light,
+  type Material,
   type Object3D,
   type Texture,
 } from 'three';
@@ -122,6 +123,37 @@ describe('environment quality', () => {
     env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
     for (const [view, meshes] of Object.entries(balanced)) {
       expect(seen(env.object, cameras[view as keyof typeof cameras]), view).toEqual(meshes);
+    }
+    env.dispose();
+  });
+});
+
+describe('environment night twins', () => {
+  it('draws the lit tokens top-down only as twins at night and leaves them to the perspective views as by day, on every preset', () => {
+    if (layout === undefined) return;
+    const env = proceduralEnvironment(layout, palette);
+    const lit = (e: { object: Object3D }, view: Layers): Mesh[] =>
+      [...seen(e.object, view)].filter((m) => !isNodeMaterial(m) && !isMarking(m)).map(asMesh);
+    for (const preset of ['low', 'balanced', 'high'] as const) {
+      env.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
+      const tokens = lit(env, cameras.topDown);
+      expect(tokens.length, preset).toBeGreaterThan(0);
+      const perspective = (view: Layers): boolean[] =>
+        tokens.map((t) => seen(env.object, view).has(t));
+      const byDay = [cameras.cockpit, cameras.mirror].map(perspective);
+
+      env.setLook(lookFor(QUALITY_FLAGS[preset], 'night'));
+      const night = lit(env, cameras.topDown);
+      expect(night.length, preset).toBe(tokens.length);
+      for (const t of tokens) expect(night.includes(t), preset).toBe(false);
+      for (const twin of night) {
+        expect(twin.layers.mask, preset).toBe(1 << AIDS_LAYER);
+        expect(twin.castShadow, preset).toBe(false);
+        for (const view of [cameras.cockpit, cameras.mirror]) {
+          expect(seen(env.object, view).has(twin), preset).toBe(false);
+        }
+      }
+      expect([cameras.cockpit, cameras.mirror].map(perspective), preset).toEqual(byDay);
     }
     env.dispose();
   });
@@ -415,25 +447,46 @@ describe('environment at night', () => {
     const colour = (m: Object3D): number =>
       (asMesh(m).material as unknown as { color: Color }).color.getHex();
 
+    /** What a mesh draws: its material and geometry content, so a twin of a token matches it. */
+    const signature = (m: Object3D): string => {
+      const mesh = asMesh(m);
+      const sum = (name: string): number => {
+        const attribute = mesh.geometry.attributes[name];
+        return attribute === undefined ? 0 : Array.from(attribute.array).reduce((a, b) => a + b, 0);
+      };
+      const positions = mesh.geometry.getAttribute('position').count;
+      return [(mesh.material as Material).id, positions, sum('position'), sum('color')].join(':');
+    };
+    const drawn = (env: { object: Object3D }): string[] =>
+      [...seen(env.object, cameras.topDown)].map(signature).sort();
+    const without = (from: readonly string[], other: readonly string[]): string[] => {
+      const rest = [...other];
+      return from.filter((s) => {
+        const i = rest.indexOf(s);
+        if (i >= 0) rest.splice(i, 1);
+        return i < 0;
+      });
+    };
+
     it('keeps the top-down grounds, obstacles and markings as by day and swaps only the accent strokes', () => {
       const env = buildStroked();
       env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
-      const day = topDown(env);
+      const day = drawn(env);
+      const dayMeshes = topDown(env);
       for (const preset of ['low', 'balanced', 'high'] as const) {
         env.setLook(lookFor(QUALITY_FLAGS[preset], 'night'));
-        const night = topDown(env);
-        for (const [mesh, material] of day) {
-          if (night.has(mesh)) expect(night.get(mesh), preset).toBe(material);
-        }
+        const night = drawn(env);
         // the outline, the band core, its whole-yard copy and the gate give way; their casings stay
-        const gone = [...day.keys()].filter((m) => !night.has(m));
-        const added = [...night.keys()].filter((m) => !day.has(m));
+        const gone = without(day, night);
+        const added = [...seen(env.object, cameras.topDown)]
+          .filter((m) => without([signature(m)], day).length > 0)
+          .map(colour);
         expect(gone, preset).toHaveLength(4);
-        expect(added.map(colour), preset).toEqual([0x00ffff, 0x00ffff, 0x00ffff, 0x00ffff]);
-        expect(night.size, preset).toBe(day.size);
+        expect(added, preset).toEqual([0x00ffff, 0x00ffff, 0x00ffff, 0x00ffff]);
+        expect(night.length, preset).toBe(day.length);
       }
       env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
-      expect(topDown(env)).toEqual(day);
+      expect(topDown(env)).toEqual(dayMeshes);
       env.dispose();
     });
 
