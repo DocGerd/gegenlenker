@@ -9,7 +9,6 @@ import {
   colourBox,
   colourShare,
   HEAVY,
-  PRESET_TIMEOUT_MS,
   diffShot,
   distinctColours,
   MIN_DRAWN_COLOURS,
@@ -149,8 +148,22 @@ async function paneMapper(
   });
 }
 
+/** Wall-clock bound per drive, above `PRESET_TIMEOUT_MS`: each drive also takes several shots and compares them. */
+const DRIVE_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
+  low: 90_000,
+  balanced: 210_000,
+  high: 450_000,
+};
+/** Bound on each phase of `settle` for a drive; High loads its KTX2 files one after another. */
+const SETTLE_DEADLINE_MS: Readonly<Record<Preset, number>> = {
+  low: 30_000,
+  balanced: 30_000,
+  high: 120_000,
+};
+
 const DAY_LOW: RenderConfig = { preset: 'low', lighting: 'day' };
 const NIGHT_LOW: RenderConfig = { preset: 'low', lighting: 'night' };
+const NIGHT_BALANCED: RenderConfig = { preset: 'balanced', lighting: 'night' };
 /** The presets compared with Low at night, one test each, so no test drives all three. */
 const COMPARED = ['balanced', 'high'] as const satisfies readonly Preset[];
 
@@ -163,13 +176,19 @@ type Run = {
   readonly threeProblems: readonly string[];
 };
 
-/** Drives `drives` in turn, each on a fresh page, and keeps their shots; the timeout is the sum of the drives'. */
+/**
+ * Drives `drives` in turn, each on a fresh page, and keeps their shots; the timeout is the sum of
+ * the drives'. With `lampKeys`, each drive then presses the lamp keys and checks the top-down shots
+ * did not change, and takes no zoomed shots.
+ */
 async function runDrives(
   context: BrowserContext,
   testInfo: TestInfo,
-  { id, name: exercise, zooms }: (typeof EXERCISES)[number],
+  { id, name: exercise, zooms: allZooms }: (typeof EXERCISES)[number],
   drives: readonly RenderConfig[],
+  lampKeys = false,
 ): Promise<Run> {
+  const zooms = lampKeys ? [] : allZooms;
   const found = exercises.find((e) => e.id === id);
   if (found === undefined) throw new Error(`no exercise ${id}`);
   const layout = resolveLayout(layouts[found.layout], found);
@@ -178,7 +197,7 @@ async function runDrives(
     gate: layout.waypoint,
   };
   const names: readonly string[] = [...SHOTS, ...zooms];
-  test.setTimeout(drives.reduce((sum, { preset }) => sum + PRESET_TIMEOUT_MS[preset], 0));
+  test.setTimeout(drives.reduce((sum, { preset }) => sum + DRIVE_TIMEOUT_MS[preset], 0));
   const errors: string[] = [];
   const threeProblems: string[] = [];
   const shots = new Map<string, Buffer>();
@@ -193,7 +212,7 @@ async function runDrives(
     });
     page.on('pageerror', (e) => errors.push(e.message));
     const three = collectThreeProblems(page);
-    await startPinnedDrive(page, config, exercise);
+    await startPinnedDrive(page, config, exercise, '', SETTLE_DEADLINE_MS[preset]);
     for (const key of ['accent', 'nightAccent', 'wheel'] as const) {
       tokens[key] = await sceneRgb(page, key);
     }
@@ -226,12 +245,11 @@ async function runDrives(
       expect(await tokenShare(page, png, 'accent', 2), `${label}: day accent`).toBe(0);
     }
     if (yardPng === null) throw new Error('no yard shot');
-    // the top-down view is the same at every preset, so one preset stands for all
-    if (lighting === 'night' && preset === 'balanced') {
+    if (lampKeys) {
       // the lamps are perspective-only: switching the lights off and the hazard lights on changes no top-down pixel
       await page.keyboard.press('h');
       await page.keyboard.press('x');
-      await settle(page, preset);
+      await settle(page, preset, SETTLE_DEADLINE_MS[preset]);
       await expect(page.locator('[data-ctl="lights"]')).toHaveAttribute('aria-pressed', 'false');
       await expect(page.locator('[data-ctl="hazard"]')).toHaveAttribute('aria-pressed', 'true');
       for (const shot of SHOTS) {
@@ -366,4 +384,14 @@ for (const kind of EXERCISES) {
       },
     );
   }
+
+  test(
+    `the lamp keys leave the top-down view at night unchanged at balanced: ${exercise}`,
+    { tag: HEAVY },
+    async ({ context }, testInfo) => {
+      const run = await runDrives(context, testInfo, kind, [NIGHT_BALANCED], true);
+      expect(run.errors).toEqual([]);
+      expect(run.threeProblems).toEqual([]);
+    },
+  );
 }

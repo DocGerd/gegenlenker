@@ -29,6 +29,8 @@ export type Look = {
   readonly yardLight: boolean;
   /** The floodlight masts are SpotLights in the light set, where the preset has the lit rig for them. */
   readonly yardSpots: boolean;
+  /** Two floodlight masts cast static shadows of the yard's props; needs `yardSpots`. */
+  readonly yardShadow: boolean;
   /** The HDRI sun casts a shadow; the contact blobs stay while it does not. */
   readonly shadow: boolean;
   readonly grade: {
@@ -71,6 +73,7 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
     lampShadow: flags.lampShadow && flags.lampLight && night,
     yardLight: flags.yardLight && night,
     yardSpots: flags.yardLight && flags.perspectiveLighting && night,
+    yardShadow: flags.yardShadow && flags.yardLight && flags.perspectiveLighting && night,
     shadow: flags.sunShadow && flags.perspectiveLighting && !night,
     grade: {
       on: flags.perspectiveLighting,

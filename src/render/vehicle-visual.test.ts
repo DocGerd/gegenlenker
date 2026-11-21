@@ -30,6 +30,7 @@ import {
   enableLayers,
   PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
+  YARD_CASTER_LAYER,
 } from './seams';
 import {
   GLOW_NAME,
@@ -335,6 +336,20 @@ describe('sun shadow', () => {
       for (const m of meshes(visual.object).filter(isPlate)) {
         expect(m.castShadow).toBe(false);
         expect(m.receiveShadow).toBe(true);
+      }
+    },
+  );
+
+  it.each(visuals.map((v, i) => [i, v] as const))(
+    "stays out of the floodlights' static shadow maps, at every look (#%i)",
+    (_i, visual) => {
+      for (const flags of Object.values(QUALITY_FLAGS)) {
+        for (const mode of ['day', 'night'] as const) {
+          visual.setLook(lookFor(flags, mode));
+          for (const m of meshes(visual.object)) {
+            expect(m.layers.isEnabled(YARD_CASTER_LAYER), `${mode} ${m.name}`).toBe(false);
+          }
+        }
       }
     },
   );

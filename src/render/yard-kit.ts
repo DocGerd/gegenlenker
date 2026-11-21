@@ -33,7 +33,13 @@ import {
   setGraded,
 } from './grade';
 import type { Look } from './look';
-import { COCKPIT_LAYERS, enableLayers, gpuLost, PERSPECTIVE_LAYER } from './seams';
+import {
+  COCKPIT_LAYERS,
+  enableLayers,
+  gpuLost,
+  PERSPECTIVE_LAYER,
+  YARD_CASTER_LAYER,
+} from './seams';
 import { startShells, type Shells } from './glb-shells';
 import { startTextureSet, TEXTURE_FAILED, type TextureMaps, type TextureSet } from './texture-set';
 import { VehicleLightingModel, type VehicleEnvironment } from './vehicle-pbr';
@@ -43,8 +49,10 @@ import { mergeKit, parseKitGlb, type KitPieces } from './yard-kit-pieces';
  * The yard kit (tools/blender/yard_kit.py, issue #160): the surroundings outside the yard, on High.
  * One merged mesh per material on PERSPECTIVE_LAYER; the top-down view never draws it. It casts the
  * sun's shadow where the sun does (High); the atlas mesh receives it, the leaf cards do not
- * (double-sided cards shadow themselves into acne). Both materials are standard PBR with the kit's
- * atlases, and take the vehicles' sky map as a reflection where there is one.
+ * (double-sided cards shadow themselves into acne). At night, where the floodlights cast, a proxy
+ * of each mesh on `YARD_CASTER_LAYER` alone casts into their maps, so the lamps' passes never draw
+ * the kit. Both materials are standard PBR with the kit's atlases, and take the vehicles' sky map
+ * as a reflection where there is one.
  */
 
 /** Names the kit's atlas shader, so a compile error can be traced to it. */
@@ -340,17 +348,21 @@ export function createYardKitLayer(
   let wanted = false;
   let graded = false;
   let casting = false;
+  let yardCasting = false;
+  /** Casters for the floodlights' maps: the kit's geometry and material on a layer no camera draws. */
+  const proxies: Mesh[] = [];
+  const shown: Mesh[] = [];
   let mode: LightingMode = DEFAULT_LIGHTING;
   let drawn = false;
 
   const sync = (): void => {
     const on = wanted && built !== null;
     object.visible = on;
-    for (const mesh of object.children) {
+    for (const mesh of shown) {
       mesh.castShadow = casting;
-      mesh.receiveShadow =
-        casting && mesh instanceof Mesh && mesh.material === built?.materials.atlas;
+      mesh.receiveShadow = casting && mesh.material === built?.materials.atlas;
     }
+    for (const proxy of proxies) proxy.castShadow = yardCasting;
     if (built !== null) {
       const map = on ? (reflections?.texture(palette, mode) ?? null) : null;
       for (const material of [built.materials.atlas, built.materials.leaves]) {
@@ -370,6 +382,8 @@ export function createYardKitLayer(
   const release = (): void => {
     if (built === null) return;
     object.clear();
+    proxies.length = 0;
+    shown.length = 0;
     for (const geometry of built.geometries) geometry.dispose();
     built.materials.atlas.dispose();
     built.materials.leaves.dispose();
@@ -394,10 +408,18 @@ export function createYardKitLayer(
                 const mesh = new Mesh(geometry, material);
                 mesh.layers.set(PERSPECTIVE_LAYER);
                 mesh.frustumCulled = false;
-                object.add(mesh);
+                const proxy = new Mesh(geometry, material);
+                proxy.layers.set(YARD_CASTER_LAYER);
+                proxy.frustumCulled = false;
+                proxy.receiveShadow = false;
+                proxies.push(proxy);
+                shown.push(mesh);
+                object.add(mesh, proxy);
               }
             } catch (error) {
               object.clear();
+              proxies.length = 0;
+              shown.length = 0;
               for (const geometry of geometries) geometry.dispose();
               materials.atlas.dispose();
               materials.leaves.dispose();
@@ -414,11 +436,12 @@ export function createYardKitLayer(
 
   return {
     object,
-    setLook({ flags, grade, mode: lookMode, shadow }) {
+    setLook({ flags, grade, mode: lookMode, shadow, yardShadow }) {
       wanted = flags.yardKit;
       graded = grade.on;
       mode = lookMode;
       casting = shadow;
+      yardCasting = yardShadow;
       sync();
     },
     dispose() {

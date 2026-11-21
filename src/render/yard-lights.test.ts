@@ -1,18 +1,23 @@
 import { Color, type Object3D, SpotLight, Vector3 } from 'three';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ScenePalette } from '../contracts/render';
+import { setGradeDisabled } from './grade';
 import { GROUND, litGround } from './lamp-light';
 import { NIGHT_AMBIENT, NIGHT_TINT, PEAK_HEADROOM } from './light-rig';
 import { lookFor } from './look';
 import { KEYS } from './palette';
 import { QUALITY_FLAGS } from './quality';
-import { PERSPECTIVE_LAYER } from './seams';
+import { PERSPECTIVE_LAYER, YARD_CASTER_LAYER } from './seams';
+import { isShadowCamera } from './sun-shadow';
+import { yardProps } from './yard-props';
 import {
+  castingMasts,
   createYardLights,
   faceIrradiance,
   FLOOD,
+  FLOOD_SHADOW,
   FLOOD_POOL_NAME,
   floodLitSample,
   groundIrradiance,
@@ -266,7 +271,7 @@ describe('createYardLights', () => {
     return found;
   };
 
-  it('has one spot light per mast, lit to its candela, on the perspective layer and casting nothing', () => {
+  it('has one spot light per mast, lit to its candela and on the perspective layer, casting nothing until a look asks', () => {
     const lights = createYardLights(layout, palette);
     expect(lights.lights).toHaveLength(floods.length);
     lights.lights.forEach((light, i) => {
@@ -337,13 +342,133 @@ describe('createYardLights', () => {
 });
 
 describe('floodLitSample', () => {
-  it('is a graded surface under four mast spots with no map, so it adds no sampler', () => {
+  it('is a graded shadow receiver under four mast spots with no map, the casting ones as the yard has them', () => {
     const sample = floodLitSample();
     expect(sample.lights).toHaveLength(4);
     for (const light of sample.lights ?? []) {
       if (!(light instanceof SpotLight)) throw new Error('not a spot light');
       expect(light.map).toBeNull();
     }
+    expect((sample.lights ?? []).filter((l) => l.castShadow)).toHaveLength(FLOOD_SHADOW.casting);
+    expect(sample.mesh.receiveShadow).toBe(true);
     sample.dispose();
+  });
+});
+
+describe('floodlight shadows', () => {
+  afterEach(() => {
+    setGradeDisabled(false);
+  });
+  const withFloods = withFixtures.filter((l) => yardLightSpecs(l).some((s) => s.kind === 'flood'));
+  const floodsOf = (layout: (typeof resolved)[number]) =>
+    yardLightSpecs(layout).filter((s) => s.kind === 'flood');
+  const posts = (specs: readonly { post: { x: number; y: number } }[]): string[] =>
+    specs.map(({ post }) => `${String(post.x)},${String(post.y)}`);
+
+  it.each(withFloods.map((l) => [l.id, l] as const))(
+    'casts from the masts nearest the entrance of %s, whichever exercise it runs',
+    (_, layout) => {
+      const floods = floodsOf(layout);
+      const chosen = castingMasts(floods);
+      expect(chosen).toHaveLength(Math.min(FLOOD_SHADOW.casting, floods.length));
+      const rest = floods.filter((f) => !chosen.includes(f));
+      for (const c of chosen) for (const r of rest) expect(c.post.y).toBeLessThanOrEqual(r.post.y);
+      for (const exercise of exercises.filter((e) => e.layout === layout.id)) {
+        const again = floodsOf(resolveLayout(layouts[layout.id], exercise));
+        expect(posts(castingMasts(again)), exercise.id).toEqual(posts(chosen));
+      }
+    },
+  );
+
+  const depot = withFloods[0];
+  if (depot === undefined) throw new Error('no layout with floodlights');
+  const spotsOf = (lights: ReturnType<typeof createYardLights>) => ({
+    casting: lights.casting,
+    quiet: lights.lights.filter((l) => !lights.casting.includes(l)),
+  });
+
+  it("draws the casting masts' maps from the yard casters only, once", () => {
+    const lights = createYardLights(depot, palette);
+    const { casting, quiet } = spotsOf(lights);
+    expect(casting).toHaveLength(FLOOD_SHADOW.casting);
+    for (const light of casting) {
+      expect(light.shadow.camera.layers.mask).toBe(1 << YARD_CASTER_LAYER);
+      expect(isShadowCamera(light.shadow.camera)).toBe(true);
+      expect(light.shadow.autoUpdate).toBe(false);
+      expect(light.shadow.mapSize.width).toBe(FLOOD_SHADOW.mapSize);
+      expect(light.shadow.bias).toBe(FLOOD_SHADOW.bias);
+      expect(light.shadow.normalBias).toBe(FLOOD_SHADOW.normalBias);
+    }
+    for (const light of quiet) expect(isShadowCamera(light.shadow.camera)).toBe(false);
+    lights.dispose();
+  });
+
+  it('casts only at night on High, queues the maps on every look and keeps the light set', () => {
+    const lights = createYardLights(depot, palette);
+    const { casting, quiet } = spotsOf(lights);
+    const looks = [
+      ['low', 'day', false],
+      ['balanced', 'night', false],
+      ['high', 'day', false],
+      ['high', 'night', true],
+      ['balanced', 'night', false],
+      ['high', 'night', true],
+    ] as const;
+    for (const [preset, mode, casts] of looks) {
+      lights.setLook(lookFor(QUALITY_FLAGS[preset], mode));
+      for (const light of casting) {
+        expect([light.castShadow, light.shadow.needsUpdate], `${preset} ${mode}`).toEqual([
+          casts,
+          casts,
+        ]);
+      }
+      for (const light of quiet) expect(light.castShadow, `${preset} ${mode}`).toBe(false);
+    }
+    lights.dispose();
+  });
+
+  it('asks for a redraw on request, and stops casting while the grade check has failed', () => {
+    const lights = createYardLights(depot, palette);
+    lights.setLook(lookFor(QUALITY_FLAGS.high, 'night'));
+    for (const light of lights.casting) light.shadow.needsUpdate = false;
+    lights.queueShadows();
+    for (const light of lights.casting) expect(light.shadow.needsUpdate).toBe(true);
+
+    setGradeDisabled(true);
+    lights.update();
+    for (const light of lights.casting) expect(light.castShadow).toBe(false);
+    setGradeDisabled(false);
+    lights.update();
+    for (const light of lights.casting) {
+      expect([light.castShadow, light.shadow.needsUpdate]).toEqual([true, true]);
+    }
+    for (const light of lights.casting) light.shadow.needsUpdate = false;
+    lights.update();
+    for (const light of lights.casting) expect(light.shadow.needsUpdate, 'idle').toBe(false);
+    lights.dispose();
+  });
+
+  it("keeps each casting mast's own head and post out of its shadow camera", () => {
+    const lights = createYardLights(depot, palette);
+    const pieces = yardProps(depot);
+    for (const light of lights.casting) {
+      const axis = light.target.position.clone().sub(light.position).normalize();
+      const own = pieces.find(
+        (p) => Math.hypot(p.x - light.position.x, p.y + light.position.z) < 1,
+      );
+      if (own === undefined) throw new Error('no mast piece');
+      const position = own.geometry.getAttribute('position');
+      const to = new Vector3();
+      let inside = 0;
+      for (let i = 0; i < position.count; i++) {
+        to.fromBufferAttribute(position, i).sub(light.position);
+        const depth = to.dot(axis);
+        if (depth >= light.shadow.camera.near && depth / to.length() > Math.cos(light.angle)) {
+          inside++;
+        }
+      }
+      expect(inside).toBe(0);
+    }
+    lights.dispose();
   });
 });
