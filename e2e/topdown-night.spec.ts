@@ -151,6 +151,7 @@ async function paneMapper(
 
 const DAY_LOW: RenderConfig = { preset: 'low', lighting: 'day' };
 const NIGHT_LOW: RenderConfig = { preset: 'low', lighting: 'night' };
+const NIGHT_BALANCED: RenderConfig = { preset: 'balanced', lighting: 'night' };
 /** The presets compared with Low at night, one test each, so no test drives all three. */
 const COMPARED = ['balanced', 'high'] as const satisfies readonly Preset[];
 
@@ -163,13 +164,19 @@ type Run = {
   readonly threeProblems: readonly string[];
 };
 
-/** Drives `drives` in turn, each on a fresh page, and keeps their shots; the timeout is the sum of the drives'. */
+/**
+ * Drives `drives` in turn, each on a fresh page, and keeps their shots; the timeout is the sum of
+ * the drives'. With `lampKeys`, each drive then presses the lamp keys and checks the top-down shots
+ * did not change, and takes no zoomed shots.
+ */
 async function runDrives(
   context: BrowserContext,
   testInfo: TestInfo,
-  { id, name: exercise, zooms }: (typeof EXERCISES)[number],
+  { id, name: exercise, zooms: allZooms }: (typeof EXERCISES)[number],
   drives: readonly RenderConfig[],
+  lampKeys = false,
 ): Promise<Run> {
+  const zooms = lampKeys ? [] : allZooms;
   const found = exercises.find((e) => e.id === id);
   if (found === undefined) throw new Error(`no exercise ${id}`);
   const layout = resolveLayout(layouts[found.layout], found);
@@ -226,8 +233,7 @@ async function runDrives(
       expect(await tokenShare(page, png, 'accent', 2), `${label}: day accent`).toBe(0);
     }
     if (yardPng === null) throw new Error('no yard shot');
-    // the top-down view is the same at every preset, so one preset stands for all
-    if (lighting === 'night' && preset === 'balanced') {
+    if (lampKeys) {
       // the lamps are perspective-only: switching the lights off and the hazard lights on changes no top-down pixel
       await page.keyboard.press('h');
       await page.keyboard.press('x');
@@ -366,4 +372,14 @@ for (const kind of EXERCISES) {
       },
     );
   }
+
+  test(
+    `the lamp keys leave the top-down view at night unchanged at balanced: ${exercise}`,
+    { tag: HEAVY },
+    async ({ context }, testInfo) => {
+      const run = await runDrives(context, testInfo, kind, [NIGHT_BALANCED], true);
+      expect(run.errors).toEqual([]);
+      expect(run.threeProblems).toEqual([]);
+    },
+  );
 }
