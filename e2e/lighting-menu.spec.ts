@@ -11,7 +11,7 @@ import {
   DAY_BRIGHT,
   heavyAt,
   MAX_MIRROR_BRIGHT,
-  PRESET_TIMEOUT_MS,
+  timeoutWithSettles,
   type Preset,
   settle,
   shoot,
@@ -56,7 +56,7 @@ for (const preset of ['low', 'high'] as const) {
     `the menu Day/Night choice changes the drawn look, day to night to day, at ${preset}`,
     heavyAt(preset),
     async ({ page }) => {
-      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
+      test.setTimeout(timeoutWithSettles(preset, 3));
       await startPinnedDrive(page, { preset, lighting: 'day' }, en.layoutDepot);
       expect(
         await brightShare(page, await shoot(page, 'mirrorLeft'), DAY_BRIGHT),

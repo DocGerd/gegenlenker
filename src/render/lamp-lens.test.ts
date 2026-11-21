@@ -144,7 +144,7 @@ describe('lamp lenses', () => {
     expect(() => tag(lamps.slice(1))).toThrow('lies on 0 lamps');
     const [first] = lamps;
     if (first === undefined) throw new Error('no lafette lenses');
-    expect(() => tag([...lamps, { ...first, id: 'twin', fns: ['side-marker'] }])).toThrow(
+    expect(() => tag([...lamps, { ...first, id: 'twin', fns: ['side-indicator'] }])).toThrow(
       'lies on 2 lamps',
     );
   });

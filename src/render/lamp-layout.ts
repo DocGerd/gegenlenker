@@ -74,6 +74,9 @@ export const LAMP_COLOURS: Readonly<Record<LampFn, LampColour>> = {
   work: 'white',
 };
 
+/** An amber side marker that flashes with the same-side indicators (R48 6.18.7). */
+const FLASHING_MARKER: readonly LampFn[] = ['side-marker', 'side-indicator'];
+
 export type LampPart = 'cab' | 'body' | 'trailer' | 'dolly';
 export type LampFacing = 'front' | 'rear' | 'left' | 'right';
 export type Range = readonly [number, number];
@@ -358,7 +361,7 @@ export function truckLamps(spec: TruckSpec, cabLength = CAB_LENGTH): LampLayout 
   }
 
   const run = truckSideRun(spec, cabLength);
-  sideMarkers(sink, 'side-marker', run, hw, ['side-marker'], 'body', false);
+  sideMarkers(sink, 'side-marker', run, hw, FLASHING_MARKER, 'body', false);
   const foremost = Math.max(...markerXs(...run.span)) - MARKER_LENGTH / 2;
   if (front - foremost > SIDE_MARKER_REACH) {
     // a long cab pushes the body back: one more marker on the cab side
@@ -369,7 +372,7 @@ export function truckLamps(spec: TruckSpec, cabLength = CAB_LENGTH): LampLayout 
       sink.lamps.push({
         ...cabLamp,
         id: `side-marker-cab-${sideName(side)}`,
-        fns: ['side-marker'],
+        fns: FLASHING_MARKER,
         side,
         facing: side > 0 ? 'left' : 'right',
         box: boxOf([x0, x0 + MARKER_LENGTH], lateral(side, hw, hw + LENS_DEPTH), [
@@ -477,7 +480,6 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
   const lafette = variant === 'shell' && kind === 'lafette';
   const lowDeck = variant === 'shell' && kind === 'low-loader' ? lowLoaderDeck(spec) : null;
   const sink: Sink = { lamps: [], brackets: [] };
-  const markerFns = ['side-marker', 'side-indicator'] as const;
   const lamp = (l: Omit<Lamp, 'shell' | 'seat'> & Partial<Pick<Lamp, 'shell' | 'seat'>>): void => {
     sink.lamps.push({ shell: false, seat: 'part', ...l });
   };
@@ -537,7 +539,7 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
       'side-marker',
       run,
       hw,
-      markerFns,
+      FLASHING_MARKER,
       'trailer',
       true,
       LAFETTE.markRelief[1],
@@ -557,7 +559,7 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
       const zPad = (REAR_CORNER.height - MARKER_HEIGHT) / 2;
       lamp({
         id: `side-marker-rear-${sideName(side)}`,
-        fns: markerFns,
+        fns: FLASHING_MARKER,
         side,
         part: 'trailer',
         facing: side > 0 ? 'left' : 'right',
@@ -571,7 +573,7 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
       });
     }
   } else {
-    sideMarkers(sink, 'side-marker', run, hw, markerFns, 'trailer', false);
+    sideMarkers(sink, 'side-marker', run, hw, FLASHING_MARKER, 'trailer', false);
   }
   const xc = f.kink - DOLLY_MARKER.behindKink;
   const armY = DRAWBAR_SPREAD * (1 - xc / a.eye.x) + ARM_WIDTH / 2;
@@ -589,7 +591,7 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
     });
     lamp({
       id: `side-marker-dolly-${sideName(side)}`,
-      fns: markerFns,
+      fns: FLASHING_MARKER,
       side,
       part: 'dolly',
       facing: side > 0 ? 'left' : 'right',

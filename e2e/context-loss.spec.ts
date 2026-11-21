@@ -13,6 +13,7 @@ import {
   settle,
   shoot,
   startPinnedDrive,
+  timeoutWithSettles,
 } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
@@ -132,7 +133,7 @@ test(
 );
 
 test('the cockpit looks the same after a loss as before it', { tag: HEAVY }, async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(timeoutWithSettles('high', 2, 180_000));
   const problems = collectProblems(page);
   await watchFailedAttachments(page);
   await startPinnedDrive(page, { preset: 'high', lighting: 'day' }, en.exerciseStraightReverse);
