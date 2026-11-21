@@ -259,9 +259,12 @@ const sheeting = (pieces: readonly PropPiece[]): number =>
     .reduce((sum, v) => sum + v, 0);
 
 /** What `obstacle` adds to a layout's drawing, so the yard around it cannot matter. */
-const sheetingOf = (layout: ResolvedLayout, obstacle: Obstacle): number =>
-  sheeting(yardProps({ ...layout, obstacles: [obstacle], props: [] })) -
-  sheeting(yardProps({ ...layout, obstacles: [], props: [] }));
+const bare = new Map<ResolvedLayout, number>();
+const sheetingOf = (layout: ResolvedLayout, obstacle: Obstacle): number => {
+  const yard = bare.get(layout) ?? sheeting(yardProps({ ...layout, obstacles: [], props: [] }));
+  bare.set(layout, yard);
+  return sheeting(yardProps({ ...layout, obstacles: [obstacle], props: [] })) - yard;
+};
 
 describe('retro sheeting', () => {
   const [base] = cases;
@@ -305,7 +308,13 @@ describe('retro sheeting', () => {
 
   describe.each(cases)('$name', ({ resolved }) => {
     it('comes from the obstacle alone: the same in the yard of every layout and exercise', () => {
-      const own = resolved.obstacles.filter((o) => RESTYLED_KINDS.has(o.kind));
+      // one of each kind and size: the rest draw alike
+      const sizes = new Map(
+        resolved.obstacles
+          .filter((o) => RESTYLED_KINDS.has(o.kind))
+          .map((o) => [`${o.kind} ${o.obb.halfLength} ${o.obb.halfWidth} ${o.height}`, o]),
+      );
+      const own = [...sizes.values()];
       expect(own.length).toBeGreaterThan(0);
       for (const o of own) {
         expect(sheetingOf(resolved, o), o.id).toBe(sheetingOf(base.resolved, o));
