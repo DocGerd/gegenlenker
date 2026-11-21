@@ -26,6 +26,9 @@ const sizes = [
   { width: 1366, height: 768 },
 ];
 
+/** Height of the gear column before the lamp row: its label, four gear buttons and their gaps. */
+const GEAR_COLUMN_HEIGHT = 274.5;
+
 /** The key legend wraps differently per language, so every size runs in both. */
 const locales = [
   { locale: 'en-US', messages: en },
@@ -136,6 +139,13 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
       expect(overlaps(m, c), `${c.name} overlaps a mirror housing`).toBe(false);
     }
   }
+
+  // The lamp row must not make the gear column taller than the gears and their label were alone.
+  const [gearColumn] = await boxes(page.locator('.ctl-gears'));
+  expect(
+    (gearColumn?.bottom ?? 0) - (gearColumn?.top ?? 0),
+    'gear column height',
+  ).toBeLessThanOrEqual(GEAR_COLUMN_HEIGHT);
 
   const panels = await boxes(
     page.locator('.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action'),

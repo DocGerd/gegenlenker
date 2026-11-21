@@ -40,7 +40,7 @@ const RESET_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7" /><path d="M12 2.5v5.5M12 13v.01" /></svg>';
 
 const LIGHTS_ICON =
-  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5.5C5.5 5.5 4 8.5 4 12s1.5 6.5 6 6.5c1.5 0 2.5-.5 3.5-1.5V7C12.5 6 11.5 5.5 10 5.5z" /><path d="M16.5 8.5H21M16.5 12H21M16.5 15.5H21" /></svg>';
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5.5C5.5 5.5 4 8.5 4 12s1.5 6.5 6 6.5c1.5 0 2.5-.5 3.5-1.5V7C12.5 6 11.5 5.5 10 5.5z" /><path d="M16.5 9.5l4.5 1.5M16.5 13l4.5 1.5M16.5 16.5l4.5 1.5" /></svg>';
 const HAZARD_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5L21.5 20h-19z" /><path d="M12 9.5L16.5 17.5h-9z" /></svg>';
 
@@ -172,13 +172,21 @@ export function createControls(
   ] as const) {
     button.title = label;
     button.setAttribute('aria-label', label);
+    const toggle = (): void => {
+      state[key] = !state[key];
+    };
+    // Acts on press, like the gears: a second finger's tap never becomes a `click`.
     button.addEventListener(
-      'click',
-      () => {
-        state[key] = !state[key];
+      'pointerdown',
+      (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.preventDefault();
+        toggle();
       },
       { signal },
     );
+    // Keyboard and assistive technology activate with a `click` that has no pointer behind it.
+    button.addEventListener('click', (e) => e.detail === 0 && toggle(), { signal });
   }
   const keyboard = createKeyboard(state, opts.steerRate);
 

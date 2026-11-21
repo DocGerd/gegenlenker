@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { Locator } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { QUALITY_FLAGS } from '../src/render/quality';
@@ -62,6 +63,8 @@ for (const preset of PRESETS) {
   );
 }
 
+/** Half the hazard flash period (`FLASH_PERIOD` in src/render/lamp-state.ts), in ms. */
+const HALF_FLASH_MS = 1000 / 3;
 const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
 
 // Lamp lenses are what the chase view shows of the lamps; the light they cast is not asserted here.
@@ -98,10 +101,42 @@ test(
     await expect(lights).toHaveAttribute('aria-pressed', 'true');
     expect(hash(await shoot(page, 'chase')), 'lights back on').toBe(lit);
 
+    // the hazard lights flash with sim time: half a period apart they show both phases
     await hazard.click();
+    await settle(page, 'balanced');
+    await expect(hazard).toHaveAttribute('aria-pressed', 'true');
+    const phases = new Set<string>();
+    for (let i = 0; i < 3; i++) {
+      phases.add(hash(await shoot(page, 'chase')));
+      await page.clock.runFor(HALF_FLASH_MS);
+    }
+    expect(phases.size, 'the hazard lights flash').toBeGreaterThan(1);
+    expect(phases, 'dark phase is the lights-on look').toContain(lit);
+
     await page.keyboard.press('x');
     await settle(page, 'balanced');
     await expect(hazard).toHaveAttribute('aria-pressed', 'false');
+    expect(hash(await shoot(page, 'chase')), 'hazard lights off').toBe(lit);
+
+    // a finger held on the lever must not stop a second finger's tap from switching a lamp
+    const cdp = await page.context().newCDPSession(page);
+    const centre = async (loc: Locator): Promise<{ x: number; y: number }> => {
+      const box = await loc.boundingBox();
+      if (box === null) throw new Error('no box');
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    };
+    const held = await centre(page.locator('[data-ctl="lever"]'));
+    const tap = await centre(hazard);
+    const touch = (
+      type: 'touchStart' | 'touchEnd',
+      ...touchPoints: { x: number; y: number; id: number }[]
+    ) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints });
+    await touch('touchStart', { ...held, id: 1 });
+    await touch('touchStart', { ...held, id: 1 }, { ...tap, id: 2 });
+    await touch('touchEnd', { ...held, id: 1 });
+    await touch('touchEnd');
+    await settle(page, 'balanced');
+    await expect(hazard).toHaveAttribute('aria-pressed', 'true');
     expect(errors).toEqual([]);
     expect(three).toEqual([]);
   },
