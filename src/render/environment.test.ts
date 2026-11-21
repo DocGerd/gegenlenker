@@ -57,9 +57,10 @@ import {
   enableLayers,
   PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
+  YARD_CASTER_LAYER,
 } from './seams';
 import { RESTYLED_KINDS } from './yard-props';
-import { FLOOD_POOL_NAME, STREET_POOL_NAME, yardLightSpecs } from './yard-lights';
+import { FLOOD_POOL_NAME, FLOOD_SHADOW, STREET_POOL_NAME, yardLightSpecs } from './yard-lights';
 import { RetroNodeMaterial, type RetroCheck, type RetroVerdict } from './retro';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -159,6 +160,56 @@ describe('environment night twins', () => {
       }
       expect([cameras.cockpit, cameras.mirror].map(perspective), preset).toEqual(byDay);
     }
+    env.dispose();
+  });
+});
+
+describe('environment floodlight shadows', () => {
+  const masts = camera([]);
+  masts.set(YARD_CASTER_LAYER);
+  const casters = (root: Object3D, view: Layers): Set<Object3D> =>
+    new Set([...seen(root, view)].filter((m) => asMesh(m).castShadow));
+
+  it('draws to the masts exactly the casters the perspective views draw, from none of the top-down twins and tokens', () => {
+    if (layout === undefined) return;
+    const env = proceduralEnvironment(layout, palette);
+    for (const preset of ['low', 'balanced', 'high'] as const) {
+      for (const mode of ['day', 'night'] as const) {
+        env.setLook(lookFor(QUALITY_FLAGS[preset], mode));
+        const perspective = new Set([
+          ...casters(env.object, cameras.cockpit),
+          ...casters(env.object, cameras.mirror),
+        ]);
+        const mast = casters(env.object, masts);
+        // low draws no detail props, whose meshes are the casters of a restyled yard
+        if (preset !== 'low') expect(mast.size, `${preset} ${mode}`).toBeGreaterThan(0);
+        expect(mast, `${preset} ${mode}`).toEqual(perspective);
+        for (const m of mast)
+          expect(cameras.topDown.test(m.layers), `${preset} ${mode}`).toBe(false);
+      }
+    }
+    env.dispose();
+  });
+
+  it('queues the masts maps on every look, so a restored context draws them again', () => {
+    if (layout === undefined) return;
+    const env = proceduralEnvironment(layout, palette);
+    const casting = (): SpotLight[] => {
+      const out: SpotLight[] = [];
+      env.object.traverse((o) => {
+        if (o instanceof SpotLight && o.castShadow) out.push(o);
+      });
+      return out;
+    };
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'night'));
+    const lights = casting();
+    expect(lights).toHaveLength(FLOOD_SHADOW.casting);
+    for (const light of lights) {
+      light.shadow.needsUpdate = false;
+      expect(light.shadow.needsUpdate).toBe(false);
+    }
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'night'));
+    for (const light of lights) expect(light.shadow.needsUpdate).toBe(true);
     env.dispose();
   });
 });
