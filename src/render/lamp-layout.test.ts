@@ -310,6 +310,15 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     }
   });
 
+  // Reg. (EU) 1230/2012 Annex I App. 1 Table II item 6.1: end-outline lamps stay out of the width, within 100 mm
+  it('keep every end-outline lens within 100 mm past the vehicle width', () => {
+    const lenses = v.lamps.filter(
+      (l) => l.fns.includes('end-outline-front') || l.fns.includes('end-outline-rear'),
+    );
+    expect(lenses.length).toBeGreaterThan(0);
+    for (const l of lenses) expect(fromEdge(v, l), l.id).toBeGreaterThanOrEqual(-0.1);
+  });
+
   it('pair every lamp with its mirror image across the centreline', () => {
     const mirrored = (l: Lamp): string =>
       JSON.stringify([l.fns, l.part, l.box[0], [-l.box[1][1], -l.box[1][0]], l.box[2]]);
