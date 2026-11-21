@@ -10,6 +10,7 @@ import {
   type GraphicsPreset,
   type LightingMode,
   type Rect,
+  type ViewRects,
   type RenderFrame,
   type RenderStats,
   type SceneRenderer,
@@ -26,7 +27,7 @@ import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createFrame, type Frame } from './frame-target';
 import { describeAdapter } from './gpu-backend';
-import { createMirror, mirrorPose } from './mirror';
+import { CLASS_II_MIRRORS, createMirror, mirrorAnchor, mirrorFacing } from './mirror';
 import { readScenePalette } from './palette';
 import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
@@ -207,8 +208,10 @@ export function createThreeSceneRenderer(
   topDownCamera.position.y = SKY_HEIGHT;
   let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
   let lighting: LightingMode = DEFAULT_LIGHTING;
-  const mirrorLeft = createMirror(quality.mirrorMsaa);
-  const mirrorRight = createMirror(quality.mirrorMsaa);
+  const mirrors = CLASS_II_MIRRORS.map((spec) => ({
+    mirror: createMirror(spec, quality.mirrorMsaa),
+    rect: (views: ViewRects): Rect | null => views[spec.view],
+  }));
   const mirrorPosition = new Vector3();
   const projected = new Vector3();
 
@@ -228,6 +231,8 @@ export function createThreeSceneRenderer(
   let backend: GraphicsBackend = 'webgl2';
   let drawCalls = 0;
   let shadowPasses = 0;
+  let mirrorCalls = 0;
+  let frameIndex = 0;
   let topDownRect: Rect | null = null;
   let chaseShown = false;
   const lead = { x: 0, y: 0 };
@@ -270,6 +275,7 @@ export function createThreeSceneRenderer(
     b.truck.setLook(look);
     b.trailer.setLook(look);
     b.interior.setLook(look);
+    for (const { mirror } of mirrors) mirror.invalidate();
   }
 
   function disposeBuilt(): void {
@@ -465,8 +471,7 @@ export function createThreeSceneRenderer(
       if (next === quality) return;
       if (next.pixelRatioCap !== quality.pixelRatioCap) appliedRatio = 0;
       quality = next;
-      mirrorLeft.setSamples(quality.mirrorMsaa);
-      mirrorRight.setSamples(quality.mirrorMsaa);
+      for (const { mirror } of mirrors) mirror.setSamples(quality.mirrorMsaa);
       if (built !== null) {
         applyLookTo(built);
         timer.warmUp('quality');
@@ -517,28 +522,25 @@ export function createThreeSceneRenderer(
       const anchors = b.anchors;
       const { cockpit, mirrorLeft: leftRect, mirrorRight: rightRect, topDown } = views;
 
-      if (leftRect !== null) {
-        const facing = mirrorPose(snapshot.truck, anchors.mirrorLeft, 'left', mirrorPosition);
-        mirrorLeft.place(mirrorPosition, facing);
-        mirrorLeft.capture(
-          gl,
-          b.scene,
-          leftRect.width * pixelRatio,
-          leftRect.height * pixelRatio,
-          sky,
+      const mirrorCallsBefore = gl.info.render.drawCalls;
+      for (const { mirror, rect } of mirrors) {
+        const r = rect(views);
+        if (r === null) {
+          mirror.invalidate();
+          continue;
+        }
+        const { spec } = mirror;
+        const facing = mirrorFacing(
+          snapshot.truck,
+          mirrorAnchor(spec, anchors),
+          spec.yaw,
+          mirrorPosition,
         );
+        mirror.place(mirrorPosition, facing);
+        mirror.capture(gl, b.scene, r.width * pixelRatio, r.height * pixelRatio, sky, frameIndex);
       }
-      if (rightRect !== null) {
-        const facing = mirrorPose(snapshot.truck, anchors.mirrorRight, 'right', mirrorPosition);
-        mirrorRight.place(mirrorPosition, facing);
-        mirrorRight.capture(
-          gl,
-          b.scene,
-          rightRect.width * pixelRatio,
-          rightRect.height * pixelRatio,
-          sky,
-        );
-      }
+      mirrorCalls = gl.info.render.drawCalls - mirrorCallsBefore;
+      frameIndex++;
 
       // The panes tile the canvas, so on WebGL 2 each clears its own rect as part of its pass: a clear
       // of its own would resolve the whole multisample target once more, and the scissor keeps it to
@@ -599,13 +601,11 @@ export function createThreeSceneRenderer(
       }
 
       gl.autoClear = false;
-      if (leftRect !== null) {
-        out.place(leftRect, pixelRatio);
-        mirrorLeft.composite(gl);
-      }
-      if (rightRect !== null) {
-        out.place(rightRect, pixelRatio);
-        mirrorRight.composite(gl);
+      for (const { mirror, rect } of mirrors) {
+        const r = rect(views);
+        if (r === null) continue;
+        out.place(r, pixelRatio);
+        mirror.composite(gl);
       }
       out.present();
       // includes the one output pass that draws the frame target to the canvas
@@ -638,6 +638,7 @@ export function createThreeSceneRenderer(
         frameP95Ms: timer.p95Ms(),
         resolutionScale: timer.scale(),
         drawCalls,
+        mirrorCalls,
         shadowPasses,
         glRenderer,
         contextLost,
@@ -646,8 +647,7 @@ export function createThreeSceneRenderer(
 
     dispose() {
       disposeBuilt();
-      mirrorLeft.dispose();
-      mirrorRight.dispose();
+      for (const { mirror } of mirrors) mirror.dispose();
       generation++;
       releaseGpu();
       lostListeners.clear();

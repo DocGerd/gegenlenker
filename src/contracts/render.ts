@@ -166,6 +166,8 @@ export type RenderStats = {
   readonly frameP95Ms: number;
   readonly resolutionScale: number;
   readonly drawCalls: number;
+  /** Draw calls of the mirror captures in the last frame; part of `drawCalls`. */
+  readonly mirrorCalls: number;
   /** Shadow-camera renders in the last frame: one per shadow map, a point light's six faces counting six. */
   readonly shadowPasses: number;
   readonly glRenderer: string;

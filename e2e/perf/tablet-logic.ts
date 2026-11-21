@@ -20,6 +20,7 @@ export type Reading = {
   p95: number;
   scale: number;
   calls: number;
+  mirror: number;
   shadow: number;
   gl: string;
 };
@@ -109,12 +110,13 @@ export function parseOptions(argv: readonly string[]): Options {
 
 /** Parses the `?perf=1` overlay text written by `src/render/perf-overlay.ts`. */
 export function parseOverlay(text: string): Reading | null {
-  const m = /(\d+) fps\s+p95 ([\d.]+) ms\s+scale ([\d.]+)\s+calls (\d+)\s+shadow (\d+)\n(.*)/.exec(
-    text,
-  );
-  const [, fps, p95, scale, calls, shadow, gl] = m ?? [];
-  return fps && p95 && scale && calls && shadow && gl
-    ? { fps: +fps, p95: +p95, scale: +scale, calls: +calls, shadow: +shadow, gl }
+  const m =
+    /(\d+) fps\s+p95 ([\d.]+) ms\s+scale ([\d.]+)\s+calls (\d+)\s+mirror (\d+)\s+shadow (\d+)\n(.*)/.exec(
+      text,
+    );
+  const [, fps, p95, scale, calls, mirror, shadow, gl] = m ?? [];
+  return fps && p95 && scale && calls && mirror && shadow && gl
+    ? { fps: +fps, p95: +p95, scale: +scale, calls: +calls, mirror: +mirror, shadow: +shadow, gl }
     : null;
 }
 
