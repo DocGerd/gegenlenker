@@ -25,6 +25,7 @@ export const LENS_SLOTS = [
   ['reversing'],
   ['rear-fog'],
   ['rear-plate'],
+  ['work'],
 ] as const satisfies readonly (readonly LampFn[])[];
 
 export const SLOT_ATTRIBUTE = 'lampSlot';

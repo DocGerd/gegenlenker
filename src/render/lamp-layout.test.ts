@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
-import { BODY_SHELL, FLOOR_TOP, TIPPER_SHELL } from './body-dims';
-import { CAB_LENGTH, FRAME_TOP } from './cab-dims';
+import { FLOOR_TOP, TARP_TOP, TIPPER_RIM, TIPPER_SHELL } from './body-dims';
+import { CAB_LENGTH, FRAME_TOP, round } from './cab-dims';
 import {
   type Lamp,
   LAMP_COLOURS,
@@ -14,7 +14,15 @@ import {
 } from './lamp-layout';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { REALISM_HUES as HUE } from './realism-hues';
-import { LAFETTE, lowLoaderDeck, RAMP_HEIGHT, SWAP_BODY_HEIGHT } from './trailer-dims';
+import {
+  LAFETTE,
+  lowLoaderDeck,
+  RAMP_GAP,
+  RAMP_HEIGHT,
+  RAMP_WIDTH,
+  SWAP_BODY_HEIGHT,
+  trailerFrame,
+} from './trailer-dims';
 
 /*
  * UN R48 (06 series, Supplement 10), https://eur-lex.europa.eu/eli/reg/2019/57/oj/eng, for an N3
@@ -51,8 +59,8 @@ function truckVehicle(id: (typeof TRUCK_IDS)[number], cabLength: number): Vehicl
     // the tipper's corner posts, above its drop sides; the tarpaulin's top
     rearTop:
       TRUCK_LOOKS[id].body.kind === 'tipper'
-        ? FLOOR_TOP + TIPPER_SHELL.wallHeight + BODY_SHELL.rim
-        : BODY_SHELL.tarpTop,
+        ? FLOOR_TOP + TIPPER_SHELL.wallHeight + TIPPER_RIM
+        : TARP_TOP,
     lamps: truckLamps(spec, cabLength).lamps,
   };
 }
@@ -229,7 +237,10 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     const front = v.lamps.filter(
       (l) => l.facing === 'front' && !l.fns.includes('end-outline-front'),
     );
-    const rear = v.lamps.filter((l) => l.facing === 'rear' && !l.fns.includes('end-outline-rear'));
+    // the work floodlights stand on masts and are no R48 function
+    const rear = v.lamps.filter(
+      (l) => l.facing === 'rear' && !l.fns.includes('end-outline-rear') && !l.fns.includes('work'),
+    );
     if (v.windscreenTop === undefined) {
       expect(top('end-outline-front')).toBeGreaterThanOrEqual(Math.max(...front.map(high)) - EPS);
     } else {
@@ -329,6 +340,20 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     }
   });
 
+  it('fit a pair of work floodlights above the reversing lamps', () => {
+    const { left, right } = pair(v, 'work');
+    const reversing = pair(v, 'reversing');
+    for (const l of [left, right]) {
+      expect(l.facing, l.id).toBe('rear');
+      expect(l.box[0][1], `${l.id} behind the vehicle's front`).toBeLessThan(v.front);
+      expect(low(l), `${l.id} above the reversing lamps`).toBeGreaterThan(
+        Math.max(high(reversing.left), high(reversing.right)),
+      );
+      expect(fromEdge(v, l), `${l.id} inside the width`).toBeGreaterThan(0);
+    }
+    expect(innerGap({ left, right })).toBeGreaterThan(0);
+  });
+
   it('give a trailer, and only a trailer, a rear plate lamp (6.8)', () => {
     const plate = withFn(v, 'rear-plate');
     expect(plate).toHaveLength(v.trailer ? 1 : 0);
@@ -354,5 +379,49 @@ describe('lamp layout parts', () => {
     expect(trailerLamps(trailerById('krone-azw-18'), 'procedural').lamps.some((l) => l.shell)).toBe(
       false,
     );
+  });
+});
+
+describe('work floodlight mounts', () => {
+  const work = (id: (typeof TRAILER_IDS)[number], variant: 'procedural' | 'shell') =>
+    trailerLamps(trailerById(id), variant).lamps.filter((l) => l.fns.includes('work'));
+
+  it('stand the low-loader shell lenses on the folded ramps, under their top', () => {
+    const spec = trailerById('hueffermann-hpa-24-81-l');
+    const deck = lowLoaderDeck(spec);
+    for (const l of work('hueffermann-hpa-24-81-l', 'shell')) {
+      const [y0, y1] = l.box[1];
+      const [ramp0, ramp1] =
+        l.side > 0 ? [RAMP_GAP, RAMP_GAP + RAMP_WIDTH] : [-RAMP_GAP - RAMP_WIDTH, -RAMP_GAP];
+      expect(y0, l.id).toBeGreaterThanOrEqual(ramp0);
+      expect(y1, l.id).toBeLessThanOrEqual(ramp1);
+      expect(l.box[2][1], l.id).toBeLessThan(deck.rampTop);
+      expect(l.box[2][0], l.id).toBeGreaterThan(deck.rearDeck);
+    }
+  });
+
+  it('stand the lafette shell lenses on posts above its lamp bar', () => {
+    const spec = trailerById('krone-azw-18');
+    const { brackets } = trailerLamps(spec, 'shell');
+    const barTop = trailerFrame(spec).deck + LAFETTE.lampBar.height;
+    for (const l of work('krone-azw-18', 'shell')) {
+      const post = brackets.find(
+        (b) =>
+          b.part === 'trailer' &&
+          b.box[2][0] === round(barTop) &&
+          b.box[1][0] < l.box[1][1] &&
+          b.box[1][1] > l.box[1][0],
+      );
+      expect(post, l.id).toBeDefined();
+      expect(post?.box[2][1] ?? 0, l.id).toBeGreaterThan(l.box[2][0] - 1e-6);
+    }
+  });
+
+  it('keep every work lamp out of the glb: detail seat, no shell lens', () => {
+    for (const id of TRAILER_IDS) {
+      for (const variant of ['procedural', 'shell'] as const) {
+        expect(work(id, variant).every((l) => l.seat === 'detail' && !l.shell)).toBe(true);
+      }
+    }
   });
 });

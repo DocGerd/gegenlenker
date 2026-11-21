@@ -6,7 +6,8 @@ import type { ScenePalette } from '../contracts/render';
 import { TRUCK_IDS, type TruckId } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById } from '../vehicles/registry';
-import { bodyFrontX, bodyShellParams } from './body-dims';
+import { bodyFrontX, bodyShellParams, TARP_TOP, TIPPER_RIM } from './body-dims';
+import { truckWorkSill } from './lamp-layout';
 import { CAB_HEIGHT, CAB_LENGTH, CAB_STRIPE, cabShellParams, FRAME_TOP, RELIEF } from './cab-dims';
 import { REALISM_HUES } from './realism-hues';
 import {
@@ -44,9 +45,6 @@ const glb = (key: string): ArrayBuffer => {
 const loadShell = (id: TruckId, kind: ShellKind): Promise<Shell> =>
   parseShell(glb(`${id}-${kind}`), kind);
 
-/** Height of the rim on a tipper's headboard (tools/blender/body_shell.py RIM) and of the tarpaulin top (TARP_TOP). */
-const TIPPER_RIM = 0.06;
-const TARP_TOP = 2.75;
 /** The roof light bar (cab_shell.py BEACON_BASE + BEACON_HEIGHT) stands this far above the roof. */
 const BEACON_TOP = 0.14;
 /** A tipper's corner posts stand 0.06 m proud of its walls (body_shell.py POST). */
@@ -109,6 +107,10 @@ describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
     expect(Math.max(-box.min.z, box.max.z)).toBeLessThanOrEqual(half + proud + 1e-3);
     expect(Math.max(-box.min.z, box.max.z)).toBeCloseTo(half + proud, 2);
     expect(box.max.y).toBeCloseTo(top, 2);
+    // the work lamps stand on the shell's top: on a tarp's roof, a little above a tipper's rim on posts
+    const sill = truckWorkSill(spec);
+    expect(sill).toBeGreaterThanOrEqual(box.max.y - 1e-3);
+    expect(sill - box.max.y).toBeLessThan(look.body.kind === 'tarp' ? 1e-2 : 0.1);
   });
 
   it.runIf(look.body.kind === 'tipper')(

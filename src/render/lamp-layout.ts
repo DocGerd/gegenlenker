@@ -10,7 +10,10 @@ import {
   MARKING_END_MARGIN as END_MARGIN,
   BODY_SHELL,
   markingBand,
+  TARP_TOP,
+  TIPPER_RIM,
   TIPPER_SHELL,
+  TIPPER_WALL_TOP,
 } from './body-dims';
 import { CAB_LENGTH, FRAME_TOP, hex, metres, RELIEF, round } from './cab-dims';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
@@ -49,7 +52,8 @@ export type LampFn =
   | 'rear-indicator'
   | 'reversing'
   | 'rear-fog'
-  | 'rear-plate';
+  | 'rear-plate'
+  | 'work';
 
 export type LampColour = 'white' | 'red' | 'amber';
 
@@ -68,6 +72,7 @@ export const LAMP_COLOURS: Readonly<Record<LampFn, LampColour>> = {
   reversing: 'white',
   'rear-fog': 'red',
   'rear-plate': 'white',
+  work: 'white',
 };
 
 /** An amber side marker that flashes with the same-side indicators (R48 6.18.7). */
@@ -124,6 +129,34 @@ const SIDE_MARKER_REACH = 3; // R48 6.18.4.3, foremost marker from the front
 const TRAILER_FRONT = { bracket: 0.1, inset: 0.005, gap: 0.01 } as const;
 const DOLLY_MARKER = { behindKink: 0.3, bracket: 0.05, relief: 0.02 } as const;
 const REAR_CORNER = { length: 0.3, width: 0.1, height: 0.12 } as const; // lafette rear side marker block
+const PLATE_LAMP = { halfWidth: 0.06, height: 0.03, belowGuardTop: 0.01 } as const;
+/**
+ * Rear work floodlights, not an R48 function. A pair on posts over the truck body's front wall (see
+ * `truckWorkSill`), on the swap body's rear edge, on posts over the lafette's lamp bar, or on the
+ * low-loader's folded ramps, `belowTop` under their top. `housing` is the lamp box's depth, `lateral`
+ * its centre off the centreline.
+ */
+export const WORK_LAMP = {
+  width: 0.3,
+  height: 0.12,
+  lateral: 0.6,
+  housing: 0.11,
+  belowTop: 0.3,
+  post: { halfWidth: 0.04, behindFront: [0.09, 0.02] },
+  /** The lafette's posts rise this far above its deck. */
+  lafetteSill: 1.2,
+} as const;
+
+/**
+ * The height the truck's work lamps stand on: a tarp's roof, or a tipper's wall top, which is also
+ * above its shell's headboard rim. `glb-shells.test.ts` holds both to the shells.
+ */
+export function truckWorkSill(spec: TruckSpec): number {
+  return TRUCK_LOOKS[spec.id].body.kind === 'tarp'
+    ? TARP_TOP
+    : Math.max(TIPPER_WALL_TOP, FLOOR_TOP + TIPPER_SHELL.headboardHeight + TIPPER_RIM);
+}
+
 /**
  * The white half of a stalk lamp at a rear top corner (R48 6.13.2(a), 6.13.9): a lens facing forward
  * on a short bracket standing out beside the body, so the main mirrors see it past the body's side.
@@ -140,20 +173,18 @@ function truckRearCorner(spec: TruckSpec): { top: number; edge: number; reach: n
   if (TRUCK_LOOKS[spec.id].body.kind === 'tipper') {
     // on the corner post, outboard of it
     return {
-      top: FLOOR_TOP + TIPPER_SHELL.wallHeight + BODY_SHELL.rim,
+      top: FLOOR_TOP + TIPPER_SHELL.wallHeight + TIPPER_RIM,
       edge: hw + BODY_SHELL.postProud,
       reach: 0,
     };
   }
   // at the tarpaulin's top, outboard of its side, on a bracket from the crown
   return {
-    top: BODY_SHELL.tarpTop,
+    top: TARP_TOP,
     edge: hw - BODY_SHELL.tarpInset,
     reach: BODY_SHELL.tarpCrown,
   };
 }
-
-const PLATE_LAMP = { halfWidth: 0.06, height: 0.03, belowGuardTop: 0.01 } as const;
 
 const lateral = (side: number, from: number, to: number): Range =>
   side > 0 ? [from, to] : [-to, -from];
@@ -190,6 +221,32 @@ function rearViewLamps(
       part,
       facing: 'front',
       box: boxOf([rear, rear + FRONT_LENS_DEPTH], across, z),
+      hue: HUE.plateWhite,
+      shell: false,
+      seat: 'detail',
+    });
+  }
+}
+
+/** A work floodlight pair: lens boxes behind `housing` (an x range), at `z`, each side on `y` from the centreline. */
+function workPair(
+  sink: Sink,
+  part: LampPart,
+  housing: Range,
+  z: Range,
+  extra: (side: number) => Bracket[],
+): void {
+  const w = WORK_LAMP.width;
+  for (const side of SIDES) {
+    const y = lateral(side, WORK_LAMP.lateral - w / 2, WORK_LAMP.lateral + w / 2);
+    sink.brackets.push(...extra(side), { part, box: boxOf(housing, y, z), shell: false });
+    sink.lamps.push({
+      id: `work-${sideName(side)}`,
+      fns: ['work'],
+      side,
+      part,
+      facing: 'rear',
+      box: boxOf([housing[0] - LENS_DEPTH, housing[0]], y, z),
       hue: HUE.plateWhite,
       shell: false,
       seat: 'detail',
@@ -421,9 +478,31 @@ export function truckLamps(spec: TruckSpec, cabLength = CAB_LENGTH): LampLayout 
       hue: HUE.tailLamp,
     });
   }
+
   const corner = truckRearCorner(spec);
   const top = corner.top - REAR_VIEW.lift;
   rearViewLamps(sink, 'body', rear, hw, corner.edge, [top - SMALL_LAMP.height, top], corner.reach);
+
+  // posts through the front wall (a tipper's headboard, a tarp's front) carry the work lamps over the body
+  const bodyFront = bodyFrontX(front, cabLength);
+  const [post0, post1] = WORK_LAMP.post.behindFront;
+  const housing: Range = [bodyFront - WORK_LAMP.housing - 0.01, bodyFront - 0.01];
+  const sill = truckWorkSill(spec);
+  workPair(sink, 'body', housing, [sill, sill + WORK_LAMP.height], (side) => [
+    {
+      part: 'body',
+      box: boxOf(
+        [bodyFront - post0, bodyFront - post1],
+        lateral(
+          side,
+          WORK_LAMP.lateral - WORK_LAMP.post.halfWidth,
+          WORK_LAMP.lateral + WORK_LAMP.post.halfWidth,
+        ),
+        [FLOOR_TOP, sill],
+      ),
+      shell: false,
+    },
+  ]);
   return sink;
 }
 
@@ -666,6 +745,39 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
     });
   }
   rearViewLamps(sink, 'trailer', a.rearX, hw, outline.edge, outline.z);
+  const flush = (x: number, top: number): void => {
+    const z0 = top - WORK_LAMP.belowTop;
+    workPair(sink, 'trailer', [x - WORK_LAMP.housing, x], [z0, z0 + WORK_LAMP.height], () => []);
+  };
+  if (lafette) {
+    // posts on the lamp bar; the shell has no swap body to stand them on
+    const barTop = deck + LAFETTE.lampBar.height;
+    const bar: Range = [a.rearX, a.rearX + LAFETTE.lampBar.depth];
+    const sill = deck + WORK_LAMP.lafetteSill;
+    const half = WORK_LAMP.post.halfWidth;
+    workPair(
+      sink,
+      'trailer',
+      [bar[1] - WORK_LAMP.housing, bar[1]],
+      [sill, sill + WORK_LAMP.height],
+      (side) => [
+        {
+          part: 'trailer',
+          box: boxOf(bar, lateral(side, WORK_LAMP.lateral - half, WORK_LAMP.lateral + half), [
+            barTop,
+            sill,
+          ]),
+          shell: false,
+        },
+      ],
+    );
+  } else if (isBox) {
+    flush(a.rearX, deck + SWAP_BODY_HEIGHT);
+  } else if (lowDeck !== null) {
+    flush(lowDeck.carrierX, lowDeck.rampTop);
+  } else {
+    flush(a.rearX, deck + RAMP_HEIGHT);
+  }
   lamp({
     id: 'rear-plate',
     fns: ['rear-plate'],

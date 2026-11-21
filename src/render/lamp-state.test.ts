@@ -53,6 +53,14 @@ describe('lampState', () => {
     expect(levels['rear-position']).toBeGreaterThan(0);
   });
 
+  it('lights the work floodlights in R with the lights on only', () => {
+    const work = (gear: ControlVector['gear'], lights: boolean): number =>
+      lampState(at(0, { gear }), { lights, hazard: false }).levels.work;
+    expect(work('R', true)).toBe(1);
+    expect(work('R', false)).toBe(0);
+    for (const gear of ['P', 'N', 'D'] as const) expect(work(gear, true)).toBe(0);
+  });
+
   it('flashes the hazards independently of the lights', () => {
     const { levels } = lampState(at(0.01), { lights: false, hazard: true });
     expect(levels['rear-indicator']).toBe(1);
