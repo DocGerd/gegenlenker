@@ -39,6 +39,13 @@ import {
 import { gradeDisabled, setGraded } from './grade';
 import { trailerLamps, truckLamps } from './lamp-layout';
 import { createDetailMaterial, createLampEmission, slotShell } from './lamp-lens';
+import {
+  createLampLights,
+  type LampLights,
+  type LampLightSpec,
+  trailerLampLight,
+  truckLampLights,
+} from './lamp-light';
 import { DAY, lampState, type LampToggles } from './lamp-state';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
@@ -153,6 +160,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   let shadowMaterial: MeshBasicMaterial | null = null;
   let sunShadowed = false;
   let lampToggles: LampToggles = DAY;
+  let lampLights: LampLights | null = null;
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
     return material;
@@ -242,7 +250,17 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       lampToggles = night ? { night: true, hazard: false } : DAY;
     },
     updateLamps(snapshot: Parameters<typeof lampState>[0]): void {
-      lamps.update(lampState(snapshot, lampToggles));
+      const state = lampState(snapshot, lampToggles);
+      lamps.update(state);
+      lampLights?.update(state);
+    },
+    /** The lamps' lights, children of `parent`; they stay off until `setLampLight`. */
+    attachLampLights(specs: readonly LampLightSpec[], parent: Object3D): void {
+      lampLights = createLampLights(specs, parent);
+    },
+    /** Switches the lamps' lights on or off; it changes the light set, so call it on a look change only. */
+    setLampLight(on: boolean): void {
+      lampLights?.setEnabled(on);
     },
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
@@ -296,6 +314,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     },
     dispose(): void {
       stopWatching?.();
+      lampLights?.dispose();
       env?.reportApplied(pbrToken, false);
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());
@@ -414,6 +433,7 @@ export function proceduralTruck(
   const bodyBox = res.mesh(merge(body), bodyMaterial);
   const detailMesh = res.detail(detail.geometry);
   const group = new Group();
+  res.attachLampLights(truckLampLights(spec), group);
   group.add(
     schematic.rear,
     res.shadow(blobShadow(truckBlobs, SHADOW_HEIGHT)),
@@ -534,7 +554,7 @@ export function proceduralTruck(
       res.updateLamps(snapshot);
       res.syncBlobs();
     },
-    setLook({ flags, grade, mode, shadow, lamps }) {
+    setLook({ flags, grade, mode, shadow, lamps, lampLight }) {
       cabGlb = flags.cabGlb;
       vehicleGlb = flags.vehicleGlb;
       cabShell?.setEnabled(cabOn());
@@ -542,6 +562,7 @@ export function proceduralTruck(
       res.setGrade(grade.on);
       res.setSunShadow(shadow);
       res.setLamps(lamps);
+      res.setLampLight(lampLight);
       res.setPbr(group, flags.pbr, mode);
     },
     dispose() {
@@ -728,6 +749,7 @@ export function proceduralTrailer(
   );
   const group = new Group();
   group.add(dolly, trailer);
+  res.attachLampLights([trailerLampLight(spec)], trailer);
 
   type Applied = ReturnType<typeof applyShell>;
   let applied: { readonly trailer: Applied; readonly dolly: Applied } | null = null;
@@ -794,12 +816,13 @@ export function proceduralTrailer(
       res.updateLamps(snapshot);
       res.syncBlobs();
     },
-    setLook({ flags, grade, mode, shadow, lamps }) {
+    setLook({ flags, grade, mode, shadow, lamps, lampLight }) {
       vehicleGlb = flags.vehicleGlb;
       showShell(vehicleGlb);
       res.setGrade(grade.on);
       res.setSunShadow(shadow);
       res.setLamps(lamps);
+      res.setLampLight(lampLight);
       res.setPbr(group, flags.pbr, mode);
     },
     dispose() {

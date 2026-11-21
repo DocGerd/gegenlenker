@@ -32,6 +32,8 @@ export type QualityFlags = {
   readonly sunShadow: boolean;
   /** HDRI sky dome, also what the vehicles reflect; a download. */
   readonly hdriSky: boolean;
+  /** At night the lamps light the ground and the yard around the vehicles. */
+  readonly lampLight: boolean;
 };
 
 const BALANCED: QualityFlags = {
@@ -53,6 +55,7 @@ const BALANCED: QualityFlags = {
   aerialPerspective: false,
   sunShadow: false,
   hdriSky: false,
+  lampLight: true,
 };
 
 /** Most draw calls a frame may spend, mirrors included: the requirement for High. */
@@ -78,6 +81,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     aerialPerspective: false,
     sunShadow: false,
     hdriSky: false,
+    lampLight: false,
   },
   balanced: BALANCED,
   high: {

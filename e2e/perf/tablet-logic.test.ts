@@ -118,9 +118,20 @@ describe('verdicts', () => {
 describe('parseOptions', () => {
   it('defaults to the full matrix', () => {
     const o = parseOptions([]);
-    expect(o).toMatchObject({ throttle: 4, runs: 1, perf: true, functional: false, backend: null });
+    expect(o).toMatchObject({
+      throttle: 4,
+      runs: 1,
+      perf: true,
+      functional: false,
+      backend: null,
+      lighting: 'day',
+    });
     expect(o.presets).toHaveLength(3);
     expect(o.pairs).toHaveLength(4);
+  });
+
+  it('--lighting picks the lighting mode', () => {
+    expect(parseOptions(['--lighting', 'night']).lighting).toBe('night');
   });
 
   it('--quick keeps the first vehicle pair', () => {
@@ -132,6 +143,7 @@ describe('parseOptions', () => {
     expect(() => parseOptions(['--runs', '1.5'])).toThrow('--runs');
     expect(() => parseOptions(['--preset', 'ultra'])).toThrow('--preset');
     expect(() => parseOptions(['--backend', 'vulkan'])).toThrow('--backend');
+    expect(() => parseOptions(['--lighting', 'dusk'])).toThrow('--lighting');
     expect(() => parseOptions(['--bogus'])).toThrow();
   });
 
