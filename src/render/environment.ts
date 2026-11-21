@@ -30,7 +30,15 @@ import type { SkyTextures } from './sky-texture';
 import { createLightRig, perspectiveLight, sunPosition } from './light-rig';
 import { applyLook, type Look } from './look';
 import { nightPalette } from './palette';
-import { AID_STROKE, AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
+import {
+  AID_STROKE,
+  AIDS_LAYER,
+  DEFAULT_LAYER,
+  PERSPECTIVE_LAYER,
+  type Environment,
+  type ShadowFocus,
+  YARD_CASTER_LAYER,
+} from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
 import { createYardKitLayer, type YardKitParts } from './yard-kit';
@@ -235,6 +243,18 @@ export function proceduralEnvironment(
   const propSwap = tokenCopy(tokens);
   propSwap.set(true); // detail on until the first setLook
   propSwap.setCopies(props);
+
+  // The masts' static shadow cameras draw `YARD_CASTER_LAYER` only, which never holds a vehicle.
+  // A layer swap resets the mask, so this runs after the swaps of every look.
+  const yardCasters = [...obstacleMeshes, ...props];
+  const markYardCasters = (): void => {
+    for (const mesh of yardCasters) {
+      const drawn =
+        mesh.layers.isEnabled(DEFAULT_LAYER) || mesh.layers.isEnabled(PERSPECTIVE_LAYER);
+      if (drawn) mesh.layers.enable(YARD_CASTER_LAYER);
+      else mesh.layers.disable(YARD_CASTER_LAYER);
+    }
+  };
 
   // Night: the top-down view draws twins of the lit tokens in the night palette, built on the first
   // night look. They share the tokens' material, so no program is added; the tokens leave the top-down
@@ -462,10 +482,11 @@ export function proceduralEnvironment(
   const legacyGround = domeGround(palette, false);
   const splitGround = domeGround(palette, true);
   const skyline = createSkyline(layout.bounds, haze);
+  const yardLights = createYardLights(layout, palette);
   const kit = createYardKitLayer(layout, palette, yardKit, (drawn) => {
     standInGroup.visible = !drawn;
+    yardLights.queueShadows();
   });
-  const yardLights = createYardLights(layout, palette);
   group.add(sky.mesh, skyline.mesh, kit.object, yardLights.object);
 
   let look: Look | null = null;
@@ -522,6 +543,7 @@ export function proceduralEnvironment(
     object: group,
     update(frame: RenderFrame, focus: ShadowFocus): void {
       rig.fitShadow(focus);
+      yardLights.update();
       if (yardBand !== null) yardBand.visible = frame.topDown === 'yard';
       if (gate !== null) {
         const next = frame.waypointVisited === true ? gate.passed : gate.pending;
@@ -567,6 +589,8 @@ export function proceduralEnvironment(
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
       flatSwap.set(next.litCopies);
+      markYardCasters();
+      yardLights.queueShadows();
     },
     dispose: () => {
       cancelGroundTexture?.();

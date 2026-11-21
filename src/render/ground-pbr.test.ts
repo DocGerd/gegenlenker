@@ -12,6 +12,7 @@ import {
   SHADOW_SAMPLERS,
 } from './ground-pbr-spec';
 import type { TextureMaps } from './texture-set';
+import { FLOOD_SHADOW } from './yard-lights';
 
 const texture = (): Texture => new DataTexture(new Uint8Array(4), 1, 1);
 const maps: TextureMaps<PbrKey> = {
@@ -133,9 +134,9 @@ describe('the PBR ground at night', () => {
     expect(spots).toHaveLength(7);
     const mapped = spots.filter((l) => l.map !== null);
     const casting = spots.filter((l) => l.castShadow);
-    // a map and a shadow each add a sampler to every receiver
+    // a map and a shadow each add a sampler to every receiver: two lamps cast, and two masts
     expect(mapped).toHaveLength(2);
-    expect(casting).toHaveLength(2);
+    expect(casting).toHaveLength(2 + FLOOD_SHADOW.casting);
     expect(PBR_SAMPLER_BUDGET + mapped.length + casting.length).toBeLessThanOrEqual(
       SAMPLER_CEILING,
     );
