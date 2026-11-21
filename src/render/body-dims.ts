@@ -22,6 +22,9 @@ export const CAB_GAP = 0.1; // cab rear to body front
 export const FLOOR_THICKNESS = 0.2;
 export const WALL_THICKNESS = 0.1;
 export const TIPPER_WALL_TOP = 2.5;
+/** The shells' rim on a tipper's headboard and tarpaulin top (tools/blender/body_shell.py RIM, TARP_TOP); `glb-shells.test.ts` checks the glbs against them. */
+export const TIPPER_RIM = 0.06;
+export const TARP_TOP = 2.75;
 export const RAIL_HALF_GAP = 0.45; // lateral centre of each chassis rail
 export const RAIL_WIDTH = 0.2;
 export const MARKER_HEIGHT = 0.1; // side marker lamps; the yellow strip is thinner

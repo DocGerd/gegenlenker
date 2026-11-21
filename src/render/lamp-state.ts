@@ -47,6 +47,7 @@ export function lampState(
       reversing: snapshot.control.gear === 'R' ? 1 : 0,
       'rear-fog': 0,
       'rear-plate': lit,
+      work: lights && snapshot.control.gear === 'R' ? 1 : 0,
     },
   };
 }
