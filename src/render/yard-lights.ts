@@ -42,7 +42,7 @@ export const FLOOD = {
   /** Metres from the mast, towards the fixture's aim, where the axis meets the ground. */
   throw: 35,
   /** Highest irradiance one mast puts on the ground, in the units of `light-rig.ts`. */
-  peak: 0.3,
+  peak: 0.25,
   /** Of the head's lens centre: metres along the mast's aim from its axis, and below its top. */
   head: { forward: 0.46, below: 0.5 },
   /** Share of the lens colour the head glows with. */
@@ -179,6 +179,19 @@ export function groundIrradiance(spec: YardLightSpec, x: number, y: number): num
   const t = to.length();
   const share = coneShare(spec, to.dot(new Vector3(aim.x, aim.y, aim.z)) / t);
   return yardCandela(spec) * share * facingIrradiance(1, t, spec.distance, spec.decay) * (p.z / t);
+}
+
+/** Irradiance the light puts on a face at sim point `at` with unit `normal`, as three's spot light does; zero on the far side. */
+export function faceIrradiance(spec: YardLightSpec, at: Vec3, normal: Vec3): number {
+  const { position: p, aim } = spec;
+  const to = new Vector3(at.x - p.x, at.y - p.y, at.z - p.z);
+  const t = to.length();
+  const share = coneShare(spec, to.dot(new Vector3(aim.x, aim.y, aim.z)) / t);
+  const facing = -(to.dot(new Vector3(normal.x, normal.y, normal.z)) / t);
+  return Math.max(
+    0,
+    yardCandela(spec) * share * facingIrradiance(1, t, spec.distance, spec.decay) * facing,
+  );
 }
 
 /** Linear luminance of a token: the albedo a baked pool is lit as. */

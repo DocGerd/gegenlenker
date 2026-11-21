@@ -1,6 +1,6 @@
 import { Color, type Object3D, SpotLight, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
-import { layouts } from '../content/registry';
+import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import type { ScenePalette } from '../contracts/render';
 import { GROUND, litGround } from './lamp-light';
@@ -11,6 +11,7 @@ import { QUALITY_FLAGS } from './quality';
 import { PERSPECTIVE_LAYER } from './seams';
 import {
   createYardLights,
+  faceIrradiance,
   FLOOD,
   FLOOD_POOL_NAME,
   floodLitSample,
@@ -146,6 +147,59 @@ describe('yard light levels', () => {
       const vehicle = Math.max(GROUND.dipped, GROUND.reversing + GROUND.stop);
       const ambient = NIGHT_AMBIENT * Math.PI * Math.max(...NIGHT_TINT);
       expect(peak + vehicle + ambient).toBeLessThanOrEqual(PEAK_HEADROOM * Math.PI);
+    },
+  );
+});
+
+describe('yard light faces', () => {
+  // the masts' real lights also light vertical faces (hall facades, vehicle sides), with the same vehicle lamps and ambient on top
+  it.each(withFixtures.map((l) => [l.id, l] as const))(
+    'keeps the light on any vertical face in the cones of %s, with the worst vehicle lamps, inside the 8-bit headroom',
+    (_, layout) => {
+      const floods = yardLightSpecs(layout).filter((s) => s.kind === 'flood');
+      const normals = Array.from({ length: 8 }, (_, i) => ({
+        x: Math.cos((i * Math.PI) / 4),
+        y: Math.sin((i * Math.PI) / 4),
+        z: 0,
+      }));
+      const { bounds } = layout;
+      let worst = 0;
+      for (let x = bounds.minX; x <= bounds.maxX; x += 4) {
+        for (let y = bounds.minY; y <= bounds.maxY; y += 4) {
+          for (const z of [0.5, 2, 4, 6, 8]) {
+            for (const n of normals) {
+              worst = Math.max(
+                worst,
+                floods.reduce((sum, s) => sum + faceIrradiance(s, { x, y, z }, n), 0),
+              );
+            }
+          }
+        }
+      }
+      expect(worst).toBeGreaterThan(0);
+      const vehicle = Math.max(GROUND.dipped, GROUND.reversing + GROUND.stop);
+      const ambient = NIGHT_AMBIENT * Math.PI * Math.max(...NIGHT_TINT);
+      expect(worst + vehicle + ambient).toBeLessThanOrEqual(PEAK_HEADROOM * Math.PI);
+    },
+  );
+});
+
+describe('exercise independence', () => {
+  const specsOf = (layout: (typeof resolved)[number]) =>
+    yardLightSpecs(layout).map((s) => ({
+      ...s,
+      colour: s.colour.getHex(),
+      cd: yardCandela(s),
+      pool: poolGeometry([{ spec: s, albedo: 0.4 }]).getAttribute('color').array,
+    }));
+
+  it.each(Object.values(layouts).map((l) => [l.id, l] as const))(
+    'puts the same lights and pools on %s for every exercise as for none',
+    (_, layout) => {
+      const none = specsOf(resolveLayout(layout, null));
+      for (const exercise of exercises.filter((e) => e.layout === layout.id)) {
+        expect(specsOf(resolveLayout(layout, exercise)), exercise.id).toEqual(none);
+      }
     },
   );
 });
