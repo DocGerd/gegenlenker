@@ -63,16 +63,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { suite: heavy, shard: 1, shards: 10, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 2, shards: 10, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 3, shards: 10, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 4, shards: 10, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 5, shards: 10, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 6, shards: 10, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 7, shards: 10, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 8, shards: 10, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 9, shards: 10, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 10, shards: 10, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 1, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 2, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 3, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 4, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 5, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 6, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 7, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 8, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 9, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 10, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 11, shards: 11, filter: '--grep @heavy' }
           - { suite: layout, shard: 1, shards: 3, filter: '--grep layout.spec' }
           - { suite: layout, shard: 2, shards: 3, filter: '--grep layout.spec' }
           - { suite: layout, shard: 3, shards: 3, filter: '--grep layout.spec' }
