@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { QUALITY_FLAGS } from '../src/render/quality';
@@ -5,6 +7,7 @@ import {
   brightShare,
   DAY_BRIGHT,
   distinctColours,
+  HEAVY,
   heavyAt,
   MAX_MIRROR_BRIGHT,
   MIN_DRAWN_COLOURS,
@@ -12,6 +15,7 @@ import {
   type Preset,
   brightenedShare,
   type Shot,
+  settle,
   shiftToReverse,
   shoot,
   startPinnedDrive,
@@ -27,6 +31,8 @@ const MAX_CLEAR_COLOUR = 0.2;
 const LAMP_STEP = 4;
 /** Least share of a mirror the reversing lamps must light: a pool the driver can use, not a sliver beside the trailer. */
 const MIN_REVERSING_POOL = 0.01;
+/** Least share of the cockpit view the dipped beam must light on the ground ahead. */
+const MIN_BEAM_POOL = 0.01;
 
 for (const preset of PRESETS) {
   test(
@@ -77,3 +83,115 @@ for (const preset of PRESETS) {
     },
   );
 }
+
+/** Half the hazard flash period (`FLASH_PERIOD` in src/render/lamp-state.ts), in ms. */
+const HALF_FLASH_MS = 1000 / 3;
+const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
+
+type Night = {
+  readonly lights: Locator;
+  readonly hazard: Locator;
+  readonly errors: string[];
+  readonly three: string[];
+};
+
+/** A night drive of the straight reverse at `preset`, with the lamp switches and the error collectors. */
+async function nightDrive(page: Page, preset: Preset): Promise<Night> {
+  const errors: string[] = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
+  });
+  page.on('pageerror', (e) => errors.push(e.message));
+  const three = collectThreeProblems(page);
+  await startPinnedDrive(page, { preset, lighting: 'night' }, en.exerciseStraightReverse);
+  const lights = page.locator('[data-ctl="lights"]');
+  const hazard = page.locator('[data-ctl="hazard"]');
+  await expect(lights).toHaveAttribute('aria-pressed', 'true');
+  await expect(hazard).toHaveAttribute('aria-pressed', 'false');
+  return { lights, hazard, errors, three };
+}
+
+// Lamp lenses are what the chase view shows of the lamps; the dipped beam is what the cockpit shows.
+test(
+  'the lights key and button switch the lenses and the beam at night at balanced',
+  { tag: HEAVY },
+  async ({ page }) => {
+    test.setTimeout(2 * PRESET_TIMEOUT_MS.balanced);
+    const { lights, errors, three } = await nightDrive(page, 'balanced');
+    const litCockpit = await shoot(page, 'cockpit');
+    const lit = hash(await shoot(page, 'chase'));
+
+    await page.keyboard.press('h');
+    await settle(page, 'balanced');
+    await expect(lights).toHaveAttribute('aria-pressed', 'false');
+    const darkCockpit = await shoot(page, 'cockpit');
+    expect(hash(await shoot(page, 'chase')), 'lights off').not.toBe(lit);
+    // the dipped beam lights the ground ahead; with the lights off it is dark
+    expect(
+      await brightenedShare(page, darkCockpit, litCockpit, LAMP_STEP),
+      'ground ahead with the lights on',
+    ).toBeGreaterThan(MIN_BEAM_POOL);
+
+    await lights.click();
+    await settle(page, 'balanced');
+    await expect(lights).toHaveAttribute('aria-pressed', 'true');
+    expect(hash(await shoot(page, 'chase')), 'lights back on').toBe(lit);
+    expect(errors).toEqual([]);
+    expect(three).toEqual([]);
+  },
+);
+
+test(
+  'the hazard key and button flash the indicator lenses at night at balanced',
+  { tag: HEAVY },
+  async ({ page }) => {
+    test.setTimeout(2 * PRESET_TIMEOUT_MS.balanced);
+    const { hazard, errors, three } = await nightDrive(page, 'balanced');
+    const lit = hash(await shoot(page, 'chase'));
+
+    // the hazard lights flash with sim time: half a period apart they show both phases
+    await hazard.click();
+    await settle(page, 'balanced');
+    await expect(hazard).toHaveAttribute('aria-pressed', 'true');
+    const phases = new Set<string>();
+    for (let i = 0; i < 3; i++) {
+      phases.add(hash(await shoot(page, 'chase')));
+      await page.clock.runFor(HALF_FLASH_MS);
+    }
+    expect(phases.size, 'the hazard lights flash').toBeGreaterThan(1);
+    expect(phases, 'dark phase is the lights-on look').toContain(lit);
+
+    await page.keyboard.press('x');
+    await settle(page, 'balanced');
+    await expect(hazard).toHaveAttribute('aria-pressed', 'false');
+    expect(hash(await shoot(page, 'chase')), 'hazard lights off').toBe(lit);
+    expect(errors).toEqual([]);
+    expect(three).toEqual([]);
+  },
+);
+
+// The switches act on press, so a second finger works while another holds the lever; Low draws fastest.
+test('a second finger switches a lamp while another holds the lever', async ({ page }) => {
+  test.setTimeout(PRESET_TIMEOUT_MS.low);
+  const { hazard, errors, three } = await nightDrive(page, 'low');
+  const cdp = await page.context().newCDPSession(page);
+  const centre = async (loc: Locator): Promise<{ x: number; y: number }> => {
+    const box = await loc.boundingBox();
+    if (box === null) throw new Error('no box');
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  };
+  const held = await centre(page.locator('[data-ctl="lever"]'));
+  const tap = await centre(hazard);
+  const touch = (
+    type: 'touchStart' | 'touchEnd',
+    ...touchPoints: { x: number; y: number; id: number }[]
+  ) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints });
+  await touch('touchStart', { ...held, id: 1 });
+  await touch('touchStart', { ...held, id: 1 }, { ...tap, id: 2 });
+  await touch('touchEnd', { ...held, id: 1 });
+  await touch('touchEnd');
+  await settle(page, 'low');
+  await expect(hazard).toHaveAttribute('aria-pressed', 'true');
+  expect(errors).toEqual([]);
+  expect(three).toEqual([]);
+});

@@ -57,7 +57,9 @@ export function createKeyboard(state: InputState, steerRate: number): Keyboard {
         state.lever = 0;
         leverHeld.clear();
         brake = true;
-      } else if (gear !== undefined) state.gear = gear;
+      } else if (action === 'lights') state.lights = !state.lights;
+      else if (action === 'hazard') state.hazard = !state.hazard;
+      else if (gear !== undefined) state.gear = gear;
       e.preventDefault();
     },
     { signal },

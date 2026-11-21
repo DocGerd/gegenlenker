@@ -63,6 +63,13 @@ describe('keymap', () => {
     expect(isAction('splitReset', { code: 'KeyX', key: 'l' })).toBe(false);
   });
 
+  it('binds the lamp keys while driving only', () => {
+    expect(actionFor('drive', { code: 'KeyH', key: 'h' })).toBe('lights');
+    expect(actionFor('drive', { code: 'KeyX', key: 'x' })).toBe('hazard');
+    expect(actionFor('view', { code: 'KeyH', key: 'h' })).toBeUndefined();
+    expect(actionFor('view', { code: 'KeyX', key: 'x' })).toBeUndefined();
+  });
+
   it('has legend text for every row', () => {
     for (const chase of [false, true]) {
       for (const { term, desc } of legendRows(chase)) {

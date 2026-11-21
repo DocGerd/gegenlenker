@@ -112,6 +112,11 @@ export type ScenePaletteKey =
   | 'band'
   | 'cladding';
 export type ScenePalette = Readonly<Record<ScenePaletteKey, number>>;
+/** The driver's lamp switches; the lamps' own state follows from them and the controls. */
+export type LampSwitches = {
+  readonly lights: boolean;
+  readonly hazard: boolean;
+};
 export type RenderFrame = {
   readonly snapshot: SimSnapshot;
   readonly views: ViewRects;
@@ -122,6 +127,8 @@ export type RenderFrame = {
   readonly topDownClear?: Rect;
   readonly aids: AidFlags;
   readonly predicted: Prediction;
+  /** Absent means the lighting's default: lights on at night, hazard lights off. */
+  readonly lamps?: LampSwitches;
   /** Absent means not yet passed. */
   readonly waypointVisited?: boolean;
 };

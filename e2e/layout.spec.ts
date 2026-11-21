@@ -26,6 +26,9 @@ const sizes = [
   { width: 1366, height: 768 },
 ];
 
+/** Height of the gear column before the lamp row: its label, four gear buttons and their gaps. */
+const GEAR_COLUMN_HEIGHT = 274.5;
+
 /** The key legend wraps differently per language, so every size runs in both. */
 const locales = [
   { locale: 'en-US', messages: en },
@@ -97,13 +100,15 @@ async function hudReady(page: Page): Promise<void> {
   await expect(page.locator('.hud-action')).toBeVisible();
   await expect(page.locator('.ctl-wheel')).toBeVisible();
   await expect(page.locator('.ctl-lever')).toBeVisible();
+  await expect(page.locator('.ctl-lamp')).toHaveCount(2);
+  await expect(page.locator('.ctl-lamp').first()).toBeVisible();
 }
 
 /** The mirrors, controls, panels and gauge labels do not collide or clip. */
 async function expectMirrorsClearControls(page: Page, size: Size): Promise<void> {
   const mirrors = page.locator('.hud-mirror:not([hidden])');
   const controls = page.locator(
-    '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+    '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend',
   );
 
   const mirrorBoxes = await boxes(mirrors);
@@ -134,6 +139,13 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
       expect(overlaps(m, c), `${c.name} overlaps a mirror housing`).toBe(false);
     }
   }
+
+  // The lamp row must not make the gear column taller than the gears and their label were alone.
+  const [gearColumn] = await boxes(page.locator('.ctl-gears'));
+  expect(
+    (gearColumn?.bottom ?? 0) - (gearColumn?.top ?? 0),
+    'gear column height',
+  ).toBeLessThanOrEqual(GEAR_COLUMN_HEIGHT);
 
   const panels = await boxes(
     page.locator('.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action'),
@@ -188,7 +200,7 @@ for (const size of insetSizes) {
     const placed = await boxes(
       page.locator(
         [
-          '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever',
+          '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever',
           '.hud-action, .hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-legend',
           '.hud-gear, .hud-speed, .hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])',
         ].join(', '),
@@ -215,7 +227,7 @@ for (const size of insetSizes) {
     const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
     const controls = await boxes(
       page.locator(
-        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend',
       ),
     );
     for (const m of mirrors) {
@@ -328,7 +340,7 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
     const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
     const controls = await boxes(
       page.locator(
-        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-stop, .ctl-lever, .hud-legend',
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend',
       ),
     );
     const panels = await boxes(

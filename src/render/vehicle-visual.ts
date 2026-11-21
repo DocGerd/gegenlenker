@@ -163,7 +163,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
   let sunShadowed = false;
-  let lampToggles: LampToggles = DAY;
+  let lampsDefault: LampToggles = DAY;
   let lampLights: LampLights | null = null;
   let glow: { readonly mesh: Mesh; readonly material: MeshBasicMaterial } | null = null;
   let glowOn = false;
@@ -257,12 +257,12 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     },
     /** The lamp lenses of the detail and the shells, switched per snapshot. */
     lamps,
-    /** Lights the lenses the look asks for: the night's lamp functions, or none by day. */
+    /** The switches when the frame sets none: the look's night lamp functions, or none by day. */
     setLamps(night: boolean): void {
-      lampToggles = night ? { night: true, hazard: false } : DAY;
+      lampsDefault = night ? { lights: true, hazard: false } : DAY;
     },
-    updateLamps(snapshot: Parameters<typeof lampState>[0]): void {
-      const state = lampState(snapshot, lampToggles);
+    updateLamps(snapshot: Parameters<typeof lampState>[0], switches?: LampToggles): void {
+      const state = lampState(snapshot, switches ?? lampsDefault);
       lamps.update(state);
       lampLights?.update(state);
       glowLevel = lensLevel(state, ['side-marker']);
@@ -589,11 +589,11 @@ export function proceduralTruck(
 
   return {
     object: group,
-    update(snapshot) {
+    update(snapshot, switches) {
       placePose(group, snapshot.truck);
       pivotRight.rotation.y = snapshot.roadWheelAngle;
       pivotLeft.rotation.y = snapshot.roadWheelAngle;
-      res.updateLamps(snapshot);
+      res.updateLamps(snapshot, switches);
       res.syncBlobs();
     },
     setLook({ flags, grade, mode, shadow, lamps, lampLight }) {
@@ -856,10 +856,10 @@ export function proceduralTrailer(
 
   return {
     object: group,
-    update(snapshot) {
+    update(snapshot, switches) {
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
-      res.updateLamps(snapshot);
+      res.updateLamps(snapshot, switches);
       res.syncBlobs();
     },
     setLook({ flags, grade, mode, shadow, lamps, lampLight }) {

@@ -501,8 +501,8 @@ export function createThreeSceneRenderer(
 
       const { snapshot, views } = frame;
       const sky = b.palette.sky;
-      b.truck.update(snapshot);
-      b.trailer.update(snapshot);
+      b.truck.update(snapshot, frame.lamps);
+      b.trailer.update(snapshot, frame.lamps);
       shadowPasses = 0;
       b.environment.update(frame, {
         ...vehicleCentre(snapshot, b.anchors.frontX),

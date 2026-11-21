@@ -14,6 +14,8 @@ export type Action =
   | 'gearR'
   | 'gearN'
   | 'gearD'
+  | 'lights'
+  | 'hazard'
   | 'escape'
   | 'viewFollow'
   | 'viewYard'
@@ -96,6 +98,13 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
   { action: 'gearR', match: { by: 'code', values: ['Digit2', 'Numpad2'] }, scope: 'drive' },
   { action: 'gearN', match: { by: 'code', values: ['Digit3', 'Numpad3'] }, scope: 'drive' },
   { action: 'gearD', match: { by: 'code', values: ['Digit4', 'Numpad4'] }, scope: 'drive' },
+  {
+    action: 'lights',
+    match: { by: 'code', values: ['KeyH'] },
+    scope: 'drive',
+    legend: { term: 'H / X', desc: 'lampKeys', viewOnly: true },
+  },
+  { action: 'hazard', match: { by: 'code', values: ['KeyX'] }, scope: 'drive' },
   {
     action: 'escape',
     match: { by: 'code', values: ['Escape'] },
