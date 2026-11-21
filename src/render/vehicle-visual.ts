@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   BoxGeometry,
   BufferGeometry,
   CylinderGeometry,
@@ -37,7 +38,7 @@ import {
   type TruckShells,
 } from './glb-shells';
 import { gradeDisabled, setGraded } from './grade';
-import { trailerLamps, truckLamps } from './lamp-layout';
+import { type Lamp, trailerLamps, truckLamps } from './lamp-layout';
 import { createDetailMaterial, createLampEmission, slotShell } from './lamp-lens';
 import {
   createLampLights,
@@ -46,7 +47,8 @@ import {
   trailerLampLight,
   truckLampLights,
 } from './lamp-light';
-import { DAY, lampState, type LampToggles } from './lamp-state';
+import { DAY, lampState, lensLevel, type LampToggles } from './lamp-state';
+import { markerGlowGeometry } from './marker-glow';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
@@ -92,6 +94,8 @@ export const SHADOW_NAME = 'blob-shadow';
 /** Share of the contact blobs' opacity kept while the sun casts a shadow. */
 const BLOB_OPACITY_UNDER_SUN = 0.5;
 export const SHADOW_HEIGHT = 0.02; // above the markings
+export const GLOW_NAME = 'marker-glow';
+const GLOW_LIFT = 0.002; // above the contact blobs
 const BODY_SHADOW = { alpha: 0.5, squareness: 4, margin: 0.7 } as const;
 const WHEEL_SHADOW = { alpha: 0.6, squareness: 2, growX: 1.3, growY: 1.4 } as const;
 const DRAWBAR_SHADOW_HALF_WIDTH = 0.3;
@@ -161,6 +165,14 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   let sunShadowed = false;
   let lampToggles: LampToggles = DAY;
   let lampLights: LampLights | null = null;
+  let glow: { readonly mesh: Mesh; readonly material: MeshBasicMaterial } | null = null;
+  let glowOn = false;
+  let glowLevel = 0;
+  const syncGlow = (): void => {
+    if (glow === null) return;
+    glow.material.color.setScalar(glowLevel);
+    glow.mesh.visible = glowOn && glowLevel > 0;
+  };
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
     return material;
@@ -253,6 +265,32 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       const state = lampState(snapshot, lampToggles);
       lamps.update(state);
       lampLights?.update(state);
+      glowLevel = lensLevel(state, ['side-marker']);
+      syncGlow();
+    },
+    /** The ground pool under the side markers of `lamps`: perspective only, shown while the lamps light the ground. */
+    markerGlow(lamps: readonly Lamp[]): Mesh | null {
+      const geometry = markerGlowGeometry(lamps, SHADOW_HEIGHT + GLOW_LIFT);
+      if (geometry === null) return null;
+      geometries.add(geometry);
+      const material = track(
+        new MeshBasicMaterial({
+          vertexColors: true,
+          transparent: true,
+          blending: AdditiveBlending,
+          depthWrite: false,
+          side: DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -6,
+          polygonOffsetUnits: -6,
+        }),
+      );
+      const mesh = new Mesh(geometry, material);
+      mesh.layers.set(PERSPECTIVE_LAYER);
+      mesh.visible = false;
+      mesh.name = GLOW_NAME;
+      glow = { mesh, material };
+      return mesh;
     },
     /** The lamps' lights, children of `parent`; they stay off until `setLampLight`. */
     attachLampLights(specs: readonly LampLightSpec[], parent: Object3D): void {
@@ -261,6 +299,8 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     /** Switches the lamps' lights on or off; it changes the light set, so call it on a look change only. */
     setLampLight(on: boolean): void {
       lampLights?.setEnabled(on);
+      glowOn = on;
+      syncGlow();
     },
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
@@ -434,6 +474,8 @@ export function proceduralTruck(
   const detailMesh = res.detail(detail.geometry);
   const group = new Group();
   res.attachLampLights(truckLampLights(spec), group);
+  const glow = res.markerGlow(truckLamps(spec, look.cab.length).lamps);
+  if (glow !== null) group.add(glow);
   group.add(
     schematic.rear,
     res.shadow(blobShadow(truckBlobs, SHADOW_HEIGHT)),
@@ -750,6 +792,10 @@ export function proceduralTrailer(
   const group = new Group();
   group.add(dolly, trailer);
   res.attachLampLights([trailerLampLight(spec)], trailer);
+  const glow = res.markerGlow(
+    trailerLamps(spec, 'procedural').lamps.filter((l) => l.part === 'trailer'),
+  );
+  if (glow !== null) trailer.add(glow);
 
   type Applied = ReturnType<typeof applyShell>;
   let applied: { readonly trailer: Applied; readonly dolly: Applied } | null = null;

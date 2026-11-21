@@ -2,7 +2,12 @@ import { Group, type Material, Mesh, MeshBasicMaterial } from 'three';
 import type { ScenePalette } from '../contracts/render';
 import type { TruckId, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
-import { createCockpitInterior, type FlatInterior } from './cockpit-interior';
+import {
+  createBinnacleLip,
+  createCockpitInterior,
+  type FlatInterior,
+  placeInEye,
+} from './cockpit-interior';
 import arocsUrl from './assets/arocs-1835-ak-interior.glb?url';
 import manUrl from './assets/man-le-18-280-interior.glb?url';
 import type { InteriorMeshName } from './interior-dims';
@@ -95,7 +100,13 @@ export function createGlbInterior(
   const frame = new Group();
   frame.position.set(-eye.x, -eye.z, eye.y);
   standing.add(frame);
-  object.add(flat.object, standing);
+  // the lit lip is authored in the camera's NDC like the flat overlay, so it has its own frame
+  const lip = createBinnacleLip();
+  const lipFrame = new Group();
+  lipFrame.name = 'binnacle-lip-frame';
+  lipFrame.add(lip.mesh);
+  lipFrame.visible = false;
+  object.add(flat.object, standing, lipFrame);
   standing.visible = false;
 
   const plain = new MeshBasicMaterial({ vertexColors: true, fog: false });
@@ -150,6 +161,7 @@ export function createGlbInterior(
     const next = wanted && attached;
     flat.object.visible = flat.object.visible && !next;
     standing.visible = next;
+    lipFrame.visible = next;
     if (next !== drawn) {
       drawn = next;
       shells?.attached(key, next);
@@ -159,6 +171,7 @@ export function createGlbInterior(
   const apply = (): void => {
     if (look === null) return;
     flat.setLook(look);
+    lip.setLook(look);
     wanted = look.flags.cockpitInterior && look.flags.interiorGlb;
     dress();
     sync();
@@ -204,6 +217,8 @@ export function createGlbInterior(
       standing.position.copy(camera.position);
       standing.rotation.set(0, camera.rotation.y + Math.PI / 2, 0);
       standing.updateMatrixWorld(true);
+      placeInEye(lipFrame, camera);
+      lipFrame.updateMatrixWorld(true);
     },
     setLook(next) {
       look = next;
@@ -216,6 +231,7 @@ export function createGlbInterior(
       if (drawn) shells?.attached(key, false);
       drawn = false;
       flat.dispose();
+      lip.dispose();
       plain.dispose();
       lit?.dispose();
     },

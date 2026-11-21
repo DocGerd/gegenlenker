@@ -19,7 +19,7 @@ import {
   interiorShellFrom,
 } from './interior-glb';
 import { NIGHT_AMBIENT, NIGHT_TINT } from './light-rig';
-import { lookFor } from './look';
+import { INTERIOR_BACKLIGHT, lookFor } from './look';
 import {
   createInteriorCheck,
   type InteriorCheck,
@@ -186,13 +186,16 @@ describe.each(trucks)('lit interior of $id', (spec) => {
     expect(interior.material).toBeInstanceOf(MeshBasicMaterial);
   });
 
-  it('multiplies the unlit interior, glb and flat overlay, by the night ambient and by 1 by day', async () => {
-    const dim = NIGHT_TINT.map((t) => t * NIGHT_AMBIENT);
+  it('multiplies the unlit interior, glb and flat overlay, by the backlit night ambient and by 1 by day', async () => {
+    const dim = NIGHT_TINT.map((t) => t * NIGHT_AMBIENT * INTERIOR_BACKLIGHT);
     const flatColour = (i: { flat: { object: Group } }): number[] => {
       const colours = new Set<string>();
       i.flat.object.traverse((o) => {
         const m = (o as { material?: unknown }).material;
-        if (m instanceof MeshBasicMaterial) colours.add(m.color.toArray().join());
+        // the lip glows in its own colours, whatever the interior's multiplier
+        if (m instanceof MeshBasicMaterial && o.name !== 'binnacle-lip') {
+          colours.add(m.color.toArray().join());
+        }
       });
       expect(colours.size).toBe(1);
       return [...colours][0]?.split(',').map(Number) ?? [];

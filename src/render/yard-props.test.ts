@@ -6,12 +6,14 @@ import {
   isKitDecor,
   type Collider,
   type Fixture,
+  type Obstacle,
   type ObstacleKind,
   type Prop,
   type ResolvedLayout,
 } from '../contracts/layout';
 import { OVERLAY } from './yard-concrete';
-import { cornerHoops, decorPieces, RESTYLED_KINDS, yardProps } from './yard-props';
+import { RETRO_ATTRIBUTE } from './tint';
+import { cornerHoops, decorPieces, type PropPiece, RESTYLED_KINDS, yardProps } from './yard-props';
 
 const TOLERANCE = 0.05;
 const MAX_RELIEF = 0.16; // thin relief only, as for seals and dock lights
@@ -247,5 +249,67 @@ describe('lamp fixtures', () => {
     expect(east.min.x).toBeGreaterThan(-0.3);
     expect(west.min.x).toBeLessThan(-0.3);
     expect(west.max.x).toBeLessThan(0.3);
+  });
+});
+
+/** Vertices of `pieces` that carry retro-reflective sheeting. */
+const sheeting = (pieces: readonly PropPiece[]): number =>
+  pieces
+    .flatMap((p) => Array.from(p.geometry.getAttribute(RETRO_ATTRIBUTE).array))
+    .reduce((sum, v) => sum + v, 0);
+
+/** What `obstacle` adds to a layout's drawing, so the yard around it cannot matter. */
+const sheetingOf = (layout: ResolvedLayout, obstacle: Obstacle): number =>
+  sheeting(yardProps({ ...layout, obstacles: [obstacle], props: [] })) -
+  sheeting(yardProps({ ...layout, obstacles: [], props: [] }));
+
+describe('retro sheeting', () => {
+  const [base] = cases;
+  if (base === undefined) throw new Error('no layout');
+  const REFLECTIVE: readonly ObstacleKind[] = ['cone', 'bollard', 'barrier'];
+
+  it('puts the attribute on every piece, so merged chunks stay merged', () => {
+    for (const { resolved } of cases) {
+      for (const piece of yardProps(resolved)) {
+        expect(piece.geometry.hasAttribute(RETRO_ATTRIBUTE)).toBe(true);
+      }
+    }
+  });
+
+  it('shines only on reflective kinds, and on a semitrailer, never on the rest', () => {
+    for (const kind of RESTYLED_KINDS) {
+      const obstacle = {
+        id: `synthetic-${kind}`,
+        kind,
+        obb: { cx: 20, cy: 20, halfLength: 2, halfWidth: 0.5, heading: 0 },
+        height: 1,
+      };
+      const shines = sheetingOf(base.resolved, obstacle) > 0;
+      expect(shines, kind).toBe(REFLECTIVE.includes(kind));
+    }
+    const semi = {
+      id: 'synthetic-semitrailer',
+      kind: 'parked',
+      obb: { cx: 20, cy: 20, halfLength: 7, halfWidth: 1.3, heading: 0 },
+      height: 4,
+    } satisfies Obstacle;
+    expect(sheetingOf(base.resolved, semi)).toBeGreaterThan(0);
+  });
+
+  it('keeps decor and loose goods dark', () => {
+    for (const { resolved } of cases) {
+      const pieces = decorPieces(resolved.decor);
+      expect(sheeting(pieces)).toBe(0);
+    }
+  });
+
+  describe.each(cases)('$name', ({ resolved }) => {
+    it('comes from the obstacle alone: the same in the yard of every layout and exercise', () => {
+      const own = resolved.obstacles.filter((o) => RESTYLED_KINDS.has(o.kind));
+      expect(own.length).toBeGreaterThan(0);
+      for (const o of own) {
+        expect(sheetingOf(resolved, o), o.id).toBe(sheetingOf(base.resolved, o));
+      }
+    });
   });
 });

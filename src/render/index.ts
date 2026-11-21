@@ -18,6 +18,7 @@ import {
 } from './glb-shells';
 import { createGradeCheck, precompileGrade } from './grade';
 import { lampLitSample } from './lamp-light';
+import { retroLitSample } from './retro';
 import { createInteriorCheck } from './interior-material';
 import { createGlbInterior, INTERIOR_URLS, interiorShellFrom } from './interior-glb';
 import { startGroundPbrTextures } from './ground-pbr';
@@ -126,7 +127,13 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       syncReflection();
       publishGrade(state);
     },
-    (gpu) => precompileGrade(gpu, [skylineGradeSample, ...KIT_SHADOW_SAMPLES, lampLitSample]),
+    (gpu) =>
+      precompileGrade(gpu, [
+        skylineGradeSample,
+        ...KIT_SHADOW_SAMPLES,
+        lampLitSample,
+        retroLitSample,
+      ]),
   );
   const renderer = createThreeSceneRenderer({
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),

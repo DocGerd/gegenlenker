@@ -31,7 +31,13 @@ import {
   PERSPECTIVE_LAYER,
   TOP_DOWN_LAYERS,
 } from './seams';
-import { proceduralTrailer, proceduralTruck, SHADOW_HEIGHT, SHADOW_NAME } from './vehicle-visual';
+import {
+  GLOW_NAME,
+  proceduralTrailer,
+  proceduralTruck,
+  SHADOW_HEIGHT,
+  SHADOW_NAME,
+} from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
 
@@ -76,7 +82,10 @@ describe.each([
 });
 
 const detailOf = (root: Object3D): Mesh[] =>
-  meshes(root).filter((m) => m.layers.mask === 1 << PERSPECTIVE_LAYER && m.name !== SHADOW_NAME);
+  meshes(root).filter(
+    (m) =>
+      m.layers.mask === 1 << PERSPECTIVE_LAYER && m.name !== SHADOW_NAME && m.name !== GLOW_NAME,
+  );
 
 const shadowsOf = (root: Object3D): Mesh[] => meshes(root).filter((m) => m.name === SHADOW_NAME);
 
@@ -301,7 +310,9 @@ describe('sun shadow', () => {
     return material.isNodeMaterial === true && !material.vertexColors;
   };
   const bodies = (root: Object3D): Mesh[] =>
-    meshes(root).filter((m) => m.name !== SHADOW_NAME && !isPlate(m) && !isSchematic(m));
+    meshes(root).filter(
+      (m) => m.name !== SHADOW_NAME && m.name !== GLOW_NAME && !isPlate(m) && !isSchematic(m),
+    );
 
   it.each(visuals.map((v, i) => [i, v] as const))(
     'lets the bodies cast and take the sun, and the blobs and plates cast nothing (#%i)',

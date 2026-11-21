@@ -34,9 +34,9 @@ export type Look = {
     readonly sunDirection: Vector3;
   };
   readonly interior: {
-    /** Scales the lit cab interior's albedo; 1 by day and at night, where the rig dims it. */
+    /** Scales the lit cab interior's albedo; 1 by day, raised at night by the instrument backlight. */
     readonly light: number;
-    /** Linear colour the unlit interior (flat overlay, plain glb) is multiplied by: the night ambient's, white by day. */
+    /** Linear colour the unlit interior (flat overlay, plain glb) is multiplied by: the night ambient's with the backlight, white by day. */
     readonly unlit: readonly [number, number, number];
   };
 };
@@ -45,6 +45,9 @@ const DAY_RIG: RigLevels = { sun: 1, ambient: 1, tint: null };
 
 /** Share of the day light the top-down view's legacy lights keep at night; the grounds dim to it. */
 export const TOP_DOWN_NIGHT_LIGHT = 0.75;
+
+/** How far the instrument backlight lifts the cab interior over the night ambient. */
+export const INTERIOR_BACKLIGHT = 2;
 
 export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
   const night = mode === 'night';
@@ -69,9 +72,13 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
       sunDirection: perspectiveSunDirection(),
     },
     interior: {
-      light: 1,
+      light: night ? INTERIOR_BACKLIGHT : 1,
       unlit: night
-        ? (NIGHT_TINT.map((t) => t * NIGHT_AMBIENT) as [number, number, number])
+        ? (NIGHT_TINT.map((t) => t * NIGHT_AMBIENT * INTERIOR_BACKLIGHT) as [
+            number,
+            number,
+            number,
+          ])
         : [1, 1, 1],
     },
   };

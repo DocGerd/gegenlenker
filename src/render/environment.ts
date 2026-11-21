@@ -35,6 +35,7 @@ import { createSkyline } from './skyline';
 import { createYardKitLayer, type YardKitParts } from './yard-kit';
 import { createSceneSky, domeGround, nightDomeGround, skyColours } from './scene-sky';
 import { createWornMarkingMaterial, MarkingChunks, wearableMarkings } from './marking-wear';
+import { RetroNodeMaterial } from './retro';
 import { tint } from './tint';
 import { addMarking, addObstacle } from './yard-tokens';
 import { tokenCopy } from './token-copy';
@@ -209,6 +210,8 @@ export function proceduralEnvironment(
   }
   // graded props wear their own copy, so the grade never reaches the layer-0 tokens
   const propMaterial = new MeshLambertNodeMaterial({ vertexColors: true });
+  // night only, built on the first night look: the day programs never see the reflector term
+  let retroMaterial: RetroNodeMaterial | null = null;
   const props = detail.meshes(solid, geometries);
   for (const mesh of props) {
     castAndReceive(mesh);
@@ -492,7 +495,12 @@ export function proceduralEnvironment(
       hdriOn = flags.hdriSky;
       syncSky();
       setGraded(propMaterial, graded);
-      for (const mesh of props) mesh.material = lightSplit ? propMaterial : solid;
+      if (lightSplit && next.lampLight) {
+        retroMaterial ??= new RetroNodeMaterial({ vertexColors: true });
+        setGraded(retroMaterial, graded);
+      }
+      const lit = next.lampLight && retroMaterial !== null ? retroMaterial : propMaterial;
+      for (const mesh of props) mesh.material = lightSplit ? lit : solid;
       if (texturedGroundMaterial !== null) setGraded(texturedGroundMaterial, graded);
       if (pbrMaterial !== null) setGraded(pbrMaterial, graded);
       pbrWanted = flags.groundPbr;
@@ -531,6 +539,7 @@ export function proceduralEnvironment(
       gate?.night.dispose();
       solid.dispose();
       propMaterial.dispose();
+      retroMaterial?.dispose();
       flat.dispose();
       nightFlat.dispose();
       strokeCasing.dispose();
