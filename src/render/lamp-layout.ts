@@ -9,9 +9,10 @@ import {
   MARKER_SPACING,
   MARKING_END_MARGIN as END_MARGIN,
   markingBand,
+  TIPPER_SHELL,
 } from './body-dims';
 import { CAB_LENGTH, FRAME_TOP, hex, metres, RELIEF, round } from './cab-dims';
-import { TRAILER_LOOKS } from './livery';
+import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { REALISM_HUES as HUE } from './realism-hues';
 import {
   ARM_WIDTH,
@@ -122,6 +123,13 @@ const SIDE_MARKER_REACH = 3; // R48 6.18.4.3, foremost marker from the front
 const TRAILER_FRONT = { bracket: 0.1, inset: 0.005, gap: 0.01 } as const;
 const DOLLY_MARKER = { behindKink: 0.3, bracket: 0.05, relief: 0.02 } as const;
 const REAR_CORNER = { length: 0.3, width: 0.1, height: 0.12 } as const; // lafette rear side marker block
+/**
+ * The white half of a stalk lamp at a rear top corner (R48 6.13.2(a), 6.13.9): a lens facing forward
+ * on a short bracket standing out beside the body, so the main mirrors see it past the body's side.
+ */
+const REAR_VIEW = { out: 0.06, depth: 0.05, margin: 0.03 } as const;
+/** Where the truck body's side ends at the rear, above the ground: render estimates, as in `body_shell.py`. */
+const TRUCK_REAR_TOP = { tipper: FLOOR_TOP + TIPPER_SHELL.wallHeight, tarp: 2.5 } as const;
 const PLATE_LAMP = { halfWidth: 0.06, height: 0.03, belowGuardTop: 0.01 } as const;
 
 const lateral = (side: number, from: number, to: number): Range =>
@@ -130,6 +138,38 @@ const r = ([a, b]: Range): Range => [round(a), round(b)];
 const boxOf = (x: Range, y: Range, z: Range): Box3 => [r(x), r(y), r(z)];
 const SIDES = [1, -1] as const;
 const sideName = (side: number): string => (side > 0 ? 'left' : 'right');
+
+/** The forward-facing white lamps at a rear corner, beside `edge` (the red end-outline lamp's outer side), over `z`. */
+function rearViewLamps(
+  sink: Sink,
+  part: 'body' | 'trailer',
+  rear: number,
+  edge: number,
+  z: Range,
+): void {
+  for (const side of SIDES) {
+    const across = lateral(side, edge, edge + REAR_VIEW.out);
+    sink.brackets.push({
+      part,
+      box: boxOf([rear - REAR_VIEW.depth, rear], across, [
+        z[0] - REAR_VIEW.margin,
+        z[1] + REAR_VIEW.margin,
+      ]),
+      shell: false,
+    });
+    sink.lamps.push({
+      id: `end-outline-view-${sideName(side)}`,
+      fns: ['end-outline-front'],
+      side,
+      part,
+      facing: 'front',
+      box: boxOf([rear, rear + FRONT_LENS_DEPTH], across, z),
+      hue: HUE.plateWhite,
+      shell: false,
+      seat: 'detail',
+    });
+  }
+}
 
 /** Marker centres along [x0, x1], as the procedural side marking spaces them. */
 export function markerXs(x0: number, x1: number): number[] {
@@ -355,6 +395,8 @@ export function truckLamps(spec: TruckSpec, cabLength = CAB_LENGTH): LampLayout 
       hue: HUE.tailLamp,
     });
   }
+  const top = TRUCK_REAR_TOP[TRUCK_LOOKS[spec.id].body.kind] - 0.02;
+  rearViewLamps(sink, 'body', rear, hw, [top - SMALL_LAMP.height, top]);
   return sink;
 }
 
@@ -573,8 +615,9 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
     rearX,
     tailZ,
   );
-  const outlineAt = (): { y: (side: number) => Range; z: Range } => {
+  const outlineAt = (): { y: (side: number) => Range; z: Range; edge: number } => {
     const near = (top: number, edge: number, width: number = SMALL_LAMP.width) => ({
+      edge,
       y: (side: number) => lateral(side, edge - width, edge),
       z: [top - SMALL_LAMP.height - 0.02, top - 0.02] as Range,
     });
@@ -595,6 +638,7 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
       hue: HUE.tailLamp,
     });
   }
+  rearViewLamps(sink, 'trailer', a.rearX, outline.edge, outline.z);
   lamp({
     id: 'rear-plate',
     fns: ['rear-plate'],

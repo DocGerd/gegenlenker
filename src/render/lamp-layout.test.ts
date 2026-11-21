@@ -88,8 +88,12 @@ const fromEdge = (v: Vehicle, l: Lamp): number =>
 /** The category 5 or 6 side indicators: a side marker that flashes carries the function too. */
 const repeaters = (v: Vehicle): Lamp[] =>
   withFn(v, 'side-indicator').filter((l) => !l.fns.includes('side-marker'));
+/** The white half of the stalk lamps at the rear corners: visible from the front, though at the rear. */
+const isRearView = (l: Lamp): boolean => l.id.startsWith('end-outline-view-');
 const pair = (v: Vehicle, fn: LampFn): { left: Lamp; right: Lamp } => {
-  const lamps = fn === 'side-indicator' ? repeaters(v) : withFn(v, fn);
+  const lamps = (fn === 'side-indicator' ? repeaters(v) : withFn(v, fn)).filter(
+    (l) => !isRearView(l),
+  );
   const left = lamps.filter((l) => l.side > 0);
   const right = lamps.filter((l) => l.side < 0);
   expect(left, `${v.name} ${fn} left`).toHaveLength(1);
@@ -260,6 +264,29 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
         (l) => l.side === side && l.fns.includes('side-marker') && l.fns.includes('side-indicator'),
       );
       expect(flashing.length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  // 6.13.2(a): two more white lamps visible from the front, as close to the rear as practicable
+  // (6.13.4.3), beside the red end-outline lamps; 6.13.9 asks that the main mirrors show them.
+  it('fit a white stalk lens facing forward at each rear top corner (6.13.2(a), 6.13.4)', () => {
+    const lamps = v.lamps.filter(isRearView);
+    expect(lamps.map((l) => l.side).sort()).toEqual([-1, 1]);
+    const reds = withFn(v, 'end-outline-rear');
+    for (const l of lamps) {
+      expect(l.fns, l.id).toEqual(['end-outline-front']);
+      expect(l.facing, l.id).toBe('front');
+      expect(l.shell, l.id).toBe(false);
+      expect(l.seat, l.id).toBe('detail');
+      expect(l.box[0][0] - v.rear, `${l.id} from the rear`).toBeLessThanOrEqual(0.4);
+      expect(fromEdge(v, l), `${l.id} outer`).toBeLessThanOrEqual(0.4 + EPS);
+      const red = reds.find((r) => r.side === l.side);
+      expect(red, l.id).toBeDefined();
+      // beside the red lamp: its lens is not lower, and stands outboard of it
+      expect(high(l), l.id).toBeGreaterThanOrEqual(high(red as Lamp) - 0.1);
+      expect(Math.abs(l.box[1][l.side > 0 ? 1 : 0]), l.id).toBeGreaterThan(
+        Math.abs((red as Lamp).box[1][l.side > 0 ? 1 : 0]),
+      );
     }
   });
 
