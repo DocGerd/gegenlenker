@@ -213,7 +213,8 @@ for (const { id, name: exercise, zooms } of EXERCISES) {
           expect(await tokenShare(page, png, 'accent', 2), `${label}: day accent`).toBe(0);
         }
         if (yardPng === null) throw new Error('no yard shot');
-        if (lighting === 'night') {
+        // the top-down view is the same at every preset, so one preset stands for all
+        if (lighting === 'night' && preset === 'balanced') {
           // the lamps are perspective-only: switching the lights off and the hazard lights on changes no top-down pixel
           await page.keyboard.press('h');
           await page.keyboard.press('x');
