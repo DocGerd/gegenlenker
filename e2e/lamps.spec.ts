@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import {
-  HEAVY,
+  heavyAt,
   PRESET_TIMEOUT_MS,
   type Preset,
   settle,
@@ -20,7 +20,7 @@ const hash = (png: Buffer): string => createHash('sha256').update(png).digest('h
 for (const preset of PRESETS) {
   test(
     `lighting the stop lamps leaves the top-down view unchanged at ${preset}`,
-    { tag: HEAVY },
+    heavyAt(preset),
     async ({ context }) => {
       test.setTimeout(PRESET_TIMEOUT_MS[preset]);
       const errors: string[] = [];

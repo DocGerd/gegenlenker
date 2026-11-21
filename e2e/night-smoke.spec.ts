@@ -5,7 +5,7 @@ import {
   brightShare,
   DAY_BRIGHT,
   distinctColours,
-  HEAVY,
+  heavyAt,
   MAX_MIRROR_BRIGHT,
   MIN_DRAWN_COLOURS,
   PRESET_TIMEOUT_MS,
@@ -25,7 +25,7 @@ const MAX_CLEAR_COLOUR = 0.2;
 for (const preset of PRESETS) {
   test(
     `every perspective view draws at night without errors at ${preset}`,
-    { tag: HEAVY },
+    heavyAt(preset),
     async ({ page }) => {
       test.setTimeout(PRESET_TIMEOUT_MS[preset]);
       const errors: string[] = [];
