@@ -131,4 +131,20 @@
   --scene-night-tracks: #202428;
   --scene-band: #202428;
   --scene-cladding: #aeb2b7;
+  --scene-night-yard: #9da1a6;
+  --scene-night-pavement: #cccdce;
+  --scene-night-street: #4d5258;
+  --scene-night-verge: #757b83;
+  --scene-night-kerb: #cbcdcf;
+  --scene-night-cone: #77221b;
+  --scene-night-band: #020202;
+  --scene-night-wall: #3f4449;
+  --scene-night-fence: #30353a;
+  --scene-night-hall: #282c31;
+  --scene-night-ramp: #3f4449;
+  --scene-night-lamp: #2b2f34;
+  --scene-night-parked: #30353a;
+  --scene-night-body: #767b81;
+  --scene-night-cab: #cbcdcf;
+  --scene-night-chassis: #131519;
 }

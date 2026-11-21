@@ -409,7 +409,7 @@
 
 /* The legend draws what the top-down view shows at night: the yard dimmed to the night light (tokens.test.ts checks it), the night strokes. */
 [data-render-lighting='night'] .hud-swatch {
-  background: #a4a8ad;
+  background: #84878c;
 }
 
 [data-render-lighting='night'] .swatch-core {

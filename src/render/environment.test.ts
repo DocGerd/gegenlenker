@@ -32,7 +32,7 @@ import { createGroundPbrMaterial } from './ground-pbr-material';
 import type { TextureMaps, TextureSet } from './texture-set';
 import type { PbrKey } from './ground-pbr-spec';
 import { GROUND_SURFACES } from './ground-texture-spec';
-import { KEYS } from './palette';
+import { KEYS, NIGHT_KEY, nightPalette } from './palette';
 import { FOG_DENSITY, GRADE } from './grade';
 import { NIGHT_AMBIENT, perspectiveLight } from './light-rig';
 import { nightDomeGround, skyColours } from './scene-sky';
@@ -441,6 +441,10 @@ describe('environment at night', () => {
       nightAccent: 0x00ffff,
       marking: 0x00ff00,
       wheel: 0x101010,
+      // each lit token darker at night, and every one different, so a twin built from the day token shows
+      ...Object.fromEntries(
+        Object.values(NIGHT_KEY).map((key, i) => [key, 0x202020 + 0x050505 * i]),
+      ),
     };
     const buildStroked = (): ReturnType<typeof proceduralEnvironment> => {
       if (nightLayout === null) throw new Error('no slalom exercise');
@@ -451,18 +455,24 @@ describe('environment at night', () => {
     const colour = (m: Object3D): number =>
       (asMesh(m).material as unknown as { color: Color }).color.getHex();
 
-    /** What a mesh draws: its material and geometry content, so a twin of a token matches it. */
-    const signature = (m: Object3D): string => {
+    /** What a mesh draws: its geometry content and, with `colours`, its vertex colours; with `materials`, its material, so a twin of a token matches it. */
+    const signature = (m: Object3D, { materials = true, colours = true } = {}): string => {
       const mesh = asMesh(m);
       const sum = (name: string): number => {
         const attribute = mesh.geometry.attributes[name];
         return attribute === undefined ? 0 : Array.from(attribute.array).reduce((a, b) => a + b, 0);
       };
       const positions = mesh.geometry.getAttribute('position').count;
-      return [(mesh.material as Material).id, positions, sum('position'), sum('color')].join(':');
+      return [
+        materials ? (mesh.material as Material).id : 0,
+        positions,
+        sum('position'),
+        colours ? sum('color') : 0,
+      ].join(':');
     };
-    const drawn = (env: { object: Object3D }): string[] =>
-      [...seen(env.object, cameras.topDown)].map(signature).sort();
+    const shape = { colours: false };
+    const drawn = (env: { object: Object3D }, options = {}): string[] =>
+      [...seen(env.object, cameras.topDown)].map((m) => signature(m, options)).sort();
     const without = (from: readonly string[], other: readonly string[]): string[] => {
       const rest = [...other];
       return from.filter((s) => {
@@ -472,18 +482,18 @@ describe('environment at night', () => {
       });
     };
 
-    it('keeps the top-down grounds, obstacles and markings as by day and swaps only the accent strokes', () => {
+    it('keeps the top-down grounds, obstacles and markings in place at night and swaps only the accent strokes', () => {
       const env = buildStroked();
       env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
-      const day = drawn(env);
+      const day = drawn(env, shape);
       const dayMeshes = topDown(env);
       for (const preset of ['low', 'balanced', 'high'] as const) {
         env.setLook(lookFor(QUALITY_FLAGS[preset], 'night'));
-        const night = drawn(env);
+        const night = drawn(env, shape);
         // the outline, the band core, its whole-yard copy and the gate give way; their casings stay
         const gone = without(day, night);
         const added = [...seen(env.object, cameras.topDown)]
-          .filter((m) => without([signature(m)], day).length > 0)
+          .filter((m) => without([signature(m, shape)], day).length > 0)
           .map(colour);
         expect(gone, preset).toHaveLength(4);
         expect(added, preset).toEqual([0x00ffff, 0x00ffff, 0x00ffff, 0x00ffff]);
@@ -492,6 +502,23 @@ describe('environment at night', () => {
       env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
       expect(topDown(env)).toEqual(dayMeshes);
       env.dispose();
+    });
+
+    it('draws the lit grounds and obstacles in the night palette at night, as by day from a palette of those tokens', () => {
+      if (nightLayout === null) throw new Error('no slalom exercise');
+      const env = buildStroked();
+      const reference = proceduralEnvironment(nightLayout, nightPalette(strokePalette));
+      const vertexColours = (e: { object: Object3D }): string[] =>
+        drawn(e, { materials: false }).filter((s) => !s.endsWith(':0'));
+      reference.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
+      env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
+      const day = vertexColours(env);
+      env.setLook(lookFor(QUALITY_FLAGS.low, 'night'));
+      const night = vertexColours(env);
+      expect(night).toEqual(vertexColours(reference));
+      expect(night).not.toEqual(day);
+      env.dispose();
+      reference.dispose();
     });
 
     it('draws the outline and gate casings by day and night, to the top-down camera only', () => {

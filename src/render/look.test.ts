@@ -6,7 +6,7 @@ import { GRAPHICS_PRESETS } from '../contracts/render';
 import { FOG_DENSITY, GRADE } from './grade';
 import { NIGHT_AMBIENT, NIGHT_TINT, perspectiveSunDirection } from './light-rig';
 import { applyLook, INTERIOR_BACKLIGHT, lookFor, TOP_DOWN_NIGHT_LIGHT } from './look';
-import { KEYS, tokenName } from './palette';
+import { KEYS, NIGHT_KEY, tokenName } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import type { ScenePaletteKey } from '../contracts/render';
 
@@ -92,7 +92,9 @@ describe('the night yard', () => {
     return [lit.getHex() >> 16, (lit.getHex() >> 8) & 255, lit.getHex() & 255];
   };
   const lit = (Object.keys(KEYS) as ScenePaletteKey[]).filter(
-    (k) => !['sky', 'backdrop', 'nightBackdrop', 'nightAccent', 'nightTracks'].includes(k),
+    (k) =>
+      !['sky', 'backdrop', 'nightBackdrop', 'nightAccent', 'nightTracks'].includes(k) &&
+      !(Object.values(NIGHT_KEY) as string[]).includes(k),
   );
 
   it('keeps at least 12 distinct codes across the surfaces, so the dark does not band', () => {

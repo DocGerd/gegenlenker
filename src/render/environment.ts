@@ -241,7 +241,6 @@ export function proceduralEnvironment(
   // view for the perspective cameras.
   let twinsBuilt = false;
   const buildTwins = (): void => {
-    twinsBuilt = true;
     const night = nightPalette(palette);
     const twin = (mesh: Mesh): Mesh => {
       mesh.receiveShadow = true;
@@ -263,6 +262,7 @@ export function proceduralEnvironment(
     const fromChunks = (chunks: Chunks): Mesh[] => chunks.meshes(solid, geometries).map(twin);
     obstacleSwap.setTwins(fromChunks(shared));
     propSwap.setTwins(fromChunks(restyled));
+    twinsBuilt = true;
   };
 
   const markings = new MarkingChunks(layout.bounds);
