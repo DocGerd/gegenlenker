@@ -35,17 +35,18 @@ export function isShadowCamera(camera: Camera): boolean {
   return shadowCameras.has(camera);
 }
 
-/** One shadow render per queued frame, of the caster layers only. */
+/** One shadow render per queued frame, of `layers` only. */
 export function prepareShadow(
   light: DirectionalLight | SpotLight,
   mapSize = SHADOW_MAP_SIZE,
+  layers: readonly number[] = SHADOW_CASTER_LAYERS,
 ): void {
   const { shadow } = light;
   shadow.autoUpdate = false;
   shadow.mapSize.set(mapSize, mapSize);
   // three copies the viewing camera's layers when only layer 0 is set
   shadow.camera.layers.disableAll();
-  enableLayers(shadow.camera.layers, SHADOW_CASTER_LAYERS);
+  enableLayers(shadow.camera.layers, layers);
   shadowCameras.add(shadow.camera);
 }
 

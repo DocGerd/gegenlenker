@@ -18,6 +18,7 @@ const COMPUTE_ONLY: readonly (keyof QualityFlags)[] = [
   'aerialPerspective',
   'sunShadow',
   'lampShadow',
+  'yardShadow',
 ];
 
 describe('quality flags', () => {
@@ -90,6 +91,17 @@ describe('quality flags', () => {
     for (const preset of GRAPHICS_PRESETS) {
       const flags = QUALITY_FLAGS[preset];
       if (flags.lampShadow) expect(flags.lampLight, preset).toBe(true);
+    }
+  });
+
+  it("casts the yard's shadows only where the masts are lights, on High", () => {
+    expect(GRAPHICS_PRESETS.filter((p) => QUALITY_FLAGS[p].yardShadow)).toEqual(['high']);
+    for (const preset of GRAPHICS_PRESETS) {
+      const flags = QUALITY_FLAGS[preset];
+      if (flags.yardShadow) {
+        expect(flags.yardLight, preset).toBe(true);
+        expect(flags.perspectiveLighting, preset).toBe(true);
+      }
     }
   });
 

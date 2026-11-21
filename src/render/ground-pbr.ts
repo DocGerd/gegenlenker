@@ -39,6 +39,7 @@ import {
 import { createWornMarkingMaterial, MARK_BOX, MARKING_WEAR_MARKER } from './marking-wear';
 import { COCKPIT_LAYERS, enableLayers, gpuLost, PERSPECTIVE_LAYER } from './seams';
 import { prepareShadow } from './sun-shadow';
+import { FLOOD_SHADOW } from './yard-lights';
 import {
   describeTranscodeTarget,
   startTextureSet,
@@ -146,13 +147,13 @@ function groundStandIn(maps: TextureMaps<PbrKey>) {
   };
 }
 
-/** Floodlight masts the yard has at night on High. */
+/** Floodlight masts the yard has at night on High, and how many of them cast. */
 const YARD_MASTS = 4;
 
 /**
  * The PBR ground on stand-in maps under the whole light set High has at night: the HDRI sun
- * without a shadow, the sky probe, the yard's mast lights and the lamp lights, the beam and the trailer's light mapped and
- * casting. Rejects when its fragment shader declares more than `SAMPLER_CEILING` samplers.
+ * without a shadow, the sky probe, the yard's mast lights, two of them casting, and the lamp lights, the beam and the
+ * trailer's light mapped and casting. Rejects when its fragment shader declares more than `SAMPLER_CEILING` samplers.
  */
 export function pbrGroundNightSample(): GradeSample {
   const unit = (): Texture => {
@@ -173,8 +174,12 @@ export function pbrGroundNightSample(): GradeSample {
   const mesh = new Mesh(standIn.geometry, standIn.material);
   mesh.receiveShadow = true;
   const lamps = sampleLampLights();
-  // the yard's mast lights: spots with neither a map nor a shadow, so they add no sampler
-  const masts = Array.from({ length: YARD_MASTS }, () => new SpotLight());
+  // the yard's mast lights: no map, and a shadow on the masts that cast
+  const masts = Array.from({ length: YARD_MASTS }, (_, i) => {
+    const mast = new SpotLight();
+    mast.castShadow = i < FLOOD_SHADOW.casting;
+    return mast;
+  });
   return {
     mesh,
     lights: [new DirectionalLight(), new LightProbe(), ...lamps.lights, ...masts],

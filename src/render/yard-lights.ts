@@ -15,17 +15,19 @@ import { MeshLambertNodeMaterial } from 'three/webgpu';
 import type { Fixture, ResolvedLayout } from '../contracts/layout';
 import type { ScenePalette } from '../contracts/render';
 import type { Vec3 } from '../contracts/vehicle';
-import { setGraded, type GradeSample } from './grade';
+import { gradeDisabled, setGraded, type GradeSample } from './grade';
 import { type Cone, coneShare, facingIrradiance, groundIrradiancePerCandela } from './lamp-light';
 import type { Look } from './look';
-import { PERSPECTIVE_LAYER } from './seams';
+import { PERSPECTIVE_LAYER, YARD_CASTER_LAYER } from './seams';
+import { prepareShadow, queueShadow } from './sun-shadow';
 
 /*
  * The yard's lamps at night: a floodlight mast throws a pool on the yard and a street lamp one on
  * the road, both from one analytic spot spec. The High preset lights the masts with real
  * SpotLights; the pools of Balanced and of the street lamps are the same spec baked into an
  * additive ground decal, so no light joins the set there. All of it is perspective only and drawn
- * at night; the lamps' lights stay on whatever the vehicles' lamps do.
+ * at night; the lamps' lights stay on whatever the vehicles' lamps do. Where the preset allows it,
+ * two masts also cast the yard's props into a map rendered once per look, kit load or restored context.
  */
 
 const rad = (deg: number): number => (deg * Math.PI) / 180;
@@ -47,6 +49,18 @@ export const FLOOD = {
   head: { forward: 0.46, below: 0.5 },
   /** Share of the lens colour the head glows with. */
   glow: 1.5,
+} as const;
+
+/**
+ * The masts that cast and their shadow maps. Each shadow adds a sampler to every lit receiver, so
+ * `casting` is bounded by the PBR ground's headroom (`pbrGroundNightSample`). The bias is in the
+ * shadow camera's perspective depth (see `LAMP_SHADOW`).
+ */
+export const FLOOD_SHADOW = {
+  casting: 2,
+  mapSize: 2048,
+  bias: -0.00005,
+  normalBias: 0.08,
 } as const;
 
 export const STREET = {
@@ -146,6 +160,16 @@ export function yardLightSpecs(layout: Pick<ResolvedLayout, 'props'>): YardLight
     out.push(yardLightSpec({ x: post.obb.cx, y: post.obb.cy, height: post.height }, prop.fixture));
   }
   return out;
+}
+
+/**
+ * The masts that cast: the `FLOOD_SHADOW.casting` nearest the yard's entrance, from the layout's
+ * fixtures alone so the shadows never hint at an exercise.
+ */
+export function castingMasts(floods: readonly YardLightSpec[]): YardLightSpec[] {
+  return [...floods]
+    .sort((a, b) => a.post.y - b.post.y || a.post.x - b.post.x)
+    .slice(0, FLOOD_SHADOW.casting);
 }
 
 const candelas = new Map<string, number>();
@@ -264,8 +288,14 @@ export interface YardLights {
   readonly object: Group;
   /** The masts' SpotLights; in the light set only while the look lights them. */
   readonly lights: readonly SpotLight[];
-  /** Shows the pools and switches the lights; it changes the light set, so call it on a look change only. */
+  /** The masts that cast, once the look and the grade allow it. */
+  readonly casting: readonly SpotLight[];
+  /** Shows the pools and switches the lights and their shadows; it changes the light set, so call it on a look change only. */
   setLook(look: Look): void;
+  /** Stops the casting while the grade check has failed, as the sun does; once per frame. */
+  update(): void;
+  /** Redraws the casting masts' maps at the next render, after a caster has appeared or gone. */
+  queueShadows(): void;
   dispose(): void;
 }
 
@@ -288,6 +318,8 @@ export function createYardLights(layout: ResolvedLayout, palette: ScenePalette):
   const floods = specs.filter((s) => s.kind === 'flood');
   const streets = specs.filter((s) => s.kind === 'street');
   const object = new Group();
+  const casters = new Set(castingMasts(floods));
+  const casting: SpotLight[] = [];
   const lights = floods.map((spec) => {
     const light = new SpotLight(
       spec.colour,
@@ -299,6 +331,12 @@ export function createYardLights(layout: ResolvedLayout, palette: ScenePalette):
     );
     toThree(spec.position, light.position);
     light.target.position.copy(light.position).addScaledVector(toThree(spec.aim), 10);
+    if (casters.has(spec)) {
+      prepareShadow(light, FLOOD_SHADOW.mapSize, [YARD_CASTER_LAYER]);
+      light.shadow.bias = FLOOD_SHADOW.bias;
+      light.shadow.normalBias = FLOOD_SHADOW.normalBias;
+      casting.push(light);
+    }
     light.layers.set(PERSPECTIVE_LAYER);
     light.visible = false;
     light.name = 'yard-flood';
@@ -306,6 +344,14 @@ export function createYardLights(layout: ResolvedLayout, palette: ScenePalette):
     object.add(light, light.target);
     return light;
   });
+  let shadowWanted = false;
+  const applyCasting = (): void => {
+    const on = shadowWanted && !gradeDisabled();
+    for (const light of casting) {
+      light.castShadow = on;
+      queueShadow(light);
+    }
+  };
   const material = new MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
@@ -333,10 +379,20 @@ export function createYardLights(layout: ResolvedLayout, palette: ScenePalette):
   return {
     object,
     lights,
-    setLook({ yardLight, yardSpots }) {
+    casting,
+    setLook({ yardLight, yardSpots, yardShadow }) {
       for (const light of lights) light.visible = yardSpots;
+      shadowWanted = yardShadow;
+      applyCasting();
       if (floodPool !== null) floodPool.visible = yardLight && !yardSpots;
       if (streetPool !== null) streetPool.visible = yardLight;
+    },
+    update() {
+      const on = shadowWanted && !gradeDisabled();
+      if (casting.some((light) => light.castShadow !== on)) applyCasting();
+    },
+    queueShadows() {
+      for (const light of casting) queueShadow(light);
     },
     dispose() {
       for (const light of lights) light.dispose();
@@ -347,18 +403,28 @@ export function createYardLights(layout: ResolvedLayout, palette: ScenePalette):
   };
 }
 
-/** A graded Lambert surface under four mast spots: the program the lit views build at High at night. */
+/** A graded Lambert shadow receiver under four mast spots, two casting: the program the lit views build at High at night. */
 export function floodLitSample(): GradeSample {
   const geometry = new BoxGeometry();
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   const material = new MeshLambertNodeMaterial({ vertexColors: true });
   setGraded(material, true);
-  const lights = Array.from(
-    { length: 4 },
-    () => new SpotLight(FLOOD.colour, 1, FLOOD.distance, FLOOD.angle, FLOOD.penumbra, FLOOD.decay),
-  );
+  const lights = Array.from({ length: 4 }, (_, i) => {
+    const light = new SpotLight(
+      FLOOD.colour,
+      1,
+      FLOOD.distance,
+      FLOOD.angle,
+      FLOOD.penumbra,
+      FLOOD.decay,
+    );
+    light.castShadow = i < FLOOD_SHADOW.casting;
+    return light;
+  });
+  const mesh = new Mesh(geometry, material);
+  mesh.receiveShadow = true;
   return {
-    mesh: new Mesh(geometry, material),
+    mesh,
     lights,
     dispose: () => {
       for (const light of lights) light.dispose();
