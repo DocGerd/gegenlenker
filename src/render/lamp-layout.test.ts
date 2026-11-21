@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
+import { TRAILER_IDS, TRUCK_IDS, type TrailerSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
+import { FLOOR_TOP, TARP_TOP, TIPPER_RIM, TIPPER_SHELL } from './body-dims';
 import { CAB_LENGTH, FRAME_TOP, round } from './cab-dims';
 import {
   type Lamp,
@@ -11,9 +12,17 @@ import {
   trailerLamps,
   truckLamps,
 } from './lamp-layout';
-import { TRUCK_LOOKS } from './livery';
-import { LAFETTE, lowLoaderDeck, RAMP_GAP, RAMP_WIDTH, trailerFrame } from './trailer-dims';
+import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { REALISM_HUES as HUE } from './realism-hues';
+import {
+  LAFETTE,
+  lowLoaderDeck,
+  RAMP_GAP,
+  RAMP_HEIGHT,
+  RAMP_WIDTH,
+  SWAP_BODY_HEIGHT,
+  trailerFrame,
+} from './trailer-dims';
 
 /*
  * UN R48 (06 series, Supplement 10), https://eur-lex.europa.eu/eli/reg/2019/57/oj/eng, for an N3
@@ -28,6 +37,8 @@ type Vehicle = {
   readonly front: number;
   readonly rear: number;
   readonly windscreenTop?: number;
+  /** The top of the body at its rear corners, above the ground (6.13.4.2). */
+  readonly rearTop: number;
   /** In one frame, the combination straight. */
   readonly lamps: readonly Lamp[];
 };
@@ -45,8 +56,22 @@ function truckVehicle(id: (typeof TRUCK_IDS)[number], cabLength: number): Vehicl
     front: a.frontX,
     rear: a.rearX,
     windscreenTop: FRAME_TOP + (cab.glassSill.value + cab.glassHeight.value) / 1000,
+    // the tipper's corner posts, above its drop sides; the tarpaulin's top
+    rearTop:
+      TRUCK_LOOKS[id].body.kind === 'tipper'
+        ? FLOOR_TOP + TIPPER_SHELL.wallHeight + TIPPER_RIM
+        : TARP_TOP,
     lamps: truckLamps(spec, cabLength).lamps,
   };
+}
+
+/** A trailer body's rear top: the swap body, a lafette's lamp bar, a low-loader's carrier or ramps. */
+function trailerRearTop(spec: TrailerSpec, variant: 'procedural' | 'shell'): number {
+  const deck = spec.deckHeight.value / 1000;
+  const kind = TRAILER_LOOKS[spec.id].kind;
+  if (variant === 'shell' && kind === 'lafette') return deck + LAFETTE.lampBar.height;
+  if (variant === 'shell' && kind === 'low-loader') return lowLoaderDeck(spec).carrierTop + 0.01;
+  return deck + (spec.body === 'box' ? SWAP_BODY_HEIGHT : RAMP_HEIGHT);
 }
 
 function trailerVehicle(
@@ -68,6 +93,7 @@ function trailerVehicle(
     halfWidth: spec.width.value / 2000,
     front: a.turntable.x + a.eye.x,
     rear: a.rearX,
+    rearTop: trailerRearTop(spec, variant),
     lamps: trailerLamps(spec, variant).lamps.map(shift),
   };
 }
@@ -89,8 +115,12 @@ const fromEdge = (v: Vehicle, l: Lamp): number =>
 /** The category 5 or 6 side indicators: a side marker that flashes carries the function too. */
 const repeaters = (v: Vehicle): Lamp[] =>
   withFn(v, 'side-indicator').filter((l) => !l.fns.includes('side-marker'));
+/** The white half of the stalk lamps at the rear corners: visible from the front, though at the rear. */
+const isRearView = (l: Lamp): boolean => l.id.startsWith('end-outline-view-');
 const pair = (v: Vehicle, fn: LampFn): { left: Lamp; right: Lamp } => {
-  const lamps = fn === 'side-indicator' ? repeaters(v) : withFn(v, fn);
+  const lamps = (fn === 'side-indicator' ? repeaters(v) : withFn(v, fn)).filter(
+    (l) => !isRearView(l),
+  );
   const left = lamps.filter((l) => l.side > 0);
   const right = lamps.filter((l) => l.side < 0);
   expect(left, `${v.name} ${fn} left`).toHaveLength(1);
@@ -265,6 +295,39 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
       );
       expect(flashing.length).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  // 6.13.2(a): two more white lamps visible from the front, as close to the rear as practicable
+  // (6.13.4.3), beside the red end-outline lamps; 6.13.9 asks that the main mirrors show them.
+  it('fit a white stalk lens facing forward at each rear top corner (6.13.2(a), 6.13.4)', () => {
+    const lamps = v.lamps.filter(isRearView);
+    expect(lamps.map((l) => l.side).sort()).toEqual([-1, 1]);
+    const reds = withFn(v, 'end-outline-rear');
+    for (const l of lamps) {
+      expect(l.fns, l.id).toEqual(['end-outline-front']);
+      expect(l.facing, l.id).toBe('front');
+      expect(l.shell, l.id).toBe(false);
+      expect(l.seat, l.id).toBe('detail');
+      expect(l.box[0][0] - v.rear, `${l.id} from the rear`).toBeLessThanOrEqual(0.4);
+      expect(fromEdge(v, l), `${l.id} outer`).toBeLessThanOrEqual(0.4 + EPS);
+      const red = reds.find((r) => r.side === l.side);
+      expect(red, l.id).toBeDefined();
+      // at the top of the body (6.13.4.2), and outboard of the red lamp
+      expect(high(l), l.id).toBeGreaterThanOrEqual(v.rearTop - 0.03);
+      expect(high(l), l.id).toBeLessThanOrEqual(v.rearTop + EPS);
+      expect(Math.abs(l.box[1][l.side > 0 ? 1 : 0]), l.id).toBeGreaterThan(
+        Math.abs((red as Lamp).box[1][l.side > 0 ? 1 : 0]),
+      );
+    }
+  });
+
+  // Reg. (EU) 1230/2012 Annex I App. 1 Table II item 6.1: end-outline lamps stay out of the width, within 100 mm
+  it('keep every end-outline lens within 100 mm past the vehicle width', () => {
+    const lenses = v.lamps.filter(
+      (l) => l.fns.includes('end-outline-front') || l.fns.includes('end-outline-rear'),
+    );
+    expect(lenses.length).toBeGreaterThan(0);
+    for (const l of lenses) expect(fromEdge(v, l), l.id).toBeGreaterThanOrEqual(-0.1);
   });
 
   it('pair every lamp with its mirror image across the centreline', () => {
