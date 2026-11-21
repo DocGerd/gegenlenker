@@ -1,7 +1,8 @@
 const WINDOW = 60;
-const P90_LIMIT_MS = 18.5;
+/** Past this a window is slow: the limit sits above the p90 of an on-time but jittery 60 Hz cadence. */
+const P90_LIMIT_MS = 19.5;
 /** A window this fast counts towards stepping the scale back up; the gap to the limit is the hysteresis. */
-const P90_HEADROOM_MS = 18;
+const P90_HEADROOM_MS = 19;
 const HOLD_MS = 4000;
 const MAX_HOLD_MS = 32000;
 /** A step up that is reverted within its hold is a failed probe; a level probed this often is left alone. */
