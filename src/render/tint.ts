@@ -24,3 +24,17 @@ export function withRetro(geometry: BufferGeometry, retro = 0): BufferGeometry {
     new Float32BufferAttribute(new Float32Array(count).fill(retro), 1),
   );
 }
+
+/** The vertex attribute (linear RGB) a lamp head glows with (`retro.ts`): zero on everything else. */
+export const EMIT_ATTRIBUTE = 'emit';
+
+/** Gives every vertex of `geometry` the same `emit` colour. */
+export function withEmit(
+  geometry: BufferGeometry,
+  emit: readonly [number, number, number] = [0, 0, 0],
+): BufferGeometry {
+  const count = geometry.getAttribute('position').count;
+  const data = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) data.set(emit, i * 3);
+  return geometry.setAttribute(EMIT_ATTRIBUTE, new Float32BufferAttribute(data, 3));
+}

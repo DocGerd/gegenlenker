@@ -10,7 +10,7 @@ import {
 import { GRADE_SHADER_MARKER, precompileSamples, setGraded, type GradeSample } from './grade';
 import { BEAM } from './lamp-light';
 import { gpuLost } from './seams';
-import { RETRO_ATTRIBUTE, withRetro } from './tint';
+import { EMIT_ATTRIBUTE, RETRO_ATTRIBUTE, withEmit, withRetro } from './tint';
 
 /*
  * Retro-reflective yard parts at night. A part carries `retro` (1 on sheeting, 0 elsewhere) as a
@@ -18,11 +18,13 @@ import { RETRO_ATTRIBUTE, withRetro } from './tint';
  * that grows as the angle between the light and the viewer, seen from the surface, shrinks. The add
  * scales the sheeting's own colour and is bounded, so a coloured band keeps its hue and only its
  * dominant channel can saturate. At night the sun is off, so only the lamps drive it; by day the
- * plain props material draws, so day output is unchanged.
+ * plain props material draws, so day output is unchanged. The same material makes the lamp heads
+ * of the yard glow: a part's `emit` attribute is the colour it emits, and zero elsewhere.
  */
 
 /** Named in the generated shader, so a shader error can be traced to this material. */
 export const RETRO_SHADER_MARKER = 'retroSheeting';
+export const EMIT_SHADER_MARKER = 'headEmission';
 
 export const RETRO = {
   /** Multiplies the light that reaches the surface, before the bound. */
@@ -75,6 +77,11 @@ export class RetroNodeMaterial extends MeshLambertNodeMaterial {
     return 'RetroNodeMaterial';
   }
 
+  constructor(parameters?: ConstructorParameters<typeof MeshLambertNodeMaterial>[0]) {
+    super(parameters);
+    this.emissiveNode = attribute<'vec3'>(EMIT_ATTRIBUTE).toVar(EMIT_SHADER_MARKER);
+  }
+
   override setupLightingModel(): PhongLightingModel {
     return new RetroLightingModel();
   }
@@ -82,7 +89,7 @@ export class RetroNodeMaterial extends MeshLambertNodeMaterial {
 
 /** The retro material on a box under a spot light: the program the props build at night, graded where the preset grades. */
 export function retroLitSample(graded = true): GradeSample {
-  const geometry = withRetro(new BoxGeometry(), 1);
+  const geometry = withEmit(withRetro(new BoxGeometry(), 1), [1, 1, 1]);
   geometry.setAttribute('color', new Float32BufferAttribute(new Float32Array(24 * 3), 3));
   const material = new RetroNodeMaterial({ vertexColors: true });
   if (graded) setGraded(material, true);
@@ -90,7 +97,9 @@ export function retroLitSample(graded = true): GradeSample {
   return {
     mesh: new Mesh(geometry, material),
     lights: [light],
-    markers: graded ? [RETRO_SHADER_MARKER, GRADE_SHADER_MARKER] : [RETRO_SHADER_MARKER],
+    markers: graded
+      ? [RETRO_SHADER_MARKER, EMIT_SHADER_MARKER, GRADE_SHADER_MARKER]
+      : [RETRO_SHADER_MARKER, EMIT_SHADER_MARKER],
     dispose: () => {
       light.dispose();
       geometry.dispose();

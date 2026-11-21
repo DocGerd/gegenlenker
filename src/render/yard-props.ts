@@ -14,7 +14,8 @@ import {
   type ResolvedLayout,
 } from '../contracts/layout';
 import { REALISM_HUES as HUE } from './realism-hues';
-import { tint, withRetro } from './tint';
+import { tint, withEmit, withRetro } from './tint';
+import { headGlow } from './yard-lights';
 import { box, merge } from './vehicle-geometry';
 import { concreteWall, kerb, loadingRamp, trafficCone } from './yard-concrete';
 import {
@@ -43,6 +44,7 @@ export type PropPiece = {
 };
 
 export type Range = readonly [number, number];
+type Rgb = readonly [number, number, number];
 
 const SPLIT = 30; // long props are cut so a chunk's bounds stay local
 const PLINTH = 2.4;
@@ -80,13 +82,15 @@ const SKIP_HUES = [HUE.containerBlue, HUE.containerOrange, HUE.containerRed] as 
 export class Parts {
   private readonly list: BufferGeometry[] = [];
 
-  box(x: Range, y: Range, z: Range, hue: number, shade = 1, retro = 0): this {
-    return this.add(box(x, y, z), hue, shade, retro);
+  box(x: Range, y: Range, z: Range, hue: number, shade = 1, retro = 0, emit?: Rgb): this {
+    return this.add(box(x, y, z), hue, shade, retro, emit);
   }
 
-  /** `retro` is 1 on retro-reflective sheeting and decided by the part's type alone. */
-  add(geometry: BufferGeometry, hue: number, shade = 1, retro = 0): this {
-    this.list.push(withRetro(tint(geometry, new Color(hue).multiplyScalar(shade)), retro));
+  /** `retro` is 1 on retro-reflective sheeting and decided by the part's type alone; `emit` is the colour a lamp head glows with at night. */
+  add(geometry: BufferGeometry, hue: number, shade = 1, retro = 0, emit?: Rgb): this {
+    this.list.push(
+      withEmit(withRetro(tint(geometry, new Color(hue).multiplyScalar(shade)), retro), emit),
+    );
     return this;
   }
 
@@ -604,12 +608,28 @@ function lamp(o: Collider, fixture?: Fixture): PropPiece {
     for (let i = 0; i < FLOODLIGHTS; i++) {
       const yc = (i - (FLOODLIGHTS - 1) / 2) * 0.6;
       p.box([0.05, 0.4], around(yc, 0.25), [h - 0.65, h - 0.35], HUE.anthracite);
-      p.box([0.4, 0.43], around(yc, 0.22), [h - 0.62, h - 0.38], HUE.plateWhite);
+      p.box(
+        [0.4, 0.43],
+        around(yc, 0.22),
+        [h - 0.62, h - 0.38],
+        HUE.plateWhite,
+        1,
+        0,
+        headGlow('flood'),
+      );
     }
   } else if (fixture?.kind === 'street') {
     p.box([0, 1.2], around(0, 0.04), [h - 0.25, h - 0.15], HUE.whiteAluminium);
     p.box([0.8, 1.4], around(0, 0.15), [h - 0.3, h - 0.15], HUE.anthracite);
-    p.box([0.85, 1.35], around(0, 0.12), [h - 0.32, h - 0.3], HUE.plateWhite);
+    p.box(
+      [0.85, 1.35],
+      around(0, 0.12),
+      [h - 0.32, h - 0.3],
+      HUE.plateWhite,
+      1,
+      0,
+      headGlow('street'),
+    );
   }
   const heading = fixture === undefined ? 0 : Math.atan2(fixture.aim.y - cy, fixture.aim.x - cx);
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };

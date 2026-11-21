@@ -23,6 +23,10 @@ export type Look = {
   readonly lamps: boolean;
   /** The lamps light the ground and the yard: the SpotLights are in the light set. */
   readonly lampLight: boolean;
+  /** The yard's lamps throw their pools: baked ground decals, or real lights where `yardSpots`. */
+  readonly yardLight: boolean;
+  /** The floodlight masts are SpotLights in the light set, where the preset has the lit rig for them. */
+  readonly yardSpots: boolean;
   /** The HDRI sun casts a shadow; the contact blobs stay while it does not. */
   readonly shadow: boolean;
   readonly grade: {
@@ -62,6 +66,8 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
     sky: mode,
     lamps: night,
     lampLight: flags.lampLight && night,
+    yardLight: flags.yardLight && night,
+    yardSpots: flags.yardLight && flags.perspectiveLighting && night,
     shadow: flags.sunShadow && flags.perspectiveLighting && !night,
     grade: {
       on: flags.perspectiveLighting,

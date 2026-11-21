@@ -40,6 +40,7 @@ import { tint } from './tint';
 import { addMarking, addObstacle } from './yard-tokens';
 import { tokenCopy } from './token-copy';
 import { isOnYard, RESTYLED_KINDS, yardProps } from './yard-props';
+import { createYardLights } from './yard-lights';
 
 const TARGET_Y = 0.012;
 const TARGET_STRIP = 0.15;
@@ -432,7 +433,8 @@ export function proceduralEnvironment(
   const kit = createYardKitLayer(layout, palette, yardKit, (drawn) => {
     standInGroup.visible = !drawn;
   });
-  group.add(sky.mesh, skyline.mesh, kit.object);
+  const yardLights = createYardLights(layout, palette);
+  group.add(sky.mesh, skyline.mesh, kit.object, yardLights.object);
 
   let look: Look | null = null;
   let graded = false;
@@ -521,6 +523,7 @@ export function proceduralEnvironment(
       skyline.mesh.visible = flags.skyline;
       skyline.setHaze(night ? nightHaze : haze);
       kit.setLook(next);
+      yardLights.setLook(next);
       for (const { copy, lit, glow } of aidCopies) copy.material = next.aidGlow ? glow : lit;
       rig.setTopDownLight(next.topDownLight);
       for (const { day, night: strokes } of nightStrokes) {
@@ -558,6 +561,7 @@ export function proceduralEnvironment(
       sky.dispose();
       skyline.dispose();
       kit.dispose();
+      yardLights.dispose();
     },
   };
 }
