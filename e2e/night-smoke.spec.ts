@@ -19,6 +19,7 @@ import {
   shiftToReverse,
   shoot,
   startPinnedDrive,
+  timeoutWithSettles,
   tokenShare,
 } from './pinned-shoot';
 import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
@@ -46,7 +47,7 @@ for (const preset of PRESETS) {
     `every perspective view draws at night without errors at ${preset}`,
     heavyAt(preset),
     async ({ page }) => {
-      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
+      test.setTimeout(timeoutWithSettles(preset, 2));
       const errors: string[] = [];
       page.on('console', (m) => {
         if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
@@ -139,7 +140,7 @@ test(
   'the lights key and button switch the lenses and the beam at night at balanced',
   { tag: HEAVY },
   async ({ page }) => {
-    test.setTimeout(2 * PRESET_TIMEOUT_MS.balanced);
+    test.setTimeout(timeoutWithSettles('balanced', 3, 2 * PRESET_TIMEOUT_MS.balanced));
     const { lights, errors, three } = await nightDrive(page, 'balanced');
     const litCockpit = await shoot(page, 'cockpit');
     const lit = hash(await shoot(page, 'chase'));
@@ -168,7 +169,7 @@ test(
   'the hazard key and button flash the indicator lenses at night at balanced',
   { tag: HEAVY },
   async ({ page }) => {
-    test.setTimeout(2 * PRESET_TIMEOUT_MS.balanced);
+    test.setTimeout(timeoutWithSettles('balanced', 3, 2 * PRESET_TIMEOUT_MS.balanced));
     const { hazard, errors, three } = await nightDrive(page, 'balanced');
     const litShot = await shoot(page, 'chase');
     const lit = hash(litShot);
@@ -204,7 +205,7 @@ test(
 
 // The switches act on press, so a second finger works while another holds the lever; Low draws fastest.
 test('a second finger switches a lamp while another holds the lever', async ({ page }) => {
-  test.setTimeout(PRESET_TIMEOUT_MS.low);
+  test.setTimeout(timeoutWithSettles('low', 2));
   const { hazard, errors, three } = await nightDrive(page, 'low');
   const cdp = await page.context().newCDPSession(page);
   const centre = async (loc: Locator): Promise<{ x: number; y: number }> => {

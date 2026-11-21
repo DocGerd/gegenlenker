@@ -17,7 +17,6 @@ export const LENS_SLOTS = [
   ['front-position'],
   ['front-indicator'],
   ['side-indicator'],
-  ['side-marker'],
   ['side-marker', 'side-indicator'],
   ['end-outline-front'],
   ['end-outline-rear'],
@@ -26,6 +25,7 @@ export const LENS_SLOTS = [
   ['reversing'],
   ['rear-fog'],
   ['rear-plate'],
+  ['work'],
 ] as const satisfies readonly (readonly LampFn[])[];
 
 export const SLOT_ATTRIBUTE = 'lampSlot';

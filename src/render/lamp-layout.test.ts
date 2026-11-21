@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
-import { CAB_LENGTH, FRAME_TOP } from './cab-dims';
+import { CAB_LENGTH, FRAME_TOP, round } from './cab-dims';
 import {
   type Lamp,
   LAMP_COLOURS,
@@ -12,6 +12,8 @@ import {
   truckLamps,
 } from './lamp-layout';
 import { TRUCK_LOOKS } from './livery';
+import { LAFETTE, lowLoaderDeck, RAMP_GAP, RAMP_WIDTH, trailerFrame } from './trailer-dims';
+import { REALISM_HUES as HUE } from './realism-hues';
 
 /*
  * UN R48 (06 series, Supplement 10), https://eur-lex.europa.eu/eli/reg/2019/57/oj/eng, for an N3
@@ -84,8 +86,11 @@ const high = (l: Lamp): number => l.box[2][1];
 /** Distance from the vehicle's outer edge to the lamp's outermost point. */
 const fromEdge = (v: Vehicle, l: Lamp): number =>
   l.side > 0 ? v.halfWidth - l.box[1][1] : l.box[1][0] + v.halfWidth;
+/** The category 5 or 6 side indicators: a side marker that flashes carries the function too. */
+const repeaters = (v: Vehicle): Lamp[] =>
+  withFn(v, 'side-indicator').filter((l) => !l.fns.includes('side-marker'));
 const pair = (v: Vehicle, fn: LampFn): { left: Lamp; right: Lamp } => {
-  const lamps = withFn(v, fn);
+  const lamps = fn === 'side-indicator' ? repeaters(v) : withFn(v, fn);
   const left = lamps.filter((l) => l.side > 0);
   const right = lamps.filter((l) => l.side < 0);
   expect(left, `${v.name} ${fn} left`).toHaveLength(1);
@@ -167,8 +172,7 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
   it.each(PAIRS)('place the $fn pair ($paragraph)', (rule) => {
     if ((rule.truckOnly && v.trailer) || (rule.trailerOnly && !v.trailer)) {
       // an O4 has no category 5 or 6 pair (6.5.3 B); its flashing side markers are checked below
-      if (rule.fn !== 'side-indicator') expect(withFn(v, rule.fn)).toHaveLength(0);
-      else expect(withFn(v, rule.fn).every((l) => l.fns.includes('side-marker'))).toBe(true);
+      expect(rule.fn === 'side-indicator' ? repeaters(v) : withFn(v, rule.fn)).toHaveLength(0);
       return;
     }
     const lamps = pair(v, rule.fn);
@@ -203,7 +207,10 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     const front = v.lamps.filter(
       (l) => l.facing === 'front' && !l.fns.includes('end-outline-front'),
     );
-    const rear = v.lamps.filter((l) => l.facing === 'rear' && !l.fns.includes('end-outline-rear'));
+    // the work floodlights stand on masts and are no R48 function
+    const rear = v.lamps.filter(
+      (l) => l.facing === 'rear' && !l.fns.includes('end-outline-rear') && !l.fns.includes('work'),
+    );
     if (v.windscreenTop === undefined) {
       expect(top('end-outline-front')).toBeGreaterThanOrEqual(Math.max(...front.map(high)) - EPS);
     } else {
@@ -213,7 +220,7 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
   });
 
   it('fit the cat 6 side indicators within 1,800 mm of the front (6.5.4.3)', () => {
-    for (const l of withFn(v, 'side-indicator').filter((l) => !l.fns.includes('side-marker'))) {
+    for (const l of repeaters(v)) {
       expect(v.front - l.box[0][0], l.id).toBeLessThanOrEqual(1.8 + EPS);
     }
   });
@@ -245,12 +252,12 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     );
   });
 
-  // 6.5.3.1(c): an O4 needs three category 5 lamps per side unless at least three amber side
-  // markers flash with the indicators, which 6.18.7 permits; (b) asks the same of an N3 over 9 m.
-  it('flash at least three amber side markers per side on a trailer, for want of cat 5 lamps (6.5.3.1)', () => {
-    if (!v.trailer) {
-      expect(v.front - v.rear).toBeLessThanOrEqual(9);
-      return;
+  // 6.18.7 lets amber side markers flash with the same-side indicators. 6.5.3.1(c) needs it of an
+  // O4's trailer, which has no category 5 lamps, and (b) of an N3 over 9 m; 6.18.9 wants them amber.
+  it('flash every amber side marker with the indicators, at least three per side (6.18.7, 6.5.3.1)', () => {
+    for (const l of withFn(v, 'side-marker')) {
+      expect(l.fns, l.id).toContain('side-indicator');
+      expect(l.hue, l.id).toBe(HUE.sideMarker);
     }
     for (const side of [1, -1]) {
       const flashing = v.lamps.filter(
@@ -268,6 +275,20 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     for (const l of v.lamps.filter((l) => l.side !== 0)) {
       expect(lamps.has(mirrored(l)), l.id).toBe(true);
     }
+  });
+
+  it('fit a pair of work floodlights above the reversing lamps', () => {
+    const { left, right } = pair(v, 'work');
+    const reversing = pair(v, 'reversing');
+    for (const l of [left, right]) {
+      expect(l.facing, l.id).toBe('rear');
+      expect(l.box[0][1], `${l.id} behind the vehicle's front`).toBeLessThan(v.front);
+      expect(low(l), `${l.id} above the reversing lamps`).toBeGreaterThan(
+        Math.max(high(reversing.left), high(reversing.right)),
+      );
+      expect(fromEdge(v, l), `${l.id} inside the width`).toBeGreaterThan(0);
+    }
+    expect(innerGap({ left, right })).toBeGreaterThan(0);
   });
 
   it('give a trailer, and only a trailer, a rear plate lamp (6.8)', () => {
@@ -295,5 +316,49 @@ describe('lamp layout parts', () => {
     expect(trailerLamps(trailerById('krone-azw-18'), 'procedural').lamps.some((l) => l.shell)).toBe(
       false,
     );
+  });
+});
+
+describe('work floodlight mounts', () => {
+  const work = (id: (typeof TRAILER_IDS)[number], variant: 'procedural' | 'shell') =>
+    trailerLamps(trailerById(id), variant).lamps.filter((l) => l.fns.includes('work'));
+
+  it('stand the low-loader shell lenses on the folded ramps, under their top', () => {
+    const spec = trailerById('hueffermann-hpa-24-81-l');
+    const deck = lowLoaderDeck(spec);
+    for (const l of work('hueffermann-hpa-24-81-l', 'shell')) {
+      const [y0, y1] = l.box[1];
+      const [ramp0, ramp1] =
+        l.side > 0 ? [RAMP_GAP, RAMP_GAP + RAMP_WIDTH] : [-RAMP_GAP - RAMP_WIDTH, -RAMP_GAP];
+      expect(y0, l.id).toBeGreaterThanOrEqual(ramp0);
+      expect(y1, l.id).toBeLessThanOrEqual(ramp1);
+      expect(l.box[2][1], l.id).toBeLessThan(deck.rampTop);
+      expect(l.box[2][0], l.id).toBeGreaterThan(deck.rearDeck);
+    }
+  });
+
+  it('stand the lafette shell lenses on posts above its lamp bar', () => {
+    const spec = trailerById('krone-azw-18');
+    const { brackets } = trailerLamps(spec, 'shell');
+    const barTop = trailerFrame(spec).deck + LAFETTE.lampBar.height;
+    for (const l of work('krone-azw-18', 'shell')) {
+      const post = brackets.find(
+        (b) =>
+          b.part === 'trailer' &&
+          b.box[2][0] === round(barTop) &&
+          b.box[1][0] < l.box[1][1] &&
+          b.box[1][1] > l.box[1][0],
+      );
+      expect(post, l.id).toBeDefined();
+      expect(post?.box[2][1] ?? 0, l.id).toBeGreaterThan(l.box[2][0] - 1e-6);
+    }
+  });
+
+  it('keep every work lamp out of the glb: detail seat, no shell lens', () => {
+    for (const id of TRAILER_IDS) {
+      for (const variant of ['procedural', 'shell'] as const) {
+        expect(work(id, variant).every((l) => l.seat === 'detail' && !l.shell)).toBe(true);
+      }
+    }
   });
 });
