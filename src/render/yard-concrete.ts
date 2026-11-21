@@ -172,6 +172,6 @@ export function trafficCone(p: Parts, halfLength: number, halfWidth: number, hei
       i < CONE_BANDS.length - 1,
     );
     g.translate(0, base + rise * ((from + to) / 2), 0);
-    p.add(g, band ? HUE.plateWhite : HUE.coneRed);
+    p.add(g, band ? HUE.plateWhite : HUE.coneRed, 1, band ? 1 : 0);
   }
 }

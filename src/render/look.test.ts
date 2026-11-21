@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { GRAPHICS_PRESETS } from '../contracts/render';
 import { FOG_DENSITY, GRADE } from './grade';
 import { NIGHT_AMBIENT, NIGHT_TINT, perspectiveSunDirection } from './light-rig';
-import { applyLook, lookFor, TOP_DOWN_NIGHT_LIGHT } from './look';
+import { applyLook, INTERIOR_BACKLIGHT, lookFor, TOP_DOWN_NIGHT_LIGHT } from './look';
 import { KEYS, tokenName } from './palette';
 import { QUALITY_FLAGS } from './quality';
 import type { ScenePaletteKey } from '../contracts/render';
@@ -56,6 +56,17 @@ describe('lookFor', () => {
       expect(look.grade.exposure).toBe(1);
       expect(look.grade.skyHdri).toBe(0);
       expect(look.grade.fogDensity).toBe(flags.aerialPerspective ? FOG_DENSITY : 0);
+    },
+  );
+
+  it.each(GRAPHICS_PRESETS)(
+    'the night look of %s backlights the cab interior modestly',
+    (preset) => {
+      const { interior } = lookFor(QUALITY_FLAGS[preset], 'night');
+      expect(interior.light).toBe(INTERIOR_BACKLIGHT);
+      expect(INTERIOR_BACKLIGHT).toBeGreaterThan(1);
+      expect(INTERIOR_BACKLIGHT).toBeLessThanOrEqual(2);
+      expect(interior.unlit).toEqual(NIGHT_TINT.map((t) => t * NIGHT_AMBIENT * INTERIOR_BACKLIGHT));
     },
   );
 });

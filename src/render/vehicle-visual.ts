@@ -1,4 +1,5 @@
 import {
+  AdditiveBlending,
   BoxGeometry,
   BufferGeometry,
   CylinderGeometry,
@@ -37,7 +38,7 @@ import {
   type TruckShells,
 } from './glb-shells';
 import { gradeDisabled, setGraded } from './grade';
-import { trailerLamps, truckLamps } from './lamp-layout';
+import { type Lamp, type LampFn, trailerLamps, truckLamps } from './lamp-layout';
 import { createDetailMaterial, createLampEmission, slotShell } from './lamp-lens';
 import {
   createLampLights,
@@ -46,7 +47,8 @@ import {
   trailerLampLight,
   truckLampLights,
 } from './lamp-light';
-import { DAY, lampState, type LampToggles } from './lamp-state';
+import { DAY, lampState, type LampState, lensLevel, type LampToggles } from './lamp-state';
+import { markerGlowGeometry } from './marker-glow';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
 import { REALISM_HUES } from './realism-hues';
@@ -92,6 +94,8 @@ export const SHADOW_NAME = 'blob-shadow';
 /** Share of the contact blobs' opacity kept while the sun casts a shadow. */
 const BLOB_OPACITY_UNDER_SUN = 0.5;
 export const SHADOW_HEIGHT = 0.02; // above the markings
+export const GLOW_NAME = 'marker-glow';
+const GLOW_LIFT = 0.002; // above the contact blobs
 const BODY_SHADOW = { alpha: 0.5, squareness: 4, margin: 0.7 } as const;
 const WHEEL_SHADOW = { alpha: 0.6, squareness: 2, growX: 1.3, growY: 1.4 } as const;
 const DRAWBAR_SHADOW_HALF_WIDTH = 0.3;
@@ -161,6 +165,21 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   let sunShadowed = false;
   let lampsDefault: LampToggles = DAY;
   let lampLights: LampLights | null = null;
+  type Glow = {
+    readonly mesh: Mesh;
+    readonly material: MeshBasicMaterial;
+    readonly fns: readonly LampFn[];
+  };
+  const glows: Glow[] = [];
+  let glowOn = false;
+  let glowState: LampState | null = null;
+  const syncGlow = (): void => {
+    for (const { mesh, material, fns } of glows) {
+      const level = glowState === null ? 0 : lensLevel(glowState, fns);
+      material.color.setScalar(level);
+      mesh.visible = glowOn && level > 0;
+    }
+  };
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
     return material;
@@ -253,6 +272,44 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       const state = lampState(snapshot, switches ?? lampsDefault);
       lamps.update(state);
       lampLights?.update(state);
+      glowState = state;
+      syncGlow();
+    },
+    /**
+     * The ground pool under the side markers of `lamps`: perspective only, shown while the lamps
+     * light the ground and lit as the markers' lenses are, so it flashes with an indicator they share.
+     */
+    markerGlow(lamps: readonly Lamp[]): Mesh | null {
+      const markers = lamps.filter((l) => l.fns.includes('side-marker'));
+      const [first] = markers;
+      if (first === undefined) return null;
+      const fns = first.fns;
+      if (markers.some((l) => l.fns.join() !== fns.join())) {
+        throw new Error('markerGlow: the side markers of one part differ in function');
+      }
+      const geometry = markerGlowGeometry(markers, SHADOW_HEIGHT + GLOW_LIFT);
+      if (geometry === null) return null;
+      geometries.add(geometry);
+      const material = track(
+        new MeshBasicMaterial({
+          vertexColors: true,
+          transparent: true,
+          blending: AdditiveBlending,
+          depthWrite: false,
+          side: DoubleSide,
+          // one pass: the decal is additive, so no back-then-front ordering is needed
+          forceSinglePass: true,
+          polygonOffset: true,
+          polygonOffsetFactor: -6,
+          polygonOffsetUnits: -6,
+        }),
+      );
+      const mesh = new Mesh(geometry, material);
+      mesh.layers.set(PERSPECTIVE_LAYER);
+      mesh.visible = false;
+      mesh.name = GLOW_NAME;
+      glows.push({ mesh, material, fns });
+      return mesh;
     },
     /** The lamps' lights, children of `parent`; they stay off until `setLampLight`. */
     attachLampLights(specs: readonly LampLightSpec[], parent: Object3D): void {
@@ -261,6 +318,8 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     /** Switches the lamps' lights on or off; it changes the light set, so call it on a look change only. */
     setLampLight(on: boolean): void {
       lampLights?.setEnabled(on);
+      glowOn = on;
+      syncGlow();
     },
     /** Cab front: lit like detail, but off the cockpit camera, whose eye is inside the cab. */
     cabFront(geometry: BufferGeometry): Mesh {
@@ -434,6 +493,8 @@ export function proceduralTruck(
   const detailMesh = res.detail(detail.geometry);
   const group = new Group();
   res.attachLampLights(truckLampLights(spec), group);
+  const glow = res.markerGlow(truckLamps(spec, look.cab.length).lamps);
+  if (glow !== null) group.add(glow);
   group.add(
     schematic.rear,
     res.shadow(blobShadow(truckBlobs, SHADOW_HEIGHT)),
@@ -750,6 +811,14 @@ export function proceduralTrailer(
   const group = new Group();
   group.add(dolly, trailer);
   res.attachLampLights([trailerLampLight(spec)], trailer);
+  const trailerGlow = res.markerGlow(
+    trailerLamps(spec, 'procedural').lamps.filter((l) => l.part === 'trailer'),
+  );
+  if (trailerGlow !== null) trailer.add(trailerGlow);
+  const dollyGlow = res.markerGlow(
+    trailerLamps(spec, 'procedural').lamps.filter((l) => l.part === 'dolly'),
+  );
+  if (dollyGlow !== null) dolly.add(dollyGlow);
 
   type Applied = ReturnType<typeof applyShell>;
   let applied: { readonly trailer: Applied; readonly dolly: Applied } | null = null;

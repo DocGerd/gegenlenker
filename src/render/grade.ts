@@ -242,12 +242,20 @@ export function precompileGrade(
   gpu: WebGPURenderer,
   extra: readonly (() => GradeSample)[] = [],
 ): Promise<void> {
-  return buildSerially(gpu, () => buildGrade(gpu, extra));
+  return precompileSamples(gpu, [lambertSample, shadowReceiverSample, ...extra]);
+}
+
+/** Builds each sample of `makes` on `gpu`, as `precompileGrade` does for the grade's own. */
+export function precompileSamples(
+  gpu: WebGPURenderer,
+  makes: readonly (() => GradeSample)[],
+): Promise<void> {
+  return buildSerially(gpu, () => buildGrade(gpu, makes));
 }
 
 async function buildGrade(
   gpu: WebGPURenderer,
-  extra: readonly (() => GradeSample)[],
+  makes: readonly (() => GradeSample)[],
 ): Promise<void> {
   const samples: GradeSample[] = [];
   const { debug } = gpu;
@@ -270,7 +278,7 @@ async function buildGrade(
   };
   debug.onShaderError = watcher;
   try {
-    for (const make of [lambertSample, shadowReceiverSample, ...extra]) {
+    for (const make of makes) {
       const sample = make();
       samples.push(sample);
       const scene = new Scene();

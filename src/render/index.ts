@@ -18,6 +18,7 @@ import {
 } from './glb-shells';
 import { createGradeCheck, precompileGrade } from './grade';
 import { lampLitSample } from './lamp-light';
+import { createRetroCheck, retroLitSample } from './retro';
 import { createInteriorCheck } from './interior-material';
 import { createGlbInterior, INTERIOR_URLS, interiorShellFrom } from './interior-glb';
 import { startGroundPbrTextures } from './ground-pbr';
@@ -118,6 +119,8 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   );
   // whether the lit cab interior builds with the vehicles' sky map; it stays plain where it does not
   const interiorCheck = createInteriorCheck();
+  // whether the reflector program builds on the live renderer, at any preset
+  const retroCheck = createRetroCheck();
   // `on` once the perspective grade compiled while the preset grades, `failed` if it fell back.
   const publishGrade = publishState('grade');
   const gradeCheck = createGradeCheck(
@@ -126,7 +129,13 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       syncReflection();
       publishGrade(state);
     },
-    (gpu) => precompileGrade(gpu, [skylineGradeSample, ...KIT_SHADOW_SAMPLES, lampLitSample]),
+    (gpu) =>
+      precompileGrade(gpu, [
+        skylineGradeSample,
+        ...KIT_SHADOW_SAMPLES,
+        lampLitSample,
+        retroLitSample,
+      ]),
   );
   const renderer = createThreeSceneRenderer({
     gpuDevice: () => requestGpuDevice(backend ?? readBackendRequest(location.search)),
@@ -137,16 +146,25 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       skyTexture.attach(gpu);
       vehicleEnvironment.attach(gpu);
       interiorCheck.attach(gpu);
+      retroCheck.attach(gpu);
       gradeCheck.attach(gpu);
     },
     truck: (spec, palette) => proceduralTruck(spec, palette, shells, vehicleEnvironment),
     trailer: (spec, palette) =>
       proceduralTrailer(spec, palette, shells.trailer, vehicleEnvironment),
     environment: (layout, palette) =>
-      proceduralEnvironment(layout, palette, groundTextures, skyTexture, groundPbr, {
-        kit: yardKit,
-        reflections: vehicleEnvironment,
-      }),
+      proceduralEnvironment(
+        layout,
+        palette,
+        groundTextures,
+        skyTexture,
+        groundPbr,
+        {
+          kit: yardKit,
+          reflections: vehicleEnvironment,
+        },
+        retroCheck,
+      ),
     interior: (truck, palette) =>
       createGlbInterior(truck, {
         shells: interiorShells,
@@ -206,6 +224,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       skyTexture.dispose();
       vehicleEnvironment.dispose();
       interiorCheck.dispose();
+      retroCheck.dispose();
       gradeCheck.dispose();
     },
   };

@@ -14,7 +14,7 @@ import {
   type ResolvedLayout,
 } from '../contracts/layout';
 import { REALISM_HUES as HUE } from './realism-hues';
-import { tint } from './tint';
+import { tint, withRetro } from './tint';
 import { box, merge } from './vehicle-geometry';
 import { concreteWall, kerb, loadingRamp, trafficCone } from './yard-concrete';
 import {
@@ -80,12 +80,13 @@ const SKIP_HUES = [HUE.containerBlue, HUE.containerOrange, HUE.containerRed] as 
 export class Parts {
   private readonly list: BufferGeometry[] = [];
 
-  box(x: Range, y: Range, z: Range, hue: number, shade = 1): this {
-    return this.add(box(x, y, z), hue, shade);
+  box(x: Range, y: Range, z: Range, hue: number, shade = 1, retro = 0): this {
+    return this.add(box(x, y, z), hue, shade, retro);
   }
 
-  add(geometry: BufferGeometry, hue: number, shade = 1): this {
-    this.list.push(tint(geometry, new Color(hue).multiplyScalar(shade)));
+  /** `retro` is 1 on retro-reflective sheeting and decided by the part's type alone. */
+  add(geometry: BufferGeometry, hue: number, shade = 1, retro = 0): this {
+    this.list.push(withRetro(tint(geometry, new Color(hue).multiplyScalar(shade)), retro));
     return this;
   }
 
@@ -299,6 +300,7 @@ function hallDetail(markings: readonly Marking[], colliders: readonly Collider[]
         [SIGN.bottom + 0.2, top - 0.2],
         HUE.whiteAluminium,
         1.25,
+        1,
       );
     out.push(worldPiece(c, r.minY, sign));
   }
@@ -569,7 +571,7 @@ function curtainSider(o: Collider, index: number): PropPiece {
     p.box(around(sx, 0.04), [w / 2 - 0.05, w / 2], [deck, h - 0.1], HUE.anthracite);
     p.box(around(sx, 0.04), [-w / 2, -w / 2 + 0.05], [deck, h - 0.1], HUE.anthracite);
   }
-  p.box([l / 2 - 0.2, l / 2], around(0, w / 2 - 0.2), [0.5, 0.7], HUE.signalYellow);
+  p.box([l / 2 - 0.2, l / 2], around(0, w / 2 - 0.2), [0.5, 0.7], HUE.signalYellow, 1, 1);
   for (const side of [-1, 1]) {
     const y: Range = side > 0 ? [w / 2 - TYRE.width, w / 2] : [-w / 2, -w / 2 + TYRE.width];
     for (let axle = 0; axle < 3; axle++) {
@@ -648,6 +650,8 @@ function furniture(o: Collider, piece?: KitPiece): PropPiece {
         around(0, hw + OVERLAY),
         [top - height + rim, top - rim],
         HUE.plateWhite,
+        1,
+        1,
       );
   } else {
     const hue = piece === 'salt-bin' ? HUE.signalYellow : HUE.containerGreen;
@@ -682,7 +686,14 @@ function barrier(o: Collider): PropPiece {
   const p = new Parts()
     .box(around(0, hl), around(0, hw), [0, 0.15], HUE.anthracite)
     .box(around(0, hl), around(0, hw), [0.15, h], HUE.plateWhite)
-    .box(around(0, hl + OVERLAY), around(0, hw + OVERLAY), [h * 0.55, h * 0.75], HUE.tailLamp);
+    .box(
+      around(0, hl + OVERLAY),
+      around(0, hw + OVERLAY),
+      [h * 0.55, h * 0.75],
+      HUE.tailLamp,
+      1,
+      1,
+    );
   const stripes = Math.round(BOOM.length / BOOM.stripe);
   for (let i = 0; i < stripes; i++) {
     const arm = box([i * BOOM.stripe, (i + 1) * BOOM.stripe], around(0, BOOM.thickness / 2), [
@@ -691,7 +702,7 @@ function barrier(o: Collider): PropPiece {
     ])
       .rotateZ(BOOM.lift)
       .translate(0, h, 0);
-    p.add(arm, i % 2 === 0 ? HUE.plateWhite : HUE.tailLamp);
+    p.add(arm, i % 2 === 0 ? HUE.plateWhite : HUE.tailLamp, 1, 1);
   }
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }

@@ -7,12 +7,15 @@ import {
   MathUtils,
   Mesh,
   MeshBasicMaterial,
+  type Object3D,
+  type PerspectiveCamera,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Rect } from '../contracts/render';
 import type { TruckSpec } from '../contracts/vehicle';
 import { type CabSight, cabSight } from './cab-sight';
 import { REALISM_HUES, type RealismHueKey } from './realism-hues';
+import type { Look } from './look';
 import { INTERIOR_LAYER, type CockpitInterior } from './seams';
 import { tint } from './tint';
 
@@ -168,6 +171,75 @@ export type FlatInterior = CockpitInterior & {
   readonly pillars: { readonly left: Mesh; readonly right: Mesh };
 };
 
+/** The binnacle's lit lip: a thin strip along the hump's top edge, inside the dash, narrow enough to stay on the hump at every `shift`. */
+export const LIP = { halfWidth: 0.15, thickness: 0.012, gap: 0.004 };
+/** Linear colour of the lip's glow. */
+const LIP_COLOUR = new Color(0xff9a3c).multiplyScalar(0.55);
+
+/** The lip's top edge as NDC y at NDC x. */
+export const lipTop = (x: number): number => hump(x) - LIP.gap;
+
+const LIP_STEPS = 12;
+
+function lipGeometry(): BufferGeometry {
+  const positions: number[] = [];
+  const index: number[] = [];
+  for (let i = 0; i <= LIP_STEPS; i++) {
+    const x = -LIP.halfWidth + (2 * LIP.halfWidth * i) / LIP_STEPS;
+    positions.push(x, lipTop(x), -1, x, lipTop(x) - LIP.thickness, -1);
+    if (i > 0) {
+      const k = 2 * i;
+      index.push(k - 2, k - 1, k, k - 1, k + 1, k);
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(index);
+  return tint(geometry, LIP_COLOUR);
+}
+/** Fixes `object` to the camera's eye, scaled so its NDC parts fill the field of view at `DEPTH`. */
+export function placeInEye(object: Object3D, camera: PerspectiveCamera): void {
+  const tanV = Math.tan(MathUtils.degToRad(camera.fov / 2));
+  object.position.copy(camera.position);
+  object.quaternion.copy(camera.quaternion);
+  object.scale.set(camera.aspect * tanV * DEPTH, tanV * DEPTH, DEPTH);
+}
+
+/** The instrument backlight's visible part: shown at night only, over everything else in the cockpit view. */
+export type BinnacleLip = {
+  readonly mesh: Mesh;
+  setLook(look: Look): void;
+  dispose(): void;
+};
+
+export function createBinnacleLip(): BinnacleLip {
+  const geometry = lipGeometry();
+  const material = new MeshBasicMaterial({
+    vertexColors: true,
+    side: DoubleSide,
+    fog: false,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+    forceSinglePass: true,
+  });
+  const mesh = new Mesh(geometry, material);
+  mesh.name = 'binnacle-lip';
+  mesh.layers.set(INTERIOR_LAYER);
+  mesh.renderOrder = 102;
+  mesh.visible = false;
+  return {
+    mesh,
+    setLook(look) {
+      mesh.visible = look.mode === 'night';
+    },
+    dispose() {
+      geometry.dispose();
+      material.dispose();
+    },
+  };
+}
+
 export function createCockpitInterior(truck: TruckSpec): FlatInterior {
   const sight = cabSight(truck);
   const object = new Group();
@@ -247,6 +319,8 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
   let shift = MAX_SHIFT;
   let visor = VISOR.left;
   const frame = add('frame', 1, buildFrame(shift, visor));
+  const lip = createBinnacleLip();
+  object.add(lip.mesh);
   object.visible = false;
   /** The windscreen centre and the mirror move with the pane: the frame is rebuilt only when one of them does. */
   const shape = (nextShift: number, nextVisor: number): void => {
@@ -273,10 +347,7 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
     meshes,
     pillars: { left, right },
     place({ camera, cockpit, mirrorLeft, mirrorRight }) {
-      const tanV = Math.tan(MathUtils.degToRad(camera.fov / 2));
-      object.position.copy(camera.position);
-      object.quaternion.copy(camera.quaternion);
-      object.scale.set(camera.aspect * tanV * DEPTH, tanV * DEPTH, DEPTH);
+      placeInEye(object, camera);
       interiorLayout(cockpit, mirrorLeft, mirrorRight, layout);
       shape(edgeShift(truck, camera.aspect, camera.fov), visorLeft(layout.left));
       const spans = pillarSpans(sight, camera.aspect, camera.fov, layout);
@@ -287,8 +358,10 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
     setLook(look) {
       object.visible = look.flags.cockpitInterior;
       material.color.setRGB(...look.interior.unlit);
+      lip.setLook(look);
     },
     dispose() {
+      lip.dispose();
       geometries.forEach((g) => g.dispose());
       material.dispose();
     },

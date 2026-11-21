@@ -15,7 +15,7 @@ import {
   type PerspectiveCamera,
 } from 'three';
 import { describe, expect, it } from 'vitest';
-import type { LegendBox, Rect, ScenePalette } from '../contracts/render';
+import type { LegendBox, LightingMode, Rect, ScenePalette } from '../contracts/render';
 import type { TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById, trucks } from '../vehicles/registry';
@@ -38,6 +38,8 @@ import {
   headerEdge,
   type FlatInterior,
   interiorLayout,
+  LIP,
+  lipTop,
   MIN_PILLAR_WIDTH,
   MIRROR_GAP,
   pillarSpans,
@@ -91,6 +93,7 @@ function shootWith<I extends CockpitInterior>(
   flags: QualityFlags,
   spec: TruckSpec = truck,
   insets?: Insets,
+  mode: LightingMode = 'day',
 ): Shot<I> {
   const { cockpit, mirrorLeft, mirrorRight } = computeViewports(
     width,
@@ -109,7 +112,7 @@ function shootWith<I extends CockpitInterior>(
   (interior.frame === 'truck' ? truckObject : scene).add(interior.object);
   const camera = createCockpitCamera();
   placeCockpitCamera(camera, pose, truckAnchors(spec).eye, cockpit);
-  interior.setLook(lookFor(flags, 'day'));
+  interior.setLook(lookFor(flags, mode));
   scene.updateMatrixWorld();
   interior.place({ camera, cockpit, mirrorLeft, mirrorRight });
   return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight };
@@ -258,6 +261,8 @@ const ROUTES: readonly Route[] = [
   },
 ];
 
+const MODES: readonly LightingMode[] = ['day', 'night'];
+
 const isPart = (o: Object3D): boolean => o.type !== 'Group' && o.type !== 'Object3D';
 
 /** Everything under `interior` that draws or lights; bare containers do not. */
@@ -295,7 +300,7 @@ describe.each(CASES)(
       interior.setLook(lookFor(flags, 'day'));
       return interior;
     };
-    const shootRoute = (width: number, height: number, heading = 0.7) =>
+    const shootRoute = (width: number, height: number, heading = 0.7, mode: LightingMode = 'day') =>
       shootWith(
         make(spec, palette),
         width,
@@ -304,6 +309,8 @@ describe.each(CASES)(
         null,
         QUALITY_FLAGS[presets[0] ?? 'high'],
         spec,
+        undefined,
+        mode,
       );
 
     describe.each(presets)('at %s', (preset) => {
@@ -364,6 +371,34 @@ describe.each(CASES)(
       }
     });
 
+    it('draws the binnacle lip at night only, and nothing at all on Low', () => {
+      for (const preset of presets) {
+        const names = (mode: LightingMode): string[] => {
+          const interior = make(spec, palette);
+          interior.setLook(lookFor(QUALITY_FLAGS[preset], mode));
+          return drawn(interior).map((o) => o.name);
+        };
+        expect(names('day'), preset).not.toContain('binnacle-lip');
+        expect(names('night'), preset).toContain('binnacle-lip');
+      }
+      const low = make(spec, palette);
+      low.setLook(lookFor(QUALITY_FLAGS.low, 'night'));
+      expect(shown(low)).toEqual([]);
+    });
+
+    it('puts the lip on the hump straight ahead, below the sight cone', () => {
+      const { camera, interior } = shootRoute(1280, 720, 0.7, 'night');
+      const parts = drawn(interior);
+      for (const x of [-LIP.halfWidth, -0.05, 0, 0.05, LIP.halfWidth]) {
+        expect(hits(camera, parts, x, lipTop(x) - LIP.thickness / 2), `x=${x}`).toContain(
+          'binnacle-lip',
+        );
+        expect(hits(camera, parts, x, lipTop(x) + 0.01), `x=${x} above`).not.toContain(
+          'binnacle-lip',
+        );
+      }
+    });
+
     describe('keeps the training view clear', () => {
       // Landscape and portrait windows from phone to desktop, the layouts of `computeViewports`.
       const windows: (readonly [number, number])[] = [];
@@ -373,9 +408,9 @@ describe.each(CASES)(
       windows.push(...REQUIRED, [1024, 768], [390, 844], [844, 390]);
       const cone = MathUtils.degToRad(CLEAR_CONE_DEG);
 
-      it('leaves a central forward sight cone free of every part', () => {
+      it.each(MODES)('leaves a central forward sight cone free of every part, by %s', (mode) => {
         for (const [w, h] of windows) {
-          const { camera, interior } = shootRoute(w, h);
+          const { camera, interior } = shootRoute(w, h, 0.7, mode);
           const parts = drawn(interior);
           for (let az = -cone; az <= cone + 1e-9; az += cone / 6) {
             for (let el = -cone; el <= cone + 1e-9; el += cone / 6) {
@@ -386,24 +421,27 @@ describe.each(CASES)(
         }
       });
 
-      it('keeps every part out of the lines of sight to each mirror rect, bar what the route covers by design', () => {
-        for (const [w, h] of windows) {
-          const { camera, interior, cockpit, left, right } = shootRoute(w, h);
-          const parts = drawn(interior);
-          for (const rect of [left, right]) {
-            for (let u = 0; u <= 1; u += 0.125) {
-              for (let v = 0; v <= 1; v += 0.125) {
-                const [x, y] = rectToNdc(cockpit, rect, u, v);
-                if (mayCoverMirror(x, y, edgeShift(spec, camera.aspect, COCKPIT_FOV))) continue;
-                expect(
-                  hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
-                  `${w}x${h} (${u}, ${v})`,
-                ).toEqual([]);
+      it.each(MODES)(
+        'keeps every part out of the lines of sight to each mirror rect, bar what the route covers by design, by %s',
+        (mode) => {
+          for (const [w, h] of windows) {
+            const { camera, interior, cockpit, left, right } = shootRoute(w, h, 0.7, mode);
+            const parts = drawn(interior);
+            for (const rect of [left, right]) {
+              for (let u = 0; u <= 1; u += 0.125) {
+                for (let v = 0; v <= 1; v += 0.125) {
+                  const [x, y] = rectToNdc(cockpit, rect, u, v);
+                  if (mayCoverMirror(x, y, edgeShift(spec, camera.aspect, COCKPIT_FOV))) continue;
+                  expect(
+                    hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
+                    `${w}x${h} (${u}, ${v})`,
+                  ).toEqual([]);
+                }
               }
             }
           }
-        }
-      });
+        },
+      );
 
       it('has a dash above the HUD band at every x, so the opaque band never meets open cab', () => {
         const y = bandTopNdc() + 0.02;
@@ -623,6 +661,23 @@ describe.each(trucks)('cockpit interior from the left seat of $id', (spec) => {
     const { camera, interior } = shoot(1280, 720, 0.7, null, spec);
     expect(hits(camera, interior.meshes, 0, -0.48)).toEqual(['frame']);
     expect(hits(camera, interior.meshes, 0, -0.46)).toEqual([]);
+  });
+});
+
+describe('the flat overlay binnacle lip', () => {
+  const windows = [...REQUIRED, [360, 844], [1920, 360], [390, 844], [844, 390]] as const;
+
+  it.each(trucks)('stays on the hump, whatever the dash shift of the window: $id', (spec) => {
+    for (const [w, h] of windows) {
+      const { camera, interior } = shoot(w, h, 0.7, null, spec);
+      for (const x of [-LIP.halfWidth, 0, LIP.halfWidth]) {
+        const edge = lipTop(x) + LIP.gap;
+        expect(hits(camera, interior.meshes, x, edge - 0.002), `${w}x${h} x=${x}`).toContain(
+          'frame',
+        );
+        expect(hits(camera, interior.meshes, x, edge + 0.002), `${w}x${h} x=${x}`).toEqual([]);
+      }
+    }
   });
 });
 
