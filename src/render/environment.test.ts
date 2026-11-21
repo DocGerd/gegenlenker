@@ -223,7 +223,7 @@ describe('environment lit markings', () => {
 describe('environment lit aids', () => {
   const slalom = exercises.find((e) => e.id === 'slalom');
   const aidLayout = slalom === undefined ? null : resolveLayout(layouts[slalom.layout], slalom);
-  const aidPalette = { ...palette, accent: 0xff0000, marking: 0x00ff00 };
+  const aidPalette = { ...palette, accent: 0xff0000, marking: 0x00ff00, wheel: 0x101010 };
   const perspectiveViews = {
     cockpit: cameras.cockpit,
     mirror: cameras.mirror,
@@ -234,8 +234,12 @@ describe('environment lit aids', () => {
     return proceduralEnvironment(aidLayout, aidPalette);
   };
   const isFlat = (mesh: Object3D): boolean => isMarking(mesh) && !isNodeMaterial(mesh);
-  const isGate = (mesh: Object3D): boolean =>
-    isMarking(mesh) && !(asMesh(mesh).material as { vertexColors: boolean }).vertexColors;
+  const isGate = (mesh: Object3D): boolean => {
+    const material = asMesh(mesh).material as unknown as { vertexColors: boolean; color: Color };
+    return (
+      isMarking(mesh) && !material.vertexColors && material.color.getHex() !== aidPalette.wheel
+    );
+  };
   const frame = (waypointVisited: boolean): RenderFrame =>
     ({ topDown: 'follow', waypointVisited }) as RenderFrame;
   const on = QUALITY_FLAGS.balanced;
@@ -420,17 +424,34 @@ describe('environment at night', () => {
         for (const [mesh, material] of day) {
           if (night.has(mesh)) expect(night.get(mesh), preset).toBe(material);
         }
-        // the outline, the band core, its whole-yard copy and the gate give way; the outline and the gate gain a casing
+        // the outline, the band core, its whole-yard copy and the gate give way; their casings stay
         const gone = [...day.keys()].filter((m) => !night.has(m));
         const added = [...night.keys()].filter((m) => !day.has(m));
         expect(gone, preset).toHaveLength(4);
-        expect(added.map(colour).sort(), preset).toEqual(
-          [0x00ffff, 0x00ffff, 0x00ffff, 0x00ffff, 0x101010, 0x101010].sort(),
-        );
-        expect(night.size - day.size, preset).toBe(2);
+        expect(added.map(colour), preset).toEqual([0x00ffff, 0x00ffff, 0x00ffff, 0x00ffff]);
+        expect(night.size, preset).toBe(day.size);
       }
       env.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
       expect(topDown(env)).toEqual(day);
+      env.dispose();
+    });
+
+    it('draws the outline and gate casings by day and night, to the top-down camera only', () => {
+      const env = buildStroked();
+      for (const look of ['day', 'night'] as const) {
+        env.setLook(lookFor(QUALITY_FLAGS.balanced, look));
+        const casings = [...seen(env.object, cameras.topDown)].filter(
+          (m) => colour(m) === strokePalette.wheel,
+        );
+        // the outline and the gate; the band's casings take vertex colours
+        expect(casings, look).toHaveLength(2);
+        for (const view of views) {
+          expect(
+            [...seen(env.object, view)].map(colour),
+            `${look} view ${views.indexOf(view)}`,
+          ).not.toContain(strokePalette.wheel);
+        }
+      }
       env.dispose();
     });
 

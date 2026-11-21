@@ -264,16 +264,25 @@ export function proceduralEnvironment(
 
   // At night the top-down view draws the accent strokes in the night accent. A token's geometry is
   // shared with its lit copy and carries the day colour, so a stroke gets a second mesh on the same
-  // geometry in a plain night material and the day token hides; the casings keep their colour.
+  // geometry in a plain night material and the day token hides. The outline and the gate ring sit on
+  // a casing that is drawn day and night.
   const nightPolygon = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
   const nightFlat = new MeshBasicMaterial({ color: palette.nightAccent, ...nightPolygon });
-  const nightCasing = new MeshBasicMaterial({ color: palette.wheel, ...nightPolygon });
+  const strokeCasing = new MeshBasicMaterial({ color: palette.wheel, ...nightPolygon });
   const nightStrokes: { day: Mesh; night: readonly Mesh[] }[] = [];
   const nightMesh = (geometry: BufferGeometry, material: MeshBasicMaterial, y = 0): Mesh => {
     const mesh = new Mesh(geometry, material);
     mesh.layers.set(AIDS_LAYER);
     mesh.visible = false;
     mesh.position.y = y;
+    return mesh;
+  };
+  /** A top-down-only casing under a stroke, visible in every look. */
+  const casingMesh = (geometry: BufferGeometry): Mesh => {
+    const mesh = new Mesh(geometry, strokeCasing);
+    mesh.layers.set(AIDS_LAYER);
+    mesh.position.y = -BAND_CASING_DROP;
+    group.add(mesh);
     return mesh;
   };
   /** `night` draws in place of `day` at night. */
@@ -304,10 +313,8 @@ export function proceduralEnvironment(
       .rotateY(target.pose.heading)
       .translate(target.pose.x, TARGET_Y, -target.pose.y);
     geometries.push(outlineCasing);
-    nightStroke(outlineToken, [
-      nightMesh(outlineCasing, nightCasing, -BAND_CASING_DROP),
-      nightMesh(outline, nightFlat),
-    ]);
+    casingMesh(outlineCasing);
+    nightStroke(outlineToken, [nightMesh(outline, nightFlat)]);
 
     const { tolerances } = layout;
     if (tolerances !== null) {
@@ -392,10 +399,8 @@ export function proceduralEnvironment(
     group.add(gateToken);
     aidCopy(gateToken, litMaterial, material);
     const nightGate = new MeshBasicMaterial(nightPolygon);
-    nightStroke(gateToken, [
-      nightMesh(ringCasing, nightCasing, -BAND_CASING_DROP),
-      nightMesh(ring, nightGate),
-    ]);
+    casingMesh(ringCasing);
+    nightStroke(gateToken, [nightMesh(ring, nightGate)]);
     gate = {
       materials: [material, litMaterial],
       night: nightGate,
@@ -528,7 +533,7 @@ export function proceduralEnvironment(
       propMaterial.dispose();
       flat.dispose();
       nightFlat.dispose();
-      nightCasing.dispose();
+      strokeCasing.dispose();
       litFlat.dispose();
       wornMaterial?.dispose();
       sky.dispose();

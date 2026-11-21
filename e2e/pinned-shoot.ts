@@ -12,11 +12,15 @@ export type RenderConfig = { readonly preset: Preset; readonly lighting: Lightin
 export type Shot = 'cockpit' | 'mirrorLeft' | 'mirrorRight' | 'follow' | 'yard' | 'chase';
 
 /**
- * Tag of the specs that step several presets or views on software GL: the slowest frames, so CI runs
- * them in shards of their own (`--grep @heavy`) apart from the rest (`--grep-invert @heavy`).
+ * Tag of the tests that are slow on software GL: they draw Balanced or High, compare presets, or
+ * step many frames. Playwright shards by test count, so CI runs them apart from the rest and from
+ * the layout spec, whose tests are many and alike (`.github/workflows/ci.yml`).
  */
 export const HEAVY = '@heavy';
-/** Wall-clock bound for a heavy spec that drives one preset; High loads the most and draws slowest on software GL. */
+/** `HEAVY` for a test that drives `preset` unless that is Low, else no tag. */
+export const heavyAt = (preset: Preset): { tag?: string } =>
+  preset === 'low' ? {} : { tag: HEAVY };
+/** Wall-clock bound for a test that drives one preset; High loads the most and draws slowest on software GL. */
 export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
   low: 90_000,
   balanced: 150_000,
@@ -348,6 +352,73 @@ export function colourShare(
       return near / (img.width * img.height);
     },
     [png.toString('base64'), rgb, tolerance] as const,
+  );
+}
+
+/**
+ * The band of pixels `from` to `to` pixels (either axis) outside the `core` pixels of a PNG, and how
+ * many of them are not `casing`, each colour within `tolerance` per channel: `from` clears the
+ * edge blend, so a stroke drawn without its casing leaves the band bare.
+ */
+export function colourBorder(
+  page: Page,
+  png: Buffer,
+  core: readonly [number, number, number],
+  casing: readonly [number, number, number],
+  tolerance: number,
+  from: number,
+  to: number,
+): Promise<{ band: number; bare: number }> {
+  return page.evaluate(
+    async ([data, inner, outer, tol, near, far]) => {
+      const img = new Image();
+      img.src = `data:image/png;base64,${data}`;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (ctx === null) throw new Error('no 2d context');
+      ctx.drawImage(img, 0, 0);
+      const px = ctx.getImageData(0, 0, img.width, img.height).data;
+      const { width, height } = img;
+      const is = (i: number, c: readonly number[]): boolean =>
+        c.every((v, k) => Math.abs((px[i * 4 + k] ?? 0) - v) <= tol);
+      const stroke = new Uint8Array(width * height);
+      for (let i = 0; i < stroke.length; i++) stroke[i] = is(i, inner) ? 1 : 0;
+      /** `stroke` grown by `span` along x, then along y. */
+      const grow = (span: number): Uint8Array => {
+        const rows = new Uint8Array(width * height);
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            if (stroke[y * width + x] !== 1) continue;
+            for (let dx = Math.max(0, x - span); dx <= Math.min(width - 1, x + span); dx++) {
+              rows[y * width + dx] = 1;
+            }
+          }
+        }
+        const out = new Uint8Array(width * height);
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            if (rows[y * width + x] !== 1) continue;
+            for (let dy = Math.max(0, y - span); dy <= Math.min(height - 1, y + span); dy++) {
+              out[dy * width + x] = 1;
+            }
+          }
+        }
+        return out;
+      };
+      const [close, wide] = [grow(near), grow(far)];
+      let band = 0;
+      let bare = 0;
+      for (let i = 0; i < wide.length; i++) {
+        if (wide[i] !== 1 || close[i] === 1) continue;
+        band++;
+        if (!is(i, outer)) bare++;
+      }
+      return { band, bare };
+    },
+    [png.toString('base64'), core, casing, tolerance, from, to] as const,
   );
 }
 
