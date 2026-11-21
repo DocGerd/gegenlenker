@@ -37,6 +37,7 @@ import {
   proceduralTruck,
   SHADOW_HEIGHT,
   SHADOW_NAME,
+  TWIN_NAME,
 } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -49,7 +50,7 @@ function meshes(root: Object3D): Mesh[] {
   return out;
 }
 
-const isSchematic = (m: Mesh): boolean => m.layers.mask === 1 << AIDS_LAYER;
+const isSchematic = (m: Mesh): boolean => m.layers.mask === 1 << AIDS_LAYER && m.name !== TWIN_NAME;
 
 const schematicOf = (root: Object3D): Mesh[] => meshes(root).filter(isSchematic);
 
@@ -311,7 +312,12 @@ describe('sun shadow', () => {
   };
   const bodies = (root: Object3D): Mesh[] =>
     meshes(root).filter(
-      (m) => m.name !== SHADOW_NAME && m.name !== GLOW_NAME && !isPlate(m) && !isSchematic(m),
+      (m) =>
+        m.name !== SHADOW_NAME &&
+        m.name !== GLOW_NAME &&
+        m.name !== TWIN_NAME &&
+        !isPlate(m) &&
+        !isSchematic(m),
     );
 
   it.each(visuals.map((v, i) => [i, v] as const))(
