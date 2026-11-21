@@ -28,6 +28,11 @@ export const AID_STROKE = {
 } as const;
 export const INTERIOR_LAYER = 4; // seen by the cockpit camera only: the cab interior around the driver's eye
 export const SHADOW_ONLY_LAYER = 5; // seen by no camera: casters stood in for what is drawn elsewhere
+/**
+ * Set on the yard's casters, which are drawn in perspective, besides their drawing layer: what the
+ * floodlights' static shadow cameras draw, so a vehicle never lands in a map rendered once.
+ */
+export const YARD_CASTER_LAYER = 6;
 /** What the sun's shadow camera draws: no aids, and not the cockpit-only interior. */
 export const SHADOW_CASTER_LAYERS = [
   DEFAULT_LAYER,

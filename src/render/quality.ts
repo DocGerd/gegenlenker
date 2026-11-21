@@ -38,6 +38,8 @@ export type QualityFlags = {
   readonly lampShadow: boolean;
   /** At night the yard's floodlights and street lamps throw pools on the ground, and their heads glow. */
   readonly yardLight: boolean;
+  /** At night two floodlight masts cast static shadows of the yard's props; needs `yardLight` and `perspectiveLighting`. */
+  readonly yardShadow: boolean;
 };
 
 const BALANCED: QualityFlags = {
@@ -62,6 +64,7 @@ const BALANCED: QualityFlags = {
   lampLight: true,
   lampShadow: false,
   yardLight: true,
+  yardShadow: false,
 };
 
 /** Most draw calls a frame may spend, mirrors included: the requirement for High. */
@@ -90,6 +93,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     lampLight: false,
     lampShadow: false,
     yardLight: false,
+    yardShadow: false,
   },
   balanced: BALANCED,
   high: {
@@ -104,5 +108,6 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     sunShadow: true,
     hdriSky: true,
     lampShadow: true,
+    yardShadow: true,
   },
 };

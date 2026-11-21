@@ -1,4 +1,4 @@
-import { Layers, Mesh, Texture, type Object3D } from 'three';
+import { Layers, Mesh, SpotLight, Texture, type Object3D } from 'three';
 import { describe, expect, it } from 'vitest';
 import { KIT_FOOTPRINTS } from '../content/kit';
 import { layouts } from '../content/registry';
@@ -15,8 +15,10 @@ import {
   enableLayers,
   SHADOW_CASTER_LAYERS,
   TOP_DOWN_LAYERS,
+  YARD_CASTER_LAYER,
 } from './seams';
 import type { VehicleEnvironment } from './vehicle-pbr';
+import { FLOOD_SHADOW } from './yard-lights';
 import { type KitTextureKey, type LoadedKit, type YardKit } from './yard-kit';
 import type { KitModel, KitPieces } from './yard-kit-pieces';
 
@@ -168,6 +170,39 @@ describe('the yard kit props', () => {
     expect(high.some(leaves)).toBe(true);
     for (const m of kitMeshes(draws))
       expect([m.castShadow, m.receiveShadow], 'off again').toEqual([false, false]);
+    env.dispose();
+  });
+
+  it("cast into the floodlights' maps at night on High, through meshes only those maps draw, and ask for a redraw once loaded", () => {
+    const { env, load } = setup();
+    const masts = new Layers();
+    masts.set(YARD_CASTER_LAYER);
+    const night = lookFor(QUALITY_FLAGS.high, 'night');
+    const casting = (): Mesh[] =>
+      [...seen(env.object, masts)].filter((m): m is Mesh => m instanceof Mesh && m.castShadow);
+    const kitOnly = (): Mesh[] => casting().filter((m) => m.layers.mask === 1 << YARD_CASTER_LAYER);
+    const lights: SpotLight[] = [];
+    env.object.traverse((o) => {
+      if (o instanceof SpotLight) lights.push(o);
+    });
+    env.setLook(night);
+    const queued = lights.filter((l) => l.castShadow);
+    expect(queued).toHaveLength(FLOOD_SHADOW.casting);
+    expect(kitOnly(), 'before the load').toEqual([]);
+    for (const light of queued) light.shadow.needsUpdate = false;
+    load();
+    for (const light of queued) expect(light.shadow.needsUpdate, 'redrawn after load').toBe(true);
+    expect(kitOnly().length).toBeGreaterThan(0);
+    for (const m of kitOnly()) {
+      expect(seen(env.object, cockpit).has(m), 'drawn by no camera').toBe(false);
+      expect(seen(env.object, camera(SHADOW_CASTER_LAYERS)).has(m), 'not in the lamps passes').toBe(
+        false,
+      );
+    }
+    env.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
+    expect(kitOnly(), 'not by day').toEqual([]);
+    env.setLook(lookFor({ ...QUALITY_FLAGS.high, yardShadow: false }, 'night'));
+    expect(kitOnly(), 'not without the flag').toEqual([]);
     env.dispose();
   });
 
