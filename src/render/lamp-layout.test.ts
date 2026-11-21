@@ -84,8 +84,11 @@ const high = (l: Lamp): number => l.box[2][1];
 /** Distance from the vehicle's outer edge to the lamp's outermost point. */
 const fromEdge = (v: Vehicle, l: Lamp): number =>
   l.side > 0 ? v.halfWidth - l.box[1][1] : l.box[1][0] + v.halfWidth;
+/** The category 5 or 6 side indicators: a side marker that flashes carries the function too. */
+const repeaters = (v: Vehicle): Lamp[] =>
+  withFn(v, 'side-indicator').filter((l) => !l.fns.includes('side-marker'));
 const pair = (v: Vehicle, fn: LampFn): { left: Lamp; right: Lamp } => {
-  const lamps = withFn(v, fn);
+  const lamps = fn === 'side-indicator' ? repeaters(v) : withFn(v, fn);
   const left = lamps.filter((l) => l.side > 0);
   const right = lamps.filter((l) => l.side < 0);
   expect(left, `${v.name} ${fn} left`).toHaveLength(1);
@@ -166,8 +169,8 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
 
   it.each(PAIRS)('place the $fn pair ($paragraph)', (rule) => {
     if ((rule.truckOnly && v.trailer) || (rule.trailerOnly && !v.trailer)) {
-      // an O4 has no category 5 or 6 pair (6.5.3 B)
-      expect(withFn(v, rule.fn)).toHaveLength(0);
+      // an O4 has no category 5 or 6 pair (6.5.3 B); its flashing side markers are checked below
+      expect(rule.fn === 'side-indicator' ? repeaters(v) : withFn(v, rule.fn)).toHaveLength(0);
       return;
     }
     const lamps = pair(v, rule.fn);
@@ -212,7 +215,7 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
   });
 
   it('fit the cat 6 side indicators within 1,800 mm of the front (6.5.4.3)', () => {
-    for (const l of withFn(v, 'side-indicator')) {
+    for (const l of repeaters(v)) {
       expect(v.front - l.box[0][0], l.id).toBeLessThanOrEqual(1.8 + EPS);
     }
   });
@@ -244,8 +247,22 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     );
   });
 
-  it('keep every side marker a steady lamp: no other function shares its lens', () => {
-    for (const l of withFn(v, 'side-marker')) expect(l.fns, l.id).toEqual(['side-marker']);
+  // 6.18.7 lets amber side markers flash with the same-side indicators. 6.5.3.1(c) needs it of an
+  // O4's trailer, which has no category 5 lamps, and (b) of an N3 over 9 m; 6.18.9 wants them amber.
+  it('flash every amber side marker with the indicators, at least three per side (6.18.7, 6.5.3.1)', () => {
+    for (const l of withFn(v, 'side-marker')) {
+      expect(l.fns, l.id).toContain('side-indicator');
+      expect(
+        l.fns.map((fn) => LAMP_COLOURS[fn]),
+        l.id,
+      ).toEqual(l.fns.map(() => 'amber'));
+    }
+    for (const side of [1, -1]) {
+      const flashing = v.lamps.filter(
+        (l) => l.side === side && l.fns.includes('side-marker') && l.fns.includes('side-indicator'),
+      );
+      expect(flashing.length).toBeGreaterThanOrEqual(3);
+    }
   });
 
   it('pair every lamp with its mirror image across the centreline', () => {

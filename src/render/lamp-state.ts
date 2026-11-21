@@ -15,9 +15,13 @@ export const FLASH_PERIOD = 60 / 90;
 /** A rear position lamp beside the stop lamp it shares a lens with. */
 export const TAIL_LEVEL = 0.25;
 
+const FLASHING: readonly LampFn[] = ['front-indicator', 'side-indicator', 'rear-indicator'];
+
 export type LampState = {
   /** How bright each function is, 0 (off) to 1. */
   readonly levels: Readonly<Record<LampFn, number>>;
+  /** The direction indicators are flashing, in either phase. */
+  readonly flashing: boolean;
 };
 
 /** Lamp levels from the snapshot's controls, with the flash phase from sim time. */
@@ -28,6 +32,7 @@ export function lampState(
   const lit = lights ? 1 : 0;
   const flash = hazard && snapshot.time % FLASH_PERIOD < FLASH_PERIOD / 2 ? 1 : 0;
   return {
+    flashing: hazard,
     levels: {
       'dipped-beam': lit,
       'front-position': lit,
@@ -46,7 +51,14 @@ export function lampState(
   };
 }
 
-/** A lens with several functions shows the brightest. */
-export function lensLevel({ levels }: LampState, fns: readonly LampFn[]): number {
-  return Math.max(0, ...fns.map((fn) => levels[fn]));
+/**
+ * A lens with several functions shows the brightest. While the indicators flash, a lens that
+ * carries one follows the flash alone: a side marker flashes with them (R48 6.18.7), never steady.
+ */
+export function lensLevel({ levels, flashing }: LampState, fns: readonly LampFn[]): number {
+  const shown =
+    flashing && fns.some((fn) => FLASHING.includes(fn))
+      ? fns.filter((fn) => FLASHING.includes(fn))
+      : fns;
+  return Math.max(0, ...shown.map((fn) => levels[fn]));
 }

@@ -123,18 +123,27 @@ describe('the marker glow in the vehicle visuals', () => {
       visual.dispose();
       return out;
     };
+    const [[, truck], [, trailer]] = visuals;
     const everything = (on: boolean, count: number): boolean[] => Array<boolean>(count).fill(on);
 
-    it('keeps every decal steady with the hazard lights, which flash only the indicators', () => {
-      for (const [, make, count] of visuals) {
-        expect(shown(make, { lights: true, hazard: true })).toEqual([
-          everything(true, count),
-          everything(true, count),
-        ]);
-        expect(shown(make, { lights: false, hazard: true })).toEqual([
-          everything(false, count),
-          everything(false, count),
-        ]);
+    it('flashes every decal with the hazard lights, whose indicators share the markers', () => {
+      for (const [make, count] of [
+        [truck, 1],
+        [trailer, 2],
+      ] as const) {
+        const flash = [everything(true, count), everything(false, count)];
+        expect(shown(make, { lights: true, hazard: true })).toEqual(flash);
+        expect(shown(make, { lights: false, hazard: true })).toEqual(flash);
+      }
+    });
+
+    it('keeps every decal steady with the lights alone', () => {
+      for (const [make, count] of [
+        [truck, 1],
+        [trailer, 2],
+      ] as const) {
+        const steady = [everything(true, count), everything(true, count)];
+        expect(shown(make, { lights: true, hazard: false })).toEqual(steady);
       }
     });
 

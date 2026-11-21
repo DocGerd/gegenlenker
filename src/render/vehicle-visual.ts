@@ -315,7 +315,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     },
     /**
      * The ground pool under the side markers of `lamps`: perspective only, shown while the lamps
-     * light the ground and lit as the markers' lenses are.
+     * light the ground and lit as the markers' lenses are, so it flashes with an indicator they share.
      */
     markerGlow(lamps: readonly Lamp[]): Mesh | null {
       const markers = lamps.filter((l) => l.fns.includes('side-marker'));
