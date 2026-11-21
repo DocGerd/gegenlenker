@@ -1,16 +1,17 @@
-import { Mesh, type Object3D, Texture } from 'three';
+import { Mesh, type MeshBasicMaterial, type Object3D, Texture } from 'three';
 import { describe, expect, it } from 'vitest';
-import type { ScenePalette } from '../contracts/render';
+import type { LampSwitches, ScenePalette } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
 import { trailerLamps, truckLamps } from './lamp-layout';
+import { FLASH_PERIOD } from './lamp-state';
 import { lookFor } from './look';
 import { GLOW, glowCentre, markerGlowGeometry } from './marker-glow';
 import { KEYS } from './palette';
 import { QUALITY_FLAGS } from './quality';
-import { PERSPECTIVE_LAYER } from './seams';
+import { PERSPECTIVE_LAYER, type VehicleVisual } from './seams';
 import { GLOW_NAME, proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -66,9 +67,10 @@ describe('markerGlowGeometry', () => {
 });
 
 describe('the marker glow in the vehicle visuals', () => {
+  /** A decal for each part that carries side markers: the truck's, the trailer's and the dolly's. */
   const visuals = [
-    ['truck', () => proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env)],
-    ['trailer', () => proceduralTrailer(trailerById(TRAILER_IDS[0]), palette, undefined, env)],
+    ['truck', () => proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env), 1],
+    ['trailer', () => proceduralTrailer(trailerById(TRAILER_IDS[0]), palette, undefined, env), 2],
   ] as const;
 
   const glowOf = (root: Object3D): Mesh[] => {
@@ -80,15 +82,16 @@ describe('the marker glow in the vehicle visuals', () => {
   };
 
   it.each(visuals)(
-    'draws one perspective-only decal per %s, at night with lamp light only',
-    (_n, make) => {
+    'draws a perspective-only single-pass decal per part of the %s, at night with lamp light only',
+    (_n, make, count) => {
       const visual = make();
       const found = glowOf(visual.object);
-      expect(found).toHaveLength(1);
-      const [glow] = found;
-      if (glow === undefined) throw new Error('no glow');
-      expect(glow.layers.mask).toBe(1 << PERSPECTIVE_LAYER);
-      expect(glow.castShadow).toBe(false);
+      expect(found).toHaveLength(count);
+      for (const glow of found) {
+        expect(glow.layers.mask).toBe(1 << PERSPECTIVE_LAYER);
+        expect(glow.castShadow).toBe(false);
+        expect((glow.material as MeshBasicMaterial).forceSinglePass).toBe(true);
+      }
       for (const [preset, lighting, shown] of [
         ['balanced', 'night', true],
         ['high', 'night', true],
@@ -98,21 +101,58 @@ describe('the marker glow in the vehicle visuals', () => {
       ] as const) {
         visual.setLook(lookFor(QUALITY_FLAGS[preset], lighting));
         visual.update(snapshot());
-        expect(glow.visible, `${preset} ${lighting}`).toBe(shown);
+        for (const glow of found) expect(glow.visible, `${preset} ${lighting}`).toBe(shown);
       }
       visual.dispose();
     },
   );
 
+  describe('follows the lamps it sits under', () => {
+    const on = { ...snapshot(), time: FLASH_PERIOD * 0.25 };
+    const off = { ...snapshot(), time: FLASH_PERIOD * 0.75 };
+
+    /** What each decal of `make()` shows under `switches` in each flash phase, at night. */
+    const shown = (make: () => VehicleVisual, switches: LampSwitches): boolean[][] => {
+      const visual = make();
+      visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+      const found = glowOf(visual.object);
+      const out = [on, off].map((frame) => {
+        visual.update(frame, switches);
+        return found.map((g) => g.visible);
+      });
+      visual.dispose();
+      return out;
+    };
+    const [[, truck], [, trailer]] = visuals;
+    const everything = (on: boolean, count: number): boolean[] => Array<boolean>(count).fill(on);
+
+    it('flashes the trailer and dolly decals with the hazard lights, whose indicators share the markers', () => {
+      const flash = [everything(true, 2), everything(false, 2)];
+      expect(shown(trailer, { lights: true, hazard: true })).toEqual(flash);
+      expect(shown(trailer, { lights: false, hazard: true })).toEqual(flash);
+    });
+
+    it('keeps the truck decal steady with the lights, and dark with the hazard lights alone', () => {
+      expect(shown(truck, { lights: true, hazard: true })).toEqual([[true], [true]]);
+      expect(shown(truck, { lights: false, hazard: true })).toEqual([[false], [false]]);
+    });
+
+    it.each(visuals)('stays dark with the lights and hazard lights off: %s', (_n, make, count) => {
+      const dark = [everything(false, count), everything(false, count)];
+      expect(shown(make, { lights: false, hazard: false })).toEqual(dark);
+    });
+  });
+
   it('counts the lamps of the part it sits on', () => {
     const spec = trailerById(TRAILER_IDS[0]);
-    const own = trailerLamps(spec, 'procedural').lamps.filter(
-      (l) => l.part === 'trailer' && l.fns.includes('side-marker'),
-    );
+    const own = (part: 'trailer' | 'dolly') =>
+      trailerLamps(spec, 'procedural').lamps.filter(
+        (l) => l.part === part && l.fns.includes('side-marker'),
+      );
     const visual = proceduralTrailer(spec, palette, undefined, env);
-    const [glow] = glowOf(visual.object);
-    expect(glow?.geometry.getAttribute('position').count).toBe(
-      own.length * (1 + 2 * GLOW.segments),
+    const sizes = glowOf(visual.object).map((g) => g.geometry.getAttribute('position').count);
+    expect(sizes.sort()).toEqual(
+      [own('trailer').length, own('dolly').length].map((n) => n * (1 + 2 * GLOW.segments)).sort(),
     );
     visual.dispose();
   });

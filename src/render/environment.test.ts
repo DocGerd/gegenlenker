@@ -57,6 +57,7 @@ import {
   TOP_DOWN_LAYERS,
 } from './seams';
 import { RESTYLED_KINDS } from './yard-props';
+import { RetroNodeMaterial, type RetroCheck, type RetroVerdict } from './retro';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
 const layout = Object.values(layouts)
@@ -1170,6 +1171,74 @@ describe('environment worn markings', () => {
         expect(geometry.getAttribute(MARK_BOX).count).toBe(geometry.getAttribute('position').count);
       }
     }
+    env.dispose();
+  });
+});
+
+describe('reflector props at night', () => {
+  const check = (
+    initial: RetroVerdict,
+  ): { check: RetroCheck; settle: (v: RetroVerdict) => void } => {
+    let verdict = initial;
+    const listeners = new Set<() => void>();
+    return {
+      check: {
+        attach: () => undefined,
+        verdict: () => verdict,
+        onChange: (l) => {
+          listeners.add(l);
+          return () => listeners.delete(l);
+        },
+        dispose: () => undefined,
+      },
+      settle: (v) => {
+        verdict = v;
+        for (const l of [...listeners]) l();
+      },
+    };
+  };
+  const reflective = (env: ReturnType<typeof proceduralEnvironment>): number =>
+    [...seen(env.object, cameras.cockpit)].filter(
+      (m) => asMesh(m).material instanceof RetroNodeMaterial,
+    ).length;
+
+  it.each(['balanced', 'high'] as const)(
+    'draw with the reflector material at night on %s, and with the plain one by day',
+    (preset) => {
+      if (layout === undefined) throw new Error('no layout');
+      const env = proceduralEnvironment(
+        layout,
+        palette,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        check('ok').check,
+      );
+      env.setLook(lookFor(QUALITY_FLAGS[preset], 'night'));
+      expect(reflective(env)).toBeGreaterThan(0);
+      env.setLook(lookFor(QUALITY_FLAGS[preset], 'day'));
+      expect(reflective(env)).toBe(0);
+      env.dispose();
+    },
+  );
+
+  it('falls back to the plain props when the reflector program fails to build, also after the look is set', () => {
+    if (layout === undefined) throw new Error('no layout');
+    const { check: c, settle } = check('pending');
+    const env = proceduralEnvironment(
+      layout,
+      palette,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      c,
+    );
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'night'));
+    expect(reflective(env)).toBeGreaterThan(0);
+    settle('failed');
+    expect(reflective(env)).toBe(0);
     env.dispose();
   });
 });

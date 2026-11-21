@@ -266,7 +266,7 @@ const sheetingOf = (layout: ResolvedLayout, obstacle: Obstacle): number =>
 describe('retro sheeting', () => {
   const [base] = cases;
   if (base === undefined) throw new Error('no layout');
-  const REFLECTIVE: readonly ObstacleKind[] = ['cone', 'bollard', 'barrier'];
+  const REFLECTIVE: readonly ObstacleKind[] = ['cone', 'barrier'];
 
   it('puts the attribute on every piece, so merged chunks stay merged', () => {
     for (const { resolved } of cases) {

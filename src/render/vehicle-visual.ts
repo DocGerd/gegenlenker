@@ -38,7 +38,7 @@ import {
   type TruckShells,
 } from './glb-shells';
 import { gradeDisabled, setGraded } from './grade';
-import { type Lamp, trailerLamps, truckLamps } from './lamp-layout';
+import { type Lamp, type LampFn, trailerLamps, truckLamps } from './lamp-layout';
 import { createDetailMaterial, createLampEmission, slotShell } from './lamp-lens';
 import {
   createLampLights,
@@ -47,7 +47,7 @@ import {
   trailerLampLight,
   truckLampLights,
 } from './lamp-light';
-import { DAY, lampState, lensLevel, type LampToggles } from './lamp-state';
+import { DAY, lampState, type LampState, lensLevel, type LampToggles } from './lamp-state';
 import { markerGlowGeometry } from './marker-glow';
 import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { placePose } from './coords';
@@ -165,13 +165,20 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   let sunShadowed = false;
   let lampsDefault: LampToggles = DAY;
   let lampLights: LampLights | null = null;
-  let glow: { readonly mesh: Mesh; readonly material: MeshBasicMaterial } | null = null;
+  type Glow = {
+    readonly mesh: Mesh;
+    readonly material: MeshBasicMaterial;
+    readonly fns: readonly LampFn[];
+  };
+  const glows: Glow[] = [];
   let glowOn = false;
-  let glowLevel = 0;
+  let glowState: LampState | null = null;
   const syncGlow = (): void => {
-    if (glow === null) return;
-    glow.material.color.setScalar(glowLevel);
-    glow.mesh.visible = glowOn && glowLevel > 0;
+    for (const { mesh, material, fns } of glows) {
+      const level = glowState === null ? 0 : lensLevel(glowState, fns);
+      material.color.setScalar(level);
+      mesh.visible = glowOn && level > 0;
+    }
   };
   const track = <M extends Material>(material: M): M => {
     materials.push(material);
@@ -265,12 +272,22 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       const state = lampState(snapshot, switches ?? lampsDefault);
       lamps.update(state);
       lampLights?.update(state);
-      glowLevel = lensLevel(state, ['side-marker']);
+      glowState = state;
       syncGlow();
     },
-    /** The ground pool under the side markers of `lamps`: perspective only, shown while the lamps light the ground. */
+    /**
+     * The ground pool under the side markers of `lamps`: perspective only, shown while the lamps
+     * light the ground and lit as the markers' lenses are, so it flashes with an indicator they share.
+     */
     markerGlow(lamps: readonly Lamp[]): Mesh | null {
-      const geometry = markerGlowGeometry(lamps, SHADOW_HEIGHT + GLOW_LIFT);
+      const markers = lamps.filter((l) => l.fns.includes('side-marker'));
+      const [first] = markers;
+      if (first === undefined) return null;
+      const fns = first.fns;
+      if (markers.some((l) => l.fns.join() !== fns.join())) {
+        throw new Error('markerGlow: the side markers of one part differ in function');
+      }
+      const geometry = markerGlowGeometry(markers, SHADOW_HEIGHT + GLOW_LIFT);
       if (geometry === null) return null;
       geometries.add(geometry);
       const material = track(
@@ -280,6 +297,8 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
           blending: AdditiveBlending,
           depthWrite: false,
           side: DoubleSide,
+          // one pass: the decal is additive, so no back-then-front ordering is needed
+          forceSinglePass: true,
           polygonOffset: true,
           polygonOffsetFactor: -6,
           polygonOffsetUnits: -6,
@@ -289,7 +308,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
       mesh.layers.set(PERSPECTIVE_LAYER);
       mesh.visible = false;
       mesh.name = GLOW_NAME;
-      glow = { mesh, material };
+      glows.push({ mesh, material, fns });
       return mesh;
     },
     /** The lamps' lights, children of `parent`; they stay off until `setLampLight`. */
@@ -792,10 +811,14 @@ export function proceduralTrailer(
   const group = new Group();
   group.add(dolly, trailer);
   res.attachLampLights([trailerLampLight(spec)], trailer);
-  const glow = res.markerGlow(
+  const trailerGlow = res.markerGlow(
     trailerLamps(spec, 'procedural').lamps.filter((l) => l.part === 'trailer'),
   );
-  if (glow !== null) trailer.add(glow);
+  if (trailerGlow !== null) trailer.add(trailerGlow);
+  const dollyGlow = res.markerGlow(
+    trailerLamps(spec, 'procedural').lamps.filter((l) => l.part === 'dolly'),
+  );
+  if (dollyGlow !== null) dolly.add(dollyGlow);
 
   type Applied = ReturnType<typeof applyShell>;
   let applied: { readonly trailer: Applied; readonly dolly: Applied } | null = null;

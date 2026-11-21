@@ -33,6 +33,8 @@ const LAMP_STEP = 4;
 const MIN_REVERSING_POOL = 0.01;
 /** Least share of the cockpit view the dipped beam must light on the ground ahead. */
 const MIN_BEAM_POOL = 0.01;
+/** Share of a shot the dark phase of the hazard lights may brighten against the lights-on look: nothing but noise. */
+const MAX_DARK_PHASE_ADDED = 0.0005;
 
 for (const preset of PRESETS) {
   test(
@@ -147,19 +149,28 @@ test(
   async ({ page }) => {
     test.setTimeout(2 * PRESET_TIMEOUT_MS.balanced);
     const { hazard, errors, three } = await nightDrive(page, 'balanced');
-    const lit = hash(await shoot(page, 'chase'));
+    const litShot = await shoot(page, 'chase');
+    const lit = hash(litShot);
 
     // the hazard lights flash with sim time: half a period apart they show both phases
     await hazard.click();
     await settle(page, 'balanced');
     await expect(hazard).toHaveAttribute('aria-pressed', 'true');
-    const phases = new Set<string>();
+    const phases = new Map<string, Buffer>();
     for (let i = 0; i < 3; i++) {
-      phases.add(hash(await shoot(page, 'chase')));
+      const png = await shoot(page, 'chase');
+      phases.set(hash(png), png);
       await page.clock.runFor(HALF_FLASH_MS);
     }
     expect(phases.size, 'the hazard lights flash').toBeGreaterThan(1);
-    expect(phases, 'dark phase is the lights-on look').toContain(lit);
+    // the dark phase adds no light to the lights-on look: the indicators are off, and the
+    // side markers they flash with (and their ground glow) are dark too
+    const added: number[] = [];
+    for (const png of phases.values())
+      added.push(await brightenedShare(page, litShot, png, LAMP_STEP));
+    expect(Math.min(...added), 'dark phase adds nothing to the lights-on look').toBeLessThan(
+      MAX_DARK_PHASE_ADDED,
+    );
 
     await page.keyboard.press('x');
     await settle(page, 'balanced');

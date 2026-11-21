@@ -674,8 +674,8 @@ function bollard(o: Collider): PropPiece {
   const by = around(0, hw + OVERLAY);
   const p = new Parts()
     .box(x, y, [0, h], HUE.signalYellow)
-    .box(bx, by, [h * 0.55, h * 0.7], HUE.chevronBlack, 1, 1)
-    .box(bx, by, [h - 0.05, h + OVERLAY], HUE.chevronBlack, 1, 1);
+    .box(bx, by, [h * 0.55, h * 0.7], HUE.chevronBlack)
+    .box(bx, by, [h - 0.05, h + OVERLAY], HUE.chevronBlack);
   return { x: cx, y: cy, geometry: p.place(cx, cy, heading) };
 }
 

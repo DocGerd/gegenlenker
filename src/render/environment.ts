@@ -35,7 +35,7 @@ import { createSkyline } from './skyline';
 import { createYardKitLayer, type YardKitParts } from './yard-kit';
 import { createSceneSky, domeGround, nightDomeGround, skyColours } from './scene-sky';
 import { createWornMarkingMaterial, MarkingChunks, wearableMarkings } from './marking-wear';
-import { RetroNodeMaterial } from './retro';
+import { RetroNodeMaterial, type RetroCheck } from './retro';
 import { tint } from './tint';
 import { addMarking, addObstacle } from './yard-tokens';
 import { tokenCopy } from './token-copy';
@@ -65,6 +65,7 @@ export function proceduralEnvironment(
   skyTexture?: SkyTextures,
   groundPbr?: GroundPbrTextures,
   yardKit?: YardKitParts,
+  retroCheck?: RetroCheck,
 ): Environment {
   const group = new Group();
   const geometries: BufferGeometry[] = [];
@@ -470,6 +471,19 @@ export function proceduralEnvironment(
     },
   );
 
+  /** The props' material: plain by day and where the reflector program fails, the reflector one under the lamps at night. */
+  const syncProps = (): void => {
+    if (look === null) return;
+    const reflect = look.lightSplit && look.lampLight && retroCheck?.verdict() !== 'failed';
+    if (reflect) {
+      retroMaterial ??= new RetroNodeMaterial({ vertexColors: true });
+      setGraded(retroMaterial, graded);
+    }
+    const lit = reflect && retroMaterial !== null ? retroMaterial : propMaterial;
+    for (const mesh of props) mesh.material = look.lightSplit ? lit : solid;
+  };
+  const stopRetroCheck = retroCheck?.onChange(syncProps);
+
   return {
     object: group,
     update(frame: RenderFrame, focus: ShadowFocus): void {
@@ -495,12 +509,7 @@ export function proceduralEnvironment(
       hdriOn = flags.hdriSky;
       syncSky();
       setGraded(propMaterial, graded);
-      if (lightSplit && next.lampLight) {
-        retroMaterial ??= new RetroNodeMaterial({ vertexColors: true });
-        setGraded(retroMaterial, graded);
-      }
-      const lit = next.lampLight && retroMaterial !== null ? retroMaterial : propMaterial;
-      for (const mesh of props) mesh.material = lightSplit ? lit : solid;
+      syncProps();
       if (texturedGroundMaterial !== null) setGraded(texturedGroundMaterial, graded);
       if (pbrMaterial !== null) setGraded(pbrMaterial, graded);
       pbrWanted = flags.groundPbr;
@@ -527,6 +536,7 @@ export function proceduralEnvironment(
       cancelGroundPbr?.();
       cancelSkyTexture?.();
       disposed = true;
+      stopRetroCheck?.();
       hdriMap = null;
       hdriOn = false;
       syncSky();
