@@ -147,8 +147,16 @@ describe('lamp light levels', () => {
     },
   );
 
-  it('stands the truck work light over the body, above the reversing lamps, ending just past the trailer', () => {
-    for (const [truck, trailer] of PAIRS) {
+  /** The rearmost ground x the light lights above `level`, its irradiance at the candela as set. */
+  const reachBack = (spec: LampLightSpec, work: boolean, level = 0.1): number => {
+    const cone = work && spec.work !== undefined ? { ...spec, ...spec.work } : spec;
+    const { white, red } = candela(spec, work);
+    const lit = litGround(cone, 200).filter((p) => p.irradiance * (white + red) > level);
+    return Math.min(...lit.map((p) => p.x));
+  };
+
+  it('stands the truck work light over the body, above the reversing lamps', () => {
+    for (const truck of TRUCK_IDS) {
       const spec = truckById(truck);
       const rear = truckLampLights(spec).find((l) => l.id === 'truck-rear');
       const work = rear?.work;
@@ -161,18 +169,47 @@ describe('lamp light levels', () => {
       expect(work.position.y).toBeCloseTo(0, 6);
       expect(work.position.z).toBeGreaterThan(Math.max(...reversing.map((l) => l.box[2][1])));
       expect(work.position.x).toBeLessThan(Math.min(...workLamps.map((l) => l.box[0][0])));
-      expect(work.aim).toEqual(rear.aim);
+      expect(work.aim.z, 'flatter than the reversing light').toBeGreaterThan(rear.aim.z);
+      expect(work.aim.x).toBeLessThan(-0.8);
       expect(work.angle).toBe(rear.angle);
-      const toFront =
-        work.position.x - (truckAnchors(spec).rearX - drawbarGap(spec, trailerById(trailer)));
-      expect(work.distance, 'past the trailer front').toBeGreaterThan(toFront);
-      expect(work.distance, 'just past').toBeLessThan(toFront + 1);
     }
   });
 
-  it('gives the trailers no work light: the shell stands no swap body to mount it on', () => {
-    for (const id of TRAILER_IDS) expect(trailerLampLight(trailerById(id)).work).toBeUndefined();
-  });
+  it.each(PAIRS)(
+    'lights the ground behind the %s truck at least as far back as the reversing light, not under the %s trailer',
+    (truck, trailer) => {
+      const spec = truckById(truck);
+      const rear = truckLampLights(spec).find((l) => l.id === 'truck-rear');
+      if (rear?.work === undefined) throw new Error(`no work light on ${truck}`);
+      const trailerFront = truckAnchors(spec).rearX - drawbarGap(spec, trailerById(trailer));
+      expect(reachBack(rear, true)).toBeLessThanOrEqual(reachBack(rear, false));
+      // under the trailer the pool is down to a sliver of its peak
+      const under = litGround({ ...rear, ...rear.work }, 200)
+        .filter((p) => p.x < trailerFront)
+        .map((p) => p.irradiance * candela(rear, true).white);
+      expect(Math.max(...under)).toBeLessThan(0.05 * GROUND.reversing);
+    },
+  );
+
+  it.each(TRAILER_IDS)(
+    'stands the %s trailer work light above its reversing lamps, lighting as far back as they do',
+    (id) => {
+      const spec = trailerById(id);
+      const light = trailerLampLight(spec);
+      const work = light.work;
+      if (work === undefined) throw new Error(`no work light on ${id}`);
+      const lamps = trailerLamps(spec, 'shell').lamps;
+      const reversing = lamps.filter((l) => l.fns.includes('reversing'));
+      const workLamps = lamps.filter((l) => l.fns.includes('work'));
+      expect(workLamps).toHaveLength(2);
+      expect(work.position.y).toBeCloseTo(0, 6);
+      expect(work.position.z).toBeGreaterThan(Math.max(...reversing.map((l) => l.box[2][1])));
+      expect(work.position.x).toBeLessThan(Math.min(...workLamps.map((l) => l.box[0][0])));
+      expect(work.aim).toEqual(light.aim);
+      expect(work.angle).toBe(light.angle);
+      expect(reachBack(light, true)).toBeLessThanOrEqual(reachBack(light, false));
+    },
+  );
 
   it('puts the trailer light peak a few metres behind the lamp, where the mirrors look', () => {
     for (const id of TRAILER_IDS) {
@@ -391,36 +428,51 @@ describe('lamp light in the vehicle visuals', () => {
     visual.dispose();
   });
 
-  it('swaps the truck rear light to the work cone in R with the lights on, keeping the light set', () => {
-    const spec = truckById(TRUCK_IDS[0]);
-    const truck = proceduralTruck(spec, palette, undefined, env);
-    truck.setLook(night('balanced'));
-    const lights = spotsOf(truck.object);
-    const rear = lights.find((l) => l.name === 'truck-rear');
-    const rearSpec = truckLampLights(spec).find((l) => l.id === 'truck-rear');
-    const work = rearSpec?.work;
-    if (rear === undefined || rearSpec === undefined || work === undefined)
-      throw new Error('no work light');
-    const settled = lights.map((l) => [l.visible, l.castShadow, l.map, l.angle]);
-    const place = (control: Partial<SimSnapshot['control']>, lightsOn = true): void =>
-      truck.update(snapshotWith(TRUCK_IDS[0], TRAILER_IDS[0], control), {
-        lights: lightsOn,
-        hazard: false,
-      });
-    place({ gear: 'D' });
-    const parked = rear.intensity;
-    expect([rear.distance, rear.position.y]).toEqual([rearSpec.distance, rearSpec.position.z]);
-    place({ gear: 'R' });
-    expect([rear.distance, rear.position.y]).toEqual([work.distance, work.position.z]);
-    expect(rear.intensity).toBeGreaterThan(parked);
-    place({ gear: 'R' }, false);
-    expect(rear.distance, 'no work light with the lights off').toBe(rearSpec.distance);
-    place({ gear: 'R' });
-    place({ gear: 'D' });
-    expect(rear.distance).toBe(rearSpec.distance);
-    expect(lights.map((l) => [l.visible, l.castShadow, l.map, l.angle])).toEqual(settled);
-    truck.dispose();
-  });
+  const rearLights = [
+    [
+      'truck-rear',
+      () => proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env),
+      () => truckLampLights(truckById(TRUCK_IDS[0])).find((l) => l.id === 'truck-rear'),
+    ],
+    [
+      'trailer-rear',
+      () => proceduralTrailer(trailerById(TRAILER_IDS[0]), palette, undefined, env),
+      () => trailerLampLight(trailerById(TRAILER_IDS[0])),
+    ],
+  ] as const;
+
+  it.each(rearLights)(
+    'swaps the %s light to the work cone in R with the lights on, keeping the light set',
+    (name, make, specOf) => {
+      const visual = make();
+      visual.setLook(night('balanced'));
+      const lights = spotsOf(visual.object);
+      const rear = lights.find((l) => l.name === name);
+      const rearSpec = specOf();
+      const work = rearSpec?.work;
+      if (rear === undefined || rearSpec === undefined || work === undefined)
+        throw new Error('no work light');
+      const settled = lights.map((l) => [l.visible, l.castShadow, l.map, l.angle]);
+      const place = (control: Partial<SimSnapshot['control']>, lightsOn = true): void =>
+        visual.update(snapshotWith(TRUCK_IDS[0], TRAILER_IDS[0], control), {
+          lights: lightsOn,
+          hazard: false,
+        });
+      place({ gear: 'D' });
+      const parked = rear.intensity;
+      expect([rear.distance, rear.position.y]).toEqual([rearSpec.distance, rearSpec.position.z]);
+      place({ gear: 'R' });
+      expect([rear.distance, rear.position.y]).toEqual([work.distance, work.position.z]);
+      expect(rear.intensity).toBeGreaterThan(parked);
+      place({ gear: 'R' }, false);
+      expect(rear.distance, 'no work light with the lights off').toBe(rearSpec.distance);
+      place({ gear: 'R' });
+      place({ gear: 'D' });
+      expect(rear.distance).toBe(rearSpec.distance);
+      expect(lights.map((l) => [l.visible, l.castShadow, l.map, l.angle])).toEqual(settled);
+      visual.dispose();
+    },
+  );
 
   it.each(visuals)('switches the %s lights with the look, not the snapshot', (_name, make) => {
     const visual = make();

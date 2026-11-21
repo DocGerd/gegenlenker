@@ -9,9 +9,13 @@ import {
   MARKER_SPACING,
   MARKING_END_MARGIN as END_MARGIN,
   markingBand,
+  TARP_TOP,
+  TIPPER_RIM,
+  TIPPER_SHELL,
+  TIPPER_WALL_TOP,
 } from './body-dims';
 import { CAB_LENGTH, FRAME_TOP, hex, metres, RELIEF, round } from './cab-dims';
-import { TRAILER_LOOKS } from './livery';
+import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { REALISM_HUES as HUE } from './realism-hues';
 import {
   ARM_WIDTH,
@@ -123,19 +127,31 @@ const DOLLY_MARKER = { behindKink: 0.3, bracket: 0.05, relief: 0.02 } as const;
 const REAR_CORNER = { length: 0.3, width: 0.1, height: 0.12 } as const; // lafette rear side marker block
 const PLATE_LAMP = { halfWidth: 0.06, height: 0.03, belowGuardTop: 0.01 } as const;
 /**
- * Rear work floodlights, not an R48 function. A pair on the truck body's front wall, on posts that
- * rise to `truckSill` (above a tipper's headboard and a tarp's roof), or on a swap body's rear edge
- * `belowTop` under its roof. `housing` is the lamp box's depth, `lateral` its centre off the centreline.
+ * Rear work floodlights, not an R48 function. A pair on posts over the truck body's front wall (see
+ * `truckWorkSill`), on the swap body's rear edge, on posts over the lafette's lamp bar, or on the
+ * low-loader's folded ramps, `belowTop` under their top. `housing` is the lamp box's depth, `lateral`
+ * its centre off the centreline.
  */
 export const WORK_LAMP = {
   width: 0.3,
   height: 0.12,
   lateral: 0.6,
   housing: 0.11,
-  truckSill: 2.75,
   belowTop: 0.3,
   post: { halfWidth: 0.04, behindFront: [0.09, 0.02] },
+  /** The lafette's posts rise this far above its deck. */
+  lafetteSill: 1.2,
 } as const;
+
+/**
+ * The height the truck's work lamps stand on: a tarp's roof, or a tipper's wall top, which is also
+ * above its shell's headboard rim. `glb-shells.test.ts` holds both to the shells.
+ */
+export function truckWorkSill(spec: TruckSpec): number {
+  return TRUCK_LOOKS[spec.id].body.kind === 'tarp'
+    ? TARP_TOP
+    : Math.max(TIPPER_WALL_TOP, FLOOR_TOP + TIPPER_SHELL.headboardHeight + TIPPER_RIM);
+}
 
 const lateral = (side: number, from: number, to: number): Range =>
   side > 0 ? [from, to] : [-to, -from];
@@ -399,7 +415,7 @@ export function truckLamps(spec: TruckSpec, cabLength = CAB_LENGTH): LampLayout 
   const bodyFront = bodyFrontX(front, cabLength);
   const [post0, post1] = WORK_LAMP.post.behindFront;
   const housing: Range = [bodyFront - WORK_LAMP.housing - 0.01, bodyFront - 0.01];
-  const sill = WORK_LAMP.truckSill;
+  const sill = truckWorkSill(spec);
   workPair(sink, 'body', housing, [sill, sill + WORK_LAMP.height], (side) => [
     {
       part: 'body',
@@ -656,16 +672,38 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
       hue: HUE.tailLamp,
     });
   }
-  if (isBox && variant === 'procedural') {
-    // the lafette shell has no swap body to stand them on
-    const top = deck + SWAP_BODY_HEIGHT - WORK_LAMP.belowTop;
+  const flush = (x: number, top: number): void => {
+    const z0 = top - WORK_LAMP.belowTop;
+    workPair(sink, 'trailer', [x - WORK_LAMP.housing, x], [z0, z0 + WORK_LAMP.height], () => []);
+  };
+  if (lafette) {
+    // posts on the lamp bar; the shell has no swap body to stand them on
+    const barTop = deck + LAFETTE.lampBar.height;
+    const bar: Range = [a.rearX, a.rearX + LAFETTE.lampBar.depth];
+    const sill = deck + WORK_LAMP.lafetteSill;
+    const half = WORK_LAMP.post.halfWidth;
     workPair(
       sink,
       'trailer',
-      [a.rearX - WORK_LAMP.housing, a.rearX],
-      [top, top + WORK_LAMP.height],
-      () => [],
+      [bar[1] - WORK_LAMP.housing, bar[1]],
+      [sill, sill + WORK_LAMP.height],
+      (side) => [
+        {
+          part: 'trailer',
+          box: boxOf(bar, lateral(side, WORK_LAMP.lateral - half, WORK_LAMP.lateral + half), [
+            barTop,
+            sill,
+          ]),
+          shell: false,
+        },
+      ],
     );
+  } else if (isBox) {
+    flush(a.rearX, deck + SWAP_BODY_HEIGHT);
+  } else if (lowDeck !== null) {
+    flush(lowDeck.carrierX, lowDeck.rampTop);
+  } else {
+    flush(a.rearX, deck + RAMP_HEIGHT);
   }
   lamp({
     id: 'rear-plate',

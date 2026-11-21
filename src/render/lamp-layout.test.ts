@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
-import { CAB_LENGTH, FRAME_TOP } from './cab-dims';
+import { CAB_LENGTH, FRAME_TOP, round } from './cab-dims';
 import {
   type Lamp,
   LAMP_COLOURS,
@@ -12,6 +12,7 @@ import {
   truckLamps,
 } from './lamp-layout';
 import { TRUCK_LOOKS } from './livery';
+import { LAFETTE, lowLoaderDeck, RAMP_GAP, RAMP_WIDTH, trailerFrame } from './trailer-dims';
 
 /*
  * UN R48 (06 series, Supplement 10), https://eur-lex.europa.eu/eli/reg/2019/57/oj/eng, for an N3
@@ -26,8 +27,6 @@ type Vehicle = {
   readonly front: number;
   readonly rear: number;
   readonly windscreenTop?: number;
-  /** Whether a structure stands above the reversing lamps, which is where work floodlights go. */
-  readonly workFitted: boolean;
   /** In one frame, the combination straight. */
   readonly lamps: readonly Lamp[];
 };
@@ -45,7 +44,6 @@ function truckVehicle(id: (typeof TRUCK_IDS)[number], cabLength: number): Vehicl
     front: a.frontX,
     rear: a.rearX,
     windscreenTop: FRAME_TOP + (cab.glassSill.value + cab.glassHeight.value) / 1000,
-    workFitted: true,
     lamps: truckLamps(spec, cabLength).lamps,
   };
 }
@@ -69,8 +67,6 @@ function trailerVehicle(
     halfWidth: spec.width.value / 2000,
     front: a.turntable.x + a.eye.x,
     rear: a.rearX,
-    // the lafette shell is a bare chassis, so only the procedural swap body carries them
-    workFitted: spec.body === 'box' && variant === 'procedural',
     lamps: trailerLamps(spec, variant).lamps.map(shift),
   };
 }
@@ -278,12 +274,7 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     }
   });
 
-  it('fit a pair of work floodlights where a structure stands above the reversing lamps', () => {
-    const work = withFn(v, 'work');
-    if (!v.workFitted) {
-      expect(work).toHaveLength(0);
-      return;
-    }
+  it('fit a pair of work floodlights above the reversing lamps', () => {
     const { left, right } = pair(v, 'work');
     const reversing = pair(v, 'reversing');
     for (const l of [left, right]) {
@@ -322,5 +313,49 @@ describe('lamp layout parts', () => {
     expect(trailerLamps(trailerById('krone-azw-18'), 'procedural').lamps.some((l) => l.shell)).toBe(
       false,
     );
+  });
+});
+
+describe('work floodlight mounts', () => {
+  const work = (id: (typeof TRAILER_IDS)[number], variant: 'procedural' | 'shell') =>
+    trailerLamps(trailerById(id), variant).lamps.filter((l) => l.fns.includes('work'));
+
+  it('stand the low-loader shell lenses on the folded ramps, under their top', () => {
+    const spec = trailerById('hueffermann-hpa-24-81-l');
+    const deck = lowLoaderDeck(spec);
+    for (const l of work('hueffermann-hpa-24-81-l', 'shell')) {
+      const [y0, y1] = l.box[1];
+      const [ramp0, ramp1] =
+        l.side > 0 ? [RAMP_GAP, RAMP_GAP + RAMP_WIDTH] : [-RAMP_GAP - RAMP_WIDTH, -RAMP_GAP];
+      expect(y0, l.id).toBeGreaterThanOrEqual(ramp0);
+      expect(y1, l.id).toBeLessThanOrEqual(ramp1);
+      expect(l.box[2][1], l.id).toBeLessThan(deck.rampTop);
+      expect(l.box[2][0], l.id).toBeGreaterThan(deck.rearDeck);
+    }
+  });
+
+  it('stand the lafette shell lenses on posts above its lamp bar', () => {
+    const spec = trailerById('krone-azw-18');
+    const { brackets } = trailerLamps(spec, 'shell');
+    const barTop = trailerFrame(spec).deck + LAFETTE.lampBar.height;
+    for (const l of work('krone-azw-18', 'shell')) {
+      const post = brackets.find(
+        (b) =>
+          b.part === 'trailer' &&
+          b.box[2][0] === round(barTop) &&
+          b.box[1][0] < l.box[1][1] &&
+          b.box[1][1] > l.box[1][0],
+      );
+      expect(post, l.id).toBeDefined();
+      expect(post?.box[2][1] ?? 0, l.id).toBeGreaterThan(l.box[2][0] - 1e-6);
+    }
+  });
+
+  it('keep every work lamp out of the glb: detail seat, no shell lens', () => {
+    for (const id of TRAILER_IDS) {
+      for (const variant of ['procedural', 'shell'] as const) {
+        expect(work(id, variant).every((l) => l.seat === 'detail' && !l.shell)).toBe(true);
+      }
+    }
   });
 });

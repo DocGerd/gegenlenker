@@ -83,6 +83,8 @@ export const REAR = {
   pitch: rad(35),
   /** The trailer's light is aimed flatter and reaches this far: nothing stands behind it but the yard. */
   trailerPitch: rad(22),
+  /** The truck's work lamps, standing higher up, aim flatter so their pool reaches back to the trailer. */
+  workPitch: rad(12),
   trailerDistance: 12,
   /** Elevation (degrees below the horizon) down to which the trailer's light is at full strength; steeper rays fall with `falloff`, which puts the ground peak a few metres back. */
   hot: 11,
@@ -95,9 +97,6 @@ export const REAR = {
  * `TAIL_LEVEL` of the stop lamp's).
  */
 export const GROUND = { dipped: 1.1, reversing: 1.2, stop: 0.8 } as const;
-
-/** A truck's work light ends this far (m) past the trailer's front face. */
-const WORK_PAST_TRAILER = 0.5;
 
 /**
  * The lights that cast where the look allows it. The reversing lamps behind the truck light the
@@ -150,17 +149,31 @@ const aimOf = (side: 1 | -1, pitch: number): Vec3 => ({
 
 const has = (fn: Lamp['fns'][number]) => (l: Lamp) => l.fns.includes(fn);
 
-/** The cone of `light` moved to the work lamps in `lamps`, or none where it has no work lamps. */
+/** Share of its peak a work pool still has where it should end: three's distance window fades towards the cut-off. */
+const WORK_END_SHARE = 0.02;
+
+/**
+ * The cone of `light` moved to the work lamps in `lamps`, or none where it has no work lamps. The
+ * cone's `distance` is a ray length from a lamp high up, so it is set from where the pool should end
+ * on the ground, `groundEnd` (x, behind the lamps), which is where the window is down to `WORK_END_SHARE`.
+ */
 function withWork(
   light: LampLightSpec,
   lamps: readonly Lamp[],
-  distance: (position: Vec3) => number,
+  groundEnd: number,
+  aim = light.aim,
 ): LampLightSpec {
   const work = lamps.filter(has('work'));
   if (work.length === 0) return light;
   const position = placed(work, -1);
-  return { ...light, work: { ...light, position, distance: distance(position) } };
+  const windowAtEnd = (1 - Math.sqrt(WORK_END_SHARE)) ** 0.25;
+  const distance = Math.hypot(position.x - groundEnd, position.z) / windowAtEnd;
+  return { ...light, work: { ...light, position, aim, distance } };
 }
+
+/** The x on the ground where `light`'s cone ends, behind it. */
+const groundEnd = ({ position, distance }: Cone): number =>
+  position.x - Math.sqrt(distance ** 2 - position.z ** 2);
 
 /** Metres from a truck's rear end to a trailer's front when the vehicles stand straight. */
 export function drawbarGap(truck: TruckSpec, trailer: TrailerSpec): number {
@@ -195,26 +208,25 @@ export function truckLampLights(spec: TruckSpec): readonly LampLightSpec[] {
         distance: gap - (rearX - rear.x),
       },
       lamps,
-      // the work lamps stand higher up and further forward, so theirs ends just past the trailer's front
-      (position) => position.x - rearX + gap + WORK_PAST_TRAILER,
+      // the work pool runs back to the trailer's front and fades out there
+      rearX - gap,
+      aimOf(-1, REAR.workPitch),
     ),
   ];
 }
 
 export function trailerLampLight(spec: TrailerSpec): LampLightSpec {
   const { lamps } = trailerLamps(spec, 'shell');
-  return withWork(
-    {
-      id: 'trailer-rear',
-      position: placed(lamps.filter(has('reversing')), -1),
-      aim: aimOf(-1, REAR.trailerPitch),
-      angle: REAR.angle,
-      penumbra: REAR.penumbra,
-      distance: REAR.trailerDistance,
-    },
-    lamps,
-    () => REAR.trailerDistance,
-  );
+  const light: LampLightSpec = {
+    id: 'trailer-rear',
+    position: placed(lamps.filter(has('reversing')), -1),
+    aim: aimOf(-1, REAR.trailerPitch),
+    angle: REAR.angle,
+    penumbra: REAR.penumbra,
+    distance: REAR.trailerDistance,
+  };
+  // the work pool ends where the reversing one does
+  return withWork(light, lamps, groundEnd(light));
 }
 
 const smoothstep = (a: number, b: number, x: number): number => {
