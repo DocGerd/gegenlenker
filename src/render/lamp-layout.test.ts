@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
+import { TRAILER_IDS, TRUCK_IDS, type TrailerSpec } from '../contracts/vehicle';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
+import { BODY_SHELL, FLOOR_TOP, TIPPER_SHELL } from './body-dims';
 import { CAB_LENGTH, FRAME_TOP } from './cab-dims';
 import {
   type Lamp,
@@ -11,8 +12,9 @@ import {
   trailerLamps,
   truckLamps,
 } from './lamp-layout';
-import { TRUCK_LOOKS } from './livery';
+import { TRAILER_LOOKS, TRUCK_LOOKS } from './livery';
 import { REALISM_HUES as HUE } from './realism-hues';
+import { LAFETTE, lowLoaderDeck, RAMP_HEIGHT, SWAP_BODY_HEIGHT } from './trailer-dims';
 
 /*
  * UN R48 (06 series, Supplement 10), https://eur-lex.europa.eu/eli/reg/2019/57/oj/eng, for an N3
@@ -27,6 +29,8 @@ type Vehicle = {
   readonly front: number;
   readonly rear: number;
   readonly windscreenTop?: number;
+  /** The top of the body at its rear corners, above the ground (6.13.4.2). */
+  readonly rearTop: number;
   /** In one frame, the combination straight. */
   readonly lamps: readonly Lamp[];
 };
@@ -44,8 +48,22 @@ function truckVehicle(id: (typeof TRUCK_IDS)[number], cabLength: number): Vehicl
     front: a.frontX,
     rear: a.rearX,
     windscreenTop: FRAME_TOP + (cab.glassSill.value + cab.glassHeight.value) / 1000,
+    // the tipper's corner posts, above its drop sides; the tarpaulin's top
+    rearTop:
+      TRUCK_LOOKS[id].body.kind === 'tipper'
+        ? FLOOR_TOP + TIPPER_SHELL.wallHeight + BODY_SHELL.rim
+        : BODY_SHELL.tarpTop,
     lamps: truckLamps(spec, cabLength).lamps,
   };
+}
+
+/** A trailer body's rear top: the swap body, a lafette's lamp bar, a low-loader's carrier or ramps. */
+function trailerRearTop(spec: TrailerSpec, variant: 'procedural' | 'shell'): number {
+  const deck = spec.deckHeight.value / 1000;
+  const kind = TRAILER_LOOKS[spec.id].kind;
+  if (variant === 'shell' && kind === 'lafette') return deck + LAFETTE.lampBar.height;
+  if (variant === 'shell' && kind === 'low-loader') return lowLoaderDeck(spec).carrierTop + 0.01;
+  return deck + (spec.body === 'box' ? SWAP_BODY_HEIGHT : RAMP_HEIGHT);
 }
 
 function trailerVehicle(
@@ -67,6 +85,7 @@ function trailerVehicle(
     halfWidth: spec.width.value / 2000,
     front: a.turntable.x + a.eye.x,
     rear: a.rearX,
+    rearTop: trailerRearTop(spec, variant),
     lamps: trailerLamps(spec, variant).lamps.map(shift),
   };
 }
@@ -282,8 +301,9 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
       expect(fromEdge(v, l), `${l.id} outer`).toBeLessThanOrEqual(0.4 + EPS);
       const red = reds.find((r) => r.side === l.side);
       expect(red, l.id).toBeDefined();
-      // beside the red lamp: its lens is not lower, and stands outboard of it
-      expect(high(l), l.id).toBeGreaterThanOrEqual(high(red as Lamp) - 0.1);
+      // at the top of the body (6.13.4.2), and outboard of the red lamp
+      expect(high(l), l.id).toBeGreaterThanOrEqual(v.rearTop - 0.03);
+      expect(high(l), l.id).toBeLessThanOrEqual(v.rearTop + EPS);
       expect(Math.abs(l.box[1][l.side > 0 ? 1 : 0]), l.id).toBeGreaterThan(
         Math.abs((red as Lamp).box[1][l.side > 0 ? 1 : 0]),
       );

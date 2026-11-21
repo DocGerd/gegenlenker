@@ -8,6 +8,7 @@ import {
   MARKER_LENGTH,
   MARKER_SPACING,
   MARKING_END_MARGIN as END_MARGIN,
+  BODY_SHELL,
   markingBand,
   TIPPER_SHELL,
 } from './body-dims';
@@ -127,9 +128,31 @@ const REAR_CORNER = { length: 0.3, width: 0.1, height: 0.12 } as const; // lafet
  * The white half of a stalk lamp at a rear top corner (R48 6.13.2(a), 6.13.9): a lens facing forward
  * on a short bracket standing out beside the body, so the main mirrors see it past the body's side.
  */
-const REAR_VIEW = { out: 0.06, depth: 0.05, margin: 0.03 } as const;
-/** Where the truck body's side ends at the rear, above the ground: render estimates, as in `body_shell.py`. */
-const TRUCK_REAR_TOP = { tipper: FLOOR_TOP + TIPPER_SHELL.wallHeight, tarp: 2.5 } as const;
+const REAR_VIEW = { out: 0.06, depth: 0.05, margin: 0.03, lift: 0.02 } as const;
+/** End-outline lamps are excluded from the width, within 100 mm: (EU) 1230/2012 Annex I App. 1 Table II, item 6.1. */
+const MAX_PROTRUSION = 0.095;
+/**
+ * The truck body's rear top corner: the lens top above the floor, how far the shell stands out past
+ * the body's side there, and how far the bracket reaches inboard to the shell's top.
+ */
+function truckRearCorner(spec: TruckSpec): { top: number; edge: number; reach: number } {
+  const hw = metres(spec.width) / 2;
+  if (TRUCK_LOOKS[spec.id].body.kind === 'tipper') {
+    // on the corner post, outboard of it
+    return {
+      top: FLOOR_TOP + TIPPER_SHELL.wallHeight + BODY_SHELL.rim,
+      edge: hw + BODY_SHELL.postProud,
+      reach: 0,
+    };
+  }
+  // at the tarpaulin's top, outboard of its side, on a bracket from the crown
+  return {
+    top: BODY_SHELL.tarpTop,
+    edge: hw - BODY_SHELL.tarpInset,
+    reach: BODY_SHELL.tarpCrown,
+  };
+}
+
 const PLATE_LAMP = { halfWidth: 0.06, height: 0.03, belowGuardTop: 0.01 } as const;
 
 const lateral = (side: number, from: number, to: number): Range =>
@@ -144,16 +167,19 @@ function rearViewLamps(
   sink: Sink,
   part: 'body' | 'trailer',
   rear: number,
+  hw: number,
   edge: number,
   z: Range,
+  reach = 0,
 ): void {
+  const out = Math.min(REAR_VIEW.out, hw + MAX_PROTRUSION - edge);
   for (const side of SIDES) {
-    const across = lateral(side, edge, edge + REAR_VIEW.out);
+    const across = lateral(side, edge, edge + out);
     sink.brackets.push({
       part,
-      box: boxOf([rear - REAR_VIEW.depth, rear], across, [
+      box: boxOf([rear - REAR_VIEW.depth, rear], lateral(side, edge - reach, edge + out), [
         z[0] - REAR_VIEW.margin,
-        z[1] + REAR_VIEW.margin,
+        z[1] + REAR_VIEW.lift,
       ]),
       shell: false,
     });
@@ -395,8 +421,9 @@ export function truckLamps(spec: TruckSpec, cabLength = CAB_LENGTH): LampLayout 
       hue: HUE.tailLamp,
     });
   }
-  const top = TRUCK_REAR_TOP[TRUCK_LOOKS[spec.id].body.kind] - 0.02;
-  rearViewLamps(sink, 'body', rear, hw, [top - SMALL_LAMP.height, top]);
+  const corner = truckRearCorner(spec);
+  const top = corner.top - REAR_VIEW.lift;
+  rearViewLamps(sink, 'body', rear, hw, corner.edge, [top - SMALL_LAMP.height, top], corner.reach);
   return sink;
 }
 
@@ -638,7 +665,7 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
       hue: HUE.tailLamp,
     });
   }
-  rearViewLamps(sink, 'trailer', a.rearX, outline.edge, outline.z);
+  rearViewLamps(sink, 'trailer', a.rearX, hw, outline.edge, outline.z);
   lamp({
     id: 'rear-plate',
     fns: ['rear-plate'],

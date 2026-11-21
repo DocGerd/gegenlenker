@@ -38,6 +38,20 @@ export const FLOOR_TOP = FRAME_TOP + FLOOR_THICKNESS;
  */
 export const TIPPER_SHELL = { wallHeight: 0.6, headboardHeight: 1.1 } as const;
 
+/**
+ * What `tools/blender/body_shell.py` builds the rear stalk lamps stand on: the tipper's wall rim and
+ * corner posts, the tarpaulin's top, shoulder, inset and crown. The script owns the numbers and
+ * `body-dims.test.ts` pins them; they are not Params, so they stay out of the glb inputs.
+ */
+export const BODY_SHELL = {
+  rim: 0.06,
+  postProud: 0.06,
+  tarpTop: 2.75,
+  tarpShoulder: 0.25,
+  tarpInset: 0.04,
+  tarpCrown: 0.2,
+} as const;
+
 /** Body front in the top-down view, behind the 2.2 m cab box. */
 export const bodyFrontX = (frontX: number, cabLength = CAB_LENGTH): number =>
   frontX - cabLength - CAB_GAP;
