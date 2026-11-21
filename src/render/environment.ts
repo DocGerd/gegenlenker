@@ -29,6 +29,7 @@ import type { GroundTextures } from './ground-texture';
 import type { SkyTextures } from './sky-texture';
 import { createLightRig, perspectiveLight, sunPosition } from './light-rig';
 import { applyLook, type Look } from './look';
+import { nightPalette } from './palette';
 import { AID_STROKE, AIDS_LAYER, type Environment, type ShadowFocus } from './seams';
 import { REALISM_HUES } from './realism-hues';
 import { createSkyline } from './skyline';
@@ -201,10 +202,12 @@ export function proceduralEnvironment(
     const chunks = RESTYLED_KINDS.has(o.kind) ? topDownOnly : obstacles;
     addObstacle(o, palette, chunks, color, roof, isOnYard(yard, cx, cy));
   }
-  for (const mesh of obstacles.meshes(solid, geometries)) {
+  const obstacleMeshes = obstacles.meshes(solid, geometries);
+  for (const mesh of obstacleMeshes) {
     castAndReceive(mesh);
     group.add(mesh);
   }
+  const obstacleSwap = tokenCopy(obstacleMeshes);
   const tokens = topDownOnly.meshes(solid, geometries);
   for (const mesh of tokens) group.add(mesh);
   for (const piece of yardProps(layout)) {
@@ -232,6 +235,35 @@ export function proceduralEnvironment(
   const propSwap = tokenCopy(tokens);
   propSwap.set(true); // detail on until the first setLook
   propSwap.setCopies(props);
+
+  // Night: the top-down view draws twins of the lit tokens in the night palette, built on the first
+  // night look. They share the tokens' material, so no program is added; the tokens leave the top-down
+  // view for the perspective cameras.
+  let twinsBuilt = false;
+  const buildTwins = (): void => {
+    twinsBuilt = true;
+    const night = nightPalette(palette);
+    const twin = (mesh: Mesh): Mesh => {
+      mesh.receiveShadow = true;
+      mesh.layers.set(AIDS_LAYER);
+      mesh.visible = false;
+      group.add(mesh);
+      return mesh;
+    };
+    const nightGroundGeometry = groundGeometry(layout, night);
+    geometries.push(nightGroundGeometry);
+    groundSwap.setTwins([twin(new Mesh(nightGroundGeometry, solid))]);
+    const shared = new Chunks(layout.bounds);
+    const restyled = new Chunks(layout.bounds);
+    for (const o of layout.obstacles) {
+      const { cx, cy } = o.obb;
+      const chunks = RESTYLED_KINDS.has(o.kind) ? restyled : shared;
+      addObstacle(o, night, chunks, color, roof, isOnYard(yard, cx, cy));
+    }
+    const fromChunks = (chunks: Chunks): Mesh[] => chunks.meshes(solid, geometries).map(twin);
+    obstacleSwap.setTwins(fromChunks(shared));
+    propSwap.setTwins(fromChunks(restyled));
+  };
 
   const markings = new MarkingChunks(layout.bounds);
   color.set(palette.marking);
@@ -530,6 +562,8 @@ export function proceduralEnvironment(
         day.visible = !night;
         for (const stroke of strokes) stroke.visible = night;
       }
+      if (night && !twinsBuilt) buildTwins();
+      for (const swap of [groundSwap, obstacleSwap, propSwap]) swap.setTopDown(night);
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
       flatSwap.set(next.litCopies);

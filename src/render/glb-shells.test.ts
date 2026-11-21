@@ -32,7 +32,7 @@ import {
   TOP_DOWN_LAYERS,
   SHADOW_ONLY_LAYER,
 } from './seams';
-import { proceduralTruck } from './vehicle-visual';
+import { proceduralTruck, TWIN_NAME } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
 
@@ -297,6 +297,43 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     expect(seenBy(group, sees.topDown)).toEqual(topDownBefore);
     // the procedural cab and body boxes are for the top-down view only now
     expect(movedTo(group, before, AIDS_LAYER)).toHaveLength(2);
+  });
+
+  it('draws the night twins top-down in place of the tokens, whether or not a shell has taken them', async () => {
+    const d = deferred(await loadBoth(id));
+    const visual = proceduralTruck(spec, palette, d.shells);
+    applyAll(d);
+    const all = meshesOf(visual.object);
+    // cab, chassis, body: no shell takes the chassis, so it keeps the perspective views
+    const twins = all.filter((m) => m.name === TWIN_NAME);
+    expect(twins).toHaveLength(3);
+    const tokens = twins.map((t) => all.find((m) => m !== t && m.geometry === t.geometry));
+    for (const shelled of [false, true]) {
+      for (const night of [false, true]) {
+        visual.setLook(
+          lookFor(
+            { ...QUALITY_FLAGS.balanced, cabGlb: shelled, vehicleGlb: shelled },
+            night ? 'night' : 'day',
+          ),
+        );
+        const label = `shelled ${String(shelled)}, night ${String(night)}`;
+        const topDown = seenBy(visual.object, sees.topDown);
+        for (const [i, twin] of twins.entries()) {
+          const token = tokens[i];
+          expect(token, label).toBeDefined();
+          if (token === undefined) continue;
+          expect(topDown.includes(twin) && twin.visible, label).toBe(night);
+          expect(topDown.includes(token), label).toBe(!night);
+          for (const view of ['cockpit', 'mirror', 'chase'] as const) {
+            expect(seenBy(visual.object, sees[view]).includes(token), `${label} ${view}`).toBe(
+              i === 1 || !shelled,
+            );
+            expect(sees[view].test(twin.layers)).toBe(false);
+          }
+          expect(twin.castShadow).toBe(false);
+        }
+      }
+    }
   });
 
   it('shortens the side marking only where the cab is longer, by swapping the detail mesh', async () => {

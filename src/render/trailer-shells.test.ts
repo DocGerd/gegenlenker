@@ -38,7 +38,7 @@ import {
   trailerShellParams,
 } from './trailer-dims';
 import { trailerDetail } from './vehicle-detail';
-import { proceduralTrailer } from './vehicle-visual';
+import { proceduralTrailer, TWIN_NAME } from './vehicle-visual';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
 
@@ -305,6 +305,38 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
     }
     // what the top-down camera draws is the same set of meshes
     expect(seenBy(visual.object, sees.topDown)).toEqual(topDownBefore);
+  });
+
+  it('draws the night twins top-down in place of the tokens, whether or not the shell has taken them', async () => {
+    const d = deferred(await load(id));
+    const visual = proceduralTrailer(spec, palette, d.shells);
+    d.apply();
+    const parts = [...visual.object.children].flatMap((g) => meshesOf(g));
+    const twins = parts.filter((m) => m.name === TWIN_NAME);
+    expect(twins).toHaveLength(3);
+    const tokens = twins.map((t) => parts.find((m) => m !== t && m.geometry === t.geometry));
+    for (const shelled of [false, true]) {
+      for (const night of [false, true]) {
+        visual.setLook(
+          lookFor({ ...QUALITY_FLAGS.balanced, vehicleGlb: shelled }, night ? 'night' : 'day'),
+        );
+        const label = `shelled ${String(shelled)}, night ${String(night)}`;
+        const topDown = seenBy(visual.object, sees.topDown);
+        for (const [i, twin] of twins.entries()) {
+          const token = tokens[i];
+          expect(token, label).toBeDefined();
+          if (token === undefined) continue;
+          expect(topDown.includes(twin) && twin.visible, label).toBe(night);
+          expect(topDown.includes(token), label).toBe(!night);
+          for (const view of ['cockpit', 'mirror', 'chase'] as const) {
+            expect(seenBy(visual.object, sees[view]).includes(token), `${label} ${view}`).toBe(
+              !shelled,
+            );
+            expect(sees[view].test(twin.layers)).toBe(false);
+          }
+        }
+      }
+    }
   });
 
   it(
