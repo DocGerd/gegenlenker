@@ -72,7 +72,8 @@ test(
   'the lamp keys and buttons switch the lenses at night at balanced',
   { tag: HEAVY },
   async ({ page }) => {
-    test.setTimeout(PRESET_TIMEOUT_MS.balanced);
+    // one drive with a dozen shots and settles
+    test.setTimeout(2 * PRESET_TIMEOUT_MS.balanced);
     const errors: string[] = [];
     page.on('console', (m) => {
       if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
