@@ -68,7 +68,7 @@ Scene colours are theme-independent neutral greys, except the red obstacle cone 
 
 At night the top-down view draws the lit surfaces (ground, obstacles, vehicle body, cab and chassis) as twins in the night tokens below and its strokes in the night stroke tokens. The legacy lights run at `TOP_DOWN_NIGHT_LIGHT` (`src/render/look.ts`) of the day: a lit surface shows `lin(night token) · f · k`, where `f` is the legacy irradiance over π and `k` the night share. `k` is the same on every graphics preset, so the top-down output never depends on the preset. The perspective views and the day top-down view keep the day tokens. Unlit tokens are not dimmed: the white bay lines and the contact marker keep their colour, the casing stays `--scene-wheel`, and the accent and track strokes switch to `--scene-night-accent` and `--scene-night-tracks`. `tokens.test.ts` checks these targets on that model, on the night tokens.
 
-The night tokens are the day hues scaled to the darkest set that meets every target below with a margin: the casing floors the lit yard, body, cab and kerb at 3:1, and the flare term of the contrast ratio floors every T1 ground, so the T1 objects go dark and the band near black.
+The night tokens are the day hues, each no lighter than its day token per channel, scaled to the darkest set that meets every target below with a margin. The casing at 3:1 floors the verge and the body, the yard sits 1.5:1 above both and the pavement 1.5:1 above the yard, the night tracks floor the street, and wall and ramp sit 3.1:1 under the yard; the T1 objects go dark and the band near black.
 
 | Token                    | Value     | Role                                                            |
 | ------------------------ | --------- | --------------------------------------------------------------- |
@@ -81,15 +81,15 @@ The night tokens are the day hues scaled to the darkest set that meets every tar
 | `--scene-night-band`     | `#020202` | TN1 on yard and verge: yard kerbs, plot fences, cone base plate |
 | `--scene-night-wall`     | `#3f4449` | TN1 on yard                                                     |
 | `--scene-night-fence`    | `#30353a` | TN1 on yard                                                     |
-| `--scene-night-hall`     | `#24282c` | TN1 on yard; roof                                               |
+| `--scene-night-hall`     | `#1b1f23` | TN1 on yard; roof                                               |
 | `--scene-night-ramp`     | `#3f4449` | TN1 on yard                                                     |
-| `--scene-night-lamp`     | `#2b2f34` | TN1 on yard and pavement                                        |
+| `--scene-night-lamp`     | `#25292e` | TN1 on yard and pavement                                        |
 | `--scene-night-parked`   | `#30353a` | TN1 on yard                                                     |
 | `--scene-night-body`     | `#767b81` | TN3 against yard, street, pavement; marking                     |
 | `--scene-night-cab`      | `#cbcdcf` | casing 3:1                                                      |
 | `--scene-night-chassis`  | `#131519` | under body and cab                                              |
 
-- **TN1, TN3:** T1 and T3 against the night grounds, unchanged floors (3.1:1 and 1.5:1). The binding pairs are the casing against the yard, the band on the verge, and yard against verge and street.
+- **TN1, TN3:** T1 and T3 against the night grounds, unchanged floors (3.1:1 and 1.5:1). The pairs at the margin are the casing on the verge and the body, yard against verge and pavement, body against yard, night tracks against the street, and wall and ramp on the yard.
 - **TN-a, night backdrop:** `--scene-night-backdrop` is the top-down clear colour at night, darker than every night ground, 1.5:1 or more against each.
 - **TN-b, strokes on the night backdrop:** the night accent core and the contact-marker core (`--scene-marking`) are 3:1 or more against `--scene-night-backdrop`.
 - **Strokes on the night grounds:** the night accent is 3:1 or more against its `--scene-wheel` casing. On every ground the casing or the core reads 3:1 or more: the casing on yard, pavement and verge, the core on the street. The target outline and the gate ring keep their casing at night, as by day.

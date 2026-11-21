@@ -57,8 +57,8 @@ const encode = (l: number): number =>
   Math.round(255 * (l <= 0.0031308 ? 12.92 * l : 1.055 * l ** (1 / 2.4) - 0.055));
 
 /**
- * The sRGB code a lit upward surface of `key` stores under `share` of the day light: lin(token) times the legacy irradiance over pi times `share`.
- * At night the token is the night one.
+ * The sRGB code a lit upward surface of `key` stores under `lighting`: lin(token) times the legacy irradiance over pi,
+ * times TOP_DOWN_NIGHT_LIGHT at night, where the token is the night one.
  */
 async function litCode(
   page: Page,

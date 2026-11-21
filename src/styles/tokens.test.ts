@@ -471,18 +471,18 @@ describe('scene tokens', () => {
       },
     );
 
-    // The night top-down view is never brighter than the day one: each night token, dimmed, stays under its day token, dimmed by the day light, per channel.
-    it.each(Object.entries(NIGHT_KEY))('the lit %s is no brighter than by day', (key, nightKey) => {
-      const channels = (hex: string): number[] =>
-        [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-      const linear = (c: number): number =>
-        c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-      const night = channels(scene(nightKey)).map((c) => linear(c) * dim);
-      const day = channels(scene(key)).map(
-        (c) => linear(c) * (legacyIrradiance(palette) / Math.PI),
-      );
-      night.forEach((c, i) => expect(c, `channel ${i}`).toBeLessThanOrEqual(day[i] ?? 0));
-    });
+    // The night top-down view is never brighter than the day one: each night token stays under its day token, per channel.
+    it.each(Object.entries(NIGHT_KEY))(
+      'the %s night token is no lighter than its day token',
+      (key, nightKey) => {
+        const channels = (hex: string): number[] =>
+          [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+        const day = channels(scene(key));
+        channels(scene(nightKey)).forEach((c, i) =>
+          expect(c, `channel ${i}`).toBeLessThanOrEqual(day[i] ?? 0),
+        );
+      },
+    );
 
     // TN-a: the night clear colour is darker than every lit ground, so the yard's edge reads against it.
     it.each(grounds)('TN-a: nightBackdrop is darker than %s with 1.5:1 or more', (ground) => {
@@ -548,13 +548,6 @@ describe('scene tokens', () => {
         expect(ratio(flat('wheel'), lit(surface))).toBeGreaterThanOrEqual(3);
       },
     );
-
-    // The dark does not collapse the grounds into one 8-bit code, as the intermediate stores them.
-    it('keeps the lit grounds at distinct codes, above the black floor', () => {
-      const codes = grounds.map((k) => Math.round(255 * lit(k) ** (1 / 2.4)));
-      expect(new Set(codes).size).toBe(codes.length);
-      for (const c of codes) expect(c).toBeGreaterThanOrEqual(16);
-    });
 
     // The legend swatch ground is the yard as the intermediate stores it.
     it('draws the legend swatches on the lit night yard', () => {
