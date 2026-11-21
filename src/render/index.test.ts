@@ -170,6 +170,7 @@ describe('scene renderer attach hooks', () => {
     mocks.ground?.('ktx2');
     mocks.ground?.('ktx2');
     expect(mocks.warmUp).toHaveBeenCalledTimes(1);
+    expect(mocks.warmUp).toHaveBeenCalledWith('attach:ground');
     mocks.ground?.(null);
     mocks.ground?.('ktx2');
     expect(mocks.warmUp).toHaveBeenCalledTimes(2);

@@ -138,6 +138,16 @@ describe('parseOptions', () => {
     expect(parseOptions(['--quick']).pairs).toEqual([['man-le-18-280', 'krone-azw-18']]);
   });
 
+  it('--pair keeps one vehicle pair and rejects an unknown or conflicting one', () => {
+    expect(parseOptions(['--pair', 'arocs-1835-ak+krone-azw-18']).pairs).toEqual([
+      ['arocs-1835-ak', 'krone-azw-18'],
+    ]);
+    expect(() => parseOptions(['--pair', 'arocs-1835-ak+nope'])).toThrow('--pair');
+    expect(() => parseOptions(['--pair', 'arocs-1835-ak+krone-azw-18', '--quick'])).toThrow(
+      'exclusive',
+    );
+  });
+
   it('rejects bad values', () => {
     expect(() => parseOptions(['--throttle', '0'])).toThrow('--throttle');
     expect(() => parseOptions(['--runs', '1.5'])).toThrow('--runs');

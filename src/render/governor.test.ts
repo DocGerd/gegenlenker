@@ -279,4 +279,77 @@ describe('frame timer', () => {
       expect(timer.fps()).toBeCloseTo(40, 0);
     });
   });
+
+  describe('trace', () => {
+    const cost = (scale: number): number => (scale >= 1 ? 22 : 8);
+    function driveSlowFull(timer: Timer, seconds: number, start = 1000) {
+      let now = start;
+      while (now - start < seconds * 1000) {
+        now += Math.max(cost(timer.scale()), 1000 / 60);
+        timer.frame(now);
+      }
+      return now;
+    }
+
+    it('records a probe that cannot hold, twice, then nothing', () => {
+      const timer = createFrameTimer();
+      driveSlowFull(timer, 600);
+      const { events } = timer.trace();
+      expect(events.map((e) => e.kind)).toEqual([
+        'down',
+        'up',
+        'probe-failed',
+        'up',
+        'probe-failed',
+      ]);
+      expect(events.map((e) => e.level)).toEqual([1, 0, 1, 0, 1]);
+      expect(events.map((e) => e.failedProbes)).toEqual([0, 0, 1, 1, 2]);
+      expect(events.map((e) => e.hold)).toEqual([4000, 4000, 8000, 8000, 16000]);
+      for (const e of events) expect(e.p90).toBeGreaterThan(0);
+      expect(events.filter((e) => e.kind === 'up').every((e) => e.steady >= 4000)).toBe(true);
+    });
+
+    it('records a probe that holds', () => {
+      const timer = createFrameTimer();
+      const end = driveSlowFull(timer, 10);
+      run(timer, 90, 6000, end);
+      expect(timer.trace().events.map((e) => e.kind)).toEqual([
+        'down',
+        'up',
+        'probe-failed',
+        'up',
+        'probe-held',
+      ]);
+      expect(timer.scale()).toBe(1);
+    });
+
+    it('names what caused a warm-up and what it discarded', () => {
+      const timer = createFrameTimer();
+      const { end } = run(timer, 40, 30);
+      timer.warmUp('resize');
+      timer.resetTiming('scene');
+      timer.warmUp();
+      const { events } = timer.trace();
+      expect(events.map((e) => [e.kind, e.tag])).toEqual([
+        ['warmup', 'resize'],
+        ['discard', 'resize'],
+        ['warmup', 'scene'],
+        ['warmup', ''],
+      ]);
+      expect(events[0]?.t).toBe(end);
+    });
+
+    it('keeps the newest events and intervals within fixed bounds', () => {
+      const timer = createFrameTimer();
+      for (let i = 0; i < 1000; i++) timer.warmUp(String(i));
+      const { end } = run(timer, 90, 9000);
+      const trace = timer.trace();
+      expect(trace.events).toHaveLength(256);
+      expect(trace.events.at(-1)?.tag).toBe('999');
+      expect(trace.intervals).toHaveLength(8192);
+      expect(trace.dropped).toBeGreaterThan(0);
+      expect(trace.intervals.at(-1)).toBeCloseTo(1000 / 90, 3);
+      expect(end).toBeGreaterThan(0);
+    });
+  });
 });

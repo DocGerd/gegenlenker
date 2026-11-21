@@ -4,7 +4,7 @@
  * overlay per graphics preset and vehicle pair, and runs function checks. See docs/perf.md.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -50,6 +50,7 @@ const USAGE = `Usage: pnpm perf:tablet [options]
   --preset <name>    low | balanced | high | all (default all)
   --runs <n>         repeats per preset and vehicle pair (default 1)
   --quick            first vehicle pair only
+  --pair <t>+<tr>    one vehicle pair, <truck id>+<trailer id>
   --functional       also run the function checks
   --no-perf          skip the fps matrix (needs --functional)
   --allow-software   do not abort on a software GL renderer (results are not valid)
@@ -227,6 +228,8 @@ async function measure(
   opts: Options,
   preset: Preset,
   [truckId, trailerId]: Pair,
+  traces: TraceSink,
+  index: number,
 ): Promise<Run> {
   const { context, page, errors, failed } = await tabletContext(browser, {
     graphics: preset,
@@ -281,6 +284,24 @@ async function measure(
     errors.push(...samples.flatMap(readingProblems));
     const wrongBackend = backendProblem(opts.backend, final.gl);
     if (wrongBackend !== null) errors.push(wrongBackend);
+    if (final.scale < 1) {
+      const trace = await page.evaluate(() => {
+        const governor = Reflect.get(window, '__governor') as { trace: () => unknown } | undefined;
+        return governor?.trace() ?? null;
+      });
+      const label = `${preset}-${truckId}-${trailerId}-run${String(index + 1)}`;
+      const { throttle, lighting, backend } = opts;
+      const path = traces.write(label, {
+        preset,
+        pair: [truckId, trailerId],
+        throttle,
+        lighting,
+        backend,
+        reading: final,
+        trace,
+      });
+      console.log(`${label}: ended at scale ${final.scale.toFixed(2)}, governor trace ${path}`);
+    }
     return {
       reading: {
         fps: median(samples.map((s) => s.fps)),
@@ -297,13 +318,29 @@ async function measure(
   }
 }
 
+/** Governor traces of runs that ended below full resolution, kept in a directory that outlives the harness. */
+type TraceSink = { write: (label: string, content: unknown) => string };
+
+function traceSink(): TraceSink {
+  let dir: string | null = null;
+  return {
+    write(label, content) {
+      dir ??= mkdtempSync(join(tmpdir(), 'gegenlenker-governor-'));
+      const path = join(dir, `${label}.json`);
+      writeFileSync(path, JSON.stringify(content));
+      return path;
+    },
+  };
+}
+
 async function perfMatrix(browser: Browser, base: string, opts: Options): Promise<Cell[]> {
   const cells: Cell[] = [];
+  const traces = traceSink();
   for (const preset of opts.presets) {
     for (const pair of opts.pairs) {
       const cell: Cell = { preset, pair, runs: [] };
       for (let i = 0; i < opts.runs; i++) {
-        cell.runs.push(await measure(browser, base, opts, preset, pair));
+        cell.runs.push(await measure(browser, base, opts, preset, pair, traces, i));
       }
       cells.push(cell);
       const { passed, total } = cellVerdict(cell.runs);

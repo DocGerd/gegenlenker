@@ -41,6 +41,17 @@ export type Options = {
   lighting: Lighting;
 };
 
+/** `<truck id>+<trailer id>`, one of `PAIRS`. */
+export function parsePair(raw: string): Pair {
+  const pair = PAIRS.find(([truck, trailer]) => `${truck}+${trailer}` === raw);
+  if (pair === undefined) {
+    throw new Error(
+      `--pair must be one of ${PAIRS.map((p) => p.join('+')).join(', ')}, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return pair;
+}
+
 const positive = (name: string, raw: string): number => {
   const value = Number(raw);
   if (!Number.isInteger(value) || value < 1) throw new Error(`--${name} must be an integer >= 1`);
@@ -55,6 +66,7 @@ export function parseOptions(argv: readonly string[]): Options {
       preset: { type: 'string', default: 'all' },
       runs: { type: 'string', default: '1' },
       quick: { type: 'boolean', default: false },
+      pair: { type: 'string' },
       functional: { type: 'boolean', default: false },
       'no-perf': { type: 'boolean', default: false },
       'allow-software': { type: 'boolean', default: false },
@@ -73,12 +85,19 @@ export function parseOptions(argv: readonly string[]): Options {
   if (values['no-perf'] && !values.functional) {
     throw new Error('--no-perf needs --functional, otherwise nothing runs');
   }
+  if (values.pair !== undefined && values.quick)
+    throw new Error('--pair and --quick are exclusive');
   return {
     help: values.help,
     throttle: positive('throttle', values.throttle),
     runs: positive('runs', values.runs),
     presets,
-    pairs: values.quick ? PAIRS.slice(0, 1) : PAIRS,
+    pairs:
+      values.pair !== undefined
+        ? [parsePair(values.pair)]
+        : values.quick
+          ? PAIRS.slice(0, 1)
+          : PAIRS,
     functional: values.functional,
     perf: !values['no-perf'],
     allowSoftware: values['allow-software'],

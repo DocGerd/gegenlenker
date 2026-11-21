@@ -6,13 +6,14 @@
 
 ```
 pnpm perf:tablet [--throttle <n>] [--preset low|balanced|high|all] [--runs <n>]
-                 [--quick] [--functional] [--no-perf] [--allow-software] [--skip-build]
+                 [--quick | --pair <truck id>+<trailer id>] [--functional] [--no-perf] [--allow-software] [--skip-build]
                  [--backend webgl2|webgpu|auto]
 ```
 
 - `--throttle` is the CPU slowdown factor (default 4; use 6 for a pessimistic device).
 - `--runs` repeats every cell; a cell passes only if every run passes, which exposes governor flakiness.
 - `--no-perf` needs `--functional`. `--functional` adds checks for offline service worker, history back from a drive, wake lock and two-thumb touch (wheel and lever together). Any console error, failed request or lost or software WebGL context during a perf cell or check also fails it, as does a vehicle that does not move.
+- `--pair` limits the run to one vehicle pair. A run that ends below scale 1.00 keeps the resolution governor's trace (events and sampled frame intervals, from `window.__governor` under `?perf=1`) in a JSON file under the temp directory and prints its path.
 - A cell passes at at least 58 fps with the resolution scale still at 1.00. The exit code is 1 when any cell or check fails (or every check skips), 2 when the harness itself fails or the options are invalid.
 - It aborts on a software renderer (SwiftShader, llvmpipe), where fps is meaningless; `--allow-software` overrides that for debugging the harness.
 - `--backend` sets the app's `?backend=` (see below) and fails a cell drawn on another backend; `auto` fails one not drawn on WebGPU, since it runs the WebGPU gate. The table names each cell's backend. For WebGPU it adds `--enable-unsafe-webgpu`, and on WSL `--use-webgpu-adapter=opengles`: WSL has no hardware Vulkan driver, so Dawn's OpenGL ES backend is its only hardware adapter, and that one runs in compatibility mode (no canvas MSAA).
