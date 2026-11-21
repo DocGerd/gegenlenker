@@ -1,4 +1,4 @@
-import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
+import type { NightLitKey, ScenePalette, ScenePaletteKey } from '../contracts/render';
 
 export const KEYS: Record<ScenePaletteKey, true> = {
   sky: true,
@@ -27,6 +27,22 @@ export const KEYS: Record<ScenePaletteKey, true> = {
   nightTracks: true,
   band: true,
   cladding: true,
+  nightYard: true,
+  nightPavement: true,
+  nightStreet: true,
+  nightVerge: true,
+  nightKerb: true,
+  nightCone: true,
+  nightBand: true,
+  nightWall: true,
+  nightFence: true,
+  nightHall: true,
+  nightRamp: true,
+  nightLamp: true,
+  nightParked: true,
+  nightBody: true,
+  nightCab: true,
+  nightChassis: true,
 };
 
 /** `nightBackdrop` is the token `--scene-night-backdrop`. */
@@ -46,5 +62,29 @@ export function readScenePalette(el: Element = document.documentElement): SceneP
   return palette as ScenePalette;
 }
 
-/** The tokens the top-down view draws its lit surfaces in at night. */
-export const nightPalette = (palette: ScenePalette): ScenePalette => palette;
+/** The night token of each lit key. */
+export const NIGHT_KEY: Readonly<{ [K in NightLitKey]: `night${Capitalize<K>}` }> = {
+  yard: 'nightYard',
+  pavement: 'nightPavement',
+  street: 'nightStreet',
+  verge: 'nightVerge',
+  kerb: 'nightKerb',
+  cone: 'nightCone',
+  band: 'nightBand',
+  wall: 'nightWall',
+  fence: 'nightFence',
+  hall: 'nightHall',
+  ramp: 'nightRamp',
+  lamp: 'nightLamp',
+  parked: 'nightParked',
+  body: 'nightBody',
+  cab: 'nightCab',
+  chassis: 'nightChassis',
+};
+
+/** The palette the top-down view draws its lit surfaces in at night: each lit key takes its night token. */
+export function nightPalette(palette: ScenePalette): ScenePalette {
+  const night: Record<ScenePaletteKey, number> = { ...palette };
+  for (const key of Object.keys(NIGHT_KEY) as NightLitKey[]) night[key] = palette[NIGHT_KEY[key]];
+  return night;
+}

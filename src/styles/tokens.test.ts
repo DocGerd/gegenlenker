@@ -1,14 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { LAYOUT_IDS } from '../contracts/layout';
-import type { ScenePalette, ScenePaletteKey } from '../contracts/render';
+import type { NightLitKey, ScenePalette, ScenePaletteKey } from '../contracts/render';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { isOnYard } from '../render/yard-props';
 import { obstaclePaletteKey } from '../render/yard-tokens';
 import { legacyIrradiance } from '../render/light-rig';
 import { TOP_DOWN_NIGHT_LIGHT } from '../render/look';
-import { KEYS, tokenName } from '../render/palette';
+import { KEYS, NIGHT_KEY, tokenName } from '../render/palette';
 import { REALISM_HUES } from '../render/realism-hues';
 import { HUD_BAND_SHARE } from '../render/viewports';
 
@@ -386,13 +386,13 @@ describe('scene tokens', () => {
   );
 
   // The legacy lights run at TOP_DOWN_NIGHT_LIGHT of the day at night, so a lit surface shows
-  // lin(token) * f * k, f being the legacy irradiance over pi; unlit strokes and markings keep their colour.
+  // lin(night token) * f * k, f being the legacy irradiance over pi; unlit strokes and markings keep their colour.
   const palette = Object.fromEntries(
     keys.map((key) => [key, parseInt(scene(key).slice(1), 16)]),
   ) as unknown as ScenePalette;
   const dim = (legacyIrradiance(palette) / Math.PI) * TOP_DOWN_NIGHT_LIGHT;
-  /** Relative luminance of a lit surface at night. */
-  const lit = (key: string): number => luminance(scene(key)) * dim;
+  /** Relative luminance of a lit surface at night: its night token, dimmed by the night light. */
+  const lit = (key: string): number => luminance(scene(NIGHT_KEY[key as NightLitKey])) * dim;
   /** Relative luminance of an unlit token, which the night light does not touch. */
   const flat = (key: string): number => luminance(scene(key));
   const ratio = (a: number, b: number): number => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
@@ -471,6 +471,19 @@ describe('scene tokens', () => {
       },
     );
 
+    // The night top-down view is never brighter than the day one: each night token stays under its day token, per channel.
+    it.each(Object.entries(NIGHT_KEY))(
+      'the %s night token is no lighter than its day token',
+      (key, nightKey) => {
+        const channels = (hex: string): number[] =>
+          [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+        const day = channels(scene(key));
+        channels(scene(nightKey)).forEach((c, i) =>
+          expect(c, `channel ${i}`).toBeLessThanOrEqual(day[i] ?? 0),
+        );
+      },
+    );
+
     // TN-a: the night clear colour is darker than every lit ground, so the yard's edge reads against it.
     it.each(grounds)('TN-a: nightBackdrop is darker than %s with 1.5:1 or more', (ground) => {
       expect(flat('nightBackdrop'), 'darker').toBeLessThan(lit(ground));
@@ -544,7 +557,7 @@ describe('scene tokens', () => {
         const v = c / 255;
         return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
       };
-      const yard = scene('yard');
+      const yard = scene('nightYard');
       const expected = [1, 3, 5]
         .map((i) => encode(decode(parseInt(yard.slice(i, i + 2), 16)) * dim))
         .map((c) => c.toString(16).padStart(2, '0'))
