@@ -47,7 +47,8 @@ export type LampFn =
   | 'rear-indicator'
   | 'reversing'
   | 'rear-fog'
-  | 'rear-plate';
+  | 'rear-plate'
+  | 'work';
 
 export type LampColour = 'white' | 'red' | 'amber';
 
@@ -66,6 +67,7 @@ export const LAMP_COLOURS: Readonly<Record<LampFn, LampColour>> = {
   reversing: 'white',
   'rear-fog': 'red',
   'rear-plate': 'white',
+  work: 'white',
 };
 
 export type LampPart = 'cab' | 'body' | 'trailer' | 'dolly';
@@ -120,6 +122,20 @@ const TRAILER_FRONT = { bracket: 0.1, inset: 0.005, gap: 0.01 } as const;
 const DOLLY_MARKER = { behindKink: 0.3, bracket: 0.05, relief: 0.02 } as const;
 const REAR_CORNER = { length: 0.3, width: 0.1, height: 0.12 } as const; // lafette rear side marker block
 const PLATE_LAMP = { halfWidth: 0.06, height: 0.03, belowGuardTop: 0.01 } as const;
+/**
+ * Rear work floodlights, not an R48 function. A pair on the truck body's front wall, on posts that
+ * rise to `truckSill` (above a tipper's headboard and a tarp's roof), or on a swap body's rear edge
+ * `belowTop` under its roof. `housing` is the lamp box's depth, `lateral` its centre off the centreline.
+ */
+export const WORK_LAMP = {
+  width: 0.3,
+  height: 0.12,
+  lateral: 0.6,
+  housing: 0.11,
+  truckSill: 2.75,
+  belowTop: 0.3,
+  post: { halfWidth: 0.04, behindFront: [0.09, 0.02] },
+} as const;
 
 const lateral = (side: number, from: number, to: number): Range =>
   side > 0 ? [from, to] : [-to, -from];
@@ -127,6 +143,32 @@ const r = ([a, b]: Range): Range => [round(a), round(b)];
 const boxOf = (x: Range, y: Range, z: Range): Box3 => [r(x), r(y), r(z)];
 const SIDES = [1, -1] as const;
 const sideName = (side: number): string => (side > 0 ? 'left' : 'right');
+
+/** A work floodlight pair: lens boxes behind `housing` (an x range), at `z`, each side on `y` from the centreline. */
+function workPair(
+  sink: Sink,
+  part: LampPart,
+  housing: Range,
+  z: Range,
+  extra: (side: number) => Bracket[],
+): void {
+  const w = WORK_LAMP.width;
+  for (const side of SIDES) {
+    const y = lateral(side, WORK_LAMP.lateral - w / 2, WORK_LAMP.lateral + w / 2);
+    sink.brackets.push(...extra(side), { part, box: boxOf(housing, y, z), shell: false });
+    sink.lamps.push({
+      id: `work-${sideName(side)}`,
+      fns: ['work'],
+      side,
+      part,
+      facing: 'rear',
+      box: boxOf([housing[0] - LENS_DEPTH, housing[0]], y, z),
+      hue: HUE.plateWhite,
+      shell: false,
+      seat: 'detail',
+    });
+  }
+}
 
 /** Marker centres along [x0, x1], as the procedural side marking spaces them. */
 export function markerXs(x0: number, x1: number): number[] {
@@ -352,6 +394,27 @@ export function truckLamps(spec: TruckSpec, cabLength = CAB_LENGTH): LampLayout 
       hue: HUE.tailLamp,
     });
   }
+
+  // posts through the front wall (a tipper's headboard, a tarp's front) carry the work lamps over the body
+  const bodyFront = bodyFrontX(front, cabLength);
+  const [post0, post1] = WORK_LAMP.post.behindFront;
+  const housing: Range = [bodyFront - WORK_LAMP.housing - 0.01, bodyFront - 0.01];
+  const sill = WORK_LAMP.truckSill;
+  workPair(sink, 'body', housing, [sill, sill + WORK_LAMP.height], (side) => [
+    {
+      part: 'body',
+      box: boxOf(
+        [bodyFront - post0, bodyFront - post1],
+        lateral(
+          side,
+          WORK_LAMP.lateral - WORK_LAMP.post.halfWidth,
+          WORK_LAMP.lateral + WORK_LAMP.post.halfWidth,
+        ),
+        [FLOOR_TOP, sill],
+      ),
+      shell: false,
+    },
+  ]);
   return sink;
 }
 
@@ -592,6 +655,17 @@ export function trailerLamps(spec: TrailerSpec, variant: LampVariant): LampLayou
       box: boxOf(rearX, outline.y(side), outline.z),
       hue: HUE.tailLamp,
     });
+  }
+  if (isBox && variant === 'procedural') {
+    // the lafette shell has no swap body to stand them on
+    const top = deck + SWAP_BODY_HEIGHT - WORK_LAMP.belowTop;
+    workPair(
+      sink,
+      'trailer',
+      [a.rearX - WORK_LAMP.housing, a.rearX],
+      [top, top + WORK_LAMP.height],
+      () => [],
+    );
   }
   lamp({
     id: 'rear-plate',

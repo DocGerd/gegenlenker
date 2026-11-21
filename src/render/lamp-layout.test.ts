@@ -26,6 +26,8 @@ type Vehicle = {
   readonly front: number;
   readonly rear: number;
   readonly windscreenTop?: number;
+  /** Whether a structure stands above the reversing lamps, which is where work floodlights go. */
+  readonly workFitted: boolean;
   /** In one frame, the combination straight. */
   readonly lamps: readonly Lamp[];
 };
@@ -43,6 +45,7 @@ function truckVehicle(id: (typeof TRUCK_IDS)[number], cabLength: number): Vehicl
     front: a.frontX,
     rear: a.rearX,
     windscreenTop: FRAME_TOP + (cab.glassSill.value + cab.glassHeight.value) / 1000,
+    workFitted: true,
     lamps: truckLamps(spec, cabLength).lamps,
   };
 }
@@ -66,6 +69,8 @@ function trailerVehicle(
     halfWidth: spec.width.value / 2000,
     front: a.turntable.x + a.eye.x,
     rear: a.rearX,
+    // the lafette shell is a bare chassis, so only the procedural swap body carries them
+    workFitted: spec.body === 'box' && variant === 'procedural',
     lamps: trailerLamps(spec, variant).lamps.map(shift),
   };
 }
@@ -203,7 +208,10 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     const front = v.lamps.filter(
       (l) => l.facing === 'front' && !l.fns.includes('end-outline-front'),
     );
-    const rear = v.lamps.filter((l) => l.facing === 'rear' && !l.fns.includes('end-outline-rear'));
+    // the work floodlights stand on masts and are no R48 function
+    const rear = v.lamps.filter(
+      (l) => l.facing === 'rear' && !l.fns.includes('end-outline-rear') && !l.fns.includes('work'),
+    );
     if (v.windscreenTop === undefined) {
       expect(top('end-outline-front')).toBeGreaterThanOrEqual(Math.max(...front.map(high)) - EPS);
     } else {
@@ -268,6 +276,25 @@ describe.each(vehicles)('R48 lamps of $name', (v) => {
     for (const l of v.lamps.filter((l) => l.side !== 0)) {
       expect(lamps.has(mirrored(l)), l.id).toBe(true);
     }
+  });
+
+  it('fit a pair of work floodlights where a structure stands above the reversing lamps', () => {
+    const work = withFn(v, 'work');
+    if (!v.workFitted) {
+      expect(work).toHaveLength(0);
+      return;
+    }
+    const { left, right } = pair(v, 'work');
+    const reversing = pair(v, 'reversing');
+    for (const l of [left, right]) {
+      expect(l.facing, l.id).toBe('rear');
+      expect(l.box[0][1], `${l.id} behind the vehicle's front`).toBeLessThan(v.front);
+      expect(low(l), `${l.id} above the reversing lamps`).toBeGreaterThan(
+        Math.max(high(reversing.left), high(reversing.right)),
+      );
+      expect(fromEdge(v, l), `${l.id} inside the width`).toBeGreaterThan(0);
+    }
+    expect(innerGap({ left, right })).toBeGreaterThan(0);
   });
 
   it('give a trailer, and only a trailer, a rear plate lamp (6.8)', () => {

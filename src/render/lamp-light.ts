@@ -19,6 +19,7 @@ import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailers } from '../vehicles/registry';
 import { gradeDisabled, setGraded, type GradeSample } from './grade';
 import { type Lamp, trailerLamps, truckLamps } from './lamp-layout';
+import { TRUCK_LOOKS } from './livery';
 import { type LampState } from './lamp-state';
 import { PERSPECTIVE_LAYER } from './seams';
 import { prepareShadow, queueShadow } from './sun-shadow';
@@ -50,8 +51,11 @@ export type Cone = {
   readonly decay?: number;
 };
 
-/** Positions are in the body frame of the part that carries the light. */
-export type LampLightSpec = Cone & { readonly id: LampLightId };
+/**
+ * Positions are in the body frame of the part that carries the light. A rear light with `work` takes
+ * that cone while the work floodlights shine: the light set stays the same, only its uniforms change.
+ */
+export type LampLightSpec = Cone & { readonly id: LampLightId; readonly work?: Cone };
 
 /** The dipped beam: asymmetric, with a cut-off, and shaped by `beamPattern`. */
 export const BEAM = {
@@ -91,6 +95,9 @@ export const REAR = {
  * `TAIL_LEVEL` of the stop lamp's).
  */
 export const GROUND = { dipped: 1.1, reversing: 1.2, stop: 0.8 } as const;
+
+/** A truck's work light ends this far (m) past the trailer's front face. */
+const WORK_PAST_TRAILER = 0.5;
 
 /**
  * The lights that cast where the look allows it. The reversing lamps behind the truck light the
@@ -143,6 +150,18 @@ const aimOf = (side: 1 | -1, pitch: number): Vec3 => ({
 
 const has = (fn: Lamp['fns'][number]) => (l: Lamp) => l.fns.includes(fn);
 
+/** The cone of `light` moved to the work lamps in `lamps`, or none where it has no work lamps. */
+function withWork(
+  light: LampLightSpec,
+  lamps: readonly Lamp[],
+  distance: (position: Vec3) => number,
+): LampLightSpec {
+  const work = lamps.filter(has('work'));
+  if (work.length === 0) return light;
+  const position = placed(work, -1);
+  return { ...light, work: { ...light, position, distance: distance(position) } };
+}
+
 /** Metres from a truck's rear end to a trailer's front when the vehicles stand straight. */
 export function drawbarGap(truck: TruckSpec, trailer: TrailerSpec): number {
   const t = truckAnchors(truck);
@@ -152,9 +171,10 @@ export function drawbarGap(truck: TruckSpec, trailer: TrailerSpec): number {
 
 /** The truck's lights: the dipped beam ahead, and the reversing and stop lamps over the drawbar gap behind. */
 export function truckLampLights(spec: TruckSpec): readonly LampLightSpec[] {
-  const { lamps } = truckLamps(spec);
+  const { lamps } = truckLamps(spec, TRUCK_LOOKS[spec.id].cab.length);
   const rear = placed(lamps.filter(has('reversing')), -1);
   const gap = Math.min(...trailers.map((t) => drawbarGap(spec, t)));
+  const rearX = truckAnchors(spec).rearX;
   return [
     {
       id: 'truck-front',
@@ -164,27 +184,37 @@ export function truckLampLights(spec: TruckSpec): readonly LampLightSpec[] {
       penumbra: BEAM.penumbra,
       distance: BEAM.distance,
     },
-    {
-      id: 'truck-rear',
-      position: rear,
-      aim: aimOf(-1, REAR.pitch),
-      angle: REAR.angle,
-      penumbra: REAR.penumbra,
-      // ends before the trailer's front, which the light would otherwise reach through the gap
-      distance: gap - (truckAnchors(spec).rearX - rear.x),
-    },
+    withWork(
+      {
+        id: 'truck-rear',
+        position: rear,
+        aim: aimOf(-1, REAR.pitch),
+        angle: REAR.angle,
+        penumbra: REAR.penumbra,
+        // ends before the trailer's front, which the light would otherwise reach through the gap
+        distance: gap - (rearX - rear.x),
+      },
+      lamps,
+      // the work lamps stand higher up and further forward, so theirs ends just past the trailer's front
+      (position) => position.x - rearX + gap + WORK_PAST_TRAILER,
+    ),
   ];
 }
 
 export function trailerLampLight(spec: TrailerSpec): LampLightSpec {
-  return {
-    id: 'trailer-rear',
-    position: placed(trailerLamps(spec, 'shell').lamps.filter(has('reversing')), -1),
-    aim: aimOf(-1, REAR.trailerPitch),
-    angle: REAR.angle,
-    penumbra: REAR.penumbra,
-    distance: REAR.trailerDistance,
-  };
+  const { lamps } = trailerLamps(spec, 'shell');
+  return withWork(
+    {
+      id: 'trailer-rear',
+      position: placed(lamps.filter(has('reversing')), -1),
+      aim: aimOf(-1, REAR.trailerPitch),
+      angle: REAR.angle,
+      penumbra: REAR.penumbra,
+      distance: REAR.trailerDistance,
+    },
+    lamps,
+    () => REAR.trailerDistance,
+  );
 }
 
 const smoothstep = (a: number, b: number, x: number): number => {
@@ -259,12 +289,13 @@ type Candela = { readonly white: number; readonly red: number };
 
 const candelas = new Map<string, Candela>();
 
-/** The candela that bring each lamp to its `GROUND` peak. */
-export function candela(spec: LampLightSpec): Candela {
-  const key = `${spec.id} ${spec.position.z} ${spec.distance}`;
+/** The candela that bring each lamp to its `GROUND` peak; with `work`, as the light stands on the work floodlights' cone. */
+export function candela(spec: LampLightSpec, work = false): Candela {
+  const cone = work && spec.work !== undefined ? { ...spec, ...spec.work } : spec;
+  const key = `${spec.id} ${cone.position.z} ${cone.distance} ${cone.position.x}`;
   let known = candelas.get(key);
   if (known === undefined) {
-    const perCandela = groundIrradiancePerCandela(spec);
+    const perCandela = groundIrradiancePerCandela(cone);
     known =
       spec.id === 'truck-front'
         ? { white: GROUND.dipped / perCandela, red: 0 }
@@ -314,18 +345,26 @@ export interface LampLights {
 
 const toThree = ({ x, y, z }: Vec3, out = new Vector3()): Vector3 => out.set(x, z, -y);
 
+/** Puts `light` on `cone`; the light stays in its set, only its uniforms (and its shadow camera's) follow. */
+function shape(light: SpotLight, cone: Cone): void {
+  toThree(cone.position, light.position);
+  light.target.position.copy(light.position).addScaledVector(toThree(cone.aim), 10);
+  light.angle = cone.angle;
+  light.penumbra = cone.penumbra;
+  light.distance = cone.distance;
+}
+
 /** Lights for `specs`, children of `parent`, whose frame is the specs' part. Off until `setEnabled`. */
 export function createLampLights(specs: readonly LampLightSpec[], parent: Object3D): LampLights {
   const maps = specs.map((s) => {
     const pattern = patternOf(s.id);
     return pattern === null ? null : patternMap(pattern);
   });
-  const cds = specs.map(candela);
+  const cds = specs.map((s) => candela(s));
+  const workCds = specs.map((s) => (s.work === undefined ? null : candela(s, true)));
   const lights = specs.map((spec, i) => {
     const light = new SpotLight(0xffffff, 0, spec.distance, spec.angle, spec.penumbra, 2);
-    toThree(spec.position, light.position);
-    const aim = toThree(spec.aim);
-    light.target.position.copy(light.position).addScaledVector(aim, 10);
+    shape(light, spec);
     light.map = maps[i] ?? null;
     if (CASTING_LIGHTS.includes(spec.id)) {
       prepareShadow(light, LAMP_SHADOW.mapSize);
@@ -341,6 +380,7 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
     return light;
   });
   let wanted = false;
+  const working = specs.map(() => false);
   const setCasting = (): void => {
     specs.forEach((spec, i) => {
       const light = lights[i];
@@ -362,8 +402,13 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
       setCasting();
       specs.forEach((spec, i) => {
         const light = lights[i];
-        const cd = cds[i];
-        if (light === undefined || cd === undefined) return;
+        const cone = state.levels.work > 0 ? spec.work : undefined;
+        const cd = cone === undefined ? cds[i] : workCds[i];
+        if (light === undefined || cd === undefined || cd === null) return;
+        if ((cone !== undefined) !== working[i]) {
+          working[i] = cone !== undefined;
+          shape(light, cone ?? spec);
+        }
         light.intensity = emission(spec.id, cd, state, light.color);
         // a dark lamp skips its pass and keeps castShadow: flipping it rebuilds every lit program
         if (light.intensity > 0) queueShadow(light);
