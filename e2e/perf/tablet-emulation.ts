@@ -54,7 +54,8 @@ const USAGE = `Usage: pnpm perf:tablet [options]
   --no-perf          skip the fps matrix (needs --functional)
   --allow-software   do not abort on a software GL renderer (results are not valid)
   --skip-build       reuse the existing dist/ (must be built with BASE_PATH=${BASE_PATH})
-  --backend <name>   webgl2 | webgpu | auto: the app's ?backend= (default: the app's default)`;
+  --backend <name>   webgl2 | webgpu | auto: the app's ?backend= (default: the app's default)
+  --lighting <mode>  day | night: the stored lighting setting (default day)`;
 
 const wsl = existsSync(WSL_LIB);
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -229,6 +230,7 @@ async function measure(
 ): Promise<Run> {
   const { context, page, errors, failed } = await tabletContext(browser, {
     graphics: preset,
+    lighting: opts.lighting,
     truckId,
     trailerId,
   });

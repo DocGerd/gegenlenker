@@ -21,6 +21,8 @@ export type Look = {
   readonly sky: LightingMode;
   /** The lamp lenses of the vehicles are lit. */
   readonly lamps: boolean;
+  /** The lamps light the ground and the yard: the SpotLights are in the light set. */
+  readonly lampLight: boolean;
   /** The HDRI sun casts a shadow; the contact blobs stay while it does not. */
   readonly shadow: boolean;
   readonly grade: {
@@ -56,6 +58,7 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
     topDownLight: night ? TOP_DOWN_NIGHT_LIGHT : 1,
     sky: mode,
     lamps: night,
+    lampLight: flags.lampLight && night,
     shadow: flags.sunShadow && flags.perspectiveLighting && !night,
     grade: {
       on: flags.perspectiveLighting,

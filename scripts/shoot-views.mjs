@@ -1,6 +1,6 @@
 // Pinned-clock shots of every view per graphics preset, for before/after renderer comparisons.
 // Usage: node scripts/shoot-views.mjs --url <app url> --out <dir> [--backend webgl2|webgpu]
-//          [--compare <hashes.json>] [--diff <dir>] [--lighting day|night]
+//          [--compare <hashes.json>] [--diff <dir>] [--lighting day|night] [--gear R]
 //          [--new-headless]
 //        node scripts/shoot-views.mjs --out <dir> --diff <dir>   (diff earlier shots only)
 // --backend webgpu draws on SwiftShader's WebGPU adapter (no GPU needed) in Chromium's new headless
@@ -19,6 +19,7 @@ import {
   diffShot,
   distinctColours,
   MIN_DRAWN_COLOURS,
+  shiftToReverse,
   shoot,
   startPinnedDrive,
   tokenShare,
@@ -62,6 +63,7 @@ const { values } = parseArgs({
     diff: { type: 'string' },
     backend: { type: 'string', default: 'webgl2' },
     lighting: { type: 'string', default: 'day' },
+    gear: { type: 'string' },
     'new-headless': { type: 'boolean', default: false },
   },
 });
@@ -71,6 +73,10 @@ if (values.backend !== 'webgl2' && values.backend !== 'webgpu') {
 }
 if (values.lighting !== 'day' && values.lighting !== 'night') {
   console.error('--lighting must be day or night');
+  process.exit(2);
+}
+if (values.gear !== undefined && values.gear !== 'R') {
+  console.error('--gear must be R');
   process.exit(2);
 }
 if (values.out === undefined || (values.url === undefined && values.diff === undefined)) {
@@ -105,6 +111,7 @@ try {
         EXERCISE,
         `?backend=${values.backend}`,
       );
+      if (values.gear === 'R') await shiftToReverse(page);
       const backend = await page.locator('html').getAttribute('data-render-backend');
       if (backend !== values.backend)
         throw new Error(`${preset}: drawn on ${backend ?? 'nothing'}, not ${values.backend}`);
@@ -140,7 +147,8 @@ try {
       await context.close();
     }
     writeFileSync(join(values.out, 'hashes.json'), `${JSON.stringify(hashes, null, 2)}\n`);
-    for (const shot of TOP_DOWN) {
+    // after a gear change the follow framing is still easing towards its lead, at a pace each preset's frames set
+    for (const shot of values.gear === undefined ? TOP_DOWN : []) {
       const seen = new Set(PRESETS.map((preset) => hashes[`${preset}-${shot}`]));
       if (seen.size !== 1) {
         console.log(`FAIL   ${shot}: the top-down view differs between presets`);

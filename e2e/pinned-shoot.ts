@@ -236,6 +236,14 @@ export async function settle(
   await step(page, SETTLE_FRAMES);
 }
 
+/** Shifts to reverse. The sim stands still; the reversing lamps light, and the prediction aid and the follow framing move. */
+export async function shiftToReverse(page: Page): Promise<void> {
+  await page.keyboard.press('2');
+  await step(page, 2);
+  await page.locator('[data-gear="R"][aria-pressed="true"]').waitFor();
+  await step(page, SETTLE_FRAMES);
+}
+
 /** The bare canvas (HUD and controls hidden) under `shot`'s pane, as PNG; switches the view first when needed. */
 export async function shoot(page: Page, shot: Shot): Promise<Buffer> {
   const key = VIEW_KEY[shot];
@@ -456,6 +464,26 @@ export function brightShare(page: Page, png: Buffer, level: number): Promise<num
     },
     [png.toString('base64'), level] as const,
   );
+}
+
+/** Mean of the highest channel of every pixel of a PNG (0-255): what a lamp's light adds to a dark pane. */
+export function meanBrightness(page: Page, png: Buffer): Promise<number> {
+  return page.evaluate(async (data) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${data}`;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) throw new Error('no 2d context');
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, img.width, img.height).data;
+    let sum = 0;
+    for (let i = 0; i < px.length; i += 4)
+      sum += Math.max(px[i] ?? 0, px[i + 1] ?? 0, px[i + 2] ?? 0);
+    return sum / (img.width * img.height);
+  }, png.toString('base64'));
 }
 
 export type ShotDiff = {

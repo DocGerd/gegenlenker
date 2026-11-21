@@ -10,7 +10,9 @@ import {
   MIN_DRAWN_COLOURS,
   PRESET_TIMEOUT_MS,
   type Preset,
+  meanBrightness,
   type Shot,
+  shiftToReverse,
   shoot,
   startPinnedDrive,
   tokenShare,
@@ -35,6 +37,7 @@ for (const preset of PRESETS) {
       page.on('pageerror', (e) => errors.push(e.message));
       const three = collectThreeProblems(page);
       await startPinnedDrive(page, { preset, lighting: 'night' }, en.exerciseStraightReverse);
+      const parked: Partial<Record<Shot, number>> = {};
       for (const shot of PERSPECTIVE) {
         if (shot === 'chase' && !QUALITY_FLAGS[preset].chaseView) continue;
         const png = await shoot(page, shot);
@@ -46,12 +49,21 @@ for (const preset of PRESETS) {
             await brightShare(page, png, DAY_BRIGHT),
             `${preset} ${shot} bright pixels`,
           ).toBeLessThan(MAX_MIRROR_BRIGHT);
+          parked[shot] = await meanBrightness(page, png);
         }
         if (shot === 'cockpit') {
           expect(
             await tokenShare(page, png, 'nightBackdrop', 0),
             `${preset} ${shot} clear colour`,
           ).toBeLessThan(MAX_CLEAR_COLOUR);
+        }
+      }
+      if (QUALITY_FLAGS[preset].lampLight) {
+        // the reversing lamps light the ground behind truck and trailer, which the mirrors show
+        await shiftToReverse(page);
+        for (const shot of ['mirrorLeft', 'mirrorRight'] as const) {
+          const reversing = await meanBrightness(page, await shoot(page, shot));
+          expect(reversing, `${preset} ${shot} in R`).toBeGreaterThan(parked[shot] ?? Infinity);
         }
       }
       expect(errors).toEqual([]);
