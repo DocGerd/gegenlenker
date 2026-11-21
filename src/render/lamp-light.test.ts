@@ -421,7 +421,7 @@ describe('lamp light in the vehicle visuals', () => {
     return layers;
   };
 
-  it('keeps every vehicle light on the top-down layer or on one every perspective camera sees, and none casting', () => {
+  it('keeps every vehicle light on the top-down layer or on one every perspective camera sees', () => {
     const perspective = [COCKPIT_LAYERS, MIRROR_LAYERS, CHASE_LAYERS].map(camera);
     for (const [, make] of visuals) {
       const visual = make();
@@ -434,7 +434,6 @@ describe('lamp light in the vehicle visuals', () => {
           const everywhere = perspective.every((c) => (c.mask & l.layers.mask) === l.layers.mask);
           expect(aidsOnly || everywhere).toBe(true);
           expect(l.layers.mask).toBe(1 << PERSPECTIVE_LAYER);
-          expect(l.castShadow).toBe(false);
         }
       }
       visual.dispose();
@@ -443,11 +442,12 @@ describe('lamp light in the vehicle visuals', () => {
 });
 
 describe('lampLitSample', () => {
-  it('is a graded surface under a spot light with the beam map', () => {
+  it('is a graded shadow receiver under the casting spot light with the beam map', () => {
     const sample = lampLitSample();
     expect(sample.lights).toHaveLength(1);
     const [light] = sample.lights ?? [];
-    expect(light instanceof SpotLight && light.map !== null).toBe(true);
+    expect(light instanceof SpotLight && light.map !== null && light.castShadow).toBe(true);
+    expect(sample.mesh.receiveShadow).toBe(true);
     sample.dispose();
   });
 });

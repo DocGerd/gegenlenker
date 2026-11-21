@@ -6,7 +6,7 @@ import type { LightingMode } from '../src/contracts/render';
 import { heavyAt, PRESET_TIMEOUT_MS, type Preset, settle, startPinnedDrive } from './pinned-shoot';
 import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 
-// High at night is the one lit scene with the sun's shadow pass taken out and the aids unlit.
+// High at night is the one lit scene with the sun's shadow pass taken out, the aids unlit and the lamps' passes in.
 const RUNS: readonly { preset: Preset; lighting: LightingMode }[] = [
   { preset: 'low', lighting: 'day' },
   { preset: 'balanced', lighting: 'day' },
@@ -20,6 +20,8 @@ const VIEWS = [
 ] as const;
 /** Longer than the overlay's refresh interval, with frames in between. */
 const PAST_REFRESH_MS = 500;
+/** The sun at High by day; at night the dipped beam and the trailer's rear light, both lit at the start. */
+const SHADOW_PASSES = { day: 1, night: 2 } as const;
 
 for (const { preset, lighting } of RUNS) {
   const label = lighting === 'night' ? `${preset} at night` : preset;
@@ -49,7 +51,7 @@ for (const { preset, lighting } of RUNS) {
         expect(drawnBackend(reading.gl), `${label} ${view} backend`).toBe('webgl2');
         expect(reading.calls, `${label} ${view} drew nothing`).toBeGreaterThan(0);
         expect(reading.shadow, `${label} ${view} shadow passes`).toBe(
-          preset === 'high' && lighting === 'day' ? 1 : 0,
+          preset === 'high' ? SHADOW_PASSES[lighting] : 0,
         );
         expect(reading.calls, `draw calls over ${DRAW_CALL_BUDGET}`).toBeLessThanOrEqual(
           DRAW_CALL_BUDGET,

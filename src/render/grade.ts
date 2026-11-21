@@ -31,6 +31,7 @@ import {
   type NodeMaterial,
   type WebGPURenderer,
 } from 'three/webgpu';
+import { countSamplers } from './ground-pbr-spec';
 import { gpuLost } from './seams';
 
 /*
@@ -197,6 +198,8 @@ export function buildSerially<T>(gpu: WebGPURenderer, build: () => Promise<T>): 
  */
 export type GradeSample = {
   readonly mesh: Mesh;
+  /** The most samplers its fragment shader may declare; a bigger one rejects the check. */
+  readonly maxSamplers?: number;
   readonly lights?: readonly Light[];
   readonly override?: Material;
   readonly markers?: readonly string[];
@@ -294,6 +297,10 @@ async function buildGrade(
       );
       if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
         throw new Error('a graded shader did not build');
+      }
+      const samplers = countSamplers(fragmentShader ?? '');
+      if (sample.maxSamplers !== undefined && samplers > sample.maxSamplers) {
+        throw new Error(`a graded shader declares ${String(samplers)} samplers`);
       }
     }
     if (rejected.log !== null) {

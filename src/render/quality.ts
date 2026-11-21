@@ -34,6 +34,8 @@ export type QualityFlags = {
   readonly hdriSky: boolean;
   /** At night the lamps light the ground and the yard around the vehicles. */
   readonly lampLight: boolean;
+  /** At night the dipped beam and the trailer's rear light cast shadows; needs `lampLight`. */
+  readonly lampShadow: boolean;
 };
 
 const BALANCED: QualityFlags = {
@@ -56,6 +58,7 @@ const BALANCED: QualityFlags = {
   sunShadow: false,
   hdriSky: false,
   lampLight: true,
+  lampShadow: false,
 };
 
 /** Most draw calls a frame may spend, mirrors included: the requirement for High. */
@@ -82,6 +85,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     sunShadow: false,
     hdriSky: false,
     lampLight: false,
+    lampShadow: false,
   },
   balanced: BALANCED,
   high: {
@@ -95,5 +99,6 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     aerialPerspective: true,
     sunShadow: true,
     hdriSky: true,
+    lampShadow: true,
   },
 };

@@ -205,6 +205,18 @@ describe('precompileGrade', () => {
     );
   });
 
+  it('holds a sample to the samplers it allows', async () => {
+    const samplers = (count: number): string =>
+      Array.from({ length: count }, (_, i) => `uniform sampler2D map${String(i)};`).join('\n');
+    const sample = (): GradeSample => ({ mesh: new Mesh(), maxSamplers: 2, dispose: vi.fn() });
+    await expect(precompileGrade(gpu(`${built}\n${samplers(2)}`), [sample])).resolves.toBe(
+      undefined,
+    );
+    await expect(precompileGrade(gpu(`${built}\n${samplers(3)}`), [sample])).rejects.toThrow(
+      '3 samplers',
+    );
+  });
+
   it('rejects when the GLSL of a sample fails, by the sample marker', async () => {
     const context = {
       getShaderSource: (shader: unknown) => shader,

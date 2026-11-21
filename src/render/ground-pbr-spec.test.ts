@@ -4,13 +4,13 @@ import { describe, expect, it } from 'vitest';
 import { GROUND_SURFACES } from './ground-texture-spec';
 import { PBR_PACKED } from './ground-pbr-pixels';
 import {
+  countSamplers,
   GROUND_FRAME,
   type Mat2,
   SLAB_PITCH,
   SLAB_UV_TRANSFORMS,
   slabNormalMatrix,
 } from './ground-pbr-spec';
-import { countSamplers } from './ground-pbr';
 
 const apply = ([a, b, c, d]: Mat2, [x, y]: readonly [number, number]): [number, number] => [
   a * x + b * y,
