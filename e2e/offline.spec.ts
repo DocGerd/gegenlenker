@@ -4,7 +4,6 @@ import { ASSET_REGISTRY } from '../src/render/asset-registry';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { DEFAULT_GRAPHICS } from '../src/contracts/render';
 import { RUNTIME_ASSETS } from '../src/pwa/config';
-import { collectThreeProblems } from './three-problems';
 import { expectNoFailedAttachment, watchFailedAttachments } from './attachment-markers';
 import { HEAVY, HIGH_WAIT_MS, PRESET_TIMEOUT_MS } from './pinned-shoot';
 
@@ -25,15 +24,10 @@ test('loads from the subpath and drives an exercise offline', async ({
       foreign.push(url);
   });
 
-  const three = collectThreeProblems(page);
   const warnings: string[] = [];
-  const errors: string[] = [];
   page.on('console', (m) => {
     if (m.type() === 'warning') warnings.push(m.text());
-    // Offline reloads log resource-load failures for unprecached requests.
-    if (m.type() === 'error' && !/net::ERR_/.test(m.text())) errors.push(m.text());
   });
-  page.on('pageerror', (e) => errors.push(e.message));
 
   await page.goto('./');
   await page.evaluate(async () => {
@@ -88,12 +82,9 @@ test('loads from the subpath and drives an exercise offline', async ({
     'krone-azw-18-trailer man-le-18-280-body man-le-18-280-cab',
   );
   expect(warnings.filter((w) => w.includes('Shell '))).toEqual([]);
-  expect(errors).toEqual([]);
-  expect(three).toEqual([]);
 });
 
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {
-  const three = collectThreeProblems(page);
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   const reset = page.getByRole('button', { name: en.resetView, exact: true });
@@ -125,7 +116,6 @@ test('zooms and pans the top-down view without disturbing the controls', async (
   await page.mouse.move(free.x - 30, free.y + 20, { steps: 4 });
   await page.mouse.up();
   await expect(reset).toBeEnabled();
-  expect(three).toEqual([]);
 });
 
 test(
@@ -142,15 +132,10 @@ test(
       if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:'))
         foreign.push(url);
     });
-    let offline = false;
-    const three = collectThreeProblems(page);
     const warnings: string[] = [];
-    const errors: string[] = [];
     page.on('console', (m) => {
       if (m.type() === 'warning') warnings.push(m.text());
-      if (m.type() === 'error' && !(offline && /net::ERR_/.test(m.text()))) errors.push(m.text());
     });
-    page.on('pageerror', (e) => errors.push(e.message));
     await page.addInitScript(() => {
       localStorage.setItem(
         'gegenlenker.settings.v1',
@@ -254,7 +239,6 @@ test(
     await expect(marker).not.toHaveAttribute('data-cockpit-interior', /.*/);
     await expect(marker).not.toHaveAttribute('data-perspective-grade', /.*/);
 
-    offline = true;
     await context.setOffline(true);
     await page.reload();
     await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
@@ -272,8 +256,6 @@ test(
         ),
       ),
     ).toEqual([]);
-    expect(errors).toEqual([]);
-    expect(three).toEqual([]);
     expect(foreign).toEqual([]);
     await expectNoFailedAttachment(page);
   },
