@@ -9,17 +9,25 @@ import { straightReverse } from './exercises/straight-reverse';
 import { resolveRun } from './run';
 
 const clamp = (x: number, limit: number): number => Math.max(-limit, Math.min(limit, x));
-const STOPPING_DISTANCE = 0.2; // at the lever below, from brake to standstill
+const LEVER = 0.6;
+const STOPPING_DISTANCE = 0.2; // at LEVER, from brake to standstill
 const MAX_STEPS = 20_000;
+
+const brakesAtStop = (s: SimSnapshot, target: TargetZone): boolean =>
+  s.trailerRear.x < target.pose.x + STOPPING_DISTANCE;
+
+function wheelStraight(s: SimSnapshot, target: TargetZone): ControlVector {
+  return { steer: 0, lever: LEVER, brake: brakesAtStop(s, target), gear: 'R' };
+}
 
 /** A cascade of proportional loops, one per joint, from the trailer's lateral error back to the steering. */
 function corrected(s: SimSnapshot, target: TargetZone): ControlVector {
-  const { x: stopX, y: lineY } = target.pose;
+  const lineY = target.pose.y;
   const trailerHeading = clamp(0.15 * (s.trailerRear.y - lineY), 0.1);
   const turntable = clamp(2 * wrapAngle(s.trailer.heading - trailerHeading), 0.3);
   const coupling = clamp(-2 * wrapAngle(s.trailer.heading + turntable - s.dolly.heading), 0.5);
   const steer = clamp(-4 * wrapAngle(s.dolly.heading + coupling - s.truck.heading), 1);
-  return { steer, lever: 0.6, brake: s.trailerRear.x < stopX + STOPPING_DISTANCE, gear: 'R' };
+  return { steer, lever: LEVER, brake: brakesAtStop(s, target), gear: 'R' };
 }
 
 function reverse(
@@ -66,18 +74,21 @@ describe('straight reverse starts bent', () => {
     expect(Object.keys(other.start)).toEqual(['truck']);
   });
 
+  it('leaves the target reached with the wheel straight only when there is no bend', () => {
+    for (const { truck, trailer } of combinations) {
+      const { final, reached } = reverse(truck, trailer, wheelStraight, 0);
+      expect(reached, `${truck} ${trailer}`).toBe(true);
+      expect(final.contacts + final.jackknifes, `${truck} ${trailer}`).toBe(0);
+    }
+  });
+
   // The drift grows exponentially, so any bend fails; half of it still failing is the margin the angle keeps.
   it('is not solved by leaving the wheel straight, even at half the bend: every pair meets a cone or jackknifes', () => {
     const bend = straightReverse.startArticulation?.turntable ?? 0;
     expect(bend).toBeGreaterThan(0);
     for (const turntable of [bend, bend / 2]) {
       for (const { truck, trailer } of combinations) {
-        const { final, reached } = reverse(
-          truck,
-          trailer,
-          () => ({ steer: 0, lever: 1, brake: false, gear: 'R' }),
-          turntable,
-        );
+        const { final, reached } = reverse(truck, trailer, wheelStraight, turntable);
         expect(reached, `${truck} ${trailer}`).toBe(false);
         expect(final.contacts + final.jackknifes, `${truck} ${trailer}`).toBeGreaterThan(0);
       }
