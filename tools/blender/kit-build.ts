@@ -6,8 +6,8 @@ import { type Run, runHashes, YARD_KIT_RUN } from './glb-build';
 import { yardKitParams } from './kit-params';
 
 /**
- * KTX2 encodings of the baked kit atlases (ktx2-encoder options). Albedo tolerates ETC1S; normals
- * need UASTC; RDO 3 keeps the packed maps inside the download budget.
+ * KTX2 encodings of the baked kit atlases (ktx2-encoder options). Albedo and the alpha-cut leaf cards
+ * tolerate ETC1S; normals need UASTC; RDO 3 keeps the packed maps inside the download budget.
  */
 export const KTX2_ENCODINGS = {
   albedo: {
@@ -33,11 +33,10 @@ export const KTX2_ENCODINGS = {
     isKTX2File: true,
   },
   cards: {
-    isUASTC: true,
-    uastcLDRQualityLevel: 3,
-    needSupercompression: true,
-    enableRDO: true,
-    rdoQualityLevel: 3,
+    isUASTC: false,
+    qualityLevel: 255,
+    compressionLevel: 4,
+    needSupercompression: false,
     isPerceptual: true,
     isSetKTX2SRGBTransferFunc: true,
     generateMipmap: true,
