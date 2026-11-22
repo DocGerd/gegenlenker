@@ -256,7 +256,10 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 /** The cockpit pane is drawn from the first row down, once a frame has landed. */
 async function expectNoBlankBand(page: Page, size: Size): Promise<void> {
   await settled(page);
-  await expect.poll(() => blankRows(page, Math.round(size.width * 0.3))).toBe(0);
+  // each screenshot waits for a software-GL frame, which the class IV passes make slower on a loaded runner
+  await expect
+    .poll(() => blankRows(page, Math.round(size.width * 0.3)), { timeout: 90_000 })
+    .toBe(0);
 }
 
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
