@@ -34,6 +34,7 @@ pnpm verify     # lint, format, typecheck, unit and e2e tests
 - [Engine choice ADR](docs/decisions/0001-engine-choice.md)
 - [Asset credits](docs/asset-credits.md): source and licence of each third-party asset
 - [Changelog](CHANGELOG.md); [changelog fragments](changelog.d/README.md)
+- [Contributing](CONTRIBUTING.md); [code of conduct](CODE_OF_CONDUCT.md)
 - [Security policy](SECURITY.md)
 
 ## Licence

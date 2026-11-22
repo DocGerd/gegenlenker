@@ -71,15 +71,8 @@ and investigated promptly and fairly.
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
 
-> **Single-maintainer caveat — please read.** This project has exactly one
-> maintainer, so there is no independent
-> body to appeal to and no second person to receive a report about the
-> maintainer. If your report concerns the maintainer, or you are not satisfied
-> with the outcome, escalate to GitHub directly via
-> [Reporting abuse or spam](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam)
-> — GitHub's own Acceptable Use Policies apply to this repository independently
-> of this document. We would rather state this limitation than imply a process
-> that does not exist.
+If a report concerns the maintainer, escalate to GitHub via
+[Reporting abuse or spam](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam).
 
 ## Enforcement Guidelines
 

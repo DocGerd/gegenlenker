@@ -7,7 +7,7 @@ body:
     id: summary
     attributes:
       label: What happened?
-      description: What you saw and what you expected instead.
+      description: What you saw and what you expected instead. Paste screenshots here.
     validations:
       required: true
   - type: textarea
@@ -38,5 +38,5 @@ body:
   - type: textarea
     id: logs
     attributes:
-      label: Console output or screenshot
+      label: Console output
       render: shell
