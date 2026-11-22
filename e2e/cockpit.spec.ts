@@ -506,10 +506,7 @@ test(
     const finger = (dx: number): Touch => ({ x: x + dx, y, id: 3 });
     await touch('touchStart', rim(0));
     await touch('touchStart', rim(0), leverAt(0));
-    await touch('touchStart', rim(0), leverAt(0), finger(0));
-    for (let i = 1; i <= 6; i++) {
-      await touch('touchMove', rim(i * 0.2), leverAt(i * 10), finger(i * 25));
-    }
+    for (let i = 1; i <= 6; i++) await touch('touchMove', rim(i * 0.2), leverAt(i * 10));
     await page.clock.runFor(10 * 16);
     await expect
       .poll(() =>
@@ -519,10 +516,36 @@ test(
     await expect
       .poll(() => page.locator('[data-ctl="wheel-art"]').evaluate((el) => el.style.transform))
       .not.toMatch(/^(rotate\(0deg\))?$/);
+    // the controls stay as they are, so the view at their setting is the one to come back to
+    const steered = hash(await shoot(page, 'cockpit'));
+    await touch('touchStart', rim(1.2), leverAt(60), finger(0));
+    for (let i = 1; i <= 6; i++) {
+      await touch('touchMove', rim(1.2), leverAt(60), finger(i * 25));
+    }
     await differs('a finger beside the controls');
+    // with that finger still down, the controls steer and move the lever as before
+    const wheelArt = page.locator('[data-ctl="wheel-art"]');
+    const leverBefore = await page
+      .locator('[data-ctl="lever"]')
+      .evaluate((el) => el.style.getPropertyValue('--lever'));
+    const wheelBefore = await wheelArt.evaluate((el) => el.style.transform);
+    await touch('touchMove', rim(1.5), leverAt(80), finger(150));
+    await page.clock.runFor(10 * 16);
+    await expect
+      .poll(() =>
+        page.locator('[data-ctl="lever"]').evaluate((el) => el.style.getPropertyValue('--lever')),
+      )
+      .not.toBe(leverBefore);
+    await expect.poll(() => wheelArt.evaluate((el) => el.style.transform)).not.toBe(wheelBefore);
+    await touch('touchMove', rim(1.2), leverAt(60), finger(150));
+    await page.clock.runFor(10 * 16);
+    // `touchEnd` lifts the points it lists
+    await touch('touchEnd', finger(150));
+    await ease();
+    expect(hash(await shoot(page, 'cockpit')), 'lifting the finger restores the view').toBe(
+      steered,
+    );
     await touch('touchEnd', rim(1.2), leverAt(60));
-    await touch('touchEnd');
-    await settled('lifting the finger');
     expect(three).toEqual([]);
   },
 );

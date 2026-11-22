@@ -916,11 +916,11 @@ for (const { size, locale, messages } of [
     test.slow();
     const context = await browser.newContext({ locale, viewport: size });
     try {
-      await context.addInitScript(([key, value]) => localStorage.setItem(key, value), [
+      const page = await context.newPage();
+      await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
         SETTINGS_KEY,
         JSON.stringify({ version: 1, graphics: 'high' }),
       ] as const);
-      const page = await context.newPage();
       await startStraightReverse(page, messages.exerciseStraightReverse);
       await expect(page.locator('.hud-legend')).toContainText(messages.lookAround);
       await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
