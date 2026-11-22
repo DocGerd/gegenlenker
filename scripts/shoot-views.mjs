@@ -29,6 +29,8 @@ import { QUALITY_FLAGS } from '../src/render/quality.ts';
 
 const PRESETS = ['low', 'balanced', 'high'];
 const SHOTS = ['cockpit', 'mirrorLeft', 'mirrorRight', 'front', 'follow', 'yard', 'chase'];
+/** Fewest colours a shot may have: the front mirror is a small pane of mostly bare ground, which at night is a few dark shades. */
+const MIN_COLOURS = { front: 10 };
 /** Views whose flat regions must survive a renderer change; the perspective ones are judged by eye. */
 const TOP_DOWN = new Set(['follow', 'yard']);
 /** Largest step a flat pixel may move: an 8-bit linear intermediate rounds sRGB tokens, dark ones by more. */
@@ -126,7 +128,7 @@ try {
         }
         const png = await shoot(page, shot);
         const colours = await distinctColours(page, png);
-        if (colours <= MIN_DRAWN_COLOURS)
+        if (colours <= (MIN_COLOURS[shot] ?? MIN_DRAWN_COLOURS))
           throw new Error(`${name} has ${colours} colours: not drawn`);
         if (shot === 'cockpit') {
           const backdrop = await tokenShare(
@@ -173,7 +175,8 @@ try {
       const before = readFileSync(beforeFile);
       const after = readFileSync(join(values.out, file));
       const drawn = [await distinctColours(page, before), await distinctColours(page, after)];
-      if (drawn.some((colours) => colours <= MIN_DRAWN_COLOURS)) {
+      const least = MIN_COLOURS[name.split('-')[1]] ?? MIN_DRAWN_COLOURS;
+      if (drawn.some((colours) => colours <= least)) {
         console.log(`BLANK  ${name}: ${drawn.join(' / ')} colours before / after`);
         failed++;
         continue;

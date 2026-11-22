@@ -10,6 +10,8 @@ export const CLEAR_CONE_DEG = 12;
 /** NDC gaps between a pillar and the cone, and between a pillar and a mirror rect. */
 export const CONE_GAP = 0.05;
 export const MIRROR_GAP = 0.03;
+/** NDC gap between the front mirror and the mirror or pillar to its right: its frame and bracket need the room. */
+const FRONT_GAP = 0.06;
 export const PILLAR_WIDTH = 0.12;
 /** NDC; a narrower pillar is a sliver. */
 export const MIN_PILLAR_WIDTH = 0.06;
@@ -62,7 +64,7 @@ function headerFloor(x0: number, x1: number): number {
 
 /**
  * Where the front mirror may sit in a cockpit view of `aspect`, whose right mirror's inner edge is
- * `rightInner` from the centre: in the windscreen, right of the visor and the cone, left of the
+ * `rightInner` from the centre: in the windscreen, right of the visor, left of the
  * right pillar's top and mirror, below the header and above the sight cone. Null where nothing is left.
  */
 export function frontBand(aspect: number, rightInner: number): NdcBox | null {
@@ -70,8 +72,8 @@ export function frontBand(aspect: number, rightInner: number): NdcBox | null {
   const left = VISOR.right + MIRROR_GAP;
   const right =
     slot === null
-      ? Math.min(rightInner, 1) - MIRROR_GAP
-      : slot.centre - slot.width / 2 - PILLAR_LEAN * slot.width - MIRROR_GAP;
+      ? Math.min(rightInner, 1) - FRONT_GAP
+      : slot.centre - slot.width / 2 - PILLAR_LEAN * slot.width - FRONT_GAP;
   const bottom = coneTop(COCKPIT_FOV) + CONE_GAP;
   const top = headerFloor(left, right) - MIRROR_GAP;
   return right > left && top > bottom ? { left, right, bottom, top } : null;

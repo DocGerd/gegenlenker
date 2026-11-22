@@ -13,8 +13,8 @@ import { CLASS_VI_REACH, classVIField, frontMirrorMount, insidePolygon } from '.
 
 const STRAIGHT: Pose2 = { x: 0, y: 0, heading: 0 };
 const GRID = 0.1;
-/** Metres ahead of the bumper in which the number plate may hide ground from the mirror. */
-const PLATE_SHADOW = 0.3;
+/** Metres ahead of the bumper in which front fittings on the centre line (the plate, a tow eye) may hide ground from the mirror. */
+const FITTING_SHADOW = 0.3;
 
 /** The class VI camera of `spec` placed on the straight pose as the renderer does, at the mirror's aspect. */
 function frontCamera(spec: TruckSpec) {
@@ -133,9 +133,9 @@ describe.each(trucks)('class VI front mirror of $id', (spec) => {
     const { relief, plateRelief } = cabShellParams(spec);
     expect(mount.x).toBeGreaterThan(frontX + Math.max(relief, plateRelief));
     const points = sample(field);
-    // only the number plate, a hand's breadth ahead of the bumper, stands in the way
+    // only fittings low on the centre line, within `FITTING_SHADOW` of the bumper, stand in the way
     const hidden = points.filter((p) => blocked(onGround(p)));
-    expect(hidden.filter((p) => p.x > frontX + PLATE_SHADOW)).toEqual([]);
+    expect(hidden.filter((p) => p.x > frontX + FITTING_SHADOW)).toEqual([]);
     expect(hidden.length / points.length).toBeLessThan(0.01);
     // the bumper itself is in frame, so the picture shows where the truck ends
     const bumper = onGround({ x: frontX, y: 0 }, 0.5).project(camera);
