@@ -462,6 +462,15 @@ test(
     await page.mouse.up();
     await settled('releasing the drag');
 
+    // a cancelled pointer (the Android back gesture) leaves the look at once, without easing back
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 150, y + 20, { steps: 6 });
+    expect(hash(await shoot(page, 'cockpit')), 'dragged again').not.toBe(home);
+    await page.locator('.drive-surface').dispatchEvent('pointercancel', { pointerId: 1 });
+    expect(hash(await shoot(page, 'cockpit')), 'a cancelled pointer').toBe(home);
+    await page.mouse.up();
+
     // a movement under the slop leaves the view alone
     await page.mouse.move(x, y);
     await page.mouse.down();

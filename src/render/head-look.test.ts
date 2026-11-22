@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HEAD_REST, type HeadPose } from '../contracts/render';
 import {
-  clampHead,
   dragHead,
   easeHead,
   GLANCE_YAW,
@@ -40,13 +39,6 @@ describe('dragging the head', () => {
 });
 
 describe('head limits', () => {
-  it('are 100 degrees of yaw either way, 10 of pitch down and 3 up', () => {
-    const rad = (degrees: number): number => (degrees * Math.PI) / 180;
-    expect(clampHead({ yaw: 9, pitch: -9 })).toEqual({ yaw: rad(100), pitch: -rad(10) });
-    expect(clampHead({ yaw: -9, pitch: 9 })).toEqual({ yaw: -rad(100), pitch: rad(3) });
-    expect(clampHead({ yaw: 0.2, pitch: 0.04 })).toEqual({ yaw: 0.2, pitch: 0.04 });
-  });
-
   it('hold the glance inside them', () => {
     expect(GLANCE_YAW).toBeLessThanOrEqual(HEAD_LIMITS.yaw);
   });

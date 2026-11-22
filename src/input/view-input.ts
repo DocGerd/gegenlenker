@@ -104,14 +104,14 @@ export function createPointerRouter<Pane extends string>() {
 const KEY_ZOOM = 1.25;
 const KEY_STEP = (5 * Math.PI) / 180;
 
+type Pane = 'topDown' | 'cockpit';
+
 /**
  * Pans and zooms the top-down pane of the shared canvas, or in the outside view orbits, tilts and
  * zooms it: drag, pinch, wheel and keys. A drag in the cockpit pane turns the head instead and the
  * glance keys hold it to a side; it eases back on release. Controls and the HUD's buttons sit above
  * the canvas, so their gestures never reach it.
  */
-type Pane = 'topDown' | 'cockpit';
-
 export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): ViewInput {
   const abort = new AbortController();
   const { signal } = abort;

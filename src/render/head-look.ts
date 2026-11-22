@@ -7,7 +7,8 @@ const rad = (degrees: number): number => (degrees * Math.PI) / 180;
 
 /**
  * How far the head turns from straight ahead. Looking up sinks the dash, so it stops short of
- * letting the opaque HUD band meet open cab (`cockpit-interior.test.ts` pins it); down has no such limit.
+ * letting the opaque HUD band meet open cab (`cockpit-interior.test.ts` derives how far that is); the
+ * dash sets no limit on looking down, so that one is for comfort.
  */
 export const HEAD_LIMITS = { yaw: rad(100), pitchUp: rad(3), pitchDown: rad(10) } as const;
 /** Where a held glance key turns the head to. */

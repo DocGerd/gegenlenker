@@ -962,4 +962,27 @@ describe.each(trucks)('glb interior of $id with the head turned', (spec) => {
       }
     }
   });
+
+  it('stops the pitch up just short of where the dash sinks under the HUD band', () => {
+    const y = bandTopNdc() + 0.02;
+    const covered = (w: number, h: number, pitch: number): boolean => {
+      const { camera, interior } = shootGlb(w, h, { yaw: 0, pitch });
+      const parts = drawn(interior);
+      for (let x = -1; x <= 1; x += 0.125) {
+        if (!hits(camera, parts, x, y).includes('interior')) return false;
+      }
+      return true;
+    };
+    for (const [w, h] of REQUIRED) {
+      let [low, high] = [0, deg(20)];
+      expect(covered(w, h, low), `${w}x${h} forward`).toBe(true);
+      while (high - low > 1e-3) {
+        const mid = (low + high) / 2;
+        if (covered(w, h, mid)) low = mid;
+        else high = mid;
+      }
+      expect(low, `${w}x${h} the dash's own limit`).toBeGreaterThanOrEqual(HEAD_LIMITS.pitchUp);
+      expect(low - HEAD_LIMITS.pitchUp, `${w}x${h} slack`).toBeLessThan(deg(2));
+    }
+  });
 });
