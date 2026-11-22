@@ -16,6 +16,7 @@ import { isFormField } from '../input/keyboard';
 import { messageColumn } from '../render/viewports';
 import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
 import { aidSwatch } from './aid-swatches';
+import type { Ahead } from '../sim/predict';
 import { createGauge, type Gauge } from './gauges';
 import './hud.css';
 
@@ -29,12 +30,12 @@ export type HudAction =
   | { type: 'collapse'; panel: keyof CollapsedPanels; collapsed: boolean }
   /** The aid legend opened or closed, which changes the height of the panels. */
   | { type: 'aidLegend' }
-  | { type: 'finish' }
-  | { type: 'menu' };
+  /** The button opening the pause sheet. */
+  | { type: 'pause' };
 
 export type Hud = {
-  /** `contactAhead` is the first warning stage: the held steer leads into a contact soon. */
-  update(s: SimSnapshot, contactAhead?: boolean): void;
+  /** `ahead` is the first warning stage: the held steer leads into a contact or limit stop soon. */
+  update(s: SimSnapshot, ahead?: Ahead): void;
   /** Elapsed run time in seconds; the clock starts with the first driving input, not when the drive opens. */
   setRunTime(seconds: number): void;
   layout(views: ViewRects): void;
@@ -89,10 +90,11 @@ const BLOCKED_KEY: Record<Exclude<BlockReason, 'contact'>, MessageKey> = {
 
 type ToastLevel = 'warn' | 'danger';
 
-/** Two stages: a predicted contact warns, a blocked vehicle states what stopped it. */
+/** Two stages: a predicted contact or limit stop warns, a blocked vehicle states what stopped it. */
 function toastFor(
   s: SimSnapshot,
-  contactAhead: boolean,
+  ahead: Ahead,
+  started: boolean,
 ): { key: MessageKey; level: ToastLevel } | null {
   if (s.blocked === 'contact') {
     return {
@@ -101,9 +103,10 @@ function toastFor(
     };
   }
   if (s.blocked !== null) return { key: BLOCKED_KEY[s.blocked], level: 'danger' };
-  if (contactAhead) return { key: 'contactAhead', level: 'warn' };
-  // The lever acts only in a gear, so a raised lever in P would move the truck off on shifting.
-  return s.control.gear === 'P' && s.control.lever > 0
+  if (ahead === 'contact') return { key: 'contactAhead', level: 'warn' };
+  if (ahead === 'limit') return { key: 'limitAhead', level: 'warn' };
+  // From the start until the first gear; later, a raised lever in P would move the truck off on shifting.
+  return s.control.gear === 'P' && (!started || s.control.lever > 0)
     ? { key: 'selectGear', level: 'warn' }
     : null;
 }
@@ -131,6 +134,8 @@ const VIEW_OF: Partial<Record<Action, TopDownMode>> = {
 /** Aids drawn in the top-down view only; the outside view shows none of them. */
 const TOP_DOWN_AIDS: readonly (keyof AidFlags)[] = ['path', 'tracks', 'ghost'];
 const MS_TO_KMH = 3.6;
+/** How long a counter stays highlighted before it fades. */
+const BUMP_MS = 250;
 /**
  * Cockpit widths below which the legend drops to one column: it must fit right of the wheel and
  * gears, and where the cockpit reaches the screen's right edge, left of the lever as well.
@@ -212,13 +217,13 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
       }
     </div>
   </div>
-  <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
+  <div class="hud-toast-wrap" data-hud="toastWrap" role="status" aria-live="polite"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-split" data-hud="split" hidden>
     <div class="hud-split-handle" data-hud="splitHandle" role="separator" tabindex="0" ></div>
     <button type="button" class="hud-toggle hud-icon hud-split-reset" data-hud="splitReset" aria-keyshortcuts="L" disabled>${SPLIT_ICON}</button>
   </div>
   <div class="hud-arrow" data-hud="targetArrow" role="img" aria-label="${t('targetDirection')}" hidden><svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="M-9 -8L10 0L-9 8L-4 0Z" /></svg></div>
-  <button type="button" class="hud-action" data-chrome data-hud="action" data-i18n="${mode === 'exercise' ? 'finish' : 'menu'}"></button>
+  <button type="button" class="hud-action" data-chrome data-hud="action" data-i18n="pause"></button>
 </div>`;
 
 const query = <T extends Element>(
@@ -380,7 +385,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   resetView.addEventListener('click', () => emit({ type: 'resetView' }), { signal });
   query(hud, 'action', HTMLElement).addEventListener(
     'click',
-    () => emit({ type: opts.mode === 'exercise' ? 'finish' : 'menu' }),
+    () => emit({ type: 'pause' }),
     { signal },
   );
 
@@ -607,6 +612,21 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   gearEl.textContent = 'P';
   gearEl.dataset['gear'] = 'P';
   let shownToast: MessageKey | null = null;
+  /** A gear other than P has been selected: the start hint is done. */
+  let started = false;
+  const bumps = new Map<HTMLElement, number>();
+  /** Flashes a counter that just grew; its CSS transition fades it back. */
+  const bump = (el: HTMLElement): void => {
+    clearTimeout(bumps.get(el));
+    el.classList.add('bumped');
+    bumps.set(
+      el,
+      window.setTimeout(() => {
+        el.classList.remove('bumped');
+        bumps.delete(el);
+      }, BUMP_MS),
+    );
+  };
   let shownGoal: GoalState = 'away';
   let shownContacts = -1;
   let shownJackknifes = -1;
@@ -620,11 +640,12 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   writeSpeed(0);
 
   return {
-    update(s, contactAhead = false) {
+    update(s, ahead = null) {
       const tenths = Math.round(Math.abs(s.speed) * MS_TO_KMH * 10);
       if (tenths !== shownTenths) writeSpeed(tenths);
 
       const gear = s.control.gear;
+      if (gear !== 'P') started = true;
       if (gear !== shownGear) {
         shownGear = gear;
         gearEl.textContent = gear;
@@ -634,7 +655,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       coupling.set(s.couplingAngle);
       turntable.set(s.turntableAngle);
 
-      const warning = toastFor(s, contactAhead);
+      const warning = toastFor(s, ahead, started);
       const key = warning?.key ?? null;
       if (key !== shownToast) {
         shownToast = key;
@@ -646,10 +667,12 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       }
 
       if (contactsEl && s.contacts !== shownContacts) {
+        if (shownContacts >= 0 && s.contacts > shownContacts) bump(contactsEl);
         shownContacts = s.contacts;
         contactsEl.textContent = formatNumber(s.contacts, 0);
       }
       if (jackknifesEl && s.jackknifes !== shownJackknifes) {
+        if (shownJackknifes >= 0 && s.jackknifes > shownJackknifes) bump(jackknifesEl);
         shownJackknifes = s.jackknifes;
         jackknifesEl.textContent = formatNumber(s.jackknifes, 0);
       }
@@ -774,6 +797,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     dispose() {
       if (drag?.frame != null) cancelAnimationFrame(drag.frame);
+      for (const timer of bumps.values()) clearTimeout(timer);
       abort.abort();
       hud.remove();
     },
