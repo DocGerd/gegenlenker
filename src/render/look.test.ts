@@ -37,6 +37,7 @@ describe('lookFor', () => {
     expect(look.yardLight).toBe(false);
     expect(look.yardSpots).toBe(false);
     expect(look.yardShadow).toBe(false);
+    expect(look.skylineWindows).toBe(false);
     expect(look.shadow).toBe(flags.sunShadow && flags.perspectiveLighting);
     expect(look.interior).toEqual({ light: 1, unlit: [1, 1, 1] });
   });
@@ -59,6 +60,7 @@ describe('lookFor', () => {
       expect(look.yardLight).toBe(flags.yardLight);
       expect(look.yardSpots).toBe(flags.yardLight && flags.perspectiveLighting);
       expect(look.yardShadow).toBe(preset === 'high');
+      expect(look.skylineWindows).toBe(preset !== 'low');
       expect(look.shadow).toBe(false);
       expect(look.grade.on).toBe(flags.perspectiveLighting);
       expect(look.grade.exposure).toBe(1);
@@ -66,6 +68,14 @@ describe('lookFor', () => {
       expect(look.grade.fogDensity).toBe(flags.aerialPerspective ? FOG_DENSITY : 0);
     },
   );
+
+  it('lights the skyline windows only where the skyline is drawn', () => {
+    const flags = { ...QUALITY_FLAGS.balanced, skyline: false };
+    expect(lookFor(flags, 'night').skylineWindows).toBe(false);
+    expect(
+      lookFor({ ...flags, skyline: true, skylineWindows: false }, 'night').skylineWindows,
+    ).toBe(false);
+  });
 
   it.each(GRAPHICS_PRESETS)(
     'the night look of %s backlights the cab interior modestly',
