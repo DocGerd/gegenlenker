@@ -122,7 +122,7 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
       const camera = createCockpitCamera();
       placeCockpitCamera(camera, pose, anchors.eye, cockpit as Rect);
       scene.updateMatrixWorld();
-      interior.place({ camera, cockpit: cockpit as Rect, mirrorLeft, mirrorRight });
+      interior.place({ camera, heading, cockpit: cockpit as Rect, mirrorLeft, mirrorRight });
       truck.updateMatrixWorld(true);
       const inverse = truck.matrixWorld.clone().invert();
       for (const mesh of interior.meshes) {

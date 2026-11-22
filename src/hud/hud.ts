@@ -68,6 +68,8 @@ export type HudOptions = {
   chase: boolean;
   /** Draws the mirror housings; the preset's `cockpitInterior` flag. */
   interior: boolean;
+  /** Offers looking around in the cockpit; the preset's `interiorGlb` flag with the interior. */
+  look?: boolean;
   collapsed: CollapsedPanels;
 };
 
@@ -168,14 +170,16 @@ const legendRow = ({ term, desc, viewOnly }: LegendRow): string => {
   return `${dt}<dd${viewOnly ? ' class="hud-legend-view"' : ''} data-i18n="${desc}"></dd>`;
 };
 
-const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
+const MARKUP = (mode: HudOptions['mode'], chase: boolean, look: boolean | undefined): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
     <span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl>
-        ${legendRows(chase).map(legendRow).join('')}
+        ${legendRows(chase, look === true)
+          .map(legendRow)
+          .join('')}
       </dl>
     </div>
     <div class="hud-band">
@@ -253,7 +257,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     for (const cb of listeners) cb(a);
   };
 
-  root.insertAdjacentHTML('beforeend', MARKUP(opts.mode, opts.chase));
+  root.insertAdjacentHTML('beforeend', MARKUP(opts.mode, opts.chase, opts.look));
   const hud = query(root, 'root', HTMLElement);
   hud.toggleAttribute('data-interior', opts.interior);
   applyMessages(hud);

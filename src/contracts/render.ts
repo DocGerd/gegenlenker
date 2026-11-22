@@ -148,6 +148,12 @@ export type LampSwitches = {
   readonly lights: boolean;
   readonly hazard: boolean;
 };
+/** Where the driver looks, relative to straight ahead in the cockpit view: radians, yaw positive to the left, pitch positive up. */
+export type HeadPose = {
+  readonly yaw: number;
+  readonly pitch: number;
+};
+export const HEAD_REST: HeadPose = { yaw: 0, pitch: 0 };
 export type RenderFrame = {
   readonly snapshot: SimSnapshot;
   readonly views: ViewRects;
@@ -160,6 +166,8 @@ export type RenderFrame = {
   readonly predicted: Prediction;
   /** Absent means the lighting's default: lights on at night, hazard lights off. */
   readonly lamps?: LampSwitches;
+  /** Absent means looking straight ahead; ignored where the cockpit draws no interior asset. */
+  readonly head?: HeadPose;
   /** Absent means not yet passed. */
   readonly waypointVisited?: boolean;
 };

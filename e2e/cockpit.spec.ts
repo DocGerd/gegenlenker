@@ -1,6 +1,7 @@
+import { createHash } from 'node:crypto';
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { DRIVER_PERFORMANCE_HINT } from './three-problems';
+import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 import { en } from '../src/i18n/en';
 import { COCKPIT_FOV } from '../src/render/cockpit-camera';
 import { TRUCK_IDS } from '../src/contracts/vehicle';
@@ -9,12 +10,15 @@ import { interiorLayout, pillarSpans } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
 import { truckById } from '../src/vehicles/registry';
 import {
+  distinctColours,
   HEAVY,
   heavyAt,
   HIGH_WAIT_MS,
+  MIN_DRAWN_COLOURS,
   PRESET_TIMEOUT_MS,
   type Preset,
   settle,
+  shoot,
   startPinnedDrive,
 } from './pinned-shoot';
 
@@ -413,3 +417,112 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     },
   );
 }
+
+const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
+/** The frames the head's easing takes, jumped in few, long steps so each High frame is drawn once. */
+const EASE_STEPS = 6;
+const EASE_STEP_MS = 64;
+
+test(
+  'the cockpit looks around from a drag, a touch beside the controls and the Q and E keys, and settles back on release',
+  heavyAt('high'),
+  async ({ page }) => {
+    test.setTimeout(PRESET_TIMEOUT_MS.high);
+    const three = collectThreeProblems(page);
+    await pinnedDrive(page, 'high');
+    await expect(page.locator('.hud-legend')).toContainText('Q / E');
+
+    const forward = await shoot(page, 'cockpit');
+    expect(await distinctColours(page, forward), 'forward view').toBeGreaterThan(MIN_DRAWN_COLOURS);
+    const home = hash(forward);
+    const seen = new Set([home]);
+    const ease = async (): Promise<void> => {
+      for (let i = 0; i < EASE_STEPS; i++) await page.clock.fastForward(EASE_STEP_MS);
+    };
+    const settled = async (what: string): Promise<void> => {
+      await ease();
+      expect(hash(await shoot(page, 'cockpit')), `${what} restores the forward view`).toBe(home);
+    };
+    const differs = async (what: string): Promise<void> => {
+      const png = await shoot(page, 'cockpit');
+      expect(await distinctColours(page, png), what).toBeGreaterThan(MIN_DRAWN_COLOURS);
+      expect(seen.has(hash(png)), `${what} differs from every earlier view`).toBe(false);
+      seen.add(hash(png));
+    };
+
+    const cockpit = await boxOf(page, '.hud-cockpit');
+    const x = cockpit.x + cockpit.width / 2;
+    const y = cockpit.y + cockpit.height * 0.3;
+
+    // a mouse drag turns the head while held, and releasing eases it back
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 150, y + 20, { steps: 6 });
+    await differs('dragged');
+    await page.mouse.up();
+    await settled('releasing the drag');
+
+    // a movement under the slop leaves the view alone
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 4, y + 3, { steps: 2 });
+    expect(hash(await shoot(page, 'cockpit')), 'a click').toBe(home);
+    await page.mouse.up();
+
+    // Q and E glance to either side while held
+    for (const key of ['q', 'e']) {
+      await page.keyboard.down(key);
+      await ease();
+      await differs(`glancing with ${key}`);
+      await page.keyboard.up(key);
+      await settled(`letting go of ${key}`);
+    }
+
+    // two fingers on the controls and one on the canvas: the controls still steer and hold the lever
+    const centre = async (selector: string): Promise<{ x: number; y: number; r: number }> => {
+      const box = await boxOf(page, selector);
+      return {
+        x: box.x + box.width / 2,
+        y: box.y + box.height / 2,
+        r: Math.min(box.width, box.height) / 2,
+      };
+    };
+    const wheel = await centre('.ctl-wheel');
+    const lever = await boxOf(page, '[data-ctl="lever"]');
+    const cdp = await page.context().newCDPSession(page);
+    type Touch = { x: number; y: number; id: number };
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', ...touchPoints: Touch[]) =>
+      cdp.send('Input.dispatchTouchEvent', { type, touchPoints });
+    const rim = (turns: number): Touch => ({
+      x: wheel.x + wheel.r * 0.7 * Math.cos(turns),
+      y: wheel.y + wheel.r * 0.7 * Math.sin(turns),
+      id: 1,
+    });
+    const leverAt = (up: number): Touch => ({
+      x: lever.x + lever.width / 2,
+      y: lever.y + lever.height - 4 - up,
+      id: 2,
+    });
+    const finger = (dx: number): Touch => ({ x: x + dx, y, id: 3 });
+    await touch('touchStart', rim(0));
+    await touch('touchStart', rim(0), leverAt(0));
+    await touch('touchStart', rim(0), leverAt(0), finger(0));
+    for (let i = 1; i <= 6; i++) {
+      await touch('touchMove', rim(i * 0.2), leverAt(i * 10), finger(i * 25));
+    }
+    await page.clock.runFor(10 * 16);
+    await expect
+      .poll(() =>
+        page.locator('[data-ctl="lever"]').evaluate((el) => el.style.getPropertyValue('--lever')),
+      )
+      .not.toBe('0');
+    await expect
+      .poll(() => page.locator('[data-ctl="wheel-art"]').evaluate((el) => el.style.transform))
+      .not.toMatch(/^(rotate\(0deg\))?$/);
+    await differs('a finger beside the controls');
+    await touch('touchEnd', rim(1.2), leverAt(60));
+    await touch('touchEnd');
+    await settled('lifting the finger');
+    expect(three).toEqual([]);
+  },
+);

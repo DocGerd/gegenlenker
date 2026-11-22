@@ -1,4 +1,4 @@
-import { Group, type Material, Mesh, MeshBasicMaterial } from 'three';
+import { Euler, Group, type Material, Mesh, MeshBasicMaterial, Quaternion } from 'three';
 import type { ScenePalette } from '../contracts/render';
 import type { TruckId, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
@@ -10,6 +10,7 @@ import {
 } from './cockpit-interior';
 import arocsUrl from './assets/arocs-1835-ak-interior.glb?url';
 import manUrl from './assets/man-le-18-280-interior.glb?url';
+import { COCKPIT_PITCH } from './cockpit-camera';
 import type { InteriorMeshName } from './interior-dims';
 import {
   type InteriorCheck,
@@ -93,14 +94,15 @@ export function createGlbInterior(
   const { eye } = truckAnchors(truck);
   const object = new Group();
   object.name = 'cockpit-interior-glb';
-  // Placed at the camera's eye with the truck's heading each frame.
+  // Placed at the camera's eye with the truck's heading each frame: it stays put while the head turns.
   const standing = new Group();
   standing.name = 'interior-standing';
   // The meshes are authored in the body frame about the origin; the eye is the anchor.
   const frame = new Group();
   frame.position.set(-eye.x, -eye.z, eye.y);
   standing.add(frame);
-  // the lit lip is authored in the camera's NDC like the flat overlay, so it has its own frame
+  // the lit lip is authored in the camera's NDC like the flat overlay, so it has its own frame, facing
+  // where the head looks forward
   const lip = createBinnacleLip();
   const lipFrame = new Group();
   lipFrame.name = 'binnacle-lip-frame';
@@ -116,6 +118,8 @@ export function createGlbInterior(
   let attached = false;
   let wanted = false;
   let drawn = false;
+  const forward = new Quaternion();
+  const forwardEuler = new Euler(0, 0, 0, 'YXZ');
 
   let useLit = false;
   const current = (): Material => (useLit ? litMaterial() : plain);
@@ -200,6 +204,9 @@ export function createGlbInterior(
   return {
     object,
     frame: 'eye',
+    get looksAround() {
+      return drawn;
+    },
     flat,
     meshes,
     get drawn() {
@@ -213,11 +220,12 @@ export function createGlbInterior(
     place(view) {
       if (flat.object.visible) flat.place(view);
       if (!drawn) return;
-      const { camera } = view;
+      const { camera, heading } = view;
       standing.position.copy(camera.position);
-      standing.rotation.set(0, camera.rotation.y + Math.PI / 2, 0);
+      standing.rotation.set(0, heading, 0);
       standing.updateMatrixWorld(true);
-      placeInEye(lipFrame, camera);
+      forward.setFromEuler(forwardEuler.set(COCKPIT_PITCH, heading - Math.PI / 2, 0));
+      placeInEye(lipFrame, camera, forward);
       lipFrame.updateMatrixWorld(true);
     },
     setLook(next) {

@@ -86,7 +86,10 @@ export interface AidsLayer {
 }
 /** What a cockpit interior is placed against each cockpit frame; the rects are in CSS px. */
 export interface InteriorView {
+  /** Turned by the head, so an interior that stays in the cab must not take its orientation from it. */
   readonly camera: PerspectiveCamera;
+  /** The truck's heading. */
+  readonly heading: number;
   readonly cockpit: Rect;
   readonly mirrorLeft: Rect | null;
   readonly mirrorRight: Rect | null;
@@ -103,6 +106,8 @@ export interface CockpitInterior {
    * transform and updates its own world matrices.
    */
   place(view: InteriorView): void;
+  /** Whether it stays in the cab while the head turns; one fixed to the eye needs the head forward. */
+  readonly looksAround?: boolean;
   setLook(look: Look): void;
   dispose(): void;
 }
