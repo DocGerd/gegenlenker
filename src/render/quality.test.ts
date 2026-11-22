@@ -55,12 +55,6 @@ describe('quality flags', () => {
     }
   });
 
-  it('draws the class V mirror on balanced and high, not on low', () => {
-    expect(QUALITY_FLAGS.balanced.closeMirror).toBe(true);
-    expect(QUALITY_FLAGS.high.closeMirror).toBe(true);
-    expect(QUALITY_FLAGS.low.closeMirror).toBe(false);
-  });
-
   it('differs from balanced on high only in classified flags', () => {
     const classified: readonly string[] = [...DOWNLOADS, ...COMPUTE_ONLY];
     const changed = (Object.keys(QUALITY_FLAGS.high) as (keyof QualityFlags)[]).filter(

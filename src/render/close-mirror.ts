@@ -8,7 +8,7 @@ export const CLOSE_ASPECT = 2;
  * device pixel ratio of 1 anywhere in the class V field (`close-mirror.test.ts` derives it from the
  * camera); where the layout cannot hold it, there is no class V mirror.
  */
-export const MIN_CLOSE_WIDTH = 140;
+export const MIN_CLOSE_WIDTH = 128;
 
 /**
  * Class V: from beside the A-pillar, outward and down onto the ground between the cab side and 2 m out.
@@ -19,7 +19,7 @@ export const CLASS_V: Omit<MirrorSpec, 'anchor' | 'view'> = {
   yaw: Math.PI / 2,
   pitch: (-75 * Math.PI) / 180,
   roll: Math.PI,
-  fov: 55,
+  fov: 51,
   aspect: CLOSE_ASPECT,
   targetScale: 1,
   cadence: 1,
