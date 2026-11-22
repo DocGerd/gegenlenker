@@ -614,9 +614,10 @@ describe('a 60 Hz cadence with frame jitter', () => {
     expect(governor.scale()).toBeCloseTo(0.85, 10);
   });
 
-  it.each([20, 21, 25])('steps down when every frame takes %ims', (ms) => {
+  it.each([20, 21, 25])('steps down, then back, when every frame takes %ims at any scale', (ms) => {
     const governor = createResolutionGovernor();
-    feed(governor, new Array<number>(120).fill(ms));
-    expect(governor.scale()).toBeLessThan(1);
+    feed(governor, new Array<number>(200).fill(ms));
+    expect(governor.trace().events.map((e) => e.kind)).toEqual(['down', 'down-failed']);
+    expect(governor.scale()).toBe(1);
   });
 });
