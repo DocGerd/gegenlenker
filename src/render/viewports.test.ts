@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TOP_DOWN_LAYOUT, type Rect } from '../contracts/render';
+import { de } from '../i18n/de';
+import { en } from '../i18n/en';
 import { COCKPIT_FOV, coneTop, CONE_GAP, FRONT_GAP_PX, frontBand, VISOR } from './cockpit-band';
 import {
   computeViewports,
@@ -354,43 +356,56 @@ describe('computeViewports front mirror', () => {
   });
 
   it('starts below the display cut-out where the band would reach into it', () => {
-    // 120 px lies below the band's top at these sizes, so only the clamp keeps the rect out of it
-    const insets = { top: 120, right: 48, bottom: 20, left: 48 };
-    for (const [w, h] of [
-      [1280, 720],
-      [1024, 600],
+    // each inset lies below the band's top at its size, so only the clamp keeps the rect out of it
+    for (const [w, h, top] of [
+      [1280, 720, 120],
+      [1920, 1080, 200],
     ] as const) {
+      const insets = { top, right: 0, bottom: 0, left: 0 };
       const plain = computeViewports(w, h, 'drive', null, NO_INSETS, undefined, null, FRONT);
-      expect(plain.front?.y, `${w}x${h}`).toBeLessThan(insets.top);
+      expect(plain.front?.y, `${w}x${h}`).toBeLessThan(top);
       const { front } = computeViewports(w, h, 'drive', null, insets, undefined, null, FRONT);
       expect(front, `${w}x${h}`).not.toBeNull();
-      expect(front?.y, `${w}x${h}`).toBe(insets.top);
+      expect(front?.y, `${w}x${h}`).toBe(top);
     }
   });
 
-  it('keeps the toast column clear of the side mirrors and the front mirror', () => {
-    let beside = 0;
-    let below = 0;
-    for (const [w, h] of sizes) {
-      const views = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
-      const { front, mirrorLeft, mirrorRight } = views;
-      if (front === null || mirrorLeft === null || mirrorRight === null) continue;
-      const column = messageColumn(views);
-      const at = `${w}x${h}`;
-      expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
-      expect(column.width, at).toBeGreaterThan(0);
-      // beside the front mirror, or entirely below it
-      if (column.y < front.y + front.height) {
-        beside++;
+  it('keeps the toast column between the left mirror and the front mirror, wide enough for its words', () => {
+    const insets = { top: 0, right: 0, bottom: 0, left: 48 };
+    let shown = 0;
+    let dropped = 0;
+    for (const inset of [NO_INSETS, insets]) {
+      for (const [w, h] of sizes) {
+        const views = computeViewports(w, h, 'drive', null, inset, undefined, null, FRONT);
+        const { front, mirrorLeft } = views;
+        if (front === null || mirrorLeft === null) {
+          dropped++;
+          continue;
+        }
+        shown++;
+        const column = messageColumn(views);
+        const at = `${w}x${h} left inset ${inset.left}`;
+        expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
         expect(column.x + column.width, at).toBeLessThanOrEqual(front.x);
-        expect(column.width, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
-      } else {
-        below++;
-        expect(column.x + column.width, at).toBeLessThanOrEqual(mirrorRight.x);
+        // the wrap pads its left by the inset
+        expect(column.width - inset.left, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
       }
     }
-    expect(beside).toBeGreaterThan(0);
-    expect(below).toBeGreaterThan(0);
+    expect(shown).toBeGreaterThan(100);
+    expect(dropped).toBeGreaterThan(0);
+  });
+
+  it('pins the widest word of a toast or goal cue that MIN_MESSAGE_WIDTH is measured for', () => {
+    const messages = [en, de].flatMap((table) =>
+      Object.entries(table)
+        .filter(([key]) => /^(blocked|goal|contactAhead|selectGear)/.test(key))
+        .map(([, text]) => text),
+    );
+    const longest = messages
+      .flatMap((text) => text.split(/\s+/))
+      .sort((a, b) => b.length - a.length)[0];
+    // 131 px at 14 px Geist; a longer word needs a new measurement and a wider MIN_MESSAGE_WIDTH
+    expect(longest).toBe('Drehschemelwinkel');
   });
 
   it('leaves the toast column alone without a front mirror', () => {

@@ -32,6 +32,14 @@ export const MIN_MIRROR_HEIGHT = 48;
 /** Narrowest and widest the front mirror gets, in CSS px; where the band cannot hold the narrowest, there is none. */
 export const MIN_FRONT_WIDTH = 80;
 const MAX_FRONT_WIDTH = 240;
+/** CSS px between the toast column and the mirrors on either side of it. */
+const MESSAGE_GAP = 8;
+/**
+ * Narrowest toast column: the widest unbreakable word of a toast or goal cue ("Drehschemelwinkel",
+ * 131 px at 14 px Geist, measured), the toast's padding and borders (41 px, warn border included)
+ * and the 32 px its `max-width` leaves. `hud.test.ts` pins the word, `layout.spec.ts` the fit.
+ */
+export const MIN_MESSAGE_WIDTH = 131 + 41 + 32;
 /** The front mirror's width over its height. */
 export const FRONT_ASPECT = 2;
 
@@ -226,7 +234,16 @@ export function computeViewports(
     mirrorLeft: { x: left, y, width: mw, height: mh },
     mirrorRight,
     front: extra.front
-      ? frontRect(cockpit, mirrorRight, cockpit.y + top, cssHeight, controls, legend)
+      ? frontRect(
+          cockpit,
+          mirrorRight,
+          // the toast column left of it starts right of the left mirror
+          left + mw + MESSAGE_GAP + insets.left + MIN_MESSAGE_WIDTH + MESSAGE_GAP,
+          cockpit.y + top,
+          cssHeight,
+          controls,
+          legend,
+        )
       : null,
     topDown,
   };
@@ -235,11 +252,13 @@ export function computeViewports(
 /**
  * The front mirror in the windscreen band of `cockpit` (`frontBand`), hung from the header at the
  * band's right; null where it would be narrower than `MIN_FRONT_WIDTH` or would reach the controls or
- * the key legend. `ceiling` is the least y the screen's display cut-out leaves.
+ * the key legend. `leftLimit` is the least x it may start at, which keeps the toast column wide
+ * enough; `ceiling` is the least y the screen's display cut-out leaves.
  */
 function frontRect(
   cockpit: Rect,
   mirrorRight: Rect,
+  leftLimit: number,
   ceiling: number,
   cssHeight: number,
   controls: number,
@@ -258,7 +277,7 @@ function frontRect(
   const height = Math.floor(
     Math.min(
       toY(band.bottom) - top,
-      (right - toX(band.left)) / FRONT_ASPECT,
+      (right - Math.max(toX(band.left), leftLimit)) / FRONT_ASPECT,
       MAX_FRONT_WIDTH / FRONT_ASPECT,
     ),
   );
@@ -271,27 +290,11 @@ function frontRect(
   return rect;
 }
 
-/** Narrowest column a toast gets beside the front mirror; narrower, it goes below it. */
-export const MIN_MESSAGE_WIDTH = 160;
-/** CSS px between the toast column and the mirrors around it. */
-const MESSAGE_GAP = 8;
-
-/**
- * Where the toast and the goal cue stand: the cockpit's top centre, between the left mirror and the
- * front mirror, or below the front mirror and between the side mirrors where that is too narrow.
- */
+/** Where the toast and the goal cue stand: the cockpit's top, between the left mirror and the front mirror. */
 export function messageColumn(views: ViewRects): Rect {
   const base = views.cockpit ?? views.topDown;
-  const { front, mirrorLeft, mirrorRight } = views;
-  if (front === null || mirrorLeft === null || mirrorRight === null) return base;
-  const left = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
-  const beside = front.x - MESSAGE_GAP - left;
-  if (beside >= MIN_MESSAGE_WIDTH) return { ...base, x: left, width: beside };
-  const y = front.y + front.height;
-  return {
-    x: left,
-    y,
-    width: Math.max(0, mirrorRight.x - MESSAGE_GAP - left),
-    height: base.y + base.height - y,
-  };
+  const { front, mirrorLeft } = views;
+  if (front === null || mirrorLeft === null) return base;
+  const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
+  return { ...base, x, width: front.x - MESSAGE_GAP - x };
 }

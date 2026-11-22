@@ -2,6 +2,7 @@ import { type Locator, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
+import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
 
@@ -441,7 +442,11 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
   }
 }
 
-/** The longest toast and a goal cue stay clear of the cockpit label and every mirror shown. */
+/**
+ * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
+ * or the forward sight cone. With the front mirror they also keep clear of the cockpit label and every
+ * mirror; without it they span the cockpit, as before it existed.
+ */
 async function expectMessagesClear(page: Page, toast: string, goal: string): Promise<void> {
   await page.evaluate(
     ([toastText, goalText]) => {
@@ -457,14 +462,42 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     },
     [toast, goal] as const,
   );
+  const overflow = await page
+    .locator('[data-hud="toast"], [data-hud="goalCue"]')
+    .evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
+  expect(overflow, 'a word sticks out of a message').toEqual([0, 0]);
   const messages = await boxes(page.locator('[data-hud="toast"], [data-hud="goalCue"]'));
-  const others = await boxes(
-    page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'),
-  );
   expect(messages).toHaveLength(2);
-  expect(others.length).toBeGreaterThanOrEqual(3);
+  const controls = await boxes(
+    page.locator(
+      '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend, .hud-gear, .hud-speed',
+    ),
+  );
+  const [cockpit] = await boxes(page.locator('.hud-cockpit'));
+  if (cockpit === undefined) throw new Error('no cockpit');
+  const aspect = (cockpit.right - cockpit.left) / (cockpit.bottom - cockpit.top);
+  const centre = {
+    x: (cockpit.left + cockpit.right) / 2,
+    y: (cockpit.top + cockpit.bottom) / 2,
+  };
+  const halfWidth = (coneEdge(aspect, COCKPIT_FOV) * (cockpit.right - cockpit.left)) / 2;
+  const halfHeight = (coneTop(COCKPIT_FOV) * (cockpit.bottom - cockpit.top)) / 2;
+  const cone = {
+    name: 'sight cone',
+    left: centre.x - halfWidth,
+    right: centre.x + halfWidth,
+    top: centre.y - halfHeight,
+    bottom: centre.y + halfHeight,
+  };
+  const frontShown = (await page.locator('[data-hud="front"]:not([hidden])').count()) > 0;
+  const mirrors = frontShown
+    ? await boxes(page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'))
+    : [];
+  if (frontShown) expect(mirrors.length).toBeGreaterThanOrEqual(4);
   for (const m of messages) {
-    for (const o of others) expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
+    for (const o of [...controls, cone, ...mirrors]) {
+      expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
+    }
   }
 }
 
@@ -484,7 +517,7 @@ for (const { locale, messages } of locales) {
             expectMirrorsClearControls(page, size));
           await test.step('the cockpit view has no blank band', () =>
             expectNoBlankBand(page, size));
-          await test.step('the longest toast and the goal cue keep clear of the label and the mirrors', () =>
+          await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
             expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         }
         // Last: the divider moves the stored split.
@@ -497,16 +530,17 @@ for (const { locale, messages } of locales) {
   }
 }
 
+/** Sizes the front mirror is shown at, and phone portrait sizes it is not: the toast column is too narrow there. */
 const frontShown = [
   { width: 1280, height: 800, front: 1 },
   { width: 1366, height: 768, front: 1 },
   { width: 768, height: 1024, front: 1 },
-  { width: 390, height: 844, front: 1 },
-  { width: 360, height: 800, front: 1 },
+  { width: 390, height: 844, front: 0 },
+  { width: 360, height: 800, front: 0 },
 ];
 
 for (const { width, height, front } of frontShown) {
-  test(`the longest German toast clears the label and the mirrors at ${width}x${height}`, async ({
+  test(`the longest German toast fits and clears the controls and the mirrors at ${width}x${height}`, async ({
     browser,
   }) => {
     const context = await browser.newContext({ locale: 'de-DE', viewport: { width, height } });
