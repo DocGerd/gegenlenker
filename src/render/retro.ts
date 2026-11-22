@@ -31,17 +31,20 @@ export const RETRO = {
   gain: 2.5,
   /** Steepness of the lobe in `1 - cos(angle)` between the light and the viewer. */
   sharpness: 24,
-  /** Most the add can reach, in units of the surface's own colour: the return is bounded, not clipped. */
+  /** Most the add can reach from the two dipped lamps together, in units of the surface's own colour: the return is bounded, not clipped. */
   max: 1,
 } as const;
+
+/** What one light's add is bounded by: the lamps of a pair share `RETRO.max`. */
+const LIGHT_MAX = RETRO.max / 2;
 
 /** Share (0 to 1) of the return at an observation angle between the light and the viewer, in radians. */
 export const retroLobe = (angle: number): number =>
   Math.exp(-RETRO.sharpness * (1 - Math.cos(angle)));
 
-/** The add, in units of the surface's colour, of light `lit` (per channel, as `lightColor` is) on sheeting: below `RETRO.max`, rising like `lit` while small. */
+/** The add, in units of the surface's colour, of one light `lit` (per channel, as `lightColor` is) on sheeting: below half of `RETRO.max`, rising like `lit` while small. */
 export const retroBoost = (lit: number, facing: number, angle: number): number =>
-  RETRO.max * (1 - Math.exp(-(lit * facing * retroLobe(angle) * RETRO.gain) / RETRO.max));
+  LIGHT_MAX * (1 - Math.exp(-(lit * facing * retroLobe(angle) * RETRO.gain) / LIGHT_MAX));
 
 /** Lambert, plus the retro lobe of each light on the vertices that carry `retro`. */
 class RetroLightingModel extends PhongLightingModel {
@@ -67,7 +70,7 @@ class RetroLightingModel extends PhongLightingModel {
     const observed = lightDirection.dot(positionViewDirection).clamp();
     const lobe = exp(float(1).sub(observed).mul(-RETRO.sharpness));
     const lit = lightColor.mul(facing).mul(lobe).mul(this.sheeting).mul(RETRO.gain);
-    const boost = float(RETRO.max).mul(float(1).sub(exp(lit.div(-RETRO.max))));
+    const boost = float(LIGHT_MAX).mul(float(1).sub(exp(lit.div(-LIGHT_MAX))));
     reflected.addAssign(boost.mul(diffuseColor.rgb));
   }
 }

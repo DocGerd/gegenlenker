@@ -108,20 +108,28 @@ function beamAt(spec: LampLightSpec, point: Vector3): number {
 describe('the retro add on lit sheeting', () => {
   const [spec] = trucks;
   if (spec === undefined) throw new Error('no truck');
-  const [front] = truckLampLights(spec);
-  if (front === undefined) throw new Error('no front light');
-  const lamp = new Vector3(front.position.x, front.position.y, front.position.z);
+  const lamps = truckLampLights(spec).filter((l) => l.id === 'truck-front');
+  expect(lamps).toHaveLength(2);
   const eye = truckAnchors(spec).eye;
   const driver = new Vector3(eye.x, eye.y, eye.z);
   const red = new Color(REALISM_HUES.tailLamp);
   const albedo = [red.r, red.g, red.b] as const;
 
-  /** Linear colour of a band of `albedo` facing the lamp at `ahead` metres and `right` metres to the right of the lamp. */
-  const band = (ahead: number, right: number) => {
-    const point = new Vector3(lamp.x + ahead, lamp.y - right, 0.6);
-    const lit = beamAt(front, point);
-    const angle = lamp.clone().sub(point).angleTo(driver.clone().sub(point));
-    const retro = retroBoost(lit, 1, angle);
+  /**
+   * Linear colour of a band of `albedo` facing the lamps at `ahead` metres in front of them and
+   * `right` metres to the right of the vehicle's axis; each lamp adds its own diffuse and retro light.
+   */
+  const band = (ahead: number, right: number, facing = 1) => {
+    let lit = 0;
+    let retro = 0;
+    for (const lamp of lamps) {
+      const position = new Vector3(lamp.position.x, lamp.position.y, lamp.position.z);
+      const point = new Vector3(position.x + ahead, -right, 0.6);
+      const share = beamAt(lamp, point);
+      const angle = position.sub(point).angleTo(driver.clone().sub(point));
+      lit += share;
+      retro += retroBoost(share, facing, angle);
+    }
     const diffuse = lit / Math.PI;
     return {
       lit,
@@ -138,10 +146,12 @@ describe('the retro add on lit sheeting', () => {
       expect(boost).toBeLessThanOrEqual(RETRO.max);
     }
     expect(retroBoost(1e-4, 1, 0)).toBeCloseTo(1e-4 * RETRO.gain, 6);
+    // the two dipped lamps add up to the bound, however bright they shine
+    expect(2 * retroBoost(1e6, 1, 0)).toBeLessThanOrEqual(RETRO.max);
   });
 
-  it('never adds more than the sheeting colour itself, at any distance in the beam', () => {
-    for (let ahead = 4; ahead <= 40; ahead += 2) {
+  it('never adds more than the sheeting colour itself from both lamps, at any distance in the beam', () => {
+    for (let ahead = 2; ahead <= 40; ahead += 1) {
       const { diffuse, retro, linear } = band(ahead, 1);
       expect(retro).toBeLessThanOrEqual(RETRO.max);
       linear.forEach((c, i) => {
