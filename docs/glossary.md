@@ -33,3 +33,6 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Menu screen listing the app's changes           | what's new                    | Neuigkeiten                                  |
 | Badge on what's new while entries are unseen    | new                           | Neu                                          |
 | Group of entries not seen on the last visit     | since your last visit         | Seit dem letzten Besuch                      |
+| Speed readout and label                         | speed                         | Tempo                                        |
+| Gear readout and label                          | gear                          | Fahrstufe                                    |
+| Steering readout and label                      | steer                         | Lenken                                       |

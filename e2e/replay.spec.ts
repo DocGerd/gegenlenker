@@ -31,6 +31,7 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   await expect(time).toHaveText(`${total} / ${total}`);
   await scrubber.fill('0');
   await expect(time).toHaveText(`0.0 s / ${total}`);
+  await expect(scrubber).toHaveValue((await scrubber.getAttribute('min')) ?? '0');
 });
 
 test('a night run replays at night after the stored setting switched to day', async ({ page }) => {

@@ -53,7 +53,7 @@ function button(className: string, text: string, onClick: () => void): HTMLButto
 
 function readoutText(s: SimSnapshot): string {
   const steer = Math.round(Math.abs(s.steer) * 100);
-  const side = s.steer > 0 ? '←' : s.steer < 0 ? '→' : '';
+  const side = steer === 0 ? '' : s.steer > 0 ? '←' : '→';
   const parts = [
     `${t('gear')} ${s.control.gear}`,
     `${t('steer')} ${side}${formatNumber(steer, 0)} %`,
@@ -130,13 +130,13 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   let playing = true;
   let speed = DEFAULT_SPEED;
   let topDown: TopDownMode = 'yard';
-  let position = 0;
+  let position = startStep;
   let dirty = true;
 
   const bar = document.createElement('div');
   bar.className = 'replay-bar';
   const playButton = button('app-button app-button-primary', '', () => {
-    if (!playing && position >= log.steps) position = 0;
+    if (!playing && position >= log.steps) position = startStep;
     playing = !playing;
     sync();
   });
@@ -176,10 +176,10 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   const scrubber = document.createElement('input');
   scrubber.type = 'range';
   scrubber.className = 'replay-scrubber';
-  scrubber.min = '0';
+  scrubber.min = String(startStep);
   scrubber.max = String(log.steps);
   scrubber.step = '1';
-  scrubber.value = '0';
+  scrubber.value = String(startStep);
   scrubber.setAttribute('aria-label', t('timeline'));
   scrubber.addEventListener('input', () => {
     position = Number(scrubber.value);
