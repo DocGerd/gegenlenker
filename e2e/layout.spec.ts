@@ -117,6 +117,7 @@ async function expectedViews(page: Page, insets: Insets, wide: boolean) {
   return computeViewports(size.width, size.height, 'drive', legend, insets, undefined, null, {
     front: QUALITY_FLAGS.balanced.frontMirror,
     wide: QUALITY_FLAGS.balanced.wideMirrors && wide,
+    close: QUALITY_FLAGS.balanced.closeMirror,
   });
 }
 
