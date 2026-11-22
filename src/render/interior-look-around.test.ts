@@ -1,15 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  BufferGeometry,
-  Float32BufferAttribute,
-  MathUtils,
-  Mesh,
-  MeshBasicMaterial,
-  Raycaster,
-  Vector3,
-} from 'three';
-import { describe, expect, it } from 'vitest';
+import { Box3, MathUtils, type Mesh, Ray, Vector3 } from 'three';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { truckAnchors } from '../vehicles/anchors';
 import { trucks } from '../vehicles/registry';
 import { CAB_HEIGHT, cabShellParams, FRAME_TOP } from './cab-dims';
@@ -36,6 +28,13 @@ import { computeViewports } from './viewports';
  */
 
 const LOOK_YAW = 100;
+/**
+ * The camera's yaw step and its NDC grid. Together they leave a ray in every 2-degree cell of the swept
+ * directions (a 1-degree grid would take twice the rays), which is finer than the thinnest part's
+ * angle from the eye.
+ */
+const YAW_STEP = 10;
+const GRID_STEPS = 24;
 /** The look-around's pitch range, read both against the horizon and against the forward view's pitch. */
 const LOOK_PITCH = 10;
 const BASE_PITCH = -MathUtils.radToDeg(COCKPIT_PITCH);
@@ -55,27 +54,94 @@ const WINDOWS: readonly (readonly [number, number])[] = [
   [390, 844],
 ];
 
-const solidsMesh = (solids: readonly Solid[]): Mesh => {
-  const position: number[] = [];
+/**
+ * A part's front faces in three space as flat vertex triples, with their box: the ray tests walk plain
+ * vectors, not `Raycaster`, which rebuilds the ray in each mesh's frame for every ray.
+ */
+type Part = { readonly box: Box3; readonly triangles: readonly Vector3[] };
+
+const partOf = (triangles: Vector3[]): Part => ({
+  box: new Box3().setFromPoints(triangles),
+  triangles,
+});
+
+const meshPart = (mesh: Mesh): Part => {
+  mesh.updateMatrixWorld(true);
+  const position = mesh.geometry.getAttribute('position');
+  const index = mesh.geometry.getIndex();
+  const count = index?.count ?? position.count;
+  const found: Vector3[] = [];
+  for (let i = 0; i < count; i++) {
+    found.push(
+      new Vector3()
+        .fromBufferAttribute(position, index ? index.getX(i) : i)
+        .applyMatrix4(mesh.matrixWorld),
+    );
+  }
+  return partOf(found);
+};
+
+const solidPart = (solids: readonly Solid[]): Part => {
+  const found: Vector3[] = [];
   for (const { verts, faces } of solids) {
     for (const face of faces) {
       for (let i = 1; i < face.length - 1; i++) {
         for (const k of [0, i, i + 1]) {
           const [x, y, z] = verts[face[k] as number] as Vec3;
-          position.push(x, z, -y); // body frame to three space, which keeps the winding
+          found.push(new Vector3(x, z, -y)); // body frame to three space, which keeps the winding
         }
       }
     }
   }
-  const geometry = new BufferGeometry();
-  geometry.setAttribute('position', new Float32BufferAttribute(position, 3));
-  return new Mesh(geometry, new MeshBasicMaterial());
+  return partOf(found);
 };
 
-const probe = new Raycaster();
-const nearest = (meshes: readonly Mesh[], origin: Vector3, direction: Vector3): number | null => {
-  probe.set(origin, direction);
-  return probe.intersectObjects(meshes as Mesh[], false)[0]?.distance ?? null;
+const ray = new Ray();
+const hit = new Vector3();
+
+/** The distance to the nearest front face along the ray, or null. */
+const nearest = (parts: readonly Part[], origin: Vector3, direction: Vector3): number | null => {
+  ray.set(origin, direction);
+  let best: number | null = null;
+  for (const { box, triangles } of parts) {
+    if (!ray.intersectsBox(box)) continue;
+    for (let i = 0; i < triangles.length; i += 3) {
+      if (
+        ray.intersectTriangle(
+          triangles[i] as Vector3,
+          triangles[i + 1] as Vector3,
+          triangles[i + 2] as Vector3,
+          true,
+          hit,
+        ) === null
+      )
+        continue;
+      const distance = origin.distanceTo(hit);
+      if (best === null || distance < best) best = distance;
+    }
+  }
+  return best;
+};
+
+/** Whether the ray meets any front face; stops at the first. */
+const hits = (parts: readonly Part[], origin: Vector3, direction: Vector3): boolean => {
+  ray.set(origin, direction);
+  for (const { box, triangles } of parts) {
+    if (!ray.intersectsBox(box)) continue;
+    for (let i = 0; i < triangles.length; i += 3) {
+      if (
+        ray.intersectTriangle(
+          triangles[i] as Vector3,
+          triangles[i + 1] as Vector3,
+          triangles[i + 2] as Vector3,
+          true,
+          hit,
+        ) !== null
+      )
+        return true;
+    }
+  }
+  return false;
 };
 
 /** The body-frame direction at NDC (x, y) of a camera looking `yaw` to the left and `elevation` above the horizon, degrees. */
@@ -109,6 +175,9 @@ const grid = (steps: number): [number, number][] => {
   }
   return found;
 };
+
+const LOOK_GRID = grid(GRID_STEPS);
+const FORWARD_GRID = grid(40);
 
 const widest = Math.max(
   ...WINDOWS.map(([w, h]) => {
@@ -148,28 +217,22 @@ describe.each(trucks)('cab interior for looking around, $id', (spec) => {
     return false;
   };
 
-  const shell = async () => {
+  let shell: Part[] = [];
+  beforeAll(async () => {
     const bytes = readFileSync(join(import.meta.dirname, `assets/${spec.id}-interior.glb`));
     const data = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    const protos = Object.values(interiorShellFrom(await parseMeshes(data)));
-    return protos.map((proto) => {
-      const mesh = new Mesh(proto.geometry, new MeshBasicMaterial({ vertexColors: true }));
-      proto.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
-      mesh.updateMatrixWorld(true);
-      return mesh;
-    });
-  };
+    shell = Object.values(interiorShellFrom(await parseMeshes(data))).map(meshPart);
+  });
 
-  it(`hits an interior part on every ray within ${LOOK_YAW} degrees of yaw and ${LOOK_PITCH} of pitch, except through the open window and the front`, async () => {
-    const meshes = await shell();
+  it(`hits an interior part on every ray within ${LOOK_YAW} degrees of yaw and ${LOOK_PITCH} of pitch, except through the open window and the front`, () => {
     let checked = 0;
     let glass = 0;
-    for (let yaw = -LOOK_YAW; yaw <= LOOK_YAW; yaw += 5) {
+    for (let yaw = -LOOK_YAW; yaw <= LOOK_YAW; yaw += YAW_STEP) {
       for (const elevation of AXIS_ELEVATIONS) {
-        for (const ndc of grid(24)) {
+        for (const ndc of LOOK_GRID) {
           const d = direction(ndc, yaw, elevation, widest);
           checked++;
-          if (nearest(meshes, origin, toThree(d)) !== null) continue;
+          if (hits(shell, origin, toThree(d))) continue;
           glass++;
           expect(
             throughGlass(d),
@@ -188,13 +251,13 @@ describe.each(trucks)('cab interior for looking around, $id', (spec) => {
     const added = lookAroundSolids(spec);
     const names = Object.keys(added) as InteriorMeshName[];
     const base = names.map((n) =>
-      solidsMesh(params.meshes[n].slice(0, params.meshes[n].length - added[n].length)),
+      solidPart(params.meshes[n].slice(0, params.meshes[n].length - added[n].length)),
     );
-    const all = names.map((n) => solidsMesh(params.meshes[n]));
+    const all = names.map((n) => solidPart(params.meshes[n]));
     for (const [w, h] of WINDOWS) {
       const { cockpit } = computeViewports(w, h, 'drive', null);
       const aspect = (cockpit?.width ?? 1) / (cockpit?.height ?? 1);
-      for (const ndc of grid(40)) {
+      for (const ndc of FORWARD_GRID) {
         const d = toThree(direction(ndc, 0, -BASE_PITCH, aspect));
         expect(nearest(all, origin, d), `${w}x${h} ndc ${ndc.join(', ')}`).toBe(
           nearest(base, origin, d),
