@@ -21,6 +21,7 @@ export const REALISM_HUES = {
   coneRed: 0xcc0605, // RAL 3020 traffic red, cone body
   skylineDark: 0x5c6875, // distant industrial silhouettes
   skyHaze: 0xdcebf2, // horizon haze, pale blue-grey
+  windowLight: 0xffc27a, // lit office windows of the skyline at night
   sunHalo: 0xfff1d0, // warm glow around the sun
   nightHorizon: 0x18243f, // night sky dome at the horizon; the haze fades to it
   nightZenith: 0x03050a, // night sky dome overhead

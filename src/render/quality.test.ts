@@ -113,6 +113,17 @@ describe('quality flags', () => {
     }
   });
 
+  it('lights the skyline windows only on a drawn skyline, on Balanced and High', () => {
+    expect(GRAPHICS_PRESETS.filter((p) => QUALITY_FLAGS[p].skylineWindows)).toEqual([
+      'balanced',
+      'high',
+    ]);
+    for (const preset of GRAPHICS_PRESETS) {
+      const flags = QUALITY_FLAGS[preset];
+      if (flags.skylineWindows) expect(flags.skyline, preset).toBe(true);
+    }
+  });
+
   it('tone-maps every reflection: pbr with the HDRI sky needs the grade', () => {
     // the reflection capture is untoned; only the graded reflective material maps it
     for (const preset of GRAPHICS_PRESETS) {
