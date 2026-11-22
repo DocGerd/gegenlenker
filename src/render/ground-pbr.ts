@@ -3,6 +3,7 @@ import {
   DirectionalLight,
   Float32BufferAttribute,
   LightProbe,
+  LinearFilter,
   Mesh,
   PerspectiveCamera,
   PlaneGeometry,
@@ -126,6 +127,8 @@ function groundStandIn(maps: TextureMaps<PbrKey>) {
     .setAttribute('groundSelect', new Float32BufferAttribute(new Float32Array(vertices * 3), 3))
     .setAttribute(MARK_BOX, new Float32BufferAttribute(new Float32Array(vertices * 4), 4));
   const macro = new DataTexture(new Uint8Array(4), 1, 1);
+  // the macro read is biased: three emits a sampler for it, and none for a nearest-filtered texture
+  macro.minFilter = macro.magFilter = LinearFilter;
   macro.needsUpdate = true;
   const mask = new DataTexture(new Uint8Array(2), 1, 1, RGFormat, UnsignedByteType);
   mask.unpackAlignment = 1;
