@@ -5,7 +5,7 @@ import { en } from '../src/i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
-import { startPinnedDrive } from './pinned-shoot';
+import { heavyAt, startPinnedDrive } from './pinned-shoot';
 
 type Size = { width: number; height: number };
 
@@ -99,7 +99,7 @@ async function blankRows(page: Page, x: number): Promise<number> {
 
 /**
  * The mirrors the default Balanced drive shows at the page's size: the two side mirrors, the class IV
- * mirrors under them and the front mirror where `computeViewports` finds room for them, given the key
+ * mirrors under them, the class V mirror above the right one and the front mirror where `computeViewports` finds room for them, given the key
  * legend as the page measured it.
  */
 async function expectedViews(page: Page, insets: Insets, wide: boolean) {
@@ -136,8 +136,8 @@ const wideSetting = (page: Page): Promise<boolean> =>
   }, SETTINGS_KEY);
 
 async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
-  const { front, wideLeft } = await expectedViews(page, insets, await wideSetting(page));
-  return 2 + (wideLeft === null ? 0 : 2) + (front === null ? 0 : 1);
+  const { front, wideLeft, close } = await expectedViews(page, insets, await wideSetting(page));
+  return 2 + (wideLeft === null ? 0 : 2) + (front === null ? 0 : 1) + (close === null ? 0 : 1);
 }
 
 /**
@@ -273,6 +273,20 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
     expect((frontBox?.top ?? 0) - bracket, 'bracket inside the cockpit').toBeGreaterThanOrEqual(
       cockpitBox?.top ?? 0,
     );
+  }
+
+  // The class V mirror's housing arm reaches past its outer, right side, and stays on screen and clear.
+  const close = page.locator('[data-hud="close"]:not([hidden])');
+  if ((await close.count()) > 0) {
+    const [closeBox] = await boxes(close);
+    const [closeArm] = await armReach(close);
+    if (closeBox === undefined || closeArm === undefined) throw new Error('class V arm');
+    expect(closeArm, 'class V arm is drawn').toBeGreaterThan(0);
+    const armedClose = { ...closeBox, right: closeBox.right + closeArm };
+    expect(armedClose.right, 'class V arm on screen').toBeLessThanOrEqual(size.width);
+    for (const c of controlBoxes) {
+      expect(overlaps(armedClose, c), `${c.name} overlaps the class V housing`).toBe(false);
+    }
   }
 
   // The lamp row must not make the gear column taller than the gears and their label were alone.
@@ -551,10 +565,13 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
   };
   const frontShown = (await page.locator('[data-hud="front"]:not([hidden])').count()) > 0;
   const wideShown = (await page.locator('[data-hud^="wide"]:not([hidden])').count()) > 0;
+  const closeShown = (await page.locator('[data-hud="close"]:not([hidden])').count()) > 0;
   const mirrors = await boxes(
     page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'),
   );
-  expect(mirrors).toHaveLength(3 + (frontShown ? 1 : 0) + (wideShown ? 2 : 0));
+  expect(mirrors).toHaveLength(
+    3 + (frontShown ? 1 : 0) + (wideShown ? 2 : 0) + (closeShown ? 1 : 0),
+  );
   for (const m of messages) {
     for (const o of [...controls, cone, ...mirrors]) {
       expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
@@ -865,6 +882,50 @@ test('the divider runs across the screen in portrait', async ({ page }) => {
     for (const d of divider) expect(overlaps(m, d), `${d.name} overlaps a mirror`).toBe(false);
   }
 });
+
+test(
+  'the class V mirror sits above the right class II mirror at 1920x1080, with the messages clear',
+  heavyAt('balanced'),
+  async ({ browser }) => {
+    test.slow();
+    const size = { width: 1920, height: 1080 };
+    const context = await browser.newContext({ locale: 'en-US', viewport: size });
+    try {
+      const page = await context.newPage();
+      await startStraightReverse(page, en.exerciseStraightReverse);
+      const close = page.locator('[data-hud="close"]:not([hidden])');
+      await expect(close).toHaveCount(1);
+      const [closeBox] = await boxes(close);
+      const [rightBox] = await boxes(page.locator('[data-hud="mirrorRight"]'));
+      if (closeBox === undefined || rightBox === undefined) throw new Error('mirrors');
+      expect(closeBox.right, 'right-aligned with class II').toBeCloseTo(rightBox.right, 0);
+      expect(closeBox.bottom, 'above class II').toBeLessThanOrEqual(rightBox.top);
+      await expectMirrorsClearControls(page, size);
+      await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+/** Laptop viewports too small to leave class V room above class II. */
+for (const size of [
+  { width: 1280, height: 720 },
+  { width: 1366, height: 768 },
+  { width: 1536, height: 729 },
+]) {
+  test(`there is no class V mirror at ${size.width}x${size.height}`, async ({ browser }) => {
+    const context = await browser.newContext({ locale: 'en-US', viewport: size });
+    try {
+      const page = await context.newPage();
+      await startStraightReverse(page, en.exerciseStraightReverse);
+      await expect(page.locator('[data-hud="close"]')).toBeHidden();
+      await expect(page.locator('[data-hud="close"]:not([hidden])')).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+}
 
 /** Laptop viewports where class IV shows beside the open key legend; 1440x739 is the first to lose it if the legend grows. */
 const laptops: { size: Size; locale: string; messages: typeof en | typeof de }[] = [
