@@ -193,7 +193,8 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
         playing = false;
         sync();
       });
-      marker.style.left = `${(event.step / log.steps) * 100}%`;
+      const span = log.steps - startStep;
+      marker.style.left = `${span > 0 ? (Math.max(0, event.step - startStep) / span) * 100 : 0}%`;
       marker.title = label;
       marker.setAttribute('aria-label', label);
       markers.append(marker);

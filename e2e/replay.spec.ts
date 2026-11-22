@@ -5,6 +5,7 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   await expect(page.locator('[data-hud="speed"]')).toHaveText('0.0 km/h');
+  await page.waitForTimeout(1000);
   await page.keyboard.press('4');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
   await expect(page.locator('[data-hud="speed"]')).not.toHaveText('0.0 km/h');
@@ -19,6 +20,9 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   const scrubber = page.getByRole('slider', { name: en.timeline });
   const time = page.locator('.replay-time');
   await expect(scrubber).toBeVisible();
+  // Idle time before the first input is cut off: the timeline starts after step 0.
+  const first = Number(await scrubber.getAttribute('min'));
+  expect(first).toBeGreaterThan(0);
   const last = await scrubber.getAttribute('max');
   expect(Number(last)).toBeGreaterThan(0);
 
@@ -30,8 +34,8 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   const total = (await time.textContent())?.split(' / ')[1] ?? '';
   await expect(time).toHaveText(`${total} / ${total}`);
   await scrubber.fill('0');
+  await expect(scrubber).toHaveValue(String(first));
   await expect(time).toHaveText(`0.0 s / ${total}`);
-  await expect(scrubber).toHaveValue((await scrubber.getAttribute('min')) ?? '0');
 });
 
 test('a night run replays at night after the stored setting switched to day', async ({ page }) => {
