@@ -690,14 +690,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
           el.style.setProperty('--hud-above-height', `${above.height}px`);
         }
       });
-      const base = c ?? views.topDown;
       const column = messageColumn(views);
       toastWrap.style.left = `${column.x}px`;
       toastWrap.style.top = `${column.y}px`;
       toastWrap.style.width = `${column.width}px`;
       place(topDown, views.topDown);
       // The finish/menu button sits at the screen's top-right corner.
-      toastWrap.toggleAttribute('data-reserve', base.y < 1 && spansRight(base));
+      toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
       hasCockpit = c !== null;
       syncSplitHidden();

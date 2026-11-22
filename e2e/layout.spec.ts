@@ -502,9 +502,6 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
   }
 }
 
-/** Screen height below which the toast and the goal cue cannot clear the gear column. */
-const CRAMPED_HEIGHT = 420;
-
 /**
  * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
  * or the forward sight cone, the cockpit label and every mirror.
@@ -557,11 +554,8 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'),
   );
   expect(mirrors).toHaveLength(3 + (frontShown ? 1 : 0) + (wideShown ? 2 : 0));
-  // On a screen this short even one toast line and the cue reach the gear column, as before the front
-  // mirror: the rule drops the mirror there, and only the fit is asserted.
-  const cramped = !frontShown && (page.viewportSize()?.height ?? Infinity) < CRAMPED_HEIGHT;
   for (const m of messages) {
-    for (const o of cramped ? [] : [...controls, cone, ...mirrors]) {
+    for (const o of [...controls, cone, ...mirrors]) {
       expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
     }
   }
