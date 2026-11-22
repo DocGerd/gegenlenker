@@ -14,6 +14,7 @@ import {
   SPACE_PX,
   wordPx,
   wrapLines,
+  MIN_CLASS_II_SHARE,
   MIN_MIRROR_HEIGHT,
   MIN_WIDE_HEIGHT,
   MIN_WIDE_WIDTH,
@@ -636,9 +637,8 @@ describe('computeViewports class IV mirrors', () => {
           expect(a.x, at).toBe(b.x);
         } else {
           count.shrunk++;
-          // never below 90% of the linear size it has without class IV (the owner's rule)
-          expect(a.width, at).toBeGreaterThanOrEqual(Math.ceil(0.9 * b.width));
-          expect(a.height, at).toBeGreaterThanOrEqual(Math.ceil(0.9 * b.height));
+          expect(a.width, at).toBeGreaterThanOrEqual(Math.ceil(MIN_CLASS_II_SHARE * b.width));
+          expect(a.height, at).toBeGreaterThanOrEqual(Math.ceil(MIN_CLASS_II_SHARE * b.height));
           expect(a.height, at).toBeLessThan(b.height);
           expect(a.x, at).toBe(b.x);
         }
@@ -689,5 +689,27 @@ describe('computeViewports class IV mirrors', () => {
       expect(v.wideLeft, `${w}x${h}`).not.toBeNull();
       expect(v.front, `${w}x${h}`).not.toBeNull();
     }
+  });
+
+  it('is shown at laptop viewports, where the cockpit column is the limit', () => {
+    for (const [w, h] of [
+      [1536, 729],
+      [1536, 701],
+      [1440, 719],
+      [1470, 762],
+      [1512, 788],
+    ] as const) {
+      const v = views(w, h, WIDE, null);
+      expect(v.wideLeft, `${w}x${h}`).not.toBeNull();
+      expect(v.wideRight, `${w}x${h}`).not.toBeNull();
+    }
+  });
+
+  it('puts class II beside a legend that reaches under it when that holds class IV below the legend top', () => {
+    const [w, h] = [1440, 765];
+    const legend = { right: 721.09, height: 409.7 };
+    const v = views(w, h, WIDE, legend);
+    if (v.wideRight === null) throw new Error('class IV beside the legend');
+    expect(v.wideRight.y + v.wideRight.height).toBeGreaterThan(h - legend.height);
   });
 });
