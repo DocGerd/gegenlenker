@@ -199,7 +199,7 @@ export function startDrive(
       undefined,
       undefined,
       null,
-      extraMirrors(graphics),
+      extraMirrors(graphics, settings.wideMirrors),
     ),
     topDown,
     aids,
@@ -301,7 +301,7 @@ export function startDrive(
       measured.set(paneWidth, bottom);
       return bottom;
     };
-    const extra = extraMirrors(graphics);
+    const extra = extraMirrors(graphics, settings.wideMirrors);
     let views = computeViewports(
       width,
       height,

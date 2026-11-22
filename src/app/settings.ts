@@ -29,6 +29,7 @@ export type Settings = {
   readonly collapsed: CollapsedPanels;
   readonly graphics: GraphicsPreset;
   readonly lighting: LightingMode;
+  readonly wideMirrors: boolean;
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
@@ -89,6 +90,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
     },
     graphics: pick(GRAPHICS_PRESETS, s['graphics'], DEFAULT_GRAPHICS),
     lighting: pick(LIGHTING_MODES, s['lighting'], DEFAULT_LIGHTING),
+    wideMirrors: flag(s['wideMirrors'], true),
   };
 }
 

@@ -144,7 +144,7 @@ export async function startProbe(root: HTMLElement): Promise<void> {
         NO_INSETS,
         undefined,
         null,
-        extraMirrors(DEFAULT_GRAPHICS),
+        extraMirrors(DEFAULT_GRAPHICS, true),
       ),
       topDown: 'follow',
       aids: { pivots: true, path: true, tracks: true, ghost: true },

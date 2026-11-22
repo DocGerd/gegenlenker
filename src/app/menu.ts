@@ -79,6 +79,7 @@ const MARKUP = `
       <label class="menu-field"><span class="menu-label" data-i18n="language"></span><select class="menu-select" data-menu="language"></select></label>
       <label class="menu-field"><span class="menu-label" data-i18n="theme"></span><select class="menu-select" data-menu="theme"></select></label>
       <label class="menu-field"><span class="menu-label" data-i18n="graphics"></span><select class="menu-select" data-menu="graphics"></select></label>
+      <label class="menu-field"><span class="menu-label" data-i18n="wideMirrors"></span><select class="menu-select" data-menu="wideMirrors"></select></label>
     </div>
   </section>
   <footer class="menu-footer">
@@ -211,6 +212,7 @@ export function showMenu(
     const language = query(container, 'language', HTMLSelectElement);
     const theme = query(container, 'theme', HTMLSelectElement);
     const graphics = query(container, 'graphics', HTMLSelectElement);
+    const wideMirrors = query(container, 'wideMirrors', HTMLSelectElement);
     fillSelect(
       truck,
       trucks.map((s) => [s.id, s.name]),
@@ -240,6 +242,14 @@ export function showMenu(
       graphics,
       GRAPHICS_PRESETS.map((v) => [v, t(GRAPHICS_NAME[v])]),
       settings.graphics,
+    );
+    fillSelect(
+      wideMirrors,
+      [
+        ['on', t('settingOn')],
+        ['off', t('settingOff')],
+      ],
+      settings.wideMirrors ? 'on' : 'off',
     );
 
     const pair = (): Pick<RunConfig, 'truckId' | 'trailerId'> => {
@@ -326,6 +336,10 @@ export function showMenu(
       const preset = GRAPHICS_PRESETS.find((v) => v === graphics.value);
       if (preset === undefined) graphics.value = currentSettings().graphics;
       else updateSettings({ graphics: preset });
+    });
+
+    wideMirrors.addEventListener('change', () => {
+      updateSettings({ wideMirrors: wideMirrors.value !== 'off' });
     });
 
     query(container, 'whatsNew', HTMLElement).addEventListener('click', onWhatsNew);
