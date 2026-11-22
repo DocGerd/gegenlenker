@@ -15,7 +15,7 @@ import { CAB_HEIGHT, FRAME_TOP } from './cab-dims';
 import { CAMERA_FAR, CHASE_LAYERS, enableLayers } from './seams';
 
 const CHASE_FOV = 40;
-/** Distance beyond the one that just fits the combination's bounding sphere. */
+/** Distance beyond the one that just fits the combination. */
 const FIT_MARGIN = 1.1;
 const MIN_ASPECT = 0.3;
 /** Floor of the free rect's half-angle tangent, so a collapsed free rect cannot push the distance to infinity. */
@@ -26,6 +26,8 @@ export const CHASE_MAX_DISTANCE = 100;
 const CHASE_FAR = CAMERA_FAR + CHASE_MAX_DISTANCE;
 /** Metres the eye keeps above a collider it would otherwise sit inside, and around its footprint. */
 const COLLIDER_CLEARANCE = 0.3;
+/** Metres the eye stops short of a grown collider box, so rounding never counts it inside. */
+const ENTRY_GAP = 1e-3;
 
 /** The cab's front face in the truck body frame (x forward, y left, z up), metres. */
 export type CabFront = {
@@ -59,28 +61,68 @@ export type ChaseFrame = {
 
 const frameAspect = (frame: ChaseFrame): number => Math.max(frame.width / frame.height, MIN_ASPECT);
 
-/** Distance at which a sphere of `radius` fills the narrower half-angle of the free rect. */
-export function chaseDistance(radius: number, frame: ChaseFrame): number {
-  const tanVertical = Math.tan(MathUtils.degToRad(CHASE_FOV / 2));
-  const tanFit = Math.max(
-    Math.min(
-      tanVertical * (frame.clear.height / frame.height),
-      tanVertical * frameAspect(frame) * (frame.clear.width / frame.width),
-    ),
-    MIN_TAN_FIT,
-  );
-  return (FIT_MARGIN * radius) / Math.sin(Math.atan(tanFit));
+/** The combination straight, from its centre: half its length and half its widest body, metres. */
+export type CombinationExtent = { readonly halfLength: number; readonly halfWidth: number };
+
+export function combinationExtent(truck: TruckSpec, trailer: TrailerSpec): CombinationExtent {
+  const p = resolveCombination(truck, trailer);
+  const length =
+    p.truckFront + p.couplingOffset + p.drawbar + p.trailerWheelbase + p.trailerRearOverhang;
+  return { halfLength: length / 2, halfWidth: Math.max(p.truckWidth, p.trailerWidth) / 2 };
 }
 
 /** Metres added to the combination's bounding radius. */
 const RADIUS_MARGIN = 1;
 
 /** Metres from `vehicleCentre` that bound the whole combination, however it bends. */
-export function combinationRadius(truck: TruckSpec, trailer: TrailerSpec): number {
-  const p = resolveCombination(truck, trailer);
-  const length =
-    p.truckFront + p.couplingOffset + p.drawbar + p.trailerWheelbase + p.trailerRearOverhang;
-  return length / 2 + Math.max(p.truckWidth, p.trailerWidth) / 2 + RADIUS_MARGIN;
+export const boundingRadius = ({ halfLength, halfWidth }: CombinationExtent): number =>
+  halfLength + halfWidth + RADIUS_MARGIN;
+
+/** The height the camera aims at, and the one a combination of `face`'s cab stands up to, metres. */
+const aimHeight = (face: CabFront): number => (face.bottom + face.top) / 2;
+
+/**
+ * Distance at which the straight combination's bounding box, seen from the default azimuth and
+ * pitch, fills the free rect. A bent combination can reach past it: the zoom range covers the bounding sphere.
+ */
+export function chaseDistance(
+  extent: CombinationExtent,
+  face: CabFront,
+  frame: ChaseFrame,
+): number {
+  const azimuth = CHASE_AZIMUTH.default;
+  const pitch = CHASE_PITCH.default;
+  const toEye = new Vector3(
+    Math.cos(pitch) * Math.cos(azimuth),
+    Math.cos(pitch) * Math.sin(azimuth),
+    Math.sin(pitch),
+  );
+  const right = new Vector3(-Math.sin(azimuth), Math.cos(azimuth), 0);
+  const up = new Vector3().crossVectors(toEye, right).negate();
+  const tanVertical = Math.tan(MathUtils.degToRad(CHASE_FOV / 2));
+  const tanAcross = Math.max(
+    tanVertical * frameAspect(frame) * (frame.clear.width / frame.width),
+    MIN_TAN_FIT,
+  );
+  const tanUp = Math.max(tanVertical * (frame.clear.height / frame.height), MIN_TAN_FIT);
+  const middle = aimHeight(face);
+  const corner = new Vector3();
+  let distance = 0;
+  for (const x of [-1, 1]) {
+    for (const y of [-1, 1]) {
+      for (const z of [-middle, face.top - middle]) {
+        corner.set(x * extent.halfLength, y * extent.halfWidth, z);
+        // a corner nearer the eye than the pivot, by `t`, needs that much more distance
+        const t = corner.dot(toEye);
+        distance = Math.max(
+          distance,
+          Math.abs(corner.dot(right)) / tanAcross + t,
+          Math.abs(corner.dot(up)) / tanUp + t,
+        );
+      }
+    }
+  }
+  return FIT_MARGIN * distance;
 }
 
 /** The bumper-to-trailer-rear midpoint the follow views, the chase view and the sun shadow centre on. */
@@ -100,8 +142,7 @@ export type ChaseRig = {
   readonly truck: Pose2;
   /** The pivot, in the sim plane: `vehicleCentre`. */
   readonly centre: Vec2;
-  /** Metres from `centre` that bound the whole combination. */
-  readonly radius: number;
+  readonly extent: CombinationExtent;
   readonly face: CabFront;
   /** The eye never sits inside one of these boxes. */
   readonly colliders: readonly Pick<Obstacle, 'obb' | 'height'>[];
@@ -131,6 +172,56 @@ function colliderTop(rig: ChaseRig, x: number, y: number): number {
 }
 
 /**
+ * How far from (`x`, `y`, `z`) (sim plane, z up) along the unit direction (`dx`, `dy`, `dz`) the ray
+ * first enters a collider box grown by `COLLIDER_CLEARANCE`; infinity when it enters none. A ray that
+ * starts inside a box has no entry.
+ */
+function firstEntry(
+  rig: ChaseRig,
+  from: readonly [number, number, number],
+  dir: readonly [number, number, number],
+): number {
+  let nearest = Infinity;
+  for (const { obb, height } of rig.colliders) {
+    const cos = Math.cos(obb.heading);
+    const sin = Math.sin(obb.heading);
+    const ox = from[0] - obb.cx;
+    const oy = from[1] - obb.cy;
+    // the ray in the box's frame, against its slabs along, across and up
+    const origin = [ox * cos + oy * sin, -ox * sin + oy * cos, from[2]];
+    const step = [dir[0] * cos + dir[1] * sin, -dir[0] * sin + dir[1] * cos, dir[2]];
+    const low = [
+      -obb.halfLength - COLLIDER_CLEARANCE,
+      -obb.halfWidth - COLLIDER_CLEARANCE,
+      -COLLIDER_CLEARANCE,
+    ];
+    const high = [
+      obb.halfLength + COLLIDER_CLEARANCE,
+      obb.halfWidth + COLLIDER_CLEARANCE,
+      height + COLLIDER_CLEARANCE,
+    ];
+    let enter = -Infinity;
+    let leave = Infinity;
+    for (let axis = 0; axis < 3; axis++) {
+      const o = origin[axis] as number;
+      const d = step[axis] as number;
+      const lo = low[axis] as number;
+      const hi = high[axis] as number;
+      if (Math.abs(d) < 1e-12) {
+        if (o < lo || o > hi) leave = -Infinity;
+        continue;
+      }
+      const a = (lo - o) / d;
+      const b = (hi - o) / d;
+      enter = Math.max(enter, Math.min(a, b));
+      leave = Math.min(leave, Math.max(a, b));
+    }
+    if (enter > 0 && enter <= leave) nearest = Math.min(nearest, enter);
+  }
+  return nearest;
+}
+
+/**
  * Orbits the combination's centre, framed in the part of the pane the HUD leaves free: `view.panX` turns the camera around it
  * (counter-clockwise from above, radians, from the truck's heading), `view.panY` tilts it from the default pitch and `view.zoom`
  * divides the fitted distance, which never drops below the combination's bounding radius.
@@ -145,12 +236,21 @@ export function placeChaseCamera(
   const { centre, truck, face } = rig;
   const azimuth = truck.heading + CHASE_AZIMUTH.default + view.panX;
   const pitch = MathUtils.clamp(CHASE_PITCH.default + view.panY, CHASE_PITCH.min, CHASE_PITCH.max);
-  const distance = MathUtils.clamp(
-    chaseDistance(rig.radius, frame) / MathUtils.clamp(view.zoom, CHASE_ZOOM.min, CHASE_ZOOM.max),
-    rig.radius,
-    Math.max(CHASE_MAX_DISTANCE, rig.radius),
+  const middle = aimHeight(face);
+  const radius = boundingRadius(rig.extent);
+  const wanted = MathUtils.clamp(
+    chaseDistance(rig.extent, face, frame) /
+      MathUtils.clamp(view.zoom, CHASE_ZOOM.min, CHASE_ZOOM.max),
+    radius,
+    Math.max(CHASE_MAX_DISTANCE, radius),
   );
-  const middle = (face.bottom + face.top) / 2;
+  // Closer than a collider between the pivot and the eye, which would hide the vehicle; the bounding radius still comes first.
+  const entry = firstEntry(
+    rig,
+    [centre.x, centre.y, middle],
+    [Math.cos(pitch) * Math.cos(azimuth), Math.cos(pitch) * Math.sin(azimuth), Math.sin(pitch)],
+  );
+  const distance = Math.max(radius, Math.min(wanted, entry - ENTRY_GAP));
   const horizontal = distance * Math.cos(pitch);
   const x = centre.x + horizontal * Math.cos(azimuth);
   const y = centre.y + horizontal * Math.sin(azimuth);

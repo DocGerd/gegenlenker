@@ -12,7 +12,7 @@ import { resolveCombination } from '../vehicles/resolve';
 import { RELIEF } from './cab-dims';
 import {
   cabFront,
-  combinationRadius,
+  combinationExtent,
   createChaseCamera,
   placeChaseCamera,
   vehicleCentre,
@@ -229,7 +229,7 @@ describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
         {
           truck: STRAIGHT,
           centre: vehicleCentre(straight, face.x),
-          radius: combinationRadius(truckById(id), trailerById(trailerId)),
+          extent: combinationExtent(truckById(id), trailerById(trailerId)),
           face,
           colliders: [],
         },

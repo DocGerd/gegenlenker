@@ -23,7 +23,8 @@ import {
   CHASE_MAX_DISTANCE,
   cabFront,
   chaseDistance,
-  combinationRadius,
+  boundingRadius,
+  combinationExtent,
   createChaseCamera,
   placeChaseCamera,
   vehicleCentre,
@@ -87,7 +88,7 @@ function posed(t: number, r: number, pose: Pose2, coupling: number, turntable: n
     rig: {
       truck: snapshot.truck,
       centre: vehicleCentre(snapshot, face.x),
-      radius: combinationRadius(truck, trailer),
+      extent: combinationExtent(truck, trailer),
       face,
     },
     bodies: bodyFootprints(params, snapshot).map((f) => f.obb),
@@ -163,7 +164,9 @@ describe('chase camera', () => {
                       bodies.every((o) => !inside(o, position.x, -position.z)),
                     label,
                   ).toBe(true);
-                  expect(position.distanceTo(aim), label).toBeGreaterThanOrEqual(rig.radius - 1e-9);
+                  expect(position.distanceTo(aim), label).toBeGreaterThanOrEqual(
+                    boundingRadius(rig.extent) - 1e-9,
+                  );
                   expect(position.distanceTo(aim), label).toBeLessThanOrEqual(
                     CHASE_MAX_DISTANCE + 1e-9,
                   );
@@ -223,24 +226,36 @@ describe('chase camera', () => {
     expect(pitchOf(CHASE_TILT.max + 1)).toBeCloseTo(CHASE_PITCH.max, 9);
   });
 
-  it('lifts the eye above a collider box it would sit in, and leaves it alone elsewhere', () => {
+  it('draws the eye in before a collider that hides the pivot, down to the bounding radius, and lifts it over what is left', () => {
     const { rig } = posed(0, 0, POSES[0] as Pose2, 0, 0);
     const frame = FRAMES[0] as ChaseFrame;
+    const aim = aimOf(rig);
     const clear = place(free(rig), frame, DEFAULT_TOP_DOWN_VIEW).position;
-    const box: Obb = { cx: clear.x, cy: -clear.z, halfLength: 2, halfWidth: 2, heading: 0.3 };
-    const lifted = place(
-      { ...rig, colliders: [{ obb: box, height: clear.y + 5 }] },
-      frame,
-      DEFAULT_TOP_DOWN_VIEW,
-    ).position;
-    expect(lifted.y).toBeGreaterThan(clear.y + 5);
-    expect(lifted.x).toBeCloseTo(clear.x, 9);
+    const radius = boundingRadius(rig.extent);
+    const wall = (distance: number, height: number, thick = 0.2): ChaseRig => {
+      const cx = rig.centre.x + ((clear.x - aim.x) * distance) / clear.distanceTo(aim);
+      const cy = rig.centre.y + ((-clear.z - rig.centre.y) * distance) / clear.distanceTo(aim);
+      const obb: Obb = { cx, cy, halfLength: thick, halfWidth: 30, heading: 0.4 };
+      return { ...rig, colliders: [{ obb, height }] };
+    };
+    const tall = place(wall(radius + 6, 50), frame, DEFAULT_TOP_DOWN_VIEW).position;
+    expect(tall.distanceTo(aim)).toBeCloseTo(radius + 6 - 0.2 - 0.3, 0);
+    const buried = place(wall(radius - 3, 50, 5), frame, DEFAULT_TOP_DOWN_VIEW).position;
+    expect(buried.distanceTo(aim)).toBeGreaterThanOrEqual(radius);
+    expect(buried.y).toBeGreaterThanOrEqual(50);
+    const low = place(wall(radius + 6, 0.5), frame, DEFAULT_TOP_DOWN_VIEW).position;
+    expect(low.distanceTo(clear)).toBeLessThan(1e-9);
     const aside = place(
-      { ...rig, colliders: [{ obb: { ...box, cx: box.cx + 50 }, height: 50 }] },
+      {
+        ...rig,
+        colliders: [
+          { obb: { cx: 500, cy: 500, halfLength: 2, halfWidth: 2, heading: 0 }, height: 50 },
+        ],
+      },
       frame,
       DEFAULT_TOP_DOWN_VIEW,
     ).position;
-    expect(aside.y).toBeCloseTo(clear.y, 9);
+    expect(aside.distanceTo(clear)).toBeLessThan(1e-9);
   });
 
   it.each(Object.values(layouts))(
@@ -298,7 +313,7 @@ describe('chase camera', () => {
     );
     expect(camera.position).toEqual(before);
     const collapsed = { width: 600, height: 600, clear: none };
-    expect(chaseDistance(rig.radius, collapsed)).toBeLessThan(CAMERA_FAR);
+    expect(chaseDistance(rig.extent, rig.face, collapsed)).toBeLessThan(CAMERA_FAR);
     const far = place(free(rig), collapsed, { zoom: CHASE_ZOOM.min, panX: 0, panY: 0 });
     expect(far.position.distanceTo(aimOf(rig))).toBeLessThanOrEqual(CHASE_MAX_DISTANCE + 1e-9);
   });

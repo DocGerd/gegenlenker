@@ -21,11 +21,13 @@ import type { TruckAnchors } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import {
   cabFront,
-  combinationRadius,
+  boundingRadius,
+  combinationExtent,
   createChaseCamera,
   placeChaseCamera,
   vehicleCentre,
   type CabFront,
+  type CombinationExtent,
 } from './chase-camera';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
@@ -78,6 +80,7 @@ type Built = {
   readonly palette: ScenePalette;
   readonly yardBounds: Rect2;
   readonly obstacles: readonly Obstacle[];
+  readonly extent: CombinationExtent;
   /** Metres from the follow centre that bound the whole combination. */
   readonly radius: number;
 };
@@ -444,6 +447,7 @@ export function createThreeSceneRenderer(
       const environment = parts.environment(nextLayout, palette);
       const aids = parts.aids(truck, trailer, nextLayout, palette);
       const interior = parts.interior(truck, palette);
+      const extent = combinationExtent(truck, trailer);
       setAidsLayer(aids.object);
       scene.add(environment.object, truckVisual.object, trailerVisual.object, aids.object);
       (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
@@ -460,7 +464,8 @@ export function createThreeSceneRenderer(
         palette,
         yardBounds: fitBounds(nextLayout),
         obstacles: nextLayout.obstacles,
-        radius: combinationRadius(truck, trailer),
+        extent,
+        radius: boundingRadius(extent),
       };
       applyLookTo(built);
     },
@@ -576,7 +581,7 @@ export function createThreeSceneRenderer(
           {
             truck: snapshot.truck,
             centre: vehicleCentre(snapshot, b.anchors.frontX),
-            radius: b.radius,
+            extent: b.extent,
             face: b.cabFront,
             colliders: b.obstacles,
           },
