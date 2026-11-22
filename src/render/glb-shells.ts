@@ -323,13 +323,15 @@ export function bakeGeometry(parts: readonly BakePart[]): BufferGeometry {
   const point = new Vector3();
   let first = 0;
   for (const { geometry, matrix } of parts) {
+    if (!geometry.hasAttribute('normal') || !geometry.hasAttribute('color')) {
+      throw new Error('a part to bake lacks normal or color');
+    }
     const [p, n, c] = [
       geometry.getAttribute('position'),
       geometry.getAttribute('normal'),
       geometry.getAttribute('color'),
     ];
-    if (n === undefined || c === undefined) throw new Error('a part to bake lacks normal or color');
-    const s = geometry.getAttribute(SLOT_ATTRIBUTE);
+    const s = geometry.hasAttribute(SLOT_ATTRIBUTE) ? geometry.getAttribute(SLOT_ATTRIBUTE) : null;
     const normalMatrix = matrix === undefined ? null : new Matrix3().getNormalMatrix(matrix);
     for (let i = 0; i < p.count; i++) {
       const at = (first + i) * 3;
@@ -340,7 +342,7 @@ export function bakeGeometry(parts: readonly BakePart[]): BufferGeometry {
       if (normalMatrix !== null) point.applyNormalMatrix(normalMatrix);
       point.normalize().toArray(normal, at);
       point.fromBufferAttribute(c, i).toArray(color, at);
-      if (s !== undefined) slot[first + i] = s.getX(i);
+      if (s !== null) slot[first + i] = s.getX(i);
     }
     // a mirroring matrix turns the triangles inside out, which three undoes per object, not per vertex
     const flip = matrix !== undefined && matrix.determinant() < 0;
