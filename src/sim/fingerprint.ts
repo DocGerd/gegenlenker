@@ -28,7 +28,12 @@ export function dataFingerprint({ params, obstacles, start, exercise, scoring }:
     params,
     obstacles.map(({ obb }) => [obb.cx, obb.cy, obb.halfLength, obb.halfWidth, obb.heading]),
     start,
-    exercise && [exercise.target, exercise.tolerances, exercise.waypoint],
+    exercise && [
+      exercise.target,
+      exercise.tolerances,
+      exercise.waypoint,
+      ...(exercise.startArticulation === undefined ? [] : [exercise.startArticulation]),
+    ],
     SIM_CONSTANTS,
     scoring,
   ]);
