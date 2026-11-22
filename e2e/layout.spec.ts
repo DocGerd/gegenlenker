@@ -525,6 +525,32 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     .locator('[data-hud="toast"], [data-hud="goalCue"]')
     .evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
   expect(overflow, 'a word sticks out of a message').toEqual([0, 0]);
+  // Standing over the top view's panels, they must paint above them: the wrap takes no pointer events, so
+  // let it, or `elementFromPoint` skips it.
+  const covered = await page.evaluate(() => {
+    const wrap = document.querySelector('[data-hud="toastWrap"]');
+    if (!(wrap instanceof HTMLElement)) throw new Error('no toastWrap');
+    wrap.style.pointerEvents = 'auto';
+    const hidden: string[] = [];
+    for (const el of document.querySelectorAll('[data-hud="toast"], [data-hud="goalCue"]')) {
+      const r = el.getBoundingClientRect();
+      const mid = (r.top + r.bottom) / 2;
+      const points = [
+        [(r.left + r.right) / 2, mid],
+        [r.left + 12, mid],
+        [r.right - 12, mid],
+        [(r.left + r.right) / 2, r.top + 4],
+      ] as const;
+      for (const [x, y] of points) {
+        const top = document.elementFromPoint(x, y);
+        if (!top || !el.contains(top))
+          hidden.push(`${el.className} at ${Math.round(x)},${Math.round(y)}`);
+      }
+    }
+    wrap.style.pointerEvents = '';
+    return hidden;
+  });
+  expect(covered, 'a message is painted under another element').toEqual([]);
   const messages = await boxes(page.locator('[data-hud="toast"], [data-hud="goalCue"]'));
   expect(messages).toHaveLength(2);
   const controls = await boxes(

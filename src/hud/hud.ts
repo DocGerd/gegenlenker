@@ -188,7 +188,6 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
   <div class="hud-mirror" data-hud="wideLeft" hidden></div>
   <div class="hud-mirror" data-hud="wideRight" hidden></div>
   <div class="hud-mirror" data-hud="front" hidden></div>
-  <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
@@ -213,6 +212,7 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
       }
     </div>
   </div>
+  <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-split" data-hud="split" hidden>
     <div class="hud-split-handle" data-hud="splitHandle" role="separator" tabindex="0" ></div>
     <button type="button" class="hud-toggle hud-icon hud-split-reset" data-hud="splitReset" aria-keyshortcuts="L" disabled>${SPLIT_ICON}</button>
