@@ -49,8 +49,7 @@ const gradedHaze = (): Node<'vec4'> =>
 /** Named in the generated shader, so a check can tell the window glow was built. */
 export const SKYLINE_WINDOW_MARKER = 'skylineWindows';
 
-/** Lit window colour, sRGB; the `Color` converts to linear. */
-const WINDOW_LIGHT = new Color(0xffc27a);
+const WINDOW_LIGHT = new Color(REALISM_HUES.windowLight);
 /** Widest edge blur, in cell widths: past it a derivative is a quad seam, not a minified edge. */
 const EDGE_BLUR = 0.2;
 
