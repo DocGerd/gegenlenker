@@ -22,7 +22,7 @@ const COMPUTE_ONLY: readonly (keyof QualityFlags)[] = [
 ];
 
 /** Flags that stay on at every preset, Low included: they cost a pass, not realism, and the tablet check measures them. */
-const ALWAYS_ON: readonly (keyof QualityFlags)[] = ['frontMirror'];
+const ALWAYS_ON: readonly (keyof QualityFlags)[] = ['frontMirror', 'wideMirrors'];
 
 describe('quality flags', () => {
   it('defines every preset', () => {

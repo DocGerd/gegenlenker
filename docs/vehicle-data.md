@@ -30,6 +30,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | mirror.glassOutboard | 200 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | mirror.behindBumper | 600 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | mirror.height | 2000 mm | typical for the vehicle class, no source found |
+| MAN LE 18.280 | mirror.wideBelow | 400 mm | class IV glass stacked under the class II, no source found |
 | MAN LE 18.280 | steering.lockToLockTurns | 5 turns | typical for the vehicle class, no source found |
 | MAN LE 18.280 | steering.maxRate | 1.5 turns/s | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.windscreenInset | 149 mm | typical for the vehicle class, no source found |
@@ -64,6 +65,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Mercedes-Benz Arocs 1835 AK | mirror.glassOutboard | 200 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | mirror.behindBumper | 700 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | mirror.height | 2200 mm | typical for the vehicle class, no source found |
+| Mercedes-Benz Arocs 1835 AK | mirror.wideBelow | 400 mm | class IV glass stacked under the class II, no source found |
 | Mercedes-Benz Arocs 1835 AK | steering.lockToLockTurns | 5 turns | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | steering.maxRate | 1.5 turns/s | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.windscreenInset | 150 mm | typical for the vehicle class, no source found |

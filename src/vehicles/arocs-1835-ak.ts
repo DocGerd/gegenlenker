@@ -31,6 +31,7 @@ export const arocs1835Ak: TruckSpec = {
     glassOutboard: estimate(200, typical),
     behindBumper: estimate(700, typical),
     height: estimate(2200, typical),
+    wideBelow: estimate(400, 'class IV glass stacked under the class II, no source found'),
   },
   steering: {
     lockToLockTurns: estimate(5.0, typical),

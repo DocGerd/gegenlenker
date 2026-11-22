@@ -58,9 +58,9 @@ async function drive(page: Page): Promise<void> {
  * pixel probes below do not compete with a render loop for the CPU (a screenshot of a free-running
  * drive takes seconds on software GL), and the preset's attachments are in place before they read.
  */
-async function pinnedDrive(page: Page, preset: Preset): Promise<void> {
+async function pinnedDrive(page: Page, preset: Preset, mirrors = 3): Promise<void> {
   await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
-  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(3);
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(mirrors);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }
 
@@ -253,83 +253,113 @@ function mirrorPoints(box: Box) {
   };
 }
 
-// Balanced and High render the mirror through a multisampled target, Low through a plain one.
-for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Preset[]) {
-  test(
-    `each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`,
-    heavyAt(preset),
-    async ({ page }) => {
-      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
-      const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
-      const errors = collectErrors(page);
-      await pinnedDrive(page, preset);
+/** The mirror pairs the probe reads: class II on every preset, class IV where the preset draws it. */
+const MIRROR_PAIRS = [
+  {
+    name: 'each mirror',
+    left: 'mirrorLeft',
+    right: 'mirrorRight',
+    presets: ['low', 'balanced', 'high'],
+  },
+  {
+    name: 'each class IV mirror',
+    left: 'wideLeft',
+    right: 'wideRight',
+    presets: ['low', 'balanced', 'high'],
+  },
+] as const satisfies readonly {
+  name: string;
+  left: string;
+  right: string;
+  presets: readonly Preset[];
+}[];
 
-      // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
-      // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.
-      const sides = [
-        { side: 'mirrorLeft', inner: 'right', outer: 'left' },
-        { side: 'mirrorRight', inner: 'left', outer: 'right' },
-      ] as const;
-      const boxes = await Promise.all(sides.map((s) => boxOf(page, `[data-hud="${s.side}"]`)));
-      // One screenshot covers both mirrors: a frame is slow on software GL, so one per probe adds up.
-      const left = Math.min(...boxes.map((b) => b.x));
-      const top = Math.min(...boxes.map((b) => b.y));
-      const area = {
-        x: left,
-        y: top,
-        width: Math.max(...boxes.map((b) => b.x + b.width)) - left,
-        height: Math.max(...boxes.map((b) => b.y + b.height)) - top,
-      };
-      const sample = async () => {
-        const probes = boxes.map((box) => {
-          const dx = Math.round(box.x - area.x);
-          const dy = Math.round(box.y - area.y);
-          const shift = (pts: readonly (readonly [number, number])[]) =>
-            pts.map(([x, y]) => [x + dx, y + dy] as const);
-          const points = mirrorPoints(box);
-          return {
-            centre: shift(points.centre),
-            left: shift(points.left),
-            right: shift(points.right),
-          };
-        });
-        const pixels = await pixelsAt(
-          page,
-          area,
-          probes.flatMap((p) => [...p.centre, ...p.left, ...p.right]),
-        );
-        let at = 0;
-        const take = (n: number) => pixels.slice(at, (at += n));
-        return sides.map(({ side, inner, outer }, i) => {
-          const probe = probes[i];
-          if (probe === undefined) throw new Error(`no probe for ${side}`);
-          const centre = take(probe.centre.length);
-          const bottom = centre.at(-1);
-          const edges = { left: take(probe.left.length), right: take(probe.right.length) };
-          const ground = [bottom, ...edges[outer]];
-          return {
-            side,
-            // Sky above and ground below first: only a drawn frame can pass, so absence at the edge means something.
-            drawn: centre.slice(0, -1).some(isSky) && !ground.some(isSky) && ground.some(isGround),
-            outerYard: yardShare(edges[outer]),
-            innerYard: yardShare(edges[inner]),
-          };
-        });
-      };
-      let seen: Awaited<ReturnType<typeof sample>> = [];
-      await expect
-        .poll(async () => {
-          seen = await sample();
-          return seen.map((s) => `${s.side}: ${String(s.drawn)}`);
-        }, wait)
-        .toEqual(sides.map((s) => `${s.side}: true`));
-      for (const { side, outerYard, innerYard } of seen) {
-        expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
-        expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
-      }
-      expect(errors).toEqual([]);
-    },
-  );
+// Balanced and High render the mirror through a multisampled target, Low through a plain one.
+for (const pair of MIRROR_PAIRS) {
+  for (const preset of pair.presets) {
+    test(
+      `${pair.name} shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`,
+      heavyAt(preset),
+      async ({ page }) => {
+        test.setTimeout(PRESET_TIMEOUT_MS[preset]);
+        const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
+        const errors = collectErrors(page);
+        // Class IV shows beside the open key legend only on a big enough cockpit: 1920x1080 has room on every preset.
+        if (pair.left === 'wideLeft') await page.setViewportSize({ width: 1920, height: 1080 });
+        await pinnedDrive(page, preset, pair.left === 'wideLeft' ? 5 : 3);
+
+        // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
+        // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.
+        const sides = [
+          { side: pair.left, inner: 'right', outer: 'left' },
+          { side: pair.right, inner: 'left', outer: 'right' },
+        ] as const;
+        const boxes = await Promise.all(sides.map((s) => boxOf(page, `[data-hud="${s.side}"]`)));
+        // One screenshot covers both mirrors: a frame is slow on software GL, so one per probe adds up.
+        const left = Math.min(...boxes.map((b) => b.x));
+        const top = Math.min(...boxes.map((b) => b.y));
+        const area = {
+          x: left,
+          y: top,
+          width: Math.max(...boxes.map((b) => b.x + b.width)) - left,
+          height: Math.max(...boxes.map((b) => b.y + b.height)) - top,
+        };
+        const sample = async () => {
+          const probes = boxes.map((box) => {
+            const dx = Math.round(box.x - area.x);
+            const dy = Math.round(box.y - area.y);
+            const shift = (pts: readonly (readonly [number, number])[]) =>
+              pts.map(([x, y]) => [x + dx, y + dy] as const);
+            const points = mirrorPoints(box);
+            return {
+              centre: shift(points.centre),
+              left: shift(points.left),
+              right: shift(points.right),
+            };
+          });
+          const pixels = await pixelsAt(
+            page,
+            area,
+            probes.flatMap((p) => [...p.centre, ...p.left, ...p.right]),
+          );
+          let at = 0;
+          const take = (n: number) => pixels.slice(at, (at += n));
+          return sides.map(({ side, inner, outer }, i) => {
+            const probe = probes[i];
+            if (probe === undefined) throw new Error(`no probe for ${side}`);
+            const centre = take(probe.centre.length);
+            const bottom = centre.at(-1);
+            const edges = { left: take(probe.left.length), right: take(probe.right.length) };
+            const ground = [bottom, ...edges[outer]];
+            return {
+              side,
+              // Sky above and ground below first: only a drawn frame can pass, so absence at the edge means something.
+              drawn:
+                centre.slice(0, -1).some(isSky) && !ground.some(isSky) && ground.some(isGround),
+              outerYard: yardShare(edges[outer]),
+              innerYard: yardShare(edges[inner]),
+            };
+          });
+        };
+        let seen: Awaited<ReturnType<typeof sample>> = [];
+        await expect
+          .poll(async () => {
+            seen = await sample();
+            return seen.map((s) => `${s.side}: ${String(s.drawn)}`);
+          }, wait)
+          .toEqual(sides.map((s) => `${s.side}: true`));
+        for (const { side, outerYard, innerYard } of seen) {
+          expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
+          // Low's flat vehicle tokens are as bright as the yard, so the class IV edge cannot tell them apart by
+          // brightness there; the side flip is pinned in `wide-mirror.test.ts`.
+          if (pair.left !== 'wideLeft' || preset !== 'low') {
+            expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
+          }
+        }
+        expect(errors).toEqual([]);
+      },
+    );
+  }
 }
 
 /** Probe points of the front mirror as fractions of its box: across the top edge, the middle and the bottom edge. */

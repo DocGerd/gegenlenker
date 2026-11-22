@@ -1,5 +1,6 @@
 import type { Vec2 } from '../contracts/sim';
 import type { TruckSpec, Vec3 } from '../contracts/vehicle';
+import { truckAnchors } from '../vehicles/anchors';
 import { CAB_HEIGHT, cabShellParams } from './cab-dims';
 
 // No `three` import: the fields are ground polygons in the truck body frame (x forward, y left).
@@ -30,6 +31,54 @@ export function classVIField(truck: TruckSpec): readonly Vec2[] {
     });
   }
   return polygon;
+}
+
+/** UN R46 15.2.4.4.1/.2: class IV shows a strip this wide (m) beside the vehicle, from `CLASS_IV_NEAR` to `CLASS_IV_FAR` behind the ocular points. */
+export const CLASS_IV_WIDTH = 15;
+export const CLASS_IV_NEAR = 10;
+export const CLASS_IV_FAR = 25;
+/** ... and, from `CLASS_IV_START` behind the ocular plane, a strip `CLASS_IV_NARROW` wide. */
+export const CLASS_IV_START = 1.5;
+export const CLASS_IV_NARROW = 4.5;
+
+/**
+ * The ground a class IV mirror must show on `side`: the narrow strip from `CLASS_IV_START` behind the
+ * ocular points, widening to `CLASS_IV_WIDTH` at `CLASS_IV_NEAR`, out to `CLASS_IV_FAR`; the horizon
+ * is taken as that far. Both strips start at the outermost side of the cab.
+ */
+export function classIVField(truck: TruckSpec, side: 'left' | 'right'): readonly Vec2[] {
+  const { width } = cabShellParams(truck);
+  const { eye } = truckAnchors(truck);
+  const sign = side === 'left' ? 1 : -1;
+  const half = width / 2;
+  const edge = (behind: number, out: number): Vec2 => ({
+    x: eye.x - behind,
+    y: sign * (half + out),
+  });
+  return [
+    edge(CLASS_IV_START, 0),
+    edge(CLASS_IV_START, CLASS_IV_NARROW),
+    edge(CLASS_IV_NEAR, CLASS_IV_NARROW),
+    edge(CLASS_IV_NEAR, CLASS_IV_WIDTH),
+    edge(CLASS_IV_FAR, CLASS_IV_WIDTH),
+    edge(CLASS_IV_FAR, 0),
+  ];
+}
+
+/**
+ * UN R46 15.2.4.5: the class V field on the passenger side, reported only: from the cab side to 2 m
+ * out, from 1.75 m behind to 1 m ahead of the ocular plane.
+ */
+export function classVField(truck: TruckSpec): readonly Vec2[] {
+  const { width } = cabShellParams(truck);
+  const { eye } = truckAnchors(truck);
+  const half = width / 2;
+  return [
+    { x: eye.x + 1, y: -half },
+    { x: eye.x + 1, y: -half - 2 },
+    { x: eye.x - 1.75, y: -half - 2 },
+    { x: eye.x - 1.75, y: -half },
+  ];
 }
 
 /** Whether `p` lies inside `polygon`, edges included to a rounding error. */

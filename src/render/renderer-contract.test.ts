@@ -277,6 +277,8 @@ describe('pane clears', () => {
         cockpit: { x: 0, y: 200, width: 800, height: 400 },
         mirrorLeft: null,
         mirrorRight: null,
+        wideLeft: null,
+        wideRight: null,
         front: null,
         topDown: { x: 0, y: 0, width: 800, height: 200 },
       },

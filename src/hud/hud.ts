@@ -185,6 +185,8 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
   </div>
   <div class="hud-mirror" data-hud="mirrorLeft" hidden></div>
   <div class="hud-mirror" data-hud="mirrorRight" hidden></div>
+  <div class="hud-mirror" data-hud="wideLeft" hidden></div>
+  <div class="hud-mirror" data-hud="wideRight" hidden></div>
   <div class="hud-mirror" data-hud="front" hidden></div>
   <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
@@ -229,6 +231,9 @@ const query = <T extends Element>(
   return el;
 };
 
+/** The mirror views, in the order the HUD draws them. */
+const MIRROR_KEYS = ['mirrorLeft', 'mirrorRight', 'wideLeft', 'wideRight', 'front'] as const;
+
 const place = (el: HTMLElement, r: Rect): void => {
   el.style.left = `${r.x}px`;
   el.style.top = `${r.y}px`;
@@ -255,11 +260,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   const cockpit = query(hud, 'cockpit', HTMLElement);
   const legend = query(hud, 'legend', HTMLElement);
-  const mirrors = [
-    query(hud, 'mirrorLeft', HTMLElement),
-    query(hud, 'mirrorRight', HTMLElement),
-    query(hud, 'front', HTMLElement),
-  ];
+  const mirrors = MIRROR_KEYS.map((key) => query(hud, key, HTMLElement));
   const toastWrap = query(hud, 'toastWrap', HTMLElement);
   const toast = query(hud, 'toast', HTMLElement);
   const topDown = query(hud, 'topDown', HTMLElement);
@@ -675,11 +676,19 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
           c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH),
         );
       }
-      const mirrorRects = [views.mirrorLeft, views.mirrorRight, views.front];
-      mirrors.forEach((el, i) => {
-        const r = mirrorRects[i];
+      // a class IV mirror hangs from the arm of the class II mirror above it
+      const hung = { wideLeft: views.mirrorLeft, wideRight: views.mirrorRight } as const;
+      MIRROR_KEYS.forEach((key, i) => {
+        const el = mirrors[i];
+        const r = views[key];
+        if (el === undefined) return;
         setHidden(el, !r);
         if (r) place(el, r);
+        const above = key === 'wideLeft' || key === 'wideRight' ? hung[key] : null;
+        if (r && above) {
+          el.style.setProperty('--hud-above-gap', `${r.y - above.y - above.height}px`);
+          el.style.setProperty('--hud-above-height', `${above.height}px`);
+        }
       });
       const base = c ?? views.topDown;
       const column = messageColumn(views);
