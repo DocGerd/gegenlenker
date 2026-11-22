@@ -502,13 +502,9 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
   }
 }
 
-/** Screen height below which the toast and the goal cue cannot clear the gear column. */
-const CRAMPED_HEIGHT = 420;
-
 /**
  * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
- * or the forward sight cone. With the front or class IV mirrors they also keep clear of the cockpit
- * label and every mirror; without them the layout is as it was before they existed.
+ * or the forward sight cone, the cockpit label and every mirror.
  */
 async function expectMessagesClear(page: Page, toast: string, goal: string): Promise<void> {
   await page.evaluate(
@@ -553,20 +549,13 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     bottom: centre.y + halfHeight,
   };
   const frontShown = (await page.locator('[data-hud="front"]:not([hidden])').count()) > 0;
-  // Every mirror the layout shows, class II and class IV rows among them, wherever the front or class IV
-  // mirrors are: they must not reach the toast. Without either the layout is main's, where a short screen
-  // lets the toast cover the cockpit label and a class II mirror.
   const wideShown = (await page.locator('[data-hud^="wide"]:not([hidden])').count()) > 0;
-  const mirrors =
-    frontShown || wideShown
-      ? await boxes(page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'))
-      : [];
-  if (frontShown || wideShown) expect(mirrors.length).toBeGreaterThanOrEqual(wideShown ? 5 : 4);
-  // On a screen this short even one toast line and the cue reach the gear column, as before the front
-  // mirror: the rule drops the mirror there, and only the fit is asserted.
-  const cramped = !frontShown && (page.viewportSize()?.height ?? Infinity) < CRAMPED_HEIGHT;
+  const mirrors = await boxes(
+    page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'),
+  );
+  expect(mirrors).toHaveLength(3 + (frontShown ? 1 : 0) + (wideShown ? 2 : 0));
   for (const m of messages) {
-    for (const o of cramped ? [] : [...controls, cone, ...mirrors]) {
+    for (const o of [...controls, cone, ...mirrors]) {
       expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
     }
   }
