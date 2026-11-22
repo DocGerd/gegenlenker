@@ -49,9 +49,6 @@ function randomMisses(rate: number, seed: number, heavy = 2 * V): () => number {
 /** A fill-rate-bound GPU: the frame cost goes with the pixel count. */
 const fillBound = (fullMs: number) => (scale: number) => fullMs * scale * scale;
 
-const downs = (timer: Timer): number =>
-  timer.trace().events.filter((e) => e.kind === 'down').length;
-
 describe('frame timer', () => {
   it.each([72, 90, 144])('keeps full resolution at a healthy %i Hz cadence', (hz) => {
     const timer = createFrameTimer();
@@ -224,14 +221,32 @@ describe('frame timer', () => {
 
   describe('a load the scale cannot help', () => {
     it.each([0.08, 0.12, 0.2])(
-      'steps down at most once on %d random misses, never to the floor',
+      'never steps to the floor on %d random misses, and retries a level ever more rarely',
       (rate) => {
         const timer = createFrameTimer();
-        const { scales } = drive(timer, randomMisses(rate, 1), 120);
-        expect(downs(timer)).toBeLessThanOrEqual(1);
+        const { scales } = drive(timer, randomMisses(rate, 1), 600);
         expect(Math.min(...scales)).toBeGreaterThan(0.5);
+        const reverts = new Map<number, number[]>();
+        for (const e of timer.trace().events) {
+          if (e.kind === 'down-failed')
+            reverts.set(e.level, [...(reverts.get(e.level) ?? []), e.t]);
+        }
+        expect(reverts.size).toBeGreaterThan(0);
+        for (const times of reverts.values()) {
+          const gaps = times.slice(1).map((t, i) => t - (times[i] ?? 0));
+          expect(gaps[0] ?? Infinity).toBeGreaterThanOrEqual(32000);
+          for (let i = 1; i < gaps.length; i++) expect(gaps[i]).toBeGreaterThan(gaps[i - 1] ?? 0);
+        }
       },
     );
+
+    it('lets a fill-bound load step down once the park a burst left has passed', () => {
+      const timer = createFrameTimer();
+      const { end } = drive(timer, () => 2 * V, 6);
+      expect(timer.trace().events.some((e) => e.kind === 'down-failed')).toBe(true);
+      const { scales } = drive(timer, fillBound(25), 40, end);
+      expect(scales).toContain(0.85);
+    });
 
     it('steps down to the level that fits a fill-bound load, and recovers', () => {
       const timer = createFrameTimer();

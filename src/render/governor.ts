@@ -11,6 +11,8 @@ const MAX_FAILED_PROBES = 2;
 const SETTLE_FRAMES = 3;
 /** A step down must cut the next window's mean interval by this share, or it is reverted: the load ignores the scale. */
 const MIN_IMPROVEMENT = 0.1;
+/** A level whose step down was reverted is parked this long, doubling with each revert there: a burst cannot block a later fill-bound step for good. */
+const PARK_MS = MAX_HOLD_MS;
 /** Startup hitches (shader links, texture uploads) follow a scene or an attach; they say nothing about steady load. */
 const WARM_UP_MS = 2000;
 const STEP = 0.15;
@@ -201,9 +203,12 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   let lastP90 = 0;
   /** Mean interval of the window that caused the last step down; 0 when no step awaits its verdict. */
   let beforeStep = 0;
+  /** ms sampled so far: the clock of the parks. */
+  let clock = 0;
   const failedProbes = new Uint8Array(MAX_LEVEL + 1);
-  /** Levels whose step down was reverted for not helping: a slower frame there is not the scale's doing. */
-  const futileDown = new Uint8Array(MAX_LEVEL + 1);
+  /** Per level, when a step down that was reverted there may be tried again: until then a slower frame is not the scale's doing. */
+  const parkedUntil = new Float64Array(MAX_LEVEL + 1);
+  const parkMs = new Float64Array(MAX_LEVEL + 1).fill(PARK_MS);
   const ring = new Float64Array(WINDOW);
   const scratch = new Float64Array(WINDOW);
   const scale = (): number => Math.max(FLOOR, 1 - level * STEP);
@@ -233,6 +238,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   return {
     sample(frameMs) {
       trace.interval(frameMs);
+      clock += frameMs;
       sinceUp += frameMs;
       if (probing && sinceUp >= hold) {
         probing = false;
@@ -260,8 +266,10 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
         beforeStep = 0;
         if (!helped) {
           // A mean, not the p90: vsync quantises the p90 to whole frames.
-          futileDown[level - 1] = 1;
           level--;
+          const park = parkMs[level] ?? PARK_MS;
+          parkedUntil[level] = clock + park;
+          parkMs[level] = park * 2;
           steady = 0;
           count = 0;
           settle = SETTLE_FRAMES;
@@ -270,7 +278,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
         }
       }
       if (p90 > P90_LIMIT_MS) {
-        if (level < MAX_LEVEL && !futileDown[level]) {
+        if (level < MAX_LEVEL && clock >= (parkedUntil[level] ?? 0)) {
           const failedProbe = probing;
           const left = level;
           if (failedProbe) {
@@ -315,7 +323,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       steady = 0;
       // The load changed: the next window cannot judge a pending step, nor does a park still hold.
       beforeStep = 0;
-      futileDown.fill(0);
+      parkedUntil.fill(0);
     },
     restart(tag = '') {
       note('restart', tag);
@@ -326,7 +334,8 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       toFull();
       hold = HOLD_MS;
       failedProbes.fill(0);
-      futileDown.fill(0);
+      parkedUntil.fill(0);
+      parkMs.fill(PARK_MS);
     },
     scale,
     trace: () => trace.read(),
