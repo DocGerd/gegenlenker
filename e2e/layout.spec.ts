@@ -442,6 +442,9 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
   }
 }
 
+/** Screen height below which the toast and the goal cue cannot clear the gear column. */
+const CRAMPED_HEIGHT = 420;
+
 /**
  * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
  * or the forward sight cone. With the front mirror they also keep clear of the cockpit label and every
@@ -494,8 +497,11 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     ? await boxes(page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'))
     : [];
   if (frontShown) expect(mirrors.length).toBeGreaterThanOrEqual(4);
+  // On a screen this short even one toast line and the cue reach the gear column, as before the front
+  // mirror: the rule drops the mirror there, and only the fit is asserted.
+  const cramped = !frontShown && (page.viewportSize()?.height ?? Infinity) < CRAMPED_HEIGHT;
   for (const m of messages) {
-    for (const o of [...controls, cone, ...mirrors]) {
+    for (const o of cramped ? [] : [...controls, cone, ...mirrors]) {
       expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
     }
   }
@@ -511,15 +517,15 @@ for (const { locale, messages } of locales) {
       try {
         const page = await context.newPage();
         await startStraightReverse(page, messages.exerciseStraightReverse);
-        // The short landscape size only has the divider check.
+        // The short landscape size has no mirror or blank-band check, only the messages and the divider.
         if (size !== shortLandscape) {
           await test.step('mirrors clear the controls', () =>
             expectMirrorsClearControls(page, size));
           await test.step('the cockpit view has no blank band', () =>
             expectNoBlankBand(page, size));
-          await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
-            expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         }
+        await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
+          expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
           expectDividerClears(page, size));

@@ -11,7 +11,7 @@ import {
   type ViewMode,
   type ViewRects,
 } from '../contracts/render';
-import { frontBand } from './cockpit-band';
+import { COCKPIT_FOV, coneEdge, coneTop, frontBand } from './cockpit-band';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -37,9 +37,21 @@ const MESSAGE_GAP = 8;
 /**
  * Narrowest toast column: the widest unbreakable word of a toast or goal cue ("Drehschemelwinkel",
  * 131 px at 14 px Geist, measured), the toast's padding and borders (41 px, warn border included)
- * and the 32 px its `max-width` leaves. `hud.test.ts` pins the word, `layout.spec.ts` the fit.
+ * and the 32 px its `max-width` leaves. `viewports.test.ts` pins the word, `layout.spec.ts` the fit.
  */
 export const MIN_MESSAGE_WIDTH = 131 + 41 + 32;
+/**
+ * What the toast and the goal cue stack needs, for the longest messages ("Drehschemelwinkel am
+ * Anschlag – in Gegenrichtung fahren", "In der Toleranz – jetzt anhalten"): characters, an
+ * over-estimated px per character, line height, and the padding and border above and below a box.
+ */
+const TOAST_CHARS = 56;
+const CUE_CHARS = 33;
+const CHAR_PX = 7.5;
+const MESSAGE_LINE = 22;
+const MESSAGE_BOX = 18;
+/** Height of the gear column with its lamp row, as `layout.spec.ts` measures it. */
+const GEARS_HEIGHT = 274.5;
 /** The front mirror's width over its height. */
 export const FRONT_ASPECT = 2;
 
@@ -229,24 +241,65 @@ export function computeViewports(
   }
   const { y, width: mw, height: mh } = mirror;
   const mirrorRight: Rect = { x: right - mw, y, width: mw, height: mh };
+  const messagesLeft = left + mw + MESSAGE_GAP;
+  let front: Rect | null = null;
+  if (extra.front) {
+    // the toast column left of it starts right of the left mirror
+    const leftLimit = messagesLeft + insets.left + MIN_MESSAGE_WIDTH + MESSAGE_GAP;
+    front = frontRect(
+      cockpit,
+      mirrorRight,
+      leftLimit,
+      cockpit.y + top,
+      cssHeight,
+      controls,
+      legend,
+    );
+    if (front !== null) {
+      const column = { x: messagesLeft, width: front.x - MESSAGE_GAP - messagesLeft };
+      if (!messagesFit(cockpit, column, cssWidth, cssHeight, controls, insets)) front = null;
+    }
+  }
   return {
     cockpit,
     mirrorLeft: { x: left, y, width: mw, height: mh },
     mirrorRight,
-    front: extra.front
-      ? frontRect(
-          cockpit,
-          mirrorRight,
-          // the toast column left of it starts right of the left mirror
-          left + mw + MESSAGE_GAP + insets.left + MIN_MESSAGE_WIDTH + MESSAGE_GAP,
-          cockpit.y + top,
-          cssHeight,
-          controls,
-          legend,
-        )
-      : null,
+    front,
     topDown,
   };
+}
+
+/**
+ * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top, end above
+ * the controls and the forward sight cone they would otherwise reach into.
+ */
+function messagesFit(
+  cockpit: Rect,
+  column: { readonly x: number; readonly width: number },
+  cssWidth: number,
+  cssHeight: number,
+  controls: number,
+  insets: Insets,
+): boolean {
+  const lines = (chars: number, chrome: number): number =>
+    Math.ceil((chars * CHAR_PX) / Math.max(1, column.width - insets.left - chrome));
+  // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
+  const toast = lines(TOAST_CHARS, 32 + 41) * MESSAGE_LINE + MESSAGE_BOX;
+  const cue = lines(CUE_CHARS, 34) * MESSAGE_LINE + MESSAGE_BOX;
+  const landscape = cssWidth >= cssHeight;
+  const bottom = cockpit.y + INSET + (landscape ? insets.top : 0) + toast + MESSAGE_GAP + cue;
+  const reaches = (x0: number, x1: number): boolean =>
+    column.x < x1 && column.x + column.width > x0;
+  const wheel = wheelSize(cssWidth, cssHeight, insets);
+  const gearsLeft = 2 * INSET + wheel + insets.left;
+  if (reaches(INSET + insets.left, gearsLeft + GEARS_WIDTH)) {
+    const gearsTop = cssHeight - INSET - insets.bottom - GEARS_HEIGHT;
+    if (bottom > Math.min(cssHeight - controls, gearsTop)) return false;
+  }
+  const half = (coneEdge(cockpit.width / cockpit.height, COCKPIT_FOV) * cockpit.width) / 2;
+  const centre = cockpit.x + cockpit.width / 2;
+  const coneTopY = cockpit.y + ((1 - coneTop(COCKPIT_FOV)) / 2) * cockpit.height;
+  return !(reaches(centre - half, centre + half) && bottom > coneTopY);
 }
 
 /**

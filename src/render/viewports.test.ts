@@ -358,8 +358,8 @@ describe('computeViewports front mirror', () => {
   it('starts below the display cut-out where the band would reach into it', () => {
     // each inset lies below the band's top at its size, so only the clamp keeps the rect out of it
     for (const [w, h, top] of [
-      [1280, 720, 120],
-      [1920, 1080, 200],
+      [1920, 1080, 150],
+      [2560, 1440, 200],
     ] as const) {
       const insets = { top, right: 0, bottom: 0, left: 0 };
       const plain = computeViewports(w, h, 'drive', null, NO_INSETS, undefined, null, FRONT);
@@ -406,6 +406,15 @@ describe('computeViewports front mirror', () => {
       .sort((a, b) => b.length - a.length)[0];
     // 131 px at 14 px Geist; a longer word needs a new measurement and a wider MIN_MESSAGE_WIDTH
     expect(longest).toBe('Drehschemelwinkel');
+    // the stack height `messagesFit` assumes is for messages no longer than these
+    const lengths = (pattern: RegExp): number[] =>
+      [en, de].flatMap((table) =>
+        Object.entries(table)
+          .filter(([key]) => pattern.test(key))
+          .map(([, text]) => text.length),
+      );
+    expect(Math.max(...lengths(/^goal(Inside|Outside)$/))).toBeLessThanOrEqual(33);
+    expect(Math.max(...lengths(/^(blocked|contactAhead|selectGear)/))).toBeLessThanOrEqual(56);
   });
 
   it('leaves the toast column alone without a front mirror', () => {
