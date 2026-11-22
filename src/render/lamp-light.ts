@@ -317,7 +317,7 @@ const candelas = new Map<string, Candela>();
 /** The candela that bring each lamp (the two dipped lamps together) to its `GROUND` peak; with `work`, as the light stands on the work floodlights' cone. */
 export function candela(spec: LampLightSpec, work = false): Candela {
   const cone = work && spec.work !== undefined ? { ...spec, ...spec.work } : spec;
-  const key = `${spec.id} ${cone.position.z} ${cone.distance} ${cone.position.x}`;
+  const key = `${spec.id} ${cone.position.z} ${cone.distance} ${cone.position.x} ${Math.abs(cone.position.y)}`;
   let known = candelas.get(key);
   if (known === undefined) {
     const perCandela = groundIrradiancePerCandela(cone);

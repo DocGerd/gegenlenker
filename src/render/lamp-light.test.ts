@@ -373,7 +373,7 @@ describe('the dipped beam map', () => {
   /** A point `ahead` metres in front of the lamp at `elevation` degrees, `left` metres to its left. */
   const ray = (ahead: number, elevation: number, left: number): [number, number, number] => [
     spec.position.x + ahead,
-    left,
+    spec.position.y + left,
     spec.position.z + ahead * Math.tan((elevation * Math.PI) / 180),
   ];
   const share = (elevation: number, left: number): number => {
