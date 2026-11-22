@@ -7,6 +7,8 @@ export type QualityFlags = {
   /** Requested mirror render-target samples, mapped to 0 or 4 (`mirrorSamples`); 0 disables MSAA. */
   readonly mirrorMsaa: number;
   readonly skyline: boolean;
+  /** At night about a quarter of the skyline's office windows are lit; needs `skyline`. */
+  readonly skylineWindows: boolean;
   /** Perspective yard props; off shows the plain obstacle tokens in the perspective views too. */
   readonly yardDetail: boolean;
   /** The yard kit's meshes and atlases in the perspective views; a download, off until a preset draws it. */
@@ -18,6 +20,8 @@ export type QualityFlags = {
   readonly frontMirror: boolean;
   /** The class IV wide-angle mirrors under the class II ones. */
   readonly wideMirrors: boolean;
+  /** The class V close-proximity mirror on the passenger side; Low stays off until the tablet check has measured it. */
+  readonly closeMirror: boolean;
   /** Dashboard, pillars, header and visor around the cockpit view, and the mirror housings. */
   readonly cockpitInterior: boolean;
   /** The Blender cab interior in the cockpit view in place of the flat overlay; a download, and needs `cockpitInterior`. */
@@ -50,6 +54,7 @@ const BALANCED: QualityFlags = {
   pixelRatioCap: 2,
   mirrorMsaa: 4,
   skyline: true,
+  skylineWindows: true,
   yardDetail: true,
   yardKit: false,
   cabGlb: true,
@@ -57,6 +62,7 @@ const BALANCED: QualityFlags = {
   chaseView: true,
   frontMirror: true,
   wideMirrors: true,
+  closeMirror: true,
   cockpitInterior: true,
   interiorGlb: false,
   litMarkings: true,
@@ -81,6 +87,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     pixelRatioCap: 1,
     mirrorMsaa: 0,
     skyline: false,
+    skylineWindows: false,
     yardDetail: false,
     yardKit: false,
     cabGlb: false,
@@ -88,6 +95,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     chaseView: false,
     frontMirror: true,
     wideMirrors: true,
+    closeMirror: false,
     cockpitInterior: false,
     interiorGlb: false,
     litMarkings: false,

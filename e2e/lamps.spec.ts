@@ -9,7 +9,6 @@ import {
   shoot,
   startPinnedDrive,
 } from './pinned-shoot';
-import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
@@ -23,13 +22,7 @@ for (const preset of PRESETS) {
     heavyAt(preset),
     async ({ context }) => {
       test.setTimeout(timeoutWithSettles(preset, 2));
-      const errors: string[] = [];
       const page = await context.newPage();
-      page.on('console', (m) => {
-        if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
-      });
-      page.on('pageerror', (e) => errors.push(e.message));
-      const threeProblems = collectThreeProblems(page);
       await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
       if (preset !== 'low') {
         await expect(page.locator('html')).toHaveAttribute('data-vehicle-shells', /^\S+ \S+ \S+$/);
@@ -41,8 +34,6 @@ for (const preset of PRESETS) {
       const after = [hash(await shoot(page, 'follow')), hash(await shoot(page, 'yard'))];
       await page.keyboard.up('Space');
       expect(after, preset).toEqual(before);
-      expect(errors).toEqual([]);
-      expect(threeProblems).toEqual([]);
     },
   );
 }

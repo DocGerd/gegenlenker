@@ -1,5 +1,5 @@
 import { BufferGeometry, Float32BufferAttribute, Vector3 } from 'three';
-import { tileUv, type Tile } from './skyline-atlas';
+import { isGlassTile, tileUv, type Tile } from './skyline-atlas';
 import { BOOM_REACH, rng, type Building } from './skyline-layout';
 
 /*
@@ -15,6 +15,13 @@ const BAY = 3;
 const FASCIA = 0.9;
 const PANEL = 4;
 const ROOF_CELL = 6;
+/** Share of window quads that are lit at night. */
+export const LIT_SHARE = 0.25;
+/** Brightness of a lit window, drawn between these. */
+const LIT_LEVEL = [0.6, 1] as const;
+/** Splits the window stream from the facade stream, so the day facades stay as they were. */
+const WINDOW_STREAM = 0x5bd1e995;
+export const GLOW_ATTRIBUTE = 'glow';
 
 type Pt = readonly [number, number];
 type Tag = 'wall' | 'roof' | 'glaze' | 'base';
@@ -38,6 +45,9 @@ class Mesher {
   readonly normal: number[] = [];
   readonly uv: number[] = [];
   readonly haze: number[] = [];
+  readonly glow: number[] = [];
+  private level = 0;
+  private windows: () => number = () => 1;
   private cos = 1;
   private sin = 0;
   private ox = 0;
@@ -45,7 +55,8 @@ class Mesher {
   private share = 0;
 
   /** Local frame of the building about to be added: heading is Three's `rotation.y`. */
-  place(heading: number, ox: number, oz: number, share: number): void {
+  place(heading: number, ox: number, oz: number, share: number, seed: number): void {
+    this.windows = rng(seed ^ WINDOW_STREAM);
     this.cos = Math.cos(heading);
     this.sin = Math.sin(heading);
     this.ox = ox;
@@ -62,6 +73,18 @@ class Mesher {
     this.normal.push(n.x * this.cos + n.z * this.sin, n.y, -n.x * this.sin + n.z * this.cos);
     this.uv.push(uv[0], uv[1]);
     this.haze.push(this.share);
+    this.glow.push(this.level);
+  }
+
+  /** Sets the glow of the quad about to be pushed: a seeded level on glass, 0 elsewhere. */
+  glowFor(tile: Tile | null): void {
+    if (tile === null || !isGlassTile(tile)) {
+      this.level = 0;
+      return;
+    }
+    const lit = this.windows() < LIT_SHARE;
+    const spread = this.windows();
+    this.level = lit ? LIT_LEVEL[0] + (LIT_LEVEL[1] - LIT_LEVEL[0]) * spread : 0;
   }
 
   /** One triangle, wound so its normal agrees with `out`; degenerate ones are dropped. */
@@ -87,6 +110,7 @@ class Mesher {
     g.setAttribute('normal', new Float32BufferAttribute(this.normal, 3));
     g.setAttribute('uv', new Float32BufferAttribute(this.uv, 2));
     g.setAttribute('haze', new Float32BufferAttribute(this.haze, 1));
+    g.setAttribute(GLOW_ATTRIBUTE, new Float32BufferAttribute(this.glow, 1));
     return g;
   }
 }
@@ -108,8 +132,10 @@ function quad(
   const p10 = at(a1, b0);
   const p11 = at(a1, b1);
   const p01 = at(a0, b1);
+  m.glowFor(tile);
   m.tri(p00, p10, p11, out, [u0, v0], [u1, v0], [u1, v1]);
   m.tri(p00, p11, p01, out, [u0, v0], [u1, v1], [u0, v1]);
+  m.glowFor(null);
 }
 
 /** A face cut into columns of about `colWidth` and the given row heights, bottom up. */
@@ -566,7 +592,7 @@ function piecesOf(b: Building): readonly Piece[] {
 }
 
 function addBuilding(m: Mesher, b: Building): void {
-  m.place(b.heading, b.x, -b.y, b.haze);
+  m.place(b.heading, b.x, -b.y, b.haze, b.seed);
   for (const piece of piecesOf(b)) piece(m);
 }
 
@@ -581,7 +607,7 @@ export function buildingGeometry(b: Building): BufferGeometry {
 export function buildingParts(b: Building): BufferGeometry[] {
   return piecesOf(b).map((piece) => {
     const m = new Mesher();
-    m.place(b.heading, b.x, -b.y, b.haze);
+    m.place(b.heading, b.x, -b.y, b.haze, b.seed);
     piece(m);
     return m.geometry();
   });

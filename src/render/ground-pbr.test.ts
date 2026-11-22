@@ -130,16 +130,16 @@ describe('the PBR ground at night', () => {
     ]);
     expect(lights.filter((l) => l instanceof LightProbe)).toHaveLength(1);
     const spots = lights.filter((l): l is SpotLight => l instanceof SpotLight);
-    // three lamp lights and the yard's four masts
-    expect(spots).toHaveLength(7);
-    const mapped = spots.filter((l) => l.map !== null);
+    // four lamp lights (two dipped lamps, two rear lights) and the yard's four masts
+    expect(spots).toHaveLength(8);
+    // three declares one sampler per distinct map, so the dipped pair's shared one counts once
+    const maps = new Set(spots.flatMap((l) => (l.map === null ? [] : [l.map])));
     const casting = spots.filter((l) => l.castShadow);
-    // a map and a shadow each add a sampler to every receiver: two lamps cast, and two masts
-    expect(mapped).toHaveLength(2);
-    expect(casting).toHaveLength(2 + FLOOD_SHADOW.casting);
-    expect(PBR_SAMPLER_BUDGET + mapped.length + casting.length).toBeLessThanOrEqual(
-      SAMPLER_CEILING,
-    );
+    // a map and a shadow each add a sampler to every receiver: three lamps cast, and two masts
+    expect(spots.filter((l) => l.map !== null)).toHaveLength(3);
+    expect(maps.size).toBe(2);
+    expect(casting).toHaveLength(3 + FLOOD_SHADOW.casting);
+    expect(PBR_SAMPLER_BUDGET + maps.size + casting.length).toBeLessThanOrEqual(SAMPLER_CEILING);
     expect(sample.maxSamplers).toBe(SAMPLER_CEILING);
     expect(sample.mesh.receiveShadow).toBe(true);
     expect(sample.markers).toEqual([GROUND_PBR_MARKER, GRADE_SHADER_MARKER]);

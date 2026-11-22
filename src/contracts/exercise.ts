@@ -21,10 +21,17 @@ export type Tolerances = {
   readonly position: number; // m
   readonly angle: number; // degrees
 };
+/** Radians, signed as `couplingAngle` and `turntableAngle` in the snapshot. */
+export type StartArticulation = {
+  readonly coupling: number;
+  readonly turntable: number;
+};
 export type ExerciseDefinition = {
   readonly id: ExerciseId;
   readonly layout: LayoutId;
   readonly start: Pose2;
+  /** The combination starts bent; absent means straight. */
+  readonly startArticulation?: StartArticulation;
   readonly target: TargetZone;
   readonly tolerances: Tolerances;
   readonly waypoint: Vec2 | null;

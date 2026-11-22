@@ -114,7 +114,9 @@ describe('which lamp lights cast', () => {
     (name, make) => {
       const visual = make();
       visual.setLook(high);
-      expect(casting(visual)).toEqual(name === 'truck' ? ['truck-front'] : ['trailer-rear']);
+      expect(casting(visual)).toEqual(
+        name === 'truck' ? ['truck-front-left', 'truck-front-right'] : ['trailer-rear'],
+      );
       visual.dispose();
     },
   );
@@ -150,7 +152,7 @@ describe('which lamp lights cast', () => {
     expect(casting(truck)).toEqual([]);
     setGradeDisabled(false);
     truck.update(snapshot({ gear: 'P' }));
-    expect(casting(truck)).toEqual(['truck-front']);
+    expect(casting(truck)).toEqual(['truck-front-left', 'truck-front-right']);
     truck.dispose();
   });
 
@@ -159,7 +161,7 @@ describe('which lamp lights cast', () => {
     const trailer = proceduralTrailer(trailerById(TRAILER_IDS[0]), palette, undefined, env);
     for (const visual of [truck, trailer]) visual.setLook(high);
     const lit = [truck, trailer].flatMap((v) => spots(v.object).filter((l) => l.castShadow));
-    expect(lit).toHaveLength(2);
+    expect(lit).toHaveLength(3);
     for (const light of lit) {
       expect(light.shadow.camera.layers.mask).toBe(castingMask);
       expect(isShadowCamera(light.shadow.camera)).toBe(true);
@@ -190,7 +192,7 @@ describe('which lamp lights cast', () => {
   it('queues a map only while the lamp is lit, and keeps casting while it is dark', () => {
     const truck = proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env);
     truck.setLook(high);
-    const front = spots(truck.object).find((l) => l.name === 'truck-front');
+    const front = spots(truck.object).find((l) => l.name === 'truck-front-left');
     if (front === undefined) throw new Error('no beam');
     front.shadow.needsUpdate = false;
     truck.update(snapshot({ gear: 'P' }), { lights: false, hazard: false });

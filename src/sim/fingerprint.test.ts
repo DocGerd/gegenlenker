@@ -16,7 +16,7 @@ if (exercise === null) throw new Error('exercise expected');
 const data: RunData = {
   params: run.params,
   obstacles: run.layout.obstacles,
-  start: run.start,
+  start: run.start.truck,
   exercise,
   scoring: SCORING_THRESHOLDS,
 };
@@ -73,8 +73,17 @@ describe('data fingerprint', () => {
       { ...data, obstacles: moved },
       { ...data, exercise: { ...exercise, tolerances } },
       { ...data, start: { ...data.start, x: data.start.x + 0.001 } },
+      { ...data, exercise: { ...exercise, startArticulation: { coupling: 0, turntable: 0.01 } } },
       { ...data, scoring: { ...data.scoring, WAYPOINT_RADIUS: 4 } },
     ];
     for (const variant of variants) expect(dataFingerprint(variant)).not.toBe(base);
+  });
+
+  it('hashes which way the starting bend goes', () => {
+    const bent = (turntable: number): RunData => ({
+      ...data,
+      exercise: { ...exercise, startArticulation: { coupling: 0, turntable } },
+    });
+    expect(dataFingerprint(bent(0.01))).not.toBe(dataFingerprint(bent(-0.01)));
   });
 });

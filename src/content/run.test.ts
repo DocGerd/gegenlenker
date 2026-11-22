@@ -50,7 +50,7 @@ function pinned(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' | 'reverse
   let reached = false;
   const cursor = createReplayCursor(
     log,
-    () => createSimulation(params, { truck: start }, contacts),
+    () => createSimulation(params, start, contacts),
     () => (snapshot) => {
       reached = tracker.update(snapshot) || reached;
     },

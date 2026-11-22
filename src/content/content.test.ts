@@ -16,6 +16,7 @@ import { trailers, trucks } from '../vehicles/registry';
 import { BARRIER_X, LANE } from './exercises/slalom';
 import { exercises, layouts } from './registry';
 import { resolveLayout } from './resolve-layout';
+import { resolveRun } from './run';
 
 const pairs = trucks.flatMap((truck) =>
   trailers.map((trailer) => [truck.id, trailer.id, truck, trailer] as const),
@@ -26,12 +27,14 @@ const cases = [
     name: l.id,
     resolved: resolveLayout(l, null),
     start: l.start,
+    ids: { layoutId: l.id, exerciseId: null },
     exercise: null,
   })),
   ...exercises.map((e) => ({
     name: e.id,
     resolved: resolveLayout(layouts[e.layout], e),
     start: e.start,
+    ids: { layoutId: e.layout, exerciseId: e.id },
     exercise: e,
   })),
 ];
@@ -76,7 +79,7 @@ function driveBy(sim: Simulation, gear: 'D' | 'R'): SimSnapshot {
   return s;
 }
 
-describe.each(cases)('$name', ({ resolved, start, exercise }) => {
+describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
   // dataFingerprint hashes the ordered OBBs without ids: sound only while contacts are counted by unique ids.
   it('has unique obstacle ids, none the self id', () => {
     const ids = resolved.obstacles.map((o) => o.id);
@@ -86,11 +89,12 @@ describe.each(cases)('$name', ({ resolved, start, exercise }) => {
 
   it.each(pairs)(
     '%s + %s starts clear and drives forward and backward',
-    (_t, _tr, truck, trailer) => {
+    (truckId, trailerId, truck, trailer) => {
       const params = resolveCombination(truck, trailer);
       const query = createContactQuery(resolved.obstacles);
+      const begin = resolveRun({ ...ids, truckId, trailerId }).start;
       for (const gear of ['D', 'R'] as const) {
-        const sim = createSimulation(params, { truck: start }, query);
+        const sim = createSimulation(params, begin, query);
         expect(query(bodyFootprints(params, sim.snapshot()))).toBeNull();
         const end = driveBy(sim, gear);
         expect(dist(end.truck, start)).toBeGreaterThanOrEqual(MOVE);
@@ -133,9 +137,10 @@ describe.each(cases)('$name', ({ resolved, start, exercise }) => {
 
     it.each(pairs)(
       '%s + %s does not start inside the target tolerance',
-      (_t, _tr, truck, trailer) => {
+      (truckId, trailerId, truck, trailer) => {
         const params = resolveCombination(truck, trailer);
-        const sim = createSimulation(params, { truck: start }, createContactQuery([]));
+        const begin = resolveRun({ ...ids, truckId, trailerId }).start;
+        const sim = createSimulation(params, begin, createContactQuery([]));
         const e = targetError(sim.snapshot(), target);
         expect({
           positionInside: e.position <= exercise.tolerances.position,
@@ -182,11 +187,11 @@ describe.each(cases)('$name', ({ resolved, start, exercise }) => {
       const { waypoint } = exercise;
       it.each(pairs)(
         '%s + %s drives forward from the start to the waypoint',
-        (_t, _tr, truck, trailer) => {
+        (truckId, trailerId, truck, trailer) => {
           const params = resolveCombination(truck, trailer);
           const sim = createSimulation(
             params,
-            { truck: start },
+            resolveRun({ ...ids, truckId, trailerId }).start,
             createContactQuery(resolved.obstacles),
           );
           const route = [...(via[exercise.id] ?? []), waypoint];
