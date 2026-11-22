@@ -15,6 +15,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - Parallel worktrees: e2e previews on a port derived from the checkout path (printed as `e2e preview port: N`), so no lock is needed; `E2E_PORT=<n>` overrides a clash (`--strictPort` fails loudly); a killed run can orphan a preview: `pnpm preview:stop` stops only this checkout's preview (`--port n` stops whatever listens there), never `pkill -f`. `pnpm shoot --out <dir> [shoot-views args]` builds, serves on a free port, shoots and tears down (rebuilds `dist/`: not beside `pnpm test:e2e`).
 - Parallel PRs: the up-to-date ruleset serialises merges (each merge restarts everyone's CI); merge one at a time.
 - CI e2e jobs are a matrix in `.github/workflows/ci.yml` on ~4-core runners: each job runs cost-packed `suite:i/n` slices (retune the table when a suite's cost shifts; the lint job checks it partitions each suite), and a new e2e test is tagged `heavyAt(preset)`, or `slowAt(preset)` when one test takes minutes (`e2e/pinned-shoot.ts`); reproduce CI-only slowness locally with `taskset -c 0-3`.
+- The `webgpu` CI job (advisory, not in `check`) runs `pnpm test:e2e:webgpu` (`e2e/webgpu/`: software WebGPU, every preset must start and build its pipelines); keep specs off the `offline` project there.
 - Local-only ignores go in `.git/info/exclude` as unanchored patterns (`dir/`, not `/dir/`); the format scripts pass it to Prettier.
 
 ## Layering
