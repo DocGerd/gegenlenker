@@ -10,7 +10,15 @@ import { cabShellParams } from './cab-dims';
 import { CLOSE_ASPECT, MIN_CLOSE_WIDTH } from './close-mirror';
 import { parseShell } from './glb-shells';
 import { extraMirrors } from './index';
-import { CLASS_V_MIRROR, createMirror, type MirrorSpec, mirrorFacing } from './mirror';
+import {
+  CLASS_V_MIRROR,
+  createMirror,
+  type MirrorSpec,
+  mirrorAnchor,
+  mirrorFacing,
+  MIRRORS,
+  mirrorMounts,
+} from './mirror';
 import {
   CLASS_V_AHEAD,
   CLASS_V_BEHIND,
@@ -28,7 +36,12 @@ const SPEC: MirrorSpec = CLASS_V_MIRROR;
 function closeCamera(truck: TruckSpec) {
   const mirror = createMirror(SPEC);
   const position = new Vector3();
-  const facing = mirrorFacing(STRAIGHT, closeMirrorMount(truck), SPEC.yaw, position);
+  const facing = mirrorFacing(
+    STRAIGHT,
+    mirrorAnchor(SPEC, mirrorMounts(truck)),
+    SPEC.yaw,
+    position,
+  );
   mirror.place(position, facing);
   mirror.camera.aspect = CLOSE_ASPECT;
   mirror.camera.updateProjectionMatrix();
@@ -186,6 +199,16 @@ describe('class V minimum width', () => {
     expect(MIN_CLOSE_WIDTH % 2).toBe(0);
     expect(scale(MIN_CLOSE_WIDTH) * 0.3).toBeGreaterThanOrEqual(6);
     expect(scale(MIN_CLOSE_WIDTH - 2) * 0.3).toBeLessThan(6);
+  });
+});
+
+describe('class V close mirror wiring', () => {
+  it('is the one mirror drawn into the close view, from the close mount', () => {
+    expect(MIRRORS.filter((m) => m.view === 'close')).toEqual([CLASS_V_MIRROR]);
+    expect(CLASS_V_MIRROR.anchor).toBe('close');
+    for (const truck of trucks) {
+      expect(mirrorAnchor(CLASS_V_MIRROR, mirrorMounts(truck))).toEqual(closeMirrorMount(truck));
+    }
   });
 });
 

@@ -909,30 +909,45 @@ test('the divider runs across the screen in portrait', async ({ page }) => {
   }
 });
 
-test(
-  'the class V mirror sits above the right class II mirror at 1920x1080, with the messages clear',
-  heavyAt('balanced'),
-  async ({ browser }) => {
-    test.slow();
-    const size = { width: 1920, height: 1080 };
-    const context = await browser.newContext({ locale: 'en-US', viewport: size });
-    try {
-      const page = await context.newPage();
-      await startStraightReverse(page, en.exerciseStraightReverse);
-      const close = page.locator('[data-hud="close"]:not([hidden])');
-      await expect(close).toHaveCount(1);
-      const [closeBox] = await boxes(close);
-      const [rightBox] = await boxes(page.locator('[data-hud="mirrorRight"]'));
-      if (closeBox === undefined || rightBox === undefined) throw new Error('mirrors');
-      expect(closeBox.right, 'right-aligned with class II').toBeCloseTo(rightBox.right, 0);
-      expect(closeBox.bottom, 'above class II').toBeLessThanOrEqual(rightBox.top);
-      await expectMirrorsClearControls(page, size);
-      await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
-    } finally {
-      await context.close();
-    }
-  },
-);
+/** Where the class V mirror shows: wide and tall screens, the key legend open or folded away. */
+const closeScreens = [
+  { size: { width: 1920, height: 1080 }, folded: false },
+  { size: { width: 1920, height: 1080 }, folded: true },
+  { size: { width: 1080, height: 1920 }, folded: false },
+];
+
+for (const { size, folded } of closeScreens) {
+  test(
+    `the class V mirror sits above the right class II mirror at ${size.width}x${size.height} with the legend ${folded ? 'folded' : 'open'}, with the messages clear`,
+    heavyAt('balanced'),
+    async ({ browser }) => {
+      test.slow();
+      const context = await browser.newContext({ locale: 'en-US', viewport: size });
+      try {
+        const page = await context.newPage();
+        await startStraightReverse(page, en.exerciseStraightReverse);
+        if (folded) {
+          const toggle = page.locator('[data-hud="keysToggle"]');
+          await toggle.click();
+          await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+          await expect(page.locator('.hud-legend dl')).toBeHidden();
+          await hudReady(page);
+        }
+        const close = page.locator('[data-hud="close"]:not([hidden])');
+        await expect(close).toHaveCount(1);
+        const [closeBox] = await boxes(close);
+        const [rightBox] = await boxes(page.locator('[data-hud="mirrorRight"]'));
+        if (closeBox === undefined || rightBox === undefined) throw new Error('mirrors');
+        expect(closeBox.right, 'right-aligned with class II').toBeCloseTo(rightBox.right, 0);
+        expect(closeBox.bottom, 'above class II').toBeLessThanOrEqual(rightBox.top);
+        await expectMirrorsClearControls(page, size);
+        await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+      } finally {
+        await context.close();
+      }
+    },
+  );
+}
 
 /** Laptop viewports too small to leave class V room above class II. */
 for (const size of [
