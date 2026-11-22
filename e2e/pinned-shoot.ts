@@ -29,6 +29,14 @@ export const HEAVY = '@heavy';
 /** `HEAVY` for a test that drives `preset` unless that is Low, else no tag. */
 export const heavyAt = (preset: Preset): { tag?: string } =>
   preset === 'low' ? {} : { tag: HEAVY };
+/**
+ * Tag of the tests that cost several times a `HEAVY` one at High, so each runs apart from the
+ * `HEAVY` shards (`.github/workflows/ci.yml`): a shard cut by test count would otherwise stack them.
+ */
+export const SLOW = '@slow';
+/** `SLOW` for a test that drives High at a cost beyond `HEAVY`, else `heavyAt(preset)`. */
+export const slowAt = (preset: Preset): { tag?: string } =>
+  preset === 'high' ? { tag: SLOW } : heavyAt(preset);
 /** Wall-clock bound for a test that drives one preset; High loads the most and draws slowest on software GL. */
 export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
   low: 90_000,
