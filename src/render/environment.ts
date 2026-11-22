@@ -576,6 +576,7 @@ export function proceduralEnvironment(
       skyline.setGraded(graded);
       skyline.mesh.visible = flags.skyline;
       skyline.setHaze(night ? nightHaze : haze);
+      skyline.setWindows(next.skylineWindows);
       kit.setLook(next);
       yardLights.setLook(next);
       for (const { copy, lit, glow } of aidCopies) copy.material = next.aidGlow ? glow : lit;

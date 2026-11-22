@@ -31,6 +31,8 @@ export type Look = {
   readonly yardSpots: boolean;
   /** Two floodlight masts cast static shadows of the yard's props; needs `yardSpots`. */
   readonly yardShadow: boolean;
+  /** The skyline's lit office windows glow: a uniform in the skyline's material, never a shader change. */
+  readonly skylineWindows: boolean;
   /** The HDRI sun casts a shadow; the contact blobs stay while it does not. */
   readonly shadow: boolean;
   readonly grade: {
@@ -74,6 +76,7 @@ export function lookFor(flags: QualityFlags, mode: LightingMode): Look {
     yardLight: flags.yardLight && night,
     yardSpots: flags.yardLight && flags.perspectiveLighting && night,
     yardShadow: flags.yardShadow && flags.yardLight && flags.perspectiveLighting && night,
+    skylineWindows: flags.skylineWindows && flags.skyline && night,
     shadow: flags.sunShadow && flags.perspectiveLighting && !night,
     grade: {
       on: flags.perspectiveLighting,

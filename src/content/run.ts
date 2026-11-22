@@ -1,6 +1,6 @@
 import type { ExerciseDefinition } from '../contracts/exercise';
 import type { ResolvedLayout } from '../contracts/layout';
-import type { ContactQuery, Pose2 } from '../contracts/sim';
+import type { ContactQuery, StartState } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
 import { SCORING_THRESHOLDS } from '../scoring/score';
 import { createContactQuery } from '../sim/collision';
@@ -15,7 +15,7 @@ export type ResolvedRun = {
   readonly params: VehicleParams;
   readonly layout: ResolvedLayout;
   readonly exercise: ExerciseDefinition | null;
-  readonly start: Pose2;
+  readonly start: StartState;
   readonly contacts: ContactQuery;
   /** Identifies the data the run is simulated on, so stored runs match only that data. */
   readonly fingerprint: string;
@@ -26,7 +26,12 @@ export function resolveRun(ids: RunIds): ResolvedRun {
   const params = resolveCombination(truckById(ids.truckId), trailerById(ids.trailerId));
   const exercise = ids.exerciseId === null ? null : exerciseById(ids.exerciseId);
   const layout = resolveLayout(layouts[ids.layoutId], exercise);
-  const start = exercise?.start ?? layouts[ids.layoutId].start;
+  const pose = exercise?.start ?? layouts[ids.layoutId].start;
+  const bend = exercise?.startArticulation;
+  const start: StartState =
+    bend === undefined
+      ? { truck: pose }
+      : { truck: pose, couplingAngle: bend.coupling, turntableAngle: bend.turntable };
   return {
     params,
     layout,
@@ -36,7 +41,7 @@ export function resolveRun(ids: RunIds): ResolvedRun {
     fingerprint: dataFingerprint({
       params,
       obstacles: layout.obstacles,
-      start,
+      start: pose,
       exercise,
       scoring: SCORING_THRESHOLDS,
     }),
