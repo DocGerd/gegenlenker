@@ -14,6 +14,44 @@ function run(timer: Timer, hz: number, frames: number, start = 1000) {
   return { end: now };
 }
 
+/** One display refresh at 60 Hz. */
+const V = 1000 / 60;
+
+/** Frame cost depends on the scale in use: `costMs` is what a frame takes at that scale. */
+function drive(timer: Timer, costMs: (scale: number) => number, seconds: number, start = 1000) {
+  let now = start;
+  const scales: number[] = [timer.scale()];
+  while (now - start < seconds * 1000) {
+    now += Math.max(costMs(timer.scale()), V);
+    timer.frame(now);
+    if (timer.scale() !== scales.at(-1)) scales.push(timer.scale());
+  }
+  return { end: now, scales };
+}
+
+/** A seeded generator, so a random-miss run is the same every time. */
+function seeded(seed: number): () => number {
+  let a = seed;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Frames take `heavy` ms with probability `rate`, whatever the scale, like a CPU-bound load. */
+function randomMisses(rate: number, seed: number, heavy = 2 * V): () => number {
+  const next = seeded(seed);
+  return () => (next() < rate ? heavy : V);
+}
+
+/** A fill-rate-bound GPU: the frame cost goes with the pixel count. */
+const fillBound = (fullMs: number) => (scale: number) => fullMs * scale * scale;
+
+const downs = (timer: Timer): number =>
+  timer.trace().events.filter((e) => e.kind === 'down').length;
+
 describe('frame timer', () => {
   it.each([72, 90, 144])('keeps full resolution at a healthy %i Hz cadence', (hz) => {
     const timer = createFrameTimer();
@@ -27,13 +65,11 @@ describe('frame timer', () => {
     const timer = createFrameTimer();
     run(timer, 40, 61);
     expect(timer.scale()).toBeCloseTo(0.85, 10);
-    run(timer, 40, 1000);
-    expect(timer.scale()).toBe(0.5);
   });
 
   it('steps down on sustained stalls longer than the gap limit', () => {
     const timer = createFrameTimer();
-    run(timer, 1000 / 600, 200);
+    drive(timer, fillBound(600), 120);
     expect(timer.scale()).toBeLessThan(1);
   });
 
@@ -108,7 +144,7 @@ describe('frame timer', () => {
 
     it('climbs back from the floor one step at a time', () => {
       const timer = createFrameTimer();
-      const { end } = run(timer, 40, 1000);
+      const { end } = drive(timer, fillBound(80), 60);
       expect(timer.scale()).toBe(0.5);
       const seen = [timer.scale()];
       let now = end;
@@ -137,13 +173,13 @@ describe('frame timer', () => {
 
     it('does not grow the hold on slow windows that change nothing at the floor', () => {
       const timer = createFrameTimer();
-      let now = run(timer, 40, 1000).end;
+      let now = drive(timer, fillBound(80), 60).end;
       expect(timer.scale()).toBe(0.5);
       while (timer.scale() === 0.5) {
         now += 1000 / 90;
         timer.frame(now);
       }
-      now = run(timer, 40, 400, now).end;
+      now = drive(timer, fillBound(80), 10, now).end;
       expect(timer.scale()).toBe(0.5);
       run(timer, 90, 1080, now);
       expect(timer.scale()).toBeGreaterThan(0.5);
@@ -151,17 +187,6 @@ describe('frame timer', () => {
   });
 
   describe('a device that cannot sustain full resolution', () => {
-    /** Frame cost depends on the scale in use, like a fill-rate-bound GPU. */
-    function drive(timer: Timer, costMs: (scale: number) => number, seconds: number, start = 1000) {
-      let now = start;
-      const scales: number[] = [timer.scale()];
-      while (now - start < seconds * 1000) {
-        now += Math.max(costMs(timer.scale()), 1000 / 60);
-        timer.frame(now);
-        if (timer.scale() !== scales.at(-1)) scales.push(timer.scale());
-      }
-      return { end: now, scales };
-    }
     const cannotHoldFull = (scale: number): number => (scale >= 1 ? 22 : 8);
     const probes = (scales: number[]): number => scales.slice(1).filter((s) => s === 1).length;
 
@@ -197,13 +222,62 @@ describe('frame timer', () => {
     });
   });
 
+  describe('a load the scale cannot help', () => {
+    it.each([0.08, 0.12, 0.2])(
+      'steps down at most once on %d random misses, never to the floor',
+      (rate) => {
+        const timer = createFrameTimer();
+        const { scales } = drive(timer, randomMisses(rate, 1), 120);
+        expect(downs(timer)).toBeLessThanOrEqual(1);
+        expect(Math.min(...scales)).toBeGreaterThan(0.5);
+      },
+    );
+
+    it('steps down to the level that fits a fill-bound load, and recovers', () => {
+      const timer = createFrameTimer();
+      const { end, scales } = drive(timer, fillBound(36), 6);
+      expect(scales).toEqual([1, 0.85, 0.7]);
+      const { scales: back } = drive(timer, () => V, 60, end);
+      expect(back.at(-1)).toBe(1);
+    });
+
+    it('reaches the floor on a fill-bound load that even it cannot carry', () => {
+      const timer = createFrameTimer();
+      drive(timer, fillBound(80), 60);
+      expect(timer.scale()).toBe(0.5);
+    });
+
+    /** `stalls` frames of 80 ms among healthy ones, then healthy frames only. */
+    function stallWindow(stalls: number) {
+      const governor = createResolutionGovernor();
+      const window = new Array<number>(60).fill(V);
+      for (let i = 0; i < stalls; i++) window[i * 8] = 80;
+      for (const ms of window) governor.sample(ms);
+      return governor;
+    }
+
+    it('does not step down on 6 stalls in a window', () => {
+      const governor = stallWindow(6);
+      expect(governor.scale()).toBe(1);
+      expect(governor.trace().events).toEqual([]);
+    });
+
+    it('steps down once on 7 stalls in a window, then recovers', () => {
+      const governor = stallWindow(7);
+      expect(governor.scale()).toBeCloseTo(0.85, 10);
+      for (let i = 0; i < 600; i++) governor.sample(V);
+      expect(governor.scale()).toBe(1);
+      expect(governor.trace().events.map((e) => e.kind)).toEqual(['down', 'up', 'probe-held']);
+    });
+  });
+
   describe('warm-up', () => {
     it('ignores slow frames right after a reset, then governs again', () => {
       const timer = createFrameTimer();
       timer.resetTiming();
       const { end } = run(timer, 40, 60);
       expect(timer.scale()).toBe(1);
-      run(timer, 40, 200, end);
+      drive(timer, fillBound(25), 4, end);
       expect(timer.scale()).toBeLessThan(1);
     });
 
@@ -228,7 +302,7 @@ describe('frame timer', () => {
       const timer = createFrameTimer();
       const { end } = run(timer, 90, 100);
       timer.warmUp();
-      run(timer, 40, 200, end);
+      drive(timer, fillBound(25), 4, end);
       expect(timer.scale()).toBeLessThan(1);
     });
 
@@ -248,7 +322,7 @@ describe('frame timer', () => {
       timer.warmUp();
       run(timer, 40, 70, mid);
       expect(timer.scale()).toBe(1);
-      run(timer, 40, 200, mid + 3000);
+      drive(timer, fillBound(25), 4, mid + 3000);
       expect(timer.scale()).toBeLessThan(1);
     });
 
@@ -307,6 +381,16 @@ describe('frame timer', () => {
       expect(events.map((e) => e.hold)).toEqual([4000, 4000, 8000, 8000, 16000]);
       for (const e of events) expect(e.p90).toBeGreaterThan(0);
       expect(events.filter((e) => e.kind === 'up').every((e) => e.steady >= 4000)).toBe(true);
+    });
+
+    it('records a step down that did not help, once', () => {
+      const governor = createResolutionGovernor();
+      for (let i = 0; i < 600; i++) governor.sample(40);
+      expect(governor.trace().events.map((e) => [e.kind, e.level])).toEqual([
+        ['down', 1],
+        ['down-failed', 0],
+      ]);
+      expect(governor.scale()).toBe(1);
     });
 
     it('records a probe that holds', () => {
@@ -455,7 +539,8 @@ describe('a 60 Hz cadence with frame jitter', () => {
       governor,
       JITTER.map((ms) => ms + 1.5),
     );
-    expect(governor.scale()).toBeLessThan(1);
+    // The replay cannot respond to the scale, so the step is reverted after it; the step down is the signal.
+    expect(governor.trace().events.some((e) => e.kind === 'down')).toBe(true);
   });
 
   it.each([20, 21, 25])('steps down when every frame takes %ims', (ms) => {

@@ -9,6 +9,8 @@ const MAX_HOLD_MS = 32000;
 const MAX_FAILED_PROBES = 2;
 /** Frames ignored after a step up: the canvas reallocates and the first frames at the new size hitch. */
 const SETTLE_FRAMES = 3;
+/** A step down must cut the next window's mean interval by this share, or it is reverted: the load ignores the scale. */
+const MIN_IMPROVEMENT = 0.1;
 /** Startup hitches (shader links, texture uploads) follow a scene or an attach; they say nothing about steady load. */
 const WARM_UP_MS = 2000;
 const STEP = 0.15;
@@ -23,9 +25,18 @@ const EVENT_CAP = 256;
 const INTERVAL_CAP = 8192;
 
 export type GovernorEventKind =
-  'down' | 'up' | 'probe-failed' | 'probe-held' | 'warmup' | 'discard' | 'restart' | 'reset';
+  | 'down'
+  | 'down-failed'
+  | 'up'
+  | 'probe-failed'
+  | 'probe-held'
+  | 'warmup'
+  | 'discard'
+  | 'restart'
+  | 'reset';
 const KINDS: readonly GovernorEventKind[] = [
   'down',
+  'down-failed',
   'up',
   'probe-failed',
   'probe-held',
@@ -37,6 +48,7 @@ const KINDS: readonly GovernorEventKind[] = [
 /** The decisions: kept in a ring of their own, so a burst of causes cannot evict them. */
 const DECISIONS: ReadonlySet<GovernorEventKind> = new Set([
   'down',
+  'down-failed',
   'up',
   'probe-failed',
   'probe-held',
@@ -187,7 +199,11 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   let probing = false;
   let settle = 0;
   let lastP90 = 0;
+  /** Mean interval of the window that caused the last step down; 0 when no step awaits its verdict. */
+  let beforeStep = 0;
   const failedProbes = new Uint8Array(MAX_LEVEL + 1);
+  /** Levels whose step down was reverted for not helping: a slower frame there is not the scale's doing. */
+  const futileDown = new Uint8Array(MAX_LEVEL + 1);
   const ring = new Float64Array(WINDOW);
   const scratch = new Float64Array(WINDOW);
   const scale = (): number => Math.max(FLOOR, 1 - level * STEP);
@@ -198,6 +214,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
     sinceUp = Infinity;
     probing = false;
     settle = 0;
+    beforeStep = 0;
   };
   const note = (
     k: GovernorEventKind,
@@ -235,8 +252,25 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       scratch.sort();
       const p90 = scratch[Math.ceil(0.9 * WINDOW) - 1] ?? 0;
       lastP90 = p90;
+      let sum = 0;
+      for (const ms of scratch) sum += ms;
+      const mean = sum / WINDOW;
+      if (beforeStep > 0 && level > 0) {
+        const helped = mean <= beforeStep * (1 - MIN_IMPROVEMENT);
+        beforeStep = 0;
+        if (!helped) {
+          // A mean, not the p90: vsync quantises the p90 to whole frames.
+          futileDown[level - 1] = 1;
+          level--;
+          steady = 0;
+          count = 0;
+          settle = SETTLE_FRAMES;
+          note('down-failed', '', level);
+          return scale();
+        }
+      }
       if (p90 > P90_LIMIT_MS) {
-        if (level < MAX_LEVEL) {
+        if (level < MAX_LEVEL && !futileDown[level]) {
           const failedProbe = probing;
           const left = level;
           if (failedProbe) {
@@ -245,6 +279,8 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
             hold = Math.min(hold * 2, MAX_HOLD_MS);
           }
           level++;
+          beforeStep = mean;
+          settle = SETTLE_FRAMES;
           note(failedProbe ? 'probe-failed' : 'down', '', left);
         }
         probing = false;
@@ -263,6 +299,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
           sinceUp = 0;
           count = 0;
           probing = true;
+          beforeStep = 0;
           settle = SETTLE_FRAMES;
           note('up', '', level, held);
         }
@@ -286,6 +323,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       toFull();
       hold = HOLD_MS;
       failedProbes.fill(0);
+      futileDown.fill(0);
     },
     scale,
     trace: () => trace.read(),
