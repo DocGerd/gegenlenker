@@ -31,7 +31,7 @@ export const HUD_BAND_SHARE = 0.18;
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
 /** Smallest mirror height; where even this cannot clear the controls, it wins. */
 export const MIN_MIRROR_HEIGHT = 48;
-/** Narrowest and widest the front mirror gets, in CSS px; where the band cannot hold the narrowest, there is none. */
+/** Narrowest and widest the front mirror gets, in CSS px: at 80 px the 4.5 m field is still about 18 px per metre, enough to tell a cone from the kerb; below that there is none. */
 export const MIN_FRONT_WIDTH = 80;
 const MAX_FRONT_WIDTH = 240;
 /** CSS px between the toast column and the mirrors on either side of it. */
@@ -263,6 +263,15 @@ export function computeViewports(
   if (extra.front) {
     // the toast column left of it starts right of the left mirror
     const leftLimit = messagesLeft + insets.left + MIN_MESSAGE_WIDTH + MESSAGE_GAP;
+    const fits = (rect: Rect): boolean =>
+      messagesFit(
+        cockpit,
+        { x: messagesLeft, width: rect.x - MESSAGE_GAP - messagesLeft },
+        cssWidth,
+        cssHeight,
+        controls,
+        insets,
+      );
     front = frontRect(
       cockpit,
       mirrorRight,
@@ -271,11 +280,8 @@ export function computeViewports(
       cssHeight,
       controls,
       legend,
+      fits,
     );
-    if (front !== null) {
-      const column = { x: messagesLeft, width: front.x - MESSAGE_GAP - messagesLeft };
-      if (!messagesFit(cockpit, column, cssWidth, cssHeight, controls, insets)) front = null;
-    }
   }
   return {
     cockpit,
@@ -339,8 +345,8 @@ function messagesFit(
 
 /**
  * The front mirror in the windscreen band of `cockpit` (`frontBand`), hung from the header at the
- * band's right; null where it would be narrower than `MIN_FRONT_WIDTH` or would reach the controls or
- * the key legend. `leftLimit` is the least x it may start at, which keeps the toast column wide
+ * band's right, shrunk from its widest until it clears the controls, the key legend and leaves `fits`
+ * (the messages) their room; null where that takes it below `MIN_FRONT_WIDTH`. `leftLimit` is the least x it may start at, which keeps the toast column wide
  * enough; `ceiling` is the least y the screen's display cut-out leaves.
  */
 function frontRect(
@@ -351,6 +357,7 @@ function frontRect(
   cssHeight: number,
   controls: number,
   legend: LegendBox | null,
+  fits: (rect: Rect) => boolean,
 ): Rect | null {
   const band = frontBand(
     cockpit.width / cockpit.height,
@@ -362,20 +369,23 @@ function frontRect(
   const toY = (ndc: number): number => cockpit.y + ((1 - ndc) / 2) * cockpit.height;
   const top = Math.ceil(Math.max(toY(band.top), ceiling));
   const right = Math.floor(toX(band.right));
-  const height = Math.floor(
+  const widest = Math.floor(
     Math.min(
       toY(band.bottom) - top,
       (right - Math.max(toX(band.left), leftLimit)) / FRONT_ASPECT,
       MAX_FRONT_WIDTH / FRONT_ASPECT,
     ),
   );
-  const width = FRONT_ASPECT * height;
-  if (width < MIN_FRONT_WIDTH) return null;
-  const rect = { x: right - width, y: top, width, height };
-  const bottom = rect.y + rect.height + MIRROR_GAP;
-  if (bottom > cssHeight - controls) return null;
-  if (legend !== null && legend.right > rect.x && bottom > cssHeight - legend.height) return null;
-  return rect;
+  // shrink, anchored at the band's top right, before giving up: a smaller mirror leaves the messages more room
+  for (let height = widest; FRONT_ASPECT * height >= MIN_FRONT_WIDTH; height--) {
+    const width = FRONT_ASPECT * height;
+    const rect = { x: right - width, y: top, width, height };
+    const bottom = rect.y + rect.height + MIRROR_GAP;
+    if (bottom > cssHeight - controls) continue;
+    if (legend !== null && legend.right > rect.x && bottom > cssHeight - legend.height) continue;
+    if (fits(rect)) return rect;
+  }
+  return null;
 }
 
 /** Where the toast and the goal cue stand: the cockpit's top, between the left mirror and the front mirror. */

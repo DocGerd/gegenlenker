@@ -9,12 +9,12 @@ import { interiorLayout, pillarSpans } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
 import { truckById } from '../src/vehicles/registry';
 import {
-  attachmentsReady,
   HEAVY,
   heavyAt,
   HIGH_WAIT_MS,
   PRESET_TIMEOUT_MS,
   type Preset,
+  startPinnedDrive,
 } from './pinned-shoot';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
@@ -49,6 +49,17 @@ function collectErrors(page: Page): string[] {
 
 async function drive(page: Page): Promise<void> {
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(3);
+  await expect(page.locator('.ctl-wheel')).toBeVisible();
+}
+
+/**
+ * A drive of the exercise at `preset` with the clock pinned: the frame is drawn when stepped, so the
+ * pixel probes below do not compete with a render loop for the CPU (a screenshot of a free-running
+ * drive takes seconds on software GL), and the preset's attachments are in place before they read.
+ */
+async function pinnedDrive(page: Page, preset: Preset): Promise<void> {
+  await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
   await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(3);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }
@@ -194,13 +205,9 @@ test(
   'the Balanced cockpit sky is blue near the top and fades to haze towards the horizon',
   { tag: HEAVY },
   async ({ page }) => {
+    test.setTimeout(PRESET_TIMEOUT_MS.balanced);
     const errors = collectErrors(page);
-    await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
-      SETTINGS_KEY,
-      JSON.stringify({ version: 1, graphics: 'balanced' }),
-    ] as const);
-    await page.goto('./');
-    await drive(page);
+    await pinnedDrive(page, 'balanced');
     const cockpit = await boxOf(page, '.hud-cockpit');
     // Above the skyline, under the header: just right of the front mirror's frame, and just above the horizon.
     const front = await boxOf(page, '[data-hud="front"]');
@@ -258,16 +265,10 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     `each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`,
     heavyAt(preset),
     async ({ page }) => {
-      if (preset === 'high') test.setTimeout(PRESET_TIMEOUT_MS.high);
+      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
       const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
       const errors = collectErrors(page);
-      await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
-        SETTINGS_KEY,
-        JSON.stringify({ version: 1, graphics: preset }),
-      ] as const);
-      await page.goto('./');
-      await drive(page);
-      await expect.poll(() => attachmentsReady(page, preset), wait).toBe(true);
+      await pinnedDrive(page, preset);
 
       // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
       // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.
@@ -355,16 +356,10 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     `the front mirror shows the cab on its top edge at the driver's side and ground beyond on ${preset}`,
     heavyAt(preset),
     async ({ page }) => {
-      if (preset === 'high') test.setTimeout(PRESET_TIMEOUT_MS.high);
+      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
       const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
       const errors = collectErrors(page);
-      await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
-        SETTINGS_KEY,
-        JSON.stringify({ version: 1, graphics: preset }),
-      ] as const);
-      await page.goto('./');
-      await drive(page);
-      await expect.poll(() => attachmentsReady(page, preset), wait).toBe(true);
+      await pinnedDrive(page, preset);
       const box = await boxOf(page, '[data-hud="front"]');
       const points = frontPoints(box);
       const sample = async () => {

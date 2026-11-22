@@ -542,7 +542,7 @@ for (const { locale, messages } of locales) {
 const frontShown = [
   { width: 1280, height: 800, front: 1 },
   { width: 1366, height: 768, front: 1 },
-  { width: 768, height: 1024, front: 0 },
+  { width: 768, height: 1024, front: 1 },
   { width: 390, height: 844, front: 0 },
   { width: 360, height: 800, front: 0 },
 ];
