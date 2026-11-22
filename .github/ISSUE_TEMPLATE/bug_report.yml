@@ -1,0 +1,42 @@
+name: Bug report
+description: Something in the trainer is broken.
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: What you saw and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Vehicle pair, layout, exercise and the inputs that show it.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - simulation
+        - rendering
+        - controls
+        - HUD or menu
+        - offline or install
+        - other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser, OS and device
+      placeholder: Chrome on Android tablet
+  - type: textarea
+    id: logs
+    attributes:
+      label: Console output or screenshot
+      render: shell
