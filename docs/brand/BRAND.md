@@ -124,6 +124,7 @@ Vehicle detail, yard props (fence grid, hall cladding and roofs, containers, mas
 | `coneRed`         | `#cc0605` | traffic cone body (RAL 3020), with white bands            |
 | `skylineDark`     | `#5c6875` | glass and mid cladding of the skyline buildings           |
 | `skyHaze`         | `#dcebf2` | horizon haze of the sky dome; buildings fade to it        |
+| `windowLight`     | `#ffc27a` | warm glow of the lit skyline windows at night             |
 | `sunHalo`         | `#fff1d0` | glow around the sun on the sky dome                       |
 | `nightHorizon`    | `#18243f` | night dome at the horizon; buildings and fog fade to it   |
 | `nightZenith`     | `#03050a` | night dome overhead                                       |

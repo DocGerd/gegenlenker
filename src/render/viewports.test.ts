@@ -518,9 +518,40 @@ describe('computeViewports front mirror', () => {
     expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Outside)$/));
   });
 
-  it('leaves the toast column alone without a front mirror', () => {
-    const views = computeViewports(1280, 720, 'drive');
-    expect(messageColumn(views)).toEqual(views.cockpit);
+  it('puts the toast column between the class II mirrors without a front mirror, or else in the top-down pane', () => {
+    const count = { between: 0, pane: 0 };
+    for (const insets of [NO_INSETS, { top: 24, right: 0, bottom: 0, left: 48 }]) {
+      for (const [w, h] of sizes) {
+        const views = computeViewports(w, h, 'drive', null, insets);
+        const { cockpit, mirrorLeft, mirrorRight, topDown } = views;
+        if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
+          throw new Error('drive mode has mirrors');
+        }
+        const column = messageColumn(views, insets);
+        const at = `${w}x${h} left inset ${insets.left}`;
+        if (column.y === cockpit.y) {
+          count.between++;
+          expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
+          expect(column.x + column.width, at).toBeLessThanOrEqual(mirrorRight.x);
+          expect(column.width - insets.left, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
+        } else {
+          count.pane++;
+          expect(column.x, at).toBe(topDown.x);
+          expect(column.x + column.width, at).toBeLessThanOrEqual(topDown.x + topDown.width);
+          if (w < h) expect(column.width, at).toBe(topDown.width);
+          // below the finish button, which the pane's first row holds
+          expect(column.y, at).toBeGreaterThanOrEqual(topDown.y + 44);
+          expect(column.y + column.height, at).toBe(topDown.y + topDown.height);
+        }
+      }
+    }
+    expect(count.between).toBeGreaterThan(100);
+    expect(count.pane).toBeGreaterThan(100);
+  });
+
+  it('puts the toast column in the whole top-down pane in replay', () => {
+    const views = computeViewports(800, 600, 'replay');
+    expect(messageColumn(views)).toEqual(views.topDown);
   });
 });
 

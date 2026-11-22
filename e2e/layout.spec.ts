@@ -502,13 +502,9 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
   }
 }
 
-/** Screen height below which the toast and the goal cue cannot clear the gear column. */
-const CRAMPED_HEIGHT = 420;
-
 /**
  * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
- * or the forward sight cone. With the front or class IV mirrors they also keep clear of the cockpit
- * label and every mirror; without them the layout is as it was before they existed.
+ * or the forward sight cone, the cockpit label and every mirror.
  */
 async function expectMessagesClear(page: Page, toast: string, goal: string): Promise<void> {
   await page.evaluate(
@@ -529,6 +525,32 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     .locator('[data-hud="toast"], [data-hud="goalCue"]')
     .evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
   expect(overflow, 'a word sticks out of a message').toEqual([0, 0]);
+  // Standing over the top view's panels, they must paint above them: the wrap takes no pointer events, so
+  // let it, or `elementFromPoint` skips it.
+  const covered = await page.evaluate(() => {
+    const wrap = document.querySelector('[data-hud="toastWrap"]');
+    if (!(wrap instanceof HTMLElement)) throw new Error('no toastWrap');
+    wrap.style.pointerEvents = 'auto';
+    const hidden: string[] = [];
+    for (const el of document.querySelectorAll('[data-hud="toast"], [data-hud="goalCue"]')) {
+      const r = el.getBoundingClientRect();
+      const mid = (r.top + r.bottom) / 2;
+      const points = [
+        [(r.left + r.right) / 2, mid],
+        [r.left + 12, mid],
+        [r.right - 12, mid],
+        [(r.left + r.right) / 2, r.top + 4],
+      ] as const;
+      for (const [x, y] of points) {
+        const top = document.elementFromPoint(x, y);
+        if (!top || !el.contains(top))
+          hidden.push(`${el.className} at ${Math.round(x)},${Math.round(y)}`);
+      }
+    }
+    wrap.style.pointerEvents = '';
+    return hidden;
+  });
+  expect(covered, 'a message is painted under another element').toEqual([]);
   const messages = await boxes(page.locator('[data-hud="toast"], [data-hud="goalCue"]'));
   expect(messages).toHaveLength(2);
   const controls = await boxes(
@@ -553,20 +575,13 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     bottom: centre.y + halfHeight,
   };
   const frontShown = (await page.locator('[data-hud="front"]:not([hidden])').count()) > 0;
-  // Every mirror the layout shows, class II and class IV rows among them, wherever the front or class IV
-  // mirrors are: they must not reach the toast. Without either the layout is main's, where a short screen
-  // lets the toast cover the cockpit label and a class II mirror.
   const wideShown = (await page.locator('[data-hud^="wide"]:not([hidden])').count()) > 0;
-  const mirrors =
-    frontShown || wideShown
-      ? await boxes(page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'))
-      : [];
-  if (frontShown || wideShown) expect(mirrors.length).toBeGreaterThanOrEqual(wideShown ? 5 : 4);
-  // On a screen this short even one toast line and the cue reach the gear column, as before the front
-  // mirror: the rule drops the mirror there, and only the fit is asserted.
-  const cramped = !frontShown && (page.viewportSize()?.height ?? Infinity) < CRAMPED_HEIGHT;
+  const mirrors = await boxes(
+    page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'),
+  );
+  expect(mirrors).toHaveLength(3 + (frontShown ? 1 : 0) + (wideShown ? 2 : 0));
   for (const m of messages) {
-    for (const o of cramped ? [] : [...controls, cone, ...mirrors]) {
+    for (const o of [...controls, cone, ...mirrors]) {
       expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
     }
   }

@@ -1,9 +1,19 @@
 import { Camera, Color, Vector3, type BufferGeometry } from 'three';
+import { UniformNode, type MeshLambertNodeMaterial, type Node } from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
+import { layouts } from '../content/registry';
 import { BOUNDS } from '../content/street';
 import { AIDS_LAYER, CAMERA_FAR, PERSPECTIVE_LAYER } from './seams';
 import { createSkyline } from './skyline';
-import { buildingGeometry, buildingParts, SINK, skylineGeometry } from './skyline-geometry';
+import { isGlassTile, TILES, tileUv } from './skyline-atlas';
+import {
+  buildingGeometry,
+  buildingParts,
+  GLOW_ATTRIBUTE,
+  LIT_SHARE,
+  SINK,
+  skylineGeometry,
+} from './skyline-geometry';
 import { CLEARANCE, REACH, skylineBuildings, type Building } from './skyline-layout';
 
 function triangles(g: BufferGeometry): [Vector3, Vector3, Vector3][] {
@@ -151,6 +161,83 @@ describe('skyline', () => {
     topDown.layers.enable(AIDS_LAYER);
     expect(skyline.mesh.layers.test(perspective.layers)).toBe(true);
     expect(skyline.mesh.layers.test(topDown.layers)).toBe(false);
+    skyline.dispose();
+  });
+});
+
+describe('skyline windows', () => {
+  const glowOf = (g: BufferGeometry): number[] => [...g.getAttribute(GLOW_ATTRIBUTE).array];
+  const glass = TILES.filter(isGlassTile).map(tileUv);
+  const onGlass = (g: BufferGeometry, i: number): boolean => {
+    const uv = g.getAttribute('uv');
+    const [u, v] = [uv.getX(i), uv.getY(i)];
+    return glass.some((t) => u >= t.u0 && u <= t.u1 && v >= t.v0 && v <= t.v1);
+  };
+  const office = (): BufferGeometry => buildingGeometry(fixture('office', 'flat'));
+
+  it('is the same in every session', () => {
+    const buildings = skylineBuildings(BOUNDS);
+    expect(glowOf(skylineGeometry(buildings))).toEqual(glowOf(skylineGeometry(buildings)));
+  });
+
+  it('glows only on glass tiles, one level to a quad', () => {
+    const g = office();
+    const glow = glowOf(g);
+    expect(glow.some((l) => l > 0)).toBe(true);
+    for (let i = 0; i < glow.length; i++) {
+      if (!onGlass(g, i)) expect(glow[i], `vertex ${String(i)}`).toBe(0);
+    }
+    for (let q = 0; q < glow.length; q += 6) {
+      expect(new Set(glow.slice(q, q + 6)).size, `quad ${String(q / 6)}`).toBe(1);
+    }
+    for (const level of glow) expect(level === 0 || (level >= 0.6 && level <= 1)).toBe(true);
+  });
+
+  it('leaves every other building dark', () => {
+    for (const [kind, roof] of [
+      ['hall', 'sawtooth'],
+      ['warehouse', 'flat'],
+      ['chimney', 'flat'],
+      ['crane', 'flat'],
+    ] as const) {
+      expect(Math.max(...glowOf(buildingGeometry(fixture(kind, roof)))), kind).toBe(0);
+    }
+  });
+
+  it.each(Object.values(layouts))('lights about a quarter of the windows around $id', (layout) => {
+    const g = skylineGeometry(skylineBuildings(layout.bounds));
+    const glow = glowOf(g);
+    let windows = 0;
+    let lit = 0;
+    for (let q = 0; q < glow.length; q += 6) {
+      if (!onGlass(g, q)) continue;
+      windows++;
+      if ((glow[q] ?? 0) > 0) lit++;
+    }
+    expect(windows).toBeGreaterThan(100);
+    expect(lit / windows).toBeGreaterThan(LIT_SHARE - 0.05);
+    expect(lit / windows).toBeLessThan(LIT_SHARE + 0.05);
+  });
+
+  it('flips a uniform and leaves the material and its program alone', () => {
+    const skyline = createSkyline(BOUNDS, new Color(0xdcebf2));
+    const material = skyline.mesh.material as MeshLambertNodeMaterial;
+    const uniforms = (root: Node | null): number[] => {
+      const found: number[] = [];
+      const walk = (n: Node): void => {
+        if (n instanceof UniformNode && typeof n.value === 'number') found.push(n.value);
+        for (const child of n.getChildren()) walk(child);
+      };
+      if (root !== null) walk(root);
+      return found;
+    };
+    const { version } = material;
+    expect(uniforms(material.emissiveNode)).toEqual([0]);
+    skyline.setWindows(true);
+    expect(uniforms(material.emissiveNode)).toEqual([1]);
+    skyline.setWindows(false);
+    expect(uniforms(material.emissiveNode)).toEqual([0]);
+    expect(material.version).toBe(version);
     skyline.dispose();
   });
 });

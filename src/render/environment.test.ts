@@ -99,6 +99,26 @@ const asMesh = (object: Object3D): Mesh => {
   if (!isMesh(object)) throw new Error('not a mesh');
   return object;
 };
+/** The skyline's material and its window uniform (0 or 1); only the skyline carries a `glow` attribute. */
+function skylineWindows(env: ReturnType<typeof proceduralEnvironment>): {
+  material: MeshLambertNodeMaterial;
+  on: number;
+} {
+  let found: Mesh | null = null;
+  env.object.traverse((o) => {
+    if (isMesh(o) && 'glow' in o.geometry.attributes) found = o;
+  });
+  const mesh = found as Mesh | null;
+  if (mesh === null) throw new Error('no skyline');
+  const material = mesh.material as MeshLambertNodeMaterial;
+  let on = -1;
+  const walk = (n: Node): void => {
+    if (n instanceof UniformNode && typeof n.value === 'number') on = n.value;
+    for (const child of n.getChildren()) walk(child);
+  };
+  if (material.emissiveNode !== null) walk(material.emissiveNode);
+  return { material, on };
+}
 const materialOf = (mesh: Object3D): { polygonOffset?: boolean } =>
   asMesh(mesh).material as { polygonOffset?: boolean };
 const POOLS = new Set([FLOOD_POOL_NAME, STREET_POOL_NAME]);
@@ -704,6 +724,52 @@ describe('environment at night', () => {
     expect(now.sky.has(hex(night.horizon))).toBe(false);
     expect(now.skyline.has(hex(day.haze))).toBe(true);
     env.dispose();
+  });
+
+  it('lights the skyline windows at night on Balanced and High by a uniform alone, never by day or on Low', () => {
+    const env = build();
+    env.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    const { material } = skylineWindows(env);
+    const { version } = material;
+    for (const mode of ['night', 'day', 'night', 'day'] as const) {
+      env.setLook(lookFor(QUALITY_FLAGS.balanced, mode));
+      expect(skylineWindows(env).on, mode).toBe(mode === 'night' ? 1 : 0);
+      expect(material.version, mode).toBe(version);
+    }
+    for (const [preset, mode, lit] of [
+      ['high', 'night', 1],
+      ['high', 'day', 0],
+      ['low', 'night', 0],
+    ] as const) {
+      env.setLook(lookFor(QUALITY_FLAGS[preset], mode));
+      expect(skylineWindows(env).on, `${preset} ${mode}`).toBe(lit);
+    }
+    expect(skylineWindows(env).material).toBe(material);
+    env.dispose();
+  });
+
+  it('lights the same windows in every exercise: they depend on the layout bounds alone', () => {
+    const glow = (
+      exercise: (typeof exercises)[number] | null,
+      id: keyof typeof layouts,
+    ): number[] => {
+      const env = proceduralEnvironment(resolveLayout(layouts[id], exercise), palette);
+      let out: number[] = [];
+      env.object.traverse((o) => {
+        if (isMesh(o) && 'glow' in o.geometry.attributes) {
+          out = [...o.geometry.getAttribute('glow').array];
+        }
+      });
+      env.dispose();
+      return out;
+    };
+    for (const id of Object.keys(layouts) as (keyof typeof layouts)[]) {
+      const bare = glow(null, id);
+      expect(bare.some((l) => l > 0)).toBe(true);
+      for (const exercise of exercises.filter((e) => e.layout === id)) {
+        expect(glow(exercise, id), `${id} ${exercise.id}`).toEqual(bare);
+      }
+    }
   });
 
   it('fades the haze to the night horizon whether or not the HDRI is attached', () => {
@@ -1433,6 +1499,8 @@ describe('yard lamps at night', () => {
     const env = build();
     const emitting = (): number =>
       [...seen(env.object, cameras.cockpit)].filter((m) => {
+        // the skyline always has an emissive node: it emits only while its window uniform is on
+        if ('glow' in asMesh(m).geometry.attributes) return skylineWindows(env).on > 0;
         const material = asMesh(m).material as { emissiveNode?: unknown };
         return material.emissiveNode !== null && material.emissiveNode !== undefined;
       }).length;

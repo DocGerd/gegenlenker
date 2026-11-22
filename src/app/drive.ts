@@ -77,7 +77,7 @@ export function startDrive(
   });
   const truck = truckById(run.truckId);
   const trailer = trailerById(run.trailerId);
-  const sim = createSimulation(params, { truck: start }, contacts);
+  const sim = createSimulation(params, start, contacts);
   const { lighting } = settings;
   const recorder = createInputRecorder();
   const tracker = exercise === null ? null : createRunTracker(exercise);
