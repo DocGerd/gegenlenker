@@ -19,8 +19,8 @@ const VIEWS = [
 ] as const;
 /** Longer than the overlay's refresh interval, with frames in between. */
 const PAST_REFRESH_MS = 500;
-/** The sun at High by day; at night the dipped beam and the trailer's rear light, both lit at the start. */
-const SHADOW_PASSES = { day: 1, night: 2 } as const;
+/** The sun at High by day; at night the two dipped lamps and the trailer's rear light, all lit at the start. */
+const SHADOW_PASSES = { day: 1, night: 3 } as const;
 
 for (const { preset, lighting } of RUNS) {
   const label = lighting === 'night' ? `${preset} at night` : preset;
