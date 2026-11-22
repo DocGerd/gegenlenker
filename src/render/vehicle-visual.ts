@@ -611,20 +611,17 @@ export function proceduralTruck(
   };
   const attachBody = (shell: Shell): void => {
     slotShell(shell, []);
-    // the marking is part of the detail mesh, so the shortened one replaces the whole mesh
+    // the marking is part of the detail, so a longer cab bakes the shortened one into the shell
     const shortened = linked
-      ? res.detail(
-          truckDetail({ ...detailParams, bodyFront: bodyFrontX(a.frontX, look.cab.length) })
-            .geometry,
-        )
+      ? truckDetail({ ...detailParams, bodyFront: bodyFrontX(a.frontX, look.cab.length) }).geometry
       : null;
     bodyShell = applyShell(
       group,
       shell,
       {
         toAids: [bodyBox],
-        remove: shortened === null ? [] : [detailMesh],
-        add: shortened === null ? [] : [shortened],
+        remove: [detailMesh],
+        detail: shortened ?? detail.geometry,
         layer: PERSPECTIVE_LAYER,
       },
       {
@@ -637,6 +634,7 @@ export function proceduralTruck(
         },
       },
     );
+    shortened?.dispose();
     res.setPbr(group);
   };
   const attachBoth = (): void => {
@@ -846,13 +844,14 @@ export function proceduralTrailer(
   const bodyMesh = res.mesh(merge(bodyParts), bodyMaterial);
   const frameMesh = res.mesh(merge([...rails, ...axleBeams]), chassisMaterial);
   const detailMesh = res.detail(trailerRig.geometry);
+  const rimsMesh = res.detail(dollyRims);
   const dolly = new Group();
   dolly.add(
     res.shadow(blobShadow(dollyBlobs, SHADOW_HEIGHT)),
     dollyChassisMesh,
     res.mesh(merge(dollyWheels), wheelMaterial),
     dollyPlan.mesh,
-    res.detail(dollyRims),
+    rimsMesh,
   );
   const trailer = new Group();
   trailer.add(
@@ -917,23 +916,28 @@ export function proceduralTrailer(
     slotShell(shell.dolly, []);
     const material = res.detailMaterial();
     // a bare chassis drops the swap body's marking; a low-loader's detail follows its deck
-    const bare = trailerRig.shellGeometry === null ? null : res.detail(trailerRig.shellGeometry);
     // both start off, so a failure here leaves the groups as they were
     const onBody = applyShell(
       trailer,
       shell.trailer,
       {
         toAids: [bodyMesh, frameMesh],
-        remove: bare === null ? [] : [detailMesh],
-        add: bare === null ? [] : [bare],
+        remove: [detailMesh],
+        detail: trailerRig.shellGeometry ?? trailerRig.geometry,
         layer: PERSPECTIVE_LAYER,
       },
       { material, enabled: false },
     );
+    trailerRig.shellGeometry?.dispose();
     const onDolly = applyShell(
       dolly,
       shell.dolly,
-      { toAids: [dollyChassisMesh], remove: [], layer: PERSPECTIVE_LAYER },
+      {
+        toAids: [dollyChassisMesh],
+        remove: [rimsMesh],
+        detail: dollyRims,
+        layer: PERSPECTIVE_LAYER,
+      },
       { material, enabled: false },
     );
     applied = { trailer: onBody, dolly: onDolly };
@@ -963,6 +967,8 @@ export function proceduralTrailer(
     dispose() {
       cancel?.();
       showShell(false);
+      applied?.trailer.dispose();
+      applied?.dolly.dispose();
       res.dispose();
       dollyPlan.dispose();
       trailerPlan.dispose();
