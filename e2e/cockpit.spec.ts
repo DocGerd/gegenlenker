@@ -269,7 +269,7 @@ const MIRROR_PAIRS = [
     name: 'each class IV mirror',
     left: 'wideLeft',
     right: 'wideRight',
-    presets: ['balanced', 'high'],
+    presets: ['low', 'balanced', 'high'],
   },
 ] as const satisfies readonly {
   name: string;
@@ -352,7 +352,11 @@ for (const pair of MIRROR_PAIRS) {
           .toEqual(sides.map((s) => `${s.side}: true`));
         for (const { side, outerYard, innerYard } of seen) {
           expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
-          expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
+          // Low's flat vehicle tokens are as bright as the yard, so the class IV edge cannot tell them apart by
+          // brightness there; the side flip is pinned in `wide-mirror.test.ts`.
+          if (pair.left !== 'wideLeft' || preset !== 'low') {
+            expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
+          }
         }
         expect(errors).toEqual([]);
       },

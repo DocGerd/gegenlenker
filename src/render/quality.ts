@@ -87,7 +87,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     vehicleGlb: false,
     chaseView: false,
     frontMirror: true,
-    wideMirrors: false,
+    wideMirrors: true,
     cockpitInterior: false,
     interiorGlb: false,
     litMarkings: false,
