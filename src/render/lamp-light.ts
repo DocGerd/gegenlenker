@@ -379,6 +379,11 @@ function shape(light: SpotLight, cone: Cone): void {
   light.distance = cone.distance;
 }
 
+const pairLamps = new WeakSet<Object3D>();
+
+/** Whether `light` stands for one lamp of a pair (`LampLightSpec.side`). */
+export const isPairLamp = (light: Object3D): boolean => pairLamps.has(light);
+
 /** Lights for `specs`, children of `parent`, whose frame is the specs' part. Off until `setEnabled`. */
 export function createLampLights(specs: readonly LampLightSpec[], parent: Object3D): LampLights {
   // lights with one pattern share its map: three declares one sampler per distinct texture
@@ -405,6 +410,7 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
     light.layers.set(PERSPECTIVE_LAYER);
     light.visible = false;
     light.name = spec.side === undefined ? spec.id : `${spec.id}-${spec.side}`;
+    if (spec.side !== undefined) pairLamps.add(light);
     // in the graph: three never updates the matrix of a target outside it
     parent.add(light, light.target);
     return light;

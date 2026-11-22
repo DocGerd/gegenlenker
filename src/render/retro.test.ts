@@ -1,20 +1,28 @@
-import { BoxGeometry, type BufferGeometry, Color, SpotLight, Vector3 } from 'three';
-import { MeshLambertNodeMaterial, PhongLightingModel, type WebGPURenderer } from 'three/webgpu';
+import { BoxGeometry, type BufferGeometry, Color, Group, SpotLight, Vector3 } from 'three';
+import {
+  MeshLambertNodeMaterial,
+  PhongLightingModel,
+  SpotLightNode,
+  type WebGPURenderer,
+} from 'three/webgpu';
 import { describe, expect, it, vi } from 'vitest';
-import { trucks } from '../vehicles/registry';
+import { trailers, trucks } from '../vehicles/registry';
 import { truckAnchors } from '../vehicles/anchors';
 import { GRADE_SHADER_MARKER, toneMapRgb } from './grade';
 import {
   beamPattern,
   candela,
   coneShare,
+  createLampLights,
   facingIrradiance,
   type LampLightSpec,
+  trailerLampLight,
   truckLampLights,
 } from './lamp-light';
 import { REALISM_HUES } from './realism-hues';
 import {
   EMIT_SHADER_MARKER,
+  PAIR_MAX,
   RETRO,
   RETRO_SHADER_MARKER,
   RetroNodeMaterial,
@@ -23,6 +31,7 @@ import {
   type RetroVerdict,
   retroLitSample,
   retroLobe,
+  retroMax,
 } from './retro';
 import { EMIT_ATTRIBUTE, RETRO_ATTRIBUTE, withRetro } from './tint';
 
@@ -35,17 +44,21 @@ describe('retroLobe', () => {
   });
 
   it.each(trucks)(
-    'still returns light to the driver of $id from sheeting 10 to 40 m ahead of the dipped beam',
+    'still returns light to the driver of $id from sheeting 10 to 40 m ahead of each dipped lamp',
     (spec) => {
       const eye = truckAnchors(spec).eye;
-      const [front] = truckLampLights(spec);
-      if (front === undefined) throw new Error('no front light');
-      const lamp = new Vector3(front.position.x, front.position.y, front.position.z);
       const driver = new Vector3(eye.x, eye.y, eye.z);
-      for (const ahead of [10, 20, 40]) {
-        const target = new Vector3(lamp.x + ahead, 0, 0.6);
-        const angle = lamp.clone().sub(target).angleTo(driver.clone().sub(target));
-        expect(retroLobe(angle) * RETRO.gain, `${ahead} m`).toBeGreaterThan(0.5);
+      const dipped = truckLampLights(spec).filter((l) => l.id === 'truck-front');
+      expect(dipped).toHaveLength(2);
+      for (const front of dipped) {
+        const lamp = new Vector3(front.position.x, front.position.y, front.position.z);
+        for (const ahead of [10, 20, 40]) {
+          const target = new Vector3(lamp.x + ahead, 0, 0.6);
+          const angle = lamp.clone().sub(target).angleTo(driver.clone().sub(target));
+          expect(retroLobe(angle) * RETRO.gain, `${String(front.side)} ${ahead} m`).toBeGreaterThan(
+            0.5,
+          );
+        }
       }
     },
   );
@@ -128,7 +141,7 @@ describe('the retro add on lit sheeting', () => {
       const share = beamAt(lamp, point);
       const angle = position.sub(point).angleTo(driver.clone().sub(point));
       lit += share;
-      retro += retroBoost(share, facing, angle);
+      retro += retroBoost(share, facing, angle, PAIR_MAX);
     }
     const diffuse = lit / Math.PI;
     return {
@@ -146,8 +159,21 @@ describe('the retro add on lit sheeting', () => {
       expect(boost).toBeLessThanOrEqual(RETRO.max);
     }
     expect(retroBoost(1e-4, 1, 0)).toBeCloseTo(1e-4 * RETRO.gain, 6);
-    // the two dipped lamps add up to the bound, however bright they shine
-    expect(2 * retroBoost(1e6, 1, 0)).toBeLessThanOrEqual(RETRO.max);
+    expect(retroBoost(1e6, 1, 0)).toBeCloseTo(RETRO.max, 9);
+  });
+
+  it('bounds each dipped lamp by half, so the pair shares the bound, and every other light by all of it', () => {
+    const [trailerSpec] = trailers;
+    if (trailerSpec === undefined) throw new Error('no trailer');
+    const truck = createLampLights(truckLampLights(spec), new Group());
+    const trailer = createLampLights([trailerLampLight(trailerSpec)], new Group());
+    const bound = (light: SpotLight): number => retroMax(new SpotLightNode(light));
+    expect(truck.lights.map(bound)).toEqual([PAIR_MAX, PAIR_MAX, RETRO.max]);
+    expect(trailer.lights.map(bound)).toEqual([RETRO.max]);
+    expect(bound(new SpotLight())).toBe(RETRO.max);
+    expect(2 * PAIR_MAX).toBe(RETRO.max);
+    truck.dispose();
+    trailer.dispose();
   });
 
   it('never adds more than the sheeting colour itself from both lamps, at any distance in the beam', () => {

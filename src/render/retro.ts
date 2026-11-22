@@ -1,6 +1,7 @@
-import { BoxGeometry, Float32BufferAttribute, Mesh, SpotLight } from 'three';
+import { BoxGeometry, Float32BufferAttribute, Light, Mesh, SpotLight } from 'three';
 import { attribute, diffuseColor, exp, float, normalView, positionViewDirection } from 'three/tsl';
 import {
+  AnalyticLightNode,
   MeshLambertNodeMaterial,
   type Node,
   type NodeBuilder,
@@ -8,7 +9,7 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu';
 import { GRADE_SHADER_MARKER, precompileSamples, setGraded, type GradeSample } from './grade';
-import { BEAM } from './lamp-light';
+import { BEAM, isPairLamp } from './lamp-light';
 import { gpuLost } from './seams';
 import { EMIT_ATTRIBUTE, RETRO_ATTRIBUTE, withEmit, withRetro } from './tint';
 
@@ -31,20 +32,30 @@ export const RETRO = {
   gain: 2.5,
   /** Steepness of the lobe in `1 - cos(angle)` between the light and the viewer. */
   sharpness: 24,
-  /** Most the add can reach from the two dipped lamps together, in units of the surface's own colour: the return is bounded, not clipped. */
+  /** Most the add of one light can reach, in units of the surface's own colour: the return is bounded, not clipped. */
   max: 1,
 } as const;
 
-/** What one light's add is bounded by: the lamps of a pair share `RETRO.max`. */
-const LIGHT_MAX = RETRO.max / 2;
+/** The bound of each lamp of a pair (`isPairLamp`), so the two together stay within `RETRO.max`. */
+export const PAIR_MAX = RETRO.max / 2;
+
+/** The bound of the add of the light `lightNode` stands for. */
+export function retroMax(lightNode: object): number {
+  const light: unknown = lightNode instanceof AnalyticLightNode ? lightNode.light : null;
+  return light instanceof Light && isPairLamp(light) ? PAIR_MAX : RETRO.max;
+}
 
 /** Share (0 to 1) of the return at an observation angle between the light and the viewer, in radians. */
 export const retroLobe = (angle: number): number =>
   Math.exp(-RETRO.sharpness * (1 - Math.cos(angle)));
 
-/** The add, in units of the surface's colour, of one light `lit` (per channel, as `lightColor` is) on sheeting: below half of `RETRO.max`, rising like `lit` while small. */
-export const retroBoost = (lit: number, facing: number, angle: number): number =>
-  LIGHT_MAX * (1 - Math.exp(-(lit * facing * retroLobe(angle) * RETRO.gain) / LIGHT_MAX));
+/** The add, in units of the surface's colour, of light `lit` (per channel, as `lightColor` is) on sheeting: below `max`, rising like `lit` while small. */
+export const retroBoost = (
+  lit: number,
+  facing: number,
+  angle: number,
+  max: number = RETRO.max,
+): number => max * (1 - Math.exp(-(lit * facing * retroLobe(angle) * RETRO.gain) / max));
 
 /** Lambert, plus the retro lobe of each light on the vertices that carry `retro`. */
 class RetroLightingModel extends PhongLightingModel {
@@ -63,6 +74,7 @@ class RetroLightingModel extends PhongLightingModel {
     super.direct(...args);
     if (this.sheeting === null) return;
     const [data] = args;
+    const max = retroMax(data.lightNode);
     const lightDirection = data.lightDirection as Node<'vec3'>;
     const lightColor = data.lightColor as Node<'vec3'>;
     const reflected = data.reflectedLight.directDiffuse as Node<'vec3'>;
@@ -70,7 +82,7 @@ class RetroLightingModel extends PhongLightingModel {
     const observed = lightDirection.dot(positionViewDirection).clamp();
     const lobe = exp(float(1).sub(observed).mul(-RETRO.sharpness));
     const lit = lightColor.mul(facing).mul(lobe).mul(this.sheeting).mul(RETRO.gain);
-    const boost = float(LIGHT_MAX).mul(float(1).sub(exp(lit.div(-LIGHT_MAX))));
+    const boost = float(max).mul(float(1).sub(exp(lit.div(-max))));
     reflected.addAssign(boost.mul(diffuseColor.rgb));
   }
 }
