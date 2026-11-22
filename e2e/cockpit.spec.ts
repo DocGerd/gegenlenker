@@ -1,6 +1,5 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { DRIVER_PERFORMANCE_HINT } from './three-problems';
 import { en } from '../src/i18n/en';
 import { COCKPIT_FOV } from '../src/render/cockpit-camera';
 import { TRUCK_IDS } from '../src/contracts/vehicle';
@@ -40,15 +39,6 @@ const isGround = (p: number[] | undefined): boolean =>
 
 /** The two class II and two class IV mirrors and the front mirror, at the default viewport. */
 const DEFAULT_MIRRORS = 5;
-
-function collectErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
-  });
-  page.on('pageerror', (e) => errors.push(e.message));
-  return errors;
-}
 
 async function drive(page: Page): Promise<void> {
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
@@ -145,7 +135,6 @@ test(
   { tag: HEAVY },
   async ({ page }) => {
     test.setTimeout(PRESET_TIMEOUT_MS.balanced + PRESET_TIMEOUT_MS.low);
-    const errors = collectErrors(page);
     await pinnedDrive(page, 'balanced');
 
     await expect(page.locator('.hud[data-interior]')).toHaveCount(1);
@@ -194,7 +183,6 @@ test(
     expect(near(dash, DASH)).toBe(false);
     expect(near(pillarLeft, PILLAR)).toBe(false);
     expect(near(pillarRight, PILLAR)).toBe(false);
-    expect(errors).toEqual([]);
   },
 );
 
@@ -203,7 +191,6 @@ test(
   { tag: HEAVY },
   async ({ page }) => {
     test.setTimeout(PRESET_TIMEOUT_MS.balanced);
-    const errors = collectErrors(page);
     await pinnedDrive(page, 'balanced');
     const cockpit = await boxOf(page, '.hud-cockpit');
     // Above the skyline, under the header: just right of the front mirror's frame, and just above the horizon.
@@ -217,7 +204,6 @@ test(
     expect(top[0] ?? 0, 'red channel: the haze is paler than the zenith').toBeLessThan(
       (horizon[0] ?? 0) - HAZE_STEP,
     );
-    expect(errors).toEqual([]);
   },
 );
 
@@ -286,7 +272,6 @@ for (const pair of MIRROR_PAIRS) {
       async ({ page }) => {
         test.setTimeout(PRESET_TIMEOUT_MS[preset]);
         const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
-        const errors = collectErrors(page);
         // Class IV is small at the default viewport: 1920x1080 gives its pixel probes room.
         if (pair.left === 'wideLeft') await page.setViewportSize({ width: 1920, height: 1080 });
         await pinnedDrive(page, preset);
@@ -359,7 +344,6 @@ for (const pair of MIRROR_PAIRS) {
             expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
           }
         }
-        expect(errors).toEqual([]);
       },
     );
   }
@@ -385,7 +369,6 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     async ({ page }) => {
       test.setTimeout(PRESET_TIMEOUT_MS[preset]);
       const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
-      const errors = collectErrors(page);
       await pinnedDrive(page, preset);
       const box = await boxOf(page, '[data-hud="front"]');
       const points = frontPoints(box);
@@ -409,7 +392,6 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
       const seen = await sample();
       expect(seen.cabShare, 'cab at the top left').toBeGreaterThan(0.6);
       expect(seen.passengerYard, 'ground at the top right').toBeGreaterThan(0.6);
-      expect(errors).toEqual([]);
     },
   );
 }

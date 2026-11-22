@@ -21,10 +21,11 @@ const high = { timeout: HIGH_WAIT_MS };
 const LOST = 'Graphics context lost; starting afresh';
 
 /**
- * Console warnings, errors and page errors; headless Chromium denies the wake lock, which is not
+ * Console warnings and errors, to assert the exact logs a loss produces; page errors and THREE
+ * warnings fail through the guard fixture. Headless Chromium denies the wake lock, which is not
  * about graphics.
  */
-function collectProblems(page: Page): string[] {
+function collectLogs(page: Page): string[] {
   const problems: string[] = [];
   page.on('console', (m) => {
     const text = m.text();
@@ -36,7 +37,6 @@ function collectProblems(page: Page): string[] {
       problems.push(text);
     }
   });
-  page.on('pageerror', (e) => problems.push(e.message));
   return problems;
 }
 
@@ -68,7 +68,7 @@ test(
   { tag: HEAVY },
   async ({ page }) => {
     test.setTimeout(180_000);
-    const problems = collectProblems(page);
+    const problems = collectLogs(page);
     await page.addInitScript(
       ([key, value]) => {
         if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
@@ -134,7 +134,7 @@ test(
 
 test('the cockpit looks the same after a loss as before it', { tag: HEAVY }, async ({ page }) => {
   test.setTimeout(timeoutWithSettles('high', 2, 180_000));
-  const problems = collectProblems(page);
+  const problems = collectLogs(page);
   await watchFailedAttachments(page);
   await startPinnedDrive(page, { preset: 'high', lighting: 'day' }, en.exerciseStraightReverse);
   const hash = async (): Promise<string> => {
@@ -153,7 +153,7 @@ test('the cockpit looks the same after a loss as before it', { tag: HEAVY }, asy
 
 test('losses in quick succession end at the reload notice', async ({ page, allow }) => {
   allow(/Graphics could not start/);
-  const problems = collectProblems(page);
+  const problems = collectLogs(page);
   await startDrive(page);
   for (let i = 0; i < 3; i++) await loseAndReplace(page);
   await loseLiveContext(page);

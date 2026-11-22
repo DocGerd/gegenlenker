@@ -4,9 +4,7 @@ import { en } from '../src/i18n/en';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 
-async function start(page: Page, settings: object): Promise<string[]> {
-  const errors: string[] = [];
-  page.on('pageerror', (e) => errors.push(e.message));
+async function start(page: Page, settings: object): Promise<void> {
   await page.addInitScript(
     ([key, value]) => {
       localStorage.setItem(key, value);
@@ -16,13 +14,12 @@ async function start(page: Page, settings: object): Promise<string[]> {
   await page.goto('./?framing=1');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   await expect(page.locator('[data-view="follow"]')).toBeVisible();
-  return errors;
 }
 
 test('the chase view orbits and zooms without errors, hides the target arrow and the top-down aids, and is not stored', async ({
   page,
 }) => {
-  const errors = await start(page, {});
+  await start(page, {});
   await page.locator('[data-view="chase"]').click();
   await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
   for (const aid of ['path', 'tracks', 'ghost']) {
@@ -52,20 +49,17 @@ test('the chase view orbits and zooms without errors, hides the target arrow and
   await expect(page.locator('[data-aid-legend="path"]')).not.toHaveAttribute('data-disabled');
   await page.keyboard.press('o');
   await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
-  expect(errors).toEqual([]);
 });
 
 test('a drive starts in the stored follow or yard view, never in chase', async ({ page }) => {
-  const errors = await start(page, { topDown: 'chase' });
+  await start(page, { topDown: 'chase' });
   await expect(page.locator('[data-view="follow"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-view="chase"]')).toBeVisible();
-  expect(errors).toEqual([]);
 });
 
 test('Low graphics offers no chase view and ignores its key', async ({ page }) => {
-  const errors = await start(page, { graphics: 'low' });
+  await start(page, { graphics: 'low' });
   await expect(page.locator('[data-view="chase"]')).toBeHidden();
   await page.keyboard.press('o');
   await expect(page.locator('[data-view="follow"]')).toHaveAttribute('aria-pressed', 'true');
-  expect(errors).toEqual([]);
 });
