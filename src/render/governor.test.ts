@@ -247,6 +247,25 @@ describe('frame timer', () => {
       expect(timer.scale()).toBe(0.5);
     });
 
+    it('keeps a step whose verdict a warm-up interrupted', () => {
+      const timer = createFrameTimer();
+      const { end } = drive(timer, fillBound(25), 1.6);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+      timer.warmUp('quality');
+      drive(timer, fillBound(40), 60, end);
+      expect(timer.scale()).toBeLessThan(0.85);
+      expect(timer.trace().events.some((e) => e.kind === 'down-failed')).toBe(false);
+    });
+
+    it('tries a parked level again once a warm-up changed the load', () => {
+      const timer = createFrameTimer();
+      const { end } = drive(timer, () => 40, 6);
+      expect(timer.trace().events.some((e) => e.kind === 'down-failed')).toBe(true);
+      timer.warmUp('quality');
+      drive(timer, fillBound(25), 6, end);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+    });
+
     /** `stalls` frames of 80 ms among healthy ones, then healthy frames only. */
     function stallWindow(stalls: number) {
       const governor = createResolutionGovernor();

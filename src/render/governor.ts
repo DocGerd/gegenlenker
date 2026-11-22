@@ -313,6 +313,9 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       if (count > 0 || steady > 0) note('discard', tag);
       count = 0;
       steady = 0;
+      // The load changed: the next window cannot judge a pending step, nor does a park still hold.
+      beforeStep = 0;
+      futileDown.fill(0);
     },
     restart(tag = '') {
       note('restart', tag);
