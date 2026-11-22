@@ -49,7 +49,8 @@ jobs:
   # Software GL (SwiftShader) draws the multisample frame target slowly. The suite runs in shards,
   # per test, not per file. Playwright cuts a suite into runs of equal test count, so each shard
   # group holds tests of alike cost: `@heavy` (Balanced and High draws, preset comparisons, many
-  # stepped frames), the layout spec (many short tests), and the rest. Every test runs in exactly
+  # stepped frames), `@slow` (several times a `@heavy` test, so a shard holds few), the layout spec
+  # (many short tests), and the rest. Every test runs in exactly
   # one shard: the `--grep` filters partition the suite.
   # Skipped on push to main: the ruleset's strict required status checks (no bypass) make the
   # merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
@@ -63,22 +64,40 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { suite: heavy, shard: 1, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 2, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 3, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 4, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 5, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 6, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 7, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 8, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 9, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 10, shards: 11, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 11, shards: 11, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 1, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 2, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 3, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 4, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 5, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 6, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 7, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 8, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 9, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 10, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 11, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 12, shards: 13, filter: '--grep @heavy' }
+          - { suite: heavy, shard: 13, shards: 13, filter: '--grep @heavy' }
+          - { suite: slow, shard: 1, shards: 6, filter: '--grep @slow' }
+          - { suite: slow, shard: 2, shards: 6, filter: '--grep @slow' }
+          - { suite: slow, shard: 3, shards: 6, filter: '--grep @slow' }
+          - { suite: slow, shard: 4, shards: 6, filter: '--grep @slow' }
+          - { suite: slow, shard: 5, shards: 6, filter: '--grep @slow' }
+          - { suite: slow, shard: 6, shards: 6, filter: '--grep @slow' }
           - { suite: layout, shard: 1, shards: 3, filter: '--grep layout.spec' }
           - { suite: layout, shard: 2, shards: 3, filter: '--grep layout.spec' }
           - { suite: layout, shard: 3, shards: 3, filter: '--grep layout.spec' }
-          - { suite: light, shard: 1, shards: 2, filter: '--grep-invert "@heavy|layout.spec"' }
-          - { suite: light, shard: 2, shards: 2, filter: '--grep-invert "@heavy|layout.spec"' }
+          - {
+              suite: light,
+              shard: 1,
+              shards: 2,
+              filter: '--grep-invert "@heavy|@slow|layout.spec"',
+            }
+          - {
+              suite: light,
+              shard: 2,
+              shards: 2,
+              filter: '--grep-invert "@heavy|@slow|layout.spec"',
+            }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
