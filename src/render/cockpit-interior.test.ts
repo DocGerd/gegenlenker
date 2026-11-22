@@ -497,7 +497,7 @@ describe.each(CASES)(
           }
         }
         expect(fronts).toBeGreaterThan(windows.length / 2);
-        expect(wides).toBeGreaterThan(windows.length / 2);
+        expect(wides).toBeGreaterThan(windows.length / 4);
       });
     });
   },

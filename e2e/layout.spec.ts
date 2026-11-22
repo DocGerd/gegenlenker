@@ -5,6 +5,7 @@ import { en } from '../src/i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
+import { startPinnedDrive } from './pinned-shoot';
 
 type Size = { width: number; height: number };
 
@@ -151,6 +152,53 @@ async function hudReady(
   await expect(page.locator('.ctl-lamp').first()).toBeVisible();
 }
 
+/**
+ * Each class IV mirror hangs from the arm of the class II mirror above it: its arm sits on the same side
+ * and overlaps that arm both across and down.
+ */
+async function expectWideArms(page: Page): Promise<void> {
+  await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
+  const arms = await page
+    .locator(
+      '[data-hud="mirrorLeft"], [data-hud="wideLeft"], [data-hud="mirrorRight"], [data-hud="wideRight"]',
+    )
+    .evaluateAll((els) =>
+      els.map((el) => {
+        const box = el.getBoundingClientRect();
+        const arm = getComputedStyle(el, '::before');
+        const left = box.left + parseFloat(arm.left);
+        const top = box.top + parseFloat(arm.top);
+        return {
+          name: el.getAttribute('data-hud') ?? '',
+          left,
+          right: left + parseFloat(arm.width),
+          top,
+          bottom: box.bottom - parseFloat(arm.bottom),
+        };
+      }),
+    );
+  for (const side of ['Left', 'Right']) {
+    const upper = arms.find((a) => a.name === `mirror${side}`);
+    const lower = arms.find((a) => a.name === `wide${side}`);
+    if (upper === undefined || lower === undefined) throw new Error(`no ${side} arms`);
+    expect(lower.left, `${side} class IV arm is at the class II arm's side`).toBeCloseTo(
+      upper.left,
+      0,
+    );
+    expect(lower.right, `${side} class IV arm is at the class II arm's side`).toBeCloseTo(
+      upper.right,
+      0,
+    );
+    expect(lower.top, `${side} class IV arm reaches into the class II arm`).toBeLessThan(
+      upper.bottom,
+    );
+    expect(lower.top, `${side} class IV arm reaches into the class II arm`).toBeGreaterThan(
+      upper.top,
+    );
+    expect(lower.bottom, `${side} class IV arm hangs below it`).toBeGreaterThan(upper.bottom);
+  }
+}
+
 /** The mirrors, controls, panels and gauge labels do not collide or clip. */
 async function expectMirrorsClearControls(page: Page, size: Size): Promise<void> {
   const mirrors = page.locator('.hud-mirror:not([hidden])');
@@ -197,23 +245,8 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
     }
   }
 
-  // Each class IV mirror hangs from the arm of the class II mirror above it: its arm reaches up into that mirror's span.
-  const wide = page.locator('[data-hud^="wide"]:not([hidden])');
-  const wideBoxes = await boxes(wide);
-  if (wideBoxes.length > 0) {
-    // `hudReady` pinned the count against the layout, so a missing mirror has failed already
-    expect(wideBoxes).toHaveLength(2);
-    const stems = await wide.evaluateAll((els) =>
-      els.map((el) => Math.max(0, -parseFloat(getComputedStyle(el, '::before').top))),
-    );
-    wideBoxes.forEach((box, i) => {
-      const above = i === 0 ? leftBox : rightBox;
-      const top = box.top - (stems[i] ?? 0);
-      expect(stems[i], 'class IV arm is drawn').toBeGreaterThan(0);
-      expect(top, 'class IV arm reaches the class II arm').toBeGreaterThanOrEqual(above.top);
-      expect(top, 'class IV arm reaches the class II arm').toBeLessThan(above.bottom);
-    });
-  }
+  if ((await page.locator('[data-hud^="wide"]:not([hidden])').count()) > 0)
+    await expectWideArms(page);
 
   // The front mirror hangs from a bracket above it, which stays inside the cockpit.
   const front = page.locator('[data-hud="front"]:not([hidden])');
@@ -251,15 +284,6 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
     .locator('.hud-gauge .hud-label')
     .evaluateAll((els) => els.filter((el) => el.scrollWidth > el.clientWidth).length);
   expect(clipped, 'a gauge label is wider than its gauge').toBe(0);
-}
-
-/** The cockpit pane is drawn from the first row down, once a frame has landed. */
-async function expectNoBlankBand(page: Page, size: Size): Promise<void> {
-  await settled(page);
-  // each screenshot waits for a software-GL frame, which the class IV passes make slower on a loaded runner
-  await expect
-    .poll(() => blankRows(page, Math.round(size.width * 0.3)), { timeout: 90_000 })
-    .toBe(0);
 }
 
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
@@ -472,8 +496,8 @@ const CRAMPED_HEIGHT = 420;
 
 /**
  * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
- * or the forward sight cone. With the front mirror they also keep clear of the cockpit label and every
- * mirror; without it they span the cockpit, as before it existed.
+ * or the forward sight cone. With the front or class IV mirrors they also keep clear of the cockpit
+ * label and every mirror; without them the layout is as it was before they existed.
  */
 async function expectMessagesClear(page: Page, toast: string, goal: string): Promise<void> {
   await page.evaluate(
@@ -518,10 +542,15 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     bottom: centre.y + halfHeight,
   };
   const frontShown = (await page.locator('[data-hud="front"]:not([hidden])').count()) > 0;
-  const mirrors = frontShown
-    ? await boxes(page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'))
-    : [];
-  if (frontShown) expect(mirrors.length).toBeGreaterThanOrEqual(4);
+  // Every mirror the layout shows, class II and class IV rows among them, wherever the front or class IV
+  // mirrors are: they must not reach the toast. Without either the layout is main's, where a short screen
+  // lets the toast cover the cockpit label and a class II mirror.
+  const wideShown = (await page.locator('[data-hud^="wide"]:not([hidden])').count()) > 0;
+  const mirrors =
+    frontShown || wideShown
+      ? await boxes(page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'))
+      : [];
+  if (frontShown || wideShown) expect(mirrors.length).toBeGreaterThanOrEqual(wideShown ? 5 : 4);
   // On a screen this short even one toast line and the cue reach the gear column, as before the front
   // mirror: the rule drops the mirror there, and only the fit is asserted.
   const cramped = !frontShown && (page.viewportSize()?.height ?? Infinity) < CRAMPED_HEIGHT;
@@ -542,12 +571,10 @@ for (const { locale, messages } of locales) {
       try {
         const page = await context.newPage();
         await startStraightReverse(page, messages.exerciseStraightReverse);
-        // The short landscape size has no mirror or blank-band check, only the messages and the divider.
+        // The short landscape size has no mirror check, only the messages and the divider.
         if (size !== shortLandscape) {
           await test.step('mirrors clear the controls', () =>
             expectMirrorsClearControls(page, size));
-          await test.step('the cockpit view has no blank band', () =>
-            expectNoBlankBand(page, size));
         }
         await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
           expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
@@ -560,6 +587,44 @@ for (const { locale, messages } of locales) {
     });
   }
 }
+
+/**
+ * The cockpit pane is drawn from the first row down. On a pinned drive: a free-running software-GL
+ * frame takes seconds, which a screenshot poll would spend waiting for.
+ */
+for (const size of sizes) {
+  test(`the cockpit view has no blank band at ${size.width}x${size.height}`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale: 'en-US', viewport: size });
+    try {
+      const page = await context.newPage();
+      await startPinnedDrive(
+        page,
+        { preset: 'balanced', lighting: 'day' },
+        en.exerciseStraightReverse,
+      );
+      expect(await blankRows(page, Math.round(size.width * 0.3))).toBe(0);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('the class IV mirrors hang from the class II arms at 1920x1080', async ({ browser }) => {
+  const context = await browser.newContext({
+    locale: 'en-US',
+    viewport: { width: 1920, height: 1080 },
+  });
+  try {
+    const page = await context.newPage();
+    await startStraightReverse(page, en.exerciseStraightReverse);
+    await hudReady(page);
+    await expectWideArms(page);
+  } finally {
+    await context.close();
+  }
+});
 
 /** Sizes where the front mirror is shown and where it is not: the toast column is too narrow or too short there. */
 const frontShown = [

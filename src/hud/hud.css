@@ -3,6 +3,7 @@
   --hud-target: var(--size-target);
   --hud-stroke: 3px;
   --hud-mirror-arm: 8px;
+  --hud-arm-inset: 0.38; /* share of a mirror's height above and below its arm */
   --hud-band: 18%; /* mirrors HUD_BAND_SHARE in viewports.ts */
   --hud-frame:
     0 0 0 var(--hud-stroke) var(--color-surface),
@@ -77,8 +78,8 @@
 .hud[data-interior] .hud-mirror::before {
   content: '';
   position: absolute;
-  top: 38%;
-  bottom: 38%;
+  top: calc(100% * var(--hud-arm-inset));
+  bottom: calc(100% * var(--hud-arm-inset));
   left: calc(-1 * var(--hud-mirror-arm) - 2 * var(--hud-stroke));
   width: var(--hud-mirror-arm);
   border-radius: var(--radius-sm);
@@ -86,14 +87,21 @@
   opacity: 0.7;
 }
 
-.hud[data-interior] .hud-mirror[data-hud='mirrorRight']::before {
+.hud[data-interior] .hud-mirror[data-hud='mirrorRight']::before,
+.hud[data-interior] .hud-mirror[data-hud='wideRight']::before {
   left: auto;
   right: calc(-1 * var(--hud-mirror-arm) - 2 * var(--hud-stroke));
 }
 
-/* The class IV mirror hangs from the class II mirror's arm: its own arm reaches up to it. */
+/* The class IV mirror hangs from the class II mirror's arm: its own arm, on the same side, reaches up into that arm (`--hud-above-*`: the gap to the mirror above and its height). */
 .hud[data-interior] .hud-mirror[data-hud^='wide']::before {
-  top: calc(-1 * var(--hud-arm-reach, 0px));
+  top: calc(
+    -1 *
+      (
+        var(--hud-above-gap, 0px) + var(--hud-arm-inset) * var(--hud-above-height, 0px) +
+          var(--hud-mirror-arm)
+      )
+  );
   bottom: 50%;
 }
 

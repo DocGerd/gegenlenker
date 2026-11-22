@@ -1,7 +1,6 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
-import { QUALITY_FLAGS } from '../src/render/quality';
 
 test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ page }) => {
   await page.addInitScript(() => {
@@ -74,9 +73,7 @@ const gpuSeen = (page: Page) =>
 async function drive(page: Page, search: string): Promise<void> {
   await page.goto(`./${search}`);
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
-  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(
-    3 + (QUALITY_FLAGS.balanced.wideMirrors ? 2 : 0),
-  );
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(3);
   await expect(page.locator('.app-notice')).toHaveCount(0);
 }
 

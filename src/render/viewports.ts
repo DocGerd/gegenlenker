@@ -80,11 +80,14 @@ export const WIDE_ASPECT = 5 / 3;
 /** CSS px between a class II mirror and the class IV mirror under it: both HUD frames (6 px each) and a margin. */
 export const WIDE_GAP_PX = 16;
 /**
- * Narrowest the class IV mirror (and so the class II above it) gets, in CSS px. A 0.3 m cone base
- * spans 6 px anywhere in the class IV field at this width (`wide-mirror.test.ts` derives it from the
- * camera); where the column cannot hold it, there is no class IV mirror.
+ * Narrowest the class IV mirror (and so the class II above it) gets, in CSS px: a 0.5 m wide road
+ * user spans 2 texels across the line of sight anywhere in the 4.5 m strip beside the truck, at the
+ * mirror's render scale and a device pixel ratio of 1 (`wide-mirror.test.ts` derives it from the
+ * camera). Where the column cannot hold it, there is no class IV mirror.
  */
 export const MIN_WIDE_WIDTH = 96;
+/** Class II never drops below this share of the linear size it has without class IV; below it, class IV is dropped. */
+export const MIN_CLASS_II_SHARE = 0.9;
 /** The class IV mirror's height at `width`. */
 export const wideHeight = (width: number): number => Math.round(width / WIDE_ASPECT);
 /** The least height of a class IV mirror: that of the narrowest. */
@@ -262,66 +265,122 @@ export function computeViewports(
     cockpit.x + cockpit.width - INSET - (cockpit.x + cockpit.width >= cssWidth ? insets.right : 0);
   const controls = controlsHeight(cssWidth, cssHeight, insets);
   const preferred = cockpit.y + top + Math.round(0.16 * cockpit.height);
-  /**
-   * The largest class II mirror with its bottom `clear` above the viewport bottom and at most `maxWidth`
-   * wide, and the class IV mirror under it when `wide` and the column has room: class II keeps its
-   * size where it does, otherwise both shrink towards `MIN_WIDE_WIDTH`, otherwise class IV is dropped.
-   */
-  const fit = (clear: number, maxWidth: number) => {
+  type Column = { readonly y: number; readonly width: number; readonly height: number };
+  /** The largest class II mirror with its bottom `clear` above the viewport bottom and at most `maxWidth` wide. */
+  const plainFit = (clear: number, maxWidth: number): Column => {
     const ceiling = cssHeight - clear - MIRROR_GAP;
     const y = Math.min(preferred, Math.max(floor, ceiling - wanted));
     let height = clamp(ceiling - y, MIN_MIRROR_HEIGHT, wanted);
     if ((fullWidth * height) / wanted > maxWidth) {
       height = Math.max(MIN_MIRROR_HEIGHT, Math.floor((maxWidth * wanted) / fullWidth));
     }
-    const plain = { y, width: Math.round((fullWidth * height) / wanted), height, wide: false };
-    if (!extra.wide) return plain;
-    for (let h = height; h >= MIN_MIRROR_HEIGHT; h--) {
-      const width = Math.round((fullWidth * h) / wanted);
-      if (width < MIN_WIDE_WIDTH) break;
-      const stack = h + WIDE_GAP_PX + wideHeight(width);
-      const top = Math.min(preferred, Math.max(floor, ceiling - stack));
-      if (top + stack <= ceiling) return { y: top, width, height: h, wide: true };
-    }
-    return plain;
+    return { y, width: Math.round((fullWidth * height) / wanted), height };
   };
-  // The mirror only shrinks and moves inward from its full width, so that width is the worst case.
-  const reachesLegend = legend !== null && legend.right > right - fullWidth;
-  let mirror = fit(controls, fullWidth);
-  if (legend !== null && reachesLegend) {
-    // Either sit above the legend, or beside it where that leaves the larger mirror.
-    const above = fit(Math.max(controls, legend.height), fullWidth);
-    const beside = fit(controls, Math.max(0, right - legend.right));
-    const fits = right - beside.width >= legend.right;
-    mirror = !fits || above.width * above.height >= beside.width * beside.height ? above : beside;
-  }
-  const { y, width: mw, height: mh, wide } = mirror;
-  const mirrorRight: Rect = { x: right - mw, y, width: mw, height: mh };
-  const messagesLeft = left + mw + MESSAGE_GAP;
-  let front: Rect | null = null;
-  if (extra.front) {
-    // the toast column left of it starts right of the left mirror
-    const leftLimit = messagesLeft + insets.left + MIN_MESSAGE_WIDTH + MESSAGE_GAP;
-    const fits = (rect: Rect): boolean =>
-      messagesFit(
+  /**
+   * With class IV: the largest class II mirror that leaves the stack (class II, a gap, class IV) its
+   * bottom `clear` above the viewport bottom, at most `maxWidth` wide, its top no higher than
+   * `minTop`, and no smaller than `MIN_CLASS_II_SHARE` of `reference`, the size it has without class IV.
+   * Null where nothing fits.
+   */
+  const stackFit = (
+    clear: number,
+    maxWidth: number,
+    reference: Column,
+    minTop: number,
+  ): Column | null => {
+    const ceiling = cssHeight - clear - MIRROR_GAP;
+    const least = {
+      width: Math.max(MIN_WIDE_WIDTH, Math.ceil(MIN_CLASS_II_SHARE * reference.width)),
+      height: Math.max(MIN_MIRROR_HEIGHT, Math.ceil(MIN_CLASS_II_SHARE * reference.height)),
+    };
+    const start = plainFit(clear, maxWidth).height;
+    for (let height = start; height >= least.height; height--) {
+      const width = Math.round((fullWidth * height) / wanted);
+      if (width < least.width) break;
+      const stack = height + WIDE_GAP_PX + wideHeight(width);
+      const y = Math.min(preferred, Math.max(minTop, ceiling - stack));
+      if (y + stack <= ceiling) return { y, width, height };
+    }
+    return null;
+  };
+  /**
+   * The class II mirror's placement and whether class IV hangs under it. Where the legend reaches
+   * under the right mirror the choice is between sitting above it and beside it: the placement that
+   * holds class IV wins, then the larger one. Class IV is dropped where none does.
+   */
+  const choose = (wide: boolean, minTop: number): Column & { readonly wide: boolean } => {
+    // The mirror only shrinks and moves inward from its full width, so that width is the worst case.
+    const reachesLegend = legend !== null && legend.right > right - fullWidth;
+    const options: { clear: number; maxWidth: number }[] = [
+      { clear: controls, maxWidth: fullWidth },
+    ];
+    if (legend !== null && reachesLegend) {
+      options[0] = { clear: Math.max(controls, legend.height), maxWidth: fullWidth };
+      const beside = { clear: controls, maxWidth: Math.max(0, right - legend.right) };
+      // beside only where the mirror stays clear of the legend
+      if (right - plainFit(beside.clear, beside.maxWidth).width >= legend.right)
+        options.push(beside);
+    }
+    const area = (c: Column): number => c.width * c.height;
+    const best = (cs: readonly Column[]): Column | undefined =>
+      cs.reduce<Column | undefined>(
+        (a, c) => (a === undefined || area(c) > area(a) ? c : a),
+        undefined,
+      );
+    const plain = best(options.map((o) => plainFit(o.clear, o.maxWidth)));
+    if (plain === undefined) throw new Error('a placement');
+    if (!wide) return { ...plain, wide: false };
+    const stacked = best(
+      options.flatMap((o) => stackFit(o.clear, o.maxWidth, plain, minTop) ?? []),
+    );
+    return stacked === undefined ? { ...plain, wide: false } : { ...stacked, wide: true };
+  };
+  const placed = (mirror: Column & { readonly wide: boolean }) => {
+    const { y, width: mw, height: mh } = mirror;
+    const mirrorRight: Rect = { x: right - mw, y, width: mw, height: mh };
+    const messagesLeft = left + mw + MESSAGE_GAP;
+    let front: Rect | null = null;
+    if (extra.front) {
+      // the toast column left of it starts right of the left mirror
+      const leftLimit = messagesLeft + insets.left + MIN_MESSAGE_WIDTH + MESSAGE_GAP;
+      const fits = (rect: Rect): boolean =>
+        messagesFit(
+          cockpit,
+          { x: messagesLeft, width: rect.x - MESSAGE_GAP - messagesLeft },
+          cssWidth,
+          cssHeight,
+          controls,
+          insets,
+        );
+      front = frontRect(
         cockpit,
-        { x: messagesLeft, width: rect.x - MESSAGE_GAP - messagesLeft },
-        cssWidth,
+        mirrorRight,
+        leftLimit,
+        cockpit.y + top,
         cssHeight,
         controls,
-        insets,
+        legend,
+        fits,
       );
-    front = frontRect(
-      cockpit,
-      mirrorRight,
-      leftLimit,
-      cockpit.y + top,
-      cssHeight,
-      controls,
-      legend,
-      fits,
-    );
+    }
+    return { mirror, mirrorRight, front };
+  };
+  let solved = placed(choose(extra.wide, floor));
+  if (solved.mirror.wide && solved.front === null) {
+    // The messages span the cockpit: the stack stays below the toast row, or class IV goes.
+    const toastBottom =
+      cockpit.y +
+      INSET +
+      (cssWidth >= cssHeight ? insets.top : 0) +
+      messageHeights(cockpit.width - insets.left).toast;
+    const clearOfToast = toastBottom + MESSAGE_GAP;
+    if (solved.mirror.y < clearOfToast) {
+      const retry = placed(choose(true, clearOfToast));
+      solved = retry.mirror.wide ? retry : placed(choose(false, floor));
+    }
   }
+  const { mirror, mirrorRight, front } = solved;
+  const { y, width: mw, height: mh, wide } = mirror;
   const under = (rect: Rect): Rect | null =>
     wide ? { x: rect.x, y: y + mh + WIDE_GAP_PX, width: mw, height: wideHeight(mw) } : null;
   const mirrorLeft: Rect = { x: left, y, width: mw, height: mh };
@@ -355,6 +414,15 @@ export function wrapLines(text: string, width: number): number {
 const mostLines = (keys: readonly MessageKey[], width: number): number =>
   Math.max(...keys.flatMap((key) => [wrapLines(en[key], width), wrapLines(de[key], width)]));
 
+/** Heights of the longest toast and of the goal cue in a column `room` px wide (the left inset already taken off). */
+function messageHeights(room: number): { toast: number; cue: number } {
+  // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
+  return {
+    toast: mostLines(MESSAGE_KEYS.toast, room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX,
+    cue: mostLines(MESSAGE_KEYS.cue, room - 34) * MESSAGE_LINE + MESSAGE_BOX,
+  };
+}
+
 /**
  * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top, end above
  * the controls and the forward sight cone they would otherwise reach into.
@@ -367,10 +435,7 @@ function messagesFit(
   controls: number,
   insets: Insets,
 ): boolean {
-  // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
-  const room = column.width - insets.left;
-  const toast = mostLines(MESSAGE_KEYS.toast, room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX;
-  const cue = mostLines(MESSAGE_KEYS.cue, room - 34) * MESSAGE_LINE + MESSAGE_BOX;
+  const { toast, cue } = messageHeights(column.width - insets.left);
   const landscape = cssWidth >= cssHeight;
   const bottom = cockpit.y + INSET + (landscape ? insets.top : 0) + toast + MESSAGE_GAP + cue;
   const reaches = (x0: number, x1: number): boolean =>

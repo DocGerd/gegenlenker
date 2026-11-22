@@ -133,13 +133,22 @@ describe.each(trucks)('class IV mirrors of $id', (truck) => {
 });
 
 describe('class IV minimum width', () => {
-  it('shows a 0.5 m wide road user across 2 px anywhere in the 4.5 m strip at the narrowest width, and not at two px less', () => {
+  it('shows a 0.5 m wide road user across 2 texels anywhere in the 4.5 m strip at the narrowest width, and not at two px less', () => {
     // A cone base 0.3 m wide across 6 px, as the class VI mirror is sized, cannot be met: the ground
     // at 25 m shrinks to 0.5 px per 0.3 m at 100 px, and what lies along the line of sight to far less.
     // The strip beside the truck, to the far end of its 4.5 m width, is where a cyclist is overlooked.
     const WIDTH = 0.5;
-    /** Screen px a `WIDTH` m wide object at `p` spans across the line of sight from the mirror, in a mirror `width` px wide. */
-    const across = (camera: ReturnType<typeof wideCamera>, p: Vec2, width: number): number => {
+    // Texels, not CSS px: the render target is `targetScale` of the rect at a device pixel ratio of 1,
+    // the least any preset renders at (Low caps it there).
+    const DEVICE_PIXEL_RATIO = 1;
+    const texelsPerPx = (spec: MirrorSpec): number => spec.targetScale * DEVICE_PIXEL_RATIO;
+    /** Texels a `WIDTH` m wide object at `p` spans across the line of sight from the mirror, in a mirror `width` CSS px wide. */
+    const across = (
+      camera: ReturnType<typeof wideCamera>,
+      spec: MirrorSpec,
+      p: Vec2,
+      width: number,
+    ): number => {
       const at = onGround(p);
       const dx = at.x - camera.position.x;
       const dz = at.z - camera.position.z;
@@ -147,7 +156,7 @@ describe('class IV minimum width', () => {
       const side = new Vector3((-dz / length) * (WIDTH / 2), 0, (dx / length) * (WIDTH / 2));
       const a = at.clone().add(side).project(camera);
       const b = at.clone().sub(side).project(camera);
-      return (Math.abs(a.x - b.x) * width) / 2;
+      return (Math.abs(a.x - b.x) * width * texelsPerPx(spec)) / 2;
     };
     const least = (width: number): number =>
       Math.min(
@@ -164,7 +173,7 @@ describe('class IV minimum width', () => {
                 Math.abs(p.y - sign * half) <= CLASS_IV_NARROW + 1e-9,
             );
             expect(strip.length).toBeGreaterThan(500);
-            return strip.map((p) => across(camera, p, width));
+            return strip.map((p) => across(camera, spec, p, width));
           }),
         ),
       );
@@ -292,7 +301,7 @@ describe('class IV capture schedule', () => {
     expect(frame(6, 120)).toBe(1);
   });
 
-  it('renders at half the pixel ratio of its rect', () => {
+  it('renders at the pixel ratio of its rect', () => {
     const { gl } = fake();
     const bound: { width: number; height: number }[] = [];
     (
@@ -301,7 +310,7 @@ describe('class IV capture schedule', () => {
       if (t !== null) bound.push(t);
     };
     createMirror(CLASS_IV_LEFT).capture(gl, new Scene(), 200, 120, 0, 0);
-    expect(bound[0]).toMatchObject({ width: 100, height: 60 });
+    expect(bound[0]).toMatchObject({ width: 200, height: 120 });
     expect(CLASS_IV_LEFT.aspect).toBe(WIDE_ASPECT);
   });
 });
@@ -311,15 +320,21 @@ describe.each(trucks)('class V field of $id', (truck) => {
     iv: classIVField(truck, 'right'),
     vi: classVIField(truck),
   };
-  it('is the passenger side, 2 m wide, and partly outside what class IV and VI show', () => {
+  it('is covered by class IV over its rear 0.25 m and by class VI not at all, as the PR reports', () => {
     const v = classVField(truck);
-    const points = sample(v, 0.05);
-    const covered = points.filter(
-      (p) => insidePolygon(fields.iv, p) || insidePolygon(fields.vi, p),
+    const points = sample(v, 0.01);
+    const share = (field: readonly Vec2[]): number =>
+      points.filter((p) => insidePolygon(field, p)).length / points.length;
+    // the strip is 2.75 m long (1.75 m behind to 1 m ahead of the ocular plane); class IV starts 1.5 m behind it
+    expect(share(fields.iv)).toBeCloseTo((1.75 - CLASS_IV_START) / 2.75, 1);
+    expect(share(fields.vi)).toBe(0);
+    const uncovered = points.filter(
+      (p) => !insidePolygon(fields.iv, p) && !insidePolygon(fields.vi, p),
     );
-    const uncovered = 1 - covered.length / points.length;
-    // reported in the PR: the class V strip a later issue has to cover
-    expect(uncovered).toBeGreaterThan(0);
-    expect(uncovered).toBeLessThan(1);
+    expect(uncovered.length / points.length).toBeCloseTo(1 - (1.75 - CLASS_IV_START) / 2.75, 1);
+    // the uncovered part runs from the front of the strip back to class IV's start
+    const { eye } = truckAnchors(truck);
+    expect(Math.max(...uncovered.map((p) => p.x))).toBeCloseTo(eye.x + 1, 1);
+    expect(Math.min(...uncovered.map((p) => p.x))).toBeCloseTo(eye.x - CLASS_IV_START, 1);
   });
 });

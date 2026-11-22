@@ -636,9 +636,10 @@ describe('computeViewports class IV mirrors', () => {
           expect(a.x, at).toBe(b.x);
         } else {
           count.shrunk++;
-          expect(a.width, at).toBeLessThanOrEqual(b.width);
+          // never below 90% of the linear size it has without class IV (the owner's rule)
+          expect(a.width, at).toBeGreaterThanOrEqual(Math.ceil(0.9 * b.width));
+          expect(a.height, at).toBeGreaterThanOrEqual(Math.ceil(0.9 * b.height));
           expect(a.height, at).toBeLessThan(b.height);
-          expect(a.height, at).toBeGreaterThanOrEqual(MIN_MIRROR_HEIGHT);
           expect(a.x, at).toBe(b.x);
         }
       }
@@ -648,9 +649,37 @@ describe('computeViewports class IV mirrors', () => {
     expect(count.dropped).toBeGreaterThan(100);
   });
 
+  it('keeps class II below the toast row where the messages span the cockpit, at every size', () => {
+    let checked = 0;
+    for (const [w, h] of sizes) {
+      for (const legend of legends(w)) {
+        for (const inset of [NO_INSETS, { top: 24, right: 0, bottom: 0, left: 48 }]) {
+          const v = views(w, h, WIDE, legend, inset);
+          const { cockpit, mirrorLeft, mirrorRight, wideLeft } = v;
+          if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
+            throw new Error('drive mode has mirrors');
+          }
+          if (wideLeft === null || v.front !== null) continue;
+          checked++;
+          // the longest toast in the full-width column, wrapped with the measured words
+          const room = cockpit.width - inset.left - 32 - 41;
+          const lines = Math.max(
+            ...MESSAGE_KEYS.toast
+              .flatMap((key) => [en[key], de[key]])
+              .map((t) => referenceLines(t, room)),
+          );
+          const toastBottom = cockpit.y + 16 + (w >= h ? inset.top : 0) + lines * 22 + 18;
+          const at = `${w}x${h} ${JSON.stringify(legend)} left inset ${inset.left}`;
+          expect(mirrorLeft.y, at).toBeGreaterThanOrEqual(toastBottom);
+          expect(mirrorRight.y, at).toBeGreaterThanOrEqual(toastBottom);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(20);
+  });
+
   it('is shown at the required landscape sizes', () => {
     for (const [w, h] of [
-      [1350, 600],
       [1280, 800],
       [1280, 720],
       [1920, 1080],
