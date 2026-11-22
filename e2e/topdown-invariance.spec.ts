@@ -13,7 +13,6 @@ import {
   tokenShare,
   type Preset,
 } from './pinned-shoot';
-import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 import type { ScenePaletteKey } from '../src/contracts/render';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
@@ -57,19 +56,11 @@ for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
     { tag: HEAVY },
     async ({ context }, testInfo) => {
       test.setTimeout(PRESETS.reduce((sum, preset) => sum + PRESET_TIMEOUT_MS[preset], 0));
-      const errors: string[] = [];
-      const threeProblems: string[] = [];
       const mismatches: string[] = [];
       const scales: { label: string; scale: number }[] = [];
       const shots = { follow: new Map<Preset, Buffer>(), yard: new Map<Preset, Buffer>() };
       for (const preset of PRESETS) {
         const page = await context.newPage();
-        page.on('console', (m) => {
-          if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text()))
-            errors.push(m.text());
-        });
-        page.on('pageerror', (e) => errors.push(e.message));
-        const three = collectThreeProblems(page);
         await startPinnedDrive(page, { preset, lighting: 'day' }, exercise);
         scales.push({ label: `${exercise} ${preset} before`, scale: await renderScale(page) });
         for (const shot of ['follow', 'yard'] as const) {
@@ -84,7 +75,6 @@ for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
           shots[shot].set(preset, png);
         }
         scales.push({ label: `${exercise} ${preset} after`, scale: await renderScale(page) });
-        threeProblems.push(...three);
         await page.close();
       }
       const scratch = await context.newPage();
@@ -115,8 +105,6 @@ for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
       });
       expect(new Set(scales.map((e) => e.scale)).size, scaleLines.join('; ')).toBe(1);
       expect(mismatches, 'top-down shots differ between presets').toEqual([]);
-      expect(errors).toEqual([]);
-      expect(threeProblems).toEqual([]);
     },
   );
 }

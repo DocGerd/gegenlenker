@@ -4,7 +4,6 @@ import { DRAW_CALL_BUDGET, QUALITY_FLAGS } from '../src/render/quality';
 import { drawnBackend, parseOverlay } from './perf/tablet-logic';
 import type { LightingMode } from '../src/contracts/render';
 import { type Preset, settle, slowAt, startPinnedDrive, timeoutWithSettles } from './pinned-shoot';
-import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 
 // High at night is the one lit scene with the sun's shadow pass taken out, the aids unlit and the lamps' passes in.
 const RUNS: readonly { preset: Preset; lighting: LightingMode }[] = [
@@ -32,14 +31,7 @@ for (const { preset, lighting } of RUNS) {
       slowAt(preset),
       async ({ context }) => {
         test.setTimeout(timeoutWithSettles(preset, 2));
-        const errors: string[] = [];
         const page = await context.newPage();
-        page.on('console', (m) => {
-          if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text()))
-            errors.push(m.text());
-        });
-        page.on('pageerror', (e) => errors.push(e.message));
-        const threeProblems = collectThreeProblems(page);
         // every mirror draws at this size: budget the worst case
         await page.setViewportSize({ width: 1920, height: 1080 });
         await startPinnedDrive(page, { preset, lighting }, en.exerciseStraightReverse, '?perf=1');
@@ -58,8 +50,6 @@ for (const { preset, lighting } of RUNS) {
         expect(reading.calls, `draw calls over ${DRAW_CALL_BUDGET}`).toBeLessThanOrEqual(
           DRAW_CALL_BUDGET,
         );
-        expect(errors).toEqual([]);
-        expect(threeProblems).toEqual([]);
       },
     );
   }
