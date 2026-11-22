@@ -8,8 +8,8 @@ import { rng } from './skyline-layout';
  * Every cell ends in a border of its own base colour, so mip levels that blend neighbours stay quiet.
  */
 
-const CELL = 64;
-const GRID = 8;
+export const CELL = 64;
+export const GRID = 8;
 export const ATLAS_SIZE = CELL * GRID;
 const INSET = 1.5 / ATLAS_SIZE;
 
@@ -38,6 +38,9 @@ const PLAIN = [
   'foliage',
 ] as const;
 
+/** The window's glass inside its frame, in cell pixels: what the drawing fills and the night glow masks. */
+export const GLASS_RECT = { x0: 8, y0: 9, x1: 56, y1: 55 } as const;
+
 export type Tile = `${Glass}${Scheme}` | `fascia${Scheme}` | (typeof PLAIN)[number];
 
 export const TILES: readonly Tile[] = [
@@ -45,6 +48,8 @@ export const TILES: readonly Tile[] = [
   ...SCHEMES.map((s): Tile => `fascia${s}`),
   ...PLAIN,
 ];
+
+export const isGlassTile = (tile: Tile): boolean => GLASS.some((g) => tile.startsWith(g));
 
 export type TileUv = {
   readonly u0: number;
@@ -106,7 +111,14 @@ function glassOf(kind: Glass): string {
 
 function window(ctx: Ctx, scheme: Scheme, kind: Glass): void {
   rect(ctx, frameOf(scheme), 0, 0, CELL, CELL);
-  rect(ctx, glassOf(kind), 8, 9, CELL - 16, CELL - 18);
+  rect(
+    ctx,
+    glassOf(kind),
+    GLASS_RECT.x0,
+    GLASS_RECT.y0,
+    GLASS_RECT.x1 - GLASS_RECT.x0,
+    GLASS_RECT.y1 - GLASS_RECT.y0,
+  );
   if (kind === 'glassBlind') rect(ctx, hex(HUE.whiteAluminium), 8, 33, CELL - 16, CELL - 42);
   rect(ctx, shade(HUE.anthracite, 1.2), CELL / 2 - 1, 9, 2, CELL - 18);
   rect(ctx, hex(HUE.plateWhite), 8, CELL - 9, CELL - 16, 2);
