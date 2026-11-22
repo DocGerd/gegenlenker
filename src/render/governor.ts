@@ -334,13 +334,15 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       return scale();
     },
     discardWindow(tag = '') {
-      note('warmup', tag);
-      if (count > 0 || steady > 0) note('discard', tag);
-      count = 0;
-      steady = 0;
-      // The load changed: the next window cannot judge a pending step, nor does a park still hold.
+      // The load changed: a step awaiting its verdict is undone, so the new load is judged from where it was, and no park holds.
+      const pending = beforeStep > 0;
+      if (pending) level--;
       beforeStep = 0;
       parkedUntil.fill(0);
+      note('warmup', tag);
+      if (count > 0 || steady > 0 || pending) note('discard', tag);
+      count = 0;
+      steady = 0;
     },
     restart(tag = '') {
       note('restart', tag);

@@ -262,7 +262,7 @@ describe('frame timer', () => {
       expect(timer.scale()).toBe(0.5);
     });
 
-    it('keeps a step whose verdict a warm-up interrupted', () => {
+    it('judges a heavier fill-bound load after a warm-up afresh', () => {
       const timer = createFrameTimer();
       const { end } = drive(timer, fillBound(25), 1.6);
       expect(timer.scale()).toBeCloseTo(0.85, 10);
@@ -270,6 +270,16 @@ describe('frame timer', () => {
       drive(timer, fillBound(40), 60, end);
       expect(timer.scale()).toBeLessThan(0.85);
       expect(timer.trace().events.some((e) => e.kind === 'down-failed')).toBe(false);
+    });
+
+    it('undoes a step a warm-up interrupted, so a load the scale cannot help stays at full resolution', () => {
+      const timer = createFrameTimer();
+      const { end } = drive(timer, () => 25, 2);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+      timer.warmUp('attach:shells');
+      drive(timer, () => 25, 30, end);
+      expect(timer.scale()).toBe(1);
+      expect(timer.trace().events.filter((e) => e.kind === 'down')).toHaveLength(2);
     });
 
     it('tries a parked level again once a warm-up changed the load', () => {
