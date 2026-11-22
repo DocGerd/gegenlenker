@@ -104,7 +104,8 @@ const BOX: Readonly<Record<Shot, string>> = {
 };
 const VIEW_KEY: Partial<Record<Shot, string>> = { follow: 'f', yard: 'y', chase: 'o' };
 
-async function step(page: Page, frames: number): Promise<void> {
+/** Runs `frames` frames of the pinned clock. */
+export async function step(page: Page, frames: number): Promise<void> {
   await page.clock.runFor(frames * FRAME_MS);
 }
 
