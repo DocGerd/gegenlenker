@@ -81,7 +81,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     return () => undefined;
   }
   const { params, layout, exercise, start, contacts } = resolveRun(log);
-  const makeSim = (): Simulation => createSimulation(params, { truck: start }, contacts);
+  const makeSim = (): Simulation => createSimulation(params, start, contacts);
 
   // Scrubbing back rebuilds the run from step 0 across frames; the sim is deterministic, so it lands on the played state.
   let tracker: RunTracker | null = null;
