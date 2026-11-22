@@ -2,7 +2,12 @@ import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
-import { HEAVY } from './pinned-shoot';
+import { MAX_STEPS_PER_FRAME } from '../src/sim/constants';
+import { DEFAULT_GRAPHICS, DEFAULT_LIGHTING } from '../src/contracts/render';
+import { HEAVY, settle, startPinnedDrive, timeoutWithSettles } from './pinned-shoot';
+
+/** The settings a fresh install draws with, so the framing is checked as a new user sees it. */
+const DEFAULTS = { preset: DEFAULT_GRAPHICS, lighting: DEFAULT_LIGHTING } as const;
 
 const sizes = [
   { width: 1024, height: 600 },
@@ -16,8 +21,7 @@ type Box = { left: number; top: number; right: number; bottom: number; step: num
 
 async function start(page: Page, size: (typeof sizes)[number]): Promise<void> {
   await page.setViewportSize(size);
-  await page.goto('./?framing=1');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startPinnedDrive(page, DEFAULTS, en.exerciseStraightReverse);
 }
 
 async function vehicleBox(page: Page): Promise<Box> {
@@ -26,19 +30,20 @@ async function vehicleBox(page: Page): Promise<Box> {
   return JSON.parse((await stage.getAttribute('data-vehicle-box')) ?? 'null') as Box;
 }
 
-/** Waits until the sim has run `steps` more steps, then returns the box of that frame. */
+/**
+ * Jumps the pinned clock until the sim has run `steps` more steps, then returns the box of that frame.
+ * Each jump is one frame of at most `MAX_STEPS_PER_FRAME` sim steps, as on a device that draws slowly,
+ * so a frame is drawn per jump rather than per step.
+ */
 async function afterSteps(page: Page, steps: number): Promise<Box> {
   const from = (await vehicleBox(page)).step;
   let box = await vehicleBox(page);
-  await expect
-    .poll(
-      async () => {
-        box = await vehicleBox(page);
-        return box.step - from;
-      },
-      { timeout: 60_000 },
-    )
-    .toBeGreaterThanOrEqual(steps);
+  for (let jumps = 0; box.step - from < steps; jumps++) {
+    expect(jumps, `sim steps after ${jumps} frames`).toBeLessThan(Math.ceil(steps / 2));
+    const run = Math.min(MAX_STEPS_PER_FRAME, steps - (box.step - from));
+    await page.clock.fastForward((run * 1000) / 60 + 1);
+    box = await vehicleBox(page);
+  }
   return box;
 }
 
@@ -76,8 +81,7 @@ for (const size of sizes) {
       `follow framing keeps the vehicle clear of the chrome at ${name}`,
       { tag: HEAVY },
       async ({ page }) => {
-        // The sim runs in real time; software GL on CI renders far below 60 fps.
-        test.setTimeout(180_000);
+        test.setTimeout(timeoutWithSettles(DEFAULTS.preset, 1));
         await start(page, size);
         if (folded) {
           await page.getByRole('button', { name: en.panelAids, exact: true }).click();
@@ -118,8 +122,6 @@ for (const { locale, messages } of locales) {
       `whole-yard framing keeps the start and the target clear of the chrome at ${locale} ${size.width}x${size.height}`,
       { tag: HEAVY },
       async ({ browser }) => {
-        const context = await browser.newContext({ locale, viewport: size });
-        const page = await context.newPage();
         const labels = [
           messages.exerciseStraightReverse,
           messages.exerciseReverseBay,
@@ -127,19 +129,19 @@ for (const { locale, messages } of locales) {
           messages.exerciseDockRamp,
           messages.exerciseSlalom,
         ];
+        test.setTimeout(timeoutWithSettles(DEFAULTS.preset, 2 * labels.length));
+        const context = await browser.newContext({ locale, viewport: size });
         for (const label of labels) {
-          await page.goto('./?framing=1');
-          await page.getByRole('button', { name: label }).click();
+          const page = await context.newPage();
+          await startPinnedDrive(page, DEFAULTS, label);
           await page.getByRole('button', { name: messages.viewYard, exact: true }).click();
           // The box still shows the last follow frame until a frame drawn after the click.
           await afterSteps(page, 1);
-          await expect
-            .poll(async () => (await chromeHits(page, await vehicleBox(page))).length, {
-              message: label,
-            })
-            .toBe(0);
+          await settle(page, DEFAULTS.preset);
+          expect(await chromeHits(page, await vehicleBox(page)), label).toEqual([]);
           // The arrow shows only for a target outside the clear rect.
           await expect(page.locator('[data-hud="targetArrow"]'), label).toBeHidden();
+          await page.close();
         }
         await context.close();
       },
