@@ -83,8 +83,8 @@ describe('keymap', () => {
 
   it('offers the orbit and tilt keys only with the outside view', () => {
     const terms = (chase: boolean): unknown[] => legendRows(chase).map((r) => r.term);
-    expect(terms(true)).toContain(', / . · PgUp / PgDn');
-    expect(terms(false)).not.toContain(', / . · PgUp / PgDn');
+    expect(terms(true)).toContainEqual({ key: 'keyOrbitTilt' });
+    expect(terms(false)).not.toContainEqual({ key: 'keyOrbitTilt' });
   });
 
   it('offers the outside-view key only with the outside view', () => {

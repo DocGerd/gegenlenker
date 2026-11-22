@@ -145,7 +145,7 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     action: 'orbitLeft',
     match: { by: 'key', values: [','] },
     scope: 'view',
-    legend: { term: ', / . · PgUp / PgDn', desc: 'orbitTilt', viewOnly: true, chaseOnly: true },
+    legend: { term: { key: 'keyOrbitTilt' }, desc: 'orbitTilt', viewOnly: true, chaseOnly: true },
   },
   { action: 'orbitRight', match: { by: 'key', values: ['.'] }, scope: 'view' },
   { action: 'tiltUp', match: { by: 'code', values: ['PageUp'] }, scope: 'view' },

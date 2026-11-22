@@ -6,7 +6,8 @@ import {
   type Rect,
   type TopDownView,
 } from '../contracts/render';
-import type { Obstacle } from '../contracts/layout';
+import { KIT_FOOTPRINTS } from '../content/kit';
+import { isKitDecor, type KitPiece, type Obstacle, type ResolvedLayout } from '../contracts/layout';
 import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
@@ -28,6 +29,21 @@ const CHASE_FAR = CAMERA_FAR + CHASE_MAX_DISTANCE;
 const COLLIDER_CLEARANCE = 0.3;
 /** Metres the eye stops short of a grown collider box, so rounding never counts it inside. */
 const ENTRY_GAP = 1e-3;
+/** Time constant of the eye easing back out once a collider stops hiding the pivot. */
+const RELEASE_SECONDS = 0.5;
+const MAX_RELEASE_STEP_SECONDS = 0.25;
+/** Metres short of its target at which an easing eye counts as released. */
+const RELEASED = 1e-3;
+/** Decor the eye must not enter: walled buildings, not trees, poles or goods. */
+const SOLID_DECOR: ReadonlySet<KitPiece> = new Set([
+  'hall-corner',
+  'hall-door-bay',
+  'hall-roof',
+  'hall-wall-bay',
+  'office-bay',
+  'office-entrance',
+  'office-roof',
+]);
 
 /** The cab's front face in the truck body frame (x forward, y left, z up), metres. */
 export type CabFront = {
@@ -145,8 +161,62 @@ export type ChaseRig = {
   readonly extent: CombinationExtent;
   readonly face: CabFront;
   /** The eye never sits inside one of these boxes. */
-  readonly colliders: readonly Pick<Obstacle, 'obb' | 'height'>[];
+  readonly colliders: readonly ChaseCollider[];
 };
+
+export type ChaseCollider = Pick<Obstacle, 'obb' | 'height'>;
+
+/** The layout's obstacles and its solid decor, which nothing drives into but the eye could reach. */
+export function chaseColliders(
+  layout: Pick<ResolvedLayout, 'obstacles' | 'decor'>,
+): readonly ChaseCollider[] {
+  const solids = layout.decor.flatMap((d) =>
+    isKitDecor(d) && SOLID_DECOR.has(d.piece)
+      ? [{ obb: d.footprint, height: KIT_FOOTPRINTS[d.piece].height }]
+      : [],
+  );
+  return [...layout.obstacles, ...solids];
+}
+
+/**
+ * Holds the collider limit on the eye distance across frames: the eye moves in at once when a collider
+ * starts to hide the pivot and eases back out when it stops, so a gap the pivot ray slips through does
+ * not pop it out and back.
+ */
+export type ChaseArm = {
+  /**
+   * `limit` is this frame's collider limit, `open` the distance the view takes without colliders,
+   * `now` in ms; returns the limit to use.
+   */
+  hold(limit: number, open: number, now: number): number;
+  /** The next `hold` takes its limit as it is. */
+  cut(): void;
+};
+
+export function createChaseArm(): ChaseArm {
+  let held = 0;
+  let lastOpen = 0;
+  let at = -1;
+  return {
+    hold(limit, open, now) {
+      const target = Math.min(limit, open);
+      // an eye that was not held in follows the view at once
+      if (at < 0 || target <= held || held >= lastOpen) {
+        held = target;
+      } else {
+        const step = Math.min(Math.max(now - at, 0) / 1000, MAX_RELEASE_STEP_SECONDS);
+        held += (target - held) * (1 - Math.exp(-step / RELEASE_SECONDS));
+        if (target - held < RELEASED) held = target;
+      }
+      at = now;
+      lastOpen = open;
+      return held;
+    },
+    cut() {
+      at = -1;
+    },
+  };
+}
 
 const aim = new Vector3();
 const eye = new Vector3();
@@ -224,13 +294,15 @@ function firstEntry(
 /**
  * Orbits the combination's centre, framed in the part of the pane the HUD leaves free: `view.panX` turns the camera around it
  * (counter-clockwise from above, radians, from the truck's heading), `view.panY` tilts it from the default pitch and `view.zoom`
- * divides the fitted distance, which stays within the bounding radius and the first collider on the way.
+ * divides the fitted distance, which stays within the bounding radius and the first collider on the way. `hold`, a
+ * `ChaseArm`'s, carries that collider limit over from earlier frames.
  */
 export function placeChaseCamera(
   camera: PerspectiveCamera,
   rig: ChaseRig,
   frame: ChaseFrame,
   view: TopDownView,
+  hold?: (limit: number, open: number) => number,
 ): void {
   if (frame.width <= 0 || frame.height <= 0) return;
   const { centre, truck, face } = rig;
@@ -244,13 +316,13 @@ export function placeChaseCamera(
     [centre.x, centre.y, middle],
     [Math.cos(pitch) * Math.cos(azimuth), Math.cos(pitch) * Math.sin(azimuth), Math.sin(pitch)],
   );
-  const reach = Math.max(radius, Math.min(CHASE_MAX_DISTANCE, entry - ENTRY_GAP));
-  const fit = Math.min(chaseDistance(rig.extent, face, frame), reach);
-  const distance = MathUtils.clamp(
-    fit / MathUtils.clamp(view.zoom, CHASE_ZOOM.min, CHASE_ZOOM.max),
-    radius,
-    reach,
-  );
+  const limit = Math.max(radius, Math.min(CHASE_MAX_DISTANCE, entry - ENTRY_GAP));
+  const fitted = chaseDistance(rig.extent, face, frame);
+  const zoom = MathUtils.clamp(view.zoom, CHASE_ZOOM.min, CHASE_ZOOM.max);
+  const open = MathUtils.clamp(Math.max(fitted, fitted / zoom), radius, CHASE_MAX_DISTANCE);
+  const reach = hold === undefined ? limit : hold(limit, open);
+  const fit = Math.min(fitted, reach);
+  const distance = MathUtils.clamp(fit / zoom, radius, reach);
   const horizontal = distance * Math.cos(pitch);
   const x = centre.x + horizontal * Math.cos(azimuth);
   const y = centre.y + horizontal * Math.sin(azimuth);

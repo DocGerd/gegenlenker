@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Box3, Frustum, Layers, Matrix4, Mesh, Vector3, type PerspectiveCamera } from 'three';
 import { describe, expect, it } from 'vitest';
-import { layouts } from '../content/registry';
+import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { BOUNDS } from '../content/street';
 import {
@@ -22,6 +22,8 @@ import { CAB_HEIGHT, RELIEF } from './cab-dims';
 import {
   CHASE_MAX_DISTANCE,
   cabFront,
+  chaseColliders,
+  createChaseArm,
   chaseDistance,
   boundingRadius,
   combinationExtent,
@@ -262,10 +264,53 @@ describe('chase camera', () => {
     expect(aside.distanceTo(clear)).toBeLessThan(1e-9);
   });
 
+  describe('arm', () => {
+    const PULLED = 10;
+    const OPEN = 30;
+    /** An arm a collider has just pulled in to `PULLED`, at 0 ms. */
+    const pulledIn = (): ReturnType<typeof createChaseArm> => {
+      const arm = createChaseArm();
+      arm.hold(OPEN, OPEN, -20);
+      arm.hold(PULLED, OPEN, 0);
+      return arm;
+    };
+
+    it('moves in at once and eases back out at the same pace whatever the frame rate', () => {
+      const arm = createChaseArm();
+      arm.hold(OPEN, OPEN, 0);
+      expect(arm.hold(PULLED, OPEN, 20)).toBe(PULLED);
+      const once = pulledIn().hold(OPEN, OPEN, 200);
+      const stepped = pulledIn();
+      let held = 0;
+      for (let ms = 20; ms <= 200; ms += 20) held = stepped.hold(OPEN, OPEN, ms);
+      expect(once).toBeGreaterThan(PULLED);
+      expect(once).toBeLessThan(OPEN);
+      expect(held).toBeCloseTo(once, 9);
+    });
+
+    it('steps out by a fraction of the way per frame, even after a stall', () => {
+      expect(pulledIn().hold(OPEN, OPEN, 20) - PULLED).toBeLessThan(0.1 * (OPEN - PULLED));
+      expect(pulledIn().hold(OPEN, OPEN, 10_000)).toBeLessThan(OPEN - 1);
+    });
+
+    it('follows the view at once when nothing holds it in, and starts afresh after a cut', () => {
+      const arm = createChaseArm();
+      arm.hold(OPEN, OPEN, 0);
+      expect(arm.hold(CHASE_MAX_DISTANCE, 2 * OPEN, 20)).toBe(2 * OPEN);
+      const released = pulledIn();
+      let ms = 0;
+      while (released.hold(OPEN, OPEN, (ms += 20)) < OPEN && ms < 60_000);
+      expect(released.hold(CHASE_MAX_DISTANCE, 2 * OPEN, ms + 20)).toBe(2 * OPEN);
+      const cut = pulledIn();
+      cut.cut();
+      expect(cut.hold(OPEN, OPEN, 20)).toBe(OPEN);
+    });
+  });
+
   it.each(Object.values(layouts))(
-    'keeps the eye out of every collider of the $id layout, from the start and from each obstacle',
+    'keeps the eye out of every collider and solid decor of the $id layout, from the start and from each of them',
     (layout) => {
-      const colliders = resolveLayout(layout, null).obstacles;
+      const colliders = chaseColliders(resolveLayout(layout, null));
       const spots: Pose2[] = [
         layout.start,
         ...colliders.map((o) => ({ x: o.obb.cx, y: o.obb.cy, heading: o.obb.heading })),
@@ -276,17 +321,36 @@ describe('chase camera', () => {
         for (const panX of YAWS) {
           for (const panY of TILTS) {
             const { position } = place({ ...rig, colliders }, frame, { zoom: 1, panX, panY });
-            for (const o of colliders) {
+            colliders.forEach((o, i) => {
               expect(
                 !inside(o.obb, position.x, -position.z) || position.y >= o.height,
-                `${o.id} yaw ${panX} tilt ${panY}`,
+                `collider ${i} yaw ${panX} tilt ${panY}`,
               ).toBe(true);
-            }
+            });
           }
         }
       }
     },
   );
+
+  it.each(exercises)('sees the pivot past every collider at the start of $id', (exercise) => {
+    const colliders = chaseColliders(resolveLayout(layouts[exercise.layout], exercise));
+    const point = new Vector3();
+    for (const { t, r } of pairs) {
+      const { rig } = posed(t, r, exercise.start, 0, 0);
+      const aim = aimOf(rig);
+      for (const frame of FRAMES) {
+        const { position } = place({ ...rig, colliders }, frame, DEFAULT_TOP_DOWN_VIEW);
+        for (let s = 0; s <= 1; s += 1 / 256) {
+          point.lerpVectors(aim, position, s);
+          const hidden = colliders.some(
+            (o) => inside(o.obb, point.x, -point.z) && point.y < o.height,
+          );
+          expect(hidden, `${frame.width}x${frame.height} at ${s}`).toBe(false);
+        }
+      }
+    }
+  });
 
   it('keeps the skyline inside the far plane from the farthest eye over the layout bounds', () => {
     const vertices = skylineGeometry(skylineBuildings(BOUNDS)).getAttribute('position');

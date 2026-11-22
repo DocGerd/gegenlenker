@@ -1,6 +1,6 @@
 import { OrthographicCamera, Scene, Vector3, type Object3D } from 'three';
 import { Lighting, WebGPURenderer } from 'three/webgpu';
-import type { Obstacle, Rect2, ResolvedLayout } from '../contracts/layout';
+import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
   DEFAULT_GRAPHICS,
   DEFAULT_LIGHTING,
@@ -15,6 +15,7 @@ import {
   type RenderStats,
   type SceneRenderer,
   type ScenePalette,
+  type TopDownView,
   type WebgpuFallback,
 } from '../contracts/render';
 import type { TruckAnchors } from '../contracts/vehicle';
@@ -22,11 +23,14 @@ import { truckAnchors } from '../vehicles/anchors';
 import {
   cabFront,
   boundingRadius,
+  chaseColliders,
   combinationExtent,
+  createChaseArm,
   createChaseCamera,
   placeChaseCamera,
   vehicleCentre,
   type CabFront,
+  type ChaseCollider,
   type CombinationExtent,
 } from './chase-camera';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
@@ -79,7 +83,7 @@ type Built = {
   readonly cabFront: CabFront;
   readonly palette: ScenePalette;
   readonly yardBounds: Rect2;
-  readonly obstacles: readonly Obstacle[];
+  readonly colliders: readonly ChaseCollider[];
   readonly extent: CombinationExtent;
   /** Metres from the follow centre that bound the whole combination. */
   readonly radius: number;
@@ -106,6 +110,11 @@ function fitBounds(layout: ResolvedLayout): Rect2 {
     maxY: Math.max(...rects.map((r) => r.maxY)) + YARD_MARGIN,
   };
 }
+
+const isDefault = (view: TopDownView): boolean =>
+  view.zoom === DEFAULT_TOP_DOWN_VIEW.zoom &&
+  view.panX === DEFAULT_TOP_DOWN_VIEW.panX &&
+  view.panY === DEFAULT_TOP_DOWN_VIEW.panY;
 
 function setAidsLayer(object: Object3D): void {
   object.traverse((o) => o.layers.set(AIDS_LAYER));
@@ -235,6 +244,8 @@ export function createThreeSceneRenderer(
   let frameIndex = 0;
   let topDownRect: Rect | null = null;
   let chaseShown = false;
+  const chaseArm = createChaseArm();
+  let chaseView = DEFAULT_TOP_DOWN_VIEW;
   const lead = { x: 0, y: 0 };
   let leadAt = -1;
   /** Bumped by every `init` and by `dispose`, so a superseded start drops its renderer. */
@@ -436,6 +447,7 @@ export function createThreeSceneRenderer(
       timer.resetScale('scene');
       resetTiming('scene');
       leadAt = -1;
+      chaseArm.cut();
       const palette = readScenePalette();
       const scene = new Scene();
       scene.matrixWorldAutoUpdate = false;
@@ -463,7 +475,7 @@ export function createThreeSceneRenderer(
         cabFront: cabFront(truck),
         palette,
         yardBounds: fitBounds(nextLayout),
-        obstacles: nextLayout.obstacles,
+        colliders: chaseColliders(nextLayout),
         extent,
         radius: boundingRadius(extent),
       };
@@ -574,8 +586,13 @@ export function createThreeSceneRenderer(
       }
 
       out.place(topDown, pixelRatio);
+      const chaseWasShown = chaseShown;
       chaseShown = frame.topDown === 'chase';
       if (chaseShown) {
+        const view = frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW;
+        // a reset or a switch to the view is a cut: the eye starts where the view puts it
+        if (!chaseWasShown || (isDefault(view) && !isDefault(chaseView))) chaseArm.cut();
+        chaseView = view;
         placeChaseCamera(
           chaseCamera,
           {
@@ -583,14 +600,15 @@ export function createThreeSceneRenderer(
             centre: vehicleCentre(snapshot, b.anchors.frontX),
             extent: b.extent,
             face: b.cabFront,
-            colliders: b.obstacles,
+            colliders: b.colliders,
           },
           {
             width: topDown.width,
             height: topDown.height,
             clear: relativeTo(topDown, frame.topDownClear ?? topDown),
           },
-          frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW,
+          view,
+          (limit, open) => chaseArm.hold(limit, open, performance.now()),
         );
         gl.render(b.scene, chaseCamera);
       } else {
