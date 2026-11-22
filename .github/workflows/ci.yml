@@ -30,6 +30,23 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
+      # The e2e slice table must partition each class: one `n` per class, every `1..n` once.
+      - name: Check e2e slice table
+        run: |
+          grep -o "id: [0-9]*, runs: '[^']*'" .github/workflows/ci.yml | sed "s/.*runs: '//; s/'$//" | tr ' ' '\n' |
+            awk -F'[:/]' '
+              { if ($1 in n && n[$1] != $3) bad = bad " " $0; n[$1] = $3
+                if ($2 < 1 || $2 > $3 || seen[$1, $2]++) bad = bad " " $0 }
+              END {
+                split("heavy slow layout light", want, " ")
+                for (k in want) {
+                  c = want[k]
+                  if (!(c in n)) bad = bad " " c ":none"
+                  for (i = 1; i <= n[c]; i++) if (!seen[c, i]) bad = bad " " c ":" i "/" n[c]
+                }
+                for (c in n) if (c != "heavy" && c != "slow" && c != "layout" && c != "light") bad = bad " " c
+                if (bad) { print "e2e slice table is not a partition:" bad; exit 1 }
+              }'
 
   unit:
     runs-on: ubuntu-latest
@@ -51,9 +68,9 @@ jobs:
   # High draws, preset comparisons, many stepped frames), `@slow` (several times a `@heavy` test),
   # the layout spec (many short tests), and the rest (`light`). Each class is cut into slices
   # (`suite:i/n` in `runs`) and each job runs the slices packed to even its cost, from recorded
-  # per-test durations. Retune the table when a class's cost shifts: a slice must hold at least one
-  # test, and every `i` of each class must appear in exactly one job, so each test runs once. Keep
-  # the job count under the account's concurrent-job limit, or the last jobs queue.
+  # per-test durations. Retune the table when a class's cost shifts; the lint job checks that every
+  # `i` of each class appears in exactly one job, so each test runs once. Keep the job count under
+  # the account's concurrent-job limit, or the last jobs queue.
   # Skipped on push to main: the ruleset's strict required status checks (no bypass) make the
   # merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
   # still runs it.
