@@ -248,6 +248,7 @@ function frontRect(
   const band = frontBand(
     cockpit.width / cockpit.height,
     (2 * (mirrorRight.x - cockpit.x)) / cockpit.width - 1,
+    cockpit.width,
   );
   if (band === null) return null;
   const toX = (ndc: number): number => cockpit.x + ((ndc + 1) / 2) * cockpit.width;
@@ -268,4 +269,29 @@ function frontRect(
   if (bottom > cssHeight - controls) return null;
   if (legend !== null && legend.right > rect.x && bottom > cssHeight - legend.height) return null;
   return rect;
+}
+
+/** Narrowest column a toast gets beside the front mirror; narrower, it goes below it. */
+export const MIN_MESSAGE_WIDTH = 160;
+/** CSS px between the toast column and the mirrors around it. */
+const MESSAGE_GAP = 8;
+
+/**
+ * Where the toast and the goal cue stand: the cockpit's top centre, between the left mirror and the
+ * front mirror, or below the front mirror and between the side mirrors where that is too narrow.
+ */
+export function messageColumn(views: ViewRects): Rect {
+  const base = views.cockpit ?? views.topDown;
+  const { front, mirrorLeft, mirrorRight } = views;
+  if (front === null || mirrorLeft === null || mirrorRight === null) return base;
+  const left = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
+  const beside = front.x - MESSAGE_GAP - left;
+  if (beside >= MIN_MESSAGE_WIDTH) return { ...base, x: left, width: beside };
+  const y = front.y + front.height;
+  return {
+    x: left,
+    y,
+    width: Math.max(0, mirrorRight.x - MESSAGE_GAP - left),
+    height: base.y + base.height - y,
+  };
 }

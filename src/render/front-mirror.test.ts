@@ -148,12 +148,9 @@ describe.each(trucks)('class VI front mirror of $id', (spec) => {
     const { eye } = truckAnchors(spec);
     const { relief } = cabShellParams(spec);
     const sill = FRAME_TOP + cabShellParams(spec).cab.glassSill;
-    for (let y = -half; y <= half; y += 0.25) {
-      const target = { x: frontX + 0.3, y, z: 1.2 };
-      // where the sight line crosses the cab's front face
-      const t = (frontX + relief - eye.x) / (target.x - eye.x);
-      const z = eye.z + t * (target.z - eye.z);
-      expect(z, `y = ${y}`).toBeLessThan(sill);
-    }
+    // the eye's sight line to the exemption's point, straight ahead of the eye: where it crosses the cab's front face
+    const target = { x: frontX + 0.3, z: 1.2 };
+    const t = (frontX + relief - eye.x) / (target.x - eye.x);
+    expect(eye.z + t * (target.z - eye.z)).toBeLessThan(sill);
   });
 });

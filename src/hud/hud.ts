@@ -13,6 +13,7 @@ import type { GoalState } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
+import { messageColumn } from '../render/viewports';
 import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
 import { aidSwatch } from './aid-swatches';
 import { createGauge, type Gauge } from './gauges';
@@ -130,8 +131,6 @@ const VIEW_OF: Partial<Record<Action, TopDownMode>> = {
 /** Aids drawn in the top-down view only; the outside view shows none of them. */
 const TOP_DOWN_AIDS: readonly (keyof AidFlags)[] = ['path', 'tracks', 'ghost'];
 const MS_TO_KMH = 3.6;
-/** CSS px between a toast or the goal cue and the front mirror they keep left of. */
-const FRONT_CLEAR = 8;
 /**
  * Cockpit widths below which the legend drops to one column: it must fit right of the wheel and
  * gears, and where the cockpit reaches the screen's right edge, left of the lever as well.
@@ -683,11 +682,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         if (r) place(el, r);
       });
       const base = c ?? views.topDown;
-      toastWrap.style.left = `${base.x}px`;
-      toastWrap.style.top = `${base.y}px`;
-      // The front mirror hangs in the top centre: messages end left of it.
-      const toastEnd = views.front === null ? base.x + base.width : views.front.x - FRONT_CLEAR;
-      toastWrap.style.width = `${Math.max(0, toastEnd - base.x)}px`;
+      const column = messageColumn(views);
+      toastWrap.style.left = `${column.x}px`;
+      toastWrap.style.top = `${column.y}px`;
+      toastWrap.style.width = `${column.width}px`;
       place(topDown, views.topDown);
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', base.y < 1 && spansRight(base));

@@ -18,6 +18,7 @@ import { bodyToThree } from './coords';
 import { frontMirrorMount } from './mirror-fields';
 import { QUALITY_FLAGS } from './quality';
 import { CAMERA_FAR, enableLayers, MIRROR_LAYERS } from './seams';
+import { FRONT_ASPECT } from './viewports';
 
 const NEAR = 0.2;
 /** Class II mirrors look this far outward of straight back. */
@@ -80,7 +81,7 @@ export const CLASS_VI: MirrorSpec = {
   pitch: MathUtils.degToRad(-72),
   roll: Math.PI,
   fov: 54,
-  aspect: 2,
+  aspect: FRONT_ASPECT,
   targetScale: 1,
   cadence: 1,
   parity: 0,

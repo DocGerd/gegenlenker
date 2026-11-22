@@ -22,6 +22,8 @@ const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const TOLERANCE = 1;
 /** How much paler (red channel) the horizon haze is than the sky near the header. */
 const HAZE_STEP = 10;
+/** CSS px right of the front mirror's box that clear its frame (6 px) for a probe. */
+const FRONT_FRAME_CLEAR = 10;
 
 const rgb = (hex: number): readonly number[] => [hex >> 16, (hex >> 8) & 0xff, hex & 0xff];
 const HEADLINER = rgb(REALISM_HUES.headliner);
@@ -200,9 +202,10 @@ test(
     await page.goto('./');
     await drive(page);
     const cockpit = await boxOf(page, '.hud-cockpit');
-    // Between the pillars, above the skyline: just under the front mirror, and just above the horizon.
-    const x = Math.round(cockpit.width * 0.58);
-    const points = [0.24, 0.31].map((f) => [x, Math.round(cockpit.height * f)] as const);
+    // Above the skyline, under the header: just right of the front mirror's frame, and just above the horizon.
+    const front = await boxOf(page, '[data-hud="front"]');
+    const x = Math.round(front.x + front.width - cockpit.x + FRONT_FRAME_CLEAR);
+    const points = [0.14, 0.31].map((f) => [x, Math.round(cockpit.height * f)] as const);
     await expect
       .poll(async () => isSky((await panePixels(page, '.hud-cockpit', points))[0]))
       .toBe(true);

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TOP_DOWN_LAYOUT, type Rect } from '../contracts/render';
-import { COCKPIT_FOV, coneTop, CONE_GAP, frontBand, VISOR } from './cockpit-band';
+import { COCKPIT_FOV, coneTop, CONE_GAP, FRONT_GAP_PX, frontBand, VISOR } from './cockpit-band';
 import {
   computeViewports,
   controlsHeight,
   FRONT_ASPECT,
+  messageColumn,
   MIN_FRONT_WIDTH,
+  MIN_MESSAGE_WIDTH,
   MIN_MIRROR_HEIGHT,
   NO_INSETS,
   topDownSplit,
@@ -261,6 +263,7 @@ describe('computeViewports front mirror', () => {
     a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
   const sizes: (readonly [number, number])[] = [
     [390, 844],
+    [360, 800],
     [844, 390],
     [1280, 800],
   ];
@@ -328,6 +331,9 @@ describe('computeViewports front mirror', () => {
         expect(front.y + front.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h));
         expect(apart(front, mirrorLeft), at).toBe(true);
         expect(apart(front, mirrorRight), at).toBe(true);
+        expect(mirrorRight.x - (front.x + front.width), `${at} gap`).toBeGreaterThanOrEqual(
+          FRONT_GAP_PX,
+        );
         if (legend !== null && legend.right > front.x) {
           expect(front.y + front.height, at).toBeLessThanOrEqual(h - legend.height);
         }
@@ -338,7 +344,7 @@ describe('computeViewports front mirror', () => {
         expect(ndcY(front.y + front.height), at).toBeGreaterThanOrEqual(
           coneTop(COCKPIT_FOV) + CONE_GAP - 1e-6,
         );
-        const band = frontBand(cockpit.width / cockpit.height, ndcX(mirrorRight.x));
+        const band = frontBand(cockpit.width / cockpit.height, ndcX(mirrorRight.x), cockpit.width);
         if (band === null) throw new Error(`${at}: a rect without a band`);
         expect(ndcX(front.x + front.width), at).toBeLessThanOrEqual(band.right + 1e-6);
         expect(ndcY(front.y), at).toBeLessThanOrEqual(band.top + 1e-6);
@@ -347,26 +353,48 @@ describe('computeViewports front mirror', () => {
     expect(shown).toBeGreaterThan(100);
   });
 
-  it('stays below the display cut-out and inside the safe area', () => {
-    const insets = { top: 40, right: 48, bottom: 20, left: 48 };
+  it('starts below the display cut-out where the band would reach into it', () => {
+    // 120 px lies below the band's top at these sizes, so only the clamp keeps the rect out of it
+    const insets = { top: 120, right: 48, bottom: 20, left: 48 };
     for (const [w, h] of [
       [1280, 720],
       [1024, 600],
-      [1920, 1080],
     ] as const) {
-      const { cockpit, front } = computeViewports(
-        w,
-        h,
-        'drive',
-        null,
-        insets,
-        undefined,
-        null,
-        FRONT,
-      );
-      if (cockpit === null || front === null) throw new Error('no front mirror');
-      expect(front.y, `${w}x${h}`).toBeGreaterThanOrEqual(insets.top);
-      expect(front.x + front.width, `${w}x${h}`).toBeLessThanOrEqual(cockpit.x + cockpit.width);
+      const plain = computeViewports(w, h, 'drive', null, NO_INSETS, undefined, null, FRONT);
+      expect(plain.front?.y, `${w}x${h}`).toBeLessThan(insets.top);
+      const { front } = computeViewports(w, h, 'drive', null, insets, undefined, null, FRONT);
+      expect(front, `${w}x${h}`).not.toBeNull();
+      expect(front?.y, `${w}x${h}`).toBe(insets.top);
     }
+  });
+
+  it('keeps the toast column clear of the side mirrors and the front mirror', () => {
+    let beside = 0;
+    let below = 0;
+    for (const [w, h] of sizes) {
+      const views = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
+      const { front, mirrorLeft, mirrorRight } = views;
+      if (front === null || mirrorLeft === null || mirrorRight === null) continue;
+      const column = messageColumn(views);
+      const at = `${w}x${h}`;
+      expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
+      expect(column.width, at).toBeGreaterThan(0);
+      // beside the front mirror, or entirely below it
+      if (column.y < front.y + front.height) {
+        beside++;
+        expect(column.x + column.width, at).toBeLessThanOrEqual(front.x);
+        expect(column.width, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
+      } else {
+        below++;
+        expect(column.x + column.width, at).toBeLessThanOrEqual(mirrorRight.x);
+      }
+    }
+    expect(beside).toBeGreaterThan(0);
+    expect(below).toBeGreaterThan(0);
+  });
+
+  it('leaves the toast column alone without a front mirror', () => {
+    const views = computeViewports(1280, 720, 'drive');
+    expect(messageColumn(views)).toEqual(views.cockpit);
   });
 });
