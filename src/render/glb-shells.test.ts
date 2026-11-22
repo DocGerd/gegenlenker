@@ -433,6 +433,14 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     expect([cab?.castShadow, cab?.receiveShadow]).toEqual([true, true]);
     expect(clear).toHaveLength(1);
     expect([clear[0]?.castShadow, clear[0]?.receiveShadow]).toEqual([false, true]);
+    // the body shell carries the detail and still casts
+    const body = meshesOf(group).filter(
+      (m) => m.layers.mask === 1 << PERSPECTIVE_LAYER && m.castShadow,
+    );
+    expect(body).toHaveLength(1);
+    expect(body[0]?.geometry.getAttribute('position').count).toBeGreaterThan(
+      shells.body.mesh.geometry.getAttribute('position').count,
+    );
     const standIn = meshesOf(group).filter((m) => m.layers.mask === 1 << SHADOW_ONLY_LAYER);
     expect(standIn).toHaveLength(1);
     expect([standIn[0]?.castShadow, standIn[0]?.receiveShadow]).toEqual([true, false]);

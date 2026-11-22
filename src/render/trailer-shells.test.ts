@@ -361,6 +361,7 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
       const vertices = (m: Mesh): number => m.geometry.getAttribute('position').count;
       const detail = vertices(added[0] ?? shell.trailer.mesh) - vertices(shell.trailer.mesh);
       const full = vertices(removed[0] ?? shell.trailer.mesh);
+      expect(added[0]?.castShadow).toBe(true);
       expect(detail).toBeGreaterThan(0);
       // the swap body's marking drops out of the box trailer's detail
       if (isBox) expect(detail).toBeLessThan(full);
