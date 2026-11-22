@@ -86,8 +86,11 @@ export const WIDE_GAP_PX = 16;
  * camera). Where the column cannot hold it, there is no class IV mirror.
  */
 export const MIN_WIDE_WIDTH = 96;
-/** Class II never drops below this share of the linear size it has without class IV; below it, class IV is dropped. */
-export const MIN_CLASS_II_SHARE = 0.9;
+/**
+ * Class II never drops below this share of the linear size it has without class IV; below it, class IV
+ * is dropped. Low enough to show class IV on the laptop viewports `viewports.test.ts` lists.
+ */
+export const MIN_CLASS_II_SHARE = 0.72;
 /** The class IV mirror's height at `width`. */
 export const wideHeight = (width: number): number => Math.round(width / WIDE_ASPECT);
 /** The least height of a class IV mirror: that of the narrowest. */
@@ -273,6 +276,10 @@ export function computeViewports(
     let height = clamp(ceiling - y, MIN_MIRROR_HEIGHT, wanted);
     if ((fullWidth * height) / wanted > maxWidth) {
       height = Math.max(MIN_MIRROR_HEIGHT, Math.floor((maxWidth * wanted) / fullWidth));
+    }
+    // the rounded width must not exceed `maxWidth` either
+    while (height > MIN_MIRROR_HEIGHT && Math.round((fullWidth * height) / wanted) > maxWidth) {
+      height--;
     }
     return { y, width: Math.round((fullWidth * height) / wanted), height };
   };

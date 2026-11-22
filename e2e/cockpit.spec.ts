@@ -38,6 +38,9 @@ const isSky = (p: number[] | undefined): boolean =>
 const isGround = (p: number[] | undefined): boolean =>
   p !== undefined && p.reduce((a, b) => a + b, 0) > 400;
 
+/** The two class II and two class IV mirrors and the front mirror, at the default viewport. */
+const DEFAULT_MIRRORS = 5;
+
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
   page.on('console', (m) => {
@@ -49,7 +52,7 @@ function collectErrors(page: Page): string[] {
 
 async function drive(page: Page): Promise<void> {
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
-  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(3);
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(DEFAULT_MIRRORS);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }
 
@@ -58,7 +61,7 @@ async function drive(page: Page): Promise<void> {
  * pixel probes below do not compete with a render loop for the CPU (a screenshot of a free-running
  * drive takes seconds on software GL), and the preset's attachments are in place before they read.
  */
-async function pinnedDrive(page: Page, preset: Preset, mirrors = 3): Promise<void> {
+async function pinnedDrive(page: Page, preset: Preset, mirrors = DEFAULT_MIRRORS): Promise<void> {
   await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
   await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(mirrors);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
@@ -284,9 +287,9 @@ for (const pair of MIRROR_PAIRS) {
         test.setTimeout(PRESET_TIMEOUT_MS[preset]);
         const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
         const errors = collectErrors(page);
-        // Class IV shows beside the open key legend only on a big enough cockpit: 1920x1080 has room on every preset.
+        // Class IV is small at the default viewport: 1920x1080 gives its pixel probes room.
         if (pair.left === 'wideLeft') await page.setViewportSize({ width: 1920, height: 1080 });
-        await pinnedDrive(page, preset, pair.left === 'wideLeft' ? 5 : 3);
+        await pinnedDrive(page, preset);
 
         // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
         // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.

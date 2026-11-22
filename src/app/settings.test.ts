@@ -13,6 +13,7 @@ const defaults: Settings = {
   collapsed: { aids: false, gauges: false, keys: false },
   graphics: 'balanced',
   lighting: 'day',
+  wideMirrors: true,
 };
 
 const stored: Settings = {
@@ -27,6 +28,7 @@ const stored: Settings = {
   collapsed: { aids: true, gauges: true, keys: true },
   graphics: 'low',
   lighting: 'night',
+  wideMirrors: false,
 };
 
 describe('loadSettings', () => {
@@ -58,6 +60,7 @@ describe('loadSettings', () => {
       collapsed: { aids: true, gauges: 'no' },
       graphics: 'ultra',
       lighting: 'dusk',
+      wideMirrors: 'off',
     });
     expect(loadSettings(raw, 'en')).toEqual({
       ...defaults,

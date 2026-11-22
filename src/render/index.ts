@@ -42,10 +42,10 @@ import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].chaseView;
 
-/** The mirrors beyond class II that the preset draws; `computeViewports` makes room for them. */
-export const extraMirrors = (preset: GraphicsPreset): ExtraMirrors => ({
+/** The mirrors beyond class II that the preset draws; `computeViewports` makes room for them. Class IV also needs the setting. */
+export const extraMirrors = (preset: GraphicsPreset, wideMirrors: boolean): ExtraMirrors => ({
   front: QUALITY_FLAGS[preset].frontMirror,
-  wide: QUALITY_FLAGS[preset].wideMirrors,
+  wide: QUALITY_FLAGS[preset].wideMirrors && wideMirrors,
 });
 
 /** Whether the preset draws the cab interior and the mirror housings. */

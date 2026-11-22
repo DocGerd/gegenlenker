@@ -9,6 +9,8 @@ import { startPinnedDrive } from './pinned-shoot';
 
 type Size = { width: number; height: number };
 
+const SETTINGS_KEY = 'gegenlenker.settings.v1';
+
 const sizes = [
   { width: 740, height: 649 },
   { width: 768, height: 700 },
@@ -100,7 +102,7 @@ async function blankRows(page: Page, x: number): Promise<number> {
  * mirrors under them and the front mirror where `computeViewports` finds room for them, given the key
  * legend as the page measured it.
  */
-async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
+async function expectedViews(page: Page, insets: Insets, wide: boolean) {
   const size = page.viewportSize();
   if (size === null) throw new Error('no viewport');
   const legend = await page.evaluate(() => {
@@ -112,19 +114,28 @@ async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
     const stage = hud.getBoundingClientRect();
     return { right: r.right - stage.left, height: stage.bottom - r.top };
   });
-  const { front, wideLeft } = computeViewports(
-    size.width,
-    size.height,
-    'drive',
-    legend,
-    insets,
-    undefined,
-    null,
-    {
-      front: QUALITY_FLAGS.balanced.frontMirror,
-      wide: QUALITY_FLAGS.balanced.wideMirrors,
-    },
-  );
+  return computeViewports(size.width, size.height, 'drive', legend, insets, undefined, null, {
+    front: QUALITY_FLAGS.balanced.frontMirror,
+    wide: QUALITY_FLAGS.balanced.wideMirrors && wide,
+  });
+}
+
+/** The class IV mirrors are shown unless the setting is off. */
+const wideSetting = (page: Page): Promise<boolean> =>
+  page.evaluate((key) => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem(key) ?? 'null');
+      return (
+        !(typeof stored === 'object' && stored !== null && 'wideMirrors' in stored) ||
+        stored.wideMirrors !== false
+      );
+    } catch {
+      return true;
+    }
+  }, SETTINGS_KEY);
+
+async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
+  const { front, wideLeft } = await expectedViews(page, insets, await wideSetting(page));
   return 2 + (wideLeft === null ? 0 : 2) + (front === null ? 0 : 1);
 }
 
@@ -862,5 +873,78 @@ test('the divider runs across the screen in portrait', async ({ page }) => {
   const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
   for (const m of mirrors) {
     for (const d of divider) expect(overlaps(m, d), `${d.name} overlaps a mirror`).toBe(false);
+  }
+});
+
+/** Laptop viewports where class IV shows beside the open key legend; 1440x739 is the first to lose it if the legend grows. */
+const laptops: { size: Size; locale: string; messages: typeof en | typeof de }[] = [
+  ...[
+    { width: 1536, height: 729 },
+    { width: 1440, height: 765 },
+    { width: 1470, height: 832 },
+    { width: 1512, height: 788 },
+  ].flatMap((size) => locales.map((l) => ({ size, ...l }))),
+  { size: { width: 1440, height: 739 }, locale: 'de-DE', messages: de },
+];
+
+for (const { size, locale, messages } of laptops) {
+  test(`the class IV mirrors show beside the open key legend at ${locale} ${size.width}x${size.height}`, async ({
+    browser,
+  }) => {
+    test.slow();
+    const context = await browser.newContext({ locale, viewport: size });
+    try {
+      const page = await context.newPage();
+      await startStraightReverse(page, messages.exerciseStraightReverse);
+      await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
+      await expectMirrorsClearControls(page, size);
+      await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('the wide-angle mirrors setting hides class IV, gives class II its full size and persists', async ({
+  browser,
+}) => {
+  test.slow();
+  const size = { width: 1536, height: 729 };
+  const context = await browser.newContext({ locale: 'en-US', viewport: size });
+  try {
+    const page = await context.newPage();
+    const wide = page.locator('[data-hud^="wide"]:not([hidden])');
+    const left = async () => {
+      const [b] = await boxes(page.locator('[data-hud="mirrorLeft"]'));
+      return b === undefined ? undefined : { width: b.right - b.left, height: b.bottom - b.top };
+    };
+    const setting = page.locator('[data-menu="wideMirrors"]');
+
+    await startStraightReverse(page, en.exerciseStraightReverse);
+    await expect(wide).toHaveCount(2);
+    const withWide = await left();
+
+    await page.goto('./');
+    await setting.selectOption('off');
+    await page.reload();
+    await expect(setting).toHaveValue('off');
+    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+    await hudReady(page);
+    await expect(wide).toHaveCount(0);
+    const plain = (await expectedViews(page, NO_INSETS, false)).mirrorLeft;
+    const without = await left();
+    if (plain === null || withWide === undefined || without === undefined)
+      throw new Error('mirror');
+    expect(Math.abs(without.width - plain.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(without.height - plain.height)).toBeLessThanOrEqual(1);
+    expect(without.height).toBeGreaterThan(withWide.height);
+
+    await page.goto('./');
+    await setting.selectOption('on');
+    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+    await hudReady(page);
+    await expect(wide).toHaveCount(2);
+  } finally {
+    await context.close();
   }
 });

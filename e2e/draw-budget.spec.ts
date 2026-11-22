@@ -40,7 +40,7 @@ for (const { preset, lighting } of RUNS) {
         });
         page.on('pageerror', (e) => errors.push(e.message));
         const threeProblems = collectThreeProblems(page);
-        // the class IV mirrors show beside the open key legend only on a big cockpit: budget the worst case
+        // every mirror draws at this size: budget the worst case
         await page.setViewportSize({ width: 1920, height: 1080 });
         await startPinnedDrive(page, { preset, lighting }, en.exerciseStraightReverse, '?perf=1');
         await page.keyboard.press(key);
