@@ -1,6 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, MathUtils, type Mesh, Ray, Vector3 } from 'three';
+import {
+  Box3,
+  BufferGeometry,
+  Float32BufferAttribute,
+  MathUtils,
+  Mesh,
+  MeshBasicMaterial,
+  Ray,
+  Raycaster,
+  Vector3,
+} from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { truckAnchors } from '../vehicles/anchors';
 import { trucks } from '../vehicles/registry';
@@ -28,12 +38,8 @@ import { computeViewports } from './viewports';
  */
 
 const LOOK_YAW = 100;
-/**
- * The camera's yaw step and its NDC grid. Together they leave a ray in every 2-degree cell of the swept
- * directions (a 1-degree grid would take twice the rays), which is finer than the thinnest part's
- * angle from the eye.
- */
-const YAW_STEP = 10;
+/** The camera's yaw step and its NDC grid. */
+const YAW_STEP = 5;
 const GRID_STEPS = 24;
 /** The look-around's pitch range, read both against the horizon and against the forward view's pitch. */
 const LOOK_PITCH = 10;
@@ -55,15 +61,25 @@ const WINDOWS: readonly (readonly [number, number])[] = [
 ];
 
 /**
- * A part's front faces in three space as flat vertex triples, with their box: the ray tests walk plain
- * vectors, not `Raycaster`, which rebuilds the ray in each mesh's frame for every ray.
+ * A part's front faces in three space as flat vertex triples, in groups of `CHUNK` triangles with a box
+ * each (a solid is contiguous, so a group is compact): the ray tests walk plain vectors, not
+ * `Raycaster`, which rebuilds the ray in each mesh's frame for every ray.
  */
-type Part = { readonly box: Box3; readonly triangles: readonly Vector3[] };
+const CHUNK = 8;
+type Part = {
+  readonly box: Box3;
+  readonly triangles: readonly Vector3[];
+  readonly chunks: readonly { readonly box: Box3; readonly from: number; readonly to: number }[];
+};
 
-const partOf = (triangles: Vector3[]): Part => ({
-  box: new Box3().setFromPoints(triangles),
-  triangles,
-});
+const partOf = (triangles: Vector3[]): Part => {
+  const chunks = [];
+  for (let from = 0; from < triangles.length; from += 3 * CHUNK) {
+    const to = Math.min(from + 3 * CHUNK, triangles.length);
+    chunks.push({ box: new Box3().setFromPoints(triangles.slice(from, to)), from, to });
+  }
+  return { box: new Box3().setFromPoints(triangles), triangles, chunks };
+};
 
 const meshPart = (mesh: Mesh): Part => {
   mesh.updateMatrixWorld(true);
@@ -77,6 +93,12 @@ const meshPart = (mesh: Mesh): Part => {
         .fromBufferAttribute(position, index ? index.getX(i) : i)
         .applyMatrix4(mesh.matrixWorld),
     );
+  }
+  // a mirroring transform flips the winding, which the renderer culls by in the mesh's own frame
+  if (mesh.matrixWorld.determinant() < 0) {
+    for (let i = 0; i < found.length; i += 3) {
+      [found[i + 1], found[i + 2]] = [found[i + 2] as Vector3, found[i + 1] as Vector3];
+    }
   }
   return partOf(found);
 };
@@ -103,21 +125,24 @@ const hit = new Vector3();
 const nearest = (parts: readonly Part[], origin: Vector3, direction: Vector3): number | null => {
   ray.set(origin, direction);
   let best: number | null = null;
-  for (const { box, triangles } of parts) {
+  for (const { box, triangles, chunks } of parts) {
     if (!ray.intersectsBox(box)) continue;
-    for (let i = 0; i < triangles.length; i += 3) {
-      if (
-        ray.intersectTriangle(
-          triangles[i] as Vector3,
-          triangles[i + 1] as Vector3,
-          triangles[i + 2] as Vector3,
-          true,
-          hit,
-        ) === null
-      )
-        continue;
-      const distance = origin.distanceTo(hit);
-      if (best === null || distance < best) best = distance;
+    for (const { box: chunkBox, from, to } of chunks) {
+      if (!ray.intersectsBox(chunkBox)) continue;
+      for (let i = from; i < to; i += 3) {
+        if (
+          ray.intersectTriangle(
+            triangles[i] as Vector3,
+            triangles[i + 1] as Vector3,
+            triangles[i + 2] as Vector3,
+            true,
+            hit,
+          ) === null
+        )
+          continue;
+        const distance = origin.distanceTo(hit);
+        if (best === null || distance < best) best = distance;
+      }
     }
   }
   return best;
@@ -126,19 +151,22 @@ const nearest = (parts: readonly Part[], origin: Vector3, direction: Vector3): n
 /** Whether the ray meets any front face; stops at the first. */
 const hits = (parts: readonly Part[], origin: Vector3, direction: Vector3): boolean => {
   ray.set(origin, direction);
-  for (const { box, triangles } of parts) {
+  for (const { box, triangles, chunks } of parts) {
     if (!ray.intersectsBox(box)) continue;
-    for (let i = 0; i < triangles.length; i += 3) {
-      if (
-        ray.intersectTriangle(
-          triangles[i] as Vector3,
-          triangles[i + 1] as Vector3,
-          triangles[i + 2] as Vector3,
-          true,
-          hit,
-        ) !== null
-      )
-        return true;
+    for (const { box: chunkBox, from, to } of chunks) {
+      if (!ray.intersectsBox(chunkBox)) continue;
+      for (let i = from; i < to; i += 3) {
+        if (
+          ray.intersectTriangle(
+            triangles[i] as Vector3,
+            triangles[i + 1] as Vector3,
+            triangles[i + 2] as Vector3,
+            true,
+            hit,
+          ) !== null
+        )
+          return true;
+      }
     }
   }
   return false;
@@ -263,6 +291,26 @@ describe.each(trucks)('cab interior for looking around, $id', (spec) => {
           nearest(base, origin, d),
         );
       }
+    }
+  });
+});
+
+describe('meshPart', () => {
+  it.each([1, -1])('culls like Raycaster under a scale of %i on x', (sx) => {
+    const geometry = new BufferGeometry();
+    geometry.setAttribute(
+      'position',
+      new Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3), // faces +z
+    );
+    const mesh = new Mesh(geometry, new MeshBasicMaterial());
+    mesh.scale.x = sx;
+    mesh.updateMatrixWorld(true);
+    const part = meshPart(mesh);
+    for (const side of [1, -1]) {
+      const origin = new Vector3(0.25 * sx, 0.25, side);
+      const toward = new Vector3(0, 0, -side);
+      const expected = new Raycaster(origin, toward).intersectObject(mesh).length > 0;
+      expect(hits([part], origin, toward), `from z=${side}`).toBe(expected);
     }
   });
 });

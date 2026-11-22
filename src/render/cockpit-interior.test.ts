@@ -266,11 +266,11 @@ type Sight = {
   readonly side: number;
 };
 
-/** The names of the parts the world-space ray crosses, among those `camera` sees. */
+/** The names of the parts the world-space ray crosses, among those `camera` sees; visibility is the caller's, as with `Raycaster`. */
 function crossing(camera: PerspectiveCamera, meshes: readonly Mesh[]) {
   const sights: Sight[] = [];
   for (const mesh of meshes) {
-    if (!mesh.visible || (mesh.layers.mask & camera.layers.mask) === 0) continue;
+    if ((mesh.layers.mask & camera.layers.mask) === 0) continue;
     if (Array.isArray(mesh.material)) throw new Error(`${mesh.name}: material array`);
     sights.push({
       name: mesh.name,
