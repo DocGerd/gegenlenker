@@ -98,8 +98,8 @@ export const REAR = {
 
 /**
  * Peak irradiance each lamp puts on the ground, in the units of `light-rig.ts`: the light's candela
- * follow from it and the lamps' height. Dipped beam (the peak of both lamps' sum), reversing and stop
- * lamp (a lit tail lamp keeps `TAIL_LEVEL` of the stop lamp's).
+ * follow from it and the lamps' height. Dipped beam (of one light between the two lamps, which each
+ * send out half of it), reversing and stop lamp (a lit tail lamp keeps `TAIL_LEVEL` of the stop lamp's).
  */
 export const GROUND = { dipped: 1.1, reversing: 1.2, stop: 0.8 } as const;
 
@@ -314,13 +314,20 @@ type Candela = { readonly white: number; readonly red: number };
 
 const candelas = new Map<string, Candela>();
 
-/** The candela that bring each lamp (the two dipped lamps together) to its `GROUND` peak; with `work`, as the light stands on the work floodlights' cone. */
+/**
+ * The candela that bring each lamp to its `GROUND` peak; a lamp of a pair (`side`) takes half of a
+ * light centred between the two, so the pair sends out as much. With `work`, as the light stands on
+ * the work floodlights' cone.
+ */
 export function candela(spec: LampLightSpec, work = false): Candela {
   const cone = work && spec.work !== undefined ? { ...spec, ...spec.work } : spec;
-  const key = `${spec.id} ${cone.position.z} ${cone.distance} ${cone.position.x} ${Math.abs(cone.position.y)}`;
+  const pair = spec.side !== undefined;
+  const key = `${spec.id} ${String(pair)} ${cone.position.z} ${cone.distance} ${cone.position.x}`;
   let known = candelas.get(key);
   if (known === undefined) {
-    const perCandela = groundIrradiancePerCandela(cone);
+    const perCandela = pair
+      ? 2 * groundIrradiancePerCandela({ ...cone, position: { ...cone.position, y: 0 } })
+      : groundIrradiancePerCandela(cone);
     known =
       spec.id === 'truck-front'
         ? { white: GROUND.dipped / perCandela, red: 0 }
@@ -529,26 +536,9 @@ export function irradianceAt(spec: GroundCone, x: number, y: number): number {
   );
 }
 
-/** The lamp of the pair on the other side of the vehicle's axis. */
-const twinOf = <T extends Cone>(spec: T): T => ({
-  ...spec,
-  position: { ...spec.position, y: -spec.position.y },
-});
-
-/**
- * Peak irradiance per candela of the light's peak that the light puts on the ground; for a lamp of
- * a pair (`side`), the peak of the pair's sum, which is what the two lamps together are set to.
- */
-export function groundIrradiancePerCandela(
-  spec: GroundCone & { readonly side?: LampLightSpec['side'] },
-  steps = 120,
-): number {
-  if (spec.side === undefined) return Math.max(...litGround(spec, steps).map((p) => p.irradiance));
-  const twin = twinOf(spec);
-  const sum = (x: number, y: number): number => irradianceAt(spec, x, y) + irradianceAt(twin, x, y);
-  return Math.max(
-    ...[...litGround(spec, steps), ...litGround(twin, steps)].map((p) => sum(p.x, p.y)),
-  );
+/** Peak irradiance per candela of the light's peak that the light puts on the ground. */
+export function groundIrradiancePerCandela(spec: GroundCone, steps = 120): number {
+  return Math.max(...litGround(spec, steps).map((p) => p.irradiance));
 }
 
 /** The lights High has in the set at night: each lamp light as built, with the map and shadow a casting one carries. */

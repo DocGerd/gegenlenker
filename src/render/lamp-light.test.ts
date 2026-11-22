@@ -307,18 +307,35 @@ describe('the pair of dipped beams', () => {
     expect(irradianceAt(left, left.position.x - 5, left.position.y)).toBe(0);
   });
 
+  /** The field of one light centred between the lamps, at the dipped peak: the beam before it had one light per lamp. */
+  const centredField = (left: LampLightSpec, ahead: number) => {
+    const { id, aim, angle, penumbra, distance } = left;
+    const spec = { id, aim, angle, penumbra, distance, position: { ...left.position, y: 0 } };
+    const { white } = candela(spec);
+    return (y: number): number => white * irradianceAt(spec, left.position.x + ahead, y);
+  };
+  /** A row wide enough to hold the whole cone, out to 20 m. */
+  const wide = Array.from({ length: 601 }, (_, i) => 15 - i * 0.05);
+  const flux = (row: (y: number) => number): number => wide.reduce((sum, y) => sum + row(y), 0);
+
   it.each(TRUCK_IDS)(
-    'sets the pair of %s to the dipped peak together, within the headroom',
+    'sends out the light of one lamp between the two from the pair of %s, within the headroom',
     (id) => {
       const pair = pairOf(id);
+      for (const ahead of [2, 4, 6, 10, 20]) {
+        const ratio = flux(field(pair, ahead)) / flux(centredField(pair[0], ahead));
+        expect(ratio, `${String(ahead)} m ahead`).toBeCloseTo(1, 3);
+      }
+      // further out the pools have merged into the one light's
+      for (const ahead of [10, 20]) {
+        const ratio = field(pair, ahead)(0) / centredField(pair[0], ahead)(0);
+        expect(ratio, `${String(ahead)} m ahead`).toBeCloseTo(1, 1);
+      }
+      // close ahead each pool is dimmer than the one light's
       const rows = [1.5, 2, 3, 4, 6, 8, 12, 20].flatMap((ahead) => across.map(field(pair, ahead)));
       const peak = Math.max(...rows);
-      expect(peak).toBeCloseTo(GROUND.dipped, 1);
+      expect(peak).toBeLessThan(GROUND.dipped);
       expect(peak + AMBIENT_PEAK).toBeLessThanOrEqual(HEADROOM);
-      // each lamp alone gives less than the pair does
-      const single =
-        candela(pair[0]).white * groundIrradiancePerCandela({ ...pair[0], side: undefined });
-      expect(single).toBeLessThan(GROUND.dipped);
     },
   );
 
