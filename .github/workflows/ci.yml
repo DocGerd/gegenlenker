@@ -30,6 +30,23 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
+      # The e2e slice table must partition each class: one `n` per class, every `1..n` once.
+      - name: Check e2e slice table
+        run: |
+          grep -o "id: [0-9]*, runs: '[^']*'" .github/workflows/ci.yml | sed "s/.*runs: '//; s/'$//" | tr ' ' '\n' |
+            awk -F'[:/]' '
+              { if ($1 in n && n[$1] != $3) bad = bad " " $0; n[$1] = $3
+                if ($2 < 1 || $2 > $3 || seen[$1, $2]++) bad = bad " " $0 }
+              END {
+                split("heavy slow layout light", want, " ")
+                for (k in want) {
+                  c = want[k]
+                  if (!(c in n)) bad = bad " " c ":none"
+                  for (i = 1; i <= n[c]; i++) if (!seen[c, i]) bad = bad " " c ":" i "/" n[c]
+                }
+                for (c in n) if (c != "heavy" && c != "slow" && c != "layout" && c != "light") bad = bad " " c
+                if (bad) { print "e2e slice table is not a partition:" bad; exit 1 }
+              }'
 
   unit:
     runs-on: ubuntu-latest
@@ -46,58 +63,44 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
-  # Software GL (SwiftShader) draws the multisample frame target slowly. The suite runs in shards,
-  # per test, not per file. Playwright cuts a suite into runs of equal test count, so each shard
-  # group holds tests of alike cost: `@heavy` (Balanced and High draws, preset comparisons, many
-  # stepped frames), `@slow` (several times a `@heavy` test, so a shard holds few), the layout spec
-  # (many short tests), and the rest. Every test runs in exactly one shard: the `--grep` filters
-  # partition the suite.
+  # Software GL (SwiftShader) draws the multisample frame target slowly. Playwright cuts a suite
+  # into runs of equal test count, so the suite is first split by cost class: `@heavy` (Balanced and
+  # High draws, preset comparisons, many stepped frames), `@slow` (several times a `@heavy` test),
+  # the layout spec (many short tests), and the rest (`light`). Each class is cut into slices
+  # (`suite:i/n` in `runs`) and each job runs the slices packed to even its cost, from recorded
+  # per-test durations. Retune the table when a class's cost shifts; the lint job checks that every
+  # `i` of each class appears in exactly one job, so each test runs once. Keep the job count under
+  # the account's concurrent-job limit, or the last jobs queue.
   # Skipped on push to main: the ruleset's strict required status checks (no bypass) make the
   # merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
   # still runs it.
   e2e:
     if: github.event_name != 'push'
-    name: e2e (${{ matrix.suite }} ${{ matrix.shard }}/${{ matrix.shards }})
+    name: e2e ${{ matrix.id }} (${{ matrix.runs }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { suite: heavy, shard: 1, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 2, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 3, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 4, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 5, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 6, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 7, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 8, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 9, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 10, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 11, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 12, shards: 13, filter: '--grep @heavy' }
-          - { suite: heavy, shard: 13, shards: 13, filter: '--grep @heavy' }
-          - { suite: slow, shard: 1, shards: 6, filter: '--grep @slow' }
-          - { suite: slow, shard: 2, shards: 6, filter: '--grep @slow' }
-          - { suite: slow, shard: 3, shards: 6, filter: '--grep @slow' }
-          - { suite: slow, shard: 4, shards: 6, filter: '--grep @slow' }
-          - { suite: slow, shard: 5, shards: 6, filter: '--grep @slow' }
-          - { suite: slow, shard: 6, shards: 6, filter: '--grep @slow' }
-          - { suite: layout, shard: 1, shards: 3, filter: '--grep layout.spec' }
-          - { suite: layout, shard: 2, shards: 3, filter: '--grep layout.spec' }
-          - { suite: layout, shard: 3, shards: 3, filter: '--grep layout.spec' }
-          - {
-              suite: light,
-              shard: 1,
-              shards: 2,
-              filter: '--grep-invert "@heavy|@slow|layout.spec"',
-            }
-          - {
-              suite: light,
-              shard: 2,
-              shards: 2,
-              filter: '--grep-invert "@heavy|@slow|layout.spec"',
-            }
+          - { id: 1, runs: 'slow:6/8 light:2/6' }
+          - { id: 2, runs: 'layout:2/6 light:3/6' }
+          - { id: 3, runs: 'slow:8/8 heavy:5/16' }
+          - { id: 4, runs: 'slow:4/8 heavy:15/16' }
+          - { id: 5, runs: 'heavy:14/16 heavy:3/16' }
+          - { id: 6, runs: 'heavy:12/16 light:4/6' }
+          - { id: 7, runs: 'layout:3/6 layout:4/6' }
+          - { id: 8, runs: 'slow:7/8 heavy:7/16' }
+          - { id: 9, runs: 'heavy:6/16 heavy:16/16' }
+          - { id: 10, runs: 'slow:5/8 heavy:8/16' }
+          - { id: 11, runs: 'slow:3/8 layout:1/6' }
+          - { id: 12, runs: 'heavy:9/16 heavy:2/16' }
+          - { id: 13, runs: 'slow:1/8 slow:2/8' }
+          - { id: 14, runs: 'heavy:4/16 layout:5/6' }
+          - { id: 15, runs: 'light:1/6 heavy:10/16' }
+          - { id: 16, runs: 'heavy:11/16 light:5/6' }
+          - { id: 17, runs: 'heavy:13/16 heavy:1/16' }
+          - { id: 18, runs: 'layout:6/6 light:6/6' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -140,19 +143,36 @@ jobs:
           else
             echo '::warning::no .debs to cache'
           fi
-      - run: pnpm test:e2e --fully-parallel ${{ matrix.filter }} --shard=${{ matrix.shard }}/${{ matrix.shards }} --reporter=list,json
+      # Every slice runs even after a failure; `--output` keeps each slice's traces apart.
+      - name: Run e2e slices
         env:
-          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/e2e-results-${{ matrix.suite }}-${{ matrix.shard }}.json
+          RUNS: ${{ matrix.runs }}
+          RESULTS: ${{ runner.temp }}/e2e-results-${{ matrix.id }}
+        run: |
+          status=0
+          n=0
+          for run in $RUNS; do
+            n=$((n + 1))
+            case "${run%%:*}" in
+              heavy) filter=(--grep @heavy) ;;
+              slow) filter=(--grep @slow) ;;
+              layout) filter=(--grep layout.spec) ;;
+              light) filter=(--grep-invert '@heavy|@slow|layout.spec') ;;
+              *) echo "unknown suite in $run" >&2; exit 1 ;;
+            esac
+            PLAYWRIGHT_JSON_OUTPUT_NAME="$RESULTS-$n.json" pnpm test:e2e --fully-parallel "${filter[@]}" --shard="${run#*:}" --output="test-results/$n" --reporter=list,json || status=1
+          done
+          exit "$status"
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: e2e-results-${{ matrix.suite }}-${{ matrix.shard }}
-          path: ${{ runner.temp }}/e2e-results-${{ matrix.suite }}-${{ matrix.shard }}.json
+          name: e2e-results-${{ matrix.id }}
+          path: ${{ runner.temp }}/e2e-results-${{ matrix.id }}-*.json
           overwrite: true
       - if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: test-results-${{ matrix.suite }}-${{ matrix.shard }}
+          name: test-results-${{ matrix.id }}
           path: test-results/
 
   # The required status check. `always()` keeps it running when a dependency
