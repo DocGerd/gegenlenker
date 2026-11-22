@@ -59,6 +59,14 @@ test(
       seen.add(key);
     };
 
+    // the wheel alone, from the default view
+    const start = await pane(page);
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+    await page.mouse.wheel(0, -400);
+    await shot('wheeled in from the default');
+    await page.keyboard.press('0');
+    expect(hash(await chaseShot(page)), 'reset after the wheel').toBe(hash(first));
+
     // behind the combination, from the keys
     await press(page, '.', HALF_TURN_PRESSES);
     await expect(resetButton).toBeEnabled();

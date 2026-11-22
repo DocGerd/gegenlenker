@@ -21,7 +21,7 @@ const MIN_ASPECT = 0.3;
 /** Floor of the free rect's half-angle tangent, so a collapsed free rect cannot push the distance to infinity. */
 const MIN_TAN_FIT = 0.1;
 /** Farthest the eye gets from the pivot. */
-export const CHASE_MAX_DISTANCE = 100;
+export const CHASE_MAX_DISTANCE = 80;
 /** The scenery is placed to stay inside `CAMERA_FAR` of the layout bounds; the eye may be this far outside them. */
 const CHASE_FAR = CAMERA_FAR + CHASE_MAX_DISTANCE;
 /** Metres the eye keeps above a collider it would otherwise sit inside, and around its footprint. */
@@ -224,7 +224,7 @@ function firstEntry(
 /**
  * Orbits the combination's centre, framed in the part of the pane the HUD leaves free: `view.panX` turns the camera around it
  * (counter-clockwise from above, radians, from the truck's heading), `view.panY` tilts it from the default pitch and `view.zoom`
- * divides the fitted distance, which never drops below the combination's bounding radius.
+ * divides the fitted distance, which stays within the bounding radius and the first collider on the way.
  */
 export function placeChaseCamera(
   camera: PerspectiveCamera,
@@ -238,19 +238,19 @@ export function placeChaseCamera(
   const pitch = MathUtils.clamp(CHASE_PITCH.default + view.panY, CHASE_PITCH.min, CHASE_PITCH.max);
   const middle = aimHeight(face);
   const radius = boundingRadius(rig.extent);
-  const wanted = MathUtils.clamp(
-    chaseDistance(rig.extent, face, frame) /
-      MathUtils.clamp(view.zoom, CHASE_ZOOM.min, CHASE_ZOOM.max),
-    radius,
-    Math.max(CHASE_MAX_DISTANCE, radius),
-  );
-  // Closer than a collider between the pivot and the eye, which would hide the vehicle; the bounding radius still comes first.
+  // A collider between the pivot and the eye would hide the vehicle: the eye stays in front of it, but never inside the bounding radius.
   const entry = firstEntry(
     rig,
     [centre.x, centre.y, middle],
     [Math.cos(pitch) * Math.cos(azimuth), Math.cos(pitch) * Math.sin(azimuth), Math.sin(pitch)],
   );
-  const distance = Math.max(radius, Math.min(wanted, entry - ENTRY_GAP));
+  const reach = Math.max(radius, Math.min(CHASE_MAX_DISTANCE, entry - ENTRY_GAP));
+  const fit = Math.min(chaseDistance(rig.extent, face, frame), reach);
+  const distance = MathUtils.clamp(
+    fit / MathUtils.clamp(view.zoom, CHASE_ZOOM.min, CHASE_ZOOM.max),
+    radius,
+    reach,
+  );
   const horizontal = distance * Math.cos(pitch);
   const x = centre.x + horizontal * Math.cos(azimuth);
   const y = centre.y + horizontal * Math.sin(azimuth);

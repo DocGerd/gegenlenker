@@ -245,6 +245,10 @@ describe('chase camera', () => {
     expect(buried.y).toBeGreaterThanOrEqual(50);
     const low = place(wall(radius + 6, 0.5), frame, DEFAULT_TOP_DOWN_VIEW).position;
     expect(low.distanceTo(clear)).toBeLessThan(1e-9);
+    const zoomed = (zoom: number): number =>
+      place(wall(radius + 6, 50), frame, { zoom, panX: 0, panY: 0 }).position.distanceTo(aim);
+    expect(zoomed(2)).toBeLessThan(zoomed(1) - 1);
+    expect(zoomed(CHASE_ZOOM.min)).toBeCloseTo(zoomed(1), 9);
     const aside = place(
       {
         ...rig,
