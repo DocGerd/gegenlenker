@@ -16,6 +16,7 @@ import {
   settle,
   shoot,
   shootYardZoomed,
+  slowAt,
   startPinnedDrive,
   timeoutWithSettles,
   tokenShare,
@@ -361,7 +362,7 @@ for (const kind of EXERCISES) {
   for (const preset of COMPARED) {
     test(
       `the top-down view at night is the same at ${preset} as at low: ${exercise}`,
-      { tag: HEAVY },
+      slowAt(preset),
       async ({ context }, testInfo) => {
         const compared: RenderConfig = { preset, lighting: 'night' };
         const run = await runDrives(context, testInfo, kind, [NIGHT_LOW, compared]);
