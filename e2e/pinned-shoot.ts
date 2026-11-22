@@ -9,7 +9,7 @@ import { QUALITY_FLAGS } from '../src/render/quality.ts';
 export type Preset = 'low' | 'balanced' | 'high';
 /** What a drive is rendered with: the stored `graphics` and `lighting` settings. */
 export type RenderConfig = { readonly preset: Preset; readonly lighting: LightingMode };
-export type Shot = 'cockpit' | 'mirrorLeft' | 'mirrorRight' | 'follow' | 'yard' | 'chase';
+export type Shot = 'cockpit' | 'mirrorLeft' | 'mirrorRight' | 'front' | 'follow' | 'yard' | 'chase';
 
 /**
  * Tag of the tests that are slow on software GL: they draw Balanced or High, compare presets, or
@@ -78,6 +78,7 @@ const BOX: Readonly<Record<Shot, string>> = {
   cockpit: '[data-hud="cockpit"]',
   mirrorLeft: '[data-hud="mirrorLeft"]',
   mirrorRight: '[data-hud="mirrorRight"]',
+  front: '[data-hud="front"]',
   follow: '[data-hud="topDown"]',
   yard: '[data-hud="topDown"]',
   chase: '[data-hud="topDown"]',

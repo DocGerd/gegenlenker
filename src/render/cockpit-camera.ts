@@ -2,10 +2,11 @@ import { MathUtils, PerspectiveCamera } from 'three';
 import type { Rect } from '../contracts/render';
 import type { Pose2 } from '../contracts/sim';
 import type { Vec3 } from '../contracts/vehicle';
+import { COCKPIT_FOV } from './cockpit-band';
 import { bodyToThree } from './coords';
 import { CAMERA_FAR, COCKPIT_LAYERS, enableLayers } from './seams';
 
-export const COCKPIT_FOV = 55;
+export { COCKPIT_FOV };
 export const COCKPIT_PITCH = MathUtils.degToRad(-6);
 
 export function createCockpitCamera(): PerspectiveCamera {

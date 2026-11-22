@@ -73,7 +73,7 @@ const gpuSeen = (page: Page) =>
 async function drive(page: Page, search: string): Promise<void> {
   await page.goto(`./${search}`);
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
-  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(3);
   await expect(page.locator('.app-notice')).toHaveCount(0);
 }
 

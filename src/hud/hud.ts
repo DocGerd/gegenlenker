@@ -13,6 +13,7 @@ import type { GoalState } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
+import { messageColumn } from '../render/viewports';
 import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
 import { aidSwatch } from './aid-swatches';
 import { createGauge, type Gauge } from './gauges';
@@ -184,6 +185,7 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
   </div>
   <div class="hud-mirror" data-hud="mirrorLeft" hidden></div>
   <div class="hud-mirror" data-hud="mirrorRight" hidden></div>
+  <div class="hud-mirror" data-hud="front" hidden></div>
   <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
@@ -253,7 +255,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   const cockpit = query(hud, 'cockpit', HTMLElement);
   const legend = query(hud, 'legend', HTMLElement);
-  const mirrors = [query(hud, 'mirrorLeft', HTMLElement), query(hud, 'mirrorRight', HTMLElement)];
+  const mirrors = [
+    query(hud, 'mirrorLeft', HTMLElement),
+    query(hud, 'mirrorRight', HTMLElement),
+    query(hud, 'front', HTMLElement),
+  ];
   const toastWrap = query(hud, 'toastWrap', HTMLElement);
   const toast = query(hud, 'toast', HTMLElement);
   const topDown = query(hud, 'topDown', HTMLElement);
@@ -669,16 +675,17 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
           c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH),
         );
       }
-      const mirrorRects = [views.mirrorLeft, views.mirrorRight];
+      const mirrorRects = [views.mirrorLeft, views.mirrorRight, views.front];
       mirrors.forEach((el, i) => {
         const r = mirrorRects[i];
         setHidden(el, !r);
         if (r) place(el, r);
       });
       const base = c ?? views.topDown;
-      toastWrap.style.left = `${base.x}px`;
-      toastWrap.style.top = `${base.y}px`;
-      toastWrap.style.width = `${base.width}px`;
+      const column = messageColumn(views);
+      toastWrap.style.left = `${column.x}px`;
+      toastWrap.style.top = `${column.y}px`;
+      toastWrap.style.width = `${column.width}px`;
       place(topDown, views.topDown);
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', base.y < 1 && spansRight(base));

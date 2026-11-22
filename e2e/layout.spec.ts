@@ -2,6 +2,9 @@ import { type Locator, type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
+import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
+import { QUALITY_FLAGS } from '../src/render/quality';
+import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
 
 type Size = { width: number; height: number };
 
@@ -24,6 +27,8 @@ const sizes = [
   { width: 1300, height: 600 },
   { width: 1350, height: 600 },
   { width: 1366, height: 768 },
+  { width: 1172, height: 426 },
+  { width: 620, height: 774 },
 ];
 
 /** Height of the gear column before the lamp row: its label, four gear buttons and their gaps. */
@@ -89,9 +94,49 @@ async function blankRows(page: Page, x: number): Promise<number> {
   );
 }
 
-/** Waits until the HUD, gauges and controls are laid out, so measuring never sees an empty set. */
-async function hudReady(page: Page): Promise<void> {
-  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
+/**
+ * The mirrors the default Balanced drive shows at the page's size: the two side mirrors and the front
+ * mirror where `computeViewports` finds room for it, given the key legend as the page measured it.
+ */
+async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
+  const size = page.viewportSize();
+  if (size === null) throw new Error('no viewport');
+  const legend = await page.evaluate(() => {
+    const el = document.querySelector('.hud-legend');
+    const hud = document.querySelector('.hud');
+    if (!(el instanceof HTMLElement) || !(hud instanceof HTMLElement)) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0) return null;
+    const stage = hud.getBoundingClientRect();
+    return { right: r.right - stage.left, height: stage.bottom - r.top };
+  });
+  const { front } = computeViewports(
+    size.width,
+    size.height,
+    'drive',
+    legend,
+    insets,
+    undefined,
+    null,
+    {
+      front: QUALITY_FLAGS.balanced.frontMirror,
+    },
+  );
+  return front === null ? 2 : 3;
+}
+
+/**
+ * Waits until the HUD, gauges and controls are laid out, so measuring never sees an empty set. With
+ * `exact` the mirrors shown are those the default layout gives at this size: a missing front mirror fails.
+ */
+async function hudReady(
+  page: Page,
+  { insets = NO_INSETS, exact = true }: { insets?: Insets; exact?: boolean } = {},
+): Promise<void> {
+  const shown = () => page.locator('.hud-mirror:not([hidden])').count();
+  if (exact)
+    await expect.poll(async () => (await shown()) - (await expectedMirrors(page, insets))).toBe(0);
+  else await expect.poll(shown).toBeGreaterThanOrEqual(2);
   const gauges = page.locator('.hud-gauge');
   await expect(gauges).toHaveCount(2);
   await expect(gauges.first()).toBeVisible();
@@ -120,6 +165,16 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
       expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
     }
   }
+  // nor does a mirror meet another, the cockpit label or the gear and speed readouts
+  const readouts = await boxes(
+    page.locator('.hud-cockpit > .hud-view-label, .hud-gear, .hud-speed'),
+  );
+  mirrorBoxes.forEach((m, i) => {
+    for (const r of readouts) expect(overlaps(m, r), `${r.name} overlaps a mirror`).toBe(false);
+    for (const other of mirrorBoxes.slice(i + 1)) {
+      expect(overlaps(m, other), 'two mirrors overlap').toBe(false);
+    }
+  });
 
   // Balanced is the default preset, so the housings are drawn: the arms stay clear too.
   await expect(page.locator('.hud[data-interior]')).toHaveCount(1);
@@ -138,6 +193,21 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
     for (const c of controlBoxes) {
       expect(overlaps(m, c), `${c.name} overlaps a mirror housing`).toBe(false);
     }
+  }
+
+  // The front mirror hangs from a bracket above it, which stays inside the cockpit.
+  const front = page.locator('[data-hud="front"]:not([hidden])');
+  if ((await front.count()) > 0) {
+    // `hudReady` pinned the count against the layout, so a missing mirror has failed already
+    const [frontBox] = await boxes(front);
+    const [cockpitBox] = await boxes(page.locator('.hud-cockpit'));
+    const bracket = await front.evaluate((el) =>
+      Math.max(0, -parseFloat(getComputedStyle(el, '::before').top)),
+    );
+    expect(bracket, 'bracket is drawn').toBeGreaterThan(0);
+    expect((frontBox?.top ?? 0) - bracket, 'bracket inside the cockpit').toBeGreaterThanOrEqual(
+      cockpitBox?.top ?? 0,
+    );
   }
 
   // The lamp row must not make the gear column taller than the gears and their label were alone.
@@ -195,7 +265,7 @@ for (const size of insetSizes) {
       )
       .toBe(`${insets.left}px`);
     await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
-    await hudReady(page);
+    await hudReady(page, { insets });
 
     const placed = await boxes(
       page.locator(
@@ -349,7 +419,8 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
       ),
     );
     const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
-    expect(mirrors).toHaveLength(2);
+    // the front mirror comes with the two side mirrors where the window has room for it
+    expect(mirrors.length).toBeGreaterThanOrEqual(2);
     expect(divider).toHaveLength(2);
     for (const m of mirrors) {
       for (const c of [...controls, ...divider]) {
@@ -373,6 +444,71 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
   }
 }
 
+/** Screen height below which the toast and the goal cue cannot clear the gear column. */
+const CRAMPED_HEIGHT = 420;
+
+/**
+ * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
+ * or the forward sight cone. With the front mirror they also keep clear of the cockpit label and every
+ * mirror; without it they span the cockpit, as before it existed.
+ */
+async function expectMessagesClear(page: Page, toast: string, goal: string): Promise<void> {
+  await page.evaluate(
+    ([toastText, goalText]) => {
+      for (const [name, text] of [
+        ['toast', toastText],
+        ['goalCue', goalText],
+      ] as const) {
+        const el = document.querySelector(`[data-hud="${name}"]`);
+        if (!(el instanceof HTMLElement)) throw new Error(`no ${name}`);
+        el.textContent = text;
+        el.hidden = false;
+      }
+    },
+    [toast, goal] as const,
+  );
+  const overflow = await page
+    .locator('[data-hud="toast"], [data-hud="goalCue"]')
+    .evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
+  expect(overflow, 'a word sticks out of a message').toEqual([0, 0]);
+  const messages = await boxes(page.locator('[data-hud="toast"], [data-hud="goalCue"]'));
+  expect(messages).toHaveLength(2);
+  const controls = await boxes(
+    page.locator(
+      '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend, .hud-gear, .hud-speed',
+    ),
+  );
+  const [cockpit] = await boxes(page.locator('.hud-cockpit'));
+  if (cockpit === undefined) throw new Error('no cockpit');
+  const aspect = (cockpit.right - cockpit.left) / (cockpit.bottom - cockpit.top);
+  const centre = {
+    x: (cockpit.left + cockpit.right) / 2,
+    y: (cockpit.top + cockpit.bottom) / 2,
+  };
+  const halfWidth = (coneEdge(aspect, COCKPIT_FOV) * (cockpit.right - cockpit.left)) / 2;
+  const halfHeight = (coneTop(COCKPIT_FOV) * (cockpit.bottom - cockpit.top)) / 2;
+  const cone = {
+    name: 'sight cone',
+    left: centre.x - halfWidth,
+    right: centre.x + halfWidth,
+    top: centre.y - halfHeight,
+    bottom: centre.y + halfHeight,
+  };
+  const frontShown = (await page.locator('[data-hud="front"]:not([hidden])').count()) > 0;
+  const mirrors = frontShown
+    ? await boxes(page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'))
+    : [];
+  if (frontShown) expect(mirrors.length).toBeGreaterThanOrEqual(4);
+  // On a screen this short even one toast line and the cue reach the gear column, as before the front
+  // mirror: the rule drops the mirror there, and only the fit is asserted.
+  const cramped = !frontShown && (page.viewportSize()?.height ?? Infinity) < CRAMPED_HEIGHT;
+  for (const m of messages) {
+    for (const o of cramped ? [] : [...controls, cone, ...mirrors]) {
+      expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
+    }
+  }
+}
+
 for (const { locale, messages } of locales) {
   for (const size of splitSizes) {
     const at = `${locale} ${size.width}x${size.height}`;
@@ -383,13 +519,15 @@ for (const { locale, messages } of locales) {
       try {
         const page = await context.newPage();
         await startStraightReverse(page, messages.exerciseStraightReverse);
-        // The short landscape size only has the divider check.
+        // The short landscape size has no mirror or blank-band check, only the messages and the divider.
         if (size !== shortLandscape) {
           await test.step('mirrors clear the controls', () =>
             expectMirrorsClearControls(page, size));
           await test.step('the cockpit view has no blank band', () =>
             expectNoBlankBand(page, size));
         }
+        await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
+          expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
           expectDividerClears(page, size));
@@ -398,6 +536,31 @@ for (const { locale, messages } of locales) {
       }
     });
   }
+}
+
+/** Sizes where the front mirror is shown and where it is not: the toast column is too narrow or too short there. */
+const frontShown = [
+  { width: 1280, height: 800, front: 1 },
+  { width: 1366, height: 768, front: 1 },
+  { width: 768, height: 1024, front: 1 },
+  { width: 390, height: 844, front: 0 },
+  { width: 360, height: 800, front: 0 },
+];
+
+for (const { width, height, front } of frontShown) {
+  test(`the longest German toast fits and clears the controls and the mirrors at ${width}x${height}`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale: 'de-DE', viewport: { width, height } });
+    try {
+      const page = await context.newPage();
+      await startStraightReverse(page, de.exerciseStraightReverse);
+      await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(front);
+      await expectMessagesClear(page, de.blockedTurntable, de.goalInside);
+    } finally {
+      await context.close();
+    }
+  });
 }
 
 /** The divider is hidden, or clear of every panel (and the open aid legend) and on screen. */
@@ -519,7 +682,7 @@ test('dragging the divider resizes the top view, persists, and resets', async ({
   // Stored per orientation, so the next run starts with the same split.
   await page.reload();
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
-  await hudReady(page);
+  await hudReady(page, { exact: false });
   await expect.poll(topLeft).toBeCloseTo(defaultLeft - 120, -1);
 
   await page.locator('[data-hud="splitReset"]').click();

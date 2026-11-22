@@ -14,6 +14,19 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Rect } from '../contracts/render';
 import type { TruckSpec } from '../contracts/vehicle';
 import { type CabSight, cabSight } from './cab-sight';
+import {
+  CLEAR_CONE_DEG,
+  CONE_GAP,
+  coneEdge,
+  headerEdge,
+  MAX_SHIFT,
+  MIN_PILLAR_WIDTH,
+  MIRROR_GAP,
+  PILLAR_LEAN,
+  type PillarSpan,
+  pillarSlot,
+  VISOR,
+} from './cockpit-band';
 import { REALISM_HUES, type RealismHueKey } from './realism-hues';
 import type { Look } from './look';
 import { INTERIOR_LAYER, type CockpitInterior } from './seams';
@@ -33,13 +46,8 @@ const STRIP_STEPS = 48;
 
 /** The dashboard's top edge as NDC y at NDC x: lowest at `shift`, rising towards the sides. */
 export const dashEdge = (x: number, shift = 0): number => -0.52 + 0.06 * (x - shift) ** 2;
-/** The header's lower edge: highest at `shift`, and as high at the left view edge as unshifted, where the left mirror sits. */
-export const headerEdge = (x: number, shift = 0): number =>
-  0.78 - 0.06 * ((x - shift) / (1 + shift)) ** 2;
 const DASH_LIP = 0.035;
 
-/** NDC; the dash low point and header high point never move further right than this. */
-const MAX_SHIFT = 0.45;
 /** The instrument binnacle over the dash straight ahead of the driver; `top` stays below the sight cone. */
 export const HUMP = { halfWidth: 0.3, drop: 0.12, top: -0.475 };
 const hump = (x: number): number => HUMP.top - HUMP.drop * (Math.abs(x) / HUMP.halfWidth) ** 4;
@@ -54,18 +62,17 @@ export function edgeShift(truck: TruckSpec, aspect: number, fov: number): number
   return Math.min(ndc, MAX_SHIFT);
 }
 
-/** Half-angle in degrees about the view axis of the forward sight cone that no part may enter. */
-export const CLEAR_CONE_DEG = 12;
-/** NDC gaps between a pillar and the cone, and between a pillar and a mirror rect. */
-export const CONE_GAP = 0.05;
-export const MIRROR_GAP = 0.03;
-const PILLAR_WIDTH = 0.12;
-/** NDC; a narrower pillar is a sliver. */
-export const MIN_PILLAR_WIDTH = 0.06;
-/** The pillar's top edge leans this far towards the centre of the view, in pillar widths. */
-const PILLAR_LEAN = 0.25;
+export {
+  CLEAR_CONE_DEG,
+  CONE_GAP,
+  coneEdge,
+  headerEdge,
+  MIN_PILLAR_WIDTH,
+  MIRROR_GAP,
+  VISOR,
+  type PillarSpan,
+};
 
-export const VISOR = { left: -0.55, right: 0, bottom: 0.62 };
 const VISOR_LIP = 0.025;
 
 /** The visor's left edge: `VISOR.left`, kept `MIRROR_GAP` clear of the left mirror's inner edge (`mirrorInner` from the centre). */
@@ -86,23 +93,6 @@ export function interiorLayout(
   into.left = mirrorLeft === null ? 1 : -ndc(mirrorLeft.x + mirrorLeft.width);
   into.right = mirrorRight === null ? 1 : ndc(mirrorRight.x);
   return into;
-}
-
-/** NDC x of the forward sight cone's edge. */
-export function coneEdge(aspect: number, fov: number): number {
-  return (
-    Math.tan(MathUtils.degToRad(CLEAR_CONE_DEG)) / (aspect * Math.tan(MathUtils.degToRad(fov / 2)))
-  );
-}
-
-export type PillarSpan = { centre: number; width: number };
-
-/** The room for a pillar in NDC beside a mirror whose inner edge is `mirrorInner` from the centre; null where it does not fit. */
-function pillarSlot(aspect: number, fov: number, mirrorInner: number): PillarSpan | null {
-  const outer = Math.min(mirrorInner - MIRROR_GAP, 1);
-  const inner = Math.max(outer - PILLAR_WIDTH, coneEdge(aspect, fov) + CONE_GAP);
-  const width = outer - inner;
-  return width < MIN_PILLAR_WIDTH ? null : { centre: (inner + outer) / 2, width };
 }
 
 export type PillarSpans = { left: PillarSpan | null; right: PillarSpan | null };

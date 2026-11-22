@@ -12,10 +12,13 @@ import {
 } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import type { Pose2 } from '../contracts/sim';
-import type { TruckAnchors, Vec3 } from '../contracts/vehicle';
+import type { TruckSpec, Vec3 } from '../contracts/vehicle';
+import { truckAnchors } from '../vehicles/anchors';
 import { bodyToThree } from './coords';
+import { frontMirrorMount } from './mirror-fields';
 import { QUALITY_FLAGS } from './quality';
 import { CAMERA_FAR, enableLayers, MIRROR_LAYERS } from './seams';
+import { FRONT_ASPECT } from './viewports';
 
 const NEAR = 0.2;
 /** Class II mirrors look this far outward of straight back. */
@@ -23,10 +26,10 @@ export const MIRROR_YAW = MathUtils.degToRad(7);
 
 /** One mirror's camera and capture schedule; angles in radians, `fov` in degrees (three's convention). */
 export type MirrorSpec = {
-  /** The truck anchor the camera sits at. */
-  readonly anchor: 'mirrorLeft' | 'mirrorRight';
+  /** Where on the truck the camera sits (`mirrorMounts`). */
+  readonly anchor: 'mirrorLeft' | 'mirrorRight' | 'front';
   /** The view rect the mirror fills. */
-  readonly view: 'mirrorLeft' | 'mirrorRight';
+  readonly view: 'mirrorLeft' | 'mirrorRight' | 'front';
   /** From straight back; positive turns toward the truck's right. */
   readonly yaw: number;
   readonly pitch: number;
@@ -66,7 +69,36 @@ export const CLASS_II_RIGHT: MirrorSpec = {
 };
 export const CLASS_II_MIRRORS: readonly MirrorSpec[] = [CLASS_II_LEFT, CLASS_II_RIGHT];
 
-export const mirrorAnchor = (spec: MirrorSpec, anchors: TruckAnchors): Vec3 => anchors[spec.anchor];
+/**
+ * Class VI: from above the cab front, forward and down onto the ground ahead of the bumper. The
+ * camera is rolled upside down, so the bumper lies on the image's top edge, and the composite's
+ * mirrored u puts the driver's side on the left.
+ */
+export const CLASS_VI: MirrorSpec = {
+  anchor: 'front',
+  view: 'front',
+  yaw: Math.PI,
+  pitch: MathUtils.degToRad(-80),
+  roll: Math.PI,
+  fov: 48,
+  aspect: FRONT_ASPECT,
+  targetScale: 1,
+  cadence: 1,
+  parity: 0,
+};
+
+/** Every mirror this build draws, in capture order; a mirror is captured when its view rect is shown. */
+export const MIRRORS: readonly MirrorSpec[] = [...CLASS_II_MIRRORS, CLASS_VI];
+
+/** Where each mirror's camera sits on a truck, in the body frame. */
+export type MirrorMounts = Readonly<Record<MirrorSpec['anchor'], Vec3>>;
+
+export function mirrorMounts(truck: TruckSpec): MirrorMounts {
+  const { mirrorLeft, mirrorRight } = truckAnchors(truck);
+  return { mirrorLeft, mirrorRight, front: frontMirrorMount(truck) };
+}
+
+export const mirrorAnchor = (spec: MirrorSpec, mounts: MirrorMounts): Vec3 => mounts[spec.anchor];
 
 /**
  * Writes the position of the mirror at the body-frame `anchor` of a truck at `pose` into `out` and

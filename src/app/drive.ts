@@ -15,7 +15,7 @@ import { createControls } from '../input/controls';
 import { isAction } from '../input/keymap';
 import { createTopDownInput } from '../input/top-down-input';
 import { isDefaultView } from '../input/top-down-view';
-import { chaseViewAvailable, interiorAvailable } from '../render';
+import { chaseViewAvailable, extraMirrors, interiorAvailable } from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay, perfRequested } from '../render/perf-overlay';
 import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
@@ -191,7 +191,16 @@ export function startDrive(
   let warnContact = false;
   const frame: Frame = {
     snapshot,
-    views: computeViewports(1, 1, 'drive'),
+    views: computeViewports(
+      1,
+      1,
+      'drive',
+      null,
+      undefined,
+      undefined,
+      null,
+      extraMirrors(graphics),
+    ),
     topDown,
     aids,
     predicted: NO_PREDICTION,
@@ -292,11 +301,30 @@ export function startDrive(
       measured.set(paneWidth, bottom);
       return bottom;
     };
-    let views = computeViewports(width, height, 'drive', null, undefined, topDownLayout, panels);
+    const extra = extraMirrors(graphics);
+    let views = computeViewports(
+      width,
+      height,
+      'drive',
+      null,
+      undefined,
+      topDownLayout,
+      panels,
+      extra,
+    );
     hud.layout(views);
     const legend = hud.legendBox();
     if (legend !== null) {
-      views = computeViewports(width, height, 'drive', legend, undefined, topDownLayout, panels);
+      views = computeViewports(
+        width,
+        height,
+        'drive',
+        legend,
+        undefined,
+        topDownLayout,
+        panels,
+        extra,
+      );
       hud.layout(views);
     }
     hud.setSplit(topDownSplit(width, height, topDownLayout, legend, undefined, panels));

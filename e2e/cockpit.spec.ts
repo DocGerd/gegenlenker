@@ -9,19 +9,21 @@ import { interiorLayout, pillarSpans } from '../src/render/cockpit-interior';
 import { REALISM_HUES } from '../src/render/realism-hues';
 import { truckById } from '../src/vehicles/registry';
 import {
-  attachmentsReady,
   HEAVY,
   heavyAt,
   HIGH_WAIT_MS,
   PRESET_TIMEOUT_MS,
   type Preset,
+  settle,
+  startPinnedDrive,
 } from './pinned-shoot';
 
-const SETTINGS_KEY = 'gegenlenker.settings.v1';
 /** An unlit vertex colour reaches the canvas as its hue, give or take the rounding of the sRGB frame target. */
 const TOLERANCE = 1;
 /** How much paler (red channel) the horizon haze is than the sky near the header. */
 const HAZE_STEP = 10;
+/** CSS px right of the front mirror's box that clear its frame (6 px) for a probe. */
+const FRONT_FRAME_CLEAR = 10;
 
 const rgb = (hex: number): readonly number[] => [hex >> 16, (hex >> 8) & 0xff, hex & 0xff];
 const HEADLINER = rgb(REALISM_HUES.headliner);
@@ -47,7 +49,18 @@ function collectErrors(page: Page): string[] {
 
 async function drive(page: Page): Promise<void> {
   await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
-  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(2);
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(3);
+  await expect(page.locator('.ctl-wheel')).toBeVisible();
+}
+
+/**
+ * A drive of the exercise at `preset` with the clock pinned: the frame is drawn when stepped, so the
+ * pixel probes below do not compete with a render loop for the CPU (a screenshot of a free-running
+ * drive takes seconds on software GL), and the preset's attachments are in place before they read.
+ */
+async function pinnedDrive(page: Page, preset: Preset): Promise<void> {
+  await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(3);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }
 
@@ -128,16 +141,9 @@ test(
   'the cockpit interior follows the graphics preset on the shared renderer',
   { tag: HEAVY },
   async ({ page }) => {
+    test.setTimeout(PRESET_TIMEOUT_MS.balanced + PRESET_TIMEOUT_MS.low);
     const errors = collectErrors(page);
-    await page.addInitScript(
-      ([key, value]) => {
-        // Only the first load seeds the setting; the menu owns it afterwards.
-        if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
-      },
-      [SETTINGS_KEY, JSON.stringify({ version: 1, graphics: 'balanced' })] as const,
-    );
-    await page.goto('./');
-    await drive(page);
+    await pinnedDrive(page, 'balanced');
 
     await expect(page.locator('.hud[data-interior]')).toHaveCount(1);
     const points = await probePoints(page);
@@ -165,6 +171,7 @@ test(
       .click();
     await page.locator('[data-menu="graphics"]').selectOption('low');
     await drive(page);
+    await settle(page, 'low');
 
     await expect(page.locator('.hud[data-interior]')).toHaveCount(0);
     // Sky above and ground below first: only a drawn frame can pass, so absence below means something.
@@ -192,16 +199,13 @@ test(
   'the Balanced cockpit sky is blue near the top and fades to haze towards the horizon',
   { tag: HEAVY },
   async ({ page }) => {
+    test.setTimeout(PRESET_TIMEOUT_MS.balanced);
     const errors = collectErrors(page);
-    await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
-      SETTINGS_KEY,
-      JSON.stringify({ version: 1, graphics: 'balanced' }),
-    ] as const);
-    await page.goto('./');
-    await drive(page);
+    await pinnedDrive(page, 'balanced');
     const cockpit = await boxOf(page, '.hud-cockpit');
-    // Between the pillars, above the skyline: just under the header, and just above the horizon.
-    const x = Math.round(cockpit.width * 0.58);
+    // Above the skyline, under the header: just right of the front mirror's frame, and just above the horizon.
+    const front = await boxOf(page, '[data-hud="front"]');
+    const x = Math.round(front.x + front.width - cockpit.x + FRONT_FRAME_CLEAR);
     const points = [0.14, 0.31].map((f) => [x, Math.round(cockpit.height * f)] as const);
     await expect
       .poll(async () => isSky((await panePixels(page, '.hud-cockpit', points))[0]))
@@ -255,16 +259,10 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
     `each mirror shows the sky above, the ground below and the vehicle on its inner edge on ${preset}`,
     heavyAt(preset),
     async ({ page }) => {
-      if (preset === 'high') test.setTimeout(PRESET_TIMEOUT_MS.high);
+      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
       const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
       const errors = collectErrors(page);
-      await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
-        SETTINGS_KEY,
-        JSON.stringify({ version: 1, graphics: preset }),
-      ] as const);
-      await page.goto('./');
-      await drive(page);
-      await expect.poll(() => attachmentsReady(page, preset), wait).toBe(true);
+      await pinnedDrive(page, preset);
 
       // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
       // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.
@@ -329,6 +327,55 @@ for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Pre
         expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
         expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
       }
+      expect(errors).toEqual([]);
+    },
+  );
+}
+
+/** Probe points of the front mirror as fractions of its box: across the top edge, the middle and the bottom edge. */
+function frontPoints(box: Box) {
+  const at = (u: number, v: number) =>
+    [Math.round(box.width * u), Math.round(box.height * v)] as const;
+  return {
+    // the cab front lies along the top edge on the driver's (left) side, past the passenger side's ground
+    cab: [0.1, 0.2, 0.3].map((u) => at(u, 0.03)),
+    passenger: [0.85, 0.9, 0.95].map((u) => at(u, 0.03)),
+    // the far edge of the field, all ground
+    far: [0.1, 0.3, 0.5, 0.7, 0.9].map((u) => at(u, 0.95)),
+  };
+}
+
+for (const preset of ['low', 'balanced', 'high'] as const satisfies readonly Preset[]) {
+  test(
+    `the front mirror shows the cab on its top edge at the driver's side and ground beyond on ${preset}`,
+    heavyAt(preset),
+    async ({ page }) => {
+      test.setTimeout(PRESET_TIMEOUT_MS[preset]);
+      const wait = preset === 'high' ? { timeout: HIGH_WAIT_MS } : {};
+      const errors = collectErrors(page);
+      await pinnedDrive(page, preset);
+      const box = await boxOf(page, '[data-hud="front"]');
+      const points = frontPoints(box);
+      const sample = async () => {
+        const pixels = await pixelsAt(page, box, [
+          ...points.cab,
+          ...points.passenger,
+          ...points.far,
+        ]);
+        const cab = pixels.slice(0, points.cab.length);
+        const passenger = pixels.slice(cab.length, cab.length + points.passenger.length);
+        const far = pixels.slice(cab.length + passenger.length);
+        return {
+          // ground along the far edge first: only a drawn frame can pass, so the rest means something
+          drawn: far.every(isYard) && !far.some(isSky),
+          cabShare: cab.filter((p) => !isYard(p) && !isSky(p)).length / cab.length,
+          passengerYard: yardShare(passenger),
+        };
+      };
+      await expect.poll(async () => (await sample()).drawn, wait).toBe(true);
+      const seen = await sample();
+      expect(seen.cabShare, 'cab at the top left').toBeGreaterThan(0.6);
+      expect(seen.passengerYard, 'ground at the top right').toBeGreaterThan(0.6);
       expect(errors).toEqual([]);
     },
   );

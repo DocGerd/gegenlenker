@@ -1,5 +1,7 @@
 import {
   DEFAULT_TOP_DOWN_LAYOUT,
+  type ExtraMirrors,
+  NO_EXTRA_MIRRORS,
   TOP_DOWN_SHARE_LIMITS,
   type LegendBox,
   type Orientation,
@@ -9,6 +11,9 @@ import {
   type ViewMode,
   type ViewRects,
 } from '../contracts/render';
+import { de } from '../i18n/de';
+import { en, type MessageKey } from '../i18n/en';
+import { COCKPIT_FOV, coneEdge, coneTop, frontBand } from './cockpit-band';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -26,6 +31,50 @@ export const HUD_BAND_SHARE = 0.18;
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
 /** Smallest mirror height; where even this cannot clear the controls, it wins. */
 export const MIN_MIRROR_HEIGHT = 48;
+/**
+ * Narrowest and widest the front mirror gets, in CSS px. The narrowest is wide enough that a 0.3 m
+ * cone base spans 6 px anywhere in the class VI field (`front-mirror.test.ts` derives it from the
+ * camera); where the band cannot hold it, there is no front mirror.
+ */
+export const MIN_FRONT_WIDTH = 122;
+const MAX_FRONT_WIDTH = 240;
+/** CSS px between the toast column and the mirrors on either side of it. */
+const MESSAGE_GAP = 8;
+/**
+ * Narrowest toast column: the widest unbreakable word of a toast or goal cue ("Drehschemelwinkel",
+ * 131 px at 14 px Geist, measured), the toast's padding and borders (41 px, warn border included)
+ * and the 32 px its `max-width` leaves. `viewports.test.ts` pins the word, `layout.spec.ts` the fit.
+ */
+export const MIN_MESSAGE_WIDTH = 131 + 41 + 32;
+/**
+ * The toast and goal-cue messages `messagesFit` wraps. `viewports.test.ts` checks the lists against
+ * the message tables.
+ */
+export const MESSAGE_KEYS = {
+  toast: [
+    'contactAhead',
+    'selectGear',
+    'blockedContactTruck',
+    'blockedContactDrawbar',
+    'blockedContactTrailer',
+    'blockedContactSelf',
+    'blockedCoupling',
+    'blockedTurntable',
+  ],
+  cue: ['goalInside', 'goalOutside'],
+} as const satisfies Record<string, readonly MessageKey[]>;
+/**
+ * A word's width at 14 px Geist, medium: no less than any measured word of these messages has
+ * (`MESSAGE_WORD_PX` in `viewports.test.ts` holds the measurements), and its space.
+ */
+export const wordPx = (word: string): number => 8 * word.length + 6;
+export const SPACE_PX = 4;
+const MESSAGE_LINE = 22;
+const MESSAGE_BOX = 18;
+/** Height of the gear column with its lamp row, as `layout.spec.ts` measures it. */
+const GEARS_HEIGHT = 274.5;
+/** The front mirror's width over its height. */
+export const FRONT_ASPECT = 2;
 
 /** Screen areas the display cuts into, in CSS px; read from `--safe-*` in tokens.css. */
 export type Insets = {
@@ -158,10 +207,11 @@ export function computeViewports(
   safeInsets?: Insets,
   layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
   panels: PanelStack | null = null,
+  extra: ExtraMirrors = NO_EXTRA_MIRRORS,
 ): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
-    return { cockpit: null, mirrorLeft: null, mirrorRight: null, topDown: full };
+    return { cockpit: null, mirrorLeft: null, mirrorRight: null, front: null, topDown: full };
   }
   const insets = safeInsets ?? readSafeInsets();
   const { share } = topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
@@ -211,10 +261,142 @@ export function computeViewports(
     mirror = !fits || above.width * above.height >= beside.width * beside.height ? above : beside;
   }
   const { y, width: mw, height: mh } = mirror;
+  const mirrorRight: Rect = { x: right - mw, y, width: mw, height: mh };
+  const messagesLeft = left + mw + MESSAGE_GAP;
+  let front: Rect | null = null;
+  if (extra.front) {
+    // the toast column left of it starts right of the left mirror
+    const leftLimit = messagesLeft + insets.left + MIN_MESSAGE_WIDTH + MESSAGE_GAP;
+    const fits = (rect: Rect): boolean =>
+      messagesFit(
+        cockpit,
+        { x: messagesLeft, width: rect.x - MESSAGE_GAP - messagesLeft },
+        cssWidth,
+        cssHeight,
+        controls,
+        insets,
+      );
+    front = frontRect(
+      cockpit,
+      mirrorRight,
+      leftLimit,
+      cockpit.y + top,
+      cssHeight,
+      controls,
+      legend,
+      fits,
+    );
+  }
   return {
     cockpit,
     mirrorLeft: { x: left, y, width: mw, height: mh },
-    mirrorRight: { x: right - mw, y, width: mw, height: mh },
+    mirrorRight,
+    front,
     topDown,
   };
+}
+
+/** Lines `text` takes in a box `width` px wide, by greedy word wrap over `wordPx`; a word wider than the box takes a line. */
+export function wrapLines(text: string, width: number): number {
+  let lines = 1;
+  let used = 0;
+  for (const word of text.split(/\s+/)) {
+    const px = wordPx(word);
+    if (used === 0) used = px;
+    else if (used + SPACE_PX + px <= width) used += SPACE_PX + px;
+    else {
+      lines++;
+      used = px;
+    }
+  }
+  return lines;
+}
+
+const mostLines = (keys: readonly MessageKey[], width: number): number =>
+  Math.max(...keys.flatMap((key) => [wrapLines(en[key], width), wrapLines(de[key], width)]));
+
+/**
+ * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top, end above
+ * the controls and the forward sight cone they would otherwise reach into.
+ */
+function messagesFit(
+  cockpit: Rect,
+  column: { readonly x: number; readonly width: number },
+  cssWidth: number,
+  cssHeight: number,
+  controls: number,
+  insets: Insets,
+): boolean {
+  // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
+  const room = column.width - insets.left;
+  const toast = mostLines(MESSAGE_KEYS.toast, room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX;
+  const cue = mostLines(MESSAGE_KEYS.cue, room - 34) * MESSAGE_LINE + MESSAGE_BOX;
+  const landscape = cssWidth >= cssHeight;
+  const bottom = cockpit.y + INSET + (landscape ? insets.top : 0) + toast + MESSAGE_GAP + cue;
+  const reaches = (x0: number, x1: number): boolean =>
+    column.x < x1 && column.x + column.width > x0;
+  const wheel = wheelSize(cssWidth, cssHeight, insets);
+  const gearsLeft = 2 * INSET + wheel + insets.left;
+  if (reaches(INSET + insets.left, gearsLeft + GEARS_WIDTH)) {
+    const gearsTop = cssHeight - INSET - insets.bottom - GEARS_HEIGHT;
+    if (bottom > Math.min(cssHeight - controls, gearsTop)) return false;
+  }
+  const half = (coneEdge(cockpit.width / cockpit.height, COCKPIT_FOV) * cockpit.width) / 2;
+  const centre = cockpit.x + cockpit.width / 2;
+  const coneTopY = cockpit.y + ((1 - coneTop(COCKPIT_FOV)) / 2) * cockpit.height;
+  return !(reaches(centre - half, centre + half) && bottom > coneTopY);
+}
+
+/**
+ * The front mirror in the windscreen band of `cockpit` (`frontBand`), hung from the header at the
+ * band's right, shrunk from its widest until it clears the controls, the key legend and leaves `fits`
+ * (the messages) their room; null where that takes it below `MIN_FRONT_WIDTH`. `leftLimit` is the least x it may start at, which keeps the toast column wide
+ * enough; `ceiling` is the least y the screen's display cut-out leaves.
+ */
+function frontRect(
+  cockpit: Rect,
+  mirrorRight: Rect,
+  leftLimit: number,
+  ceiling: number,
+  cssHeight: number,
+  controls: number,
+  legend: LegendBox | null,
+  fits: (rect: Rect) => boolean,
+): Rect | null {
+  const band = frontBand(
+    cockpit.width / cockpit.height,
+    (2 * (mirrorRight.x - cockpit.x)) / cockpit.width - 1,
+    cockpit.width,
+  );
+  if (band === null) return null;
+  const toX = (ndc: number): number => cockpit.x + ((ndc + 1) / 2) * cockpit.width;
+  const toY = (ndc: number): number => cockpit.y + ((1 - ndc) / 2) * cockpit.height;
+  const top = Math.ceil(Math.max(toY(band.top), ceiling));
+  const right = Math.floor(toX(band.right));
+  const widest = Math.floor(
+    Math.min(
+      toY(band.bottom) - top,
+      (right - Math.max(toX(band.left), leftLimit)) / FRONT_ASPECT,
+      MAX_FRONT_WIDTH / FRONT_ASPECT,
+    ),
+  );
+  // shrink, anchored at the band's top right, before giving up: a smaller mirror leaves the messages more room
+  for (let height = widest; FRONT_ASPECT * height >= MIN_FRONT_WIDTH; height--) {
+    const width = FRONT_ASPECT * height;
+    const rect = { x: right - width, y: top, width, height };
+    const bottom = rect.y + rect.height + MIRROR_GAP;
+    if (bottom > cssHeight - controls) continue;
+    if (legend !== null && legend.right > rect.x && bottom > cssHeight - legend.height) continue;
+    if (fits(rect)) return rect;
+  }
+  return null;
+}
+
+/** Where the toast and the goal cue stand: the cockpit's top, between the left mirror and the front mirror. */
+export function messageColumn(views: ViewRects): Rect {
+  const base = views.cockpit ?? views.topDown;
+  const { front, mirrorLeft } = views;
+  if (front === null || mirrorLeft === null) return base;
+  const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
+  return { ...base, x, width: front.x - MESSAGE_GAP - x };
 }

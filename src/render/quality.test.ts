@@ -21,6 +21,9 @@ const COMPUTE_ONLY: readonly (keyof QualityFlags)[] = [
   'yardShadow',
 ];
 
+/** Flags that stay on at every preset, Low included: they cost a pass, not realism, and the tablet check measures them. */
+const ALWAYS_ON: readonly (keyof QualityFlags)[] = ['frontMirror'];
+
 describe('quality flags', () => {
   it('defines every preset', () => {
     expect(Object.keys(QUALITY_FLAGS).sort()).toEqual([...GRAPHICS_PRESETS].sort());
@@ -43,7 +46,12 @@ describe('quality flags', () => {
     expect(low.pixelRatioCap).toBe(1);
     expect(low.mirrorMsaa).toBe(0);
     for (const [key, flag] of Object.entries(low)) {
-      if (typeof flag === 'boolean') expect(flag, key).toBe(false);
+      if (typeof flag === 'boolean')
+        expect(flag, key).toBe(ALWAYS_ON.includes(key as keyof QualityFlags));
+    }
+    for (const preset of GRAPHICS_PRESETS) {
+      for (const key of ALWAYS_ON)
+        expect(QUALITY_FLAGS[preset][key], `${preset} ${key}`).toBe(true);
     }
   });
 

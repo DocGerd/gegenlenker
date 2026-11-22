@@ -27,7 +27,14 @@ import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createFrame, type Frame } from './frame-target';
 import { describeAdapter } from './gpu-backend';
-import { CLASS_II_MIRRORS, createMirror, mirrorAnchor, mirrorFacing } from './mirror';
+import {
+  createMirror,
+  mirrorAnchor,
+  mirrorFacing,
+  type MirrorMounts,
+  mirrorMounts,
+  MIRRORS,
+} from './mirror';
 import { readScenePalette } from './palette';
 import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
@@ -63,6 +70,7 @@ type Built = {
   readonly aids: AidsLayer;
   readonly interior: CockpitInterior;
   readonly anchors: TruckAnchors;
+  readonly mounts: MirrorMounts;
   readonly cabFront: CabFront;
   readonly palette: ScenePalette;
   readonly yardBounds: Rect2;
@@ -208,7 +216,7 @@ export function createThreeSceneRenderer(
   topDownCamera.position.y = SKY_HEIGHT;
   let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
   let lighting: LightingMode = DEFAULT_LIGHTING;
-  const mirrors = CLASS_II_MIRRORS.map((spec) => ({
+  const mirrors = MIRRORS.map((spec) => ({
     mirror: createMirror(spec, quality.mirrorMsaa),
     rect: (views: ViewRects): Rect | null => views[spec.view],
   }));
@@ -458,6 +466,7 @@ export function createThreeSceneRenderer(
         aids,
         interior,
         anchors: truckAnchors(truck),
+        mounts: mirrorMounts(truck),
         cabFront: cabFront(truck),
         palette,
         yardBounds: fitBounds(nextLayout),
@@ -532,7 +541,7 @@ export function createThreeSceneRenderer(
         const { spec } = mirror;
         const facing = mirrorFacing(
           snapshot.truck,
-          mirrorAnchor(spec, anchors),
+          mirrorAnchor(spec, b.mounts),
           spec.yaw,
           mirrorPosition,
         );

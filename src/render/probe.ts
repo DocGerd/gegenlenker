@@ -3,7 +3,7 @@ import '../styles/base.css';
 import '../styles/fonts';
 import { exerciseById, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
-import type { RenderFrame, RenderStats } from '../contracts/render';
+import { DEFAULT_GRAPHICS, type RenderFrame, type RenderStats } from '../contracts/render';
 import type { ContactQuery, Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import {
   TRAILER_IDS,
@@ -15,7 +15,7 @@ import { predictCombination } from '../sim/predict';
 import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
-import { createSceneRenderer } from './index';
+import { createSceneRenderer, extraMirrors } from './index';
 import { mountPerfOverlay } from './perf-overlay';
 import { computeViewports, NO_INSETS } from './viewports';
 
@@ -136,7 +136,16 @@ export async function startProbe(root: HTMLElement): Promise<void> {
     const snapshot = snapshotAt(now / 1000, centre, truckAnchor, trailerAnchor, fold);
     const frame: RenderFrame = {
       snapshot,
-      views: computeViewports(width, height, 'drive', null, NO_INSETS),
+      views: computeViewports(
+        width,
+        height,
+        'drive',
+        null,
+        NO_INSETS,
+        undefined,
+        null,
+        extraMirrors(DEFAULT_GRAPHICS),
+      ),
       topDown: 'follow',
       aids: { pivots: true, path: true, tracks: true, ghost: true },
       predicted: predictCombination(params, snapshot, noContacts),

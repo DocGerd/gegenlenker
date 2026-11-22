@@ -1,8 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TOP_DOWN_LAYOUT } from '../contracts/render';
+import { DEFAULT_TOP_DOWN_LAYOUT, type Rect } from '../contracts/render';
+import { de } from '../i18n/de';
+import { en } from '../i18n/en';
+import { COCKPIT_FOV, coneTop, CONE_GAP, FRONT_GAP_PX, frontBand, VISOR } from './cockpit-band';
 import {
   computeViewports,
   controlsHeight,
+  FRONT_ASPECT,
+  messageColumn,
+  MESSAGE_KEYS,
+  MIN_FRONT_WIDTH,
+  MIN_MESSAGE_WIDTH,
+  SPACE_PX,
+  wordPx,
+  wrapLines,
   MIN_MIRROR_HEIGHT,
   NO_INSETS,
   topDownSplit,
@@ -249,5 +260,260 @@ describe('top-down split', () => {
       width: 1280,
       height: 720,
     });
+  });
+});
+
+/** Word widths in px at 14 px Geist medium, measured in the page (the toast's box, padding excluded). */
+const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
+  Anhänger: 65,
+  Anschlag: 63,
+  Außerhalb: 70,
+  Berührung: 71,
+  'Berührung:': 75,
+  Contact: 53,
+  'Contact:': 57,
+  Coupling: 60,
+  D: 10,
+  Deichsel: 58,
+  Drehschemelwinkel: 131,
+  Gegenrichtung: 99,
+  In: 12,
+  Kupplungswinkel: 116,
+  Lkw: 27,
+  Outside: 54,
+  R: 10,
+  Select: 43,
+  Toleranz: 56,
+  Turntable: 62,
+  ahead: 41,
+  am: 20,
+  and: 25,
+  angle: 37,
+  anhalten: 57,
+  at: 13,
+  ausweichen: 80,
+  away: 36,
+  der: 23,
+  drawbar: 57,
+  drive: 35,
+  fahren: 43,
+  in: 12,
+  jetzt: 32,
+  limit: 29,
+  now: 28,
+  oder: 31,
+  or: 14,
+  other: 36,
+  steer: 36,
+  stop: 31,
+  the: 22,
+  to: 14,
+  tolerance: 63,
+  trailer: 41,
+  truck: 37,
+  um: 20,
+  und: 25,
+  voraus: 45,
+  way: 28,
+  'wählen,': 51,
+  zu: 16,
+  '–': 8,
+};
+const MEASURED_SPACE_PX = 3;
+
+/** Greedy word wrap with the measured widths: what the browser does, give or take kerning. */
+function referenceLines(text: string, width: number): number {
+  let lines = 1;
+  let used = 0;
+  for (const word of text.split(/\s+/)) {
+    const px = MESSAGE_WORD_PX[word] ?? Infinity;
+    if (used === 0) used = px;
+    else if (used + MEASURED_SPACE_PX + px <= width) used += MEASURED_SPACE_PX + px;
+    else {
+      lines++;
+      used = px;
+    }
+  }
+  return lines;
+}
+
+describe('computeViewports front mirror', () => {
+  const FRONT = { front: true };
+  const apart = (a: Rect, b: Rect): boolean =>
+    a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+  const sizes: (readonly [number, number])[] = [
+    [390, 844],
+    [360, 800],
+    [844, 390],
+    [1280, 800],
+  ];
+  for (let w = 320; w <= 2000; w += 40) {
+    for (let h = 320; h <= 2000; h += 40) sizes.push([w, h]);
+  }
+
+  it('is only there when asked for, and moves nothing else', () => {
+    for (const [w, h] of sizes) {
+      const plain = computeViewports(w, h, 'drive');
+      const extra = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
+      expect(plain.front, `${w}x${h}`).toBeNull();
+      expect({ ...extra, front: null }, `${w}x${h}`).toEqual(plain);
+    }
+  });
+
+  it('keeps the top-down rect and the split the same with it on or off', () => {
+    for (const [w, h] of sizes) {
+      for (const legend of [null, { right: 300, height: 260 }]) {
+        const plain = computeViewports(w, h, 'drive', legend);
+        const extra = computeViewports(w, h, 'drive', legend, undefined, undefined, null, FRONT);
+        expect(extra.topDown, `${w}x${h}`).toEqual(plain.topDown);
+        expect(extra.cockpit, `${w}x${h}`).toEqual(plain.cockpit);
+        expect(extra.mirrorLeft, `${w}x${h}`).toEqual(plain.mirrorLeft);
+        expect(extra.mirrorRight, `${w}x${h}`).toEqual(plain.mirrorRight);
+      }
+    }
+  });
+
+  it('is shown at the required landscape sizes', () => {
+    for (const [w, h] of [
+      [1350, 600],
+      [1280, 800],
+      [1280, 720],
+      [1920, 1080],
+      [768, 1024],
+      [1210, 720],
+    ] as const) {
+      const { front } = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
+      expect(front, `${w}x${h}`).not.toBeNull();
+    }
+  });
+
+  it('is replaced by nothing in replay', () => {
+    expect(
+      computeViewports(800, 600, 'replay', null, undefined, undefined, null, FRONT).front,
+    ).toBeNull();
+  });
+
+  it('lies in the windscreen band, clear of the mirrors, the controls and the legend, at every size', () => {
+    let shown = 0;
+    for (const [w, h] of sizes) {
+      for (const legend of [null, { right: 300, height: 260 }, { right: w - 40, height: 260 }]) {
+        const views = computeViewports(w, h, 'drive', legend, undefined, undefined, null, FRONT);
+        const { cockpit, mirrorLeft, mirrorRight, front } = views;
+        if (front === null) continue;
+        shown++;
+        if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
+          throw new Error('drive mode has mirrors');
+        }
+        const at = `${w}x${h} ${JSON.stringify(legend)}`;
+        expect(front.width, at).toBeGreaterThanOrEqual(MIN_FRONT_WIDTH);
+        expect(front.width, at).toBe(FRONT_ASPECT * front.height);
+        expect(front.x, at).toBeGreaterThanOrEqual(cockpit.x);
+        expect(front.x + front.width, at).toBeLessThanOrEqual(cockpit.x + cockpit.width);
+        expect(front.y, at).toBeGreaterThanOrEqual(cockpit.y);
+        expect(front.y + front.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h));
+        expect(apart(front, mirrorLeft), at).toBe(true);
+        expect(apart(front, mirrorRight), at).toBe(true);
+        expect(mirrorRight.x - (front.x + front.width), `${at} gap`).toBeGreaterThanOrEqual(
+          FRONT_GAP_PX,
+        );
+        if (legend !== null && legend.right > front.x) {
+          expect(front.y + front.height, at).toBeLessThanOrEqual(h - legend.height);
+        }
+        // in the cockpit camera's NDC: right of the visor, above the sight cone's top
+        const ndcX = (x: number): number => (2 * (x - cockpit.x)) / cockpit.width - 1;
+        const ndcY = (y: number): number => 1 - (2 * (y - cockpit.y)) / cockpit.height;
+        expect(ndcX(front.x), at).toBeGreaterThanOrEqual(VISOR.right);
+        expect(ndcY(front.y + front.height), at).toBeGreaterThanOrEqual(
+          coneTop(COCKPIT_FOV) + CONE_GAP - 1e-6,
+        );
+        const band = frontBand(cockpit.width / cockpit.height, ndcX(mirrorRight.x), cockpit.width);
+        if (band === null) throw new Error(`${at}: a rect without a band`);
+        expect(ndcX(front.x + front.width), at).toBeLessThanOrEqual(band.right + 1e-6);
+        expect(ndcY(front.y), at).toBeLessThanOrEqual(band.top + 1e-6);
+      }
+    }
+    expect(shown).toBeGreaterThan(100);
+  });
+
+  it('starts below the display cut-out where the band would reach into it', () => {
+    // each inset lies below the band's top at its size, so only the clamp keeps the rect out of it
+    for (const [w, h, top] of [
+      [1920, 1080, 150],
+      [2560, 1440, 200],
+    ] as const) {
+      const insets = { top, right: 0, bottom: 0, left: 0 };
+      const plain = computeViewports(w, h, 'drive', null, NO_INSETS, undefined, null, FRONT);
+      expect(plain.front?.y, `${w}x${h}`).toBeLessThan(top);
+      const { front } = computeViewports(w, h, 'drive', null, insets, undefined, null, FRONT);
+      expect(front, `${w}x${h}`).not.toBeNull();
+      expect(front?.y, `${w}x${h}`).toBe(top);
+    }
+  });
+
+  it('keeps the toast column between the left mirror and the front mirror, wide enough for its words', () => {
+    const insets = { top: 0, right: 0, bottom: 0, left: 48 };
+    let shown = 0;
+    let dropped = 0;
+    for (const inset of [NO_INSETS, insets]) {
+      for (const [w, h] of sizes) {
+        const views = computeViewports(w, h, 'drive', null, inset, undefined, null, FRONT);
+        const { front, mirrorLeft } = views;
+        if (front === null || mirrorLeft === null) {
+          dropped++;
+          continue;
+        }
+        shown++;
+        const column = messageColumn(views);
+        const at = `${w}x${h} left inset ${inset.left}`;
+        expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
+        expect(column.x + column.width, at).toBeLessThanOrEqual(front.x);
+        // the wrap pads its left by the inset
+        expect(column.width - inset.left, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
+      }
+    }
+    expect(shown).toBeGreaterThan(100);
+    expect(dropped).toBeGreaterThan(0);
+  });
+
+  it('wraps no fewer lines than the measured words do, at every column width', () => {
+    for (const keys of [MESSAGE_KEYS.toast, MESSAGE_KEYS.cue]) {
+      for (const key of keys) {
+        for (const text of [en[key], de[key]]) {
+          for (let width = 100; width <= 600; width++) {
+            expect(wrapLines(text, width), `${key} ${text} at ${width}`).toBeGreaterThanOrEqual(
+              referenceLines(text, width),
+            );
+          }
+        }
+      }
+    }
+  });
+
+  it('knows every word of the messages, and measured none wider than it assumes', () => {
+    const texts = [...MESSAGE_KEYS.toast, ...MESSAGE_KEYS.cue].flatMap((key) => [en[key], de[key]]);
+    for (const word of texts.flatMap((text) => text.split(/\s+/))) {
+      expect(
+        MESSAGE_WORD_PX[word],
+        `${word} is unmeasured: add it to MESSAGE_WORD_PX`,
+      ).toBeDefined();
+      expect(wordPx(word), word).toBeGreaterThanOrEqual(MESSAGE_WORD_PX[word] ?? Infinity);
+    }
+    expect(SPACE_PX).toBeGreaterThanOrEqual(MEASURED_SPACE_PX);
+    // MIN_MESSAGE_WIDTH is built on the widest word
+    expect(Math.max(...Object.values(MESSAGE_WORD_PX))).toBe(MESSAGE_WORD_PX['Drehschemelwinkel']);
+  });
+
+  it('lists exactly the toast and goal-cue messages', () => {
+    const keysOf = (pattern: RegExp): string[] =>
+      Object.keys(en)
+        .filter((key) => pattern.test(key))
+        .sort();
+    expect([...MESSAGE_KEYS.toast].sort()).toEqual(keysOf(/^(blocked|contactAhead|selectGear)/));
+    expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Outside)$/));
+  });
+
+  it('leaves the toast column alone without a front mirror', () => {
+    const views = computeViewports(1280, 720, 'drive');
+    expect(messageColumn(views)).toEqual(views.cockpit);
   });
 });

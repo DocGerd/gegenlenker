@@ -77,7 +77,12 @@ type Shot<I extends CockpitInterior = FlatInterior> = {
   readonly cockpit: Rect;
   readonly left: Rect;
   readonly right: Rect;
+  readonly front: Rect | null;
 };
+
+/** Every mirror rect of `shot`, the front mirror's among them where the window has room for it. */
+const rectsOf = ({ left, right, front }: Pick<Shot, 'left' | 'right' | 'front'>): Rect[] =>
+  front === null ? [left, right] : [left, right, front];
 
 /**
  * The real cockpit camera and `interior` placed for a window of `width` x `height` CSS px, as the
@@ -95,12 +100,15 @@ function shootWith<I extends CockpitInterior>(
   insets?: Insets,
   mode: LightingMode = 'day',
 ): Shot<I> {
-  const { cockpit, mirrorLeft, mirrorRight } = computeViewports(
+  const { cockpit, mirrorLeft, mirrorRight, front } = computeViewports(
     width,
     height,
     'drive',
     legend,
     insets,
+    undefined,
+    null,
+    { front: true },
   );
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) throw new Error('no views');
   const pose = { x: 12, y: -7, heading };
@@ -115,7 +123,7 @@ function shootWith<I extends CockpitInterior>(
   interior.setLook(lookFor(flags, mode));
   scene.updateMatrixWorld();
   interior.place({ camera, cockpit, mirrorLeft, mirrorRight });
-  return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight };
+  return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight, front };
 }
 
 function shoot(
@@ -425,9 +433,10 @@ describe.each(CASES)(
         'keeps every part out of the lines of sight to each mirror rect, bar what the route covers by design, by %s',
         (mode) => {
           for (const [w, h] of windows) {
-            const { camera, interior, cockpit, left, right } = shootRoute(w, h, 0.7, mode);
+            const shot = shootRoute(w, h, 0.7, mode);
+            const { camera, interior, cockpit } = shot;
             const parts = drawn(interior);
-            for (const rect of [left, right]) {
+            for (const rect of rectsOf(shot)) {
               for (let u = 0; u <= 1; u += 0.125) {
                 for (let v = 0; v <= 1; v += 0.125) {
                   const [x, y] = rectToNdc(cockpit, rect, u, v);
@@ -458,11 +467,14 @@ describe.each(CASES)(
         }
       });
 
-      it('keeps every part off the centre of each mirror rect', () => {
+      it('keeps every part off the centre of each mirror rect, the front mirror included', () => {
+        let fronts = 0;
         for (const [w, h] of windows) {
-          const { camera, interior, cockpit, left, right } = shootRoute(w, h);
+          const shot = shootRoute(w, h);
+          if (shot.front !== null) fronts++;
+          const { camera, interior, cockpit } = shot;
           const parts = drawn(interior);
-          for (const rect of [left, right]) {
+          for (const rect of rectsOf(shot)) {
             const [x, y] = rectToNdc(cockpit, rect, 0.5, 0.5);
             expect(
               hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
@@ -470,6 +482,7 @@ describe.each(CASES)(
             ).toEqual([]);
           }
         }
+        expect(fronts).toBeGreaterThan(windows.length / 2);
       });
     });
   },
@@ -544,10 +557,10 @@ describe('cockpit interior pillars', () => {
     const plain = shoot(1350, 600);
     const shot = shoot(1350, 600, 0.7, legend);
     expect(shot.right.width).toBeLessThan(plain.right.width);
-    const { camera, interior, cockpit, left, right } = shot;
+    const { camera, interior, cockpit } = shot;
     expect(interior.pillars.left.visible).toBe(true);
     expect(interior.pillars.right.visible).toBe(true);
-    for (const rect of [left, right]) {
+    for (const rect of rectsOf(shot)) {
       for (let u = 0; u <= 1; u += 0.125) {
         for (let v = 0; v <= 1; v += 0.125) {
           const [x, y] = rectToNdc(cockpit, rect, u, v);
@@ -793,7 +806,7 @@ describe.each(trucks)('glb interior steering wheel of $id', (spec) => {
           expect(hitsAlong(shot.camera, wheel, az, el), `${w}x${h} cone`).toEqual([]);
         }
       }
-      for (const rect of [shot.left, shot.right]) {
+      for (const rect of rectsOf(shot)) {
         for (let u = 0; u <= 1; u += 0.125) {
           for (let v = 0; v <= 1; v += 0.125) {
             const [x, y] = rectToNdc(shot.cockpit, rect, u, v);
