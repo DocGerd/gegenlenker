@@ -25,7 +25,7 @@ import { PERSPECTIVE_LAYER } from './seams';
 import { prepareShadow, queueShadow } from './sun-shadow';
 
 /*
- * The lamps' light at night: one SpotLight for the truck's dipped beams, one behind the truck and one
+ * The lamps' light at night: a SpotLight at each of the truck's dipped lamps, one behind the truck and one
  * behind the trailer for the reversing and stop/tail lamps. Without shadows a surface the beam can
  * reach is lit through whatever stands in front of it; where `LAMP_SHADOW` applies the beam and the
  * trailer's light cast. The lights are on the perspective layer, and a look switches them on or off
@@ -55,7 +55,12 @@ export type Cone = {
  * Positions are in the body frame of the part that carries the light. A rear light with `work` takes
  * that cone while the work floodlights shine: the light set stays the same, only its uniforms change.
  */
-export type LampLightSpec = Cone & { readonly id: LampLightId; readonly work?: Cone };
+export type LampLightSpec = Cone & {
+  readonly id: LampLightId;
+  /** The side a lamp of a pair stands on, as seen looking along the vehicle's heading. */
+  readonly side?: 'left' | 'right';
+  readonly work?: Cone;
+};
 
 /** The dipped beam: asymmetric, with a cut-off, and shaped by `beamPattern`. */
 export const BEAM = {
@@ -93,8 +98,8 @@ export const REAR = {
 
 /**
  * Peak irradiance each lamp puts on the ground, in the units of `light-rig.ts`: the light's candela
- * follow from it and the lamps' height. Dipped beam, reversing and stop lamp (a lit tail lamp keeps
- * `TAIL_LEVEL` of the stop lamp's).
+ * follow from it and the lamps' height. Dipped beam (of one light between the two lamps, which each
+ * send out half of it), reversing and stop lamp (a lit tail lamp keeps `TAIL_LEVEL` of the stop lamp's).
  */
 export const GROUND = { dipped: 1.1, reversing: 1.2, stop: 0.8 } as const;
 
@@ -188,15 +193,23 @@ export function truckLampLights(spec: TruckSpec): readonly LampLightSpec[] {
   const rear = placed(lamps.filter(has('reversing')), -1);
   const gap = Math.min(...trailers.map((t) => drawbarGap(spec, t)));
   const rearX = truckAnchors(spec).rearX;
+  const dipped = lamps
+    .filter(has('dipped-beam'))
+    .map((lamp): LampLightSpec => {
+      const position = placed([lamp], 1);
+      return {
+        id: 'truck-front',
+        side: position.y > 0 ? 'left' : 'right',
+        position,
+        aim: aimOf(1, BEAM.pitch),
+        angle: BEAM.angle,
+        penumbra: BEAM.penumbra,
+        distance: BEAM.distance,
+      };
+    })
+    .sort((a, b) => b.position.y - a.position.y);
   return [
-    {
-      id: 'truck-front',
-      position: placed(lamps.filter(has('dipped-beam')), 1),
-      aim: aimOf(1, BEAM.pitch),
-      angle: BEAM.angle,
-      penumbra: BEAM.penumbra,
-      distance: BEAM.distance,
-    },
+    ...dipped,
     withWork(
       {
         id: 'truck-rear',
@@ -301,13 +314,20 @@ type Candela = { readonly white: number; readonly red: number };
 
 const candelas = new Map<string, Candela>();
 
-/** The candela that bring each lamp to its `GROUND` peak; with `work`, as the light stands on the work floodlights' cone. */
+/**
+ * The candela that bring each lamp to its `GROUND` peak; a lamp of a pair (`side`) takes half of a
+ * light centred between the two, so the pair sends out as much. With `work`, as the light stands on
+ * the work floodlights' cone.
+ */
 export function candela(spec: LampLightSpec, work = false): Candela {
   const cone = work && spec.work !== undefined ? { ...spec, ...spec.work } : spec;
-  const key = `${spec.id} ${cone.position.z} ${cone.distance} ${cone.position.x}`;
+  const pair = spec.side !== undefined;
+  const key = `${spec.id} ${String(pair)} ${cone.position.z} ${cone.distance} ${cone.position.x}`;
   let known = candelas.get(key);
   if (known === undefined) {
-    const perCandela = groundIrradiancePerCandela(cone);
+    const perCandela = pair
+      ? 2 * groundIrradiancePerCandela({ ...cone, position: { ...cone.position, y: 0 } })
+      : groundIrradiancePerCandela(cone);
     known =
       spec.id === 'truck-front'
         ? { white: GROUND.dipped / perCandela, red: 0 }
@@ -366,11 +386,21 @@ function shape(light: SpotLight, cone: Cone): void {
   light.distance = cone.distance;
 }
 
+const pairLamps = new WeakSet<Object3D>();
+
+/** Whether `light` stands for one lamp of a pair (`LampLightSpec.side`). */
+export const isPairLamp = (light: Object3D): boolean => pairLamps.has(light);
+
 /** Lights for `specs`, children of `parent`, whose frame is the specs' part. Off until `setEnabled`. */
 export function createLampLights(specs: readonly LampLightSpec[], parent: Object3D): LampLights {
+  // lights with one pattern share its map: three declares one sampler per distinct texture
+  const shared = new Map<Pattern, DataTexture>();
   const maps = specs.map((s) => {
     const pattern = patternOf(s.id);
-    return pattern === null ? null : patternMap(pattern);
+    if (pattern === null) return null;
+    const known = shared.get(pattern) ?? patternMap(pattern);
+    shared.set(pattern, known);
+    return known;
   });
   const cds = specs.map((s) => candela(s));
   const workCds = specs.map((s) => (s.work === undefined ? null : candela(s, true)));
@@ -386,7 +416,8 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
     light.shadow.camera.near = MAP_NEAR;
     light.layers.set(PERSPECTIVE_LAYER);
     light.visible = false;
-    light.name = spec.id;
+    light.name = spec.side === undefined ? spec.id : `${spec.id}-${spec.side}`;
+    if (spec.side !== undefined) pairLamps.add(light);
     // in the graph: three never updates the matrix of a target outside it
     parent.add(light, light.target);
     return light;
@@ -428,7 +459,7 @@ export function createLampLights(specs: readonly LampLightSpec[], parent: Object
     },
     dispose() {
       for (const light of lights) light.dispose();
-      for (const map of maps) map?.dispose();
+      for (const map of shared.values()) map.dispose();
     },
   };
 }
@@ -449,16 +480,22 @@ export function coneShare(spec: Cone, cosine: number): number {
 /** A ground point a light reaches, in the part's frame, with the irradiance there per candela of the light's peak. */
 export type LitGround = { readonly x: number; readonly y: number; readonly irradiance: number };
 
+type GroundCone = Cone & { readonly id?: LampLightId };
+
+/** The cone's frame as the shadow camera sees it: right and up for a viewer along the axis. */
+function coneFrame(spec: Cone) {
+  const axis = new Vector3(spec.aim.x, spec.aim.y, spec.aim.z);
+  const right = new Vector3().crossVectors(axis, new Vector3(0, 0, 1)).normalize();
+  const up = new Vector3().crossVectors(right, axis).normalize();
+  return { axis, right, up, reach: Math.tan(spec.angle) };
+}
+
 /**
  * The ground under the light's cone, sampled over a `steps` grid of rays. Faces turned to the beam
  * are not counted: they clip, as a lit wall does at a headlamp's range.
  */
-export function litGround(spec: Cone & { readonly id?: LampLightId }, steps = 120): LitGround[] {
-  const axis = new Vector3(spec.aim.x, spec.aim.y, spec.aim.z);
-  // the cone's frame as the shadow camera sees it: right and up for a viewer along the axis
-  const right = new Vector3().crossVectors(axis, new Vector3(0, 0, 1)).normalize();
-  const up = new Vector3().crossVectors(right, axis).normalize();
-  const reach = Math.tan(spec.angle);
+export function litGround(spec: GroundCone, steps = 120): LitGround[] {
+  const { axis, right, up, reach } = coneFrame(spec);
   const ray = new Vector3();
   const out: LitGround[] = [];
   for (let i = 0; i <= steps; i++) {
@@ -483,44 +520,60 @@ export function litGround(spec: Cone & { readonly id?: LampLightId }, steps = 12
   return out;
 }
 
+/** Irradiance per candela of the light's peak that the light puts on the ground at (x, y): `litGround`'s value at the ray through there. */
+export function irradianceAt(spec: GroundCone, x: number, y: number): number {
+  const { axis, right, up, reach } = coneFrame(spec);
+  const ray = new Vector3(x - spec.position.x, y - spec.position.y, -spec.position.z);
+  const t = ray.length();
+  ray.divideScalar(t);
+  const along = ray.dot(axis);
+  if (along <= 0) return 0;
+  const u = (ray.dot(right) / along / reach + 1) / 2;
+  const v = (ray.dot(up) / along / reach + 1) / 2;
+  const pattern = patternOf(spec.id)?.(u, v) ?? 1;
+  return (
+    coneShare(spec, along) * pattern * facingIrradiance(1, t, spec.distance, spec.decay) * -ray.z
+  );
+}
+
 /** Peak irradiance per candela of the light's peak that the light puts on the ground. */
-export function groundIrradiancePerCandela(
-  spec: Cone & { readonly id?: LampLightId },
-  steps = 120,
-): number {
+export function groundIrradiancePerCandela(spec: GroundCone, steps = 120): number {
   return Math.max(...litGround(spec, steps).map((p) => p.irradiance));
 }
 
 /** The lights High has in the set at night: each lamp light as built, with the map and shadow a casting one carries. */
 export function sampleLampLights(): { readonly lights: readonly SpotLight[]; dispose(): void } {
-  const maps: DataTexture[] = [];
-  const make = (id: LampLightId, cone: typeof BEAM | typeof REAR, distance: number): SpotLight => {
+  const beamMap = patternMap(beamPattern);
+  const trailerMap = patternMap(trailerPattern);
+  const make = (
+    id: LampLightId,
+    cone: typeof BEAM | typeof REAR,
+    distance: number,
+    map: DataTexture | null,
+  ): SpotLight => {
     const light = new SpotLight(0xffffff, 1, distance, cone.angle, cone.penumbra, 2);
-    const pattern = patternOf(id);
-    if (pattern !== null) {
-      const map = patternMap(pattern);
-      maps.push(map);
-      light.map = map;
-    }
+    light.map = map;
     light.castShadow = CASTING_LIGHTS.includes(id);
     return light;
   };
   const lights = [
-    make('truck-front', BEAM, BEAM.distance),
-    make('truck-rear', REAR, REAR.trailerDistance),
-    make('trailer-rear', REAR, REAR.trailerDistance),
+    make('truck-front', BEAM, BEAM.distance, beamMap),
+    make('truck-front', BEAM, BEAM.distance, beamMap),
+    make('truck-rear', REAR, REAR.trailerDistance, null),
+    make('trailer-rear', REAR, REAR.trailerDistance, trailerMap),
   ];
   return {
     lights,
     dispose: () => {
       for (const light of lights) light.dispose();
-      for (const map of maps) map.dispose();
+      beamMap.dispose();
+      trailerMap.dispose();
     },
   };
 }
 
 /**
- * A graded Lambert surface under the beam with its map: the program the lit views build at night.
+ * A graded Lambert surface under the two dipped beams with their shared map: the program the lit views build at night.
  * With `casting` it is a shadow receiver under the casting beam, as at High; without, as at Balanced and Low.
  */
 export function lampLitSample(casting = false): GradeSample {
@@ -529,16 +582,20 @@ export function lampLitSample(casting = false): GradeSample {
   const material = new MeshLambertNodeMaterial({ vertexColors: true });
   setGraded(material, true);
   const map = patternMap(beamPattern);
-  const light = new SpotLight(0xffffff, 1, BEAM.distance, BEAM.angle, BEAM.penumbra, 2);
-  light.map = map;
-  light.castShadow = casting;
+  // the two dipped lamps share one map
+  const lights = [0, 1].map(() => {
+    const light = new SpotLight(0xffffff, 1, BEAM.distance, BEAM.angle, BEAM.penumbra, 2);
+    light.map = map;
+    light.castShadow = casting;
+    return light;
+  });
   const mesh = new Mesh(geometry, material);
   mesh.receiveShadow = casting;
   return {
     mesh,
-    lights: [light],
+    lights,
     dispose: () => {
-      light.dispose();
+      for (const light of lights) light.dispose();
       map.dispose();
       geometry.dispose();
       material.dispose();
