@@ -46,8 +46,8 @@ export function insidePolygon(polygon: readonly Vec2[], p: Vec2): boolean {
   return inside;
 }
 
-/** Metres ahead of the cab front, and inboard of its passenger side, that the class VI mirror sits. */
-const FRONT_AHEAD = 0.15;
+/** Metres ahead of the cab front (on a short boom), and inboard of its passenger side, that the class VI mirror sits. */
+const FRONT_AHEAD = 0.5;
 const FRONT_INBOARD = 0.25;
 /** Below the cab's roof: R46 15.2.2.7 keeps class V and VI parts 2 m or more above the ground. */
 const FRONT_BELOW_ROOF = 0.1;

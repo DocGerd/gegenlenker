@@ -9,6 +9,7 @@ import { trucks } from '../vehicles/registry';
 import { cabShellParams, CAB_HEIGHT, FRAME_TOP } from './cab-dims';
 import { parseShell } from './glb-shells';
 import { CLASS_VI, createMirror, mirrorAnchor, mirrorFacing, mirrorMounts } from './mirror';
+import { MIN_FRONT_WIDTH } from './viewports';
 import { CLASS_VI_REACH, classVIField, frontMirrorMount, insidePolygon } from './mirror-fields';
 
 const STRAIGHT: Pose2 = { x: 0, y: 0, heading: 0 };
@@ -142,6 +143,30 @@ describe.each(trucks)('class VI front mirror of $id', (spec) => {
     expect(Math.abs(bumper.x)).toBeLessThan(1);
     expect(bumper.y).toBeLessThan(1);
     expect(bumper.y).toBeGreaterThan(0.5);
+  });
+
+  it('shows a 0.3 m cone base across 6 px anywhere in the field at the narrowest width, and not at two px less', () => {
+    const camera = frontCamera(spec);
+    // px per metre in the rendered mirror at `width` px, the smaller of the two ground directions
+    // (the far end is foreshortened), at the worst point of the field
+    const scale = (width: number): number => {
+      let least = Infinity;
+      for (const p of sample(field)) {
+        const at = onGround(p).project(camera);
+        for (const [dx, dy] of [
+          [0.5, 0],
+          [0, 0.5],
+        ] as const) {
+          const to = onGround({ x: p.x + dx, y: p.y + dy }).project(camera);
+          // the mirror is `width` wide and half as tall: NDC spans width / 2 and width / 4 px
+          const px = Math.hypot(((to.x - at.x) * width) / 2, ((to.y - at.y) * width) / 4);
+          least = Math.min(least, px / Math.hypot(dx, dy));
+        }
+      }
+      return least;
+    };
+    expect(scale(MIN_FRONT_WIDTH) * 0.3).toBeGreaterThanOrEqual(6);
+    expect(scale(MIN_FRONT_WIDTH - 2) * 0.3).toBeLessThan(6);
   });
 
   it('is not the R46 15.2.4.6.2 exemption: the driver cannot see 300 mm ahead at 1.2 m through the cab front', () => {

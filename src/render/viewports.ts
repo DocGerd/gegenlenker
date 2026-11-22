@@ -31,8 +31,12 @@ export const HUD_BAND_SHARE = 0.18;
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
 /** Smallest mirror height; where even this cannot clear the controls, it wins. */
 export const MIN_MIRROR_HEIGHT = 48;
-/** Narrowest and widest the front mirror gets, in CSS px: at 80 px the 4.5 m field is still about 18 px per metre, enough to tell a cone from the kerb; below that there is none. */
-export const MIN_FRONT_WIDTH = 80;
+/**
+ * Narrowest and widest the front mirror gets, in CSS px. The narrowest is wide enough that a 0.3 m
+ * cone base spans 6 px anywhere in the class VI field (`front-mirror.test.ts` derives it from the
+ * camera); where the band cannot hold it, there is no front mirror.
+ */
+export const MIN_FRONT_WIDTH = 120;
 const MAX_FRONT_WIDTH = 240;
 /** CSS px between the toast column and the mirrors on either side of it. */
 const MESSAGE_GAP = 8;

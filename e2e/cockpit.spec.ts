@@ -14,10 +14,10 @@ import {
   HIGH_WAIT_MS,
   PRESET_TIMEOUT_MS,
   type Preset,
+  settle,
   startPinnedDrive,
 } from './pinned-shoot';
 
-const SETTINGS_KEY = 'gegenlenker.settings.v1';
 /** An unlit vertex colour reaches the canvas as its hue, give or take the rounding of the sRGB frame target. */
 const TOLERANCE = 1;
 /** How much paler (red channel) the horizon haze is than the sky near the header. */
@@ -141,16 +141,9 @@ test(
   'the cockpit interior follows the graphics preset on the shared renderer',
   { tag: HEAVY },
   async ({ page }) => {
+    test.setTimeout(PRESET_TIMEOUT_MS.balanced + PRESET_TIMEOUT_MS.low);
     const errors = collectErrors(page);
-    await page.addInitScript(
-      ([key, value]) => {
-        // Only the first load seeds the setting; the menu owns it afterwards.
-        if (localStorage.getItem(key) === null) localStorage.setItem(key, value);
-      },
-      [SETTINGS_KEY, JSON.stringify({ version: 1, graphics: 'balanced' })] as const,
-    );
-    await page.goto('./');
-    await drive(page);
+    await pinnedDrive(page, 'balanced');
 
     await expect(page.locator('.hud[data-interior]')).toHaveCount(1);
     const points = await probePoints(page);
@@ -178,6 +171,7 @@ test(
       .click();
     await page.locator('[data-menu="graphics"]').selectOption('low');
     await drive(page);
+    await settle(page, 'low');
 
     await expect(page.locator('.hud[data-interior]')).toHaveCount(0);
     // Sky above and ground below first: only a drawn frame can pass, so absence below means something.
