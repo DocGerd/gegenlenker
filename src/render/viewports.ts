@@ -40,6 +40,8 @@ export const MIN_FRONT_WIDTH = 122;
 const MAX_FRONT_WIDTH = 240;
 /** CSS px between the toast column and the mirrors on either side of it. */
 const MESSAGE_GAP = 8;
+/** CSS px the message stack drops below the cockpit's top where it spans the cockpit, to clear the cockpit label (which ends at 18 px). */
+const MESSAGE_DROP = 3;
 /**
  * Narrowest toast column: the widest unbreakable word of a toast or goal cue ("Drehschemelwinkel",
  * 131 px at 14 px Geist, measured), the toast's padding and borders (41 px, warn border included)
@@ -269,10 +271,18 @@ export function computeViewports(
   const controls = controlsHeight(cssWidth, cssHeight, insets);
   const preferred = cockpit.y + top + Math.round(0.16 * cockpit.height);
   type Column = { readonly y: number; readonly width: number; readonly height: number };
-  /** The largest class II mirror with its bottom `clear` above the viewport bottom and at most `maxWidth` wide. */
-  const plainFit = (clear: number, maxWidth: number): Column => {
+  /** `y` no higher than `minTop`; `floor` is the cockpit's own limit and leaves `y` alone. */
+  const below = (minTop: number, y: number): number => (minTop > floor ? Math.max(minTop, y) : y);
+  /**
+   * The largest class II mirror with its bottom `clear` above the viewport bottom, at most `maxWidth`
+   * wide and its top no higher than `minTop`; where `minTop` leaves less than the smallest mirror, it
+   * is ignored.
+   */
+  const plainFit = (clear: number, maxWidth: number, minTop: number): Column => {
     const ceiling = cssHeight - clear - MIRROR_GAP;
-    const y = Math.min(preferred, Math.max(floor, ceiling - wanted));
+    if (minTop > floor && ceiling - minTop < MIN_MIRROR_HEIGHT)
+      return plainFit(clear, maxWidth, floor);
+    const y = below(minTop, Math.min(preferred, Math.max(floor, ceiling - wanted)));
     let height = clamp(ceiling - y, MIN_MIRROR_HEIGHT, wanted);
     if ((fullWidth * height) / wanted > maxWidth) {
       height = Math.max(MIN_MIRROR_HEIGHT, Math.floor((maxWidth * wanted) / fullWidth));
@@ -300,12 +310,12 @@ export function computeViewports(
       width: Math.max(MIN_WIDE_WIDTH, Math.ceil(MIN_CLASS_II_SHARE * reference.width)),
       height: Math.max(MIN_MIRROR_HEIGHT, Math.ceil(MIN_CLASS_II_SHARE * reference.height)),
     };
-    const start = plainFit(clear, maxWidth).height;
+    const start = plainFit(clear, maxWidth, minTop).height;
     for (let height = start; height >= least.height; height--) {
       const width = Math.round((fullWidth * height) / wanted);
       if (width < least.width) break;
       const stack = height + WIDE_GAP_PX + wideHeight(width);
-      const y = Math.min(preferred, Math.max(minTop, ceiling - stack));
+      const y = below(minTop, Math.min(preferred, Math.max(floor, ceiling - stack)));
       if (y + stack <= ceiling) return { y, width, height };
     }
     return null;
@@ -325,7 +335,7 @@ export function computeViewports(
       options[0] = { clear: Math.max(controls, legend.height), maxWidth: fullWidth };
       const beside = { clear: controls, maxWidth: Math.max(0, right - legend.right) };
       // beside only where the mirror stays clear of the legend
-      if (right - plainFit(beside.clear, beside.maxWidth).width >= legend.right)
+      if (right - plainFit(beside.clear, beside.maxWidth, minTop).width >= legend.right)
         options.push(beside);
     }
     const area = (c: Column): number => c.width * c.height;
@@ -334,7 +344,7 @@ export function computeViewports(
         (a, c) => (a === undefined || area(c) > area(a) ? c : a),
         undefined,
       );
-    const plain = best(options.map((o) => plainFit(o.clear, o.maxWidth)));
+    const plain = best(options.map((o) => plainFit(o.clear, o.maxWidth, minTop)));
     if (plain === undefined) throw new Error('a placement');
     if (!wide) return { ...plain, wide: false };
     const stacked = best(
@@ -373,18 +383,17 @@ export function computeViewports(
     return { mirror, mirrorRight, front };
   };
   let solved = placed(choose(extra.wide, floor));
-  if (solved.mirror.wide && solved.front === null) {
-    // The messages span the cockpit: the stack stays below the toast row, or class IV goes.
+  if (solved.front === null) {
+    // The messages span the cockpit: class II (and class IV under it) stay below the toast row and, where
+    // the screen has room for it, below the goal cue as well.
+    const { toast, cue } = messageHeights(cockpit.width - insets.left);
     const toastBottom =
-      cockpit.y +
-      INSET +
-      (cssWidth >= cssHeight ? insets.top : 0) +
-      messageHeights(cockpit.width - insets.left).toast;
-    const clearOfToast = toastBottom + MESSAGE_GAP;
-    if (solved.mirror.y < clearOfToast) {
-      const retry = placed(choose(true, clearOfToast));
-      solved = retry.mirror.wide ? retry : placed(choose(false, floor));
-    }
+      cockpit.y + INSET + MESSAGE_DROP + (cssWidth >= cssHeight ? insets.top : 0) + toast;
+    const tiers = [toastBottom + MESSAGE_GAP + cue + MESSAGE_GAP, toastBottom + MESSAGE_GAP];
+    // the tier is the first that class II alone keeps, so class IV never moves it
+    const highest = Math.min(solved.mirror.y, placed(choose(false, floor)).mirror.y);
+    const minTop = tiers.find((top) => highest < top && placed(choose(false, top)).mirror.y >= top);
+    if (minTop !== undefined) solved = placed(choose(extra.wide, minTop));
   }
   const { mirror, mirrorRight, front } = solved;
   const { y, width: mw, height: mh, wide } = mirror;
@@ -422,7 +431,7 @@ const mostLines = (keys: readonly MessageKey[], width: number): number =>
   Math.max(...keys.flatMap((key) => [wrapLines(en[key], width), wrapLines(de[key], width)]));
 
 /** Heights of the longest toast and of the goal cue in a column `room` px wide (the left inset already taken off). */
-function messageHeights(room: number): { toast: number; cue: number } {
+export function messageHeights(room: number): { toast: number; cue: number } {
   // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
   return {
     toast: mostLines(MESSAGE_KEYS.toast, room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX,
@@ -504,11 +513,17 @@ function frontRect(
   return null;
 }
 
-/** Where the toast and the goal cue stand: the cockpit's top, between the left mirror and the front mirror. */
+/**
+ * Where the toast and the goal cue stand: the cockpit's top, between the left mirror and the front
+ * mirror. Without a front mirror they span the cockpit, dropped below its label.
+ */
 export function messageColumn(views: ViewRects): Rect {
   const base = views.cockpit ?? views.topDown;
   const { front, mirrorLeft } = views;
-  if (front === null || mirrorLeft === null) return base;
+  if (front === null || mirrorLeft === null) {
+    if (views.cockpit === null) return base;
+    return { ...base, y: base.y + MESSAGE_DROP, height: base.height - MESSAGE_DROP };
+  }
   const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
   return { ...base, x, width: front.x - MESSAGE_GAP - x };
 }

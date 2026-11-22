@@ -8,6 +8,7 @@ import {
   controlsHeight,
   FRONT_ASPECT,
   messageColumn,
+  messageHeights,
   MESSAGE_KEYS,
   MIN_FRONT_WIDTH,
   MIN_MESSAGE_WIDTH,
@@ -357,22 +358,23 @@ describe('computeViewports front mirror', () => {
     for (let h = 320; h <= 2000; h += 40) sizes.push([w, h]);
   }
 
-  it('is only there when asked for, and moves nothing else', () => {
+  it('is only there when asked for, and moves nothing else where it is not shown', () => {
     for (const [w, h] of sizes) {
       const plain = computeViewports(w, h, 'drive');
       const extra = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
       expect(plain.front, `${w}x${h}`).toBeNull();
-      expect({ ...extra, front: null }, `${w}x${h}`).toEqual(plain);
+      if (extra.front === null) expect(extra, `${w}x${h}`).toEqual(plain);
     }
   });
 
-  it('keeps the top-down rect and the split the same with it on or off', () => {
+  it('keeps the top-down rect and the split the same with it on or off, and the mirrors where it is not shown', () => {
     for (const [w, h] of sizes) {
       for (const legend of [null, { right: 300, height: 260 }]) {
         const plain = computeViewports(w, h, 'drive', legend);
         const extra = computeViewports(w, h, 'drive', legend, undefined, undefined, null, FRONT);
         expect(extra.topDown, `${w}x${h}`).toEqual(plain.topDown);
         expect(extra.cockpit, `${w}x${h}`).toEqual(plain.cockpit);
+        if (extra.front !== null) continue;
         expect(extra.mirrorLeft, `${w}x${h}`).toEqual(plain.mirrorLeft);
         expect(extra.mirrorRight, `${w}x${h}`).toEqual(plain.mirrorRight);
       }
@@ -518,9 +520,14 @@ describe('computeViewports front mirror', () => {
     expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Outside)$/));
   });
 
-  it('leaves the toast column alone without a front mirror', () => {
+  it('drops the toast column below the cockpit label without a front mirror', () => {
     const views = computeViewports(1280, 720, 'drive');
-    expect(messageColumn(views)).toEqual(views.cockpit);
+    const { cockpit } = views;
+    expect(messageColumn(views)).toEqual({
+      ...cockpit,
+      y: (cockpit?.y ?? NaN) + 3,
+      height: (cockpit?.height ?? NaN) - 3,
+    });
   });
 });
 
@@ -627,6 +634,9 @@ describe('computeViewports class IV mirrors', () => {
         const at = `${w}x${h} ${JSON.stringify(legend)}`;
         const [a, b] = [on.mirrorLeft, off.mirrorLeft];
         if (a === null || b === null) throw new Error('drive mode has mirrors');
+        // Without class IV, class II can be lowered below the full-width toast row, and then small enough
+        // for the front mirror, which class IV's smaller class II leaves room for without the move.
+        if (b.y > a.y && on.front !== null && off.front !== null) continue;
         if (on.wideLeft === null) {
           count.dropped++;
           // nothing moves for the mirror that is not drawn
@@ -649,33 +659,91 @@ describe('computeViewports class IV mirrors', () => {
     expect(count.dropped).toBeGreaterThan(100);
   });
 
+  /** Where the longest toast, wrapped with the measured words, ends in a column spanning the cockpit. */
+  const toastBottom = (v: ReturnType<typeof views>, w: number, h: number, inset: Insets) => {
+    const { cockpit } = v;
+    if (cockpit === null) throw new Error('drive mode has a cockpit');
+    const room = cockpit.width - inset.left - 32 - 41;
+    const lines = Math.max(
+      ...MESSAGE_KEYS.toast
+        .flatMap((key) => [en[key], de[key]])
+        .map((t) => referenceLines(t, room)),
+    );
+    return messageColumn(v).y + 16 + (w >= h ? inset.top : 0) + lines * 22 + 18;
+  };
+  const insetCases = [NO_INSETS, { top: 24, right: 0, bottom: 0, left: 48 }];
+
   it('keeps class II below the toast row where the messages span the cockpit, at every size', () => {
     let checked = 0;
     for (const [w, h] of sizes) {
       for (const legend of legends(w)) {
-        for (const inset of [NO_INSETS, { top: 24, right: 0, bottom: 0, left: 48 }]) {
+        for (const inset of insetCases) {
           const v = views(w, h, WIDE, legend, inset);
-          const { cockpit, mirrorLeft, mirrorRight, wideLeft } = v;
-          if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
+          const { mirrorLeft, mirrorRight, wideLeft } = v;
+          if (mirrorLeft === null || mirrorRight === null)
             throw new Error('drive mode has mirrors');
-          }
           if (wideLeft === null || v.front !== null) continue;
           checked++;
-          // the longest toast in the full-width column, wrapped with the measured words
-          const room = cockpit.width - inset.left - 32 - 41;
-          const lines = Math.max(
-            ...MESSAGE_KEYS.toast
-              .flatMap((key) => [en[key], de[key]])
-              .map((t) => referenceLines(t, room)),
-          );
-          const toastBottom = cockpit.y + 16 + (w >= h ? inset.top : 0) + lines * 22 + 18;
           const at = `${w}x${h} ${JSON.stringify(legend)} left inset ${inset.left}`;
-          expect(mirrorLeft.y, at).toBeGreaterThanOrEqual(toastBottom);
-          expect(mirrorRight.y, at).toBeGreaterThanOrEqual(toastBottom);
+          expect(mirrorLeft.y, at).toBeGreaterThanOrEqual(toastBottom(v, w, h, inset));
+          expect(mirrorRight.y, at).toBeGreaterThanOrEqual(toastBottom(v, w, h, inset));
         }
       }
     }
     expect(checked).toBeGreaterThan(20);
+  });
+
+  it('keeps class II below the toast row without class IV too, wherever the screen leaves it room', () => {
+    let below = 0;
+    let cramped = 0;
+    for (const [w, h] of sizes) {
+      for (const inset of insetCases) {
+        const v = views(w, h, PLAIN, null, inset);
+        const { mirrorLeft, mirrorRight } = v;
+        if (mirrorLeft === null || mirrorRight === null) throw new Error('drive mode has mirrors');
+        if (v.front !== null) continue;
+        const at = `${w}x${h} left inset ${inset.left}`;
+        const bottom = toastBottom(v, w, h, inset);
+        // the rule keeps to its own, more careful, wrap estimate
+        const careful =
+          messageColumn(v).y +
+          16 +
+          (w >= h ? inset.top : 0) +
+          messageHeights((v.cockpit?.width ?? 0) - inset.left).toast +
+          8;
+        const room = h - controlsHeight(w, h, inset) - 8 - careful;
+        if (room < MIN_MIRROR_HEIGHT) {
+          cramped++;
+          continue;
+        }
+        below++;
+        expect(mirrorLeft.y, at).toBeGreaterThanOrEqual(bottom);
+        expect(mirrorRight.y, at).toBeGreaterThanOrEqual(bottom);
+        expect(mirrorLeft.y + mirrorLeft.height, at).toBeLessThanOrEqual(
+          h - controlsHeight(w, h, inset) - 8,
+        );
+      }
+    }
+    expect(below).toBeGreaterThan(100);
+    expect(cramped).toBeGreaterThan(0);
+  });
+
+  it('drops the messages below the cockpit label where they span the cockpit', () => {
+    let checked = 0;
+    for (const [w, h] of sizes) {
+      for (const inset of insetCases) {
+        const v = views(w, h, PLAIN, null, inset);
+        const { cockpit } = v;
+        if (cockpit === null) throw new Error('drive mode has a cockpit');
+        if (v.front !== null) continue;
+        checked++;
+        // the label hangs 4 px (and the display cut-out in landscape) from the top and is 14 px tall; the wrap pads its top by 16
+        const labelBottom = cockpit.y + 4 + (w >= h ? inset.top : 0) + 14;
+        const toastTop = messageColumn(v).y + 16 + (w >= h ? inset.top : 0);
+        expect(toastTop, `${w}x${h}`).toBeGreaterThanOrEqual(labelBottom);
+      }
+    }
+    expect(checked).toBeGreaterThan(100);
   });
 
   it('is shown at the required landscape sizes', () => {
