@@ -380,7 +380,7 @@ describe('computeViewports front mirror', () => {
       [1280, 720],
       [1920, 1080],
       [768, 1024],
-      [1200, 700],
+      [1210, 720],
     ] as const) {
       const { front } = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
       expect(front, `${w}x${h}`).not.toBeNull();

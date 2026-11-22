@@ -147,24 +147,31 @@ describe.each(trucks)('class VI front mirror of $id', (spec) => {
 
   it('shows a 0.3 m cone base across 6 px anywhere in the field at the narrowest width, and not at two px less', () => {
     const camera = frontCamera(spec);
-    // px per metre in the rendered mirror at `width` px, the smaller of the two ground directions
-    // (the far end is foreshortened), at the worst point of the field
-    const scale = (width: number): number => {
-      let least = Infinity;
-      for (const p of sample(field)) {
-        const at = onGround(p).project(camera);
-        for (const [dx, dy] of [
-          [0.5, 0],
-          [0, 0.5],
-        ] as const) {
-          const to = onGround({ x: p.x + dx, y: p.y + dy }).project(camera);
-          // the mirror is `width` wide and half as tall: NDC spans width / 2 and width / 4 px
-          const px = Math.hypot(((to.x - at.x) * width) / 2, ((to.y - at.y) * width) / 4);
-          least = Math.min(least, px / Math.hypot(dx, dy));
-        }
-      }
-      return least;
+    const H = 0.05;
+    const px = (p: Vec2, width: number): [number, number] => {
+      const ndc = onGround(p).project(camera);
+      // the mirror is `width` wide and half as tall: NDC spans width / 2 and width / 4 px
+      return [(ndc.x * width) / 2, (ndc.y * width) / 4];
     };
+    /** Smallest px per metre over every ground direction: the least singular value of the ground-to-pixel Jacobian. */
+    const least = (p: Vec2, width: number): number => {
+      const [x1, y1] = px({ x: p.x + H, y: p.y }, width);
+      const [x0, y0] = px({ x: p.x - H, y: p.y }, width);
+      const [u1, v1] = px({ x: p.x, y: p.y + H }, width);
+      const [u0, v0] = px({ x: p.x, y: p.y - H }, width);
+      const a = (x1 - x0) / (2 * H);
+      const b = (u1 - u0) / (2 * H);
+      const c = (y1 - y0) / (2 * H);
+      const d = (v1 - v0) / (2 * H);
+      // eigenvalues of J^T J: trace / 2 minus the root of (trace / 2)^2 - det
+      const trace = a * a + b * b + c * c + d * d;
+      const det = (a * d - b * c) ** 2;
+      return Math.sqrt(trace / 2 - Math.sqrt((trace / 2) ** 2 - det));
+    };
+    // the dense grid and the polygon's own points: the corners and the arc
+    const points = [...sample(field), ...field];
+    const scale = (width: number): number => Math.min(...points.map((p) => least(p, width)));
+    expect(MIN_FRONT_WIDTH % 2).toBe(0);
     expect(scale(MIN_FRONT_WIDTH) * 0.3).toBeGreaterThanOrEqual(6);
     expect(scale(MIN_FRONT_WIDTH - 2) * 0.3).toBeLessThan(6);
   });

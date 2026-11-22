@@ -36,7 +36,7 @@ export const MIN_MIRROR_HEIGHT = 48;
  * cone base spans 6 px anywhere in the class VI field (`front-mirror.test.ts` derives it from the
  * camera); where the band cannot hold it, there is no front mirror.
  */
-export const MIN_FRONT_WIDTH = 120;
+export const MIN_FRONT_WIDTH = 122;
 const MAX_FRONT_WIDTH = 240;
 /** CSS px between the toast column and the mirrors on either side of it. */
 const MESSAGE_GAP = 8;
