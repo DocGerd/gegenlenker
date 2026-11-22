@@ -91,6 +91,12 @@
   right: calc(-1 * var(--hud-mirror-arm) - 2 * var(--hud-stroke));
 }
 
+/* The class IV mirror hangs from the class II mirror's arm: its own arm reaches up to it. */
+.hud[data-interior] .hud-mirror[data-hud^='wide']::before {
+  top: calc(-1 * var(--hud-arm-reach, 0px));
+  bottom: 50%;
+}
+
 /* The front mirror hangs from a bracket on the header above it. */
 .hud[data-interior] .hud-mirror[data-hud='front']::before {
   top: calc(-1 * var(--hud-mirror-arm) - 2 * var(--hud-stroke));

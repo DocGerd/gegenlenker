@@ -15,7 +15,12 @@ import {
   wordPx,
   wrapLines,
   MIN_MIRROR_HEIGHT,
+  MIN_WIDE_HEIGHT,
+  MIN_WIDE_WIDTH,
   NO_INSETS,
+  WIDE_ASPECT,
+  WIDE_GAP_PX,
+  wideHeight,
   topDownSplit,
   wheelSize,
   type Insets,
@@ -338,7 +343,7 @@ function referenceLines(text: string, width: number): number {
 }
 
 describe('computeViewports front mirror', () => {
-  const FRONT = { front: true };
+  const FRONT = { front: true, wide: false };
   const apart = (a: Rect, b: Rect): boolean =>
     a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
   const sizes: (readonly [number, number])[] = [
@@ -515,5 +520,145 @@ describe('computeViewports front mirror', () => {
   it('leaves the toast column alone without a front mirror', () => {
     const views = computeViewports(1280, 720, 'drive');
     expect(messageColumn(views)).toEqual(views.cockpit);
+  });
+});
+
+describe('computeViewports class IV mirrors', () => {
+  const WIDE = { front: true, wide: true };
+  const PLAIN = { front: true, wide: false };
+  const apart = (a: Rect, b: Rect): boolean =>
+    a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+  const sizes: (readonly [number, number])[] = [
+    [390, 844],
+    [360, 800],
+    [844, 390],
+    [1280, 800],
+    [1280, 720],
+    [1920, 1080],
+  ];
+  for (let w = 320; w <= 2000; w += 40) {
+    for (let h = 320; h <= 2000; h += 40) sizes.push([w, h]);
+  }
+  const legends = (w: number) => [
+    null,
+    { right: 300, height: 260 },
+    { right: w - 40, height: 260 },
+  ];
+  const views = (
+    w: number,
+    h: number,
+    extra: typeof WIDE,
+    legend: ReturnType<typeof legends>[number],
+    insets?: Insets,
+  ) => computeViewports(w, h, 'drive', legend, insets, undefined, null, extra);
+
+  it('is only there when asked for, and replay has none', () => {
+    for (const [w, h] of sizes) {
+      const plain = views(w, h, PLAIN, null);
+      expect(plain.wideLeft, `${w}x${h}`).toBeNull();
+      expect(plain.wideRight, `${w}x${h}`).toBeNull();
+    }
+    const replay = computeViewports(800, 600, 'replay', null, undefined, undefined, null, WIDE);
+    expect([replay.wideLeft, replay.wideRight]).toEqual([null, null]);
+  });
+
+  it('keeps the top-down rect and the cockpit the same with it on or off', () => {
+    for (const [w, h] of sizes) {
+      for (const legend of legends(w)) {
+        const on = views(w, h, WIDE, legend);
+        const off = views(w, h, PLAIN, legend);
+        expect(on.topDown, `${w}x${h}`).toEqual(off.topDown);
+        expect(on.cockpit, `${w}x${h}`).toEqual(off.cockpit);
+      }
+    }
+  });
+
+  it('hangs under each class II mirror, on its x and width, clear of everything, at every size', () => {
+    let shown = 0;
+    for (const [w, h] of sizes) {
+      for (const legend of legends(w)) {
+        const v = views(w, h, WIDE, legend);
+        const { cockpit, mirrorLeft, mirrorRight, wideLeft, wideRight, front } = v;
+        if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
+          throw new Error('drive mode has mirrors');
+        }
+        const at = `${w}x${h} ${JSON.stringify(legend)}`;
+        // both sides or neither
+        expect(wideLeft === null, at).toBe(wideRight === null);
+        if (wideLeft === null || wideRight === null) continue;
+        shown++;
+        for (const [wide, above] of [
+          [wideLeft, mirrorLeft],
+          [wideRight, mirrorRight],
+        ] as const) {
+          expect(wide.x, at).toBe(above.x);
+          expect(wide.width, at).toBe(above.width);
+          expect(wide.height, at).toBe(wideHeight(wide.width));
+          expect(Math.abs(wide.width / wide.height - WIDE_ASPECT), at).toBeLessThan(0.05);
+          expect(wide.width, at).toBeGreaterThanOrEqual(MIN_WIDE_WIDTH);
+          expect(wide.height, at).toBeGreaterThanOrEqual(MIN_WIDE_HEIGHT);
+          expect(wide.y - (above.y + above.height), `${at} gap`).toBe(WIDE_GAP_PX);
+          expect(wide.x, at).toBeGreaterThanOrEqual(cockpit.x);
+          expect(wide.x + wide.width, at).toBeLessThanOrEqual(cockpit.x + cockpit.width);
+          expect(wide.y + wide.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h));
+          // the legend starts right of the left mirror, so only the right one can sit over it
+          if (wide === wideRight && legend !== null && legend.right > wide.x) {
+            expect(wide.y + wide.height, at).toBeLessThanOrEqual(h - legend.height);
+          }
+          if (front !== null) expect(apart(wide, front), at).toBe(true);
+          if (front !== null) expect(apart(wide, messageColumn(v)), at).toBe(true);
+        }
+        expect(mirrorLeft.width, at).toBe(mirrorRight.width);
+        expect(mirrorLeft.height, at).toBe(mirrorRight.height);
+        expect(wideLeft.y, at).toBe(wideRight.y);
+        expect(wideLeft.height, at).toBe(wideRight.height);
+      }
+    }
+    expect(shown).toBeGreaterThan(100);
+  });
+
+  it('keeps class II its size where the column has room, shrinks both where not, and drops class IV where even that fails', () => {
+    const count = { kept: 0, shrunk: 0, dropped: 0 };
+    for (const [w, h] of sizes) {
+      for (const legend of legends(w)) {
+        const on = views(w, h, WIDE, legend);
+        const off = views(w, h, PLAIN, legend);
+        const at = `${w}x${h} ${JSON.stringify(legend)}`;
+        const [a, b] = [on.mirrorLeft, off.mirrorLeft];
+        if (a === null || b === null) throw new Error('drive mode has mirrors');
+        if (on.wideLeft === null) {
+          count.dropped++;
+          // nothing moves for the mirror that is not drawn
+          expect(on.mirrorLeft, at).toEqual(off.mirrorLeft);
+          expect(on.mirrorRight, at).toEqual(off.mirrorRight);
+        } else if (a.width === b.width && a.height === b.height) {
+          count.kept++;
+          expect(a.x, at).toBe(b.x);
+        } else {
+          count.shrunk++;
+          expect(a.width, at).toBeLessThanOrEqual(b.width);
+          expect(a.height, at).toBeLessThan(b.height);
+          expect(a.height, at).toBeGreaterThanOrEqual(MIN_MIRROR_HEIGHT);
+          expect(a.x, at).toBe(b.x);
+        }
+      }
+    }
+    expect(count.kept).toBeGreaterThan(100);
+    expect(count.shrunk).toBeGreaterThan(10);
+    expect(count.dropped).toBeGreaterThan(100);
+  });
+
+  it('is shown at the required landscape sizes', () => {
+    for (const [w, h] of [
+      [1350, 600],
+      [1280, 800],
+      [1280, 720],
+      [1920, 1080],
+      [1366, 768],
+    ] as const) {
+      const v = views(w, h, WIDE, null);
+      expect(v.wideLeft, `${w}x${h}`).not.toBeNull();
+      expect(v.front, `${w}x${h}`).not.toBeNull();
+    }
   });
 });

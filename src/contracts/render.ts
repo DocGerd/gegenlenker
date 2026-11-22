@@ -11,13 +11,16 @@ export type ViewRects = {
   readonly cockpit: Rect | null;
   readonly mirrorLeft: Rect | null;
   readonly mirrorRight: Rect | null;
+  /** The class IV wide-angle mirrors, each directly under its class II mirror; null where the preset or the window has no room. */
+  readonly wideLeft: Rect | null;
+  readonly wideRight: Rect | null;
   /** The class VI front mirror, in the windscreen band; null where the preset or the window has no room. */
   readonly front: Rect | null;
   readonly topDown: Rect;
 };
 /** The mirrors beyond the two class II ones that the layout makes room for. */
-export type ExtraMirrors = { readonly front: boolean };
-export const NO_EXTRA_MIRRORS: ExtraMirrors = { front: false };
+export type ExtraMirrors = { readonly front: boolean; readonly wide: boolean };
+export const NO_EXTRA_MIRRORS: ExtraMirrors = { front: false, wide: false };
 
 /** The key legend as it is laid out: its right edge from the stage's left, and how far it reaches above the stage's bottom. */
 export type LegendBox = {

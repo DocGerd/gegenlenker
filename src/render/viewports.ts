@@ -75,6 +75,20 @@ const MESSAGE_BOX = 18;
 const GEARS_HEIGHT = 274.5;
 /** The front mirror's width over its height. */
 export const FRONT_ASPECT = 2;
+/** The class IV mirror's width over its height. */
+export const WIDE_ASPECT = 5 / 3;
+/** CSS px between a class II mirror and the class IV mirror under it: both HUD frames (6 px each) and a margin. */
+export const WIDE_GAP_PX = 16;
+/**
+ * Narrowest the class IV mirror (and so the class II above it) gets, in CSS px. A 0.3 m cone base
+ * spans 6 px anywhere in the class IV field at this width (`wide-mirror.test.ts` derives it from the
+ * camera); where the column cannot hold it, there is no class IV mirror.
+ */
+export const MIN_WIDE_WIDTH = 96;
+/** The class IV mirror's height at `width`. */
+export const wideHeight = (width: number): number => Math.round(width / WIDE_ASPECT);
+/** The least height of a class IV mirror: that of the narrowest. */
+export const MIN_WIDE_HEIGHT = wideHeight(MIN_WIDE_WIDTH);
 
 /** Screen areas the display cuts into, in CSS px; read from `--safe-*` in tokens.css. */
 export type Insets = {
@@ -211,7 +225,15 @@ export function computeViewports(
 ): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
-    return { cockpit: null, mirrorLeft: null, mirrorRight: null, front: null, topDown: full };
+    return {
+      cockpit: null,
+      mirrorLeft: null,
+      mirrorRight: null,
+      wideLeft: null,
+      wideRight: null,
+      front: null,
+      topDown: full,
+    };
   }
   const insets = safeInsets ?? readSafeInsets();
   const { share } = topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
@@ -240,7 +262,11 @@ export function computeViewports(
     cockpit.x + cockpit.width - INSET - (cockpit.x + cockpit.width >= cssWidth ? insets.right : 0);
   const controls = controlsHeight(cssWidth, cssHeight, insets);
   const preferred = cockpit.y + top + Math.round(0.16 * cockpit.height);
-  /** The largest mirror with its bottom `clear` above the viewport bottom and at most `maxWidth` wide. */
+  /**
+   * The largest class II mirror with its bottom `clear` above the viewport bottom and at most `maxWidth`
+   * wide, and the class IV mirror under it when `wide` and the column has room: class II keeps its
+   * size where it does, otherwise both shrink towards `MIN_WIDE_WIDTH`, otherwise class IV is dropped.
+   */
   const fit = (clear: number, maxWidth: number) => {
     const ceiling = cssHeight - clear - MIRROR_GAP;
     const y = Math.min(preferred, Math.max(floor, ceiling - wanted));
@@ -248,7 +274,16 @@ export function computeViewports(
     if ((fullWidth * height) / wanted > maxWidth) {
       height = Math.max(MIN_MIRROR_HEIGHT, Math.floor((maxWidth * wanted) / fullWidth));
     }
-    return { y, width: Math.round((fullWidth * height) / wanted), height };
+    const plain = { y, width: Math.round((fullWidth * height) / wanted), height, wide: false };
+    if (!extra.wide) return plain;
+    for (let h = height; h >= MIN_MIRROR_HEIGHT; h--) {
+      const width = Math.round((fullWidth * h) / wanted);
+      if (width < MIN_WIDE_WIDTH) break;
+      const stack = h + WIDE_GAP_PX + wideHeight(width);
+      const top = Math.min(preferred, Math.max(floor, ceiling - stack));
+      if (top + stack <= ceiling) return { y: top, width, height: h, wide: true };
+    }
+    return plain;
   };
   // The mirror only shrinks and moves inward from its full width, so that width is the worst case.
   const reachesLegend = legend !== null && legend.right > right - fullWidth;
@@ -260,7 +295,7 @@ export function computeViewports(
     const fits = right - beside.width >= legend.right;
     mirror = !fits || above.width * above.height >= beside.width * beside.height ? above : beside;
   }
-  const { y, width: mw, height: mh } = mirror;
+  const { y, width: mw, height: mh, wide } = mirror;
   const mirrorRight: Rect = { x: right - mw, y, width: mw, height: mh };
   const messagesLeft = left + mw + MESSAGE_GAP;
   let front: Rect | null = null;
@@ -287,10 +322,15 @@ export function computeViewports(
       fits,
     );
   }
+  const under = (rect: Rect): Rect | null =>
+    wide ? { x: rect.x, y: y + mh + WIDE_GAP_PX, width: mw, height: wideHeight(mw) } : null;
+  const mirrorLeft: Rect = { x: left, y, width: mw, height: mh };
   return {
     cockpit,
-    mirrorLeft: { x: left, y, width: mw, height: mh },
+    mirrorLeft,
     mirrorRight,
+    wideLeft: under(mirrorLeft),
+    wideRight: under(mirrorRight),
     front,
     topDown,
   };

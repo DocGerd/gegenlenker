@@ -18,7 +18,7 @@ import { bodyToThree } from './coords';
 import { frontMirrorMount } from './mirror-fields';
 import { QUALITY_FLAGS } from './quality';
 import { CAMERA_FAR, enableLayers, MIRROR_LAYERS } from './seams';
-import { FRONT_ASPECT } from './viewports';
+import { FRONT_ASPECT, WIDE_ASPECT } from './viewports';
 
 const NEAR = 0.2;
 /** Class II mirrors look this far outward of straight back. */
@@ -27,9 +27,9 @@ export const MIRROR_YAW = MathUtils.degToRad(7);
 /** One mirror's camera and capture schedule; angles in radians, `fov` in degrees (three's convention). */
 export type MirrorSpec = {
   /** Where on the truck the camera sits (`mirrorMounts`). */
-  readonly anchor: 'mirrorLeft' | 'mirrorRight' | 'front';
+  readonly anchor: 'mirrorLeft' | 'mirrorRight' | 'wideLeft' | 'wideRight' | 'front';
   /** The view rect the mirror fills. */
-  readonly view: 'mirrorLeft' | 'mirrorRight' | 'front';
+  readonly view: 'mirrorLeft' | 'mirrorRight' | 'wideLeft' | 'wideRight' | 'front';
   /** From straight back; positive turns toward the truck's right. */
   readonly yaw: number;
   readonly pitch: number;
@@ -69,6 +69,33 @@ export const CLASS_II_RIGHT: MirrorSpec = {
 };
 export const CLASS_II_MIRRORS: readonly MirrorSpec[] = [CLASS_II_LEFT, CLASS_II_RIGHT];
 
+/** Class IV looks this far outward of straight back, and down: its field is the ground beside the truck. */
+export const WIDE_YAW = MathUtils.degToRad(25);
+const CLASS_IV = {
+  pitch: MathUtils.degToRad(-18),
+  roll: 0,
+  fov: 64,
+  aspect: WIDE_ASPECT,
+  targetScale: 0.5,
+  cadence: 2,
+} as const;
+
+/** Left captures on even frames and right on odd ones: one class IV pass per frame. */
+export const CLASS_IV_LEFT: MirrorSpec = {
+  ...CLASS_IV,
+  anchor: 'wideLeft',
+  view: 'wideLeft',
+  yaw: -WIDE_YAW,
+  parity: 0,
+};
+export const CLASS_IV_RIGHT: MirrorSpec = {
+  ...CLASS_IV,
+  anchor: 'wideRight',
+  view: 'wideRight',
+  yaw: WIDE_YAW,
+  parity: 1,
+};
+
 /**
  * Class VI: from above the cab front, forward and down onto the ground ahead of the bumper. The
  * camera is rolled upside down, so the bumper lies on the image's top edge, and the composite's
@@ -88,14 +115,19 @@ export const CLASS_VI: MirrorSpec = {
 };
 
 /** Every mirror this build draws, in capture order; a mirror is captured when its view rect is shown. */
-export const MIRRORS: readonly MirrorSpec[] = [...CLASS_II_MIRRORS, CLASS_VI];
+export const MIRRORS: readonly MirrorSpec[] = [
+  ...CLASS_II_MIRRORS,
+  CLASS_IV_LEFT,
+  CLASS_IV_RIGHT,
+  CLASS_VI,
+];
 
 /** Where each mirror's camera sits on a truck, in the body frame. */
 export type MirrorMounts = Readonly<Record<MirrorSpec['anchor'], Vec3>>;
 
 export function mirrorMounts(truck: TruckSpec): MirrorMounts {
-  const { mirrorLeft, mirrorRight } = truckAnchors(truck);
-  return { mirrorLeft, mirrorRight, front: frontMirrorMount(truck) };
+  const { mirrorLeft, mirrorRight, wideLeft, wideRight } = truckAnchors(truck);
+  return { mirrorLeft, mirrorRight, wideLeft, wideRight, front: frontMirrorMount(truck) };
 }
 
 export const mirrorAnchor = (spec: MirrorSpec, mounts: MirrorMounts): Vec3 => mounts[spec.anchor];

@@ -16,6 +16,7 @@ export function truckAnchors(spec: TruckSpec): TruckAnchors {
   const mirrorX = F - m(spec.mirror.behindBumper.value);
   const mirrorY = m(spec.mirror.lateral.value + spec.mirror.glassOutboard.value);
   const mirrorZ = m(spec.mirror.height.value);
+  const wideZ = mirrorZ - m(spec.mirror.wideBelow.value);
   return {
     rearAxle: { x: 0, y: 0, z: 0 },
     frontAxle: { x: L, y: 0, z: 0 },
@@ -29,6 +30,8 @@ export function truckAnchors(spec: TruckSpec): TruckAnchors {
     },
     mirrorLeft: { x: mirrorX, y: mirrorY, z: mirrorZ },
     mirrorRight: { x: mirrorX, y: -mirrorY, z: mirrorZ },
+    wideLeft: { x: mirrorX, y: mirrorY, z: wideZ },
+    wideRight: { x: mirrorX, y: -mirrorY, z: wideZ },
   };
 }
 

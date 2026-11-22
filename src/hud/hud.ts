@@ -185,6 +185,8 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
   </div>
   <div class="hud-mirror" data-hud="mirrorLeft" hidden></div>
   <div class="hud-mirror" data-hud="mirrorRight" hidden></div>
+  <div class="hud-mirror" data-hud="wideLeft" hidden></div>
+  <div class="hud-mirror" data-hud="wideRight" hidden></div>
   <div class="hud-mirror" data-hud="front" hidden></div>
   <div class="hud-toast-wrap" data-hud="toastWrap"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-topdown" data-hud="topDown">
@@ -258,6 +260,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const mirrors = [
     query(hud, 'mirrorLeft', HTMLElement),
     query(hud, 'mirrorRight', HTMLElement),
+    query(hud, 'wideLeft', HTMLElement),
+    query(hud, 'wideRight', HTMLElement),
     query(hud, 'front', HTMLElement),
   ];
   const toastWrap = query(hud, 'toastWrap', HTMLElement);
@@ -675,11 +679,21 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
           c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH),
         );
       }
-      const mirrorRects = [views.mirrorLeft, views.mirrorRight, views.front];
+      const mirrorRects = [
+        views.mirrorLeft,
+        views.mirrorRight,
+        views.wideLeft,
+        views.wideRight,
+        views.front,
+      ];
       mirrors.forEach((el, i) => {
         const r = mirrorRects[i];
         setHidden(el, !r);
         if (r) place(el, r);
+        // a class IV mirror hangs from the arm of the class II mirror above it, which ends at 62% of its height
+        const above = i === 2 ? views.mirrorLeft : i === 3 ? views.mirrorRight : null;
+        if (r && above)
+          el.style.setProperty('--hud-arm-reach', `${r.y - above.y - 0.62 * above.height}px`);
       });
       const base = c ?? views.topDown;
       const column = messageColumn(views);

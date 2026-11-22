@@ -30,6 +30,7 @@ export const manLe18280: TruckSpec = {
     glassOutboard: estimate(200, typical),
     behindBumper: estimate(600, typical),
     height: estimate(2000, typical),
+    wideBelow: estimate(400, 'class IV glass stacked under the class II, no source found'),
   },
   steering: {
     lockToLockTurns: estimate(5.0, typical),

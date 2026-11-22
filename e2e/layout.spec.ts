@@ -95,8 +95,9 @@ async function blankRows(page: Page, x: number): Promise<number> {
 }
 
 /**
- * The mirrors the default Balanced drive shows at the page's size: the two side mirrors and the front
- * mirror where `computeViewports` finds room for it, given the key legend as the page measured it.
+ * The mirrors the default Balanced drive shows at the page's size: the two side mirrors, the class IV
+ * mirrors under them and the front mirror where `computeViewports` finds room for them, given the key
+ * legend as the page measured it.
  */
 async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
   const size = page.viewportSize();
@@ -110,7 +111,7 @@ async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
     const stage = hud.getBoundingClientRect();
     return { right: r.right - stage.left, height: stage.bottom - r.top };
   });
-  const { front } = computeViewports(
+  const { front, wideLeft } = computeViewports(
     size.width,
     size.height,
     'drive',
@@ -120,9 +121,10 @@ async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
     null,
     {
       front: QUALITY_FLAGS.balanced.frontMirror,
+      wide: QUALITY_FLAGS.balanced.wideMirrors,
     },
   );
-  return front === null ? 2 : 3;
+  return 2 + (wideLeft === null ? 0 : 2) + (front === null ? 0 : 1);
 }
 
 /**
@@ -193,6 +195,24 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
     for (const c of controlBoxes) {
       expect(overlaps(m, c), `${c.name} overlaps a mirror housing`).toBe(false);
     }
+  }
+
+  // Each class IV mirror hangs from the arm of the class II mirror above it: its arm reaches up into that mirror's span.
+  const wide = page.locator('[data-hud^="wide"]:not([hidden])');
+  const wideBoxes = await boxes(wide);
+  if (wideBoxes.length > 0) {
+    // `hudReady` pinned the count against the layout, so a missing mirror has failed already
+    expect(wideBoxes).toHaveLength(2);
+    const stems = await wide.evaluateAll((els) =>
+      els.map((el) => Math.max(0, -parseFloat(getComputedStyle(el, '::before').top))),
+    );
+    wideBoxes.forEach((box, i) => {
+      const above = i === 0 ? leftBox : rightBox;
+      const top = box.top - (stems[i] ?? 0);
+      expect(stems[i], 'class IV arm is drawn').toBeGreaterThan(0);
+      expect(top, 'class IV arm reaches the class II arm').toBeGreaterThanOrEqual(above.top);
+      expect(top, 'class IV arm reaches the class II arm').toBeLessThan(above.bottom);
+    });
   }
 
   // The front mirror hangs from a bracket above it, which stays inside the cockpit.

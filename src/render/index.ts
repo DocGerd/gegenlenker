@@ -45,6 +45,7 @@ export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
 /** The mirrors beyond class II that the preset draws; `computeViewports` makes room for them. */
 export const extraMirrors = (preset: GraphicsPreset): ExtraMirrors => ({
   front: QUALITY_FLAGS[preset].frontMirror,
+  wide: QUALITY_FLAGS[preset].wideMirrors,
 });
 
 /** Whether the preset draws the cab interior and the mirror housings. */

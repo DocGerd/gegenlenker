@@ -28,9 +28,19 @@ import { collectThreeProblems } from '../e2e/three-problems.ts';
 import { QUALITY_FLAGS } from '../src/render/quality.ts';
 
 const PRESETS = ['low', 'balanced', 'high'];
-const SHOTS = ['cockpit', 'mirrorLeft', 'mirrorRight', 'front', 'follow', 'yard', 'chase'];
-/** Fewest colours a shot may have: the front mirror is a small pane of mostly bare ground, which at night is a few dark shades. */
-const MIN_COLOURS = { front: 10 };
+const SHOTS = [
+  'cockpit',
+  'mirrorLeft',
+  'mirrorRight',
+  'wideLeft',
+  'wideRight',
+  'front',
+  'follow',
+  'yard',
+  'chase',
+];
+/** Fewest colours a shot may have: the front and class IV mirrors are small panes of mostly bare ground, which at night is a few dark shades. */
+const MIN_COLOURS = { front: 10, wideLeft: 10, wideRight: 10 };
 /** Views whose flat regions must survive a renderer change; the perspective ones are judged by eye. */
 const TOP_DOWN = new Set(['follow', 'yard']);
 /** Largest step a flat pixel may move: an 8-bit linear intermediate rounds sRGB tokens, dark ones by more. */
@@ -124,6 +134,10 @@ try {
         const name = `${preset}-${shot}`;
         if (shot === 'chase' && !chase) {
           console.log(`skip   ${name}: no chase view at this preset`);
+          continue;
+        }
+        if (shot.startsWith('wide') && !QUALITY_FLAGS[preset].wideMirrors) {
+          console.log(`skip   ${name}: no class IV mirrors at this preset`);
           continue;
         }
         const png = await shoot(page, shot);

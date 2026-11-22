@@ -16,6 +16,8 @@ export type QualityFlags = {
   readonly chaseView: boolean;
   /** The class VI front mirror in the cockpit view's windscreen. */
   readonly frontMirror: boolean;
+  /** The class IV wide-angle mirrors under the class II ones. */
+  readonly wideMirrors: boolean;
   /** Dashboard, pillars, header and visor around the cockpit view, and the mirror housings. */
   readonly cockpitInterior: boolean;
   /** The Blender cab interior in the cockpit view in place of the flat overlay; a download, and needs `cockpitInterior`. */
@@ -54,6 +56,7 @@ const BALANCED: QualityFlags = {
   vehicleGlb: true,
   chaseView: true,
   frontMirror: true,
+  wideMirrors: true,
   cockpitInterior: true,
   interiorGlb: false,
   litMarkings: true,
@@ -84,6 +87,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     vehicleGlb: false,
     chaseView: false,
     frontMirror: true,
+    wideMirrors: false,
     cockpitInterior: false,
     interiorGlb: false,
     litMarkings: false,

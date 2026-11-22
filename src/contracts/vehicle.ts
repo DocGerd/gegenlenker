@@ -46,6 +46,7 @@ export type TruckSpec = {
     readonly glassOutboard: Param;
     readonly behindBumper: Param;
     readonly height: Param;
+    readonly wideBelow: Param; // class IV glass below the class II pivot
   };
   readonly steering: { readonly lockToLockTurns: Param; readonly maxRate: Param };
   readonly cab: {
@@ -120,6 +121,9 @@ export type TruckAnchors = {
   readonly eye: Vec3;
   readonly mirrorLeft: Vec3;
   readonly mirrorRight: Vec3;
+  /** The class IV mirrors, below the class II ones. */
+  readonly wideLeft: Vec3;
+  readonly wideRight: Vec3;
   readonly frontX: number;
   readonly rearX: number;
 };
