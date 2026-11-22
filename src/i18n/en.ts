@@ -145,6 +145,7 @@ export const en = {
   viewSwitch: 'Follow / yard / outside',
   viewSwitchNoOutside: 'Follow / whole yard',
   panView: 'Pan / orbit',
+  orbitTilt: 'Orbit / tilt outside view',
   whatsNew: "What's new",
   whatsNewBadge: 'New',
   whatsNewSince: 'Since your last visit',

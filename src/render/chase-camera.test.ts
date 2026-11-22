@@ -2,30 +2,39 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Box3, Frustum, Layers, Matrix4, Mesh, Vector3, type PerspectiveCamera } from 'three';
 import { describe, expect, it } from 'vitest';
+import { layouts } from '../content/registry';
+import { resolveLayout } from '../content/resolve-layout';
+import { BOUNDS } from '../content/street';
 import {
-  CHASE_AZIMUTH,
-  CHASE_YAW,
+  CHASE_PITCH,
+  CHASE_TILT,
   CHASE_ZOOM,
   DEFAULT_TOP_DOWN_VIEW,
   type ScenePalette,
   type TopDownView,
 } from '../contracts/render';
-import type { Pose2 } from '../contracts/sim';
-import { trucks } from '../vehicles/registry';
+import type { Obb, Pose2 } from '../contracts/sim';
+import { bodyFootprints } from '../sim/geometry';
+import { joints, type KinematicState } from '../sim/kinematics';
+import { trailers, trucks } from '../vehicles/registry';
+import { resolveCombination } from '../vehicles/resolve';
 import { CAB_HEIGHT, RELIEF } from './cab-dims';
 import {
+  CHASE_MAX_DISTANCE,
   cabFront,
-  cabFrontCorners,
   chaseDistance,
+  combinationRadius,
   createChaseCamera,
   placeChaseCamera,
-  type CabFront,
+  vehicleCentre,
   type ChaseFrame,
+  type ChaseRig,
 } from './chase-camera';
-import { bodyToThree } from './coords';
 import { parseShell } from './glb-shells';
 import { KEYS } from './palette';
 import { AIDS_LAYER, CAB_LAYER, CAMERA_FAR, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
+import { skylineGeometry } from './skyline-geometry';
+import { skylineBuildings } from './skyline-layout';
 import { proceduralTruck } from './vehicle-visual';
 
 // Landscape-screen pane, one with the HUD's free rect cut down to a corner, a square one and a wide strip.
@@ -39,12 +48,11 @@ const POSES: readonly Pose2[] = [
   { x: 0, y: 0, heading: 0 },
   { x: -23, y: 14, heading: 2.2 },
 ];
-const VIEWS: readonly TopDownView[] = [
-  DEFAULT_TOP_DOWN_VIEW,
-  { zoom: CHASE_ZOOM.min, panX: 0, panY: 0 },
-];
-/** Metres the camera must stay ahead of the cab front plane at the ends of the orbit. */
-const FRONT_CLEARANCE = 0.3;
+const YAWS = Array.from({ length: 12 }, (_, i) => (i * Math.PI) / 6 - Math.PI + 0.1);
+const TILTS = [CHASE_TILT.min, 0, CHASE_TILT.max];
+const ZOOMS = [CHASE_ZOOM.min, 1, CHASE_ZOOM.max];
+/** Above any vehicle, light bars and roof racks included. */
+const VEHICLE_TOP = 4.5;
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
 
@@ -54,19 +62,56 @@ const layersOf = (layer: number): Layers => {
   return layers;
 };
 
-function place(
-  pose: Pose2,
-  face: CabFront,
-  frame: ChaseFrame,
-  view: TopDownView,
-): PerspectiveCamera {
+type Posed = {
+  readonly rig: Omit<ChaseRig, 'colliders'>;
+  readonly bodies: readonly Obb[];
+};
+
+/** The combination `trucks[t]` + `trailers[r]` with its truck at `pose` and the given joint angles. */
+function posed(t: number, r: number, pose: Pose2, coupling: number, turntable: number): Posed {
+  const truck = trucks[t];
+  const trailer = trailers[r];
+  if (truck === undefined || trailer === undefined) throw new Error('no such vehicle');
+  const params = resolveCombination(truck, trailer);
+  const th1 = pose.heading - coupling;
+  const state: KinematicState = {
+    x: pose.x,
+    y: pose.y,
+    th0: pose.heading,
+    th1,
+    th2: th1 - turntable,
+  };
+  const snapshot = joints(params, state);
+  const face = cabFront(truck);
+  return {
+    rig: {
+      truck: snapshot.truck,
+      centre: vehicleCentre(snapshot, face.x),
+      radius: combinationRadius(truck, trailer),
+      face,
+    },
+    bodies: bodyFootprints(params, snapshot).map((f) => f.obb),
+  };
+}
+
+const inside = (obb: Obb, x: number, y: number): boolean => {
+  const dx = x - obb.cx;
+  const dy = y - obb.cy;
+  const along = dx * Math.cos(obb.heading) + dy * Math.sin(obb.heading);
+  const across = -dx * Math.sin(obb.heading) + dy * Math.cos(obb.heading);
+  return Math.abs(along) <= obb.halfLength && Math.abs(across) <= obb.halfWidth;
+};
+
+const aimOf = (rig: Posed['rig']): Vector3 =>
+  new Vector3(rig.centre.x, (rig.face.bottom + rig.face.top) / 2, -rig.centre.y);
+
+function place(rig: ChaseRig, frame: ChaseFrame, view: TopDownView): PerspectiveCamera {
   const camera = createChaseCamera();
-  placeChaseCamera(camera, pose, face, frame, view);
+  placeChaseCamera(camera, rig, frame, view);
   return camera;
 }
 
-const forwardOf = (pose: Pose2): Vector3 =>
-  new Vector3(Math.cos(pose.heading), 0, -Math.sin(pose.heading));
+const free = (rig: Posed['rig']): ChaseRig => ({ ...rig, colliders: [] });
 
 describe('chase camera layers', () => {
   it('sees the cab, the perspective detail and the default layer, but no top-down aids', () => {
@@ -78,86 +123,188 @@ describe('chase camera layers', () => {
   });
 });
 
-describe.each(trucks)('chase camera, $id', (spec) => {
-  const face = cabFront(spec);
+describe('chase camera', () => {
+  const pairs = trucks.flatMap((truck, t) =>
+    trailers.map((trailer, r) => ({ name: `${truck.id} + ${trailer.id}`, t, r })),
+  );
+  /** Joint angles: straight, a hook either way, and the folds of both joints together. */
+  const bends = (t: number, r: number): readonly (readonly [number, number])[] => {
+    const truck = trucks[t];
+    const trailer = trailers[r];
+    if (truck === undefined || trailer === undefined) throw new Error('no such vehicle');
+    const { couplingLimit: c, turntableLimit: u } = resolveCombination(truck, trailer);
+    return [
+      [0, 0],
+      [c, 0],
+      [-c, 0],
+      [c, u],
+      [c, -u],
+      [-c, u],
+    ];
+  };
 
-  it.each(FRAMES)(
-    'frames the whole cab front, from outside it, in the free rect of $width x $height',
-    (frame) => {
+  it.each(pairs)(
+    'keeps the eye above the ground and outside the vehicle, and the pivot in the free rect: $name',
+    ({ t, r }) => {
       for (const pose of POSES) {
-        for (const view of VIEWS) {
-          const camera = place(pose, face, frame, view);
-          const frustum = new Frustum().setFromProjectionMatrix(
-            new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
-          );
-          const point = new Vector3();
-          for (const [x, y, z] of cabFrontCorners(face)) {
-            const label = `corner ${x},${y},${z} at zoom ${view.zoom}`;
-            bodyToThree(pose, { x, y, z }, point);
-            expect(frustum.containsPoint(point), label).toBe(true);
-            expect(camera.position.distanceTo(point), label).toBeLessThan(CAMERA_FAR);
-            const ndc = point.clone().project(camera);
-            const px = ((ndc.x + 1) / 2) * frame.width;
-            const py = ((1 - ndc.y) / 2) * frame.height;
-            const { clear } = frame;
-            expect(px, label).toBeGreaterThanOrEqual(clear.x);
-            expect(px, label).toBeLessThanOrEqual(clear.x + clear.width);
-            expect(py, label).toBeGreaterThanOrEqual(clear.y);
-            expect(py, label).toBeLessThanOrEqual(clear.y + clear.height);
+        for (const [coupling, turntable] of bends(t, r)) {
+          const { rig, bodies } = posed(t, r, pose, coupling, turntable);
+          const aim = aimOf(rig);
+          for (const frame of FRAMES) {
+            for (const panX of YAWS) {
+              for (const panY of TILTS) {
+                for (const zoom of ZOOMS) {
+                  const label = `${frame.width}x${frame.height} yaw ${panX} tilt ${panY} zoom ${zoom} bend ${coupling},${turntable}`;
+                  const camera = place(free(rig), frame, { zoom, panX, panY });
+                  const { position } = camera;
+                  expect(position.y, label).toBeGreaterThan(0);
+                  expect(
+                    position.y > VEHICLE_TOP ||
+                      bodies.every((o) => !inside(o, position.x, -position.z)),
+                    label,
+                  ).toBe(true);
+                  expect(position.distanceTo(aim), label).toBeGreaterThanOrEqual(rig.radius - 1e-9);
+                  expect(position.distanceTo(aim), label).toBeLessThanOrEqual(
+                    CHASE_MAX_DISTANCE + 1e-9,
+                  );
+                  const ndc = aim.clone().project(camera);
+                  const px = ((ndc.x + 1) / 2) * frame.width;
+                  const py = ((1 - ndc.y) / 2) * frame.height;
+                  const { clear } = frame;
+                  expect(px, label).toBeGreaterThanOrEqual(clear.x - 1e-6);
+                  expect(px, label).toBeLessThanOrEqual(clear.x + clear.width + 1e-6);
+                  expect(py, label).toBeGreaterThanOrEqual(clear.y - 1e-6);
+                  expect(py, label).toBeLessThanOrEqual(clear.y + clear.height + 1e-6);
+                }
+              }
+            }
           }
-          // On the outward side of the front plane, so the camera sees the face and not the cab's back.
-          const middle = bodyToThree(pose, { x: face.x, y: 0, z: (face.bottom + face.top) / 2 });
-          const toEye = camera.position.clone().sub(middle).normalize();
-          const incidence = Math.acos(toEye.dot(forwardOf(pose)));
-          expect(incidence).toBeGreaterThan(0.3);
-          expect(incidence).toBeLessThan(1.2);
         }
       }
     },
   );
 
-  it.each(FRAMES)(
-    'stays ahead of the cab front at the ends of the orbit, even for an unclamped view ($width x $height)',
-    (frame) => {
-      for (const panX of [CHASE_YAW.min, CHASE_YAW.max, -10, 10]) {
-        const view = { zoom: CHASE_ZOOM.max * 10, panX, panY: 0 };
-        for (const pose of POSES) {
-          const camera = place(pose, face, frame, view);
-          const plane = bodyToThree(pose, { x: face.x, y: 0, z: 0 });
-          const ahead = camera.position.clone().sub(plane).dot(forwardOf(pose));
-          expect(ahead, `yaw ${panX}`).toBeGreaterThanOrEqual(FRONT_CLEARANCE);
+  it.each(pairs)('frames the whole combination at the default view: $name', ({ t, r }) => {
+    for (const frame of FRAMES) {
+      for (const pose of POSES) {
+        const { rig, bodies } = posed(t, r, pose, 0, 0);
+        const camera = place(free(rig), frame, DEFAULT_TOP_DOWN_VIEW);
+        const frustum = new Frustum().setFromProjectionMatrix(
+          new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+        );
+        for (const obb of bodies) {
+          for (const a of [-1, 1]) {
+            for (const b of [-1, 1]) {
+              const cos = Math.cos(obb.heading);
+              const sin = Math.sin(obb.heading);
+              const x = obb.cx + a * obb.halfLength * cos - b * obb.halfWidth * sin;
+              const y = obb.cy + a * obb.halfLength * sin + b * obb.halfWidth * cos;
+              expect(
+                frustum.containsPoint(new Vector3(x, 0, -y)),
+                `${frame.width}x${frame.height} ${x},${y}`,
+              ).toBe(true);
+            }
+          }
         }
       }
-    },
-  );
+    }
+  });
 
-  it('turns the camera exactly to the azimuth limits at the ends of the yaw range', () => {
+  it('tilts from the default pitch to the limits', () => {
+    const { rig } = posed(0, 0, POSES[0] as Pose2, 0, 0);
     const frame = FRAMES[0] as ChaseFrame;
-    const pose = POSES[0] as Pose2;
-    const azimuth = (panX: number): number => {
-      const { position } = place(pose, face, frame, { zoom: 1, panX, panY: 0 });
-      return Math.atan2(-position.z, position.x - (face.x - 0.4));
+    const aim = aimOf(rig);
+    const pitchOf = (panY: number): number => {
+      const { position } = place(free(rig), frame, { zoom: 1, panX: 0, panY });
+      return Math.atan2(position.y - aim.y, Math.hypot(position.x - aim.x, position.z - aim.z));
     };
-    expect(azimuth(CHASE_YAW.min)).toBeCloseTo(-CHASE_AZIMUTH.limit, 6);
-    expect(azimuth(CHASE_YAW.max)).toBeCloseTo(CHASE_AZIMUTH.limit, 6);
+    expect(pitchOf(0)).toBeCloseTo(CHASE_PITCH.default, 9);
+    expect(pitchOf(CHASE_TILT.min - 1)).toBeCloseTo(CHASE_PITCH.min, 9);
+    expect(pitchOf(CHASE_TILT.max + 1)).toBeCloseTo(CHASE_PITCH.max, 9);
+  });
+
+  it('lifts the eye above a collider box it would sit in, and leaves it alone elsewhere', () => {
+    const { rig } = posed(0, 0, POSES[0] as Pose2, 0, 0);
+    const frame = FRAMES[0] as ChaseFrame;
+    const clear = place(free(rig), frame, DEFAULT_TOP_DOWN_VIEW).position;
+    const box: Obb = { cx: clear.x, cy: -clear.z, halfLength: 2, halfWidth: 2, heading: 0.3 };
+    const lifted = place(
+      { ...rig, colliders: [{ obb: box, height: clear.y + 5 }] },
+      frame,
+      DEFAULT_TOP_DOWN_VIEW,
+    ).position;
+    expect(lifted.y).toBeGreaterThan(clear.y + 5);
+    expect(lifted.x).toBeCloseTo(clear.x, 9);
+    const aside = place(
+      { ...rig, colliders: [{ obb: { ...box, cx: box.cx + 50 }, height: 50 }] },
+      frame,
+      DEFAULT_TOP_DOWN_VIEW,
+    ).position;
+    expect(aside.y).toBeCloseTo(clear.y, 9);
+  });
+
+  it.each(Object.values(layouts))(
+    'keeps the eye out of every collider of the $id layout, from the start and from each obstacle',
+    (layout) => {
+      const colliders = resolveLayout(layout, null).obstacles;
+      const spots: Pose2[] = [
+        layout.start,
+        ...colliders.map((o) => ({ x: o.obb.cx, y: o.obb.cy, heading: o.obb.heading })),
+      ];
+      const frame = FRAMES[2] as ChaseFrame;
+      for (const spot of spots) {
+        const { rig } = posed(0, 0, spot, 0, 0);
+        for (const panX of YAWS) {
+          for (const panY of TILTS) {
+            const { position } = place({ ...rig, colliders }, frame, { zoom: 1, panX, panY });
+            for (const o of colliders) {
+              expect(
+                !inside(o.obb, position.x, -position.z) || position.y >= o.height,
+                `${o.id} yaw ${panX} tilt ${panY}`,
+              ).toBe(true);
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it('keeps the skyline inside the far plane from the farthest eye over the layout bounds', () => {
+    const vertices = skylineGeometry(skylineBuildings(BOUNDS)).getAttribute('position');
+    const vertex = new Vector3();
+    let reach = 0;
+    for (let i = 0; i < vertices.count; i++) {
+      vertex.set(vertices.getX(i), vertices.getY(i), vertices.getZ(i));
+      for (const x of [BOUNDS.minX, BOUNDS.maxX]) {
+        for (const y of [BOUNDS.minY, BOUNDS.maxY]) {
+          reach = Math.max(reach, vertex.distanceTo(new Vector3(x, 0, -y)));
+        }
+      }
+    }
+    expect(reach).toBeLessThan(CAMERA_FAR);
+    expect(reach + CHASE_MAX_DISTANCE).toBeLessThan(createChaseCamera().far);
   });
 
   it('leaves the camera alone on a zero-size pane and keeps a collapsed free rect finite', () => {
+    const { rig } = posed(0, 0, POSES[0] as Pose2, 0, 0);
     const camera = createChaseCamera();
     const before = camera.position.clone();
     const none = { x: 0, y: 0, width: 0, height: 0 };
     placeChaseCamera(
       camera,
-      POSES[0] as Pose2,
-      face,
+      free(rig),
       { width: 0, height: 0, clear: none },
       DEFAULT_TOP_DOWN_VIEW,
     );
     expect(camera.position).toEqual(before);
-    const collapsed = chaseDistance(face, { width: 600, height: 600, clear: none });
-    expect(collapsed / CHASE_ZOOM.min).toBeLessThan(CAMERA_FAR);
+    const collapsed = { width: 600, height: 600, clear: none };
+    expect(chaseDistance(rig.radius, collapsed)).toBeLessThan(CAMERA_FAR);
+    const far = place(free(rig), collapsed, { zoom: CHASE_ZOOM.min, panX: 0, panY: 0 });
+    expect(far.position.distanceTo(aimOf(rig))).toBeLessThanOrEqual(CHASE_MAX_DISTANCE + 1e-9);
   });
+});
 
+describe.each(trucks)('chase camera and the cab of $id', (spec) => {
   it('shows a cab to the chase camera without a loaded shell', () => {
     const { layers } = createChaseCamera();
     const truck = proceduralTruck(spec, palette).object;
@@ -174,9 +321,7 @@ describe.each(trucks)('chase camera, $id', (spec) => {
     });
     expect(cabs).toBeGreaterThan(0);
   });
-});
 
-describe.each(trucks)('chase camera and the cab shell of $id', (spec) => {
   it('is framed around the face the glb actually has', async () => {
     const bytes = readFileSync(join(import.meta.dirname, `assets/${spec.id}-cab.glb`));
     const { mesh } = await parseShell(

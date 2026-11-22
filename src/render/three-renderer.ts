@@ -1,6 +1,6 @@
 import { OrthographicCamera, Scene, Vector3, type Object3D } from 'three';
 import { Lighting, WebGPURenderer } from 'three/webgpu';
-import type { Rect2, ResolvedLayout } from '../contracts/layout';
+import type { Obstacle, Rect2, ResolvedLayout } from '../contracts/layout';
 import {
   DEFAULT_GRAPHICS,
   DEFAULT_LIGHTING,
@@ -17,11 +17,16 @@ import {
   type ScenePalette,
   type WebgpuFallback,
 } from '../contracts/render';
-import type { SimSnapshot } from '../contracts/sim';
-import type { TrailerSpec, TruckAnchors, TruckSpec } from '../contracts/vehicle';
+import type { TruckAnchors } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
-import { resolveCombination } from '../vehicles/resolve';
-import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './chase-camera';
+import {
+  cabFront,
+  combinationRadius,
+  createChaseCamera,
+  placeChaseCamera,
+  vehicleCentre,
+  type CabFront,
+} from './chase-camera';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
@@ -54,8 +59,6 @@ import { isShadowCamera } from './sun-shadow';
 import { placeTopDownCamera } from './top-down-camera';
 
 const FOLLOW_HALF_HEIGHT = 20;
-/** Metres added to the vehicle's bounding radius. */
-const FOLLOW_RADIUS_MARGIN = 1;
 /** Time constant of the look-ahead shift, so a gear change glides instead of jumping. */
 const LEAD_SECONDS = 0.5;
 const MAX_LEAD_STEP_SECONDS = 0.25;
@@ -74,6 +77,7 @@ type Built = {
   readonly cabFront: CabFront;
   readonly palette: ScenePalette;
   readonly yardBounds: Rect2;
+  readonly obstacles: readonly Obstacle[];
   /** Metres from the follow centre that bound the whole combination. */
   readonly radius: number;
 };
@@ -98,21 +102,6 @@ function fitBounds(layout: ResolvedLayout): Rect2 {
     maxX: Math.max(...rects.map((r) => r.maxX)) + YARD_MARGIN,
     maxY: Math.max(...rects.map((r) => r.maxY)) + YARD_MARGIN,
   };
-}
-
-function followRadius(truck: TruckSpec, trailer: TrailerSpec): number {
-  const p = resolveCombination(truck, trailer);
-  const length =
-    p.truckFront + p.couplingOffset + p.drawbar + p.trailerWheelbase + p.trailerRearOverhang;
-  return length / 2 + Math.max(p.truckWidth, p.trailerWidth) / 2 + FOLLOW_RADIUS_MARGIN;
-}
-
-/** The bumper-to-trailer-rear midpoint the follow views and the sun shadow centre on. */
-function vehicleCentre(snapshot: SimSnapshot, frontX: number): { x: number; y: number } {
-  const { truck, trailerRear } = snapshot;
-  const bumperX = truck.x + Math.cos(truck.heading) * frontX;
-  const bumperY = truck.y + Math.sin(truck.heading) * frontX;
-  return { x: (bumperX + trailerRear.x) / 2, y: (bumperY + trailerRear.y) / 2 };
 }
 
 function setAidsLayer(object: Object3D): void {
@@ -470,7 +459,8 @@ export function createThreeSceneRenderer(
         cabFront: cabFront(truck),
         palette,
         yardBounds: fitBounds(nextLayout),
-        radius: followRadius(truck, trailer),
+        obstacles: nextLayout.obstacles,
+        radius: combinationRadius(truck, trailer),
       };
       applyLookTo(built);
     },
@@ -583,8 +573,13 @@ export function createThreeSceneRenderer(
       if (chaseShown) {
         placeChaseCamera(
           chaseCamera,
-          snapshot.truck,
-          b.cabFront,
+          {
+            truck: snapshot.truck,
+            centre: vehicleCentre(snapshot, b.anchors.frontX),
+            radius: b.radius,
+            face: b.cabFront,
+            colliders: b.obstacles,
+          },
           {
             width: topDown.width,
             height: topDown.height,

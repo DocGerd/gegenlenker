@@ -22,6 +22,10 @@ export type Action =
   | 'viewChase'
   | 'zoomIn'
   | 'zoomOut'
+  | 'orbitLeft'
+  | 'orbitRight'
+  | 'tiltUp'
+  | 'tiltDown'
   | 'resetView'
   | 'splitReset';
 
@@ -48,6 +52,8 @@ type LegendSpec = {
   readonly term: LegendTerm;
   readonly desc: MessageKey;
   readonly viewOnly?: boolean;
+  /** Dropped where the outside view does not exist. */
+  readonly chaseOnly?: boolean;
   /** Replaces term and desc where the outside view exists. */
   readonly withChase?: { readonly term: LegendTerm; readonly desc: MessageKey };
 };
@@ -136,6 +142,15 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
   { legend: { term: { key: 'keyScroll' }, desc: 'zoom', viewOnly: true } },
   { legend: { term: { key: 'keyDrag' }, desc: 'panView', viewOnly: true } },
   {
+    action: 'orbitLeft',
+    match: { by: 'key', values: [','] },
+    scope: 'view',
+    legend: { term: ', / . · PgUp / PgDn', desc: 'orbitTilt', viewOnly: true, chaseOnly: true },
+  },
+  { action: 'orbitRight', match: { by: 'key', values: ['.'] }, scope: 'view' },
+  { action: 'tiltUp', match: { by: 'code', values: ['PageUp'] }, scope: 'view' },
+  { action: 'tiltDown', match: { by: 'code', values: ['PageDown'] }, scope: 'view' },
+  {
     action: 'resetView',
     match: { by: 'key', values: ['0'] },
     scope: 'view',
@@ -163,7 +178,7 @@ export const isAction = (action: Action, e: KeyLike): boolean =>
 /** The key legend in display order; `chase` is whether the outside view exists. */
 export function legendRows(chase: boolean): LegendRow[] {
   return KEYMAP.map(({ legend }) => legend).flatMap((spec) => {
-    if (spec === undefined) return [];
+    if (spec === undefined || (spec.chaseOnly === true && !chase)) return [];
     const { term, desc } = chase && spec.withChase !== undefined ? spec.withChase : spec;
     return [{ term, desc, viewOnly: spec.viewOnly ?? false }];
   });

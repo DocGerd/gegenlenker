@@ -11,6 +11,8 @@ const US_CODES: Record<string, readonly string[]> = {
   '=': ['Equal'],
   '-': ['Minus', 'NumpadSubtract'],
   '0': ['Digit0', 'Numpad0'],
+  ',': ['Comma'],
+  '.': ['Period'],
 };
 
 const physicalCodes = (value: string): readonly string[] => {
@@ -34,7 +36,7 @@ describe('keymap', () => {
       expect(match.values.length).toBeGreaterThan(0);
       for (const v of match.values) {
         if (match.by === 'code')
-          expect(v).toMatch(/^(Key[A-Z]|Digit\d|Numpad\d|Arrow\w+|Space|Escape)$/);
+          expect(v).toMatch(/^(Key[A-Z]|Digit\d|Numpad\d|Arrow\w+|Page(Up|Down)|Space|Escape)$/);
         else expect(v).toHaveLength(1);
       }
     }
@@ -77,6 +79,12 @@ describe('keymap', () => {
         if (typeof term !== 'string') expect(en).toHaveProperty(term.key);
       }
     }
+  });
+
+  it('offers the orbit and tilt keys only with the outside view', () => {
+    const terms = (chase: boolean): unknown[] => legendRows(chase).map((r) => r.term);
+    expect(terms(true)).toContain(', / . · PgUp / PgDn');
+    expect(terms(false)).not.toContain(', / . · PgUp / PgDn');
   });
 
   it('offers the outside-view key only with the outside view', () => {
