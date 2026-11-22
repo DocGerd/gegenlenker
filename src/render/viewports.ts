@@ -11,6 +11,8 @@ import {
   type ViewMode,
   type ViewRects,
 } from '../contracts/render';
+import { de } from '../i18n/de';
+import { en, type MessageKey } from '../i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop, frontBand } from './cockpit-band';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -41,13 +43,28 @@ const MESSAGE_GAP = 8;
  */
 export const MIN_MESSAGE_WIDTH = 131 + 41 + 32;
 /**
- * What the toast and the goal cue stack needs, for the longest messages ("Drehschemelwinkel am
- * Anschlag – in Gegenrichtung fahren", "In der Toleranz – jetzt anhalten"): characters, an
- * over-estimated px per character, line height, and the padding and border above and below a box.
+ * The toast and goal-cue messages `messagesFit` wraps. `viewports.test.ts` checks the lists against
+ * the message tables.
  */
-const TOAST_CHARS = 56;
-const CUE_CHARS = 33;
-const CHAR_PX = 7.5;
+export const MESSAGE_KEYS = {
+  toast: [
+    'contactAhead',
+    'selectGear',
+    'blockedContactTruck',
+    'blockedContactDrawbar',
+    'blockedContactTrailer',
+    'blockedContactSelf',
+    'blockedCoupling',
+    'blockedTurntable',
+  ],
+  cue: ['goalInside', 'goalOutside'],
+} as const satisfies Record<string, readonly MessageKey[]>;
+/**
+ * A word's width at 14 px Geist, medium: no less than any measured word of these messages has
+ * (`MESSAGE_WORD_PX` in `viewports.test.ts` holds the measurements), and its space.
+ */
+export const wordPx = (word: string): number => 8 * word.length + 6;
+export const SPACE_PX = 4;
 const MESSAGE_LINE = 22;
 const MESSAGE_BOX = 18;
 /** Height of the gear column with its lamp row, as `layout.spec.ts` measures it. */
@@ -269,6 +286,25 @@ export function computeViewports(
   };
 }
 
+/** Lines `text` takes in a box `width` px wide, by greedy word wrap over `wordPx`; a word wider than the box takes a line. */
+export function wrapLines(text: string, width: number): number {
+  let lines = 1;
+  let used = 0;
+  for (const word of text.split(/\s+/)) {
+    const px = wordPx(word);
+    if (used === 0) used = px;
+    else if (used + SPACE_PX + px <= width) used += SPACE_PX + px;
+    else {
+      lines++;
+      used = px;
+    }
+  }
+  return lines;
+}
+
+const mostLines = (keys: readonly MessageKey[], width: number): number =>
+  Math.max(...keys.flatMap((key) => [wrapLines(en[key], width), wrapLines(de[key], width)]));
+
 /**
  * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top, end above
  * the controls and the forward sight cone they would otherwise reach into.
@@ -281,11 +317,10 @@ function messagesFit(
   controls: number,
   insets: Insets,
 ): boolean {
-  const lines = (chars: number, chrome: number): number =>
-    Math.ceil((chars * CHAR_PX) / Math.max(1, column.width - insets.left - chrome));
   // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
-  const toast = lines(TOAST_CHARS, 32 + 41) * MESSAGE_LINE + MESSAGE_BOX;
-  const cue = lines(CUE_CHARS, 34) * MESSAGE_LINE + MESSAGE_BOX;
+  const room = column.width - insets.left;
+  const toast = mostLines(MESSAGE_KEYS.toast, room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX;
+  const cue = mostLines(MESSAGE_KEYS.cue, room - 34) * MESSAGE_LINE + MESSAGE_BOX;
   const landscape = cssWidth >= cssHeight;
   const bottom = cockpit.y + INSET + (landscape ? insets.top : 0) + toast + MESSAGE_GAP + cue;
   const reaches = (x0: number, x1: number): boolean =>

@@ -27,6 +27,8 @@ const sizes = [
   { width: 1300, height: 600 },
   { width: 1350, height: 600 },
   { width: 1366, height: 768 },
+  { width: 1172, height: 426 },
+  { width: 620, height: 774 },
 ];
 
 /** Height of the gear column before the lamp row: its label, four gear buttons and their gaps. */
@@ -536,11 +538,11 @@ for (const { locale, messages } of locales) {
   }
 }
 
-/** Sizes the front mirror is shown at, and phone portrait sizes it is not: the toast column is too narrow there. */
+/** Sizes where the front mirror is shown and where it is not: the toast column is too narrow or too short there. */
 const frontShown = [
   { width: 1280, height: 800, front: 1 },
   { width: 1366, height: 768, front: 1 },
-  { width: 768, height: 1024, front: 1 },
+  { width: 768, height: 1024, front: 0 },
   { width: 390, height: 844, front: 0 },
   { width: 360, height: 800, front: 0 },
 ];

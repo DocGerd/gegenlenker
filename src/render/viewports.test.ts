@@ -8,8 +8,12 @@ import {
   controlsHeight,
   FRONT_ASPECT,
   messageColumn,
+  MESSAGE_KEYS,
   MIN_FRONT_WIDTH,
   MIN_MESSAGE_WIDTH,
+  SPACE_PX,
+  wordPx,
+  wrapLines,
   MIN_MIRROR_HEIGHT,
   NO_INSETS,
   topDownSplit,
@@ -259,6 +263,80 @@ describe('top-down split', () => {
   });
 });
 
+/** Word widths in px at 14 px Geist medium, measured in the page (the toast's box, padding excluded). */
+const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
+  Anhänger: 65,
+  Anschlag: 63,
+  Außerhalb: 70,
+  Berührung: 71,
+  'Berührung:': 75,
+  Contact: 53,
+  'Contact:': 57,
+  Coupling: 60,
+  D: 10,
+  Deichsel: 58,
+  Drehschemelwinkel: 131,
+  Gegenrichtung: 99,
+  In: 12,
+  Kupplungswinkel: 116,
+  Lkw: 27,
+  Outside: 54,
+  R: 10,
+  Select: 43,
+  Toleranz: 56,
+  Turntable: 62,
+  ahead: 41,
+  am: 20,
+  and: 25,
+  angle: 37,
+  anhalten: 57,
+  at: 13,
+  ausweichen: 80,
+  away: 36,
+  der: 23,
+  drawbar: 57,
+  drive: 35,
+  fahren: 43,
+  in: 12,
+  jetzt: 32,
+  limit: 29,
+  now: 28,
+  oder: 31,
+  or: 14,
+  other: 36,
+  steer: 36,
+  stop: 31,
+  the: 22,
+  to: 14,
+  tolerance: 63,
+  trailer: 41,
+  truck: 37,
+  um: 20,
+  und: 25,
+  voraus: 45,
+  way: 28,
+  'wählen,': 51,
+  zu: 16,
+  '–': 8,
+};
+const MEASURED_SPACE_PX = 3;
+
+/** Greedy word wrap with the measured widths: what the browser does, give or take kerning. */
+function referenceLines(text: string, width: number): number {
+  let lines = 1;
+  let used = 0;
+  for (const word of text.split(/\s+/)) {
+    const px = MESSAGE_WORD_PX[word] ?? Infinity;
+    if (used === 0) used = px;
+    else if (used + MEASURED_SPACE_PX + px <= width) used += MEASURED_SPACE_PX + px;
+    else {
+      lines++;
+      used = px;
+    }
+  }
+  return lines;
+}
+
 describe('computeViewports front mirror', () => {
   const FRONT = { front: true };
   const apart = (a: Rect, b: Rect): boolean =>
@@ -395,26 +473,41 @@ describe('computeViewports front mirror', () => {
     expect(dropped).toBeGreaterThan(0);
   });
 
-  it('pins the widest word of a toast or goal cue that MIN_MESSAGE_WIDTH is measured for', () => {
-    const messages = [en, de].flatMap((table) =>
-      Object.entries(table)
-        .filter(([key]) => /^(blocked|goal|contactAhead|selectGear)/.test(key))
-        .map(([, text]) => text),
-    );
-    const longest = messages
-      .flatMap((text) => text.split(/\s+/))
-      .sort((a, b) => b.length - a.length)[0];
-    // 131 px at 14 px Geist; a longer word needs a new measurement and a wider MIN_MESSAGE_WIDTH
-    expect(longest).toBe('Drehschemelwinkel');
-    // the stack height `messagesFit` assumes is for messages no longer than these
-    const lengths = (pattern: RegExp): number[] =>
-      [en, de].flatMap((table) =>
-        Object.entries(table)
-          .filter(([key]) => pattern.test(key))
-          .map(([, text]) => text.length),
-      );
-    expect(Math.max(...lengths(/^goal(Inside|Outside)$/))).toBeLessThanOrEqual(33);
-    expect(Math.max(...lengths(/^(blocked|contactAhead|selectGear)/))).toBeLessThanOrEqual(56);
+  it('wraps no fewer lines than the measured words do, at every column width', () => {
+    for (const keys of [MESSAGE_KEYS.toast, MESSAGE_KEYS.cue]) {
+      for (const key of keys) {
+        for (const text of [en[key], de[key]]) {
+          for (let width = 100; width <= 600; width++) {
+            expect(wrapLines(text, width), `${key} ${text} at ${width}`).toBeGreaterThanOrEqual(
+              referenceLines(text, width),
+            );
+          }
+        }
+      }
+    }
+  });
+
+  it('knows every word of the messages, and measured none wider than it assumes', () => {
+    const texts = [...MESSAGE_KEYS.toast, ...MESSAGE_KEYS.cue].flatMap((key) => [en[key], de[key]]);
+    for (const word of texts.flatMap((text) => text.split(/\s+/))) {
+      expect(
+        MESSAGE_WORD_PX[word],
+        `${word} is unmeasured: add it to MESSAGE_WORD_PX`,
+      ).toBeDefined();
+      expect(wordPx(word), word).toBeGreaterThanOrEqual(MESSAGE_WORD_PX[word] ?? Infinity);
+    }
+    expect(SPACE_PX).toBeGreaterThanOrEqual(MEASURED_SPACE_PX);
+    // MIN_MESSAGE_WIDTH is built on the widest word
+    expect(Math.max(...Object.values(MESSAGE_WORD_PX))).toBe(MESSAGE_WORD_PX['Drehschemelwinkel']);
+  });
+
+  it('lists exactly the toast and goal-cue messages', () => {
+    const keysOf = (pattern: RegExp): string[] =>
+      Object.keys(en)
+        .filter((key) => pattern.test(key))
+        .sort();
+    expect([...MESSAGE_KEYS.toast].sort()).toEqual(keysOf(/^(blocked|contactAhead|selectGear)/));
+    expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Outside)$/));
   });
 
   it('leaves the toast column alone without a front mirror', () => {
