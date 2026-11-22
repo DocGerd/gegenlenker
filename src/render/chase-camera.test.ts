@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { Box3, Frustum, Layers, Matrix4, Mesh, Vector3, type PerspectiveCamera } from 'three';
 import { describe, expect, it } from 'vitest';
 import { exercises, layouts } from '../content/registry';
+import { KIT_FOOTPRINTS } from '../content/kit';
 import { resolveLayout } from '../content/resolve-layout';
 import { BOUNDS } from '../content/street';
 import {
@@ -13,6 +14,7 @@ import {
   type ScenePalette,
   type TopDownView,
 } from '../contracts/render';
+import { isKitDecor } from '../contracts/layout';
 import type { Obb, Pose2 } from '../contracts/sim';
 import { bodyFootprints } from '../sim/geometry';
 import { joints, type KinematicState } from '../sim/kinematics';
@@ -310,26 +312,37 @@ describe('chase camera', () => {
   it.each(Object.values(layouts))(
     'keeps the eye out of every collider and solid decor of the $id layout, from the start and from each of them',
     (layout) => {
-      const colliders = chaseColliders(resolveLayout(layout, null));
+      const resolved = resolveLayout(layout, null);
+      const colliders = chaseColliders(resolved);
+      // Named independently of chaseColliders, so dropping decor from it cannot hide a breach.
+      const solid = [
+        ...resolved.obstacles,
+        ...resolved.decor.flatMap((d) =>
+          isKitDecor(d) && /^(hall|office)-/.test(d.piece)
+            ? [{ obb: d.footprint, height: KIT_FOOTPRINTS[d.piece].height }]
+            : [],
+        ),
+      ];
       const spots: Pose2[] = [
         layout.start,
-        ...colliders.map((o) => ({ x: o.obb.cx, y: o.obb.cy, heading: o.obb.heading })),
+        ...solid.map((o) => ({ x: o.obb.cx, y: o.obb.cy, heading: o.obb.heading })),
       ];
       const frame = FRAMES[2] as ChaseFrame;
+      const camera = createChaseCamera();
+      const breaches: string[] = [];
       for (const spot of spots) {
         const { rig } = posed(0, 0, spot, 0, 0);
+        const placed = { ...rig, colliders };
         for (const panX of YAWS) {
           for (const panY of TILTS) {
-            const { position } = place({ ...rig, colliders }, frame, { zoom: 1, panX, panY });
-            colliders.forEach((o, i) => {
-              expect(
-                !inside(o.obb, position.x, -position.z) || position.y >= o.height,
-                `collider ${i} yaw ${panX} tilt ${panY}`,
-              ).toBe(true);
-            });
+            placeChaseCamera(camera, placed, frame, { zoom: 1, panX, panY });
+            const { x, y, z } = camera.position;
+            const i = solid.findIndex((o) => y < o.height && inside(o.obb, x, -z));
+            if (i >= 0) breaches.push(`collider ${i} yaw ${panX} tilt ${panY}`);
           }
         }
       }
+      expect(breaches).toEqual([]);
     },
   );
 
