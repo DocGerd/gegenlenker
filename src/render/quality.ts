@@ -20,6 +20,8 @@ export type QualityFlags = {
   readonly frontMirror: boolean;
   /** The class IV wide-angle mirrors under the class II ones. */
   readonly wideMirrors: boolean;
+  /** The class V close-proximity mirror on the passenger side; Low stays off until the tablet check has measured it. */
+  readonly closeMirror: boolean;
   /** Dashboard, pillars, header and visor around the cockpit view, and the mirror housings. */
   readonly cockpitInterior: boolean;
   /** The Blender cab interior in the cockpit view in place of the flat overlay; a download, and needs `cockpitInterior`. */
@@ -60,6 +62,7 @@ const BALANCED: QualityFlags = {
   chaseView: true,
   frontMirror: true,
   wideMirrors: true,
+  closeMirror: true,
   cockpitInterior: true,
   interiorGlb: false,
   litMarkings: true,
@@ -92,6 +95,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     chaseView: false,
     frontMirror: true,
     wideMirrors: true,
+    closeMirror: false,
     cockpitInterior: false,
     interiorGlb: false,
     litMarkings: false,
