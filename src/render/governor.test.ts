@@ -573,8 +573,19 @@ describe('a 60 Hz cadence with frame jitter', () => {
       governor,
       JITTER.map((ms) => ms + 1.5),
     );
-    // The replay cannot respond to the scale, so the step is reverted after it; the step down is the signal.
-    expect(governor.trace().events.some((e) => e.kind === 'down')).toBe(true);
+    // The replay cannot respond to the scale, so the step is reverted after it.
+    expect(governor.trace().events.map((e) => e.kind)).toEqual(['down', 'down-failed']);
+    expect(governor.scale()).toBe(1);
+  });
+
+  it('keeps a step that brings the jitter 1.5 ms slower back on time', () => {
+    const governor = createResolutionGovernor();
+    for (let i = 0; i < 3 * JITTER.length; i++) {
+      const ms = JITTER[i % JITTER.length] ?? 0;
+      governor.sample(governor.scale() < 1 ? ms : ms + 1.5);
+    }
+    expect(governor.trace().events.map((e) => e.kind)).not.toContain('down-failed');
+    expect(governor.scale()).toBeCloseTo(0.85, 10);
   });
 
   it.each([20, 21, 25])('steps down when every frame takes %ims', (ms) => {
