@@ -33,7 +33,7 @@ const PITCH = rad(VIEW_PITCH_DEG);
 /** Metres from the cab's side wall to its inner trim face; the door tops and walls are this thick. */
 export const DOOR_THICKNESS = 0.12;
 /** Metres the dash and header stand off the windscreen's inner face. */
-const GLASS_SETBACK = 0.06;
+export const GLASS_SETBACK = 0.06;
 /** The dash's rear edge: metres ahead of the eye along the view axis, and its NDC y beside and ahead of the driver. */
 export const DASH = { depth: 0.8, edge: -0.52, flank: 0.06, flankScale: 0.9 } as const;
 /** The instrument binnacle straight ahead of the driver, in metres across the view at `DASH.depth`. */
@@ -71,13 +71,12 @@ export const PILLAR_DEPTH = 0.09;
 const ROOF_LINING = 0.1;
 
 /** Metres the forward door's rear end is behind the eye. */
-export const DOOR_BACK = 0.2;
+const DOOR_BACK = 0.2;
 /**
- * What a driver looking around sees behind the forward view (#258). The B-pillar stands `behindEye`
- * metres behind the eye, so the side window reaches back to it from the A-pillar; its front face is
- * what the aperture of cockpit-look-around checks. Everything added lies behind the eye plane or
- * under the dash and door tops, where no ray of the forward view reaches it (pinned by
- * interior-look-around.test.ts).
+ * The cab behind the forward view, for looking around (#258): the B-pillar stands `behindEye` metres
+ * behind the eye, so the side window reaches back to it from the A-pillar. The parts added lie behind
+ * the eye plane, under the dash and door tops, or (rail, roof lining) a lap past the plane where no
+ * ray of the forward view reaches them (pinned by interior-look-around.test.ts).
  */
 export const B_PILLAR = { behindEye: 0.55, depth: 0.12, inset: 0.05 } as const;
 /** Metres the rail and roof lining reach ahead of the eye plane, so a ray along it meets them. */
@@ -85,7 +84,7 @@ const EYE_PLANE_LAP = 0.02;
 /** Metres the added parts stand inside the cab's skin. */
 const SKIN_GAP = 0.01;
 /** Metres thick the rear wall and the floor are. */
-export const REAR_WALL = 0.1;
+const REAR_WALL = 0.1;
 const FLOOR = 0.04;
 const CEILING = CAB_HEIGHT - ROOF_LINING;
 /** The top of the roof lining, where the side rail and the rear wall end. */

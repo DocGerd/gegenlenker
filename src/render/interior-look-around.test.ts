@@ -19,6 +19,7 @@ import { interiorShellFrom } from './interior-glb';
 import {
   B_PILLAR,
   DOOR_THICKNESS,
+  GLASS_SETBACK,
   interiorShellParams,
   type InteriorMeshName,
   lookAroundSolids,
@@ -123,6 +124,7 @@ describe.each(trucks)('cab interior for looking around, $id', (spec) => {
   const inner = half - DOOR_THICKNESS;
   const sill = FRAME_TOP + cab.cab.glassSill;
   const glassTop = sill + cab.cab.glassHeight;
+  const glass = frontX - GLASS_SETBACK;
   const bPillarFront = eye.x - B_PILLAR.behindEye;
   const origin = toThree([eye.x, eye.y, eye.z]);
 
@@ -141,7 +143,7 @@ describe.each(trucks)('cab interior for looking around, $id', (spec) => {
     if (dy !== 0) {
       const [x, , z] = at(((dy > 0 ? inner : -inner) - eye.y) / dy);
       if (x >= bPillarFront && x <= eye.x && z >= sill && z <= glassTop) return true;
-      if (x > eye.x && x <= frontX && z >= FRAME_TOP) return true;
+      if (x > eye.x && x <= glass && z >= sill) return true;
     }
     return false;
   };
