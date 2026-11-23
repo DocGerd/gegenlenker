@@ -29,8 +29,10 @@ An array of releases, newest first. The unreleased group (`"version": null`, no 
 
 ## Release
 
-1. In `released.json`, give the unreleased group its `"version"` and `"date"`; if there is none, add a new first group with them.
-2. Add each fragment to that group as an entry, in PR number order, with `id` the file name without `.md`, `prs` the PR number, and `en` the line without the link group (ending in a period).
-3. Delete only the folded files, by name, never by glob.
-4. Run `pnpm changelog`; the folded entries appear in `CHANGELOG.md`, in their own `## [X.Y.Z] - date` section.
-5. Before tagging, confirm `changelog.d/` holds only `README.md` and `released.json`; a fragment merged after the fold is otherwise lost.
+Three commands own the release steps; run them on a clean tree.
+
+- `pnpm release:prepare [X.Y.Z] [--date YYYY-MM-DD]` sets the `package.json` version, folds every pending fragment into the head group of `released.json` (the unreleased group, else a new first group) with the version and date, in PR number order with ids unchanged, deletes exactly the folded files and regenerates `CHANGELOG.md`. Without a version it derives one from the last release: only `fixed` and `security` entries make a patch, anything else a minor; a major or the first version is always passed. It refuses a dirty tree, a version that does not rise or already has a `v` tag, and new fragments over an untagged versioned head group unless that version is passed again, which folds them into it (the date is kept). It reads the local tags, so fetch them first. Once prepared, a re-run with nothing pending is a no-op.
+- `pnpm release:check` fails on a pending fragment, a `package.json` version that differs from the head group of `released.json`, versions not strictly newest first, a stale `CHANGELOG.md`, or a head version whose local `v` tag points at another commit. It has to pass before a release is tagged.
+- `pnpm release:notes [X.Y.Z] [--body]` prints that version's `CHANGELOG.md` section (default: the `package.json` version); `--body` leaves out its `## [X.Y.Z] - date` heading, for a release titled with the version.
+
+The folded entries keep their ids, so the app's "What's new" seen-state is unaffected.

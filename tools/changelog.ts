@@ -18,8 +18,17 @@ const HEADINGS: Record<Category, string> = {
   fixed: 'Fixed',
   security: 'Security',
 };
-const VERSION_RE = /^\d+\.\d+\.\d+$/;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** SemVer core: no leading zeros, so a typo cannot become a tag. */
+export const VERSION_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const triple = (version: string): number[] => version.split('.').map(Number);
+
+/** Negative when `a` is below `b`, 0 when equal, positive when above. */
+export const compareVersions = (a: string, b: string): number => {
+  const [x, y] = [triple(a), triple(b)];
+  return (x[0] ?? 0) - (y[0] ?? 0) || (x[1] ?? 0) - (y[1] ?? 0) || (x[2] ?? 0) - (y[2] ?? 0);
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -65,6 +74,7 @@ export const releaseProblems = (data: unknown, fragmentIds: readonly string[] = 
   if (!Array.isArray(data)) return ['released.json must be an array of releases'];
   const out: string[] = [];
   const seen = new Set<string>(fragmentIds);
+  let newer: string | undefined;
   data.forEach((release: unknown, index) => {
     const where = `release ${String(index)}`;
     if (!isRecord(release)) {
@@ -77,8 +87,13 @@ export const releaseProblems = (data: unknown, fragmentIds: readonly string[] = 
       if (date !== undefined) out.push(`${where}: an unreleased group has no date`);
     } else if (typeof version !== 'string' || !VERSION_RE.test(version))
       out.push(`${where}: version must be null or x.y.z`);
-    else if (typeof date !== 'string' || !DATE_RE.test(date))
-      out.push(`${where}: a released version needs a YYYY-MM-DD date`);
+    else {
+      if (typeof date !== 'string' || !DATE_RE.test(date))
+        out.push(`${where}: a released version needs a YYYY-MM-DD date`);
+      if (newer !== undefined && compareVersions(version, newer) >= 0)
+        out.push(`${where}: version ${version} must be below ${newer} (newest first)`);
+      newer = version;
+    }
     if (!Array.isArray(entries)) out.push(`${where}: entries must be an array`);
     else
       entries.forEach((entry: unknown, i) =>
@@ -93,7 +108,7 @@ const line = (entry: ChangelogEntry): string => {
   return `- ${entry.en.slice(0, -1)} (${links}).`;
 };
 
-const section = (title: string, entries: readonly ChangelogEntry[]): string => {
+export const section = (title: string, entries: readonly ChangelogEntry[]): string => {
   const blocks = [`## ${title}`];
   for (const category of CATEGORIES) {
     const items = entries.filter((entry) => entry.category === category);
