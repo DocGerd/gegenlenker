@@ -15,7 +15,7 @@ import {
 import type { WebGPURenderer } from 'three/webgpu';
 import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
-import { ShaderRejectedError } from './shader-check';
+import { ShaderRejectedError, watchShaderErrors } from './shader-check';
 
 /*
  * Runtime-cached KTX2 textures: authored files transcoded on the device to whatever compressed
@@ -229,23 +229,13 @@ export function startTextureSet<K extends string>({
   };
 
   /** three skips its own report once `onShaderError` is set, so unrelated programs are logged here. */
-  const watchShaderErrors = (gl: WebGPURenderer): void => {
-    const previous = gl.debug.onShaderError;
-    const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
-      if (context.getShaderSource(fragment)?.includes(marker) === true) reject();
-      if (previous !== null) previous(context, program, vertex, fragment);
-      else
-        console.error(
-          'WebGLProgram: shader error',
-          context.getShaderInfoLog(vertex),
-          context.getShaderInfoLog(fragment),
-          context.getProgramInfoLog(program),
-        );
-    };
-    gl.debug.onShaderError = watcher;
-    restoreShaderErrors = () => {
-      if (gl.debug.onShaderError === watcher) gl.debug.onShaderError = previous;
-    };
+  const hookShaderErrors = (gl: WebGPURenderer): void => {
+    restoreShaderErrors = watchShaderErrors(gl, {
+      matches: (source) => source?.includes(marker) === true,
+      onMatch: reject,
+      forward: true,
+      unwatchedLabel: 'WebGLProgram: shader error',
+    });
   };
 
   const start = (): void => {
@@ -291,7 +281,7 @@ export function startTextureSet<K extends string>({
       if (renderer === next || disposed) return;
       restoreShaderErrors?.();
       renderer = next;
-      watchShaderErrors(next);
+      hookShaderErrors(next);
       start();
     },
     setEnabled(on) {

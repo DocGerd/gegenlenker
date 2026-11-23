@@ -42,6 +42,9 @@ for (const { locale, messages } of locales) {
     expect(await page.getByRole('heading', { level: 2 }).count()).toBeGreaterThan(0);
     await expect(page.getByRole('listitem')).toHaveCount(entryCount);
     await expect(page.locator('li:not([lang="en"])')).toHaveCount(0);
+    await expect(page.getByText(messages.whatsNewEnglishNote)).toHaveCount(
+      locale === 'en-US' ? 0 : 1,
+    );
     await expect(page.locator('main a')).toHaveCount(0);
 
     const overflow = await page.evaluate(() => {
