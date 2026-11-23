@@ -498,8 +498,8 @@ test('a short cockpit opens the key legend to the drive keys, and the chevron sh
 });
 
 for (const [height, openFull] of [
-  [719, false],
-  [720, true],
+  [739, false],
+  [740, true],
 ] as const) {
   test(`the key legend opens to ${openFull ? 'the full list' : 'the drive keys'} at 1280x${String(height)}`, async ({
     page,
@@ -1053,8 +1053,8 @@ const laptops: { size: Size; locale: string; messages: typeof en | typeof de }[]
     { width: 1470, height: 832 },
     { width: 1512, height: 788 },
     { width: 1280, height: 585 },
-    { width: 1280, height: 719 },
-    { width: 1280, height: 720 },
+    { width: 1280, height: 739 },
+    { width: 1280, height: 740 },
   ].flatMap((size) => locales.map((l) => ({ size, ...l }))),
   { size: { width: 1440, height: 739 }, locale: 'de-DE', messages: de },
 ];
