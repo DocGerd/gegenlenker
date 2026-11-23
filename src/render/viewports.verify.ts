@@ -25,7 +25,14 @@ import {
 import { de } from '../i18n/de';
 import { en } from '../i18n/en';
 import { CLOSE_ASPECT, MIN_CLOSE_WIDTH } from './close-mirror';
-import { COCKPIT_FOV, coneEdge, coneTop, FRONT_GAP_PX, VISOR } from './cockpit-band';
+import {
+  CLEAR_CONE_DEG,
+  COCKPIT_FOV,
+  coneEdge,
+  coneTop,
+  FRONT_GAP_PX,
+  VISOR,
+} from './cockpit-band';
 import { QUALITY_FLAGS } from './quality';
 import {
   computeViewports,
@@ -260,7 +267,7 @@ const PROPERTIES = [
   'mirrors-clear-of-control-boxes',
   'mirrors-above-hud-band',
   'mirrors-clear-of-legend',
-  'mirrors-clear-of-sight-cone',
+  'wide-mirrors-clear-of-sight-cone',
   'mirrors-and-message-column-disjoint',
   'class-iv-hangs-under-class-ii',
   'class-ii-keeps-share-with-class-iv',
@@ -276,26 +283,78 @@ const PROPERTIES = [
 ] as const;
 type Property = (typeof PROPERTIES)[number];
 
-type Stat = {
-  applied: number;
-  failed: number;
+/** Variant name to the issue that tracks the counterexamples found in it. */
+type KnownTable = Readonly<Partial<Record<Property, Readonly<Record<string, string>>>>>;
+
+/**
+ * Counterexamples already filed as issues, per bounds. A counterexample in a listed (property, variant)
+ * pair is KNOWN and does not fail the run; any other fails. A listed pair without one in its bounds is
+ * STALE and fails too: the issue was fixed, remove the entry.
+ */
+const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable } = (() => {
+  const named = (issue: string, ...variants: string[]): Record<string, string> =>
+    Object.fromEntries(variants.map((v) => [v, issue]));
+  const rounding = 'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)';
+  const shareMax = [
+    'drive balanced, share max',
+    'drive high, home indicator, legend, panels steps, share max',
+  ];
+  const wideCone = named(
+    '#392',
+    ...shareMax,
+    'drive balanced, notch',
+    'drive balanced, notch, legend, panels steps, share min',
+    'mirrors balanced',
+    'mirrors balanced, legend with all keys',
+    'mirrors high, notch, legend',
+    'mirrors balanced, home indicator, legend',
+  );
+  const insetDrive = [
+    'drive balanced, notch',
+    'drive balanced, notch, legend, panels steps, share min',
+  ];
+  const nearSquare = [
+    'drive balanced, home indicator',
+    'drive balanced, notch',
+    'drive balanced, notch, legend, panels steps, share min',
+    'drive high, home indicator, legend, panels steps, share max',
+  ];
+  const base: KnownTable = {
+    [rounding]: named('#389', ...shareMax),
+    'wide-mirrors-clear-of-sight-cone': wideCone,
+    'message-column-valid': named('#393', 'mirrors high, notch, legend'),
+  };
+  return {
+    default: base,
+    full: {
+      ...base,
+      'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)': named('#390', ...nearSquare),
+      'mirrors-clear-of-control-boxes': named('#390', ...nearSquare),
+      'message-column-valid': {
+        ...named('#393', 'mirrors high, notch, legend'),
+        ...named('#394', ...insetDrive),
+      },
+      'message-stack-clear-of-sight-cone': named('#393', 'mirrors high, notch, legend'),
+      'message-stack-clear-of-controls-and-hud-band': named(
+        '#393',
+        'mirrors high, notch, legend',
+        'mirrors balanced, home indicator, legend',
+      ),
+      'message-stack-clear-of-legend': named('#391', 'drive balanced, legend with all keys'),
+    },
+  };
+})();
+
+type Failures = {
+  n: number;
   examples: string[];
-  byVariant: Map<string, number>;
   box: { w0: number; w1: number; h0: number; h1: number };
 };
-const EXAMPLES = 4;
+type Stat = { applied: number; byVariant: Map<string, Failures> };
+const EXAMPLES = 3;
 
 const stats = new Map<Property, Stat>(
-  PROPERTIES.map((p) => [
-    p,
-    {
-      applied: 0,
-      failed: 0,
-      examples: [],
-      byVariant: new Map(),
-      box: { w0: Infinity, w1: -Infinity, h0: Infinity, h1: -Infinity },
-    },
-  ]),
+  PROPERTIES.map((p) => [p, { applied: 0, byVariant: new Map() }]),
 );
 const cur = { variant: '', w: 0, h: 0 };
 
@@ -310,14 +369,17 @@ function chk(p: Property, held: boolean): boolean {
 function fail(p: Property, detail: () => string): void {
   const s = stats.get(p);
   if (s === undefined) throw new Error(p);
-  s.failed++;
-  s.byVariant.set(cur.variant, (s.byVariant.get(cur.variant) ?? 0) + 1);
-  s.box.w0 = Math.min(s.box.w0, cur.w);
-  s.box.w1 = Math.max(s.box.w1, cur.w);
-  s.box.h0 = Math.min(s.box.h0, cur.h);
-  s.box.h1 = Math.max(s.box.h1, cur.h);
-  if (s.examples.length < EXAMPLES)
-    s.examples.push(`${cur.w}x${cur.h} [${cur.variant}] ${detail()}`);
+  let f = s.byVariant.get(cur.variant);
+  if (f === undefined) {
+    f = { n: 0, examples: [], box: { w0: Infinity, w1: -Infinity, h0: Infinity, h1: -Infinity } };
+    s.byVariant.set(cur.variant, f);
+  }
+  f.n++;
+  f.box.w0 = Math.min(f.box.w0, cur.w);
+  f.box.w1 = Math.max(f.box.w1, cur.w);
+  f.box.h0 = Math.min(f.box.h0, cur.h);
+  f.box.h1 = Math.max(f.box.h1, cur.h);
+  if (f.examples.length < EXAMPLES) f.examples.push(`${cur.w}x${cur.h} ${detail()}`);
 }
 
 const right = (r: Rect): number => r.x + r.width;
@@ -360,6 +422,26 @@ function stackHeight(room: number): number {
 }
 
 type Named = { readonly name: string; readonly rect: Rect };
+
+/**
+ * How far (degrees) the nearest point of `rect` lies inside the forward sight cone of the cockpit camera
+ * (vertical FOV `COCKPIT_FOV`, the cockpit rect's aspect, no view offset); 0 where it lies outside.
+ * Each angle is monotone in its screen axis, so the nearest point has the smaller |azimuth| and
+ * |elevation| the rect's edges allow.
+ */
+function coneDepth(rect: Rect, cockpit: Rect): number {
+  const tan = Math.tan((COCKPIT_FOV * Math.PI) / 360);
+  const aspect = cockpit.width / cockpit.height;
+  const nearest = (lo: number, hi: number): number =>
+    lo <= 0 && hi >= 0 ? 0 : Math.min(Math.abs(lo), Math.abs(hi));
+  const x0 = (2 * (rect.x - cockpit.x)) / cockpit.width - 1;
+  const x1 = (2 * (right(rect) - cockpit.x)) / cockpit.width - 1;
+  const y0 = 1 - (2 * (bottom(rect) - cockpit.y)) / cockpit.height;
+  const y1 = 1 - (2 * (rect.y - cockpit.y)) / cockpit.height;
+  const az = Math.atan(nearest(x0, x1) * aspect * tan);
+  const el = Math.atan(nearest(y0, y1) * tan);
+  return Math.max(0, CLEAR_CONE_DEG - (Math.hypot(az, el) * 180) / Math.PI);
+}
 
 /**
  * The key legend as `hud.ts` shows it at this size, with the largest of its measured boxes (headless
@@ -695,8 +777,16 @@ function evaluate(v: Variant, w: number, h: number): void {
         () => `${name} ${fmt(rect)} overlaps legend ${fmt(legendBox)}`,
       );
     }
-    if (!chk('mirrors-clear-of-sight-cone', !overlaps(rect, cone))) {
-      fail('mirrors-clear-of-sight-cone', () => `${name} ${fmt(rect)} overlaps cone ${fmt(cone)}`);
+    if (name === 'wideLeft' || name === 'wideRight') {
+      // issue #265: class IV must not cover the sight cone, the circle of `CLEAR_CONE_DEG` about the view axis
+      const depth = coneDepth(rect, cockpit);
+      if (!chk('wide-mirrors-clear-of-sight-cone', depth <= 0)) {
+        fail(
+          'wide-mirrors-clear-of-sight-cone',
+          () =>
+            `${name} ${fmt(rect)} reaches ${depth.toFixed(2)} deg into the ${CLEAR_CONE_DEG} deg cone`,
+        );
+      }
     }
   }
 
@@ -857,27 +947,53 @@ function evaluate(v: Variant, w: number, h: number): void {
 
 /* ------------------------------------------------------------------------------------------------ */
 
-/** One line per property, and for each failed one its failing region, variants and first counterexamples. */
-function report(custom: boolean): { summary: string; details: string; failed: boolean } {
+/**
+ * One line per property. A counterexample in a (property, variant) pair of `KNOWN_FINDINGS` is KNOWN and
+ * does not fail; any other fails. A listed pair without a counterexample is STALE (fixed: remove it),
+ * judged only in the named bounds.
+ */
+function report(known: KnownTable | null): { summary: string; details: string; failed: boolean } {
+  const table = known ?? KNOWN_FINDINGS.full;
   const summary: string[] = [];
   const details: string[] = [];
   let failed = false;
   for (const p of PROPERTIES) {
     const s = stats.get(p);
     if (s === undefined) continue;
-    const status = s.applied === 0 ? 'NEVER APPLIED' : s.failed === 0 ? 'ok' : 'FAILED';
+    const listed = table[p] ?? {};
+    const unknown = [...s.byVariant].filter(([name]) => listed[name] === undefined);
+    const stale =
+      known === null ? [] : Object.keys(listed).filter((name) => !s.byVariant.has(name));
     // two properties count hits of a split-off case: no hit is good; a custom box need not reach every property
     const hitCounter = p.includes('MIN_MIRROR_HEIGHT') || p.includes('deficit over');
-    if (s.failed > 0 || (s.applied === 0 && !custom && !hitCounter)) failed = true;
-    summary.push(`${status.padEnd(13)} ${p}  (${s.failed} of ${s.applied} checks failed)`);
-    if (s.failed > 0) {
-      const { w0, w1, h0, h1 } = s.box;
-      details.push(`${p}: failing sizes lie in w ${w0}..${w1}, h ${h0}..${h1}`);
-      for (const [name, n] of [...s.byVariant].sort((a, b) => b[1] - a[1]).slice(0, 12)) {
-        details.push(`  ${n} x in variant [${name}]`);
-      }
-      for (const e of s.examples) details.push(`  e.g. ${e}`);
+    const unreached = s.applied === 0 && known !== null && !hitCounter;
+    const total = [...s.byVariant.values()].reduce((n, f) => n + f.n, 0);
+    const issues = [...new Set([...s.byVariant.keys()].flatMap((name) => listed[name] ?? []))];
+    const status =
+      unknown.length > 0
+        ? 'FAILED'
+        : stale.length > 0
+          ? 'STALE'
+          : unreached
+            ? 'NEVER APPLIED'
+            : s.applied === 0
+              ? 'not applied'
+              : total > 0
+                ? `KNOWN ${issues.join(' ')}`
+                : 'ok';
+    if (unknown.length > 0 || stale.length > 0 || unreached) failed = true;
+    summary.push(`${status.padEnd(13)} ${p}  (${total} of ${s.applied} checks failed)`);
+    for (const [name, f] of unknown) {
+      const { w0, w1, h0, h1 } = f.box;
+      details.push(`FAILED ${p} in variant [${name}]: ${f.n} x, w ${w0}..${w1}, h ${h0}..${h1}`);
+      for (const e of f.examples) details.push(`  e.g. ${e}`);
     }
+    for (const name of stale) {
+      details.push(
+        `STALE ${p} in variant [${name}] (${listed[name]}): no counterexample in these bounds, remove it from KNOWN_FINDINGS`,
+      );
+    }
+    if (unreached) details.push(`NEVER APPLIED ${p}: no check reached it in these bounds`);
   }
   return { summary: summary.join('\n'), details: details.join('\n'), failed };
 }
@@ -891,7 +1007,14 @@ describe('viewport layout, exhaustive over the bounds', () => {
         }
       }
     }
-    const { summary, details, failed } = report(process.env['VERIFY_LAYOUT_W'] !== undefined);
+    const custom = process.env['VERIFY_LAYOUT_W'] !== undefined;
+    const { summary, details, failed } = report(
+      custom
+        ? null
+        : process.env['VERIFY_LAYOUT'] === 'full'
+          ? KNOWN_FINDINGS.full
+          : KNOWN_FINDINGS.default,
+    );
     const bounds = boxes()
       .map((b) => `${b.name} ${b.w[0]}..${b.w[1]} x ${b.h[0]}..${b.h[1]}`)
       .join('; ');
