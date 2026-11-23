@@ -67,7 +67,7 @@ export const timeoutWithSettles = (
 ): number => workMs + settles * 2 * SETTLE_DEADLINE_MS[preset];
 /**
  * The `settle` deadlines on a `?backend=webgpu` page: SwiftShader builds every pipeline on the CPU,
- * and High a sequence of them (about 75 s idle on a laptop, so with margin for a CI runner).
+ * and High a sequence of them, so they outlast the WebGL ones (`SETTLE_DEADLINE_MS`).
  */
 export const WEBGPU_SETTLE_DEADLINE_MS: Readonly<Record<Preset, number>> = {
   low: 60_000,
