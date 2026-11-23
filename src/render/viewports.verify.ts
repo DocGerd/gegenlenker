@@ -328,6 +328,21 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
     default: base,
     full: {
       ...base,
+      'wide-mirrors-clear-of-sight-cone': {
+        ...wideCone,
+        ...named(
+          '#392',
+          'drive balanced',
+          'drive low',
+          'drive high',
+          'drive balanced, legend',
+          'drive balanced, legend with all keys',
+          'drive balanced, panels steps',
+          'drive balanced, panels never fit',
+          'drive balanced, home indicator',
+          'drive balanced, share min',
+        ),
+      },
       'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)': named('#390', ...nearSquare),
       'mirrors-clear-of-control-boxes': named('#390', ...nearSquare),
       'message-column-valid': {

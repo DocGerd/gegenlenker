@@ -7,6 +7,7 @@ export default defineConfig({
     include: ['src/render/viewports.verify.ts'],
     environment: 'node',
     fileParallelism: false,
+    disableConsoleIntercept: true,
     maxWorkers: 1,
     testTimeout: 0,
     hookTimeout: 0,
