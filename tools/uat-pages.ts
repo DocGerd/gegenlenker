@@ -41,7 +41,7 @@ export interface Run {
 
 export interface Job {
   id: number;
-  node_id: string;
+  check_run_url: string;
   name: string;
   conclusion: string | null;
   started_at: string | null;
@@ -74,7 +74,6 @@ export interface Api {
   /** Every item of a REST list, across all pages; `key` names the array of an object response. */
   list: (path: string, key?: string) => Promise<unknown[]>;
   get: (path: string) => Promise<unknown>;
-  graphql: (query: string, variables: Record<string, string>) => Promise<unknown>;
   /** An artifact zip, by its REST path. */
   download: (path: string) => Promise<Buffer>;
 }
@@ -86,7 +85,7 @@ const nextLink = (link: string | null): string | undefined =>
     .find((url) => url !== undefined);
 
 export const restApi = (
-  { token, apiUrl, graphqlUrl }: { token: string; apiUrl: string; graphqlUrl: string },
+  { token, apiUrl }: { token: string; apiUrl: string },
   fetchFn: typeof fetch = fetch,
 ): Api => {
   const headers = {
@@ -94,9 +93,9 @@ export const restApi = (
     Authorization: `Bearer ${token}`,
     'X-GitHub-Api-Version': '2022-11-28',
   };
-  const request = async (url: string, init: RequestInit = {}): Promise<Response> => {
-    const response = await fetchFn(url, { ...init, headers });
-    if (!response.ok) throw new Error(`${init.method ?? 'GET'} ${url}: ${String(response.status)}`);
+  const request = async (url: string): Promise<Response> => {
+    const response = await fetchFn(url, { headers });
+    if (!response.ok) throw new Error(`GET ${url}: ${String(response.status)}`);
     return response;
   };
   return {
@@ -123,15 +122,6 @@ export const restApi = (
       return items;
     },
     get: async (path) => (await request(`${apiUrl}${path}`)).json() as Promise<unknown>,
-    graphql: async (query, variables) => {
-      const response = await request(graphqlUrl, {
-        method: 'POST',
-        body: JSON.stringify({ query, variables }),
-      });
-      const body = (await response.json()) as { data?: unknown; errors?: unknown };
-      if (body.errors !== undefined) throw new Error(`GraphQL: ${JSON.stringify(body.errors)}`);
-      return body.data;
-    },
     download: async (path) => {
       // The redirect target is pre-signed storage, which must not receive the token.
       const response = await fetchFn(`${apiUrl}${path}`, { headers, redirect: 'manual' });
@@ -153,10 +143,6 @@ const statusesOf = async (api: Api, repo: string, id: number): Promise<Deploymen
   (await api.list(
     `/repos/${repo}/deployments/${String(id)}/statuses?per_page=100`,
   )) as DeploymentStatus[];
-
-const JOB_DEPLOYMENT = `query($id: ID!) {
-  node(id: $id) { ... on CheckRun { databaseId deployment { databaseId } } }
-}`;
 
 export interface ProdDist {
   run: Run;
@@ -212,12 +198,15 @@ export const findProdDist = async (
   if (best === undefined) throw new Error(`no successful ${PROD_JOB} job on main`);
   const { run, job } = best;
   const at = `${PROD_JOB} job ${String(job.id)} (run ${String(run.id)})`;
-  const node = (await api.graphql(JOB_DEPLOYMENT, { id: job.node_id })) as {
-    node?: { databaseId?: number; deployment?: { databaseId?: number } | null } | null;
+  // A job is its check run (`check_run_url`), whose `deployment` is the environment's deployment.
+  const checkRun = `/repos/${repo}/check-runs/${String(job.id)}`;
+  if (!job.check_run_url.endsWith(checkRun)) throw new Error(`${at} is not ${checkRun}`);
+  const { id, deployment: link } = (await api.get(checkRun)) as {
+    id?: number;
+    deployment?: { id?: number } | null;
   };
-  const deploymentId = node.node?.deployment?.databaseId;
-  if (node.node?.databaseId !== job.id || deploymentId === undefined)
-    throw new Error(`${at} has no deployment`);
+  const deploymentId = link?.id;
+  if (id !== job.id || deploymentId === undefined) throw new Error(`${at} has no deployment`);
   const deployment = (await api.get(
     `/repos/${repo}/deployments/${String(deploymentId)}`,
   )) as Deployment;
@@ -265,7 +254,9 @@ export const findProdDist = async (
       `run ${String(run.id)} holds [${dists.map((a) => a.name).join(', ')}], not one ${name}`,
     );
   if (artifact.expired)
-    throw new Error(`${name} has expired: run CI with workflow_dispatch on main, then re-run this`);
+    throw new Error(
+      `${name} has expired: run CI with workflow_dispatch on main, then on ${UAT_REF}`,
+    );
   if (!(time(artifact.created_at) < time(job.started_at)))
     throw new Error(`${name} was not uploaded before ${at} started`);
   const { digest } = artifact;
@@ -417,7 +408,6 @@ const main = async (): Promise<void> => {
   const api = restApi({
     token: env('GH_TOKEN'),
     apiUrl: process.env['GITHUB_API_URL'] ?? 'https://api.github.com',
-    graphqlUrl: process.env['GITHUB_GRAPHQL_URL'] ?? 'https://api.github.com/graphql',
   });
   const prod = await assemble(
     api,

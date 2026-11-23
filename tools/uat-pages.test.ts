@@ -1,8 +1,9 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { crc32 } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import { prodManifest } from './prod-manifest';
 import {
@@ -66,8 +67,8 @@ const prodFiles = (
 interface World {
   runs: Run[];
   jobs: Record<number, Job[]>;
-  /** Job node id to deployment id, as GraphQL `CheckRun.deployment` links them. */
-  links: Record<string, number>;
+  /** Job (check run) id to deployment id, as the check run's `deployment` links them. */
+  links: Record<number, number>;
   deployments: Deployment[];
   /** Successive reads of one deployment's statuses; the last repeats. */
   statuses: Record<number, DeploymentStatus[][]>;
@@ -106,20 +107,16 @@ const fakeApi = (world: World): Api & { paths: string[] } => {
     },
     get: (path) => {
       paths.push(path);
+      const checkRun = new RegExp(`^${base}/check-runs/(\\d+)$`).exec(path);
+      if (checkRun !== null) {
+        const id = Number(checkRun[1]);
+        const link = world.links[id];
+        return Promise.resolve({ id, deployment: link === undefined ? null : { id: link } });
+      }
       const id = Number(/\/deployments\/(\d+)$/.exec(path)?.[1]);
       const deployment = world.deployments.find((each) => each.id === id);
       if (deployment === undefined) throw new Error(`unexpected get ${path}`);
       return Promise.resolve(deployment);
-    },
-    graphql: (_query, { id }) => {
-      paths.push(`graphql ${id ?? ''}`);
-      const job = Object.values(world.jobs)
-        .flat()
-        .find((each) => each.node_id === id);
-      const link = id === undefined ? undefined : world.links[id];
-      return Promise.resolve({
-        node: { databaseId: job?.id, deployment: link === undefined ? null : { databaseId: link } },
-      });
     },
     download: (path) => {
       paths.push(path);
@@ -141,7 +138,7 @@ const run = (id: number, sha: string, updated: number, extra: Partial<Run> = {})
 });
 const job = (id: number, started: number, done: number, extra: Partial<Job> = {}): Job => ({
   id,
-  node_id: `CR_${String(id)}`,
+  check_run_url: `https://api.github.com/repos/${REPO}/check-runs/${String(id)}`,
   name: 'deploy',
   conclusion: 'success',
   started_at: at(started),
@@ -180,7 +177,7 @@ const world = (): World => {
       1: [job(11, 10, 11, { name: 'build-pages' }), job(12, 10, 11)],
       2: [job(21, 25, 26, { name: 'build-pages' }), job(22, 30, 31)],
     },
-    links: { CR_12: 101, CR_22: 102 },
+    links: { 12: 101, 22: 102 },
     deployments: [deployment(101, OLD_SHA, 9), deployment(102, MAIN_SHA, 27)],
     statuses: {
       101: [[status(1, 'success', 11)]],
@@ -241,7 +238,7 @@ describe('assembling the UAT Pages tree', () => {
       job(32, 50, 51),
       job(33, 60, 61, { name: 'deploy-uat' }),
     ];
-    w.links['CR_32'] = 103;
+    w.links[32] = 103;
     w.deployments.push(deployment(103, OLD_SHA, 49));
     w.statuses[103] = [[status(5, 'success', 51)]];
     w.artifacts[3] = [artifact(203, `prod-dist-${OLD_SHA}`, 38, zip)];
@@ -265,7 +262,7 @@ describe('assembling the UAT Pages tree', () => {
     const zip = zipOf(prodFiles(OLD_SHA));
     w.runs.push(run(6, OLD_SHA, 5, { status: 'in_progress' }));
     w.jobs[6] = [job(61, 33, 34)];
-    w.links['CR_61'] = 106;
+    w.links[61] = 106;
     w.deployments.push(deployment(106, OLD_SHA, 28));
     w.statuses[106] = [[status(6, 'success', 34)]];
     w.artifacts[6] = [artifact(206, `prod-dist-${OLD_SHA}`, 20, zip)];
@@ -325,8 +322,15 @@ describe('assembling the UAT Pages tree', () => {
 
   it('fails closed on a deploy job without a github-pages deployment of its commit', async () => {
     const unlinked = world();
-    delete unlinked.links['CR_22'];
+    delete unlinked.links[22];
     await expect(build(unlinked)).rejects.toThrow(/has no deployment/);
+    const elsewhere = world();
+    elsewhere.jobs[2] = [
+      job(22, 30, 31, { check_run_url: `https://api.github.com/repos/x/y/check-runs/22` }),
+    ];
+    await expect(build(elsewhere)).rejects.toThrow(
+      /is not \/repos\/DocGerd\/gegenlenker\/check-runs\/22/,
+    );
     const other = world();
     other.deployments[1] = { ...deployment(102, OLD_SHA, 27) };
     await expect(build(other)).rejects.toThrow(/is not github-pages at/);
@@ -427,6 +431,94 @@ describe('assembling the UAT Pages tree', () => {
   });
 });
 
+/** A real zip of stored entries; `link` makes an entry a Unix symlink to that target. */
+const realZip = (entries: readonly { name: string; data?: string; link?: string }[]): Buffer => {
+  const parts: Buffer[] = [];
+  const directory: Buffer[] = [];
+  let offset = 0;
+  for (const { name, data = '', link } of entries) {
+    const body = Buffer.from(link ?? data);
+    const path = Buffer.from(name);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(10, 4);
+    local.writeUInt16LE(0x21, 12);
+    local.writeUInt32LE(crc32(body), 14);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(body.length, 22);
+    local.writeUInt16LE(path.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(0x030a, 4);
+    central.writeUInt16LE(10, 6);
+    central.writeUInt16LE(0x21, 14);
+    central.writeUInt32LE(crc32(body), 16);
+    central.writeUInt32LE(body.length, 20);
+    central.writeUInt32LE(body.length, 24);
+    central.writeUInt16LE(path.length, 28);
+    central.writeUInt32LE((link === undefined ? 0o100644 : 0o120777) * 0x10000, 38);
+    central.writeUInt32LE(offset, 42);
+    parts.push(local, path, body);
+    directory.push(central, path);
+    offset += local.length + path.length + body.length;
+  }
+  const listing = Buffer.concat(directory);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(listing.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, listing, end]);
+};
+
+// The checks after the overlay see only the Pages tree; a write elsewhere on the runner (its
+// actions, say) would run in the job that holds `pages: write`. So `unzip` itself must hold.
+describe('the real unzip', () => {
+  const assembleReal = async (uat: Parameters<typeof realZip>[0]): Promise<string> => {
+    const w = world();
+    const prod = realZip(
+      Object.entries(prodFiles(MAIN_SHA)).map(([name, data]) => ({ name, data })),
+    );
+    const uatZip = realZip(uat);
+    w.zips[202] = prod;
+    w.zips[299] = uatZip;
+    w.artifacts[2] = [artifact(202, `prod-dist-${MAIN_SHA}`, 26, prod)];
+    w.artifacts[UAT_RUN] = [artifact(299, `uat-dist-${UAT_SHA}`, 40, uatZip)];
+    const out = join(tempDir(), 'pages');
+    await assemble(fakeApi(w), { repo: REPO, runId: String(UAT_RUN), sha: UAT_SHA, out });
+    return out;
+  };
+
+  it('unpacks both artifacts into the Pages tree', async () => {
+    const out = await assembleReal([{ name: 'index.html', data: 'uat' }]);
+    expect(readFileSync(join(out, 'dist', 'index.html'), 'utf8')).toBe(MAIN_SHA);
+    expect(readFileSync(join(out, 'dist', 'uat', 'index.html'), 'utf8')).toBe('uat');
+  });
+
+  it('never writes outside uat/ and refuses what it cannot place there', async () => {
+    const index = { name: 'index.html', data: 'uat' };
+    // `../../../` from `<tmp>/pages/dist/uat` is `<tmp>`.
+    const out = await assembleReal([index, { name: '../../../parent', data: 'x' }]);
+    expect(existsSync(join(dirname(out), 'parent'))).toBe(false);
+    expect(existsSync(join(out, 'dist', 'uat', 'parent'))).toBe(true);
+    const root = tempDir();
+    const escaped = join(root, 'escaped');
+    for (const [name, entries, error] of [
+      ['absolute', [index, { name: escaped, data: 'x' }], /stripped absolute path/],
+      [
+        'through a link',
+        [index, { name: 'link', link: root }, { name: 'link/escaped', data: 'x' }],
+        /link exists but is not directory/,
+      ],
+      ['a link', [index, { name: 'link', link: '/etc/passwd' }], /neither a file nor a directory/],
+    ] as const) {
+      await expect(assembleReal(entries), name).rejects.toThrow(error);
+      expect(existsSync(escaped), name).toBe(false);
+    }
+  });
+});
+
 describe('the REST client', () => {
   const urlOf = (input: Parameters<typeof fetch>[0]): string =>
     typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -436,7 +528,7 @@ describe('the REST client', () => {
         next === undefined ? {} : { link: `<${next}>; rel="next", <https://x/last>; rel="last"` },
     });
   const client = (responses: Record<string, Response>): Api =>
-    restApi({ token: 't', apiUrl: 'https://api', graphqlUrl: 'https://api/graphql' }, (input) => {
+    restApi({ token: 't', apiUrl: 'https://api' }, (input) => {
       const response = responses[urlOf(input)];
       if (response === undefined) throw new Error(`unexpected ${urlOf(input)}`);
       return Promise.resolve(response);
@@ -467,7 +559,7 @@ describe('the REST client', () => {
 
   it('downloads an artifact from its redirect without sending the token there', async () => {
     const seen: (string | null)[] = [];
-    const api = restApi({ token: 't', apiUrl: 'https://api', graphqlUrl: '' }, (input, init) => {
+    const api = restApi({ token: 't', apiUrl: 'https://api' }, (input, init) => {
       seen.push(new Headers(init?.headers).get('authorization'));
       return Promise.resolve(
         urlOf(input) === 'https://api/zip'
