@@ -107,6 +107,18 @@ describe('releaseState', () => {
     expect(releaseState(root).release).toBe(false);
   });
 
+  it('rejects a package.json without an x.y.z version', () => {
+    const root = tree({ version: '1.0.0', head: '1.0.0', fragments: [] });
+    writeFileSync(join(root, 'package.json'), '{}');
+    expect(() => releaseState(root)).toThrow('version must be x.y.z');
+  });
+
+  it('is a development build when released.json has no usable head group', () => {
+    const root = tree({ version: '1.0.0', head: '1.0.0', fragments: [] });
+    writeFileSync(join(root, 'changelog.d', 'released.json'), '[]');
+    expect(releaseState(root).release).toBe(false);
+  });
+
   it('is a development build when the head group is unreleased or another version', () => {
     expect(releaseState(tree({ version: '0.0.0', head: null, fragments: [] })).release).toBe(false);
     expect(releaseState(tree({ version: '1.1.0', head: '1.0.0', fragments: [] })).release).toBe(

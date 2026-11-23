@@ -148,8 +148,10 @@ export interface ReleaseState {
 /** Whether the tree at `root` is a release build; only then is `version` shown as the app's. */
 export const releaseState = (root: string): ReleaseState => {
   const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
-    version: string;
+    version?: unknown;
   };
+  if (typeof version !== 'string' || !VERSION_RE.test(version))
+    throw new Error('package.json: version must be x.y.z');
   const dir = join(root, 'changelog.d');
   const releases = loadReleases(dir);
   const head: unknown = Array.isArray(releases) ? releases[0] : undefined;
