@@ -9,7 +9,8 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   await page.keyboard.press('4');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
   await expect(page.locator('[data-hud="speed"]')).not.toHaveText('0.0 km/h');
-  await page.waitForTimeout(500);
+  // Long enough that replay playback cannot reach its end before the pause click lands.
+  await page.waitForTimeout(3000);
   await page.getByRole('button', { name: en.pause }).click();
   await page
     .getByRole('dialog', { name: en.paused })
@@ -20,6 +21,9 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   const scrubber = page.getByRole('slider', { name: en.timeline });
   const time = page.locator('.replay-time');
   await expect(scrubber).toBeVisible();
+  // Pause first: a finished replay turns the pause button into a restart.
+  await page.getByRole('button', { name: en.pause }).click();
+  await expect(page.getByRole('button', { name: en.play })).toBeVisible();
   // Idle time before the first input is cut off: the timeline starts after step 0.
   const first = Number(await scrubber.getAttribute('min'));
   expect(first).toBeGreaterThan(0);
@@ -28,7 +32,6 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
 
   await page.getByRole('button', { name: '0.5×' }).click();
   await expect(page.getByRole('button', { name: '0.5×' })).toHaveAttribute('aria-pressed', 'true');
-  await page.getByRole('button', { name: en.pause }).click();
 
   await scrubber.fill(last ?? '0');
   const total = (await time.textContent())?.split(' / ')[1] ?? '';
