@@ -254,7 +254,8 @@ jobs:
         run: |
           pnpm build --outDir "$RUNNER_TEMP/dist-again" --emptyOutDir
           diff -r dist "$RUNNER_TEMP/dist-again"
-          node scripts/prod-manifest.mjs dist > /dev/null
+          node scripts/prod-manifest.mjs dist > prod-manifest.txt
+          (cd dist && sha256sum --check --quiet --strict ../prod-manifest.txt)
         env:
           BASE_PATH: /gegenlenker/
       - run: pnpm build --outDir dist/uat
@@ -340,9 +341,12 @@ jobs:
       # `main` changes only when a release is cut. Once the artifact has expired, run this workflow
       # with `workflow_dispatch` on `main`: it uploads a new one and redeploys production from the
       # same build, so both match once that deploy is live. This upload precedes the gated deploy, and
-      # one commit can have several such runs, so the consumer takes `prod-dist-<sha>` from the run of
-      # the last successful `github-pages` deployment from `main`, fails when it is missing, and never
-      # rebuilds production.
+      # one commit can have several such runs, so the consumer takes `prod-dist-<sha>` from the
+      # run whose `deploy` job last succeeded on `main`, in any attempt (nothing documented links a
+      # deployment to its run). It fails unless that run holds exactly one, unexpired and created
+      # before that job started (a re-run may upload another), repeats the lookup in its own
+      # `pages`-group job right before deploying (a `main` deploy may land after its build), and
+      # never rebuilds production.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: prod-dist-${{ github.sha }}

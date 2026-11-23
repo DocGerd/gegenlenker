@@ -101,10 +101,16 @@ it('build-pages proves a second build identical, then uploads dist with its mani
 });
 
 it('a gated job checks the production dist the same way before the merge', () => {
-  const steps = workflow().jobs['channels']?.steps ?? [];
+  const { jobs } = workflow();
+  const steps = jobs['channels']?.steps ?? [];
   const check = steps.findIndex((step) => step.run?.includes('diff -r dist') === true);
   const uat = steps.findIndex((step) => step.run === 'pnpm build --outDir dist/uat');
+  const manifest = (jobs['build-pages']?.steps ?? [])
+    .find((step) => step.run?.includes('scripts/prod-manifest.mjs') === true)
+    ?.run?.split('\n')
+    .filter((line) => line.includes('prod-manifest'));
   expect(check).toBeGreaterThanOrEqual(0);
-  expect(steps[check]?.run).toContain('scripts/prod-manifest.mjs dist');
+  expect(manifest?.some((line) => line.includes('sha256sum --check --quiet --strict'))).toBe(true);
+  for (const line of manifest ?? []) expect(steps[check]?.run).toContain(line);
   expect(uat).toBeGreaterThan(check);
 });
