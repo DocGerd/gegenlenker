@@ -1,8 +1,8 @@
-<!-- Features and fixes target `develop`; only `release/*` and `hotfix/*` target `main` (docs/releasing.md). -->
+<!-- Target `develop`; fixes during a release freeze target that `release/*`; only `release/*` and `hotfix/*` target `main` (docs/releasing.md). -->
 
 Closes #
 
-<!-- Closing keywords only take effect when the PR merges into the default branch (`develop`). -->
+<!-- Closing keywords only take effect when the PR targets the default branch (`develop`). -->
 
 ## What
 
@@ -12,6 +12,6 @@ Closes #
 
 ## Checklist
 
-- [ ] `pnpm check` passes locally; CI runs the e2e gate
+- [ ] `pnpm verify` passes
 - [ ] User-visible change: `changelog.d/<pr>.<category>.md` added (none for docs, CI, chore, test)
 - [ ] New UI text is in both `en` and `de`
