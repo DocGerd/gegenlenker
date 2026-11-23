@@ -50,7 +50,10 @@ export type Hud = {
   setViewChanged(changed: boolean): void;
   /** The divider between the views: its value, range and orientation. */
   setSplit(split: TopDownSplit): void;
-  /** The bottom edge of the top view's panels, px below its top, were it `paneWidth` wide; the layout is left as it was. */
+  /**
+   * The bottom edge of the top view's panels, px below its top, were it `paneWidth` wide; the layout is left as it was.
+   * `Infinity` where a row sticks out sideways at that width: no pane height holds it, so `topDownSplit` takes it as not fitting.
+   */
   panelsBottom(paneWidth: number): number;
   /** Points the arrow at a target beyond the top-down view; null hides it. Positions are stage CSS px. */
   setTargetArrow(arrow: { x: number; y: number; angle: number } | null): void;
@@ -181,6 +184,12 @@ const CHECK_ICON =
 const segmentButton = (view: string, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-segment" data-view="${view}" data-i18n="${key}"></button>`;
 
+/** The chase segment exists only where the preset offers that view, so the last one drawn closes the control. */
+const viewSegments = (chase: boolean): string =>
+  VIEWS.filter(([v]) => chase || v !== 'chase')
+    .map(([v, k]) => segmentButton(v, k))
+    .join('');
+
 /** A folding panel's chip. */
 const panelButton = (panel: string, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-chip" data-panel="${panel}" data-i18n="${key}"></button>`;
@@ -241,9 +250,7 @@ const MARKUP = (
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
-        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${VIEWS.filter(([v]) => chase || v !== 'chase')
-          .map(([v, k]) => segmentButton(v, k))
-          .join('')}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
+        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
       <div class="hud-aids" data-hud="aids" data-chrome>
         <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
