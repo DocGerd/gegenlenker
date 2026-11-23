@@ -27,8 +27,19 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 
 - PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, so the owner-only merge is the gate.
 - Changing a PR's base starts no run, and a re-run repeats the old one: after retargeting a PR, close and reopen it so CI checks it against the new base.
-- Pushes to `develop` and `main` run the gate without e2e; only `main` builds the Pages artifact and deploys. `main` also tags and publishes the release once the deploy succeeded.
-- `workflow_dispatch` of CI on `main` redeploys production.
+- Pushes to `develop` and `main` run the gate without e2e, then deploy, each after the owner approves the `github-pages` deployment.
+- `main` builds and deploys production to the site root, then tags and publishes the release once the deploy succeeded. Its Pages artifact holds production alone, so a release needs nothing from `develop`, and `/uat/` is gone until the next `develop` deploy.
+- `develop` deploys its UAT build to `/gegenlenker/uat/` (see UAT).
+- `workflow_dispatch` of CI on `main` redeploys production; on `develop` it redeploys UAT.
+
+## UAT
+
+- Each `develop` deploy republishes production beside the UAT build: the production dist of the live `main` deploy, never rebuilt. `tools/uat-pages.ts` finds it from the last successful `deploy` job of a `push` or `workflow_dispatch` run on `main`, and fails closed unless that job's deployment succeeded, no newer production deployment did, the run holds exactly one unexpired `prod-dist-<sha>` uploaded before the job started, and the files match its manifest and commit exactly.
+- `build-uat` runs that lookup before the owner is asked to approve; `deploy-uat` repeats it after approval, inside the `pages` group, right before uploading, so a release deployed in between is the one republished.
+- Both deploy jobs share the `pages` concurrency group with `queue: max`: they run one at a time, oldest waiting first, and a newer deploy never replaces a waiting one (beyond the queue limit, it is cancelled). Whether a job waiting for approval holds the group is undocumented: if a release deploy waits behind a UAT deploy, approve or reject the UAT one first. Approving UAT deploys out of order can leave an older `develop` under `/uat/`.
+- An expired `prod-dist-<sha>` fails the UAT deploy: run CI with `workflow_dispatch` on `main`, approve it, then re-run the UAT deploy.
+- On approval, check the branch is `develop`. Afterwards the site root is unchanged (what `main` last deployed) and `/uat/` serves the `develop` commit with its UAT title.
+- Roll back: `workflow_dispatch` of CI on `main` republishes production alone. To stop UAT deploys, reject them, or remove the `develop` deployment branch policy of `github-pages`.
 
 ## Commands
 
