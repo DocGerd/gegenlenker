@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  Box3,
+  type BufferGeometry,
+  BackSide,
+  DoubleSide,
   Frustum,
   Group,
   Layers,
@@ -8,6 +12,7 @@ import {
   Matrix4,
   MathUtils,
   type Object3D,
+  Ray,
   Raycaster,
   Vector2,
   Vector3,
@@ -217,6 +222,117 @@ function hitsAlong(
       false,
     )
     .map((h) => h.object.name);
+}
+
+/**
+ * A ray test for the sweeps below, which cast thousands of rays at the same few parts and mostly
+ * expect none to hit: each part's triangles are cached per geometry in groups of `CHUNK` triangles
+ * (a solid is contiguous, so a group is compact) with a box each, and a ray works in each part's own
+ * frame, so it skips whole groups. Same culling as `Mesh.raycast`; unlike `hits` it names each part
+ * once, nearest not first.
+ */
+const CHUNK = 8;
+type Soup = {
+  readonly vertices: readonly Vector3[];
+  readonly box: Box3;
+  readonly chunks: readonly { readonly box: Box3; readonly from: number; readonly to: number }[];
+};
+const soups = new WeakMap<BufferGeometry, Soup>();
+
+const soupOf = (geometry: BufferGeometry): Soup => {
+  const cached = soups.get(geometry);
+  if (cached !== undefined) return cached;
+  const position = geometry.getAttribute('position');
+  const index = geometry.getIndex();
+  const count = index?.count ?? position.count;
+  const vertices: Vector3[] = [];
+  for (let i = 0; i < count; i++) {
+    vertices.push(new Vector3().fromBufferAttribute(position, index ? index.getX(i) : i));
+  }
+  const chunks = [];
+  for (let from = 0; from < count; from += 3 * CHUNK) {
+    const to = Math.min(from + 3 * CHUNK, count);
+    chunks.push({ box: new Box3().setFromPoints(vertices.slice(from, to)), from, to });
+  }
+  const soup = { vertices, box: new Box3().setFromPoints(vertices), chunks };
+  soups.set(geometry, soup);
+  return soup;
+};
+
+type Sight = {
+  readonly name: string;
+  readonly soup: Soup;
+  readonly inverse: Matrix4;
+  readonly side: number;
+};
+
+/** The names of the parts the world-space ray crosses, among those `camera` sees; visibility is the caller's, as with `Raycaster`. */
+function crossing(camera: PerspectiveCamera, meshes: readonly Mesh[]) {
+  const sights: Sight[] = [];
+  for (const mesh of meshes) {
+    if ((mesh.layers.mask & camera.layers.mask) === 0) continue;
+    if (Array.isArray(mesh.material)) throw new Error(`${mesh.name}: material array`);
+    sights.push({
+      name: mesh.name,
+      soup: soupOf(mesh.geometry),
+      inverse: mesh.matrixWorld.clone().invert(),
+      side: mesh.material.side,
+    });
+  }
+  const local = new Ray();
+  const point = new Vector3();
+  return (origin: Vector3, direction: Vector3): string[] => {
+    const names: string[] = [];
+    for (const { name, soup, inverse, side } of sights) {
+      local.set(origin, direction).applyMatrix4(inverse);
+      if (!local.intersectsBox(soup.box)) continue;
+      const { vertices } = soup;
+      const found = soup.chunks.some(({ box, from, to }) => {
+        if (!local.intersectsBox(box)) return false;
+        for (let i = from; i < to; i += 3) {
+          const [a, b, c] = [vertices[i], vertices[i + 1], vertices[i + 2]] as [
+            Vector3,
+            Vector3,
+            Vector3,
+          ];
+          const hit =
+            side === BackSide
+              ? local.intersectTriangle(c, b, a, true, point)
+              : local.intersectTriangle(a, b, c, side !== DoubleSide, point);
+          if (hit !== null) return true;
+        }
+        return false;
+      });
+      if (found) names.push(name);
+    }
+    return names;
+  };
+}
+
+const ndcRay = new Raycaster();
+const ndc = new Vector2();
+
+/** `crossing` along the ray through NDC (x, y), like `hits`. */
+function crossingAt(camera: PerspectiveCamera, meshes: readonly Mesh[]) {
+  const cross = crossing(camera, meshes);
+  return (x: number, y: number): string[] => {
+    ndcRay.setFromCamera(ndc.set(x, y), camera);
+    return cross(ndcRay.ray.origin, ndcRay.ray.direction);
+  };
+}
+
+/** `crossing` along the view axis tilted by `azimuth` and `elevation` (radians), like `hitsAlong`. */
+function crossingAlong(camera: PerspectiveCamera, meshes: readonly Mesh[]) {
+  const cross = crossing(camera, meshes);
+  const direction = new Vector3();
+  return (azimuth: number, elevation: number): string[] =>
+    cross(
+      camera.position,
+      direction
+        .set(Math.tan(azimuth), Math.tan(elevation), -1)
+        .normalize()
+        .transformDirection(camera.matrixWorld),
+    );
 }
 
 const rectToNdc = (cockpit: Rect, rect: Rect, u: number, v: number): [number, number] => [
@@ -429,38 +545,42 @@ describe.each(CASES)(
       const cone = MathUtils.degToRad(CLEAR_CONE_DEG);
 
       it.each(MODES)('leaves a central forward sight cone free of every part, by %s', (mode) => {
+        // one assertion for the whole sweep: an expect per ray costs more than the ray
+        const blocked: string[] = [];
         for (const [w, h] of windows) {
           const { camera, interior } = shootRoute(w, h, 0.7, mode);
-          const parts = drawn(interior);
+          const along = crossingAlong(camera, drawn(interior));
           for (let az = -cone; az <= cone + 1e-9; az += cone / 6) {
             for (let el = -cone; el <= cone + 1e-9; el += cone / 6) {
               if (Math.hypot(az, el) > cone) continue;
-              expect(hitsAlong(camera, parts, az, el), `${w}x${h} ${az} ${el}`).toEqual([]);
+              const names = along(az, el);
+              if (names.length > 0) blocked.push(`${w}x${h} ${az} ${el}: ${names.join(', ')}`);
             }
           }
         }
+        expect(blocked).toEqual([]);
       });
 
       it.each(MODES)(
         'keeps every part out of the lines of sight to each mirror rect, bar what the route covers by design, by %s',
         (mode) => {
+          const blocked: string[] = [];
           for (const [w, h] of windows) {
             const shot = shootRoute(w, h, 0.7, mode);
             const { camera, interior, cockpit } = shot;
-            const parts = drawn(interior);
+            const at = crossingAt(camera, drawn(interior));
             for (const rect of rectsOf(shot)) {
               for (let u = 0; u <= 1; u += 0.125) {
                 for (let v = 0; v <= 1; v += 0.125) {
                   const [x, y] = rectToNdc(cockpit, rect, u, v);
                   if (mayCoverMirror(x, y, edgeShift(spec, camera.aspect, COCKPIT_FOV))) continue;
-                  expect(
-                    hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
-                    `${w}x${h} (${u}, ${v})`,
-                  ).toEqual([]);
+                  const names = at(x, y).filter((name) => !underMirror.includes(name));
+                  if (names.length > 0) blocked.push(`${w}x${h} (${u}, ${v}): ${names.join(', ')}`);
                 }
               }
             }
           }
+          expect(blocked).toEqual([]);
         },
       );
 
