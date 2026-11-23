@@ -29,8 +29,10 @@ An array of releases, newest first. The unreleased group (`"version": null`, no 
 
 ## Release
 
-1. In `released.json`, give the unreleased group its `"version"` and `"date"`; if there is none, add a new first group with them.
-2. Add each fragment to that group as an entry, in PR number order, with `id` the file name without `.md`, `prs` the PR number, and `en` the line without the link group (ending in a period).
-3. Delete only the folded files, by name, never by glob.
-4. Run `pnpm changelog`; the folded entries appear in `CHANGELOG.md`, in their own `## [X.Y.Z] - date` section.
-5. Before tagging, confirm `changelog.d/` holds only `README.md` and `released.json`; a fragment merged after the fold is otherwise lost.
+Three commands own the release steps; run them on a clean tree.
+
+- `pnpm release:prepare [X.Y.Z] [--date YYYY-MM-DD]` sets the `package.json` version, folds every pending fragment into the head group of `released.json` (the unreleased group, else a new first group) with the version and date, in PR number order with ids unchanged, deletes exactly the folded files and regenerates `CHANGELOG.md`. Without a version it derives one from the last release: only `fixed` and `security` entries make a patch, anything else a minor; a major or the first version is always passed. It refuses a dirty tree or a version that does not rise. Re-running it is a no-op; after a fix adds a fragment, run it again with the same version to fold that fragment into the same group (the date is kept).
+- `pnpm release:check` fails on a pending fragment, a `package.json` version that differs from the head group of `released.json`, a head version that does not rise above the previous group, or a stale `CHANGELOG.md`. It has to pass before a release is tagged.
+- `pnpm release:notes [X.Y.Z]` prints that version's `CHANGELOG.md` section (default: the `package.json` version).
+
+The folded entries keep their ids, so the app's "What's new" seen-state is unaffected.

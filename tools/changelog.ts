@@ -18,8 +18,8 @@ const HEADINGS: Record<Category, string> = {
   fixed: 'Fixed',
   security: 'Security',
 };
-const VERSION_RE = /^\d+\.\d+\.\d+$/;
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export const VERSION_RE = /^\d+\.\d+\.\d+$/;
+export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -93,7 +93,7 @@ const line = (entry: ChangelogEntry): string => {
   return `- ${entry.en.slice(0, -1)} (${links}).`;
 };
 
-const section = (title: string, entries: readonly ChangelogEntry[]): string => {
+export const section = (title: string, entries: readonly ChangelogEntry[]): string => {
   const blocks = [`## ${title}`];
   for (const category of CATEGORIES) {
     const items = entries.filter((entry) => entry.category === category);
