@@ -344,7 +344,8 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
       ? 'replaces the detail by one without the swap body marking, and adds the shell'
       : 'replaces the detail by one that follows the deck, and adds the shell',
     async () => {
-      const d = deferred(await load(id));
+      const shell = await load(id);
+      const d = deferred(shell);
       const visual = proceduralTrailer(spec, palette, d.shells);
       const { trailer } = partsOf(visual);
       const perspective = (): Mesh[] =>
@@ -355,13 +356,15 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
       const added = after.filter((m) => !before.includes(m));
       const removed = before.filter((m) => !after.includes(m));
       expect(removed).toHaveLength(1);
-      // the shell and the new detail, and the lafette's lens mesh
-      expect(added).toHaveLength(isBox ? 3 : 2);
-      if (isBox) {
-        const vertices = (m: Mesh): number => m.geometry.getAttribute('position').count;
-        const bare = added.find((m) => vertices(m) < vertices(removed[0] ?? m));
-        expect(bare).toBeDefined();
-      }
+      // the shell with the detail baked in, and the lafette's lens mesh
+      expect(added).toHaveLength(isBox ? 2 : 1);
+      const vertices = (m: Mesh): number => m.geometry.getAttribute('position').count;
+      const detail = vertices(added[0] ?? shell.trailer.mesh) - vertices(shell.trailer.mesh);
+      const full = vertices(removed[0] ?? shell.trailer.mesh);
+      expect(added[0]?.castShadow).toBe(true);
+      expect(detail).toBeGreaterThan(0);
+      // the swap body's marking drops out of the box trailer's detail
+      if (isBox) expect(detail).toBeLessThan(full);
     },
   );
 
@@ -490,7 +493,7 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
     visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     d.apply();
     const { dolly } = partsOf(visual);
-    const stuck = vi.spyOn(dolly, 'add').mockImplementation(() => {
+    const stuck = vi.spyOn(dolly, 'add').mockImplementationOnce(() => {
       throw new Error('stuck');
     });
     visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));

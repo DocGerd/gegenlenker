@@ -1,6 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, type BufferGeometry, Color, Layers, Mesh, type Object3D, Vector3 } from 'three';
+import {
+  Box3,
+  BoxGeometry,
+  type BufferGeometry,
+  Color,
+  Layers,
+  Matrix3,
+  Matrix4,
+  Mesh,
+  type Object3D,
+  Vector3,
+} from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { TRUCK_IDS, type TruckId } from '../contracts/vehicle';
@@ -11,6 +22,7 @@ import { truckWorkSill } from './lamp-layout';
 import { CAB_HEIGHT, CAB_LENGTH, CAB_STRIPE, cabShellParams, FRAME_TOP, RELIEF } from './cab-dims';
 import { REALISM_HUES } from './realism-hues';
 import {
+  bakeGeometry,
   parseShell,
   type Shell,
   type ShellKind,
@@ -19,6 +31,7 @@ import {
   type TruckShells,
 } from './glb-shells';
 import { TRUCK_LOOKS } from './livery';
+import { tint } from './tint';
 import { createMirror } from './mirror';
 import { KEYS } from './palette';
 import { lookFor } from './look';
@@ -244,6 +257,55 @@ const flags = (cabGlb: boolean, vehicleGlb: boolean): QualityFlags => ({
   vehicleGlb,
 });
 
+describe.each(TRUCK_IDS)('baked shell of %s', (id) => {
+  it('keeps every vertex where the node matrix puts it, with its linear colour, normal and a dark slot', async () => {
+    const { mesh } = await loadShell(id, 'cab');
+    const baked = bakeGeometry([{ geometry: mesh.geometry, matrix: mesh.matrixWorld }]);
+    const [source, position, normal, color, slot] = [
+      mesh.geometry,
+      baked.getAttribute('position'),
+      baked.getAttribute('normal'),
+      baked.getAttribute('color'),
+      baked.getAttribute('lampSlot'),
+    ];
+    expect(position.count).toBe(source.getAttribute('position').count);
+    const normalMatrix = new Matrix3().getNormalMatrix(mesh.matrixWorld);
+    for (let i = 0; i < position.count; i += 7) {
+      const at = new Vector3().fromBufferAttribute(source.getAttribute('position'), i);
+      expect(
+        new Vector3().fromBufferAttribute(position, i).distanceTo(mesh.localToWorld(at)),
+      ).toBeLessThan(1e-5);
+      const facing = new Vector3()
+        .fromBufferAttribute(source.getAttribute('normal'), i)
+        .applyNormalMatrix(normalMatrix)
+        .normalize();
+      expect(new Vector3().fromBufferAttribute(normal, i).distanceTo(facing)).toBeLessThan(1e-5);
+      const hue = source.getAttribute('color');
+      expect([color.getX(i), color.getY(i), color.getZ(i)]).toEqual(
+        [hue.getX(i), hue.getY(i), hue.getZ(i)].map(Math.fround),
+      );
+      expect(slot.getX(i)).toBe(0);
+    }
+    expect(baked.index?.count).toBe(source.index?.count);
+  });
+
+  it('turns the triangles of a mirroring matrix back to face outwards', () => {
+    const part = tint(new BoxGeometry(), new Color(1, 1, 1));
+    const flat = bakeGeometry([{ geometry: part, matrix: new Matrix4().makeScale(-1, 1, 1) }]);
+    const [a, b, c] = [0, 1, 2].map((k) =>
+      new Vector3().fromBufferAttribute(flat.getAttribute('position'), flat.index?.getX(k) ?? 0),
+    );
+    const face = new Vector3()
+      .subVectors(b as Vector3, a as Vector3)
+      .cross(new Vector3().subVectors(c as Vector3, a as Vector3));
+    expect(
+      face.dot(
+        new Vector3().fromBufferAttribute(flat.getAttribute('normal'), flat.index?.getX(0) ?? 0),
+      ),
+    ).toBeGreaterThan(0);
+  });
+});
+
 describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
   const spec = truckById(id);
   const linked = TRUCK_LOOKS[id].cab.length !== CAB_LENGTH;
@@ -338,16 +400,16 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     }
   });
 
-  it('shortens the side marking only where the cab is longer, by swapping the detail mesh', async () => {
+  it('bakes the detail into the body shell, shortened only where the cab is longer', async () => {
     const d = deferred(await loadBoth(id));
     const group = proceduralTruck(spec, palette, d.shells).object;
     const before = [...group.children];
     applyAll(d);
     const removed = before.filter((m) => !group.children.includes(m));
     const added = group.children.filter((m) => !before.includes(m));
-    // cab shell, its glass and lenses replace the cab front; the body shell adds one mesh, plus the detail swap when linked
-    expect(removed).toHaveLength(linked ? 2 : 1);
-    expect(added).toHaveLength(linked ? 6 : 5);
+    // the cab shell, its glass and lenses (one mesh) and its caster replace the cab front; the body shell replaces the detail
+    expect(removed).toHaveLength(2);
+    expect(added).toHaveLength(4);
   });
 
   it('draws no more meshes with the shells than without, apart from the shells themselves', async () => {
@@ -355,8 +417,8 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     const group = proceduralTruck(spec, palette, d.shells).object;
     const before = group.children.length;
     applyAll(d);
-    // cab shell replaces the cab front; its glass, lenses, shadow caster and the body shell are added
-    expect(group.children.length).toBe(before + 4);
+    // the cab shell and the body shell take the cab front and the detail; the glass and lenses and the caster are added
+    expect(group.children.length).toBe(before + 2);
   });
 
   it('lets the cab skin cast the sun shadow with a hollow stand-in no camera draws, and its glass only take it', async () => {
@@ -366,9 +428,19 @@ describe.each(TRUCK_IDS)('shell swap of %s', (id) => {
     applyAll(d);
     const placed = (geometry: BufferGeometry | undefined): Mesh | undefined =>
       meshesOf(group).find((m) => m.geometry === geometry);
-    const [cab, glass] = [placed(shells.cab.mesh.geometry), placed(shells.cab.glass?.geometry)];
+    const cab = placed(shells.cab.mesh.geometry);
+    const clear = meshesOf(group).filter((m) => m.layers.mask === 1 << CAB_LAYER && m !== cab);
     expect([cab?.castShadow, cab?.receiveShadow]).toEqual([true, true]);
-    expect([glass?.castShadow, glass?.receiveShadow]).toEqual([false, true]);
+    expect(clear).toHaveLength(1);
+    expect([clear[0]?.castShadow, clear[0]?.receiveShadow]).toEqual([false, true]);
+    // the body shell carries the detail and still casts
+    const body = meshesOf(group).filter(
+      (m) => m.layers.mask === 1 << PERSPECTIVE_LAYER && m.castShadow,
+    );
+    expect(body).toHaveLength(1);
+    expect(body[0]?.geometry.getAttribute('position').count).toBeGreaterThan(
+      shells.body.mesh.geometry.getAttribute('position').count,
+    );
     const standIn = meshesOf(group).filter((m) => m.layers.mask === 1 << SHADOW_ONLY_LAYER);
     expect(standIn).toHaveLength(1);
     expect([standIn[0]?.castShadow, standIn[0]?.receiveShadow]).toEqual([true, false]);
