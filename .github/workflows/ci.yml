@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -18,6 +18,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Steps, not a job: `check` fails on a skipped need. No ruleset rule restricts a PR's head
+      # branch, and the guard catches mistakes only (a PR can edit it, and a base change is the
+      # `edited` activity, which starts no run); the owner-only merge into `main` is the real gate.
+      # A fork's `release/*` head is no release branch either.
+      - name: Only release and hotfix branches open PRs into main
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::PRs into main must come from this repository, not $HEAD_REPO"; exit 1
+          fi
+          case "$HEAD_REF" in
+            release/* | hotfix/*) ;;
+            *) echo "::error::PRs into main come from release/* or hotfix/* only, not $HEAD_REF"; exit 1 ;;
+          esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -30,6 +47,19 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
+      # `release:check` compares the head version with the local `v` tags, which a checkout omits.
+      # A fetch whose refspec matches no tag fails, so `ls-remote` asks first (exit 2: none yet).
+      - name: Check the release tree
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          status=0
+          git ls-remote --exit-code --tags --refs origin 'refs/tags/v*' > /dev/null || status=$?
+          if [ "$status" = 0 ]; then
+            git fetch --depth=1 origin 'refs/tags/v*:refs/tags/v*'
+          elif [ "$status" != 2 ]; then
+            exit "$status"
+          fi
+          pnpm release:check
       # The e2e slice table must partition each class: one `n` per class, every `1..n` once.
       - name: Check e2e slice table
         run: |
@@ -71,8 +101,8 @@ jobs:
   # per-test durations. Retune the table when a class's cost shifts; the lint job checks that every
   # `i` of each class appears in exactly one job, so each test runs once. Keep the job count under
   # the account's concurrent-job limit, or the last jobs queue.
-  # Skipped on push to main: the ruleset's strict required status checks (no bypass) make the
-  # merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
+  # Skipped on push to `main` and `develop`: the rulesets' strict required status checks (no bypass)
+  # make the merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
   # still runs it.
   e2e:
     if: github.event_name != 'push'

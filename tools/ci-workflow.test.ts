@@ -1,6 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
 // `webgpu` is advisory: it reports, but does not gate a merge. `release` tags after `deploy`.
@@ -16,7 +18,13 @@ interface Workflow {
       needs?: string[] | string;
       if?: string;
       permissions?: Permissions;
-      steps?: { uses?: string; run?: string; with?: Record<string, unknown> }[];
+      steps?: {
+        name?: string;
+        if?: string;
+        uses?: string;
+        run?: string;
+        with?: Record<string, unknown>;
+      }[];
     }
   >;
 }
@@ -66,6 +74,110 @@ it('every gated job but e2e runs on push', () => {
     if (NOT_GATED.has(name) || name === 'e2e') continue;
     expect(job.if, name).toBeUndefined();
   }
+});
+
+const REPO = 'DocGerd/gegenlenker';
+const GIT_ENV = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: '/dev/null',
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_AUTHOR_NAME: 'Test',
+  GIT_AUTHOR_EMAIL: 'test@example.com',
+  GIT_COMMITTER_NAME: 'Test',
+  GIT_COMMITTER_EMAIL: 'test@example.com',
+};
+const git = (cwd: string, ...args: string[]): string =>
+  execFileSync('git', args, { cwd, env: GIT_ENV, encoding: 'utf8', stdio: 'pipe' });
+
+/** A lint step that runs only on PRs into main, by its script. */
+const mainPrStep = (name: string): string => {
+  const step = workflow().jobs['lint']?.steps?.find((each) => each.name === name);
+  expect(step?.if, name).toBe("github.event_name == 'pull_request' && github.base_ref == 'main'");
+  return step?.run ?? '';
+};
+
+/** Runs a step script as the runner's default shell does (`bash -e {0}`). */
+const runStep = (script: string, cwd: string, env: NodeJS.ProcessEnv): number | null =>
+  spawnSync('bash', ['-e', '-c', script], { cwd, env, stdio: 'pipe' }).status;
+
+const dirs: string[] = [];
+afterEach(() => {
+  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+it('the PR-into-main guard admits only release and hotfix heads of this repository', () => {
+  const guard = mainPrStep('Only release and hotfix branches open PRs into main');
+  const cases: [string, string, number][] = [
+    ['release/1.0.0', REPO, 0],
+    ['hotfix/1.0.1', REPO, 0],
+    ['feature/x', REPO, 1],
+    ['develop', REPO, 1],
+    ['releases/1.0.0', REPO, 1],
+    ['release', REPO, 1],
+    ['release/1.0.0', 'someone/gegenlenker', 1],
+    ['release/1.0.0', '', 1],
+  ];
+  for (const [ref, repo, status] of cases) {
+    const env = { ...process.env, HEAD_REF: ref, HEAD_REPO: repo, GITHUB_REPOSITORY: REPO };
+    expect(runStep(guard, tmpdir(), env), `${repo} ${ref}`).toBe(status);
+  }
+});
+
+describe('the release-tree step on a PR into main', () => {
+  // A depth-1 clone like the checkout's; the `pnpm` stub records the tags `release:check` sees.
+  const clone = (tagged: boolean): { cwd: string; env: NodeJS.ProcessEnv; seen: string } => {
+    const dir = mkdtempSync(join(tmpdir(), 'ci-tags-'));
+    dirs.push(dir);
+    const origin = join(dir, 'origin');
+    mkdirSync(origin);
+    git(origin, 'init', '-q', '-b', 'main');
+    git(origin, 'commit', '-q', '--allow-empty', '-m', 'released');
+    if (tagged) git(origin, 'tag', 'v1.0.0');
+    git(origin, 'commit', '-q', '--allow-empty', '-m', 'head');
+    git(dir, 'clone', '-q', '--depth=1', `file://${origin}`, 'clone');
+    const bin = join(dir, 'bin');
+    const seen = join(dir, 'seen');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'pnpm'), `#!/bin/sh\ngit tag --list 'v*' > '${seen}'\n`, {
+      mode: 0o755,
+    });
+    const env = { ...GIT_ENV, PATH: `${bin}:${process.env['PATH'] ?? ''}` };
+    return { cwd: join(dir, 'clone'), env, seen };
+  };
+  const step = (): string => mainPrStep('Check the release tree');
+
+  it('passes the remote tags to release:check, including a tag off the shallow history', () => {
+    const { cwd, env, seen } = clone(true);
+    expect(runStep(step(), cwd, env)).toBe(0);
+    expect(readFileSync(seen, 'utf8')).toBe('v1.0.0\n');
+  });
+
+  it('runs release:check before the first tag exists', () => {
+    const { cwd, env, seen } = clone(false);
+    expect(runStep(step(), cwd, env)).toBe(0);
+    expect(readFileSync(seen, 'utf8')).toBe('');
+  });
+
+  it('fails without running release:check when the tags cannot be listed', () => {
+    const { cwd, env, seen } = clone(true);
+    git(cwd, 'remote', 'set-url', 'origin', `file://${join(cwd, 'missing')}`);
+    expect(runStep(step(), cwd, env)).not.toBe(0);
+    expect(existsSync(seen)).toBe(false);
+  });
+});
+
+it('only main deploys: develop pushes run the gate and nothing else', () => {
+  const { jobs } = workflow();
+  expect(jobs['build-pages']?.if).toBe(
+    "!cancelled() && needs.check.result == 'success' && " +
+      "(github.event_name == 'push' || github.event_name == 'workflow_dispatch') && " +
+      "github.ref == 'refs/heads/main'",
+  );
+  expect(jobs['deploy']?.needs).toBe('build-pages');
+  expect(jobs['deploy']?.if).toBe("${{ !cancelled() && needs.build-pages.result == 'success' }}");
+  expect(jobs['release']?.if).toBe(
+    "${{ !cancelled() && needs.deploy.result == 'success' && github.ref == 'refs/heads/main' }}",
+  );
 });
 
 it('every action is pinned to a full commit SHA', () => {

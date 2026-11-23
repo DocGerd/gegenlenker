@@ -2,7 +2,33 @@
 
 Reference for the gitflow release flow ([#366](https://github.com/DocGerd/gegenlenker/issues/366)). `main` holds only released, tagged, deployed versions; `develop` integrates; topic branches are `feature/*`; `release/*` and `hotfix/*` are reserved. Versions are SemVer, `package.json` is the single source, and the tag is `vX.Y.Z`.
 
-Only the owner cuts releases and hotfixes and merges into `main`. Agents merge reviewed, green PRs into `develop` and `release/*`, and back-merges.
+Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
+
+## Branches
+
+| Branch          | Role                                                  | Cut from  | Merges into                                                         |
+| --------------- | ----------------------------------------------------- | --------- | ------------------------------------------------------------------- |
+| `main`          | Released, tagged production code; merge commits only  | n/a       | n/a                                                                 |
+| `develop`       | Integration; default branch and default PR base       | `main`    | n/a                                                                 |
+| `feature/*`     | One change                                            | `develop` | `develop`                                                           |
+| `release/X.Y.Z` | Stabilisation: fixes, changelog fold and version only | `develop` | `main`, then back-merged to `develop`                               |
+| `hotfix/X.Y.Z`  | Urgent production fix                                 | `main`    | `main`, then back-merged to the open `release/*`, else to `develop` |
+
+- A change lands on one of `develop`, an open `release/*` or a `hotfix/*`, and reaches the others only by back-merge.
+- Merges into `main` and back-merges are merge commits, never squash or rebase.
+- A PR closes its issues when it reaches `develop`, the default branch: closed means integrated, not released.
+
+## Who does what
+
+- The owner decides to release, cuts `release/*` and `hotfix/*`, merges every PR into `main` and approves each `github-pages` deployment.
+- Agents merge reviewed PRs with green CI into `develop` and `release/*`, and back-merges. They never merge into `main` or approve a deployment.
+
+## CI
+
+- PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, so the owner-only merge is the gate.
+- Changing a PR's base starts no run, and a re-run repeats the old one: after retargeting a PR, close and reopen it so CI checks it against the new base.
+- Pushes to `develop` and `main` run the gate without e2e; only `main` builds the Pages artifact and deploys. `main` also tags and publishes the release once the deploy succeeded.
+- `workflow_dispatch` of CI on `main` redeploys production.
 
 ## Commands
 

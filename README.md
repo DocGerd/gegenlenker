@@ -4,7 +4,7 @@
 
 A trainer for maneuvering a truck with a turntable drawbar trailer: reverse, steer against the trailer and dock it, in the browser and offline-capable.
 
-Live: https://docgerd.github.io/gegenlenker/
+Live, the latest release: https://docgerd.github.io/gegenlenker/ ([releases](https://github.com/DocGerd/gegenlenker/releases))
 
 ## Quickstart
 
@@ -32,7 +32,8 @@ pnpm verify     # lint, format, typecheck, unit and e2e tests
 - [Vehicle data](docs/vehicle-data.md): sources and the generated table of estimated parameters
 - [Brand](docs/brand/BRAND.md)
 - [Wording glossary](docs/glossary.md)
-- [Engine choice ADR](docs/decisions/0001-engine-choice.md)
+- [Engine choice ADR](docs/decisions/0001-engine-choice.md); [gitflow ADR](docs/decisions/0002-gitflow-release-flow.md)
+- [Release flow](docs/releasing.md): branches, who merges what, releases and hotfixes
 - [Asset credits](docs/asset-credits.md): source and licence of each third-party asset
 - [Changelog](CHANGELOG.md); [changelog fragments](changelog.d/README.md)
 - [Contributing](CONTRIBUTING.md); [code of conduct](CODE_OF_CONDUCT.md)
