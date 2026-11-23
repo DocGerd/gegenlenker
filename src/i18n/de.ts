@@ -170,6 +170,8 @@ export const de: Record<MessageKey, string> = {
   whatsNewSince: 'Seit dem letzten Besuch',
   whatsNewLatest: 'Aktuell',
   whatsNewEarlier: 'Frühere Änderungen',
+  buildRelease: 'Version {version}',
+  buildDevelopment: 'Entwicklungsstand {commit}',
   whatsNewEnglishNote: 'Diese Einträge sind auf Englisch.',
   changeAdded: 'Hinzugefügt',
   changeChanged: 'Geändert',

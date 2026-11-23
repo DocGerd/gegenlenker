@@ -1,5 +1,6 @@
 import type { MessageKey } from '../i18n/en';
 import { t } from '../i18n/i18n';
+import { buildLabel } from './build-info';
 import { markAllSeen, unseenIds } from './whats-new-seen';
 import { tokens, whatsNewGroups, type GroupKind, type WhatsNewGroup } from './whats-new-source';
 
@@ -69,7 +70,7 @@ export function showWhatsNew(root: HTMLElement, onBack: () => void): () => void 
   const title = element('h1', 'whats-new-title', t('whatsNew'));
   title.tabIndex = -1;
 
-  main.append(back, title);
+  main.append(back, title, element('p', 'whats-new-note mono', buildLabel()));
   if (document.documentElement.lang !== 'en') {
     main.append(element('p', 'whats-new-note', t('whatsNewEnglishNote')));
   }
