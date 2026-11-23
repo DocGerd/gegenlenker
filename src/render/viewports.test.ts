@@ -517,7 +517,9 @@ describe('computeViewports front mirror', () => {
       Object.keys(en)
         .filter((key) => pattern.test(key))
         .sort();
-    expect([...MESSAGE_KEYS.toast].sort()).toEqual(keysOf(/^(blocked|contactAhead|limitAhead|selectGear)/));
+    expect([...MESSAGE_KEYS.toast].sort()).toEqual(
+      keysOf(/^(blocked|contactAhead|limitAhead|selectGear)/),
+    );
     expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Outside)$/));
   });
 

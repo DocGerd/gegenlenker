@@ -45,6 +45,7 @@ test('Escape pauses the drive and Escape again continues', async ({ page }) => {
   await startAndRoll(page);
   await page.keyboard.press('Escape');
   await expect(sheet(page)).toBeVisible();
+  await expect(sheet(page).getByText(en.restartHint)).toBeVisible();
   const pausedAt = await clock(page).textContent();
   await page.waitForTimeout(600);
   await expect(clock(page)).toHaveText(pausedAt ?? '');
@@ -226,6 +227,7 @@ test('the start hints to select R or D until a gear is chosen', async ({ page })
   await expect(speed(page)).toHaveText('0.0 km/h');
   await expect(toast(page)).toHaveText(en.selectGear);
   await expect(page.locator('[data-hud="toastWrap"]')).toHaveAttribute('role', 'status');
+  await expect(page.locator('[data-hud="toastWrap"]')).toHaveAttribute('aria-atomic', 'false');
   await page.keyboard.press('2');
   await expect(toast(page)).toBeHidden();
   await page.keyboard.press('1');

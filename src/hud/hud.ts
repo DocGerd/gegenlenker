@@ -217,7 +217,7 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
       }
     </div>
   </div>
-  <div class="hud-toast-wrap" data-hud="toastWrap" role="status" aria-live="polite"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
+  <div class="hud-toast-wrap" data-hud="toastWrap" role="status" aria-live="polite" aria-atomic="false"><div class="hud-toast" data-hud="toast" hidden></div><div class="hud-goal-cue" data-hud="goalCue" hidden></div></div>
   <div class="hud-split" data-hud="split" hidden>
     <div class="hud-split-handle" data-hud="splitHandle" role="separator" tabindex="0" ></div>
     <button type="button" class="hud-toggle hud-icon hud-split-reset" data-hud="splitReset" aria-keyshortcuts="L" disabled>${SPLIT_ICON}</button>
@@ -383,11 +383,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   resetView.title = t('resetView');
   resetView.setAttribute('aria-label', t('resetView'));
   resetView.addEventListener('click', () => emit({ type: 'resetView' }), { signal });
-  query(hud, 'action', HTMLElement).addEventListener(
-    'click',
-    () => emit({ type: 'pause' }),
-    { signal },
-  );
+  query(hud, 'action', HTMLElement).addEventListener('click', () => emit({ type: 'pause' }), {
+    signal,
+  });
 
   const split = query(hud, 'split', HTMLElement);
   const splitHandle = query(hud, 'splitHandle', HTMLElement);
