@@ -32,6 +32,7 @@ import { measureChrome } from './chrome';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { showPauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
+import { setNightDrive } from './theme';
 import { updateSettings, type Settings } from './settings';
 
 export type RunConfig = {
@@ -133,6 +134,8 @@ export function startDrive(
   const restart = (): void => {
     if (disposed) return;
     dispose();
+    // The next drive mounts asynchronously; a light frame in between would flash at night. `leave` and `loadFailed` clear it.
+    setNightDrive(lighting === 'night');
     onRestart();
   };
   const leaveUnscored = (): void => {
@@ -163,6 +166,8 @@ export function startDrive(
 
   const view = mountRenderStage(stage, stage, () => exit(false), lighting);
   cleanups.push(() => view.dispose());
+  setNightDrive(lighting === 'night');
+  cleanups.push(() => setNightDrive(false));
   // Released early when the stage halts behind a notice: nothing may drive or hold the screen under it.
   const live: (() => void)[] = [];
   const halt = (): void => {

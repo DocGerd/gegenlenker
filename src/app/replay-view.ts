@@ -16,6 +16,7 @@ import { createReplayCursor, type ReplayCursor } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { mountRenderStage } from './render-stage';
+import { setNightDrive } from './theme';
 import './results.css';
 import { isReplayable } from './storage';
 
@@ -124,6 +125,8 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   stage.append(map);
   const view = mountRenderStage(stage, map, exit, log.lighting);
   cleanups.push(() => view.dispose());
+  setNightDrive(log.lighting === 'night');
+  cleanups.push(() => setNightDrive(false));
   const { renderer } = view;
   renderer.setScene(layout, truckById(log.truckId), trailerById(log.trailerId));
 
