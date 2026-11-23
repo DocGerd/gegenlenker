@@ -2,6 +2,7 @@ import type { VitePWAOptions } from 'vite-plugin-pwa';
 import { DEFAULT_GRAPHICS } from '../contracts/render';
 import { ASSET_REGISTRY } from '../render/asset-registry';
 import { QUALITY_FLAGS } from '../render/quality';
+import { UAT_DIR, channelNames, type Channel } from './channel';
 
 export type TokenTheme = 'light' | 'dark';
 
@@ -45,11 +46,16 @@ export const RUNTIME_ASSETS: readonly (readonly [string, readonly string[]])[] =
 const RUNTIME_ASSET_GLOBS = RUNTIME_ASSETS.flatMap(([stem, extensions]) =>
   extensions.map((extension) => `**/${stem}-*.${extension}`),
 );
-export const RUNTIME_ASSET_URLS = new RegExp(
-  `/(?:${RUNTIME_ASSETS.map(([stem, extensions]) => `${stem}-[\\w-]+\\.(?:${extensions.join('|')})`).join('|')})$`,
-);
+const RUNTIME_ASSET_ALTERNATIVES = RUNTIME_ASSETS.map(
+  ([stem, extensions]) => `${stem}-[\\w-]+\\.(?:${extensions.join('|')})`,
+).join('|');
+export const RUNTIME_ASSET_URLS = new RegExp(`/(?:${RUNTIME_ASSET_ALTERNATIVES})$`);
 
-/** `cleanupOutdatedCaches` leaves the runtime cache alone, so a rehash leaves a stale set until LRU evicts it: room for the live set plus one stale set, never below the original fixed size. */
+/** The production worker's scope contains the UAT one's: it must not answer for the UAT build's files. Matched against the full URL. */
+export const productionAssetUrls = (base: string): RegExp =>
+  new RegExp(`^(?!.*${escapeRegExp(base)}${UAT_DIR}).*/(?:${RUNTIME_ASSET_ALTERNATIVES})$`);
+
+/** Precache cleanup leaves the runtime cache alone, so a rehash leaves a stale set until LRU evicts it: room for the live set plus one stale set, never below the original fixed size. */
 export const RUNTIME_CACHE_MIN_ENTRIES = 12;
 const RUNTIME_CACHE_ENTRIES = Math.max(RUNTIME_CACHE_MIN_ENTRIES, RUNTIME_ASSET_GLOBS.length * 2);
 
@@ -57,15 +63,21 @@ export const PRECACHE_GLOBS = [
   '**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}',
 ];
 
-export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOptions> {
+export function pwaOptions(
+  base: string,
+  colors: PwaColors,
+  channel: Channel = 'production',
+): Partial<VitePWAOptions> {
+  const names = channelNames(channel);
+  const uat = channel === 'uat';
   return {
     registerType: 'prompt',
     injectRegister: false,
     includeManifestIcons: false,
     manifest: {
       id: base,
-      name: 'Gegenlenker',
-      short_name: 'Gegenlenker',
+      name: names.appName,
+      short_name: names.appName,
       lang: 'de',
       start_url: base,
       scope: base,
@@ -81,10 +93,10 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
       runtimeCaching: [
         {
           // Assets the default preset does not draw are cached on first use, not on install.
-          urlPattern: RUNTIME_ASSET_URLS,
+          urlPattern: uat ? RUNTIME_ASSET_URLS : productionAssetUrls(base),
           handler: 'CacheFirst',
           options: {
-            cacheName: 'ground-texture',
+            cacheName: names.runtimeCache,
             cacheableResponse: { statuses: [200] },
             expiration: { maxEntries: RUNTIME_CACHE_ENTRIES },
           },
@@ -92,7 +104,15 @@ export function pwaOptions(base: string, colors: PwaColors): Partial<VitePWAOpti
       ],
       maximumFileSizeToCacheInBytes: MAX_PRECACHE_FILE_BYTES,
       navigateFallback: 'index.html',
-      cleanupOutdatedCaches: true,
+      // A navigation to the UAT build is not the production app shell. Workbox tests pathname plus
+      // search, and `uat` without its slash is outside the UAT scope, so the production worker sees it.
+      navigateFallbackDenylist: uat
+        ? []
+        : [new RegExp(`^${escapeRegExp(base + UAT_DIR.slice(0, -1))}(?:[/?]|$)`)],
+      // Workbox deletes every `-precache-` cache whose name contains the worker's scope, which
+      // includes the UAT precache from the production worker. Revisions inside the one precache
+      // are pruned on activate regardless; only a cache under an older Workbox name format is left.
+      cleanupOutdatedCaches: false,
       clientsClaim: true,
       skipWaiting: false,
     },

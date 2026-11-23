@@ -25,6 +25,7 @@ import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { currentSettings, updateSettings, type Settings } from './settings';
 import { bestResults } from './storage';
 import { buildLabel } from './build-info';
+import { CHANNEL } from './channel';
 import { applyTheme } from './theme';
 
 const LAYOUT_NAME: Readonly<Record<LayoutId, MessageKey>> = {
@@ -92,6 +93,7 @@ const MARKUP = `
   <footer class="menu-footer">
     <span>© 2026 Patrick Kuhn</span>
     <span class="mono" data-menu="build"></span>
+    <span class="menu-badge" data-menu="channel" data-i18n="channelUat" hidden></span>
     <button type="button" class="menu-link" data-menu="whatsNew"><span data-i18n="whatsNew"></span><span class="menu-badge" data-menu="whatsNewBadge" data-i18n="whatsNewBadge" hidden></span></button>
     <span class="menu-offline" data-menu="offline" role="status"></span>
   </footer>
@@ -222,6 +224,9 @@ export function showMenu(
     container.innerHTML = MARKUP;
     applyMessages(container);
     query(container, 'build', HTMLElement).textContent = buildLabel();
+    const channelBadge = query(container, 'channel', HTMLElement);
+    if (CHANNEL === 'uat') channelBadge.hidden = false;
+    else channelBadge.remove();
 
     const truck = query(container, 'truck', HTMLSelectElement);
     const trailer = query(container, 'trailer', HTMLSelectElement);

@@ -172,6 +172,7 @@ export const de: Record<MessageKey, string> = {
   whatsNewEarlier: 'Frühere Änderungen',
   buildRelease: 'Version {version}',
   buildDevelopment: 'Entwicklungsstand {commit}',
+  channelUat: 'Abnahmetest',
   whatsNewEnglishNote: 'Diese Einträge sind auf Englisch.',
   changeAdded: 'Hinzugefügt',
   changeChanged: 'Geändert',

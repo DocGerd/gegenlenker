@@ -5,6 +5,7 @@ import { WEBGPU_LAUNCH } from './e2e/webgpu-launch';
 const port = previewPort(import.meta.dirname);
 if (process.env['TEST_WORKER_INDEX'] === undefined)
   console.log(`e2e preview port: ${String(port)}`);
+const UAT_BUILD = 'DEPLOY_CHANNEL=uat BASE_PATH=/gegenlenker/uat/ pnpm build --outDir dist/uat';
 const url = `http://127.0.0.1:${port}/gegenlenker/`;
 
 export default defineConfig({
@@ -17,7 +18,7 @@ export default defineConfig({
     {
       name: 'offline',
       testMatch: /\.spec\.ts$/,
-      testIgnore: /\/webgpu\//,
+      testIgnore: /\/(webgpu|channels)\//,
       // High first-load markers on software GL outlast the 5 s default; a test fits several waits.
       expect: { timeout: 30_000 },
       timeout: 90_000,
@@ -45,6 +46,13 @@ export default defineConfig({
       },
     },
     {
+      // The production dist with a UAT build inside `uat/` (E2E_CHANNELS builds both).
+      name: 'channels',
+      testMatch: /channels\/.*\.spec\.ts$/,
+      expect: { timeout: 30_000 },
+      use: { ...devices['Desktop Chrome'], locale: 'en-US', serviceWorkers: 'allow' },
+    },
+    {
       name: 'perf',
       testMatch: /\.perf\.ts$/,
       timeout: 120_000,
@@ -57,7 +65,7 @@ export default defineConfig({
   ],
   webServer: {
     // CI builds with BASE_PATH before this runs; locally the build happens here.
-    command: `${process.env['CI'] ? '' : 'pnpm build && '}pnpm preview --host 127.0.0.1 --port ${port} --strictPort`,
+    command: `${process.env['CI'] ? '' : `pnpm build && ${process.env['E2E_CHANNELS'] ? `${UAT_BUILD} && ` : ''}`}pnpm preview --host 127.0.0.1 --port ${port} --strictPort`,
     env: { BASE_PATH: '/gegenlenker/' },
     url,
   },

@@ -166,6 +166,7 @@ export const en = {
   whatsNewEarlier: 'Earlier changes',
   buildRelease: 'Version {version}',
   buildDevelopment: 'Development build {commit}',
+  channelUat: 'UAT',
   whatsNewEnglishNote: 'These entries are in English.',
   changeAdded: 'Added',
   changeChanged: 'Changed',
