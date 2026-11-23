@@ -15,13 +15,24 @@ import {
   type RenderStats,
   type SceneRenderer,
   type ScenePalette,
+  type TopDownView,
   type WebgpuFallback,
 } from '../contracts/render';
-import type { SimSnapshot } from '../contracts/sim';
-import type { TrailerSpec, TruckAnchors, TruckSpec } from '../contracts/vehicle';
+import type { TruckAnchors } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
-import { resolveCombination } from '../vehicles/resolve';
-import { cabFront, createChaseCamera, placeChaseCamera, type CabFront } from './chase-camera';
+import {
+  cabFront,
+  boundingRadius,
+  chaseColliders,
+  combinationExtent,
+  createChaseArm,
+  createChaseCamera,
+  placeChaseCamera,
+  vehicleCentre,
+  type CabFront,
+  type ChaseCollider,
+  type CombinationExtent,
+} from './chase-camera';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
@@ -54,8 +65,6 @@ import { isShadowCamera } from './sun-shadow';
 import { placeTopDownCamera } from './top-down-camera';
 
 const FOLLOW_HALF_HEIGHT = 20;
-/** Metres added to the vehicle's bounding radius. */
-const FOLLOW_RADIUS_MARGIN = 1;
 /** Time constant of the look-ahead shift, so a gear change glides instead of jumping. */
 const LEAD_SECONDS = 0.5;
 const MAX_LEAD_STEP_SECONDS = 0.25;
@@ -74,6 +83,8 @@ type Built = {
   readonly cabFront: CabFront;
   readonly palette: ScenePalette;
   readonly yardBounds: Rect2;
+  readonly colliders: readonly ChaseCollider[];
+  readonly extent: CombinationExtent;
   /** Metres from the follow centre that bound the whole combination. */
   readonly radius: number;
 };
@@ -100,20 +111,10 @@ function fitBounds(layout: ResolvedLayout): Rect2 {
   };
 }
 
-function followRadius(truck: TruckSpec, trailer: TrailerSpec): number {
-  const p = resolveCombination(truck, trailer);
-  const length =
-    p.truckFront + p.couplingOffset + p.drawbar + p.trailerWheelbase + p.trailerRearOverhang;
-  return length / 2 + Math.max(p.truckWidth, p.trailerWidth) / 2 + FOLLOW_RADIUS_MARGIN;
-}
-
-/** The bumper-to-trailer-rear midpoint the follow views and the sun shadow centre on. */
-function vehicleCentre(snapshot: SimSnapshot, frontX: number): { x: number; y: number } {
-  const { truck, trailerRear } = snapshot;
-  const bumperX = truck.x + Math.cos(truck.heading) * frontX;
-  const bumperY = truck.y + Math.sin(truck.heading) * frontX;
-  return { x: (bumperX + trailerRear.x) / 2, y: (bumperY + trailerRear.y) / 2 };
-}
+const isDefault = (view: TopDownView): boolean =>
+  view.zoom === DEFAULT_TOP_DOWN_VIEW.zoom &&
+  view.panX === DEFAULT_TOP_DOWN_VIEW.panX &&
+  view.panY === DEFAULT_TOP_DOWN_VIEW.panY;
 
 function setAidsLayer(object: Object3D): void {
   object.traverse((o) => o.layers.set(AIDS_LAYER));
@@ -243,6 +244,8 @@ export function createThreeSceneRenderer(
   let frameIndex = 0;
   let topDownRect: Rect | null = null;
   let chaseShown = false;
+  const chaseArm = createChaseArm();
+  let chaseView = DEFAULT_TOP_DOWN_VIEW;
   const lead = { x: 0, y: 0 };
   let leadAt = -1;
   /** Bumped by every `init` and by `dispose`, so a superseded start drops its renderer. */
@@ -444,6 +447,7 @@ export function createThreeSceneRenderer(
       timer.resetScale('scene');
       resetTiming('scene');
       leadAt = -1;
+      chaseArm.cut();
       const palette = readScenePalette();
       const scene = new Scene();
       scene.matrixWorldAutoUpdate = false;
@@ -455,6 +459,7 @@ export function createThreeSceneRenderer(
       const environment = parts.environment(nextLayout, palette);
       const aids = parts.aids(truck, trailer, nextLayout, palette);
       const interior = parts.interior(truck, palette);
+      const extent = combinationExtent(truck, trailer);
       setAidsLayer(aids.object);
       scene.add(environment.object, truckVisual.object, trailerVisual.object, aids.object);
       (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
@@ -470,7 +475,9 @@ export function createThreeSceneRenderer(
         cabFront: cabFront(truck),
         palette,
         yardBounds: fitBounds(nextLayout),
-        radius: followRadius(truck, trailer),
+        colliders: chaseColliders(nextLayout),
+        extent,
+        radius: boundingRadius(extent),
       };
       applyLookTo(built);
     },
@@ -579,18 +586,29 @@ export function createThreeSceneRenderer(
       }
 
       out.place(topDown, pixelRatio);
+      const chaseWasShown = chaseShown;
       chaseShown = frame.topDown === 'chase';
       if (chaseShown) {
+        const view = frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW;
+        // a reset or a switch to the view is a cut: the eye starts where the view puts it
+        if (!chaseWasShown || (isDefault(view) && !isDefault(chaseView))) chaseArm.cut();
+        chaseView = view;
         placeChaseCamera(
           chaseCamera,
-          snapshot.truck,
-          b.cabFront,
+          {
+            truck: snapshot.truck,
+            centre: vehicleCentre(snapshot, b.anchors.frontX),
+            extent: b.extent,
+            face: b.cabFront,
+            colliders: b.colliders,
+          },
           {
             width: topDown.width,
             height: topDown.height,
             clear: relativeTo(topDown, frame.topDownClear ?? topDown),
           },
-          frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW,
+          view,
+          (limit, open) => chaseArm.hold(limit, open, performance.now()),
         );
         gl.render(b.scene, chaseCamera);
       } else {

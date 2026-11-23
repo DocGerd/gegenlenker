@@ -280,6 +280,7 @@ describe('pane clears', () => {
         wideLeft: null,
         wideRight: null,
         front: null,
+        close: null,
         topDown: { x: 0, y: 0, width: 800, height: 200 },
       },
     };

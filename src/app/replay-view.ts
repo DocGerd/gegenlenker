@@ -3,7 +3,7 @@ import type { InputLog } from '../contracts/exercise';
 import type { AidFlags, RenderFrame, TopDownMode } from '../contracts/render';
 import type { Simulation, SimSnapshot } from '../contracts/sim';
 import { isAction } from '../input/keymap';
-import { createTopDownInput } from '../input/top-down-input';
+import { createViewInput } from '../input/view-input';
 import { isDefaultView } from '../input/top-down-view';
 import { formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
@@ -241,7 +241,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     predicted: NO_PREDICTION,
   };
 
-  const viewInput = createTopDownInput(view.surface, {
+  const viewInput = createViewInput(view.surface, {
     mode: 'yard',
     getRect: () => frame.views.topDown,
     onChange(next) {
