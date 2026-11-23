@@ -249,7 +249,7 @@ const MARKUP = (
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
       </div>
     </div>
-    <div class="hud-info">
+    <div class="hud-info" data-hud="info">
       <div class="hud-gauges" data-hud="gauges" data-chrome></div>
       ${
         mode === 'exercise'
@@ -326,6 +326,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const toastWrap = query(hud, 'toastWrap', HTMLElement);
   const toast = query(hud, 'toast', HTMLElement);
   const topDown = query(hud, 'topDown', HTMLElement);
+  const infoRow = query(hud, 'info', HTMLElement);
   const gaugeBox = query(hud, 'gauges', HTMLElement);
   const speed = query(hud, 'speed', HTMLElement);
   const gearEl = query(hud, 'gear', HTMLElement);
@@ -929,8 +930,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
           bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
         }
       }
+      // A counter row that cannot wrap narrower overflows into the lever column instead of growing taller.
+      const infoStyle = getComputedStyle(infoRow);
+      const infoRight =
+        infoRow.getBoundingClientRect().right - (parseFloat(infoStyle.paddingRight) || 0);
+      const overflows = [...infoRow.children].some(
+        (el) => el.getBoundingClientRect().right > infoRight + 0.5,
+      );
       topDown.style.width = previous;
-      return bottom - top;
+      return overflows ? Infinity : bottom - top;
     },
     legendBox() {
       const r = legend.getBoundingClientRect();
