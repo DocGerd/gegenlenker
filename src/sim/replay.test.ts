@@ -178,7 +178,13 @@ describe('replay', () => {
 
   it('round-trips a mirror-only run and reads an older log as driven with the top view', () => {
     const fingerprint = (): string => 'data-a';
-    const mirrors: InputLog = { version: 3, ...recorded, mirrorsOnly: true, steps: 10, changes: [] };
+    const mirrors: InputLog = {
+      version: 3,
+      ...recorded,
+      mirrorsOnly: true,
+      steps: 10,
+      changes: [],
+    };
     expect(parseInputLog(serializeInputLog(mirrors, fingerprint), fingerprint)).toEqual(mirrors);
     const v2 = JSON.stringify({
       version: 2,

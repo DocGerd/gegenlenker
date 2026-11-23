@@ -59,6 +59,8 @@ test('a mirror-only run has no top-down pane, keeps the brief and finish, and re
     .getByRole('button', { name: en.finish })
     .click();
   await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
+  // No aid is drawn without the top view, so the run counts as unaided whatever the aid settings.
+  await expect(page.getByText(en.runNoAids)).toBeVisible();
 
   // The replay draws the top view across the window, whatever the menu chose.
   await page.getByRole('button', { name: en.replay }).click();

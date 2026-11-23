@@ -85,7 +85,8 @@ describe('exerciseDone', () => {
       [bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'day', false)]: result({
         reached: false,
       }),
-      [bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l', false, 'day', false)]: other,
+      [bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l', false, 'day', false)]:
+        other,
       [bestKey('slalom', 'man-le-18-280', 'krone-azw-18', false, 'day', false)]: result({
         exerciseId: 'slalom',
         reached: false,
@@ -174,7 +175,8 @@ describe('scoring', () => {
       true,
       false,
       0,
-      'day', false,
+      'day',
+      false,
     );
     expect(r).toMatchObject({
       exerciseId: 'reverse-bay',
@@ -199,7 +201,8 @@ describe('scoring', () => {
         true,
         false,
         0,
-        'day', false,
+        'day',
+        false,
       ).reached,
     ).toBe(true);
   });
@@ -214,7 +217,8 @@ describe('scoring', () => {
       true,
       false,
       0,
-      'night', false,
+      'night',
+      false,
     );
     expect(r.lighting).toBe('night');
   });
@@ -229,7 +233,8 @@ describe('scoring', () => {
       true,
       false,
       10,
-      'day', false,
+      'day',
+      false,
     );
     expect(r.time).toBe(32.5);
   });
@@ -256,7 +261,8 @@ describe('scoring', () => {
       tracker.waypointVisited(),
       false,
       0,
-      'day', false,
+      'day',
+      false,
     );
     expect(result.reached).toBe(false);
     expect(result.waypointMissed).toBe(true);
@@ -265,8 +271,18 @@ describe('scoring', () => {
   it('does not flag a waypoint missed when the exercise has none or it was visited', () => {
     const s = snap(INSIDE);
     expect(
-      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false, false, 0, 'day', false)
-        .waypointMissed,
+      runResult(
+        s,
+        exercise(),
+        'man-le-18-280',
+        'krone-azw-18',
+        false,
+        false,
+        false,
+        0,
+        'day',
+        false,
+      ).waypointMissed,
     ).toBe(false);
     expect(
       runResult(
@@ -278,7 +294,8 @@ describe('scoring', () => {
         true,
         false,
         0,
-        'day', false,
+        'day',
+        false,
       ).waypointMissed,
     ).toBe(false);
   });
@@ -378,7 +395,8 @@ describe('best results', () => {
     expect(assisted.previous).toBeNull();
     expect(assisted.best[KEY]).toEqual(result({ time: 30 }));
     expect(
-      assisted.best[bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', true, 'day', false)]?.time,
+      assisted.best[bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', true, 'day', false)]
+        ?.time,
     ).toBe(10);
     expect(recordBest(assisted.best, result({ time: 40 })).previous?.time).toBe(30);
   });
@@ -424,9 +442,9 @@ describe('best results', () => {
     // A mirror-only result under the plain key, or a non-boolean flag, is dropped.
     const stray = { ...stored, fingerprint: 'f' };
     expect(parseBestResults(raw({ [KEY]: stray }), fingerprint)).toEqual({});
-    expect(parseBestResults(raw({ [mirrorsKey]: { ...stray, mirrorsOnly: 1 } }), fingerprint)).toEqual(
-      {},
-    );
+    expect(
+      parseBestResults(raw({ [mirrorsKey]: { ...stray, mirrorsOnly: 1 } }), fingerprint),
+    ).toEqual({});
   });
 
   it('reads bests stored before lighting as day and keeps night ones', () => {
@@ -576,7 +594,8 @@ describe('runSeconds', () => {
           true,
           false,
           start * DT,
-          'day', false,
+          'day',
+          false,
         ).time;
         expect(tenth(runSeconds(end, start))).toBe(tenth(scored));
       }
