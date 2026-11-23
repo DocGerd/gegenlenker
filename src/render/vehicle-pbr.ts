@@ -23,7 +23,13 @@ import {
 import type { LightingMode, ScenePalette } from '../contracts/render';
 import { createSceneSky, domeGround } from './scene-sky';
 import { GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
-import { buildSerially, compileShader, wgslAccepted, type Compiled } from './shader-check';
+import {
+  buildSerially,
+  compileShader,
+  watchShaderErrors,
+  wgslAccepted,
+  type Compiled,
+} from './shader-check';
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
@@ -191,29 +197,16 @@ async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise
   const mesh = new Mesh(geometry, material);
   const scene = new Scene();
   scene.add(mesh);
-  const { debug } = gpu;
-  const previous = debug.onShaderError;
   const verdict = { accepted: true };
   // only the WebGL 2 backend reports here; a node build error rejects compileAsync on either
-  const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
-    if (context.getShaderSource(fragment)?.includes(VEHICLE_SHADER_MARKER) === true) {
+  const restore = watchShaderErrors(gpu, {
+    matches: (source) => source?.includes(VEHICLE_SHADER_MARKER) === true,
+    onMatch: (logs) => {
       verdict.accepted = false;
-      console.warn(
-        'Vehicle reflection shader failed',
-        context.getShaderInfoLog(vertex),
-        context.getShaderInfoLog(fragment),
-        context.getProgramInfoLog(program),
-      );
-    } else if (previous !== null) previous(context, program, vertex, fragment);
-    else
-      console.error(
-        'Shader error',
-        context.getShaderInfoLog(vertex),
-        context.getShaderInfoLog(fragment),
-        context.getProgramInfoLog(program),
-      );
-  };
-  debug.onShaderError = watcher;
+      console.warn('Vehicle reflection shader failed', ...logs());
+    },
+    unwatchedLabel: 'Shader error',
+  });
   try {
     const built = await compileShader(gpu, scene, new PerspectiveCamera(), mesh);
     const markers = graded ? [VEHICLE_SHADER_MARKER, GRADE_SHADER_MARKER] : [VEHICLE_SHADER_MARKER];
@@ -226,7 +219,7 @@ async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise
     console.warn('Vehicle reflection shader failed', error);
     return null;
   } finally {
-    if (debug.onShaderError === watcher) debug.onShaderError = previous;
+    restore();
     material.dispose();
     geometry.dispose();
   }

@@ -69,7 +69,11 @@ export function showWhatsNew(root: HTMLElement, onBack: () => void): () => void 
   const title = element('h1', 'whats-new-title', t('whatsNew'));
   title.tabIndex = -1;
 
-  main.append(back, title, ...whatsNewGroups(unseenIds()).map(groupSection));
+  main.append(back, title);
+  if (document.documentElement.lang !== 'en') {
+    main.append(element('p', 'whats-new-note', t('whatsNewEnglishNote')));
+  }
+  main.append(...whatsNewGroups(unseenIds()).map(groupSection));
   markAllSeen();
   container.append(main);
   root.append(container);
