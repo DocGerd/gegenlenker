@@ -1,4 +1,15 @@
-import { type Group, type Material, Mesh, type Object3D } from 'three';
+import {
+  BufferGeometry,
+  type Group,
+  Float32BufferAttribute,
+  type Material,
+  Matrix3,
+  type Matrix4,
+  Mesh,
+  type Object3D,
+  Uint32BufferAttribute,
+  Vector3,
+} from 'three';
 import type { TrailerId, TruckId } from '../contracts/vehicle';
 import hueffermannUrl from './assets/hueffermann-hpa-24-81-l-trailer.glb?url';
 import kroneUrl from './assets/krone-azw-18-trailer.glb?url';
@@ -6,6 +17,7 @@ import arocsBodyUrl from './assets/arocs-1835-ak-body.glb?url';
 import arocsCabUrl from './assets/arocs-1835-ak-cab.glb?url';
 import manBodyUrl from './assets/man-le-18-280-body.glb?url';
 import manCabUrl from './assets/man-le-18-280-cab.glb?url';
+import { DARK_SLOT, SLOT_ATTRIBUTE } from './lamp-lens';
 import { AIDS_LAYER } from './seams';
 
 /*
@@ -287,6 +299,68 @@ function homeOrder(group: Group): Map<Object3D, number> {
   return order;
 }
 
+export type BakePart = {
+  readonly geometry: BufferGeometry;
+  /** Places the part; the glTF node's matrix undoes the optimiser's quantisation. */
+  readonly matrix?: Matrix4;
+};
+
+/**
+ * One indexed geometry of several parts, each placed by its matrix: float position, normal, rgb colour
+ * and `lampSlot`, whatever the part stores (quantised, RGBA, no slot: dark). A part without normal or
+ * colour is refused.
+ */
+export function bakeGeometry(parts: readonly BakePart[]): BufferGeometry {
+  const count = parts.reduce(
+    (sum, { geometry }) => sum + geometry.getAttribute('position').count,
+    0,
+  );
+  const position = new Float32Array(count * 3);
+  const normal = new Float32Array(count * 3);
+  const color = new Float32Array(count * 3);
+  const slot = new Float32Array(count).fill(DARK_SLOT);
+  const index: number[] = [];
+  const point = new Vector3();
+  let first = 0;
+  for (const { geometry, matrix } of parts) {
+    if (!geometry.hasAttribute('normal') || !geometry.hasAttribute('color')) {
+      throw new Error('a part to bake lacks normal or color');
+    }
+    const [p, n, c] = [
+      geometry.getAttribute('position'),
+      geometry.getAttribute('normal'),
+      geometry.getAttribute('color'),
+    ];
+    const s = geometry.hasAttribute(SLOT_ATTRIBUTE) ? geometry.getAttribute(SLOT_ATTRIBUTE) : null;
+    const normalMatrix = matrix === undefined ? null : new Matrix3().getNormalMatrix(matrix);
+    for (let i = 0; i < p.count; i++) {
+      const at = (first + i) * 3;
+      point.fromBufferAttribute(p, i);
+      if (matrix !== undefined) point.applyMatrix4(matrix);
+      point.toArray(position, at);
+      point.fromBufferAttribute(n, i);
+      if (normalMatrix !== null) point.applyNormalMatrix(normalMatrix);
+      point.normalize().toArray(normal, at);
+      point.fromBufferAttribute(c, i).toArray(color, at);
+      if (s !== null) slot[first + i] = s.getX(i);
+    }
+    // a mirroring matrix turns the triangles inside out, which three undoes per object, not per vertex
+    const flip = matrix !== undefined && matrix.determinant() < 0;
+    const length = geometry.index?.count ?? p.count;
+    for (let i = 0; i < length; i += 3) {
+      const corner = (k: number): number => first + (geometry.index?.getX(i + k) ?? i + k);
+      index.push(corner(0), corner(flip ? 2 : 1), corner(flip ? 1 : 2));
+    }
+    first += p.count;
+  }
+  return new BufferGeometry()
+    .setAttribute('position', new Float32BufferAttribute(position, 3))
+    .setAttribute('normal', new Float32BufferAttribute(normal, 3))
+    .setAttribute('color', new Float32BufferAttribute(color, 3))
+    .setAttribute(SLOT_ATTRIBUTE, new Float32BufferAttribute(slot, 1))
+    .setIndex(new Uint32BufferAttribute(index, 1));
+}
+
 export type ShellSwap = {
   /** Procedural meshes that stay for the top-down view only while the shell shows. */
   readonly toAids: readonly Mesh[];
@@ -294,6 +368,11 @@ export type ShellSwap = {
   readonly remove: readonly Object3D[];
   /** Procedural stand-ins that join the shell while it shows. */
   readonly add?: readonly Mesh[];
+  /**
+   * Detail, in the group's frame, that the shell's mesh carries while it shows: one draw instead of two.
+   * `remove` lists the detail mesh it replaces.
+   */
+  readonly detail?: BufferGeometry;
   readonly layer: number;
 };
 
@@ -318,6 +397,7 @@ export function applyShell(
   const masks = swap.toAids.map((m) => m.layers.mask);
   const order = homeOrder(group);
   const rank = (o: Object3D): number => order.get(o) ?? Number.MAX_SAFE_INTEGER;
+  const baked: BufferGeometry[] = [];
   let added: Mesh[] = [];
   let on = false;
   const setEnabled = (next: boolean): void => {
@@ -337,23 +417,51 @@ export function applyShell(
     onChange(next);
   };
   try {
-    // lenses and glass take the sun's shadow but never cast one: lenses are thin and lit by the lamps,
-    // and a window must not shade the interior behind it
-    const place = (prototype: Mesh, casts: boolean): Mesh => {
-      const mesh = new Mesh(prototype.geometry, material);
-      prototype.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
+    const place = (geometry: BufferGeometry, casts: boolean): Mesh => {
+      const mesh = new Mesh(geometry, material);
       mesh.layers.set(swap.layer);
       mesh.castShadow = casts;
       mesh.receiveShadow = true;
       return mesh;
     };
-    const glass = shell.glass === null ? [] : [place(shell.glass, false)];
-    const lens = shell.lens === null ? [] : [place(shell.lens, false)];
-    added = [place(shell.mesh, true), ...glass, ...lens, ...(swap.add ?? [])];
+    const bake = (...parts: BakePart[]): BufferGeometry => {
+      const geometry = bakeGeometry(parts);
+      baked.push(geometry);
+      return geometry;
+    };
+    const asNode = (prototype: Mesh): BakePart => ({
+      geometry: prototype.geometry,
+      matrix: prototype.matrixWorld,
+    });
+    // a prototype keeps its shared geometry under its node transform
+    const placeNode = (prototype: Mesh, casts: boolean): Mesh => {
+      const mesh = place(prototype.geometry, casts);
+      prototype.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
+      return mesh;
+    };
+    // lenses and glass take the sun's shadow but never cast one: lenses are thin and lit by the lamps,
+    // and a window must not shade the interior behind it
+    const [glass, lens] = [shell.glass, shell.lens];
+    const clear =
+      glass !== null && lens !== null
+        ? [place(bake(asNode(glass), asNode(lens)), false)]
+        : [glass, lens].flatMap((m) => (m === null ? [] : [placeNode(m, false)]));
+    const skin =
+      swap.detail === undefined
+        ? placeNode(shell.mesh, true)
+        : place(bake(asNode(shell.mesh), { geometry: swap.detail }), true);
+    added = [skin, ...clear, ...(swap.add ?? [])];
     setEnabled(enabled);
   } catch (error) {
     setEnabled(false);
+    baked.forEach((g) => g.dispose());
     throw error;
   }
-  return { dispose: () => setEnabled(false), setEnabled };
+  return {
+    dispose: () => {
+      setEnabled(false);
+      baked.forEach((g) => g.dispose());
+    },
+    setEnabled,
+  };
 }

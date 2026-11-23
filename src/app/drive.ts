@@ -13,7 +13,7 @@ import { createHud } from '../hud/hud';
 import { t } from '../i18n/i18n';
 import { createControls } from '../input/controls';
 import { isAction } from '../input/keymap';
-import { createTopDownInput } from '../input/top-down-input';
+import { createViewInput } from '../input/view-input';
 import { isDefaultView } from '../input/top-down-view';
 import { chaseViewAvailable, extraMirrors, interiorAvailable } from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
@@ -213,7 +213,7 @@ export function startDrive(
   });
   live.push(() => controls.dispose());
   // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
-  const viewInput = createTopDownInput(view.surface, {
+  const viewInput = createViewInput(view.surface, {
     mode: topDown,
     getRect: () => frame.views.topDown,
     onChange(next) {

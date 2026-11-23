@@ -7,9 +7,18 @@ import type { TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { trucks } from '../vehicles/registry';
 import { cabShellParams } from './cab-dims';
-import { CLASS_V, CLOSE_ASPECT, MIN_CLOSE_WIDTH } from './close-mirror';
+import { CLOSE_ASPECT, MIN_CLOSE_WIDTH } from './close-mirror';
 import { parseShell } from './glb-shells';
-import { createMirror, type MirrorSpec, mirrorFacing } from './mirror';
+import { extraMirrors } from './index';
+import {
+  CLASS_V_MIRROR,
+  createMirror,
+  type MirrorSpec,
+  mirrorAnchor,
+  mirrorFacing,
+  MIRRORS,
+  mirrorMounts,
+} from './mirror';
 import {
   CLASS_V_AHEAD,
   CLASS_V_BEHIND,
@@ -21,13 +30,18 @@ import {
 
 const STRAIGHT: Pose2 = { x: 0, y: 0, heading: 0 };
 const GRID = 0.1;
-const SPEC: MirrorSpec = { ...CLASS_V, anchor: 'front', view: 'front' };
+const SPEC: MirrorSpec = CLASS_V_MIRROR;
 
 /** The class V camera of `truck` placed on the straight pose as the renderer does, at the mirror's aspect. */
 function closeCamera(truck: TruckSpec) {
   const mirror = createMirror(SPEC);
   const position = new Vector3();
-  const facing = mirrorFacing(STRAIGHT, closeMirrorMount(truck), SPEC.yaw, position);
+  const facing = mirrorFacing(
+    STRAIGHT,
+    mirrorAnchor(SPEC, mirrorMounts(truck)),
+    SPEC.yaw,
+    position,
+  );
   mirror.place(position, facing);
   mirror.camera.aspect = CLOSE_ASPECT;
   mirror.camera.updateProjectionMatrix();
@@ -185,5 +199,25 @@ describe('class V minimum width', () => {
     expect(MIN_CLOSE_WIDTH % 2).toBe(0);
     expect(scale(MIN_CLOSE_WIDTH) * 0.3).toBeGreaterThanOrEqual(6);
     expect(scale(MIN_CLOSE_WIDTH - 2) * 0.3).toBeLessThan(6);
+  });
+});
+
+describe('class V close mirror wiring', () => {
+  it('is the one mirror drawn into the close view, from the close mount', () => {
+    expect(MIRRORS.filter((m) => m.view === 'close')).toEqual([CLASS_V_MIRROR]);
+    expect(CLASS_V_MIRROR.anchor).toBe('close');
+    for (const truck of trucks) {
+      expect(mirrorAnchor(CLASS_V_MIRROR, mirrorMounts(truck))).toEqual(closeMirrorMount(truck));
+    }
+  });
+});
+
+describe('class V close mirror flag', () => {
+  it('is drawn on Balanced and High, and not on Low, whatever the class IV setting', () => {
+    for (const wide of [true, false]) {
+      expect(extraMirrors('low', wide).close).toBe(false);
+      expect(extraMirrors('balanced', wide).close).toBe(true);
+      expect(extraMirrors('high', wide).close).toBe(true);
+    }
   });
 });
