@@ -314,8 +314,9 @@ jobs:
         env:
           BASE_PATH: /gegenlenker/
       - run: grep -q 'src="/gegenlenker/assets/' dist/index.html
-      # The `develop` deploy reuses this dist instead of rebuilding production, so the build must be
-      # byte-for-byte reproducible: a second clean build has to match the first.
+      # The `develop` deploy reuses the uploaded bytes and never rebuilds production. Regenerating an
+      # expired artifact does rebuild, so a second clean build must match the first; this proves it
+      # on one runner and toolchain only (`.nvmrc` and `ubuntu-latest` float).
       - name: Verify the build is deterministic
         run: |
           pnpm build --outDir "$RUNNER_TEMP/dist-again" --emptyOutDir
@@ -328,9 +329,11 @@ jobs:
           (cd dist && sha256sum --check --quiet ../prod-manifest.txt)
           printf '%s\n' "$GITHUB_SHA" > prod-commit.txt
       # Artifacts expire (`retention-days` is capped by the repository setting, 90 days at most), but
-      # `main` changes only when a release is cut. Once the artifact has expired, re-run this workflow
-      # with `workflow_dispatch` on `main`: the build is deterministic, so it republishes the same
-      # bytes. The consumer fails when `prod-dist-<sha>` is missing and never rebuilds production.
+      # `main` changes only when a release is cut. Once the artifact has expired, run this workflow
+      # with `workflow_dispatch` on `main`: it uploads a new one and redeploys production from the
+      # same build, so both match once that deploy is live. This upload precedes the gated deploy, so
+      # the consumer takes the commit of the last successful `github-pages` deployment, fails when its
+      # `prod-dist-<sha>` is missing, and never rebuilds production.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: prod-dist-${{ github.sha }}
