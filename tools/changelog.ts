@@ -137,3 +137,24 @@ export const generateChangelog = (root: string): string => {
   if (problems.length > 0) throw new Error(`changelog.d/released.json:\n${problems.join('\n')}`);
   return renderChangelog(data as Release[]);
 };
+
+export interface ReleaseState {
+  /** `version` of package.json. */
+  version: string;
+  /** True when `version` is the head released group of released.json and no fragment is pending. */
+  release: boolean;
+}
+
+/** Whether the tree at `root` is a release build; only then is `version` shown as the app's. */
+export const releaseState = (root: string): ReleaseState => {
+  const { version } = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
+    version?: unknown;
+  };
+  if (typeof version !== 'string' || !VERSION_RE.test(version))
+    throw new Error('package.json: version must be x.y.z');
+  const dir = join(root, 'changelog.d');
+  const releases = loadReleases(dir);
+  const head: unknown = Array.isArray(releases) ? releases[0] : undefined;
+  const headVersion = isRecord(head) ? head['version'] : undefined;
+  return { version, release: headVersion === version && fragmentFiles(dir).length === 0 };
+};

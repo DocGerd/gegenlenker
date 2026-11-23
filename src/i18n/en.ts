@@ -164,6 +164,8 @@ export const en = {
   whatsNewSince: 'Since your last visit',
   whatsNewLatest: 'Latest',
   whatsNewEarlier: 'Earlier changes',
+  buildRelease: 'Version {version}',
+  buildDevelopment: 'Development build {commit}',
   whatsNewEnglishNote: 'These entries are in English.',
   changeAdded: 'Added',
   changeChanged: 'Changed',

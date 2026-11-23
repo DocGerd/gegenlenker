@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ChangelogEntry, Release } from '../src/app/changelog-entries';
@@ -7,6 +8,7 @@ import {
   loadFragments,
   loadReleases,
   releaseProblems,
+  releaseState,
   renderChangelog,
 } from './changelog';
 
@@ -72,5 +74,55 @@ describe('renderChangelog', () => {
 describe('CHANGELOG.md', () => {
   it('is what `pnpm changelog` generates from released.json alone', () => {
     expect(readFileSync(join(ROOT, 'CHANGELOG.md'), 'utf8')).toBe(generateChangelog(ROOT));
+  });
+});
+
+describe('releaseState', () => {
+  const tree = (opts: { version: string; head: string | null; fragments: string[] }): string => {
+    const root = mkdtempSync(join(tmpdir(), 'release-state-'));
+    mkdirSync(join(root, 'changelog.d'));
+    writeFileSync(join(root, 'package.json'), JSON.stringify({ version: opts.version }));
+    const group =
+      opts.head === null ? { version: null } : { version: opts.head, date: '2026-01-01' };
+    writeFileSync(
+      join(root, 'changelog.d', 'released.json'),
+      JSON.stringify([{ ...group, entries: [] }]),
+    );
+    for (const file of opts.fragments) writeFileSync(join(root, 'changelog.d', file), 'x');
+    return root;
+  };
+
+  it('reads the version from package.json', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string };
+    expect(releaseState(ROOT).version).toBe(pkg.version);
+  });
+
+  it('is a release build when the head group matches and nothing is pending', () => {
+    const root = tree({ version: '1.0.0', head: '1.0.0', fragments: ['README.md'] });
+    expect(releaseState(root)).toEqual({ version: '1.0.0', release: true });
+  });
+
+  it('is a development build while a fragment is pending', () => {
+    const root = tree({ version: '1.0.0', head: '1.0.0', fragments: ['7.added.md'] });
+    expect(releaseState(root).release).toBe(false);
+  });
+
+  it('rejects a package.json without an x.y.z version', () => {
+    const root = tree({ version: '1.0.0', head: '1.0.0', fragments: [] });
+    writeFileSync(join(root, 'package.json'), '{}');
+    expect(() => releaseState(root)).toThrow('version must be x.y.z');
+  });
+
+  it('is a development build when released.json has no usable head group', () => {
+    const root = tree({ version: '1.0.0', head: '1.0.0', fragments: [] });
+    writeFileSync(join(root, 'changelog.d', 'released.json'), '[]');
+    expect(releaseState(root).release).toBe(false);
+  });
+
+  it('is a development build when the head group is unreleased or another version', () => {
+    expect(releaseState(tree({ version: '0.0.0', head: null, fragments: [] })).release).toBe(false);
+    expect(releaseState(tree({ version: '1.1.0', head: '1.0.0', fragments: [] })).release).toBe(
+      false,
+    );
   });
 });

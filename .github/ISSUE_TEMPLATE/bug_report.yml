@@ -31,6 +31,14 @@ body:
     validations:
       required: true
   - type: input
+    id: version
+    attributes:
+      label: App version
+      description: Shown in the menu footer and on the What's new screen; copy it as shown, in any language.
+      placeholder: Version 1.0.0 or Development build 1a2b3c4
+    validations:
+      required: true
+  - type: input
     id: environment
     attributes:
       label: Browser, OS and device
