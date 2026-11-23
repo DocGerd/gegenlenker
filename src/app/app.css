@@ -108,6 +108,20 @@
   gap: var(--space-3);
 }
 
+.menu-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.menu-list > li {
+  display: flex;
+}
+
+.menu-list > li > .menu-start {
+  flex: 1;
+}
+
 .menu-start {
   box-sizing: border-box;
   display: flex;
@@ -138,6 +152,12 @@
   font-size: var(--text-lg);
   line-height: var(--leading-lg);
   font-weight: var(--weight-medium);
+}
+
+.menu-num {
+  margin-right: var(--space-2);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .menu-done {

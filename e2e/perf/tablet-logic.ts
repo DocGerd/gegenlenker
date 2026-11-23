@@ -40,6 +40,8 @@ export type Options = {
   /** The app's `?backend=`; absent leaves the app's default. */
   backend: Backend | null;
   lighting: Lighting;
+  /** Keep the governor trace of every run, not only of one that ends below full resolution. */
+  keepTraces: boolean;
 };
 
 /** `<truck id>+<trailer id>`, one of `PAIRS`. */
@@ -74,6 +76,7 @@ export function parseOptions(argv: readonly string[]): Options {
       'skip-build': { type: 'boolean', default: false },
       backend: { type: 'string' },
       lighting: { type: 'string', default: 'day' },
+      'keep-traces': { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
     },
   });
@@ -105,6 +108,7 @@ export function parseOptions(argv: readonly string[]): Options {
     skipBuild: values['skip-build'],
     backend,
     lighting,
+    keepTraces: values['keep-traces'],
   };
 }
 
