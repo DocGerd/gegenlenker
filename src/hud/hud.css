@@ -164,6 +164,8 @@
   background: none;
   cursor: pointer;
   touch-action: manipulation;
+  min-width: 24px;
+  min-height: 24px;
 }
 
 .hud-legend-toggle:focus-visible {
@@ -182,7 +184,8 @@
   pointer-events: none;
 }
 
-.hud-legend[data-collapsed] svg {
+.hud-legend[data-collapsed] svg,
+.hud-legend[data-drive-only] svg {
   transform: rotate(-90deg);
 }
 
@@ -207,6 +210,11 @@
 .hud-legend dd {
   margin: 0;
   color: var(--color-text-secondary);
+}
+
+/* A short cockpit opens to the drive keys; the chevron brings back the rest. */
+.hud-legend[data-drive-only] .hud-legend-view {
+  display: none;
 }
 
 /* The header row would push the single column into the mirror: only the chevron stays, in the corner. */

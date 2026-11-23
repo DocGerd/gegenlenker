@@ -486,6 +486,44 @@ test('the key legend folds away and stays folded in the next run', async ({ page
   await expect(toggle).toBeVisible();
 });
 
+test('a short cockpit opens the key legend to the drive keys, and the chevron shows the rest', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 585 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const toggle = page.locator('[data-hud="keysToggle"]');
+  const rows = page.locator('.hud-legend dt');
+  const view = page.locator('.hud-legend dt.hud-legend-view');
+  await expect(view.first()).toBeHidden();
+  await expect(rows.filter({ visible: true })).toHaveCount(5);
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  const box = await toggle.boundingBox();
+  expect(box?.height).toBeGreaterThanOrEqual(24);
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(view.first()).toBeVisible();
+  await settled(page);
+  await expectMirrorsClearControls(page, { width: 1280, height: 585 });
+  await toggle.click();
+  await expect(view.first()).toBeHidden();
+});
+
+for (const [height, openFull] of [
+  [739, false],
+  [740, true],
+] as const) {
+  test(`the key legend opens to ${openFull ? 'the full list' : 'the drive keys'} at 1280x${String(height)}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height });
+    await startStraightReverse(page, en.exerciseStraightReverse);
+    await expect(page.locator('.hud-legend dt.hud-legend-view').first()).toBeVisible({
+      visible: openFull,
+    });
+  });
+}
+
 const handle = (page: Page) => page.locator('[data-hud="splitHandle"]');
 const splitBar = (page: Page) => page.locator('[data-hud="split"]');
 
@@ -1019,19 +1057,22 @@ for (const size of [
   });
 }
 
-/** Laptop viewports where class IV shows beside the open key legend; 1440x739 is the first to lose it if the legend grows. */
+/** Laptop viewports where class IV shows beside the key legend as it opens; 1440x739 is the first of the tall ones to lose it if the legend grows. */
 const laptops: { size: Size; locale: string; messages: typeof en | typeof de }[] = [
   ...[
     { width: 1536, height: 729 },
     { width: 1440, height: 765 },
     { width: 1470, height: 832 },
     { width: 1512, height: 788 },
+    { width: 1280, height: 585 },
+    { width: 1280, height: 739 },
+    { width: 1280, height: 740 },
   ].flatMap((size) => locales.map((l) => ({ size, ...l }))),
   { size: { width: 1440, height: 739 }, locale: 'de-DE', messages: de },
 ];
 
 for (const { size, locale, messages } of laptops) {
-  test(`the class IV mirrors show beside the open key legend at ${locale} ${size.width}x${size.height}`, async ({
+  test(`the class IV mirrors show beside the key legend at ${locale} ${size.width}x${size.height}`, async ({
     browser,
   }) => {
     test.slow();

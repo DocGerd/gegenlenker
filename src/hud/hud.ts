@@ -145,6 +145,11 @@ const BUMP_MS = 250;
  */
 const COMPACT_WIDTH = 720;
 const COMPACT_WIDTH_WITH_LEVER = 840;
+/**
+ * Cockpit heights below which the legend opens to the drive keys only: the full list takes the
+ * mirrors' room. At 1280 wide the full list keeps class IV from this height; `layout.spec` pins it.
+ */
+const SHORT_HEIGHT = 740;
 
 const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
 
@@ -341,6 +346,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     { signal },
   );
+  // On a short cockpit the chevron flips between the drive keys and the full list; not persisted.
+  let shortCockpit = false;
+  let allKeys = false;
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
     for (const b of aidButtons) {
@@ -358,8 +366,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         'aria-pressed',
         String(!collapsed[b.dataset['panel'] as keyof CollapsedPanels]),
       );
-    keysToggle.setAttribute('aria-expanded', String(!collapsed.keys));
-    legend.toggleAttribute('data-collapsed', collapsed.keys);
+    keysToggle.setAttribute('aria-expanded', String(shortCockpit ? allKeys : !collapsed.keys));
+    legend.toggleAttribute('data-collapsed', !shortCockpit && collapsed.keys);
+    legend.toggleAttribute('data-drive-only', shortCockpit && !allKeys);
     setHidden(aidsBox, collapsed.aids);
     setHidden(gaugeBox, !aids.pivots || collapsed.gauges);
   };
@@ -395,7 +404,16 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       signal,
     });
   }
-  keysToggle.addEventListener('click', () => togglePanel('keys'), { signal });
+  keysToggle.addEventListener(
+    'click',
+    () => {
+      if (shortCockpit) {
+        allKeys = !allKeys;
+        syncToggles();
+      } else togglePanel('keys');
+    },
+    { signal },
+  );
   const resetView = query(hud, 'resetView', HTMLButtonElement);
   resetView.title = t('resetView');
   resetView.setAttribute('aria-label', t('resetView'));
@@ -711,10 +729,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       setHidden(cockpit, c === null);
       if (c) {
         place(cockpit, c);
-        cockpit.toggleAttribute(
-          'data-compact',
-          c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH),
-        );
+        const compact = c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH);
+        cockpit.toggleAttribute('data-compact', compact);
+        // The compact legend already drops the view rows.
+        const short = !compact && c.height < SHORT_HEIGHT;
+        if (short !== shortCockpit) {
+          shortCockpit = short;
+          syncToggles();
+        }
       }
       // a class IV mirror hangs from the arm of the class II mirror above it
       const hung = { wideLeft: views.mirrorLeft, wideRight: views.mirrorRight } as const;
