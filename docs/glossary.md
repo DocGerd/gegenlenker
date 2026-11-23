@@ -10,6 +10,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Truck-to-drawbar angle                          | coupling angle                | Kupplungswinkel                              |
 | Drawbar-to-trailer angle                        | turntable angle               | Drehschemelwinkel                            |
 | Angle reached its limit                         | limit stop                    | Anschlag (am Anschlag)                       |
+| Steer the other way to ease an angle            | countersteer                  | gegenlenken                                  |
 | Vehicle touches an obstacle or itself           | contact                       | Berührung                                    |
 | Best stored result                              | best                          | Bestwert                                     |
 | Driving area                                    | yard                          | Hof                                          |

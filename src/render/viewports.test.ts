@@ -286,6 +286,7 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   Gegenrichtung: 99,
   In: 12,
   Kupplungswinkel: 116,
+  Limit: 32,
   Lkw: 27,
   Outside: 54,
   R: 10,
@@ -300,10 +301,12 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   at: 13,
   ausweichen: 80,
   away: 36,
+  countersteer: 86,
   der: 23,
   drawbar: 57,
   drive: 35,
   fahren: 43,
+  gegenlenken: 86,
   in: 12,
   jetzt: 32,
   limit: 29,
@@ -515,7 +518,9 @@ describe('computeViewports front mirror', () => {
       Object.keys(en)
         .filter((key) => pattern.test(key))
         .sort();
-    expect([...MESSAGE_KEYS.toast].sort()).toEqual(keysOf(/^(blocked|contactAhead|selectGear)/));
+    expect([...MESSAGE_KEYS.toast].sort()).toEqual(
+      keysOf(/^(blocked|contactAhead|limitAhead|selectGear)/),
+    );
     expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Outside)$/));
   });
 
