@@ -53,6 +53,10 @@ export const extraMirrors = (preset: GraphicsPreset, wideMirrors: boolean): Extr
 export const interiorAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].cockpitInterior;
 
+/** Whether the preset draws the interior asset, which the head can turn about. */
+export const lookAroundAvailable = (preset: GraphicsPreset): boolean =>
+  QUALITY_FLAGS[preset].cockpitInterior && QUALITY_FLAGS[preset].interiorGlb;
+
 declare global {
   interface Window {
     /** Under `?perf=1`: what the resolution governor did, read by the tablet harness. */

@@ -156,6 +156,7 @@ export const de: Record<MessageKey, string> = {
   viewSwitchNoOutside: 'Folgen / Ganzer Hof',
   keyOrbitTilt: ', / . · Bild↑ / Bild↓',
   panView: 'Verschieben / drehen',
+  lookAround: 'Umsehen',
   orbitTilt: 'Drehen / neigen',
   whatsNew: 'Neuigkeiten',
   whatsNewBadge: 'Neu',
