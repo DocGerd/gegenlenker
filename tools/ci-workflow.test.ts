@@ -6,13 +6,24 @@ import { parse } from 'yaml';
 // `webgpu` is advisory: it reports, but does not gate a merge. `release` tags after `deploy`.
 const NOT_GATED = new Set(['check', 'build-pages', 'deploy', 'release', 'webgpu']);
 
+type Permissions = Record<string, string> | string;
+
 interface Workflow {
-  permissions?: Record<string, string>;
+  permissions?: Permissions;
   jobs: Record<
     string,
-    { needs?: string[] | string; if?: string; permissions?: Record<string, string> }
+    {
+      needs?: string[] | string;
+      if?: string;
+      permissions?: Permissions;
+      steps?: { uses?: string; with?: Record<string, unknown> }[];
+    }
   >;
 }
+
+const writesContents = (permissions?: Permissions): boolean =>
+  permissions === 'write-all' ||
+  (typeof permissions === 'object' && permissions['contents'] === 'write');
 
 const workflow = (): Workflow =>
   parse(
@@ -31,12 +42,19 @@ it('check needs every job except the check itself, the advisory job and the depl
 
 it('only the release job can write contents, and only after a successful deploy on main', () => {
   const { jobs, permissions } = workflow();
-  expect(permissions?.['contents']).toBe('read');
+  expect(permissions).toMatchObject({ contents: 'read' });
   const writers = Object.entries(jobs)
-    .filter(([, job]) => job.permissions?.['contents'] === 'write')
+    .filter(([, job]) => writesContents(job.permissions))
     .map(([name]) => name);
   expect(writers).toEqual(['release']);
   expect(jobs['release']?.needs).toBe('deploy');
   expect(jobs['release']?.if).toContain("needs.deploy.result == 'success'");
   expect(jobs['release']?.if).toContain("github.ref == 'refs/heads/main'");
+});
+
+it('the release job fetches every tag, since its tag checks read the local clone', () => {
+  const checkout = workflow().jobs['release']?.steps?.find((step) =>
+    step.uses?.startsWith('actions/checkout@'),
+  );
+  expect(checkout?.with?.['fetch-depth']).toBe(0);
 });
