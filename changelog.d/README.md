@@ -29,7 +29,7 @@ An array of releases, newest first. The unreleased group (`"version": null`, no 
 
 ## Release
 
-Three commands own the release steps; run them on a clean tree.
+Three commands own the release steps; run them on a clean tree. The branch flow around them (cut, back-merge, hotfix) is in [`docs/releasing.md`](../docs/releasing.md).
 
 - `pnpm release:prepare [X.Y.Z] [--date YYYY-MM-DD]` sets the `package.json` version, folds every pending fragment into the head group of `released.json` (the unreleased group, else a new first group) with the version and date, in PR number order with ids unchanged, deletes exactly the folded files and regenerates `CHANGELOG.md`. Without a version it derives one from the last release: only `fixed` and `security` entries make a patch, anything else a minor; a major or the first version is always passed. It refuses a dirty tree, a version that does not rise or already has a `v` tag, and new fragments over an untagged versioned head group unless that version is passed again, which folds them into it (the date is kept). It reads the local tags, so fetch them first. Once prepared, a re-run with nothing pending is a no-op.
 - `pnpm release:check` fails on a pending fragment, a `package.json` version that differs from the head group of `released.json`, versions not strictly newest first, a stale `CHANGELOG.md`, or a head version whose local `v` tag points at another commit. It has to pass before a release is tagged.
