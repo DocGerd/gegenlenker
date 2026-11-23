@@ -140,6 +140,12 @@
   font-weight: var(--weight-medium);
 }
 
+.menu-num {
+  margin-right: var(--space-2);
+  color: var(--color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
 .menu-done {
   margin-left: var(--space-2);
   font-size: var(--text-xs);
