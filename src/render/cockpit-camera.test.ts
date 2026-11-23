@@ -1,4 +1,4 @@
-import { Vector3 } from 'three';
+import { MathUtils, type PerspectiveCamera, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { Pose2 } from '../contracts/sim';
 import { truckAnchors } from '../vehicles/anchors';
@@ -40,4 +40,23 @@ describe.each(trucks)('cockpit camera of $id', (truck) => {
       expect(centre.project(camera).x).toBeGreaterThan(0);
     },
   );
+
+  it.each(HEADINGS)('turns with the head about the eye, heading %f', (truckHeading) => {
+    const pose: Pose2 = { x: 7, y: -3, heading: truckHeading };
+    const rest = createCockpitCamera();
+    placeCockpitCamera(rest, pose, anchors.eye, PANE);
+    const camera = createCockpitCamera();
+    const yaw = MathUtils.degToRad(40);
+    const pitch = MathUtils.degToRad(8);
+    placeCockpitCamera(camera, pose, anchors.eye, PANE, { yaw, pitch });
+
+    expect(camera.position.distanceTo(rest.position)).toBeCloseTo(0, 9);
+    const along = (c: PerspectiveCamera): Vector3 => c.getWorldDirection(new Vector3());
+    const [a, b] = [along(rest), along(camera)];
+    // the sim plane's heading: counter-clockwise positive, so positive yaw looks left
+    const heading = (v: Vector3): number => Math.atan2(-v.z, v.x);
+    const turned = heading(b) - heading(a);
+    expect(Math.atan2(Math.sin(turned), Math.cos(turned))).toBeCloseTo(yaw, 9);
+    expect(Math.asin(b.y) - Math.asin(a.y)).toBeCloseTo(pitch, 9);
+  });
 });

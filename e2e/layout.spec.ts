@@ -997,6 +997,33 @@ for (const { size, locale, messages } of laptops) {
   });
 }
 
+// Look-around is offered on High only, so its legend row is one line taller there than at the default preset.
+for (const { size, locale, messages } of [
+  { size: { width: 1440, height: 739 }, locale: 'de-DE', messages: de },
+  { size: { width: 1536, height: 729 }, locale: 'en-US', messages: en },
+]) {
+  test(`the class IV mirrors show beside the legend with its look-around row on High at ${locale} ${size.width}x${size.height}`, async ({
+    browser,
+  }) => {
+    test.slow();
+    const context = await browser.newContext({ locale, viewport: size });
+    try {
+      const page = await context.newPage();
+      await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
+        SETTINGS_KEY,
+        JSON.stringify({ version: 1, graphics: 'high' }),
+      ] as const);
+      await startStraightReverse(page, messages.exerciseStraightReverse);
+      await expect(page.locator('.hud-legend')).toContainText(messages.lookAround);
+      await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
+      await expectMirrorsClearControls(page, size);
+      await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 test('the wide-angle mirrors setting hides class IV, gives class II its full size and persists', async ({
   browser,
 }) => {

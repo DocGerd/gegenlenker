@@ -1,5 +1,5 @@
 import { MathUtils, PerspectiveCamera } from 'three';
-import type { Rect } from '../contracts/render';
+import { HEAD_REST, type HeadPose, type Rect } from '../contracts/render';
 import type { Pose2 } from '../contracts/sim';
 import type { Vec3 } from '../contracts/vehicle';
 import { COCKPIT_FOV } from './cockpit-band';
@@ -16,15 +16,16 @@ export function createCockpitCamera(): PerspectiveCamera {
   return camera;
 }
 
-/** Puts the camera at the body-frame `eye` of a truck at `pose`, looking along its heading, filling `pane`. */
+/** Puts the camera at the body-frame `eye` of a truck at `pose`, looking along its heading turned by `head`, filling `pane`. */
 export function placeCockpitCamera(
   camera: PerspectiveCamera,
   pose: Pose2,
   eye: Vec3,
   pane: Pick<Rect, 'width' | 'height'>,
+  head: HeadPose = HEAD_REST,
 ): void {
   bodyToThree(pose, eye, camera.position);
-  camera.rotation.set(COCKPIT_PITCH, pose.heading - Math.PI / 2, 0);
+  camera.rotation.set(COCKPIT_PITCH + head.pitch, pose.heading - Math.PI / 2 + head.yaw, 0);
   camera.aspect = pane.width / pane.height;
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
