@@ -15,6 +15,7 @@ import type { VehicleEnvironment } from './vehicle-pbr';
 import {
   createGlbInterior,
   INTERIOR_URLS,
+  interiorParts,
   type InteriorShell,
   interiorShellFrom,
 } from './interior-glb';
@@ -122,13 +123,15 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
       const camera = createCockpitCamera();
       placeCockpitCamera(camera, pose, anchors.eye, cockpit as Rect);
       scene.updateMatrixWorld();
-      interior.place({ camera, cockpit: cockpit as Rect, mirrorLeft, mirrorRight });
+      interior.place({ camera, heading, cockpit: cockpit as Rect, mirrorLeft, mirrorRight });
       truck.updateMatrixWorld(true);
       const inverse = truck.matrixWorld.clone().invert();
-      for (const mesh of interior.meshes) {
-        expect(mesh.layers.mask, mesh.name).toBe(1 << INTERIOR_LAYER);
-        expect(mesh.castShadow, mesh.name).toBe(false);
-        mesh.updateWorldMatrix(true, false);
+      for (const merged of interior.meshes) {
+        expect(merged.layers.mask).toBe(1 << INTERIOR_LAYER);
+        expect(merged.castShadow).toBe(false);
+        merged.updateWorldMatrix(true, false);
+      }
+      for (const mesh of interior.meshes.flatMap(interiorParts)) {
         const box = new Box3();
         const position = mesh.geometry.getAttribute('position');
         for (let i = 0; i < position.count; i++) {
@@ -148,6 +151,42 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
         );
         const centre = box.getCenter(new Vector3());
         expect(centre.y, mesh.name).toBeGreaterThan(cab.frameTop);
+      }
+    }
+  });
+});
+
+describe.each(trucks)('merged interior of $id', (spec) => {
+  it('draws as one mesh that holds each source part, placed as its node places it', async () => {
+    const shell = await glb(spec.id);
+    const interior = createGlbInterior(spec);
+    interior.attach(shell);
+    interior.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
+    expect(interior.meshes).toHaveLength(1);
+    const [merged] = interior.meshes;
+    if (merged === undefined) throw new Error('no mesh');
+    interior.object.updateMatrixWorld(true);
+    const parts = interiorParts(merged);
+    expect(parts.map((p) => p.name).sort()).toEqual(['header', 'interior', 'pillars', 'wheel']);
+    for (const part of parts) {
+      const source = shell[part.name as keyof InteriorShell];
+      source.updateWorldMatrix(true, false);
+      const want = new Box3().setFromObject(source, true);
+      const got = new Box3()
+        .setFromObject(part, true)
+        .applyMatrix4(part.matrixWorld.clone().invert());
+      expect(part.geometry.getAttribute('position').count, part.name).toBe(
+        source.geometry.getAttribute('position').count,
+      );
+      expect(part.geometry.getIndex()?.count, part.name).toBe(
+        source.geometry.getIndex()?.count ?? source.geometry.getAttribute('position').count,
+      );
+      // the node matrices undo the optimiser's quantisation, so the bound is the part's own to a hair
+      for (const [a, b] of [
+        [got.min, want.min],
+        [got.max, want.max],
+      ] as const) {
+        expect(a.distanceTo(b), part.name).toBeLessThan(2e-3);
       }
     }
   });

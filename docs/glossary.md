@@ -30,8 +30,12 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Hazard flashers switch (key X, touch button)    | hazard lights                 | Warnblinker                                  |
 | Orbit view of the truck from outside            | outside view                  | Außenansicht                                 |
 | Turning the outside view around the vehicle     | orbit / tilt                  | drehen / neigen                              |
+| Turning the head in the cockpit view            | look around                   | Umsehen                                      |
 | Split of the screen into cockpit and top view   | view size                     | Ansichtsgröße                                |
 | Legend: reset both view and view size           | reset view / size             | Standardansicht                              |
 | Menu screen listing the app's changes           | what's new                    | Neuigkeiten                                  |
 | Badge on what's new while entries are unseen    | new                           | Neu                                          |
 | Group of entries not seen on the last visit     | since your last visit         | Seit dem letzten Besuch                      |
+| Speed readout and label                         | speed                         | Tempo                                        |
+| Gear readout and label                          | gear                          | Fahrstufe                                    |
+| Steering readout and label                      | steer                         | Lenken                                       |

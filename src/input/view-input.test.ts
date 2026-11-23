@@ -43,4 +43,17 @@ describe('pointer router', () => {
     expect(router.down(4, 'a', { x: 0, y: 0 })).toBe(true);
     expect(router.move(1, { x: 1, y: 1 })).toBeNull();
   });
+
+  it('reads one finger on the cockpit and one on the top-down pane as two drags', () => {
+    const router = createPointerRouter<'cockpit' | 'topDown'>();
+    router.down(1, 'cockpit', { x: 50, y: 50 });
+    router.down(2, 'topDown', { x: 50, y: 50 });
+    expect(router.move(1, { x: 60, y: 50 })?.gesture).toEqual({ kind: 'drag', dx: 10, dy: 0 });
+    expect(router.move(2, { x: 50, y: 40 })?.gesture).toEqual({ kind: 'drag', dx: 0, dy: -10 });
+    expect(router.paneOf(1)).toBe('cockpit');
+    expect(router.count('cockpit')).toBe(1);
+    router.up(1);
+    expect(router.paneOf(1)).toBeUndefined();
+    expect(router.count('cockpit')).toBe(0);
+  });
 });

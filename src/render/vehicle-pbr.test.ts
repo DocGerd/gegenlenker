@@ -683,6 +683,21 @@ describe('vehicle shader check', () => {
     }
   });
 
+  it('fails when the GPU rejects the WGSL of a build that carries the markers', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const device = {
+      pushErrorScope: () => undefined,
+      createShaderModule: () => undefined,
+      popErrorScope: () => Promise.resolve({ message: 'parse error' }),
+    };
+    const g = Object.assign(
+      gpu(() => Promise.resolve(built)),
+      { backend: { isWebGPUBackend: true, device } },
+    );
+    expect(await vehicleShaderCompiles(g, new Texture())).toBe(false);
+    expect(warn).toHaveBeenCalled();
+  });
+
   it.each([
     ['three swapped in a plain material', () => Promise.resolve('void main() {}')],
     [

@@ -420,6 +420,18 @@ test('the two gauges stay equally wide in German', async ({ browser }) => {
   await context.close();
 });
 
+test('the goal cue keeps its distance out of the live region', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  // The distance changes every 0.1 m; only the state span may be announced.
+  const parts = page.locator(
+    '[data-hud="toastWrap"][aria-live="polite"] [data-hud="goalCue"] > span',
+  );
+  await expect(parts).toHaveCount(2);
+  await expect(parts.nth(0)).toHaveAttribute('aria-hidden', 'true');
+  await expect(parts.nth(1)).not.toHaveAttribute('aria-hidden', /.*/);
+});
+
 const menuViews = [
   { width: 1280, height: 585 },
   { width: 390, height: 844 },
@@ -1068,6 +1080,33 @@ for (const { size, locale, messages } of laptops) {
     try {
       const page = await context.newPage();
       await startStraightReverse(page, messages.exerciseStraightReverse);
+      await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
+      await expectMirrorsClearControls(page, size);
+      await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+// Look-around is offered on High only, so its legend row is one line taller there than at the default preset.
+for (const { size, locale, messages } of [
+  { size: { width: 1440, height: 739 }, locale: 'de-DE', messages: de },
+  { size: { width: 1536, height: 729 }, locale: 'en-US', messages: en },
+]) {
+  test(`the class IV mirrors show beside the legend with its look-around row on High at ${locale} ${size.width}x${size.height}`, async ({
+    browser,
+  }) => {
+    test.slow();
+    const context = await browser.newContext({ locale, viewport: size });
+    try {
+      const page = await context.newPage();
+      await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
+        SETTINGS_KEY,
+        JSON.stringify({ version: 1, graphics: 'high' }),
+      ] as const);
+      await startStraightReverse(page, messages.exerciseStraightReverse);
+      await expect(page.locator('.hud-legend')).toContainText(messages.lookAround);
       await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
       await expectMirrorsClearControls(page, size);
       await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);

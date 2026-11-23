@@ -3,7 +3,6 @@ import { MeshLambertNodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import { output, vec4 } from 'three/tsl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  buildSerially,
   createGradeCheck,
   GRADE_SHADER_MARKER,
   precompileGrade,
@@ -16,6 +15,7 @@ import {
   type Rgb,
 } from './grade';
 import { markLost } from './seams';
+import { ShaderRejectedError } from './shader-check';
 
 afterEach(() => {
   setGradeDisabled(false);
@@ -141,27 +141,6 @@ const gpu = (
   return { debug, backend: {}, getContext: () => null } as unknown as WebGPURenderer;
 };
 
-describe('buildSerially', () => {
-  it('starts a build only after the earlier ones settled, even when one rejects', async () => {
-    const g = gpu(null);
-    const log: string[] = [];
-    const build =
-      (name: string, fail = false) =>
-      async (): Promise<string> => {
-        log.push(`start ${name}`);
-        await new Promise((resolve) => setTimeout(resolve));
-        log.push(`end ${name}`);
-        if (fail) throw new Error(name);
-        return name;
-      };
-    const first = buildSerially(g, build('a', true));
-    const second = buildSerially(g, build('b'));
-    await expect(first).rejects.toThrow('a');
-    await expect(second).resolves.toBe('b');
-    expect(log).toEqual(['start a', 'end a', 'start b', 'end b']);
-  });
-});
-
 describe('precompileGrade', () => {
   it('compiles a graded shadow receiver lit by a casting sun', () => {
     const sample = shadowReceiverSample();
@@ -229,6 +208,17 @@ describe('precompileGrade', () => {
     });
     const sample = (): GradeSample => ({ mesh: new Mesh(), markers: ['kit'], dispose: vi.fn() });
     await expect(precompileGrade(g, [sample])).rejects.toThrow('failed to compile');
+  });
+
+  it('rejects when the GPU rejects the WGSL', async () => {
+    const device = {
+      pushErrorScope: () => undefined,
+      createShaderModule: () => undefined,
+      popErrorScope: () => Promise.resolve({ message: 'parse error' }),
+    };
+    const webgpu = (g: WebGPURenderer): WebGPURenderer =>
+      Object.assign(g, { backend: { isWebGPUBackend: true, device } });
+    await expect(precompileGrade(webgpu(gpu(built)))).rejects.toThrow(ShaderRejectedError);
   });
 
   it('rejects when three swapped in a plain material', async () => {

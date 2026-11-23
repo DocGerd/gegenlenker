@@ -50,6 +50,27 @@
   letter-spacing: var(--tracking-tight);
 }
 
+.result-title-reached {
+  color: var(--color-success);
+}
+
+.result-title-missed {
+  color: var(--color-danger);
+}
+
+.result-icon {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: var(--space-2);
+  vertical-align: -0.1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .result-reason {
   margin: 0;
   font-size: var(--text-sm);

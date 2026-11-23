@@ -26,6 +26,8 @@ export type Action =
   | 'orbitRight'
   | 'tiltUp'
   | 'tiltDown'
+  | 'glanceLeft'
+  | 'glanceRight'
   | 'resetView'
   | 'splitReset';
 
@@ -54,6 +56,8 @@ type LegendSpec = {
   readonly viewOnly?: boolean;
   /** Dropped where the outside view does not exist. */
   readonly chaseOnly?: boolean;
+  /** Dropped where the cockpit view cannot look around. */
+  readonly lookOnly?: boolean;
   /** Replaces term and desc where the outside view exists. */
   readonly withChase?: { readonly term: LegendTerm; readonly desc: MessageKey };
 };
@@ -151,6 +155,13 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
   { action: 'tiltUp', match: { by: 'code', values: ['PageUp'] }, scope: 'view' },
   { action: 'tiltDown', match: { by: 'code', values: ['PageDown'] }, scope: 'view' },
   {
+    action: 'glanceLeft',
+    match: { by: 'code', values: ['KeyQ'] },
+    scope: 'view',
+    legend: { term: 'Q / E', desc: 'lookAround', viewOnly: true, lookOnly: true },
+  },
+  { action: 'glanceRight', match: { by: 'code', values: ['KeyE'] }, scope: 'view' },
+  {
     action: 'resetView',
     match: { by: 'key', values: ['0'] },
     scope: 'view',
@@ -175,10 +186,11 @@ export const actionFor = (scope: Scope, e: KeyLike): Action | undefined =>
 export const isAction = (action: Action, e: KeyLike): boolean =>
   BINDINGS.some((b) => b.action === action && matches(b, e));
 
-/** The key legend in display order; `chase` is whether the outside view exists. */
-export function legendRows(chase: boolean): LegendRow[] {
+/** The key legend in display order; `chase` is whether the outside view exists, `look` whether the cockpit view looks around. */
+export function legendRows(chase: boolean, look = false): LegendRow[] {
   return KEYMAP.map(({ legend }) => legend).flatMap((spec) => {
-    if (spec === undefined || (spec.chaseOnly === true && !chase)) return [];
+    if (spec === undefined) return [];
+    if ((spec.chaseOnly === true && !chase) || (spec.lookOnly === true && !look)) return [];
     const { term, desc } = chase && spec.withChase !== undefined ? spec.withChase : spec;
     return [{ term, desc, viewOnly: spec.viewOnly ?? false }];
   });

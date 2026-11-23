@@ -9,10 +9,11 @@ import type {
   ViewRects,
 } from '../contracts/render';
 import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
-import type { GoalState } from '../scoring/score';
+import type { GoalCue } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
+import { goalCueTexts } from './goal-cue';
 import { messageColumn } from '../render/viewports';
 import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
 import { aidSwatch } from './aid-swatches';
@@ -52,7 +53,7 @@ export type Hud = {
   /** Points the arrow at a target beyond the top-down view; null hides it. Positions are stage CSS px. */
   setTargetArrow(arrow: { x: number; y: number; angle: number } | null): void;
   /** The live tolerance cue; a no-op in the free yard. */
-  setGoal(goal: GoalState): void;
+  setGoal(cue: GoalCue): void;
   onAction(cb: (a: HudAction) => void): void;
   dispose(): void;
 };
@@ -69,6 +70,8 @@ export type HudOptions = {
   chase: boolean;
   /** Draws the mirror housings; the preset's `cockpitInterior` flag. */
   interior: boolean;
+  /** Offers looking around in the cockpit; the preset's `interiorGlb` flag with the interior. */
+  look?: boolean;
   collapsed: CollapsedPanels;
 };
 
@@ -178,14 +181,16 @@ const legendRow = ({ term, desc, viewOnly }: LegendRow): string => {
   return `${dt}<dd${viewOnly ? ' class="hud-legend-view"' : ''} data-i18n="${desc}"></dd>`;
 };
 
-const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
+const MARKUP = (mode: HudOptions['mode'], chase: boolean, look: boolean | undefined): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
     <span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl>
-        ${legendRows(chase).map(legendRow).join('')}
+        ${legendRows(chase, look === true)
+          .map(legendRow)
+          .join('')}
       </dl>
     </div>
     <div class="hud-band">
@@ -271,7 +276,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     for (const cb of listeners) cb(a);
   };
 
-  root.insertAdjacentHTML('beforeend', MARKUP(opts.mode, opts.chase));
+  root.insertAdjacentHTML('beforeend', MARKUP(opts.mode, opts.chase, opts.look));
   const hud = query(root, 'root', HTMLElement);
   hud.toggleAttribute('data-interior', opts.interior);
   applyMessages(hud);
@@ -287,6 +292,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const gearEl = query(hud, 'gear', HTMLElement);
   const arrow = query(hud, 'targetArrow', HTMLElement);
   const goalCue = query(hud, 'goalCue', HTMLElement);
+  const goalDistance = document.createElement('span');
+  goalDistance.setAttribute('aria-hidden', 'true');
+  const goalState = document.createElement('span');
+  goalCue.append(goalDistance, goalState);
   if (opts.exercise !== null) {
     query(hud, 'goalTitle', HTMLElement).textContent = opts.exercise.title;
     query(hud, 'goalBrief', HTMLElement).textContent = opts.exercise.brief;
@@ -651,7 +660,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       }, BUMP_MS),
     );
   };
-  let shownGoal: GoalState = 'away';
+  let shownGoal = '';
+  let shownGoalState = '';
+  let shownDistance = '';
   let shownContacts = -1;
   let shownJackknifes = -1;
   let shownDirection = -1;
@@ -812,13 +823,28 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       const deg = Math.round((next.angle * 180) / Math.PI);
       arrow.style.transform = `translate(${x}px, ${y}px) rotate(${deg}deg)`;
     },
-    setGoal(goal) {
-      if (goal === shownGoal) return;
-      shownGoal = goal;
-      goalCue.dataset['goal'] = goal;
-      if (goal !== 'away')
-        goalCue.textContent = t(goal === 'inside' ? 'goalInside' : 'goalOutside');
-      setHidden(goalCue, goal === 'away');
+    setGoal(cue) {
+      if (cue.state === 'away') {
+        if (shownGoalState === 'away') return;
+        shownGoalState = 'away';
+        setHidden(goalCue, true);
+        return;
+      }
+      const { state, distance } = goalCueTexts(cue);
+      // Only the state span is announced; rewriting it per frame would read the cue out continuously.
+      if (state !== shownGoal) {
+        shownGoal = state;
+        goalState.textContent = state;
+      }
+      if (distance !== shownDistance) {
+        shownDistance = distance;
+        goalDistance.textContent = distance;
+      }
+      if (cue.state !== shownGoalState) {
+        shownGoalState = cue.state;
+        goalCue.dataset['goal'] = cue.state;
+      }
+      setHidden(goalCue, false);
     },
     onAction(cb) {
       listeners.push(cb);

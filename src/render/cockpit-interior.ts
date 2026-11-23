@@ -9,6 +9,7 @@ import {
   MeshBasicMaterial,
   type Object3D,
   type PerspectiveCamera,
+  type Quaternion,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Rect } from '../contracts/render';
@@ -187,11 +188,15 @@ function lipGeometry(): BufferGeometry {
   geometry.setIndex(index);
   return tint(geometry, LIP_COLOUR);
 }
-/** Fixes `object` to the camera's eye, scaled so its NDC parts fill the field of view at `DEPTH`. */
-export function placeInEye(object: Object3D, camera: PerspectiveCamera): void {
+/** Fixes `object` to the camera's eye, facing along `quaternion`, scaled so its NDC parts fill the field of view at `DEPTH`. */
+export function placeInEye(
+  object: Object3D,
+  camera: PerspectiveCamera,
+  quaternion: Quaternion = camera.quaternion,
+): void {
   const tanV = Math.tan(MathUtils.degToRad(camera.fov / 2));
   object.position.copy(camera.position);
-  object.quaternion.copy(camera.quaternion);
+  object.quaternion.copy(quaternion);
   object.scale.set(camera.aspect * tanV * DEPTH, tanV * DEPTH, DEPTH);
 }
 
