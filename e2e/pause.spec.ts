@@ -10,7 +10,7 @@ const menuHeading = (page: Page) => page.getByRole('heading', { name: en.appName
 const historyState = (page: Page) => page.evaluate(() => history.state as unknown);
 
 async function finishRun(page: Page): Promise<void> {
-  await page.getByRole('button', { name: en.finish }).click();
+  await page.getByRole('button', { name: en.pause }).click();
   await sheet(page).getByRole('button', { name: en.finish }).click();
   await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
 }
@@ -45,6 +45,7 @@ test('Escape pauses the drive and Escape again continues', async ({ page }) => {
   await startAndRoll(page);
   await page.keyboard.press('Escape');
   await expect(sheet(page)).toBeVisible();
+  await expect(sheet(page).getByText(en.restartHint)).toBeVisible();
   const pausedAt = await clock(page).textContent();
   await page.waitForTimeout(600);
   await expect(clock(page)).toHaveText(pausedAt ?? '');
@@ -80,7 +81,7 @@ test('finish scores, back leaves the result, and the replay names the exercise',
   page,
 }) => {
   await startAndRoll(page);
-  await page.getByRole('button', { name: en.finish }).click();
+  await page.getByRole('button', { name: en.pause }).click();
   await expect(sheet(page)).toBeVisible();
   await sheet(page).getByRole('button', { name: en.finish }).click();
   await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
@@ -220,14 +221,26 @@ test('driving keys reach the run after Restart', async ({ page }) => {
   await expect(gear(page)).toHaveText('R');
 });
 
-test('raising the lever in P hints to select R or D', async ({ page }) => {
+test('the start hints to select R or D until a gear is chosen', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   await expect(speed(page)).toHaveText('0.0 km/h');
-  await page.keyboard.press('w');
   await expect(toast(page)).toHaveText(en.selectGear);
+  await expect(page.locator('[data-hud="toastWrap"]')).toHaveAttribute('role', 'status');
+  await expect(page.locator('[data-hud="toastWrap"]')).toHaveAttribute('aria-atomic', 'false');
   await page.keyboard.press('2');
   await expect(toast(page)).toBeHidden();
+  await page.keyboard.press('1');
+  await page.keyboard.press('w');
+  await expect(toast(page)).toHaveText(en.selectGear);
+});
+
+test('the free yard pause sheet has no restart hint', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.layoutDepot }).click();
+  await page.getByRole('button', { name: en.pause }).click();
+  await expect(sheet(page)).toBeVisible();
+  await expect(sheet(page).getByText(en.restartHint)).toHaveCount(0);
 });
 
 test('leaving without scoring stores no result and no replay', async ({ page }) => {

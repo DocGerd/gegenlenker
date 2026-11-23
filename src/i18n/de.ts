@@ -67,6 +67,7 @@ export const de: Record<MessageKey, string> = {
   directionChanges: 'Richtungswechsel',
   time: 'Zeit',
   contactAhead: 'Berührung voraus – ausweichen oder anhalten',
+  limitAhead: 'Anschlag voraus – gegenlenken oder anhalten',
   selectGear: 'R oder D wählen, um zu fahren',
   blockedContactTruck: 'Berührung: Lkw – in Gegenrichtung fahren',
   blockedContactDrawbar: 'Berührung: Deichsel – in Gegenrichtung fahren',

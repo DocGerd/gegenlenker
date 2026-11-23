@@ -54,6 +54,7 @@ export const MIN_MESSAGE_WIDTH = 131 + 41 + 32;
 export const MESSAGE_KEYS = {
   toast: [
     'contactAhead',
+    'limitAhead',
     'selectGear',
     'blockedContactTruck',
     'blockedContactDrawbar',

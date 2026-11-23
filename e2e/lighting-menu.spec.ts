@@ -137,7 +137,7 @@ test('a night run keeps its Night label and replays at night while the menu show
   await page.keyboard.press('4');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
   await page.waitForTimeout(500);
-  await page.getByRole('button', { name: en.finish }).click();
+  await page.getByRole('button', { name: en.pause }).click();
   await page
     .getByRole('dialog', { name: en.paused })
     .getByRole('button', { name: en.finish })
