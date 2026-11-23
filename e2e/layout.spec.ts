@@ -421,6 +421,7 @@ for (const { locale, messages } of locales) {
         await page.goto('./');
         const cards = page.locator('[data-menu="exercises"] .menu-start');
         await expect(cards).toHaveCount(5);
+        await expect(page.locator('ol[data-menu="exercises"] > li')).toHaveCount(5);
         await expect(page.locator('.menu-heading').first()).toHaveText(messages.exercises);
         const setupFollows = await page
           .locator('[data-menu="exercises"]')

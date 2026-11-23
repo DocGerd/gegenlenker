@@ -60,7 +60,7 @@ const MARKUP = `
   </header>
   <section class="menu-section">
     <h2 class="menu-heading" data-i18n="exercises"></h2>
-    <div class="menu-grid" data-menu="exercises"></div>
+    <ol class="menu-grid menu-list" data-menu="exercises"></ol>
   </section>
   <section class="menu-section">
     <h2 class="menu-heading" data-i18n="freeYard"></h2>
@@ -300,7 +300,13 @@ export function showMenu(
       button.append(span('menu-brief', t(EXERCISE_BRIEF[exercise.id])), toleranceLine(exercise));
       return { button, exercise };
     });
-    query(container, 'exercises', HTMLElement).append(...exerciseButtons.map((e) => e.button));
+    query(container, 'exercises', HTMLElement).append(
+      ...exerciseButtons.map((e) => {
+        const item = document.createElement('li');
+        item.append(e.button);
+        return item;
+      }),
+    );
     const refreshBest = (): void => {
       const best = bestResults();
       const { truckId, trailerId } = pair();
