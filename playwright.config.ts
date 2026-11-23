@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import { previewPort } from './e2e/preview-port';
+import { WEBGPU_LAUNCH } from './e2e/webgpu-launch';
 
 const port = previewPort(import.meta.dirname);
 if (process.env['TEST_WORKER_INDEX'] === undefined)
@@ -16,6 +17,7 @@ export default defineConfig({
     {
       name: 'offline',
       testMatch: /\.spec\.ts$/,
+      testIgnore: /\/webgpu\//,
       // High first-load markers on software GL outlast the 5 s default; a test fits several waits.
       expect: { timeout: 30_000 },
       timeout: 90_000,
@@ -27,6 +29,19 @@ export default defineConfig({
         launchOptions: {
           args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
         },
+      },
+    },
+    {
+      // Software WebGPU (SwiftShader) in Chromium's new headless mode; advisory in CI.
+      name: 'webgpu',
+      testMatch: /webgpu\/.*\.spec\.ts$/,
+      expect: { timeout: 30_000 },
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 800 },
+        locale: 'en-US',
+        serviceWorkers: 'block',
+        launchOptions: WEBGPU_LAUNCH,
       },
     },
     {

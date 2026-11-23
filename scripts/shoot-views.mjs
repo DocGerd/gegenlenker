@@ -25,6 +25,7 @@ import {
   tokenShare,
 } from '../e2e/pinned-shoot.ts';
 import { collectThreeProblems } from '../e2e/three-problems.ts';
+import { WEBGPU_LAUNCH } from '../e2e/webgpu-launch.ts';
 import { QUALITY_FLAGS } from '../src/render/quality.ts';
 
 const PRESETS = ['low', 'balanced', 'high'];
@@ -54,18 +55,6 @@ const MAX_COCKPIT_BACKDROP = 0.2;
 const EXERCISE = 'Straight reverse';
 // Same GL as the e2e `offline` project, so hashes match what CI renders.
 const ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'];
-// Only the new headless mode presents SwiftShader WebGPU frames; other flag sets lose the device.
-const WEBGPU = {
-  channel: 'chromium',
-  args: [
-    '--enable-unsafe-webgpu',
-    '--enable-features=Vulkan',
-    '--use-vulkan=swiftshader',
-    '--use-webgpu-adapter=swiftshader',
-    '--use-angle=swiftshader',
-    '--ignore-gpu-blocklist',
-  ],
-};
 
 const { values } = parseArgs({
   options: {
@@ -100,7 +89,7 @@ if (values.out === undefined || (values.url === undefined && values.diff === und
 mkdirSync(values.out, { recursive: true });
 
 const browser = await chromium.launch(
-  values.backend === 'webgpu' || values['new-headless'] ? WEBGPU : { args: ARGS },
+  values.backend === 'webgpu' || values['new-headless'] ? WEBGPU_LAUNCH : { args: ARGS },
 );
 const hashes = {};
 let failed = 0;
