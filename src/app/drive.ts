@@ -134,6 +134,8 @@ export function startDrive(
   const restart = (): void => {
     if (disposed) return;
     dispose();
+    // The next drive mounts asynchronously; a light frame in between would flash at night. `leave` and `loadFailed` clear it.
+    setNightDrive(lighting === 'night');
     onRestart();
   };
   const leaveUnscored = (): void => {
