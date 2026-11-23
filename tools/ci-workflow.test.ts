@@ -5,8 +5,18 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-// `webgpu` is advisory: it reports, but does not gate a merge. `release` tags after `deploy`.
-const NOT_GATED = new Set(['check', 'build-pages', 'deploy', 'release', 'webgpu']);
+// `webgpu` is advisory: it reports, but does not gate a merge. `release` tags after `deploy`. The
+// deploy chains wait for the owner's approval, so a gate on them would hold every merge.
+const NOT_GATED = new Set([
+  'check',
+  'build-pages',
+  'deploy',
+  'release',
+  'build-uat',
+  'preflight-uat',
+  'deploy-uat',
+  'webgpu',
+]);
 
 type Permissions = Record<string, string> | string;
 
@@ -18,12 +28,16 @@ interface Workflow {
       needs?: string[] | string;
       if?: string;
       permissions?: Permissions;
+      concurrency?: Record<string, unknown>;
+      environment?: { name?: string; url?: string };
       steps?: {
         name?: string;
+        id?: string;
         if?: string;
         uses?: string;
         run?: string;
         with?: Record<string, unknown>;
+        env?: Record<string, string>;
       }[];
     }
   >;
@@ -166,7 +180,12 @@ describe('the release-tree step on a PR into main', () => {
   });
 });
 
-it('only main deploys: develop pushes run the gate and nothing else', () => {
+const DEVELOP_ONLY =
+  "!cancelled() && needs.check.result == 'success' && " +
+  "(github.event_name == 'push' || github.event_name == 'workflow_dispatch') && " +
+  "github.ref == 'refs/heads/develop'";
+
+it('main deploys production and develop deploys UAT, each after a green check', () => {
   const { jobs } = workflow();
   expect(jobs['build-pages']?.if).toBe(
     "!cancelled() && needs.check.result == 'success' && " +
@@ -178,6 +197,141 @@ it('only main deploys: develop pushes run the gate and nothing else', () => {
   expect(jobs['release']?.if).toBe(
     "${{ !cancelled() && needs.deploy.result == 'success' && github.ref == 'refs/heads/main' }}",
   );
+  for (const name of ['build-uat', 'preflight-uat']) {
+    expect(jobs[name]?.needs, name).toBe('check');
+    expect(jobs[name]?.if, name).toBe(DEVELOP_ONLY);
+  }
+  expect(jobs['deploy-uat']?.needs).toEqual(['build-uat', 'preflight-uat']);
+  expect(jobs['deploy-uat']?.if).toBe(
+    "${{ !cancelled() && needs.build-uat.result == 'success' && " +
+      "needs.preflight-uat.result == 'success' }}",
+  );
+});
+
+// Approval-gated: a `check` that needed them would wait for the owner on every develop push.
+it('check needs none of the UAT jobs', () => {
+  const needs = workflow().jobs['check']?.needs;
+  const list = Array.isArray(needs) ? needs : [needs];
+  for (const name of ['build-uat', 'preflight-uat', 'deploy-uat']) expect(list).not.toContain(name);
+});
+
+// Whether a job waiting for approval holds its group is undocumented. One group serialises every
+// deploy either way, and `queue: max` keeps a waiting deploy from being replaced by a newer one.
+it('both deploy jobs share one pages group that queues instead of replacing', () => {
+  const { jobs } = workflow();
+  const inPages = Object.entries(jobs)
+    .filter(([, job]) => job.concurrency?.['group'] === 'pages')
+    .map(([name]) => name);
+  expect(inPages.sort()).toEqual(['deploy', 'deploy-uat']);
+  for (const name of inPages) {
+    expect(jobs[name]?.concurrency, name).toEqual({
+      group: 'pages',
+      'cancel-in-progress': false,
+      queue: 'max',
+    });
+    expect(jobs[name]?.environment?.name, name).toBe('github-pages');
+  }
+});
+
+// Only a release changes `main`: a `develop` change to the script must not reach the code that
+// verifies and publishes the site root.
+it('the jobs that read deployments or publish run main code only, without packages', () => {
+  const { jobs } = workflow();
+  const privileged = Object.entries(jobs)
+    .filter(([, job]) => {
+      const permissions = typeof job.permissions === 'object' ? job.permissions : {};
+      return (
+        permissions['pages'] === 'write' ||
+        permissions['id-token'] === 'write' ||
+        permissions['deployments'] !== undefined
+      );
+    })
+    .map(([name]) => name);
+  expect(privileged.sort()).toEqual(['deploy', 'deploy-uat', 'preflight-uat']);
+  for (const name of ['deploy-uat', 'preflight-uat']) {
+    const steps = jobs[name]?.steps ?? [];
+    const checkouts = steps.filter((step) => step.uses?.startsWith('actions/checkout@') === true);
+    expect(checkouts, name).toHaveLength(1);
+    expect(checkouts[0]?.with, name).toEqual({
+      ref: 'refs/heads/main',
+      'persist-credentials': false,
+    });
+    expect(steps.indexOf(checkouts[0] ?? {}), name).toBe(0);
+    expect(
+      steps.filter(
+        (step) => step.uses?.startsWith('./') === true || step.uses?.includes('pnpm') === true,
+      ),
+      name,
+    ).toEqual([]);
+    for (const step of steps)
+      expect(step.run ?? '', name).not.toMatch(/\bpnpm\b|download-artifact/);
+  }
+  // The develop checkout builds with the workflow's read-only token and nothing else.
+  expect(jobs['build-uat']?.permissions).toBeUndefined();
+});
+
+describe('the UAT pages step', () => {
+  const step = (job: string): string => {
+    const steps = workflow().jobs[job]?.steps ?? [];
+    const found = steps.find((each) => each.run?.includes('tools/uat-pages.ts') === true);
+    expect(found?.env, job).toEqual({ GH_TOKEN: '${{ github.token }}' });
+    return found?.run ?? '';
+  };
+  const checkout = (script: boolean): { cwd: string; env: NodeJS.ProcessEnv; seen: string } => {
+    const cwd = mkdtempSync(join(tmpdir(), 'ci-uat-'));
+    dirs.push(cwd);
+    const seen = join(cwd, 'seen.json');
+    if (script) {
+      mkdirSync(join(cwd, 'tools'));
+      writeFileSync(join(cwd, 'package.json'), '{"type":"module"}');
+      writeFileSync(
+        join(cwd, 'tools', 'uat-pages.ts'),
+        "import { writeFileSync } from 'node:fs';\n" +
+          `writeFileSync(${JSON.stringify(seen)}, JSON.stringify(process.argv.slice(2)));\n`,
+      );
+    }
+    return { cwd, env: { ...process.env, RUNNER_TEMP: '/runner/temp' }, seen };
+  };
+
+  it('fails with a clear error while main lacks the script, never running another copy', () => {
+    for (const job of ['preflight-uat', 'deploy-uat']) {
+      const { cwd, env, seen } = checkout(false);
+      const result = spawnSync('bash', ['-e', '-c', step(job)], { cwd, env, encoding: 'utf8' });
+      expect(result.status, job).toBe(1);
+      expect(result.stdout, job).toContain('::error::main has no tools/uat-pages.ts');
+      expect(existsSync(seen), job).toBe(false);
+    }
+  });
+
+  it('runs the script from main: production only to preflight, the whole tree to deploy', () => {
+    for (const [job, args] of [
+      ['preflight-uat', ['/runner/temp/pages', '--prod-only']],
+      ['deploy-uat', ['/runner/temp/pages']],
+    ] as const) {
+      const { cwd, env, seen } = checkout(true);
+      expect(runStep(step(job), cwd, env), job).toBe(0);
+      expect(JSON.parse(readFileSync(seen, 'utf8')), job).toEqual(args);
+    }
+  });
+});
+
+it('the UAT deploy uploads the assembled tree right after assembling it, then deploys', () => {
+  const steps = workflow().jobs['deploy-uat']?.steps ?? [];
+  const assemble = steps.findIndex((step) => step.name === 'Assemble production and UAT');
+  expect(steps[assemble + 1]?.uses).toMatch(/^actions\/upload-pages-artifact@/);
+  expect(steps[assemble + 1]?.with?.['path']).toBe('${{ runner.temp }}/pages/dist');
+  expect(steps[assemble + 2]?.uses).toMatch(/^actions\/deploy-pages@/);
+  expect(steps.slice(assemble + 3)).toEqual([]);
+});
+
+it('the UAT build uses the UAT channel and base, and uploads it for the deploy', () => {
+  const steps = workflow().jobs['build-uat']?.steps ?? [];
+  const build = steps.findIndex((step) => step.run === 'pnpm build --outDir dist/uat');
+  const upload = steps.findIndex((step) => step.with?.['name'] === 'uat-dist-${{ github.sha }}');
+  expect(steps[build]?.env).toEqual({ BASE_PATH: '/gegenlenker/uat/', DEPLOY_CHANNEL: 'uat' });
+  expect(steps.filter((step) => step.run?.includes('pnpm build') === true)).toHaveLength(1);
+  expect(upload).toBeGreaterThan(build);
+  expect(steps[upload]?.with?.['path']).toBe('dist/uat');
 });
 
 it('every action is pinned to a full commit SHA', () => {
