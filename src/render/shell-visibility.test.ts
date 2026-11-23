@@ -10,7 +10,13 @@ import { truckAnchors } from '../vehicles/anchors';
 import { trailerById, truckById } from '../vehicles/registry';
 import { resolveCombination } from '../vehicles/resolve';
 import { RELIEF } from './cab-dims';
-import { cabFront, createChaseCamera, placeChaseCamera } from './chase-camera';
+import {
+  cabFront,
+  combinationExtent,
+  createChaseCamera,
+  placeChaseCamera,
+  vehicleCentre,
+} from './chase-camera';
 import { placePose } from './coords';
 import { parseShell, parseTrailerShell, type ShellKind } from './glb-shells';
 import { createMirror, mirrorPose } from './mirror';
@@ -216,10 +222,17 @@ describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
       expect(box.max.z).toBeCloseTo(face.halfWidth + RELIEF, 3);
       const { topDown } = computeViewports(screen[0], screen[1], 'drive', null, NO_INSETS);
       const camera = createChaseCamera();
+      const trailerId = TRAILER_IDS[0] as TrailerId;
+      const straight = poses(id, trailerId, { x: 0, y: 0, th0: 0, th1: 0, th2: 0 });
       placeChaseCamera(
         camera,
-        STRAIGHT,
-        cabFront(truckById(id)),
+        {
+          truck: STRAIGHT,
+          centre: vehicleCentre(straight, face.x),
+          extent: combinationExtent(truckById(id), trailerById(trailerId)),
+          face,
+          colliders: [],
+        },
         {
           width: topDown.width,
           height: topDown.height,

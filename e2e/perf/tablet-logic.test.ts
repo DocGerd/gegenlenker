@@ -127,6 +127,7 @@ describe('parseOptions', () => {
       functional: false,
       backend: null,
       lighting: 'day',
+      keepTraces: false,
     });
     expect(o.presets).toHaveLength(3);
     expect(o.pairs).toHaveLength(4);

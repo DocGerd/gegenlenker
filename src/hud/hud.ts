@@ -198,6 +198,7 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean): string => `
   <div class="hud-mirror" data-hud="wideLeft" hidden></div>
   <div class="hud-mirror" data-hud="wideRight" hidden></div>
   <div class="hud-mirror" data-hud="front" hidden></div>
+  <div class="hud-mirror" data-hud="close" hidden></div>
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
@@ -242,7 +243,14 @@ const query = <T extends Element>(
 };
 
 /** The mirror views, in the order the HUD draws them. */
-const MIRROR_KEYS = ['mirrorLeft', 'mirrorRight', 'wideLeft', 'wideRight', 'front'] as const;
+const MIRROR_KEYS = [
+  'mirrorLeft',
+  'mirrorRight',
+  'wideLeft',
+  'wideRight',
+  'front',
+  'close',
+] as const;
 
 const place = (el: HTMLElement, r: Rect): void => {
   el.style.left = `${r.x}px`;

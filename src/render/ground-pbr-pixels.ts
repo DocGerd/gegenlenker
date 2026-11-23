@@ -3,8 +3,11 @@
  * hashed into each build manifest, so keep render-only values in ground-pbr-spec.ts.
  */
 
-/** Edge of every PBR ground texture, in texels. */
-export const PBR_SIZE = 2048;
+/**
+ * Edge of every PBR ground texture, in texels: half the 2k photoscans, which the build reduces. A
+ * cockpit pixel on the nearest ground still spans more than a texel of this size at 1080p.
+ */
+export const PBR_SIZE = 1024;
 
 /**
  * Linear mean of each channel of an albedo detail map: the shader multiplies by its inverse, so a

@@ -28,7 +28,8 @@ test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ pa
 });
 
 /**
- * A stand-in `navigator.gpu` (CI's Chromium has none): `none` offers no adapter, `lost` a device
+ * A stand-in `navigator.gpu` (the `offline` project's Chromium has none; `e2e/webgpu` runs the real
+ * software adapter): `none` offers no adapter, `lost` a device
  * that is already lost, so the WebGPU start fails after a device exists. Counts adapter requests
  * and destroyed devices on `window`.
  */

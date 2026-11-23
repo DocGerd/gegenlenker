@@ -3,7 +3,7 @@ import type { InputLog } from '../contracts/exercise';
 import type { AidFlags, RenderFrame, TopDownMode } from '../contracts/render';
 import type { Simulation, SimSnapshot } from '../contracts/sim';
 import { isAction } from '../input/keymap';
-import { createTopDownInput } from '../input/top-down-input';
+import { createViewInput } from '../input/view-input';
 import { isDefaultView } from '../input/top-down-view';
 import { formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
@@ -16,6 +16,7 @@ import { createReplayCursor, type ReplayCursor } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { mountRenderStage } from './render-stage';
+import { setNightDrive } from './theme';
 import './results.css';
 import { isReplayable } from './storage';
 
@@ -124,6 +125,8 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   stage.append(map);
   const view = mountRenderStage(stage, map, exit, log.lighting);
   cleanups.push(() => view.dispose());
+  setNightDrive(log.lighting === 'night');
+  cleanups.push(() => setNightDrive(false));
   const { renderer } = view;
   renderer.setScene(layout, truckById(log.truckId), trailerById(log.trailerId));
 
@@ -241,7 +244,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     predicted: NO_PREDICTION,
   };
 
-  const viewInput = createTopDownInput(view.surface, {
+  const viewInput = createViewInput(view.surface, {
     mode: 'yard',
     getRect: () => frame.views.topDown,
     onChange(next) {
