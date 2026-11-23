@@ -64,6 +64,7 @@ import { HEAD_LIMITS } from './head-look';
 import {
   createGlbInterior,
   type GlbInterior,
+  interiorParts,
   interiorShellFrom,
   type InteriorShell,
 } from './interior-glb';
@@ -435,8 +436,11 @@ function shown(interior: CockpitInterior): Object3D[] {
   return found;
 }
 
+/** The meshes drawn, with the merged glb interior split back into its named parts. */
 function drawn(interior: CockpitInterior): Mesh[] {
-  return shown(interior).filter((o): o is Mesh => o instanceof Mesh);
+  return shown(interior)
+    .filter((o): o is Mesh => o instanceof Mesh)
+    .flatMap(interiorParts);
 }
 
 /** Every route on every truck. */
