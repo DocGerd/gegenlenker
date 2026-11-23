@@ -233,8 +233,8 @@ it('both deploy jobs share one pages group that queues instead of replacing', ()
   }
 });
 
-// Only the owner merges into `main`: a `develop` change must not reach the code that verifies and
-// publishes the site root.
+// Only a release changes `main`: a `develop` change to the script must not reach the code that
+// verifies and publishes the site root.
 it('the jobs that read deployments or publish run main code only, without packages', () => {
   const { jobs } = workflow();
   const privileged = Object.entries(jobs)

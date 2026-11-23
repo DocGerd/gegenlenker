@@ -411,9 +411,9 @@ jobs:
 
   # `develop` deploys the UAT build to `/gegenlenker/uat/`; the Pages artifact also republishes the
   # production dist of the live `main` deploy, never rebuilt. The develop checkout only builds; the
-  # jobs that read deployments or publish run `main`'s code, which only the owner merges, so a
-  # `develop` change cannot alter what verifies the site root. Until a release brings the script to
-  # `main`, they fail.
+  # jobs that read deployments or publish run `main`'s `tools/uat-pages.ts`, which only a release
+  # changes. The jobs themselves are `develop`'s, so a change to them acts at once: the owner's
+  # approval of each UAT deploy is the gate. Until a release brings the script to `main`, they fail.
   build-uat:
     needs: check
     if: >-
