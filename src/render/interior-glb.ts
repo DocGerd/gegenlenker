@@ -1,4 +1,14 @@
-import { Euler, Group, type Material, Mesh, MeshBasicMaterial, Quaternion } from 'three';
+import {
+  BufferGeometry,
+  Euler,
+  Float32BufferAttribute,
+  Group,
+  type Material,
+  Mesh,
+  MeshBasicMaterial,
+  Quaternion,
+  Uint32BufferAttribute,
+} from 'three';
 import type { ScenePalette } from '../contracts/render';
 import type { TruckId, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
@@ -19,7 +29,7 @@ import {
 } from './interior-material';
 import type { Look } from './look';
 import { INTERIOR_LAYER, type CockpitInterior } from './seams';
-import type { Shells } from './glb-shells';
+import { bakeGeometry, type Shells } from './glb-shells';
 import { setGraded } from './grade';
 import type { VehicleEnvironment } from './vehicle-pbr';
 
@@ -60,6 +70,94 @@ export function interiorShellFrom(meshes: readonly Mesh[]): InteriorShell {
   };
 }
 
+/** One source mesh's slice of the merged geometry: its vertices, and its triangles in the index. */
+export type InteriorPartRange = {
+  readonly name: InteriorMeshName;
+  readonly vertexStart: number;
+  readonly vertexCount: number;
+  readonly indexStart: number;
+  readonly indexCount: number;
+};
+
+/** The merged geometry of a shell with each part's range, baked once per shell. */
+type Merged = { readonly geometry: BufferGeometry; readonly ranges: readonly InteriorPartRange[] };
+
+const merges = new WeakMap<InteriorShell, Merged>();
+const rangesOf = new WeakMap<BufferGeometry, readonly InteriorPartRange[]>();
+
+/** The four meshes as one geometry in the frame of the shell's node matrices; they share a material and never move apart. */
+function mergedGeometry(shell: InteriorShell): Merged {
+  const cached = merges.get(shell);
+  if (cached !== undefined) return cached;
+  const parts = NAMES.map((name) => {
+    const mesh = shell[name];
+    mesh.updateWorldMatrix(true, false);
+    return { name, geometry: mesh.geometry, matrix: mesh.matrixWorld };
+  });
+  const geometry = bakeGeometry(parts);
+  const ranges: InteriorPartRange[] = [];
+  let vertexStart = 0;
+  let indexStart = 0;
+  for (const { name, geometry: part } of parts) {
+    const vertexCount = part.getAttribute('position').count;
+    const indexCount = part.index?.count ?? vertexCount;
+    ranges.push({ name, vertexStart, vertexCount, indexStart, indexCount });
+    vertexStart += vertexCount;
+    indexStart += indexCount;
+  }
+  const merged = { geometry, ranges };
+  merges.set(shell, merged);
+  rangesOf.set(geometry, ranges);
+  return merged;
+}
+
+const views = new WeakMap<BufferGeometry, readonly BufferGeometry[]>();
+
+/**
+ * The merged mesh as one mesh per source part, for checks by part (not for drawing): same material, layers,
+ * visibility and world matrix as `mesh` now, each with only its own vertices.
+ */
+export function interiorParts(mesh: Mesh): Mesh[] {
+  const ranges = rangesOf.get(mesh.geometry);
+  if (ranges === undefined) return [mesh];
+  let geometries = views.get(mesh.geometry);
+  if (geometries === undefined) {
+    const { geometry } = mesh;
+    const index = geometry.getIndex();
+    if (index === null) throw new Error('a merged interior has an index');
+    geometries = ranges.map((r) => {
+      const slice = (name: string, size: number): Float32BufferAttribute =>
+        new Float32BufferAttribute(
+          (geometry.getAttribute(name).array as Float32Array).slice(
+            r.vertexStart * size,
+            (r.vertexStart + r.vertexCount) * size,
+          ),
+          size,
+        );
+      const own = new Uint32Array(r.indexCount);
+      for (let i = 0; i < r.indexCount; i++) own[i] = index.getX(r.indexStart + i) - r.vertexStart;
+      return new BufferGeometry()
+        .setAttribute('position', slice('position', 3))
+        .setAttribute('normal', slice('normal', 3))
+        .setAttribute('color', slice('color', 3))
+        .setIndex(new Uint32BufferAttribute(own, 1));
+    });
+    views.set(geometry, geometries);
+  }
+  return ranges.map((r, i) => {
+    const part = new Mesh(geometries[i], mesh.material);
+    part.name = r.name;
+    part.layers.mask = mesh.layers.mask;
+    part.visible = mesh.visible;
+    part.castShadow = mesh.castShadow;
+    part.receiveShadow = mesh.receiveShadow;
+    part.matrixAutoUpdate = false;
+    part.matrixWorldAutoUpdate = false;
+    part.matrixWorld.copy(mesh.matrixWorld);
+    return part;
+  });
+}
+
 export type InteriorOptions = {
   /** Where the asset comes from; none keeps the flat overlay. */
   readonly shells?: Shells<InteriorShell>;
@@ -75,7 +173,7 @@ export type InteriorOptions = {
 
 export type GlbInterior = CockpitInterior & {
   readonly flat: FlatInterior;
-  /** The parts drawn when the asset shows. */
+  /** What is drawn when the asset shows: the four parts merged into one mesh (`interiorParts` splits it). */
   readonly meshes: readonly Mesh[];
   /** Whether the asset, not the flat overlay, is what shows now. */
   readonly drawn: boolean;
@@ -151,10 +249,9 @@ export function createGlbInterior(
     }
   };
 
-  const place = (proto: Mesh): Mesh => {
-    const mesh = new Mesh(proto.geometry, current());
-    proto.matrixWorld.decompose(mesh.position, mesh.quaternion, mesh.scale);
-    mesh.name = proto.name;
+  const place = (shell: InteriorShell): Mesh => {
+    const mesh = new Mesh(mergedGeometry(shell).geometry, current());
+    mesh.name = 'interior-merged';
     mesh.layers.set(INTERIOR_LAYER);
     mesh.castShadow = false;
     meshes.push(mesh);
@@ -188,7 +285,7 @@ export function createGlbInterior(
 
   const attach = (shell: InteriorShell): void => {
     clear();
-    frame.add(place(shell.interior), place(shell.wheel), place(shell.header), place(shell.pillars));
+    frame.add(place(shell));
     attached = true;
     apply();
   };

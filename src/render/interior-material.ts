@@ -10,7 +10,8 @@ import {
 } from 'three';
 import { float, vertexColor } from 'three/tsl';
 import { MeshStandardNodeMaterial, type WebGPURenderer } from 'three/webgpu';
-import { buildSerially, GRADE, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
+import { GRADE, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
+import { buildSerially, compileShader, wgslAccepted, type Compiled } from './shader-check';
 import { gpuLost } from './seams';
 import { VehicleLightingModel } from './vehicle-pbr';
 
@@ -50,11 +51,16 @@ export class InteriorNodeMaterial extends MeshStandardNodeMaterial {
  * whether it compiled. three swaps a material whose node graph throws for a plain one and only logs
  * it, so the built shader must carry the marker.
  */
-export function interiorShaderCompiles(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
-  return buildSerially(gpu, () => buildInteriorShader(gpu, envMap));
+export async function interiorShaderCompiles(
+  gpu: WebGPURenderer,
+  envMap: Texture,
+): Promise<boolean> {
+  const built = await buildSerially(gpu, () => buildInteriorShader(gpu, envMap));
+  return built !== null && (await wgslAccepted(gpu, built, 'Interior shader'));
 }
 
-async function buildInteriorShader(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+/** The built program, or null when it failed. */
+async function buildInteriorShader(gpu: WebGPURenderer, envMap: Texture): Promise<Compiled | null> {
   const material = new InteriorNodeMaterial(envMap);
   const graded = !gradeDisabled();
   setGraded(material, graded);
@@ -68,11 +74,11 @@ async function buildInteriorShader(gpu: WebGPURenderer, envMap: Texture): Promis
   scene.add(mesh, sun, new LightProbe());
   const { debug } = gpu;
   const previous = debug.onShaderError;
-  let accepted = true;
+  const verdict = { accepted: true };
   // only the WebGL 2 backend reports here; a node build error rejects the build on either
   const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
     if (context.getShaderSource(fragment)?.includes(INTERIOR_SHADER_MARKER) === true) {
-      accepted = false;
+      verdict.accepted = false;
       console.warn(
         'Interior shader failed',
         context.getShaderInfoLog(vertex),
@@ -90,18 +96,18 @@ async function buildInteriorShader(gpu: WebGPURenderer, envMap: Texture): Promis
   };
   debug.onShaderError = watcher;
   try {
-    const { fragmentShader } = await debug.getShaderAsync(scene, new PerspectiveCamera(), mesh);
+    const built = await compileShader(gpu, scene, new PerspectiveCamera(), mesh);
     const markers = graded
       ? [INTERIOR_SHADER_MARKER, GRADE_SHADER_MARKER]
       : [INTERIOR_SHADER_MARKER];
-    if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
+    if (!markers.every((marker) => built.fragment?.includes(marker) === true)) {
       console.warn('Interior shader failed to build');
-      return false;
+      return null;
     }
-    return accepted;
+    return verdict.accepted ? built : null;
   } catch (error) {
     console.warn('Interior shader failed', error);
-    return false;
+    return null;
   } finally {
     if (debug.onShaderError === watcher) debug.onShaderError = previous;
     material.dispose();
