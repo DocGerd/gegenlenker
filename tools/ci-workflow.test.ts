@@ -16,7 +16,7 @@ interface Workflow {
       needs?: string[] | string;
       if?: string;
       permissions?: Permissions;
-      steps?: { uses?: string; with?: Record<string, unknown> }[];
+      steps?: { uses?: string; run?: string; with?: Record<string, unknown> }[];
     }
   >;
 }
@@ -66,4 +66,51 @@ it('every gated job but e2e runs on push', () => {
     if (NOT_GATED.has(name) || name === 'e2e') continue;
     expect(job.if, name).toBeUndefined();
   }
+});
+
+it('every action is pinned to a full commit SHA', () => {
+  for (const [name, job] of Object.entries(workflow().jobs)) {
+    for (const step of job.steps ?? []) {
+      if (step.uses !== undefined) expect(step.uses, name).toMatch(/@[0-9a-f]{40}$/);
+    }
+  }
+});
+
+// The `develop` deploy consumes this dist; production is never rebuilt for it.
+it('build-pages proves a second build identical, then uploads dist with its manifest', () => {
+  const job = workflow().jobs['build-pages'];
+  const steps = job?.steps ?? [];
+  const index = (match: (step: (typeof steps)[number]) => boolean): number =>
+    steps.findIndex(match);
+  const build = index((step) => step.run === 'pnpm build');
+  const again = index((step) => step.run?.includes('diff -r dist') === true);
+  const manifest = index((step) => step.run?.includes('scripts/prod-manifest.mjs') === true);
+  const upload = index((step) => step.with?.['name'] === 'prod-dist-${{ github.sha }}');
+  const pages = index((step) => step.uses?.startsWith('actions/upload-pages-artifact@') === true);
+  expect(build).toBeGreaterThanOrEqual(0);
+  expect(again).toBeGreaterThan(build);
+  expect(manifest).toBeGreaterThan(again);
+  expect(upload).toBeGreaterThan(manifest);
+  expect(pages).toBeGreaterThan(upload);
+  expect(steps[again]?.run).toContain('pnpm build --outDir');
+  expect(steps[upload]?.uses).toMatch(/^actions\/upload-artifact@/);
+  expect(steps[upload]?.with?.['path']).toMatch(/^dist\nprod-manifest\.txt\nprod-commit\.txt\n?$/);
+  expect(steps[upload]?.with?.['retention-days']).toBe(90);
+  expect(steps[pages]?.with?.['path']).toBe('dist');
+  expect(job?.permissions).toBeUndefined();
+});
+
+it('a gated job checks the production dist the same way before the merge', () => {
+  const { jobs } = workflow();
+  const steps = jobs['channels']?.steps ?? [];
+  const check = steps.findIndex((step) => step.run?.includes('diff -r dist') === true);
+  const uat = steps.findIndex((step) => step.run === 'pnpm build --outDir dist/uat');
+  const manifest = (jobs['build-pages']?.steps ?? [])
+    .find((step) => step.run?.includes('scripts/prod-manifest.mjs') === true)
+    ?.run?.split('\n')
+    .filter((line) => line.includes('prod-manifest'));
+  expect(check).toBeGreaterThanOrEqual(0);
+  expect(manifest?.some((line) => line.includes('sha256sum --check --quiet --strict'))).toBe(true);
+  for (const line of manifest ?? []) expect(steps[check]?.run).toContain(line);
+  expect(uat).toBeGreaterThan(check);
 });
