@@ -4,7 +4,7 @@
 
 A trainer for maneuvering a truck with a turntable drawbar trailer: reverse, steer against the trailer and dock it, in the browser and offline-capable.
 
-Live: https://docgerd.github.io/gegenlenker/
+Live, the latest release: https://docgerd.github.io/gegenlenker/ ([releases](https://github.com/DocGerd/gegenlenker/releases))
 
 ## Quickstart
 

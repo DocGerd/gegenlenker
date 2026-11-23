@@ -26,7 +26,8 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 ## CI
 
 - PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, so the owner-only merge is the gate.
-- Pushes to `develop` and `main` run the gate without e2e; only `main` builds and deploys. `main` also tags and publishes the release once the deploy succeeded.
+- Changing a PR's base starts no run, and a re-run repeats the old one: after retargeting a PR, close and reopen it so CI checks it against the new base.
+- Pushes to `develop` and `main` run the gate without e2e; only `main` builds the Pages artifact and deploys. `main` also tags and publishes the release once the deploy succeeded.
 - `workflow_dispatch` of CI on `main` redeploys production.
 
 ## Commands

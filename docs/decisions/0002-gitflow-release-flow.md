@@ -30,7 +30,7 @@ Gitflow, as requested. Branches and commands are in [releasing.md](../releasing.
 
 - Merged is not live: a change reaches production with the next release, and one update prompt replaces one per merge.
 - Every release needs a back-merge; a skipped one blocks the next `release:cut`.
-- CI runs on pushes to `develop` as well as `main` (the gate without e2e), so the caches PRs read are warm; only `main` deploys.
+- CI runs on pushes to `develop` as well as `main` (the gate without e2e). `develop` is the default branch, so every PR can restore the pnpm and Playwright caches those pushes save.
 - The owner approves every deploy, including UAT.
 
 ## Revisit triggers

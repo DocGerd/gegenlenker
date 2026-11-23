@@ -19,8 +19,9 @@ jobs:
     timeout-minutes: 10
     steps:
       # Steps, not a job: `check` fails on a skipped need. No ruleset rule restricts a PR's head
-      # branch, and the guard catches mistakes only (a PR can edit it); the owner-only merge into
-      # `main` is the real gate. A fork's `release/*` head is no release branch either.
+      # branch, and the guard catches mistakes only (a PR can edit it, and a base change is the
+      # `edited` activity, which starts no run); the owner-only merge into `main` is the real gate.
+      # A fork's `release/*` head is no release branch either.
       - name: Only release and hotfix branches open PRs into main
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
         env:
@@ -47,10 +48,17 @@ jobs:
       - run: pnpm format:check
       - run: pnpm typecheck
       # `release:check` compares the head version with the local `v` tags, which a checkout omits.
+      # A fetch whose refspec matches no tag fails, so `ls-remote` asks first (exit 2: none yet).
       - name: Check the release tree
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
         run: |
-          git fetch --depth=1 origin 'refs/tags/*:refs/tags/*'
+          status=0
+          git ls-remote --exit-code --tags --refs origin 'refs/tags/v*' > /dev/null || status=$?
+          if [ "$status" = 0 ]; then
+            git fetch --depth=1 origin 'refs/tags/v*:refs/tags/v*'
+          elif [ "$status" != 2 ]; then
+            exit "$status"
+          fi
           pnpm release:check
       # The e2e slice table must partition each class: one `n` per class, every `1..n` once.
       - name: Check e2e slice table
