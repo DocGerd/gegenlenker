@@ -12,16 +12,14 @@ import { describe, expect, it } from 'vitest';
 import type { ChangelogEntry, Release } from '../src/app/changelog-entries';
 import { entryIds, buildGroups } from '../src/app/whats-new-source';
 import { unseenAmong } from '../src/app/whats-new-seen';
-import { loadReleases, renderChangelog } from './changelog';
+import { compareVersions, loadReleases, releaseState, renderChangelog } from './changelog';
 import {
   checkRelease,
-  compareVersions,
   nextVersion,
   prepareRelease,
   releaseNotes,
   stringifyReleases,
 } from './release';
-import { releaseState } from './changelog';
 
 const ROOT = join(import.meta.dirname, '..');
 const BASE = 'https://github.com/DocGerd/gegenlenker/pull/';
@@ -65,8 +63,9 @@ const snapshot = (root: string): string[] =>
 const prepare = (
   root: string,
   version?: string,
-  over: Partial<{ date: string; dirty: boolean }> = {},
-) => prepareRelease(root, { version, date: '2026-12-01', dirty: false, ...over });
+  over: Partial<{ date: string; dirty: boolean; tagged: string[] }> = {},
+) => prepareRelease(root, { version, date: '2026-12-01', dirty: false, tagged: [], ...over });
+const TAGGED = { tagged: ['1.0.0'] };
 const released = (root: string): Release[] => loadReleases(join(root, 'changelog.d')) as Release[];
 
 const history: Release = {
@@ -150,7 +149,7 @@ describe('prepareRelease', () => {
 
   it('adds a first group when the head group is already released', () => {
     const root = makeTree({ version: '1.0.0', releases: [shipped], fragments });
-    expect(prepare(root, '1.1.0').version).toBe('1.1.0');
+    expect(prepare(root, '1.1.0', TAGGED).version).toBe('1.1.0');
     const [first, second] = released(root);
     expect(first).toMatchObject({ version: '1.1.0', date: '2026-12-01' });
     expect(first?.entries.map(({ id }) => id)).toEqual(['3.fixed', '20.added', '100.changed']);
@@ -163,9 +162,9 @@ describe('prepareRelease', () => {
       releases: [shipped],
       fragments: { '3.fixed.md': fragmentText(3) },
     });
-    expect(prepare(fixes).version).toBe('1.0.1');
+    expect(prepare(fixes, undefined, TAGGED).version).toBe('1.0.1');
     const features = makeTree({ version: '1.0.0', releases: [shipped], fragments });
-    expect(prepare(features).version).toBe('1.1.0');
+    expect(prepare(features, undefined, TAGGED).version).toBe('1.1.0');
     const first = makeTree({ releases: [history], fragments });
     expect(() => prepare(first)).toThrow('pass the version');
   });
@@ -206,16 +205,41 @@ describe('prepareRelease', () => {
   it('refuses a version that does not rise, writing nothing', () => {
     const root = makeTree({ version: '1.0.0', releases: [shipped], fragments });
     const before = snapshot(root);
-    expect(() => prepare(root, '0.9.0')).toThrow('must be above the previous release 1.0.0');
+    expect(() => prepare(root, '0.9.0', TAGGED)).toThrow(
+      'must be above the previous release 1.0.0',
+    );
     expect(snapshot(root)).toEqual(before);
 
     const older = makeTree({ version: '1.2.0', releases: [shipped], fragments });
-    expect(() => prepare(older, '1.1.0')).toThrow("below package.json's 1.2.0");
+    expect(() => prepare(older, '1.1.0', TAGGED)).toThrow("below package.json's 1.2.0");
+    const nothing = makeTree({ version: '1.2.0', releases: [shipped] });
+    expect(() => prepare(nothing, undefined, TAGGED)).toThrow("below package.json's 1.2.0");
+  });
+
+  it('never changes a tagged version', () => {
+    const root = makeTree({ version: '1.0.0', releases: [shipped], fragments });
+    const before = snapshot(root);
+    expect(() => prepare(root, '1.0.0', TAGGED)).toThrow('v1.0.0 is already tagged');
+    expect(() => prepare(root, undefined, { tagged: ['1.0.0', '1.1.0'] })).toThrow(
+      'v1.1.0 is already tagged',
+    );
+    expect(snapshot(root)).toEqual(before);
+  });
+
+  it('refuses to stack a group on an untagged prepared one', () => {
+    const root = makeTree({ releases: [history], fragments });
+    prepare(root, '1.0.0');
+    writeFileSync(join(root, 'changelog.d', '30.fixed.md'), fragmentText(30, 'Late fix.'));
+    const before = snapshot(root);
+    expect(() => prepare(root)).toThrow('pass 1.0.0 to fold into it');
+    expect(() => prepare(root, '1.0.1')).toThrow('head group 1.0.0 has no tag v1.0.0');
+    expect(snapshot(root)).toEqual(before);
   });
 
   it('refuses a malformed version, date or fragment', () => {
     const root = makeTree({ releases: [history], fragments });
     expect(() => prepare(root, '1.0')).toThrow('x.y.z');
+    expect(() => prepare(root, '1.0.01')).toThrow('x.y.z');
     expect(() => prepare(root, '1.0.0', { date: 'today' })).toThrow('YYYY-MM-DD');
     writeFileSync(join(root, 'changelog.d', '4.added.md'), 'no link\n');
     expect(() => prepare(root, '1.0.0')).toThrow('4.added.md');
@@ -241,7 +265,7 @@ describe('prepareRelease', () => {
     );
     const root = makeTree({ version: '1.0.0', releases: [shipped], fragments });
     const idsBefore = entryIds(buildGroups(texts, [shipped]));
-    prepare(root, '1.1.0');
+    prepare(root, '1.1.0', TAGGED);
     const idsAfter = entryIds(buildGroups({}, released(root)));
     expect([...idsAfter].sort()).toEqual([...idsBefore].sort());
 
@@ -284,17 +308,27 @@ describe('checkRelease', () => {
     expect(checkRelease(root).join('\n')).toContain('has no version');
   });
 
-  it('fails when the head version does not rise above the previous group', () => {
-    const equal = makeTree({
-      version: '1.0.0',
-      releases: [shipped, { ...shipped, entries: [entry({ id: '2.added' })] }],
+  it('fails unless every version is below the one before it', () => {
+    const older = (version: string, id: string): Release => ({
+      ...shipped,
+      version,
+      entries: [entry({ id })],
     });
-    expect(checkRelease(equal).join('\n')).toContain('must be above the previous 1.0.0');
-    const below = makeTree({
-      version: '1.0.0',
-      releases: [shipped, { ...shipped, version: '1.2.0', entries: [entry({ id: '2.added' })] }],
+    const equal = makeTree({ version: '1.0.0', releases: [shipped, older('1.0.0', '2.added')] });
+    expect(checkRelease(equal).join('\n')).toContain('version 1.0.0 must be below 1.0.0');
+    const below = makeTree({ version: '1.0.0', releases: [shipped, older('1.2.0', '2.added')] });
+    expect(checkRelease(below).join('\n')).toContain('version 1.2.0 must be below 1.0.0');
+    const deeper = makeTree({
+      version: '1.1.0',
+      releases: [older('1.1.0', '3.added'), shipped, older('1.0.1', '2.fixed')],
     });
-    expect(checkRelease(below).join('\n')).toContain('must be above the previous 1.2.0');
+    expect(checkRelease(deeper).join('\n')).toContain('version 1.0.1 must be below 1.0.0');
+  });
+
+  it('fails when the head version already tags another commit', () => {
+    const root = prepared();
+    expect(checkRelease(root, ['1.0.0']).join('\n')).toContain('v1.0.0 already tags another');
+    expect(checkRelease(root, ['0.9.0'])).toEqual([]);
   });
 
   it('fails on a stale or missing CHANGELOG.md', () => {
@@ -318,13 +352,16 @@ describe('releaseNotes', () => {
     const root = makeTree({ releases: [history], fragments });
     prepare(root, '1.0.0');
     writeFileSync(join(root, 'changelog.d', '50.fixed.md'), fragmentText(50, 'Next.'));
-    prepare(root, '1.0.1');
+    prepare(root, '1.0.1', TAGGED);
     const changelog = read(root, 'CHANGELOG.md');
     for (const version of ['1.0.0', '1.0.1']) {
       const start = changelog.indexOf(`## [${version}]`);
       const end = changelog.indexOf('\n## [', start + 1);
       const expected = changelog.slice(start, end === -1 ? undefined : end).trim();
       expect(releaseNotes(root, version)).toBe(expected);
+      const heading = `## [${version}] - 2026-12-01\n\n`;
+      expect(expected.startsWith(heading)).toBe(true);
+      expect(releaseNotes(root, version, false)).toBe(expected.slice(heading.length));
     }
   });
 

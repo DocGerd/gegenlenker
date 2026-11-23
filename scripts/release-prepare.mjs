@@ -11,8 +11,12 @@ const { positionals, values } = parseArgs({
   allowPositionals: true,
   options: { date: { type: 'string' } },
 });
-const dirty =
-  execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }) !== '';
+const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+const dirty = git('status', '--porcelain') !== '';
+const tagged = git('tag', '--list', 'v*')
+  .split('\n')
+  .filter((tag) => tag !== '')
+  .map((tag) => tag.slice(1));
 const date = values.date ?? new Date().toISOString().slice(0, 10);
 
 const { module } = await runnerImport('/tools/release.ts', {
@@ -22,7 +26,7 @@ const { module } = await runnerImport('/tools/release.ts', {
 });
 
 try {
-  const result = module.prepareRelease(root, { version: positionals[0], date, dirty });
+  const result = module.prepareRelease(root, { version: positionals[0], date, dirty, tagged });
   console.log(
     result.changed
       ? `Prepared ${result.version}; folded ${String(result.folded.length)} fragment(s).`

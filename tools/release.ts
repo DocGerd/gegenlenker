@@ -4,24 +4,18 @@ import type { Category, ChangelogEntry, Release } from '../src/app/changelog-ent
 import {
   DATE_RE,
   VERSION_RE,
+  compareVersions,
   fragmentFiles,
   loadFragments,
   loadReleases,
   releaseProblems,
   renderChangelog,
   section,
+  triple,
 } from './changelog';
 
 const PACKAGE_VERSION_RE = /^( {2}"version": ")[^"]*(",?)$/m;
 const PATCH_ONLY: readonly Category[] = ['fixed', 'security'];
-
-const triple = (version: string): number[] => version.split('.').map(Number);
-
-/** Negative when `a` is below `b`, 0 when equal, positive when above. */
-export const compareVersions = (a: string, b: string): number => {
-  const [x, y] = [triple(a), triple(b)];
-  return (x[0] ?? 0) - (y[0] ?? 0) || (x[1] ?? 0) - (y[1] ?? 0) || (x[2] ?? 0) - (y[2] ?? 0);
-};
 
 /** Only fixed and security entries make a patch release; anything else a minor one. */
 export const nextVersion = (base: string, entries: readonly ChangelogEntry[]): string => {
@@ -80,6 +74,8 @@ export interface PrepareOptions {
   date: string;
   /** The caller's `git status --porcelain` verdict; a dirty tree is refused. */
   dirty: boolean;
+  /** Versions that have a `v` tag: released, so never changed. */
+  tagged: readonly string[];
 }
 
 export interface PrepareResult {
@@ -124,6 +120,11 @@ export const prepareRelease = (root: string, options: PrepareOptions): PrepareRe
     version = head.version;
     next = releases;
   } else {
+    const prepared = head?.version ?? null;
+    if (prepared !== null && !options.tagged.includes(prepared) && options.version !== prepared)
+      throw new Error(
+        `head group ${prepared} has no tag v${prepared}: pass ${prepared} to fold into it, or fetch tags if it is released`,
+      );
     const refold =
       head !== undefined && (head.version === null || head.version === options.version);
     const target: Release = refold ? head : { version: null, entries: [] };
@@ -138,10 +139,10 @@ export const prepareRelease = (root: string, options: PrepareOptions): PrepareRe
     if (derived === undefined)
       throw new Error('there is no earlier release to bump from; pass the version');
     version = derived;
+    if (options.tagged.includes(version))
+      throw new Error(`v${version} is already tagged; a released version never changes`);
     if (previous != null && compareVersions(version, previous) <= 0)
       throw new Error(`version ${version} must be above the previous release ${previous}`);
-    if (compareVersions(version, packageVersion) < 0)
-      throw new Error(`version ${version} is below package.json's ${packageVersion}`);
     const group: Release = {
       version,
       date: refold && target.date !== undefined ? target.date : options.date,
@@ -149,6 +150,8 @@ export const prepareRelease = (root: string, options: PrepareOptions): PrepareRe
     };
     next = refold ? [group, ...releases.slice(1)] : [group, ...releases];
   }
+  if (compareVersions(version, packageVersion) < 0)
+    throw new Error(`version ${version} is below package.json's ${packageVersion}`);
 
   const writes: [string, string][] = [
     [join(dir, 'released.json'), stringifyReleases(next)],
@@ -165,8 +168,11 @@ export const prepareRelease = (root: string, options: PrepareOptions): PrepareRe
   return { version, folded: files, changed };
 };
 
-/** Why the tree at `root` is not a consistent release; empty when it is. */
-export const checkRelease = (root: string): string[] => {
+/**
+ * Why the tree at `root` is not a consistent release; empty when it is. `taggedElsewhere`: versions
+ * whose `v` tag points at another commit than the one checked.
+ */
+export const checkRelease = (root: string, taggedElsewhere: readonly string[] = []): string[] => {
   const dir = join(root, 'changelog.d');
   const out: string[] = [];
   const left = fragmentFiles(dir);
@@ -177,15 +183,15 @@ export const checkRelease = (root: string): string[] => {
   if (problems.length > 0) return [...out, ...problems];
   const releases = data as Release[];
 
-  const [head, previous] = releases;
+  const [head] = releases;
   const version = readPackageVersion(root);
   if (head?.version == null)
     out.push('the head group of released.json has no version, so nothing is released');
   else {
     if (head.version !== version)
       out.push(`package.json version ${version} differs from the head group ${head.version}`);
-    if (previous?.version != null && compareVersions(head.version, previous.version) <= 0)
-      out.push(`head version ${head.version} must be above the previous ${previous.version}`);
+    if (taggedElsewhere.includes(head.version))
+      out.push(`v${head.version} already tags another commit; a released version never changes`);
   }
 
   let changelog: string | undefined;
@@ -199,11 +205,15 @@ export const checkRelease = (root: string): string[] => {
   return out;
 };
 
-/** One version's section, identical to its section in CHANGELOG.md. */
-export const releaseNotes = (root: string, version: string): string => {
+/**
+ * One version's section, identical to its section in CHANGELOG.md; without `heading`, the section
+ * minus its `## [X.Y.Z] - date` line, for a release whose title carries the version.
+ */
+export const releaseNotes = (root: string, version: string, heading = true): string => {
   const release = (loadReleases(join(root, 'changelog.d')) as Release[]).find(
     (group) => group.version === version,
   );
   if (release === undefined) throw new Error(`released.json has no group for version ${version}`);
-  return section(`[${version}] - ${release.date ?? ''}`, release.entries);
+  const text = section(`[${version}] - ${release.date ?? ''}`, release.entries);
+  return heading ? text : text.split('\n\n').slice(1).join('\n\n');
 };
