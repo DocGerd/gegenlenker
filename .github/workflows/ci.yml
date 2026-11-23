@@ -20,8 +20,10 @@ jobs:
     steps:
       # Steps, not a job: `check` fails on a skipped need. No ruleset rule restricts a PR's head
       # branch, and the guard catches mistakes only (a PR can edit it, and a base change is the
-      # `edited` activity, which starts no run); the owner-only merge into `main` is the real gate.
-      # A fork's `release/*` head is no release branch either.
+      # `edited` activity, which starts no run). The gate is `/release` (`.claude/skills/release`),
+      # which merges into `main` only once this step and `Check the release tree` succeeded in the
+      # PR's own run (it matches both by name), then the owner's approval of the deploy. A fork's
+      # `release/*` head is no release branch either.
       - name: Only release and hotfix branches open PRs into main
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
         env:
