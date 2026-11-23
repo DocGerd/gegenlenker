@@ -342,7 +342,9 @@ jobs:
       # with `workflow_dispatch` on `main`: it uploads a new one and redeploys production from the
       # same build, so both match once that deploy is live. This upload precedes the gated deploy, and
       # one commit can have several such runs, so the consumer takes `prod-dist-<sha>` from the
-      # run whose `deploy` job last succeeded on `main`, in any attempt (nothing documented links a
+      # `push` or `workflow_dispatch` run on `main` (a `pull_request` run, forks included, runs its
+      # own copy of this file) whose `deploy` job last succeeded, in any attempt, with a successful
+      # `github-pages` deployment (GraphQL `CheckRun.deployment`; nothing documented links a
       # deployment to its run). It fails unless that run holds exactly one, unexpired and created
       # before that job started (a re-run may upload another), repeats the lookup in its own
       # `pages`-group job right before deploying (a `main` deploy may land after its build), and
