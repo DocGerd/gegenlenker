@@ -11,10 +11,11 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - Typecheck: `pnpm typecheck`
 - Unit tests: `pnpm test`; single test: `pnpm exec vitest run <file> -t '<name>'`
 - Build: `BASE_PATH=/gegenlenker/ pnpm build`
-- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); every `e2e/**/*.spec.ts` outside `e2e/webgpu/` runs in the `offline` project; `e2e/webgpu/` runs in the `webgpu` project (`pnpm test:e2e:webgpu`, the advisory `webgpu` CI job, not in `check`); default `expect.timeout` and `timeout` live in `playwright.config.ts`.
+- Browser e2e: `pnpm test:e2e` (builds and previews itself unless `CI` is set; once: `pnpm exec playwright install chromium`); every `e2e/**/*.spec.ts` outside `e2e/webgpu/` and `e2e/channels/` runs in the `offline` project; `e2e/webgpu/` runs in the `webgpu` project (`pnpm test:e2e:webgpu`, the advisory `webgpu` CI job, not in `check`); `e2e/channels/` (production dist with a UAT build in `uat/`) runs in `channels` (`pnpm test:e2e:channels`, CI `channels` job); default `expect.timeout` and `timeout` live in `playwright.config.ts`.
 - `e2e/layout.spec.ts` in full is slow locally: iterate with `-g '<case>'`; CI runs it all.
 - Parallel worktrees: e2e previews on a port derived from the checkout path (printed as `e2e preview port: N`), so no lock is needed; `E2E_PORT=<n>` overrides a clash (`--strictPort` fails loudly); a killed run can orphan a preview: `pnpm preview:stop` stops only this checkout's preview (`--port n` stops whatever listens there), never `pkill -f`. `pnpm shoot --out <dir> [shoot-views args]` builds, serves on a free port, shoots and tears down (rebuilds `dist/`: not beside `pnpm test:e2e`).
-- Parallel PRs: the up-to-date ruleset serialises merges (each merge restarts everyone's CI); merge one at a time.
+- Agents: a local `pnpm verify` is too slow; run `pnpm check` plus the touched specs with `-g`, and let CI be the e2e gate.
+- Parallel PRs: the up-to-date rulesets serialise merges per base branch (each merge restarts CI for that base); merge one at a time per base.
 - CI e2e jobs are a matrix in `.github/workflows/ci.yml` on ~4-core runners: each job runs cost-packed `suite:i/n` slices (retune the table when a suite's cost shifts; the lint job checks it partitions each suite), and a new e2e test is tagged `heavyAt(preset)`, or `slowAt(preset)` when one test takes minutes (`e2e/pinned-shoot.ts`); reproduce CI-only slowness locally with `taskset -c 0-3`.
 - Local-only ignores go in `.git/info/exclude` as unanchored patterns (`dir/`, not `/dir/`); the format scripts pass it to Prettier.
 
@@ -82,6 +83,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Perspective detail (decals, wear, AO) must never hint at the target: derive it from bay geometry, not from what an exercise parks or marks, and test it across every exercise.
 - e2e: await web-first assertions (`toHaveCount`, `toBeVisible`; `hudReady()` in `e2e/layout.spec.ts`) before measuring DOM boxes.
 - Never spread a possibly empty list into `add()`: three reports that (and shader errors) only via `console.error`/`THREE.` warnings, not pageerror; `e2e/fixtures.ts` fails any test on those and on page errors, so specs import `test`/`expect` from it (lint-enforced) and exempt deliberate messages with `allow()`.
+- Git-fixture tests (`tools/*.test.ts`): run `git remote set-head origin main` after the first push; CI's newer git creates `origin/HEAD` on fetch, local git does not.
 
 ## Tablet perf check (manual, reference device: Android tablet, Chrome)
 
@@ -102,16 +104,16 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 
 ## Workflow
 
-- Changes go through PRs; never push to `main`.
+- Gitflow (`docs/releasing.md`): `feature/*` → `develop` (default branch); only `release/*` and `hotfix/*` → `main`. Never push to `main`, `develop` or `release/*`.
 - `.claude/settings.json` is committed: a PostToolUse hook (`.claude/hooks/format.sh`) runs Prettier on each Edit/Write, and editing `pnpm-lock.yaml` is denied (change it through pnpm). Review `.claude/**` changes like code.
 - Commit and PR titles use conventional prefixes: `feat`, `fix`, `docs`, `ci`, `chore`, `refactor`, `perf`, `test`.
 - UI text goes through `t()`; keys live in `src/i18n/en.ts`, and `de.ts` is typed against them, so both must define every key. German UI wording follows `docs/glossary.md`.
 - User-visible PRs add a `changelog.d/<pr>.<category>.md` fragment (format: `changelog.d/README.md`) with its `([#<pr>](…/pull/<pr>))` link (without it the fragment parser fails every e2e shard); never edit `CHANGELOG.md`.
 - The README is the front door (what, quickstart, links); reference material goes in `docs/` and is linked from it.
-- Choose the merge method per PR: merge commit when the commits are meaningful; no squash by default.
+- Choose the merge method per PR into `develop`/`release/*`: merge commit when the commits are meaningful; no squash by default. `main` accepts merge commits only.
 - Commit as `13460098+DocGerd@users.noreply.github.com` (repo-local `user.email`), never the owner's real address.
-- `main` ruleset (no bypass) requires up-to-date PRs and resolved review threads: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next one and wait for CI.
-- CI runs `lint`, `unit` and `e2e` in parallel; the `main` ruleset requires the aggregate job `check` (needs all three; on push to `main` e2e is skipped and `check` accepts that): keep that job name in `ci.yml`.
+- The `main`, `develop` and `release/*` rulesets (no bypass) require up-to-date PRs and resolved review threads: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next PR on the same base (never on a `release/*` head) and wait for CI.
+- CI runs `lint`, `unit` and `e2e` in parallel; the rulesets require the aggregate job `check` (needs all three; on pushes to `main`/`develop` e2e is skipped and `check` accepts that): keep that job name in `ci.yml`. On PRs into `main`, `lint` also requires a `release/*`/`hotfix/*` head and runs `release:check` with tags fetched; a PR retargeted to `main` keeps its old `check`, so close and reopen it.
 - Pin actions to a full commit SHA with a `# vX.Y.Z` comment (repo enforces `sha_pinning_required`); Dependabot keeps them current.
-- A push to `main` deploys via `build-pages` and `deploy` (`.github/workflows/ci.yml`), which test `needs.<job>.result == 'success'` explicitly (implicit `success()` counts skipped ancestors); `workflow_dispatch` on `main` is the fallback.
-- Merge reviewed PRs with green CI without asking, until the project moves to gitflow and a first release.
+- A push to `main` deploys via `build-pages` and `deploy` (`.github/workflows/ci.yml`) once the owner approves `github-pages`, then `release` tags; these jobs test `needs.<job>.result == 'success'` explicitly (implicit `success()` counts skipped ancestors); `workflow_dispatch` on `main` is the fallback. A push to `develop` deploys UAT to `/uat/`: the `DEPLOY_CHANNEL=uat` build comes after the prod build, and the deploy runs only `main`'s `tools/uat-pages.ts`. Agents never approve deployments.
+- Merge reviewed PRs with green CI into `develop` and `release/*` (and back-merges) without asking. Only the owner cuts releases and hotfixes (`pnpm release:cut`), merges into `main` and approves deploys.
