@@ -876,8 +876,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       toastWrap.style.left = `${column.x}px`;
       toastWrap.style.top = `${column.y}px`;
       toastWrap.style.width = `${column.width}px`;
-      if (hasTopDown(views)) place(topDown, views.topDown);
-      placeKeysList(views.topDown);
+      if (hasTopDown(views)) {
+        place(topDown, views.topDown);
+        placeKeysList(views.topDown);
+      }
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));

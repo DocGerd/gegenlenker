@@ -761,6 +761,27 @@
   margin: 0 0 0 auto;
 }
 
+/* Portrait leaves the band too narrow between gears and lever: the counters wrap below the readouts. */
+@media not (min-aspect-ratio: 1/1) {
+  .hud[data-mirrors] .hud-band {
+    flex-wrap: wrap;
+    align-content: center;
+  }
+
+  .hud[data-mirrors] .hud-counters {
+    grid-template-columns: auto auto;
+  }
+}
+
+/* No pane to hold the short-screen key list: it floats above its toggle, which the full-width cockpit keeps clear of the mirrors. */
+.hud[data-mirrors] .hud-legend[data-overlay] dl {
+  left: -1px;
+  bottom: calc(100% + var(--space-2));
+  max-width: none;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hud-counters dd {
     transition: none;
