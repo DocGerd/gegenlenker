@@ -9,7 +9,7 @@ import type {
   ViewRects,
 } from '../contracts/render';
 import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
-import type { GoalState } from '../scoring/score';
+import type { GoalCue } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
@@ -52,7 +52,7 @@ export type Hud = {
   /** Points the arrow at a target beyond the top-down view; null hides it. Positions are stage CSS px. */
   setTargetArrow(arrow: { x: number; y: number; angle: number } | null): void;
   /** The live tolerance cue; a no-op in the free yard. */
-  setGoal(goal: GoalState): void;
+  setGoal(cue: GoalCue): void;
   onAction(cb: (a: HudAction) => void): void;
   dispose(): void;
 };
@@ -77,6 +77,16 @@ const CONTACT_KEY: Record<BodyId, MessageKey> = {
   drawbar: 'blockedContactDrawbar',
   trailer: 'blockedContactTrailer',
 };
+
+function goalText(cue: GoalCue): string {
+  if (cue.state === 'inside') return t('goalInside');
+  const key = !cue.positionOk
+    ? cue.angleOk
+      ? 'goalOutsideAngleOk'
+      : 'goalOutsideAngleOff'
+    : 'goalOutsideDistanceOk';
+  return t(key).replace('{dist}', formatNumber(cue.distance, 1));
+}
 
 function contactKey(contact: SimSnapshot['contact']): MessageKey {
   if (contact === null) return 'blockedContactTruck';
@@ -633,7 +643,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       }, BUMP_MS),
     );
   };
-  let shownGoal: GoalState = 'away';
+  let shownGoal = '';
   let shownContacts = -1;
   let shownJackknifes = -1;
   let shownDirection = -1;
@@ -790,13 +800,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       const deg = Math.round((next.angle * 180) / Math.PI);
       arrow.style.transform = `translate(${x}px, ${y}px) rotate(${deg}deg)`;
     },
-    setGoal(goal) {
-      if (goal === shownGoal) return;
-      shownGoal = goal;
-      goalCue.dataset['goal'] = goal;
-      if (goal !== 'away')
-        goalCue.textContent = t(goal === 'inside' ? 'goalInside' : 'goalOutside');
-      setHidden(goalCue, goal === 'away');
+    setGoal(cue) {
+      const text = goalText(cue);
+      if (cue.state === 'away') {
+        if (shownGoal === 'away') return;
+        shownGoal = 'away';
+      } else {
+        if (text === shownGoal) return;
+        shownGoal = text;
+        goalCue.textContent = text;
+      }
+      goalCue.dataset['goal'] = cue.state;
+      setHidden(goalCue, cue.state === 'away');
     },
     onAction(cb) {
       listeners.push(cb);
