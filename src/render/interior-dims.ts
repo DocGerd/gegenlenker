@@ -33,7 +33,7 @@ const PITCH = rad(VIEW_PITCH_DEG);
 /** Metres from the cab's side wall to its inner trim face; the door tops and walls are this thick. */
 export const DOOR_THICKNESS = 0.12;
 /** Metres the dash and header stand off the windscreen's inner face. */
-const GLASS_SETBACK = 0.06;
+export const GLASS_SETBACK = 0.06;
 /** The dash's rear edge: metres ahead of the eye along the view axis, and its NDC y beside and ahead of the driver. */
 export const DASH = { depth: 0.8, edge: -0.52, flank: 0.06, flankScale: 0.9 } as const;
 /** The instrument binnacle straight ahead of the driver, in metres across the view at `DASH.depth`. */
@@ -69,6 +69,26 @@ const DOOR_TOP_OVER_SILL = 0.07;
 /** Metres the A-pillars reach back from the glass, and the highest the roof lining sits under the cab roof. */
 export const PILLAR_DEPTH = 0.09;
 const ROOF_LINING = 0.1;
+
+/** Metres the forward door's rear end is behind the eye. */
+const DOOR_BACK = 0.2;
+/**
+ * The cab behind the forward view, for looking around (#258): the B-pillar stands `behindEye` metres
+ * behind the eye, so the side window reaches back to it from the A-pillar. The parts added lie behind
+ * the eye plane, under the dash and door tops, or (rail, roof lining) a lap past the plane where no
+ * ray of the forward view reaches them (pinned by interior-look-around.test.ts).
+ */
+export const B_PILLAR = { behindEye: 0.55, depth: 0.12, inset: 0.05 } as const;
+/** Metres the rail and roof lining reach ahead of the eye plane, so a ray along it meets them. */
+const EYE_PLANE_LAP = 0.02;
+/** Metres the added parts stand inside the cab's skin. */
+const SKIN_GAP = 0.01;
+/** Metres thick the rear wall and the floor are. */
+const REAR_WALL = 0.1;
+const FLOOR = 0.04;
+const CEILING = CAB_HEIGHT - ROOF_LINING;
+/** The top of the roof lining, where the side rail and the rear wall end. */
+const ROOF_TOP = CEILING + 0.02;
 
 const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -150,11 +170,16 @@ function hexahedron(hue: RealismHueKey, bottom: readonly Vec3[], top: readonly V
   return solid(hue, verts, orient(verts, CUBE_FACES, mean(verts), false));
 }
 
+/** `CUBE_FACES` index of the face at the lower and upper end of each axis, for `box`'s `omit`. */
+const FACE = { z0: 0, z1: 1, y0: 2, x1: 3, y1: 4, x0: 5 } as const;
+
+/** A box; its faces named in `omit` are left out, where nothing ever sees them from the cab. */
 function box(
   hue: RealismHueKey,
   x: readonly [number, number],
   y: readonly [number, number],
   z: readonly [number, number],
+  omit: readonly number[] = [],
 ): Solid {
   const ring = (w: number): Vec3[] => [
     [x[0], y[0], w],
@@ -162,7 +187,11 @@ function box(
     [x[1], y[1], w],
     [x[0], y[1], w],
   ];
-  return hexahedron(hue, ring(z[0]), ring(z[1]));
+  const bottom = ring(z[0]);
+  const top = ring(z[1]);
+  const verts = [...bottom, ...top];
+  const faces = orient(verts, CUBE_FACES, mean(verts), false).filter((_, i) => !omit.includes(i));
+  return solid(hue, verts, faces);
 }
 
 /** A box centred at `centre` with half sizes along the orthonormal `axes`. */
@@ -201,6 +230,7 @@ function anchorsOf(spec: TruckSpec) {
     inner: half - DOOR_THICKNESS,
     sill,
     glassTop: sill + cab.cab.glassHeight,
+    rear: frontX - cab.cabLength,
   };
 }
 
@@ -261,7 +291,7 @@ function dash(a: Anchors): Solid[] {
 
 function doors(a: Anchors): Solid[] {
   const [ex] = a.eye;
-  const back = ex - 0.2;
+  const back = ex - DOOR_BACK;
   const bottom = 1.55;
   return ([-1, 1] as const).map((side) => {
     const y: [number, number] = side > 0 ? [a.inner, a.half] : [-a.half, -a.inner];
@@ -371,16 +401,94 @@ function pillars(a: Anchors): Solid[] {
   });
 }
 
+/**
+ * The cab behind the forward view, as extra solids of the four meshes: the door lining on to the
+ * B-pillar and the rear quarter panel behind it, the rail above the side window, the sill panel,
+ * floor and bulkhead, the rear wall and the roof lining on to it. The window above the door and ahead of the
+ * B-pillar stays open, like the glass of the cab shell.
+ */
+function lookAround(a: Anchors): Record<InteriorMeshName, Solid[]> {
+  const [ex] = a.eye;
+  const back = ex - DOOR_BACK;
+  const bPillar = ex - B_PILLAR.behindEye;
+  const quarterFront = bPillar - B_PILLAR.depth;
+  // stand just inside the cab skin, which the sun shadow takes as the cab's own outside
+  const outer = a.half - SKIN_GAP;
+  const rear = a.rear + SKIN_GAP;
+  const front = a.front - SKIN_GAP;
+  const wall = rear + REAR_WALL;
+  const doorBottom = 1.55;
+  const lane = (side: 1 | -1, from: number, to: number): [number, number] =>
+    side > 0 ? [from, to] : [-to, -from];
+  const interior: Solid[] = [];
+  const pillars: Solid[] = [];
+  for (const side of [-1, 1] as const) {
+    const lining = lane(side, a.inner, outer);
+    const post = lane(side, a.inner - B_PILLAR.inset, outer);
+    const skin = [side > 0 ? FACE.y1 : FACE.y0]; // the side facing the cab's skin
+    interior.push(
+      // the door on to the B-pillar, level with the forward door where they meet
+      box('anthracite', [bPillar, back], lining, [doorBottom, doorTop(a, back)], skin),
+      // the sill panel under the door, which the forward door leaves open below its bottom
+      box('anthracite', [bPillar, a.glass], lining, [FRAME_TOP, doorBottom], skin),
+      // the rear quarter panel behind the B-pillar, floor to roof lining
+      box('anthracite', [wall, quarterFront], lining, [FRAME_TOP, ROOF_TOP], skin),
+    );
+    pillars.push(
+      box('anthracite', [quarterFront, bPillar], post, [FRAME_TOP, ROOF_TOP], skin),
+      // the rail over the side window, back from the eye plane; ahead of it the forward view keeps its sky
+      box('anthracite', [bPillar, ex + EYE_PLANE_LAP], lining, [a.glassTop, ROOF_TOP], skin),
+    );
+  }
+  interior.push(
+    box(
+      'headliner',
+      [rear, wall],
+      [-outer, outer],
+      [FRAME_TOP, ROOF_TOP],
+      [FACE.x0, FACE.y0, FACE.y1],
+    ),
+    box(
+      'anthracite',
+      [rear, front],
+      [-a.inner, a.inner],
+      [FRAME_TOP, FRAME_TOP + FLOOR],
+      [FACE.x0, FACE.x1, FACE.z0],
+    ),
+    // the bulkhead under the dash, which the dash face leaves open below its bottom edge
+    box('anthracite', [a.glass, front], [-a.inner, a.inner], [FRAME_TOP, DASH_BOTTOM], [FACE.x1]),
+  );
+  const header: Solid[] = [
+    box('headliner', [rear, ex - 0.4], [-a.inner, a.inner], [CEILING, ROOF_TOP]),
+    // the roof lining out to the cab's sides, over the rail; the forward view keeps its open corners
+    box(
+      'headliner',
+      [rear, ex + EYE_PLANE_LAP],
+      [-outer, -a.inner],
+      [CEILING, ROOF_TOP],
+      [FACE.y0],
+    ),
+    box('headliner', [rear, ex + EYE_PLANE_LAP], [a.inner, outer], [CEILING, ROOF_TOP], [FACE.y1]),
+  ];
+  return { interior, wheel: [], header, pillars };
+}
+
 export type InteriorShellParams = ReturnType<typeof interiorShellParams>;
+
+/** The solids `lookAround` adds to each mesh, which come after those of the forward view. */
+export function lookAroundSolids(spec: TruckSpec): Record<InteriorMeshName, readonly Solid[]> {
+  return lookAround(anchorsOf(spec));
+}
 
 /** Inputs of `tools/blender/interior_shell.py`; see `InteriorMeshName` for the meshes it exports. */
 export function interiorShellParams(spec: TruckSpec) {
   const a = anchorsOf(spec);
+  const around = lookAround(a);
   const meshes: Record<InteriorMeshName, Solid[]> = {
-    interior: [...dash(a), ...doors(a)],
-    wheel: wheel(a),
-    header: header(a),
-    pillars: pillars(a),
+    interior: [...dash(a), ...doors(a), ...around.interior],
+    wheel: [...wheel(a), ...around.wheel],
+    header: [...header(a), ...around.header],
+    pillars: [...pillars(a), ...around.pillars],
   };
   const hues = Object.fromEntries(
     [...new Set(Object.values(meshes).flatMap((m) => m.map((s) => s.hue)))]

@@ -33,7 +33,7 @@ if (scene === undefined) throw new Error(`${input} has no scene`);
 scene.setExtras({ ...scene.getExtras(), optimiseSha256: module.optimiseSha256(root) });
 await document.transform(
   prune({ keepAttributes: true }),
-  meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
+  meshopt({ encoder: MeshoptEncoder, level: 'high' }),
 );
 
 // Exporter and tool stamps change with versions and runs; the manifest records the versions instead.

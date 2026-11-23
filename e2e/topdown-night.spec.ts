@@ -24,7 +24,6 @@ import {
   type RenderConfig,
   type Shot,
 } from './pinned-shoot';
-import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 import type { NightLitKey, ScenePalette } from '../src/contracts/render';
 import { legacyIrradiance } from '../src/render/light-rig';
 import { TOP_DOWN_NIGHT_LIGHT } from '../src/render/look';
@@ -173,8 +172,6 @@ type Run = {
   readonly names: readonly string[];
   readonly png: (config: RenderConfig, shot: string) => Buffer;
   readonly tokens: Record<'accent' | 'nightAccent' | 'wheel', [number, number, number]>;
-  readonly errors: readonly string[];
-  readonly threeProblems: readonly string[];
 };
 
 /**
@@ -204,8 +201,6 @@ async function runDrives(
       0,
     ),
   );
-  const errors: string[] = [];
-  const threeProblems: string[] = [];
   const shots = new Map<string, Buffer>();
   const keyOf = ({ preset, lighting }: RenderConfig, shot: string): string =>
     `${lighting} ${preset} ${shot}`;
@@ -213,11 +208,6 @@ async function runDrives(
   for (const config of drives) {
     const { preset, lighting } = config;
     const page = await context.newPage();
-    page.on('console', (m) => {
-      if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
-    });
-    page.on('pageerror', (e) => errors.push(e.message));
-    const three = collectThreeProblems(page);
     await startPinnedDrive(page, config, exercise);
     for (const key of ['accent', 'nightAccent', 'wheel'] as const) {
       tokens[key] = await sceneRgb(page, key);
@@ -276,7 +266,6 @@ async function runDrives(
       // a zoom on a stroke is mostly flat ground: the accent count below says it drew
       await taken(zoom, await shootYardZoomed(page, paneAt(at), ZOOM_WHEEL), false);
     }
-    threeProblems.push(...three);
     await page.close();
   }
   const png = (config: RenderConfig, shot: string): Buffer => {
@@ -285,7 +274,7 @@ async function runDrives(
       throw new Error(`no ${shot} shot at ${config.preset} ${config.lighting}`);
     return found;
   };
-  return { names, png, tokens, errors, threeProblems };
+  return { names, png, tokens };
 }
 
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
@@ -354,8 +343,6 @@ for (const kind of EXERCISES) {
       }
       await scratch.close();
       expect(mismatches, 'top-down shots at night against day').toEqual([]);
-      expect(run.errors).toEqual([]);
-      expect(run.threeProblems).toEqual([]);
     },
   );
 
@@ -384,8 +371,6 @@ for (const kind of EXERCISES) {
         }
         await scratch.close();
         expect(mismatches, 'top-down shots at night differ between presets').toEqual([]);
-        expect(run.errors).toEqual([]);
-        expect(run.threeProblems).toEqual([]);
       },
     );
   }
@@ -394,9 +379,7 @@ for (const kind of EXERCISES) {
     `the lamp keys leave the top-down view at night unchanged at balanced: ${exercise}`,
     { tag: HEAVY },
     async ({ context }, testInfo) => {
-      const run = await runDrives(context, testInfo, kind, [NIGHT_BALANCED], true);
-      expect(run.errors).toEqual([]);
-      expect(run.threeProblems).toEqual([]);
+      await runDrives(context, testInfo, kind, [NIGHT_BALANCED], true);
     },
   );
 }

@@ -25,6 +25,7 @@ import {
   drawbarGap,
   GROUND,
   groundIrradiancePerCandela,
+  irradianceAt,
   lampLitSample,
   litGround,
   type LampLightSpec,
@@ -75,30 +76,42 @@ const PAIRS = TRUCK_IDS.flatMap((truck) => TRAILER_IDS.map((trailer) => [truck, 
 describe('lamp light placement', () => {
   it.each(TRUCK_IDS)('puts the %s truck lights outside the lenses they stand for', (id) => {
     const spec = truckById(id);
-    const { lamps } = truckLamps(spec);
-    const [front, rear] = truckLampLights(spec);
-    const dipped = lamps.filter((l) => l.fns.includes('dipped-beam'));
+    const { lamps } = truckLamps(spec, TRUCK_LOOKS[id].cab.length);
+    const lights = truckLampLights(spec);
+    const [left, right, rear] = lights;
+    const dipped = lamps
+      .filter((l) => l.fns.includes('dipped-beam'))
+      .sort((a, b) => b.box[1][0] - a.box[1][0]);
     const reversing = lamps.filter((l) => l.fns.includes('reversing'));
-    expect(front?.id).toBe('truck-front');
-    expect(rear?.id).toBe('truck-rear');
-    if (front === undefined || rear === undefined) return;
+    expect(lights.map((l) => l.id)).toEqual(['truck-front', 'truck-front', 'truck-rear']);
+    if (left === undefined || right === undefined || rear === undefined) return;
+    expect([left.side, right.side]).toEqual(['left', 'right']);
     expect(dipped).toHaveLength(2);
-    expect(front.position.x).toBeGreaterThan(Math.max(...dipped.map((l) => l.box[0][1])));
-    expect(front.position.x).toBeGreaterThan(truckAnchors(spec).frontX);
-    expect(rear.position.x).toBeLessThan(Math.min(...reversing.map((l) => l.box[0][0])));
-    for (const [light, group] of [
-      [front, dipped],
-      [rear, reversing],
+    // one light at each dipped lamp, inside its box across and up, in front of it
+    for (const [light, lamp] of [
+      [left, dipped[0]],
+      [right, dipped[1]],
     ] as const) {
-      // one light between the two lamps of the pair
-      expect(light.position.y).toBeCloseTo(0, 6);
-      const zs = group.flatMap((l) => l.box[2]);
-      expect(light.position.z).toBeGreaterThan(Math.min(...zs));
-      expect(light.position.z).toBeLessThan(Math.max(...zs));
+      if (lamp === undefined) throw new Error('no dipped lamp');
+      expect(light.position.x).toBeGreaterThan(lamp.box[0][1]);
+      expect(light.position.y).toBeGreaterThan(lamp.box[1][0]);
+      expect(light.position.y).toBeLessThan(lamp.box[1][1]);
+      expect(light.position.z).toBeGreaterThan(lamp.box[2][0]);
+      expect(light.position.z).toBeLessThan(lamp.box[2][1]);
     }
-    expect(front.aim.x).toBeGreaterThan(0.99);
+    expect(left.position.y).toBeGreaterThan(0);
+    expect(right.position.y).toBeCloseTo(-left.position.y, 6);
+    expect(right.position).toEqual({ ...left.position, y: right.position.y });
+    expect(left.position.x).toBeGreaterThan(truckAnchors(spec).frontX);
+    expect(rear.position.x).toBeLessThan(Math.min(...reversing.map((l) => l.box[0][0])));
+    // one light centred between the reversing lamps
+    expect(rear.position.y).toBeCloseTo(0, 6);
+    const zs = reversing.flatMap((l) => l.box[2]);
+    expect(rear.position.z).toBeGreaterThan(Math.min(...zs));
+    expect(rear.position.z).toBeLessThan(Math.max(...zs));
+    expect(left.aim.x).toBeGreaterThan(0.99);
     expect(rear.aim.x).toBeLessThan(-0.8);
-    for (const light of [front, rear]) expect(light.aim.z).toBeLessThan(0);
+    for (const light of lights) expect(light.aim.z).toBeLessThan(0);
   });
 
   it.each(TRAILER_IDS)('puts the %s trailer light behind its reversing lamps', (id) => {
@@ -269,6 +282,92 @@ describe('lamp light levels', () => {
   });
 });
 
+describe('the pair of dipped beams', () => {
+  const pairOf = (id: TruckId): [LampLightSpec, LampLightSpec] => {
+    const [left, right] = truckLampLights(truckById(id));
+    if (left?.side !== 'left' || right?.side !== 'right') throw new Error('no pair');
+    return [left, right];
+  };
+  const field = ([left, right]: readonly [LampLightSpec, LampLightSpec], ahead: number) => {
+    const { white } = candela(left);
+    return (y: number): number =>
+      white *
+      (irradianceAt(left, left.position.x + ahead, y) +
+        irradianceAt(right, left.position.x + ahead, y));
+  };
+  /** The row's ground y values, from the left of the vehicle to the right. */
+  const across = Array.from({ length: 81 }, (_, i) => 2 - i * 0.05);
+
+  it.each(TRUCK_IDS)('agrees with litGround where %s lights the ground', (id) => {
+    const [left] = pairOf(id);
+    for (const p of litGround(left, 40).filter((_, i) => i % 37 === 0)) {
+      expect(irradianceAt(left, p.x, p.y)).toBeCloseTo(p.irradiance, 9);
+    }
+    // behind the lamp and above the cone's reach there is nothing
+    expect(irradianceAt(left, left.position.x - 5, left.position.y)).toBe(0);
+  });
+
+  /** The field of one light centred between the lamps, at the dipped peak: the beam before it had one light per lamp. */
+  const centredField = (left: LampLightSpec, ahead: number) => {
+    const { id, aim, angle, penumbra, distance } = left;
+    const spec = { id, aim, angle, penumbra, distance, position: { ...left.position, y: 0 } };
+    const { white } = candela(spec);
+    return (y: number): number => white * irradianceAt(spec, left.position.x + ahead, y);
+  };
+  /** A row wide enough to hold the whole cone, out to 20 m. */
+  const wide = Array.from({ length: 601 }, (_, i) => 15 - i * 0.05);
+  const flux = (row: (y: number) => number): number => wide.reduce((sum, y) => sum + row(y), 0);
+
+  it.each(TRUCK_IDS)(
+    'sends out the light of one lamp between the two from the pair of %s, within the headroom',
+    (id) => {
+      const pair = pairOf(id);
+      for (const ahead of [2, 4, 6, 10, 20]) {
+        const ratio = flux(field(pair, ahead)) / flux(centredField(pair[0], ahead));
+        expect(ratio, `${String(ahead)} m ahead`).toBeCloseTo(1, 3);
+      }
+      // further out the pools have merged into the one light's
+      for (const ahead of [10, 20]) {
+        const ratio = field(pair, ahead)(0) / centredField(pair[0], ahead)(0);
+        expect(ratio, `${String(ahead)} m ahead`).toBeCloseTo(1, 1);
+      }
+      // close ahead each pool is dimmer than the one light's
+      const rows = [1.5, 2, 3, 4, 6, 8, 12, 20].flatMap((ahead) => across.map(field(pair, ahead)));
+      const peak = Math.max(...rows);
+      expect(peak).toBeLessThan(GROUND.dipped);
+      expect(peak + AMBIENT_PEAK).toBeLessThanOrEqual(HEADROOM);
+    },
+  );
+
+  /** Local maxima of the field along a row across the vehicle. */
+  const maxima = (row: (y: number) => number): number[] =>
+    across.filter((y, i) => {
+      const [before, after] = [across[i - 1], across[i + 1]];
+      return (
+        before !== undefined && after !== undefined && row(y) > row(before) && row(y) >= row(after)
+      );
+    });
+
+  it.each(TRUCK_IDS)(
+    'lights two pools close ahead of %s and one centred pool further out',
+    (id) => {
+      const pair = pairOf(id);
+      const lampY = pair[0].position.y;
+      const near = field(pair, 2);
+      const pools = maxima(near);
+      expect(pools).toHaveLength(2);
+      for (const y of pools) expect(Math.abs(Math.abs(y) - lampY)).toBeLessThan(0.3);
+      expect(near(0)).toBeLessThan(0.5 * Math.max(...across.map(near)));
+      // further out the kerb side's lifted cut-off adds a second maximum off the axis
+      for (const ahead of [4, 6, 10]) {
+        const [pool, ...others] = maxima(field(pair, ahead));
+        expect(others, `${String(ahead)} m ahead`).toEqual([]);
+        expect(Math.abs(pool ?? NaN), `${String(ahead)} m ahead`).toBeLessThan(0.1);
+      }
+    },
+  );
+});
+
 /** The beam's map coordinates of a body-frame point, through the light's own shadow camera as three samples the map. */
 function mapCoordinates(light: SpotLight, parent: Group, point: [number, number, number]) {
   parent.updateMatrixWorld(true);
@@ -291,7 +390,7 @@ describe('the dipped beam map', () => {
   /** A point `ahead` metres in front of the lamp at `elevation` degrees, `left` metres to its left. */
   const ray = (ahead: number, elevation: number, left: number): [number, number, number] => [
     spec.position.x + ahead,
-    left,
+    spec.position.y + left,
     spec.position.z + ahead * Math.tan((elevation * Math.PI) / 180),
   ];
   const share = (elevation: number, left: number): number => {
@@ -320,6 +419,20 @@ describe('the dipped beam map', () => {
     expect(light.map?.type).toBe(HalfFloatType);
     expect(light.shadow.camera.near).toBeLessThan(0.1);
     expect(light.castShadow).toBe(false);
+    lights.dispose();
+  });
+
+  it('gives both dipped lamps the same map instance, and the rear light none', () => {
+    const lights = createLampLights(truckLampLights(truckById(TRUCK_IDS[0])), new Group());
+    const [left, right, rear] = lights.lights;
+    expect([left?.name, right?.name, rear?.name]).toEqual([
+      'truck-front-left',
+      'truck-front-right',
+      'truck-rear',
+    ]);
+    expect(left?.map).not.toBeNull();
+    expect(right?.map).toBe(left?.map);
+    expect(rear?.map).toBeNull();
     lights.dispose();
   });
 
@@ -408,7 +521,7 @@ const STATES: readonly Partial<SimSnapshot['control']>[] = [
 
 describe('lamp light in the vehicle visuals', () => {
   const visuals = [
-    ['truck', () => proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env), 2],
+    ['truck', () => proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env), 3],
     ['trailer', () => proceduralTrailer(trailerById(TRAILER_IDS[0]), palette, undefined, env), 1],
   ] as const;
 
@@ -494,7 +607,9 @@ describe('lamp light in the vehicle visuals', () => {
   it('lights the rear lights from the reversing and stop lamps, and the beam always at night', () => {
     const truck = proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env);
     truck.setLook(night('balanced'));
-    const [front, rear] = spotsOf(truck.object);
+    const lights = spotsOf(truck.object);
+    const front = lights.find((l) => l.name === 'truck-front-left');
+    const rear = lights.find((l) => l.name === 'truck-rear');
     if (front === undefined || rear === undefined) throw new Error('no truck lights');
     const intensity = (control: Partial<SimSnapshot['control']>): number[] => {
       truck.update(snapshotWith(TRUCK_IDS[0], TRAILER_IDS[0], control));
@@ -514,7 +629,9 @@ describe('lamp light in the vehicle visuals', () => {
   it('darkens the beam and the tail light with the lights off, by intensity alone', () => {
     const truck = proceduralTruck(truckById(TRUCK_IDS[0]), palette, undefined, env);
     truck.setLook(night('balanced'));
-    const [front, rear] = spotsOf(truck.object);
+    const lights = spotsOf(truck.object);
+    const front = lights.find((l) => l.name === 'truck-front-left');
+    const rear = lights.find((l) => l.name === 'truck-rear');
     if (front === undefined || rear === undefined) throw new Error('no truck lights');
     const snapshot = (control: Partial<SimSnapshot['control']>, lights: boolean): void =>
       truck.update(snapshotWith(TRUCK_IDS[0], TRAILER_IDS[0], control), {
@@ -563,13 +680,14 @@ describe('lamp light in the vehicle visuals', () => {
 
 describe('lampLitSample', () => {
   it.each([true, false])(
-    'is a graded surface under the spot light with the beam map, casting %s',
+    'is a graded surface under the two dipped spot lights sharing the beam map, casting %s',
     (casting) => {
       const sample = lampLitSample(casting);
-      expect(sample.lights).toHaveLength(1);
-      const [light] = sample.lights ?? [];
-      expect(light instanceof SpotLight && light.map !== null).toBe(true);
-      expect(light?.castShadow).toBe(casting);
+      const lights = sample.lights ?? [];
+      expect(lights).toHaveLength(2);
+      expect(lights.every((l) => l instanceof SpotLight && l.map !== null)).toBe(true);
+      expect(new Set(lights.map((l) => (l instanceof SpotLight ? l.map : null))).size).toBe(1);
+      expect(lights.every((l) => l.castShadow === casting)).toBe(true);
       expect(sample.mesh.receiveShadow).toBe(casting);
       sample.dispose();
     },

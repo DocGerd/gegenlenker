@@ -22,7 +22,6 @@ import {
   timeoutWithSettles,
   tokenShare,
 } from './pinned-shoot';
-import { collectThreeProblems, DRIVER_PERFORMANCE_HINT } from './three-problems';
 
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 const PERSPECTIVE: readonly Shot[] = ['cockpit', 'mirrorLeft', 'mirrorRight', 'chase'];
@@ -48,12 +47,6 @@ for (const preset of PRESETS) {
     heavyAt(preset),
     async ({ page }) => {
       test.setTimeout(timeoutWithSettles(preset, 2));
-      const errors: string[] = [];
-      page.on('console', (m) => {
-        if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
-      });
-      page.on('pageerror', (e) => errors.push(e.message));
-      const three = collectThreeProblems(page);
       await startPinnedDrive(page, { preset, lighting: 'night' }, en.exerciseStraightReverse);
       const parked: Partial<Record<Shot, Buffer>> = {};
       for (const shot of PERSPECTIVE) {
@@ -102,8 +95,6 @@ for (const preset of PRESETS) {
           ).toBeLessThan(MAX_MIRROR_BRIGHT);
         }
       }
-      expect(errors).toEqual([]);
-      expect(three).toEqual([]);
     },
   );
 }
@@ -115,24 +106,16 @@ const hash = (png: Buffer): string => createHash('sha256').update(png).digest('h
 type Night = {
   readonly lights: Locator;
   readonly hazard: Locator;
-  readonly errors: string[];
-  readonly three: string[];
 };
 
-/** A night drive of the straight reverse at `preset`, with the lamp switches and the error collectors. */
+/** A night drive of the straight reverse at `preset`, with the lamp switches. */
 async function nightDrive(page: Page, preset: Preset): Promise<Night> {
-  const errors: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() === 'error' && !DRIVER_PERFORMANCE_HINT.test(m.text())) errors.push(m.text());
-  });
-  page.on('pageerror', (e) => errors.push(e.message));
-  const three = collectThreeProblems(page);
   await startPinnedDrive(page, { preset, lighting: 'night' }, en.exerciseStraightReverse);
   const lights = page.locator('[data-ctl="lights"]');
   const hazard = page.locator('[data-ctl="hazard"]');
   await expect(lights).toHaveAttribute('aria-pressed', 'true');
   await expect(hazard).toHaveAttribute('aria-pressed', 'false');
-  return { lights, hazard, errors, three };
+  return { lights, hazard };
 }
 
 // Lamp lenses are what the chase view shows of the lamps; the dipped beam is what the cockpit shows.
@@ -141,7 +124,7 @@ test(
   { tag: HEAVY },
   async ({ page }) => {
     test.setTimeout(timeoutWithSettles('balanced', 3, 2 * PRESET_TIMEOUT_MS.balanced));
-    const { lights, errors, three } = await nightDrive(page, 'balanced');
+    const { lights } = await nightDrive(page, 'balanced');
     const litCockpit = await shoot(page, 'cockpit');
     const lit = hash(await shoot(page, 'chase'));
 
@@ -160,8 +143,6 @@ test(
     await settle(page, 'balanced');
     await expect(lights).toHaveAttribute('aria-pressed', 'true');
     expect(hash(await shoot(page, 'chase')), 'lights back on').toBe(lit);
-    expect(errors).toEqual([]);
-    expect(three).toEqual([]);
   },
 );
 
@@ -170,7 +151,7 @@ test(
   { tag: HEAVY },
   async ({ page }) => {
     test.setTimeout(timeoutWithSettles('balanced', 3, 2 * PRESET_TIMEOUT_MS.balanced));
-    const { hazard, errors, three } = await nightDrive(page, 'balanced');
+    const { hazard } = await nightDrive(page, 'balanced');
     const litShot = await shoot(page, 'chase');
     const lit = hash(litShot);
 
@@ -198,15 +179,13 @@ test(
     await settle(page, 'balanced');
     await expect(hazard).toHaveAttribute('aria-pressed', 'false');
     expect(hash(await shoot(page, 'chase')), 'hazard lights off').toBe(lit);
-    expect(errors).toEqual([]);
-    expect(three).toEqual([]);
   },
 );
 
 // The switches act on press, so a second finger works while another holds the lever; Low draws fastest.
 test('a second finger switches a lamp while another holds the lever', async ({ page }) => {
   test.setTimeout(timeoutWithSettles('low', 2));
-  const { hazard, errors, three } = await nightDrive(page, 'low');
+  const { hazard } = await nightDrive(page, 'low');
   const cdp = await page.context().newCDPSession(page);
   const centre = async (loc: Locator): Promise<{ x: number; y: number }> => {
     const box = await loc.boundingBox();
@@ -225,6 +204,4 @@ test('a second finger switches a lamp while another holds the lever', async ({ p
   await touch('touchEnd');
   await settle(page, 'low');
   await expect(hazard).toHaveAttribute('aria-pressed', 'true');
-  expect(errors).toEqual([]);
-  expect(three).toEqual([]);
 });

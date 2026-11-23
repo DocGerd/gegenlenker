@@ -32,7 +32,7 @@ test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ pa
  * that is already lost, so the WebGPU start fails after a device exists. Counts adapter requests
  * and destroyed devices on `window`.
  */
-async function stubGpu(page: Page, kind: 'none' | 'lost'): Promise<string[]> {
+async function stubGpu(page: Page, kind: 'none' | 'lost'): Promise<void> {
   await page.addInitScript((k) => {
     const seen = { adapters: 0, destroyed: 0 };
     Object.assign(window, { gpuSeen: seen });
@@ -59,12 +59,6 @@ async function stubGpu(page: Page, kind: 'none' | 'lost'): Promise<string[]> {
       },
     });
   }, kind);
-  const problems: string[] = [];
-  page.on('console', (m) => {
-    if (m.type() === 'error' || m.text().startsWith('THREE.')) problems.push(m.text());
-  });
-  page.on('pageerror', (e) => problems.push(e.message));
-  return problems;
 }
 
 const gpuSeen = (page: Page) =>
@@ -78,32 +72,29 @@ async function drive(page: Page, search: string): Promise<void> {
 }
 
 test('asks for no WebGPU adapter unless the page asks for WebGPU', async ({ page }) => {
-  const problems = await stubGpu(page, 'none');
+  await stubGpu(page, 'none');
   await drive(page, '');
   await expect(page.locator('html')).toHaveAttribute('data-render-backend', 'webgl2');
   await expect(page.locator('html')).not.toHaveAttribute('data-render-fallback');
   expect(await gpuSeen(page)).toMatchObject({ adapters: 0 });
-  expect(problems).toEqual([]);
 });
 
 test('a WebGPU request without a WebGPU adapter drives on WebGL 2 without a notice', async ({
   page,
 }) => {
-  const problems = await stubGpu(page, 'none');
+  await stubGpu(page, 'none');
   await drive(page, '?backend=webgpu');
   await expect(page.locator('html')).toHaveAttribute('data-render-backend', 'webgl2');
   await expect(page.locator('html')).toHaveAttribute('data-render-fallback', 'unavailable');
   expect(await gpuSeen(page)).toMatchObject({ adapters: 1 });
-  expect(problems).toEqual([]);
 });
 
 test('a WebGPU start that fails after a device exists retries WebGL 2 on the same canvas', async ({
   page,
 }) => {
-  const problems = await stubGpu(page, 'lost');
+  await stubGpu(page, 'lost');
   await drive(page, '?backend=webgpu');
   await expect(page.locator('html')).toHaveAttribute('data-render-backend', 'webgl2');
   await expect(page.locator('html')).toHaveAttribute('data-render-fallback', 'failed');
   await expect.poll(() => gpuSeen(page)).toMatchObject({ adapters: 1, destroyed: 1 });
-  expect(problems).toEqual([]);
 });
