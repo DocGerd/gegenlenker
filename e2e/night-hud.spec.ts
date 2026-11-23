@@ -2,7 +2,15 @@ import { createHash } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
-import { HEAVY, shoot, startPinnedDrive, settle, timeoutWithSettles } from './pinned-shoot';
+import {
+  distinctColours,
+  HEAVY,
+  MIN_DRAWN_COLOURS,
+  settle,
+  shoot,
+  startPinnedDrive,
+  timeoutWithSettles,
+} from './pinned-shoot';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
 const SHOTS = ['follow', 'yard'] as const;
@@ -11,7 +19,11 @@ const html = (page: Page) => page.locator('html');
 
 async function topDownHashes(page: Page): Promise<string[]> {
   const hashes: string[] = [];
-  for (const shot of SHOTS) hashes.push(sha(await shoot(page, shot)));
+  for (const shot of SHOTS) {
+    const png = await shoot(page, shot);
+    expect(await distinctColours(page, png), shot).toBeGreaterThan(MIN_DRAWN_COLOURS);
+    hashes.push(sha(png));
+  }
   return hashes;
 }
 
@@ -27,6 +39,10 @@ test(
     await startPinnedDrive(system, night, en.layoutDepot);
     await expect(html(system)).toHaveAttribute('data-theme', 'dark');
     await expect(system.locator('.hud-view-label').first()).toHaveCSS(
+      'background-color',
+      'rgb(21, 23, 26)',
+    );
+    await expect(system.locator('.ctl-label').first()).toHaveCSS(
       'background-color',
       'rgb(21, 23, 26)',
     );
