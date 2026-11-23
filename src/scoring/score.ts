@@ -105,6 +105,7 @@ export function runResult(
   assisted: boolean,
   startTime: number,
   lighting: LightingMode,
+  mirrorsOnly: boolean,
 ): RunResult {
   const e = targetError(s, exercise.target);
   return {
@@ -114,6 +115,7 @@ export function runResult(
     reached,
     assisted,
     lighting,
+    mirrorsOnly,
     waypointMissed: exercise.waypoint !== null && !waypointVisited,
     positionError: e.position,
     angleError: e.angle,

@@ -102,7 +102,12 @@ async function blankRows(page: Page, x: number): Promise<number> {
  * mirrors under them, the class V mirror above the right one and the front mirror where `computeViewports` finds room for them, given the key
  * legend as the page measured it.
  */
-async function expectedViews(page: Page, insets: Insets, wide: boolean) {
+async function expectedViews(
+  page: Page,
+  insets: Insets,
+  wide: boolean,
+  mode: 'drive' | 'mirrors' = 'drive',
+) {
   const size = page.viewportSize();
   if (size === null) throw new Error('no viewport');
   const legend = await page.evaluate(() => {
@@ -114,7 +119,7 @@ async function expectedViews(page: Page, insets: Insets, wide: boolean) {
     const stage = hud.getBoundingClientRect();
     return { right: r.right - stage.left, height: stage.bottom - r.top };
   });
-  return computeViewports(size.width, size.height, 'drive', legend, insets, undefined, null, {
+  return computeViewports(size.width, size.height, mode, legend, insets, undefined, null, {
     front: QUALITY_FLAGS.balanced.frontMirror,
     wide: QUALITY_FLAGS.balanced.wideMirrors && wide,
     close: QUALITY_FLAGS.balanced.closeMirror,
@@ -135,8 +140,17 @@ const wideSetting = (page: Page): Promise<boolean> =>
     }
   }, SETTINGS_KEY);
 
-async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
-  const { front, wideLeft, close } = await expectedViews(page, insets, await wideSetting(page));
+async function expectedMirrors(
+  page: Page,
+  insets: Insets,
+  mode: 'drive' | 'mirrors',
+): Promise<number> {
+  const { front, wideLeft, close } = await expectedViews(
+    page,
+    insets,
+    await wideSetting(page),
+    mode,
+  );
   return 2 + (wideLeft === null ? 0 : 2) + (front === null ? 0 : 1) + (close === null ? 0 : 1);
 }
 
@@ -146,16 +160,26 @@ async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
  */
 async function hudReady(
   page: Page,
-  { insets = NO_INSETS, exact = true }: { insets?: Insets; exact?: boolean } = {},
+  {
+    insets = NO_INSETS,
+    exact = true,
+    mirrorsOnly = false,
+  }: { insets?: Insets; exact?: boolean; mirrorsOnly?: boolean } = {},
 ): Promise<void> {
   const shown = () => page.locator('.hud-mirror:not([hidden])').count();
+  const mode = mirrorsOnly ? 'mirrors' : 'drive';
   if (exact)
-    await expect.poll(async () => (await shown()) - (await expectedMirrors(page, insets))).toBe(0);
+    await expect
+      .poll(async () => (await shown()) - (await expectedMirrors(page, insets, mode)))
+      .toBe(0);
   else await expect.poll(shown).toBeGreaterThanOrEqual(2);
   const gauges = page.locator('.hud-gauge');
   await expect(gauges).toHaveCount(2);
-  await expect(gauges.first()).toBeVisible();
-  await expect(gauges.last()).toBeVisible();
+  // The gauges belong to the top-down pane, which a mirror-only drive does not have.
+  for (const gauge of [gauges.first(), gauges.last()]) {
+    if (mirrorsOnly) await expect(gauge).toBeHidden();
+    else await expect(gauge).toBeVisible();
+  }
   await expect(page.locator('.hud-counters')).toBeVisible();
   await expect(page.locator('.hud-action')).toBeVisible();
   await expect(page.locator('.ctl-wheel')).toBeVisible();
@@ -817,6 +841,104 @@ for (const { locale, messages } of locales) {
         // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
           expectDividerClears(page, size));
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
+/** The mirror-only drive: the cockpit takes the window, and the brief and counters stand in it clear of everything. */
+async function expectMirrorsOnlyClear(page: Page, size: Size): Promise<void> {
+  const [cockpit] = await boxes(page.locator('.hud-cockpit'));
+  expect(cockpit, 'the cockpit takes the whole window').toMatchObject({
+    left: 0,
+    top: 0,
+    right: size.width,
+    bottom: size.height,
+  });
+  const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
+  const controls = await boxes(
+    page.locator(
+      '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend',
+    ),
+  );
+  const [pause] = await boxes(page.locator('.hud-action'));
+  const [goal] = await boxes(page.locator('.hud-goal:not([hidden])'));
+  const [counters] = await boxes(page.locator('.hud-counters'));
+  if (pause === undefined || goal === undefined || counters === undefined) {
+    throw new Error('no pause button, brief or counters');
+  }
+  const { right, left } = cockpit ?? { right: 0, left: 0 };
+  const aspect = (right - left) / size.height;
+  const halfWidth = (coneEdge(aspect, COCKPIT_FOV) * size.width) / 2;
+  const halfHeight = (coneTop(COCKPIT_FOV) * size.height) / 2;
+  const cone = {
+    name: 'sight cone',
+    left: size.width / 2 - halfWidth,
+    right: size.width / 2 + halfWidth,
+    top: size.height / 2 - halfHeight,
+    bottom: size.height / 2 + halfHeight,
+  };
+  const readouts = await boxes(page.locator('.hud-gear, .hud-speed'));
+  const against = (name: string, box: (typeof mirrors)[number], others: typeof mirrors) => {
+    for (const o of others) expect(overlaps(box, o), `${name} overlaps ${o.name}`).toBe(false);
+  };
+  for (const m of mirrors)
+    against('a mirror', m, [...controls, pause, goal, counters, ...readouts]);
+  against('the brief', goal, [...controls, pause, counters, cone, ...readouts]);
+  against('the counters', counters, [...controls, pause, goal, cone]);
+  for (const box of [goal, counters, pause]) {
+    expect(box.left, `${box.name} on screen`).toBeGreaterThanOrEqual(0);
+    expect(box.right, `${box.name} on screen`).toBeLessThanOrEqual(size.width);
+    expect(box.bottom, `${box.name} on screen`).toBeLessThanOrEqual(size.height);
+  }
+}
+
+for (const size of [
+  { width: 1366, height: 768 },
+  { width: 1280, height: 585 },
+  { width: 768, height: 1024 },
+]) {
+  for (const { locale, messages } of locales) {
+    test(`the mirror-only drive clears the controls and holds the brief at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      test.slow();
+      const context = await browser.newContext({ locale, viewport: size });
+      try {
+        const page = await context.newPage();
+        await page.addInitScript((key) => {
+          if (localStorage.getItem(key) === null) {
+            localStorage.setItem(key, JSON.stringify({ version: 1, mirrorsOnly: true }));
+          }
+        }, SETTINGS_KEY);
+        await page.goto('./');
+        await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
+        await hudReady(page, { mirrorsOnly: true });
+        // Portrait has no room for the key legend beside the brief.
+        if (size.width < size.height) await expect(page.locator('.hud-legend')).toBeHidden();
+        await expectMirrorsClearControls(page, size);
+        await expectMirrorsOnlyClear(page, size);
+        await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
+        if (size.height < 700) {
+          // A short screen's key list has no top-down pane to open in.
+          await page.locator('[data-hud="keysToggle"]').click();
+          await expect(page.locator('.hud-legend dl')).toBeVisible();
+          const [list] = await boxes(page.locator('.hud-legend dl'));
+          if (list === undefined) throw new Error('no key list');
+          expect(list.left, 'key list on screen').toBeGreaterThanOrEqual(0);
+          expect(list.top, 'key list on screen').toBeGreaterThanOrEqual(0);
+          expect(list.right, 'key list on screen').toBeLessThanOrEqual(size.width);
+          expect(list.bottom, 'key list on screen').toBeLessThanOrEqual(size.height);
+          const others = await boxes(
+            page.locator(
+              '.hud-mirror:not([hidden]), .ctl-wheel, .ctl-gears, .ctl-stop, .ctl-lever, .hud-action',
+            ),
+          );
+          for (const o of others)
+            expect(overlaps(list, o), `key list overlaps ${o.name}`).toBe(false);
+        }
       } finally {
         await context.close();
       }

@@ -737,6 +737,55 @@
   transition: none;
 }
 
+/* Without the top-down pane the brief floats over the cockpit above its band, and the counters sit in the band, both left of the lever column. */
+.hud[data-mirrors] {
+  --hud-lever-clear: calc(
+    var(--space-4) + var(--safe-right) + var(--size-target) * 1.5 + var(--space-3)
+  );
+}
+
+.hud[data-mirrors] .hud-goal {
+  position: absolute;
+  right: var(--hud-lever-clear);
+  bottom: calc(var(--hud-band) + var(--space-3));
+  width: max-content;
+  max-width: min(24rem, calc(100% - var(--hud-inset) - var(--hud-lever-clear)));
+}
+
+.hud[data-mirrors] .hud-band {
+  padding-right: var(--hud-lever-clear);
+}
+
+.hud[data-mirrors] .hud-counters {
+  grid-template-columns: repeat(4, auto);
+  margin: 0 0 0 auto;
+}
+
+/* Portrait leaves the band too narrow between gears and lever: the counters wrap below the readouts, and the brief takes the key legend's place, so there is no legend. */
+@media not (min-aspect-ratio: 1/1) {
+  .hud[data-mirrors] .hud-legend {
+    display: none;
+  }
+
+  .hud[data-mirrors] .hud-band {
+    flex-wrap: wrap;
+    align-content: center;
+  }
+
+  .hud[data-mirrors] .hud-counters {
+    grid-template-columns: auto auto;
+  }
+}
+
+/* No pane to hold the short-screen key list: it floats above its toggle, which the full-width cockpit keeps clear of the mirrors. */
+.hud[data-mirrors] .hud-legend[data-overlay] dl {
+  left: -1px;
+  bottom: calc(100% + var(--space-2));
+  max-width: none;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hud-counters dd {
     transition: none;

@@ -7,8 +7,8 @@ import type { TrailerId, TruckId } from '../contracts/vehicle';
 const STORAGE_VERSION = 2;
 
 /**
- * Assisted and unaided runs rank apart: an aid must not beat an unaided best. Night runs rank
- * apart too; day keys carry no suffix, so bests stored before lighting existed stay valid.
+ * Assisted and unaided runs rank apart: an aid must not beat an unaided best. Night and mirror-only
+ * runs rank apart too; the default keys carry no suffix, so bests stored before either existed stay valid.
  */
 export function bestKey(
   exerciseId: ExerciseId,
@@ -16,13 +16,14 @@ export function bestKey(
   trailerId: TrailerId,
   assisted: boolean,
   lighting: LightingMode,
+  mirrorsOnly: boolean,
 ): string {
   const base = `${exerciseId}/${truckId}/${trailerId}/${assisted ? 'assisted' : 'unaided'}`;
-  return lighting === 'night' ? `${base}/night` : base;
+  return `${base}${lighting === 'night' ? '/night' : ''}${mirrorsOnly ? '/mirrors' : ''}`;
 }
 
 export const resultKey = (r: RunResult): string =>
-  bestKey(r.exerciseId, r.truckId, r.trailerId, r.assisted, r.lighting);
+  bestKey(r.exerciseId, r.truckId, r.trailerId, r.assisted, r.lighting, r.mirrorsOnly);
 
 /** Negative when `a` is better. */
 export function compareResults(a: RunResult, b: RunResult): number {
@@ -79,6 +80,8 @@ function toResult(v: unknown): RunResult | null {
   const { exerciseId, truckId, trailerId } = r;
   // Stored before lighting existed: drawn by day.
   const lighting = 'lighting' in r ? r.lighting : DEFAULT_LIGHTING;
+  // Stored before mirror-only runs existed: driven with the top-down view.
+  const mirrorsOnly = 'mirrorsOnly' in r ? r.mirrorsOnly : false;
   if (
     !EXERCISE_IDS.some((id) => id === exerciseId) ||
     !TRUCK_IDS.some((id) => id === truckId) ||
@@ -86,6 +89,7 @@ function toResult(v: unknown): RunResult | null {
     !LIGHTING_MODES.some((mode) => mode === lighting) ||
     typeof r.reached !== 'boolean' ||
     typeof r.assisted !== 'boolean' ||
+    typeof mirrorsOnly !== 'boolean' ||
     !isMeasure(r.positionError) ||
     !isMeasure(r.angleError) ||
     !isCount(r.contacts) ||
@@ -102,6 +106,7 @@ function toResult(v: unknown): RunResult | null {
     reached: r.reached,
     assisted: r.assisted,
     lighting: lighting as LightingMode,
+    mirrorsOnly,
     waypointMissed: r.waypointMissed === true,
     positionError: r.positionError,
     angleError: r.angleError,

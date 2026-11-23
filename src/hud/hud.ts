@@ -14,7 +14,7 @@ import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
 import { goalCueTexts } from './goal-cue';
-import { messageColumn } from '../render/viewports';
+import { hasTopDown, messageColumn } from '../render/viewports';
 import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
 import { aidSwatch } from './aid-swatches';
 import type { Ahead } from '../sim/predict';
@@ -75,6 +75,8 @@ export type HudOptions = {
   /** Offers looking around in the cockpit; the preset's `interiorGlb` flag with the interior. */
   look?: boolean;
   collapsed: CollapsedPanels;
+  /** No top-down pane: its brief and counters move into the cockpit, and its views, aids and gauges are gone. */
+  mirrorsOnly?: boolean;
 };
 
 const CONTACT_KEY: Record<BodyId, MessageKey> = {
@@ -188,7 +190,22 @@ const legendRow = ({ term, desc, viewOnly }: LegendRow): string => {
   return `${dt}<dd${viewOnly ? ' class="hud-legend-view"' : ''} data-i18n="${desc}"></dd>`;
 };
 
-const MARKUP = (mode: HudOptions['mode'], chase: boolean, look: boolean | undefined): string => `
+/** Legend rows for the top-down view, which a mirror-only drive does not have. */
+const TOP_DOWN_ROWS: readonly MessageKey[] = [
+  'viewSwitch',
+  'viewSwitchNoOutside',
+  'zoom',
+  'panView',
+  'orbitTilt',
+  'resetViewAndSize',
+];
+
+const MARKUP = (
+  mode: HudOptions['mode'],
+  chase: boolean,
+  look: boolean | undefined,
+  mirrorsOnly: boolean,
+): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
     <span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>
@@ -196,11 +213,12 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean, look: boolean | undefi
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl data-hud="keys">
         ${legendRows(chase, look === true)
+          .filter((row) => !(mirrorsOnly && TOP_DOWN_ROWS.includes(row.desc)))
           .map(legendRow)
           .join('')}
       </dl>
     </div>
-    <div class="hud-band">
+    <div class="hud-band" data-hud="band">
       <span class="hud-gear mono" data-hud="gear"></span>
       <span class="hud-speed mono" data-hud="speed"></span>
     </div>
@@ -283,7 +301,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     for (const cb of listeners) cb(a);
   };
 
-  root.insertAdjacentHTML('beforeend', MARKUP(opts.mode, opts.chase, opts.look));
+  root.insertAdjacentHTML(
+    'beforeend',
+    MARKUP(opts.mode, opts.chase, opts.look, opts.mirrorsOnly === true),
+  );
   const hud = query(root, 'root', HTMLElement);
   hud.toggleAttribute('data-interior', opts.interior);
   applyMessages(hud);
@@ -309,6 +330,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     query(hud, 'goalTitle', HTMLElement).textContent = opts.exercise.title;
     query(hud, 'goalBrief', HTMLElement).textContent = opts.exercise.brief;
     setHidden(goal, false);
+  }
+  const mirrorsOnly = opts.mirrorsOnly === true;
+  hud.toggleAttribute('data-mirrors', mirrorsOnly);
+  if (mirrorsOnly) {
+    // The pane is gone: the brief floats over the cockpit and the counters join the readouts in its band.
+    setHidden(topDown, true);
+    cockpit.append(goal);
+    const counters = hud.querySelector('[data-hud="counters"]');
+    if (counters !== null) query(hud, 'band', HTMLElement).append(counters);
   }
   const briefToggle = query(hud, 'briefToggle', HTMLButtonElement);
   briefToggle.title = t('briefToggle');
@@ -363,6 +393,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let allKeys = false;
   // On a short screen the brief and the key legend each have a state of their own; not persisted.
   let shortScreen = false;
+  /** The brief folds away on the first drive input: on a short screen, and where it floats over the cockpit. */
+  const foldsBrief = (): boolean => shortScreen || mirrorsOnly;
   let briefOpen = true;
   let briefDone = false;
   let keysOpen = false;
@@ -391,9 +423,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       shortScreen ? !keysOpen : !shortCockpit && collapsed.keys,
     );
     legend.toggleAttribute('data-drive-only', !shortScreen && shortCockpit && !allKeys);
-    setHidden(briefToggle, !shortScreen);
+    setHidden(briefToggle, !foldsBrief());
     briefToggle.setAttribute('aria-expanded', String(briefOpen));
-    goal.toggleAttribute('data-collapsed', shortScreen && !briefOpen);
+    goal.toggleAttribute('data-collapsed', foldsBrief() && !briefOpen);
     setHidden(aidsBox, collapsed.aids);
     setHidden(gaugeBox, !aids.pivots || collapsed.gauges);
   };
@@ -683,6 +715,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       }
       if (
         mode !== undefined &&
+        !mirrorsOnly &&
         (mode !== 'chase' || opts.chase) &&
         !e.defaultPrevented &&
         !e.repeat &&
@@ -752,7 +785,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     }
     if (briefDone || !isDrivingInput(c)) return;
     briefDone = true;
-    if (shortScreen && briefOpen) {
+    if (foldsBrief() && briefOpen) {
       briefOpen = false;
       syncToggles();
       emit({ type: 'brief' });
@@ -843,8 +876,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       toastWrap.style.left = `${column.x}px`;
       toastWrap.style.top = `${column.y}px`;
       toastWrap.style.width = `${column.width}px`;
-      place(topDown, views.topDown);
-      placeKeysList(views.topDown);
+      if (hasTopDown(views)) {
+        place(topDown, views.topDown);
+        placeKeysList(views.topDown);
+      }
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));

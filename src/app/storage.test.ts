@@ -13,6 +13,7 @@ const result: RunResult = {
   reached: true,
   assisted: false,
   lighting: 'day',
+  mirrorsOnly: false,
   waypointMissed: false,
   positionError: 0.1,
   angleError: 0.01,
@@ -23,10 +24,11 @@ const result: RunResult = {
 };
 
 const log: InputLog = {
-  version: 2,
+  version: 3,
   layoutId: 'logistics',
   ...ids,
   lighting: 'day',
+  mirrorsOnly: false,
   steps: 10,
   changes: [],
 };

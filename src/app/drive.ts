@@ -57,6 +57,8 @@ const ARROW_MARGIN = 24;
 const EXPOSE_FRAMING = new URLSearchParams(location.search).get('framing') === '1';
 
 const anyAid = (a: AidFlags): boolean => a.pivots || a.path || a.tracks || a.ghost;
+/** Every aid draws in the top-down view only, so a mirror-only run has none, whatever the settings. */
+const NO_AIDS: AidFlags = { pivots: false, path: false, tracks: false, ghost: false };
 
 type Frame = { -readonly [K in keyof RenderFrame]: RenderFrame[K] };
 
@@ -84,7 +86,7 @@ export function startDrive(
   const truck = truckById(run.truckId);
   const trailer = trailerById(run.trailerId);
   const sim = createSimulation(params, start, contacts);
-  const { lighting } = settings;
+  const { lighting, mirrorsOnly } = settings;
   const recorder = createInputRecorder();
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
@@ -115,6 +117,7 @@ export function startDrive(
         truckId: run.truckId,
         trailerId: run.trailerId,
         lighting,
+        mirrorsOnly,
       },
       snapshot.step,
     );
@@ -130,6 +133,7 @@ export function startDrive(
             assisted,
             startTime ?? snapshot.time,
             lighting,
+            mirrorsOnly,
           )
         : null;
     dispose();
@@ -191,7 +195,8 @@ export function startDrive(
   const lookAround = lookAroundAvailable(graphics);
   renderer.setScene(layout, truck, trailer);
 
-  let aids: AidFlags = settings.aids;
+  const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
+  let aids: AidFlags = mirrorsOnly ? NO_AIDS : settings.aids;
   let collapsed = settings.collapsed;
   let topDownLayout = settings.topDownLayout;
   let savedLayout = topDownLayout;
@@ -205,7 +210,7 @@ export function startDrive(
     views: computeViewports(
       1,
       1,
-      'drive',
+      driveMode,
       null,
       undefined,
       undefined,
@@ -228,6 +233,8 @@ export function startDrive(
     mode: topDown,
     getRect: () => frame.views.topDown,
     onChange(next) {
+      // The keys still move a view that has no pane.
+      if (mirrorsOnly) return;
       frame.topDownView = next;
       dirty = true;
       hud.setViewChanged(!isDefaultView(next));
@@ -250,17 +257,19 @@ export function startDrive(
       exercise === null
         ? null
         : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
-    aids: settings.aids,
+    aids,
     topDown,
     chase: chaseViewAvailable(graphics),
     interior: interiorAvailable(graphics),
     look: lookAround,
     collapsed,
+    mirrorsOnly,
   });
   cleanups.push(() => hud.dispose());
 
   /** Chrome moves with the layout and with collapsing panels; the vehicle is framed in what it leaves free. */
   const remeasure = (): void => {
+    if (mirrorsOnly) return;
     frame.topDownClear = clearRect(frame.views.topDown, measureChrome(stage));
     dirty = true;
   };
@@ -325,7 +334,7 @@ export function startDrive(
     let views = computeViewports(
       width,
       height,
-      'drive',
+      driveMode,
       null,
       undefined,
       topDownLayout,
@@ -338,7 +347,7 @@ export function startDrive(
       views = computeViewports(
         width,
         height,
-        'drive',
+        driveMode,
         legend,
         undefined,
         topDownLayout,
@@ -347,7 +356,9 @@ export function startDrive(
       );
       hud.layout(views);
     }
-    hud.setSplit(topDownSplit(width, height, topDownLayout, legend, undefined, panels));
+    if (!mirrorsOnly) {
+      hud.setSplit(topDownSplit(width, height, topDownLayout, legend, undefined, panels));
+    }
     frame.views = views;
     viewInput.relayout();
     remeasure();

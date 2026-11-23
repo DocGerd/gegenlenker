@@ -220,11 +220,18 @@ export function topDownSplit(
   return { orientation, share: clamp(layout[orientation], min, max), min, max, fallback };
 }
 
-/** `legend` is the measured key legend: the mirrors stay above it where it reaches under them. */
+/** Where the drive screen has no top-down view, which is then a zero-width rect at the screen's right edge. */
+export const hasTopDown = (views: ViewRects): boolean =>
+  views.topDown.width > 0 && views.topDown.height > 0;
+
+/**
+ * `mirrors` is the drive screen without the top-down view: the cockpit takes the whole window.
+ * `legend` is the measured key legend: the mirrors stay above it where it reaches under them.
+ */
 export function computeViewports(
   cssWidth: number,
   cssHeight: number,
-  mode: ViewMode,
+  mode: ViewMode | 'mirrors',
   legend: LegendBox | null = null,
   safeInsets?: Insets,
   layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
@@ -245,10 +252,16 @@ export function computeViewports(
     };
   }
   const insets = safeInsets ?? readSafeInsets();
-  const { share } = topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
+  const mirrorsOnly = mode === 'mirrors';
+  const { share } = mirrorsOnly
+    ? { share: 0 }
+    : topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
   let topDown: Rect;
   let cockpit: Rect;
-  if (cssWidth >= cssHeight) {
+  if (mirrorsOnly) {
+    topDown = { x: cssWidth, y: 0, width: 0, height: cssHeight };
+    cockpit = { x: 0, y: 0, width: cssWidth, height: cssHeight };
+  } else if (cssWidth >= cssHeight) {
     const w = Math.round(share * cssWidth);
     topDown = { x: cssWidth - w, y: 0, width: w, height: cssHeight };
     cockpit = { x: 0, y: 0, width: cssWidth - w, height: cssHeight };
@@ -265,10 +278,21 @@ export function computeViewports(
   const wanted = Math.min(2 * fullWidth, Math.round(MIRROR_SCALE * 0.5 * cockpit.height));
   // Only a cockpit that starts at the screen's top edge sits under the display cut-out there.
   const top = cockpit.y === 0 ? insets.top : 0;
-  const floor = cockpit.y + top + COCKPIT_LABEL;
+  // Without the top-down pane the pause button stands over the cockpit's top right corner, above the mirrors.
+  const floor =
+    cockpit.y +
+    top +
+    Math.max(COCKPIT_LABEL, mirrorsOnly ? INSET + tokenPx('--size-target', 44) + MIRROR_GAP : 0);
   const left = cockpit.x + INSET + insets.left;
+  // Landscape, a cockpit that reaches the screen's right edge shares it with the lever column (`.ctl-lever`).
+  const leverClear =
+    mirrorsOnly && cssWidth >= cssHeight ? 1.5 * tokenPx('--size-target', 44) + INSET : 0;
   const right =
-    cockpit.x + cockpit.width - INSET - (cockpit.x + cockpit.width >= cssWidth ? insets.right : 0);
+    cockpit.x +
+    cockpit.width -
+    INSET -
+    (cockpit.x + cockpit.width >= cssWidth ? insets.right : 0) -
+    leverClear;
   const controls = controlsHeight(cssWidth, cssHeight, insets);
   const preferred = cockpit.y + top + Math.round(0.16 * cockpit.height);
   type Column = { readonly y: number; readonly width: number; readonly height: number };
@@ -543,7 +567,8 @@ function frontRect(
 /**
  * Where the toast and the goal cue stand. Beside the front mirror they take the cockpit's top between the
  * left mirror and the front mirror. Without one they take the span between the class II mirrors where the
- * stack fits there (`messagesFit`), else the top-down pane, below the finish button and clear of the lever.
+ * stack fits there (`messagesFit`), else the top-down pane, below the finish button and clear of the lever;
+ * with no such pane they keep the span between the mirrors.
  */
 export function messageColumn(views: ViewRects, safeInsets?: Insets): Rect {
   const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
@@ -556,8 +581,9 @@ export function messageColumn(views: ViewRects, safeInsets?: Insets): Rect {
   const cssHeight = Math.max(cockpit.y + cockpit.height, topDown.y + topDown.height);
   const controls = controlsHeight(cssWidth, cssHeight, insets);
   if (
-    between.width - insets.left >= MIN_MESSAGE_WIDTH &&
-    messagesFit(cockpit, between, cssWidth, cssHeight, controls, insets)
+    !hasTopDown(views) ||
+    (between.width - insets.left >= MIN_MESSAGE_WIDTH &&
+      messagesFit(cockpit, between, cssWidth, cssHeight, controls, insets))
   ) {
     return { ...cockpit, ...between };
   }

@@ -8,6 +8,7 @@ import {
   computeViewports,
   controlsHeight,
   FRONT_ASPECT,
+  hasTopDown,
   messageColumn,
   MESSAGE_KEYS,
   MIN_FRONT_WIDTH,
@@ -841,5 +842,52 @@ describe('computeViewports class V mirror', () => {
     expect(views(1920, 1080, ALL).close).not.toBeNull();
     expect(views(1280, 720, ALL).close).toBeNull();
     expect(views(1366, 768, ALL).close).toBeNull();
+  });
+});
+
+describe('computeViewports mirror-only drive', () => {
+  const ALL = { front: true, wide: true, close: true };
+  const landscape: readonly (readonly [number, number])[] = [
+    [1280, 585],
+    [1280, 720],
+    [1366, 768],
+    [1536, 729],
+    [1920, 1080],
+  ];
+  const mirrorsOnly = (w: number, h: number) =>
+    computeViewports(w, h, 'mirrors', null, NO_INSETS, undefined, null, ALL);
+
+  it('gives the cockpit the whole window and the top-down view no area', () => {
+    for (const [w, h] of [...landscape, [768, 1024] as const]) {
+      const views = mirrorsOnly(w, h);
+      expect(views.cockpit, `${w}x${h}`).toEqual({ x: 0, y: 0, width: w, height: h });
+      expect(hasTopDown(views), `${w}x${h}`).toBe(false);
+      expect(hasTopDown(computeViewports(w, h, 'drive', null, NO_INSETS)), `${w}x${h}`).toBe(true);
+    }
+  });
+
+  it('keeps the mirrors below the pause button and left of the lever column in landscape', () => {
+    const target = 44;
+    for (const [w, h] of landscape) {
+      const { mirrorLeft, mirrorRight } = mirrorsOnly(w, h);
+      if (mirrorLeft === null || mirrorRight === null) throw new Error('mirrors');
+      for (const m of [mirrorLeft, mirrorRight]) {
+        expect(m.y, `${w}x${h}`).toBeGreaterThanOrEqual(16 + target);
+      }
+      expect(mirrorRight.x + mirrorRight.width, `${w}x${h}`).toBeLessThanOrEqual(
+        w - 16 - 1.5 * target,
+      );
+    }
+  });
+
+  it('keeps the toast column between the mirrors, which have no pane to fall back to', () => {
+    for (const [w, h] of landscape) {
+      const views = mirrorsOnly(w, h);
+      const { mirrorLeft, mirrorRight, front } = views;
+      if (mirrorLeft === null || mirrorRight === null) throw new Error('mirrors');
+      const column = messageColumn(views, NO_INSETS);
+      expect(column.x, `${w}x${h}`).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
+      expect(column.x + column.width, `${w}x${h}`).toBeLessThanOrEqual((front ?? mirrorRight).x);
+    }
   });
 });

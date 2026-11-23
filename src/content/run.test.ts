@@ -16,8 +16,9 @@ const ctl = (c: Partial<ControlVector>): ControlVector => ({
 });
 
 const FIXED_LOG = {
-  version: 2,
+  version: 3,
   lighting: 'day',
+  mirrorsOnly: false,
   steps: 2400,
   changes: [
     { step: 0, control: ctl({ steer: 0.4, lever: 0.8 }) },
@@ -66,9 +67,11 @@ function pinned(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' | 'reverse
     false,
     0,
     log.lighting,
+    log.mirrorsOnly,
   );
-  // Lighting is outside the simulation: the digest pins behaviour, not what a run is tagged with.
-  return { SIM_REVISION, digest: fnv(JSON.stringify([final, { ...result, lighting: undefined }])) };
+  // Lighting and the view are outside the simulation: the digest pins behaviour, not what a run is tagged with.
+  const tags = { lighting: undefined, mirrorsOnly: undefined };
+  return { SIM_REVISION, digest: fnv(JSON.stringify([final, { ...result, ...tags }])) };
 }
 
 describe('run behaviour pin', () => {

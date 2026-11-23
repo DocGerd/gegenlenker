@@ -47,6 +47,8 @@ export type RunResult = {
   readonly assisted: boolean;
   /** Bests rank apart per lighting, like `assisted`. */
   readonly lighting: LightingMode;
+  /** Driven without the top-down view; ranks apart too. */
+  readonly mirrorsOnly: boolean;
   /** The exercise has a waypoint the run never came within range of. */
   readonly waypointMissed: boolean;
   readonly positionError: number;
@@ -58,12 +60,13 @@ export type RunResult = {
 };
 export type BestResults = Readonly<Record<string, RunResult>>;
 export type InputLog = {
-  readonly version: 2;
+  readonly version: 3;
   readonly layoutId: LayoutId;
   readonly exerciseId: ExerciseId | null;
   readonly truckId: TruckId;
   readonly trailerId: TrailerId;
   readonly lighting: LightingMode;
+  readonly mirrorsOnly: boolean;
   readonly steps: number;
   readonly changes: readonly InputChange[];
 };

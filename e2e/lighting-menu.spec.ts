@@ -87,6 +87,7 @@ test('the menu shows the bests of the chosen time of day, and the choice is save
     reached: true,
     assisted: false,
     lighting: 'night',
+    mirrorsOnly: false,
     waypointMissed: false,
     positionError: 0.1,
     angleError: 0.01,
@@ -96,7 +97,7 @@ test('the menu shows the bests of the chosen time of day, and the choice is save
     time: 42.5,
   };
   const stored = serializeBestResults(
-    { [bestKey(exercise.id, truckId, trailerId, false, 'night')]: night },
+    { [bestKey(exercise.id, truckId, trailerId, false, 'night', false)]: night },
     (ids) => resolveRun({ ...ids, layoutId: exerciseById(ids.exerciseId).layout }).fingerprint,
   );
   await page.addInitScript(
