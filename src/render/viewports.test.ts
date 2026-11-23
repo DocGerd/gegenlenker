@@ -528,7 +528,7 @@ describe('computeViewports front mirror', () => {
     expect([...MESSAGE_KEYS.toast].sort()).toEqual(
       keysOf(/^(blocked|contactAhead|limitAhead|selectGear)/),
     );
-    expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Outside)/));
+    expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Distance|Angle|Position)/));
   });
 
   it('puts the toast column between the class II mirrors without a front mirror, or else in the top-down pane', () => {

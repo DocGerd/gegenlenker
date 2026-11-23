@@ -13,6 +13,7 @@ import type { GoalCue } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
+import { goalCueTexts } from './goal-cue';
 import { messageColumn } from '../render/viewports';
 import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
 import { aidSwatch } from './aid-swatches';
@@ -77,16 +78,6 @@ const CONTACT_KEY: Record<BodyId, MessageKey> = {
   drawbar: 'blockedContactDrawbar',
   trailer: 'blockedContactTrailer',
 };
-
-function goalText(cue: GoalCue): string {
-  if (cue.state === 'inside') return t('goalInside');
-  const key = !cue.positionOk
-    ? cue.angleOk
-      ? 'goalOutsideAngleOk'
-      : 'goalOutsideAngleOff'
-    : 'goalOutsidePositionOk';
-  return t(key).replace('{dist}', formatNumber(cue.distance, 1));
-}
 
 function contactKey(contact: SimSnapshot['contact']): MessageKey {
   if (contact === null) return 'blockedContactTruck';
@@ -292,6 +283,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const gearEl = query(hud, 'gear', HTMLElement);
   const arrow = query(hud, 'targetArrow', HTMLElement);
   const goalCue = query(hud, 'goalCue', HTMLElement);
+  const goalDistance = document.createElement('span');
+  goalDistance.setAttribute('aria-hidden', 'true');
+  const goalState = document.createElement('span');
+  goalCue.append(goalDistance, goalState);
   if (opts.exercise !== null) {
     query(hud, 'goalTitle', HTMLElement).textContent = opts.exercise.title;
     query(hud, 'goalBrief', HTMLElement).textContent = opts.exercise.brief;
@@ -644,6 +639,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     );
   };
   let shownGoal = '';
+  let shownGoalState = '';
+  let shownDistance = '';
   let shownContacts = -1;
   let shownJackknifes = -1;
   let shownDirection = -1;
@@ -801,17 +798,27 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       arrow.style.transform = `translate(${x}px, ${y}px) rotate(${deg}deg)`;
     },
     setGoal(cue) {
-      const text = goalText(cue);
       if (cue.state === 'away') {
-        if (shownGoal === 'away') return;
-        shownGoal = 'away';
-      } else {
-        if (text === shownGoal) return;
-        shownGoal = text;
-        goalCue.textContent = text;
+        if (shownGoalState === 'away') return;
+        shownGoalState = 'away';
+        setHidden(goalCue, true);
+        return;
       }
-      goalCue.dataset['goal'] = cue.state;
-      setHidden(goalCue, cue.state === 'away');
+      const { state, distance } = goalCueTexts(cue);
+      // Only the state span is announced; rewriting it per frame would read the cue out continuously.
+      if (state !== shownGoal) {
+        shownGoal = state;
+        goalState.textContent = state;
+      }
+      if (distance !== shownDistance) {
+        shownDistance = distance;
+        goalDistance.textContent = distance;
+      }
+      if (cue.state !== shownGoalState) {
+        shownGoalState = cue.state;
+        goalCue.dataset['goal'] = cue.state;
+      }
+      setHidden(goalCue, false);
     },
     onAction(cb) {
       listeners.push(cb);

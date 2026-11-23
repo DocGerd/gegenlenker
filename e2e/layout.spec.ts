@@ -420,6 +420,18 @@ test('the two gauges stay equally wide in German', async ({ browser }) => {
   await context.close();
 });
 
+test('the goal cue keeps its distance out of the live region', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  // The distance changes every 0.1 m; only the state span may be announced.
+  const parts = page.locator(
+    '[data-hud="toastWrap"][aria-live="polite"] [data-hud="goalCue"] > span',
+  );
+  await expect(parts).toHaveCount(2);
+  await expect(parts.nth(0)).toHaveAttribute('aria-hidden', 'true');
+  await expect(parts.nth(1)).not.toHaveAttribute('aria-hidden', /.*/);
+});
+
 test('the key legend folds away and stays folded in the next run', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();

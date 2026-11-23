@@ -63,7 +63,7 @@ export const MESSAGE_KEYS = {
     'blockedCoupling',
     'blockedTurntable',
   ],
-  cue: ['goalInside', 'goalOutsideAngleOk', 'goalOutsideAngleOff', 'goalOutsidePositionOk'],
+  cue: ['goalInside', 'goalDistance', 'goalAngleOk', 'goalAngleOff', 'goalPositionOk'],
 } as const satisfies Record<string, readonly MessageKey[]>;
 /**
  * A word's width at 14 px Geist, medium: no less than any measured word of these messages has
@@ -442,15 +442,27 @@ export function wrapLines(text: string, width: number): number {
   return lines;
 }
 
-const mostLines = (keys: readonly MessageKey[], width: number): number =>
-  Math.max(...keys.flatMap((key) => [wrapLines(en[key], width), wrapLines(de[key], width)]));
+const mostLines = (texts: readonly string[], width: number): number =>
+  Math.max(...texts.map((text) => wrapLines(text, width)));
+
+const textsOf = (keys: readonly MessageKey[]): string[] =>
+  keys.flatMap((key) => [en[key], de[key]]);
+
+/** The goal cue's messages as shown: the distance leads the angle verdict. */
+const cueTexts = (): string[] =>
+  [en, de].flatMap((lang) => [
+    lang.goalInside,
+    lang.goalPositionOk,
+    `${lang.goalDistance} ${lang.goalAngleOk}`,
+    `${lang.goalDistance} ${lang.goalAngleOff}`,
+  ]);
 
 /** Heights of the longest toast and of the goal cue in a column `room` px wide (the left inset already taken off). */
 function messageHeights(room: number): { toast: number; cue: number } {
   // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
   return {
-    toast: mostLines(MESSAGE_KEYS.toast, room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX,
-    cue: mostLines(MESSAGE_KEYS.cue, room - 34) * MESSAGE_LINE + MESSAGE_BOX,
+    toast: mostLines(textsOf(MESSAGE_KEYS.toast), room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX,
+    cue: mostLines(cueTexts(), room - 34) * MESSAGE_LINE + MESSAGE_BOX,
   };
 }
 
