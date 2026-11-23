@@ -57,6 +57,8 @@ const ARROW_MARGIN = 24;
 const EXPOSE_FRAMING = new URLSearchParams(location.search).get('framing') === '1';
 
 const anyAid = (a: AidFlags): boolean => a.pivots || a.path || a.tracks || a.ghost;
+/** Every aid draws in the top-down view only, so a mirror-only run has none, whatever the settings. */
+const NO_AIDS: AidFlags = { pivots: false, path: false, tracks: false, ghost: false };
 
 type Frame = { -readonly [K in keyof RenderFrame]: RenderFrame[K] };
 
@@ -194,7 +196,7 @@ export function startDrive(
   renderer.setScene(layout, truck, trailer);
 
   const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
-  let aids: AidFlags = settings.aids;
+  let aids: AidFlags = mirrorsOnly ? NO_AIDS : settings.aids;
   let collapsed = settings.collapsed;
   let topDownLayout = settings.topDownLayout;
   let savedLayout = topDownLayout;
@@ -255,7 +257,7 @@ export function startDrive(
       exercise === null
         ? null
         : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
-    aids: settings.aids,
+    aids,
     topDown,
     chase: chaseViewAvailable(graphics),
     interior: interiorAvailable(graphics),
