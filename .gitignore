@@ -6,6 +6,7 @@ playwright-report/
 .claude/*
 !.claude/settings.json
 !.claude/hooks/
+!.claude/skills/
 */**/.claude/
 .superpowers/
 .env*

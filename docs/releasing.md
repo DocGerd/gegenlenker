@@ -26,7 +26,7 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 
 ## CI
 
-- PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, so the reviewed PR and the owner's deployment approval are the gate.
+- PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, and another run of the same commit also reports `check`. So `/release` merges a reviewed PR into `main` only once its own run passed the guard and `release:check`, and the owner's deployment approval is the last gate.
 - Changing a PR's base starts no run, and a re-run repeats the old one: after retargeting a PR, close and reopen it so CI checks it against the new base.
 - Pushes to `develop` and `main` run the gate without e2e, then deploy, each after the owner approves the `github-pages` deployment.
 - `main` builds and deploys production to the site root, then tags and publishes the release once the deploy succeeded. Its Pages artifact holds production alone, so a release needs nothing from `develop`, and `/uat/` is gone until the next `develop` deploy.
@@ -68,7 +68,7 @@ Without a version it derives one from `develop`'s pending entries the way `relea
 
 1. `pnpm release:cut`. Freeze: `release/X.Y.Z` takes only fixes, by PR, and a fix goes there only. `develop` stays open for the next version.
 2. On a `feature/*` branch from `origin/release/X.Y.Z`, `pnpm release:prepare X.Y.Z`, and a PR into `release/X.Y.Z` (rerun it when a fix adds a fragment).
-3. Merge or close every PR into `release/X.Y.Z` (its branch is deleted on merge), then PR `release/X.Y.Z` into `main`; CI runs the full gate and `release:check`. Merge it with a merge commit once reviewed and green.
+3. Merge or close every PR into `release/X.Y.Z` (merging deletes the branch, and GitHub retargets PRs still based on it to `main`), then PR `release/X.Y.Z` into `main`; CI runs the full gate and `release:check`. Merge it with a merge commit once reviewed and green.
 4. The owner approves the `github-pages` deployment. After the deploy, the release job tags `vX.Y.Z` and publishes the GitHub Release.
 5. `pnpm release:backmerge`, then merge the PR with a merge commit, then `pnpm release:backmerge --verify`.
 
