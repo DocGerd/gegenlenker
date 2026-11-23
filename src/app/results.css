@@ -156,6 +156,11 @@
   min-width: var(--size-target);
 }
 
+/* A pill, so the primary action reads apart from the filled selected options. */
+.replay-bar .app-button-primary {
+  border-radius: var(--radius-pill);
+}
+
 .replay-bar .app-button:disabled {
   opacity: 0.4;
 }

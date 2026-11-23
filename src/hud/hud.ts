@@ -50,7 +50,10 @@ export type Hud = {
   setViewChanged(changed: boolean): void;
   /** The divider between the views: its value, range and orientation. */
   setSplit(split: TopDownSplit): void;
-  /** The bottom edge of the top view's panels, px below its top, were it `paneWidth` wide; the layout is left as it was. */
+  /**
+   * The bottom edge of the top view's panels, px below its top, were it `paneWidth` wide; the layout is left as it was.
+   * `Infinity` where a row sticks out sideways at that width: no pane height holds it, so `topDownSplit` takes it as not fitting.
+   */
   panelsBottom(paneWidth: number): number;
   /** Points the arrow at a target beyond the top-down view; null hides it. Positions are stage CSS px. */
   setTargetArrow(arrow: { x: number; y: number; angle: number } | null): void;
@@ -174,12 +177,26 @@ const SPLIT_ICON =
 const SPLIT_STEP = 0.02;
 const percent = (share: number): number => Math.round(share * 100);
 
-const button = (attr: string, value: string, key: MessageKey): string =>
-  `<button type="button" class="hud-toggle" ${attr}="${value}" data-i18n="${key}"></button>`;
+const CHECK_ICON =
+  '<svg class="hud-check" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l3 3 5-6" /></svg>';
 
-/** The meaning in the legend list is the toggle's description. */
+/** One segment of the joined view control. */
+const segmentButton = (view: string, key: MessageKey): string =>
+  `<button type="button" class="hud-toggle hud-segment" data-view="${view}" data-i18n="${key}"></button>`;
+
+/** The chase segment exists only where the preset offers that view, so the last one drawn closes the control. */
+const viewSegments = (chase: boolean): string =>
+  VIEWS.filter(([v]) => chase || v !== 'chase')
+    .map(([v, k]) => segmentButton(v, k))
+    .join('');
+
+/** A folding panel's chip; the ring fills with a tick while the panel shows. */
+const panelButton = (panel: string, key: MessageKey): string =>
+  `<button type="button" class="hud-toggle hud-chip" data-panel="${panel}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
+
+/** The meaning in the legend list is the toggle's description; the ring fills with a tick while the aid is on. */
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
-  `<button type="button" class="hud-toggle" data-aid="${aid}" aria-describedby="aid-meaning-${aid}" data-i18n="${key}"></button>`;
+  `<button type="button" class="hud-toggle hud-chip" data-aid="${aid}" aria-describedby="aid-meaning-${aid}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
 const legendRow = ({ term, desc, viewOnly }: LegendRow): string => {
   const cls = viewOnly ? 'mono hud-legend-view' : 'mono';
@@ -233,13 +250,13 @@ const MARKUP = (
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
-        <div class="hud-group" role="group" aria-label="${t('labelView')}">${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
+        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
       <div class="hud-aids" data-hud="aids" data-chrome>
         <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
       </div>
     </div>
-    <div class="hud-info">
+    <div class="hud-info" data-hud="info">
       <div class="hud-gauges" data-hud="gauges" data-chrome></div>
       ${
         mode === 'exercise'
@@ -316,6 +333,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const toastWrap = query(hud, 'toastWrap', HTMLElement);
   const toast = query(hud, 'toast', HTMLElement);
   const topDown = query(hud, 'topDown', HTMLElement);
+  const infoRow = query(hud, 'info', HTMLElement);
   const gaugeBox = query(hud, 'gauges', HTMLElement);
   const speed = query(hud, 'speed', HTMLElement);
   const gearEl = query(hud, 'gear', HTMLElement);
@@ -360,9 +378,6 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let view = opts.topDown;
   const aids = { ...opts.aids };
   const viewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
-  if (!opts.chase) {
-    for (const b of viewButtons) if (b.dataset['view'] === 'chase') setHidden(b, true);
-  }
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
   const panelButtons = [...hud.querySelectorAll<HTMLElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
@@ -922,8 +937,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
           bottom = Math.max(bottom, child.getBoundingClientRect().bottom);
         }
       }
+      // A counter row that cannot wrap narrower overflows into the lever column instead of growing taller.
+      const infoStyle = getComputedStyle(infoRow);
+      const infoRight =
+        infoRow.getBoundingClientRect().right - (parseFloat(infoStyle.paddingRight) || 0);
+      const overflows = [...infoRow.children].some(
+        (el) => el.getBoundingClientRect().right > infoRight + 0.5,
+      );
       topDown.style.width = previous;
-      return bottom - top;
+      return overflows ? Infinity : bottom - top;
     },
     legendBox() {
       const r = legend.getBoundingClientRect();
