@@ -905,9 +905,7 @@ for (const size of [
       browser,
     }) => {
       test.slow();
-      // Portrait stands for the tablet: touch, so no key legend.
-      const touch = size.width < size.height ? { hasTouch: true, isMobile: true } : {};
-      const context = await browser.newContext({ locale, viewport: size, ...touch });
+      const context = await browser.newContext({ locale, viewport: size });
       try {
         const page = await context.newPage();
         await page.addInitScript((key) => {
@@ -918,6 +916,8 @@ for (const size of [
         await page.goto('./');
         await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
         await hudReady(page, { mirrorsOnly: true });
+        // Portrait has no room for the key legend beside the brief.
+        if (size.width < size.height) await expect(page.locator('.hud-legend')).toBeHidden();
         await expectMirrorsClearControls(page, size);
         await expectMirrorsOnlyClear(page, size);
         await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);

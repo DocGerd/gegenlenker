@@ -761,8 +761,12 @@
   margin: 0 0 0 auto;
 }
 
-/* Portrait leaves the band too narrow between gears and lever: the counters wrap below the readouts. */
+/* Portrait leaves the band too narrow between gears and lever: the counters wrap below the readouts, and the brief takes the key legend's place, so there is no legend. */
 @media not (min-aspect-ratio: 1/1) {
+  .hud[data-mirrors] .hud-legend {
+    display: none;
+  }
+
   .hud[data-mirrors] .hud-band {
     flex-wrap: wrap;
     align-content: center;
