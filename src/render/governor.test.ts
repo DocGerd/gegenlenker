@@ -282,26 +282,23 @@ describe('frame timer', () => {
       it.each([
         [20, 0.1, 0.85],
         [28, 0.2, 0.7],
-      ])(
-        'keeps the level that fits %i ms of fill with %d missed frames',
-        (fullMs, rate, fits) => {
-          const runs = Array.from({ length: SEEDS }, (_, i) => {
-            const timer = createFrameTimer();
-            const miss = seeded(i + 1);
-            let now = 1000;
-            let above = 0;
-            while (now - 1000 < SECONDS * 1000) {
-              // Unquantised: the fill time itself, one refresh longer on a miss.
-              const ms = Math.max(fillBound(fullMs)(timer.scale()), V) + (miss() < rate ? V : 0);
-              if (now - 1000 >= SETTLED_MS && timer.scale() > fits + 1e-9) above += ms;
-              now += ms;
-              timer.frame(now);
-            }
-            return { seed: i + 1, end: timer.scale(), above: above / (now - 1000 - SETTLED_MS) };
-          });
-          expect(runs.filter((r) => Math.abs(r.end - fits) > 1e-9 || r.above > 0.05)).toEqual([]);
-        },
-      );
+      ])('keeps the level that fits %i ms of fill with %d missed frames', (fullMs, rate, fits) => {
+        const runs = Array.from({ length: SEEDS }, (_, i) => {
+          const timer = createFrameTimer();
+          const miss = seeded(i + 1);
+          let now = 1000;
+          let above = 0;
+          while (now - 1000 < SECONDS * 1000) {
+            // Unquantised: the fill time itself, one refresh longer on a miss.
+            const ms = Math.max(fillBound(fullMs)(timer.scale()), V) + (miss() < rate ? V : 0);
+            if (now - 1000 >= SETTLED_MS && timer.scale() > fits + 1e-9) above += ms;
+            now += ms;
+            timer.frame(now);
+          }
+          return { seed: i + 1, end: timer.scale(), above: above / (now - 1000 - SETTLED_MS) };
+        });
+        expect(runs.filter((r) => Math.abs(r.end - fits) > 1e-9 || r.above > 0.05)).toEqual([]);
+      });
     });
 
     it.each([
