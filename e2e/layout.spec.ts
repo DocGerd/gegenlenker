@@ -556,8 +556,9 @@ test('below 700 px the brief collapses on the first drive input and the key lege
   await page.waitForTimeout(1000);
   await expect(list).toBeVisible();
   await expect(brief).toBeVisible();
-  await page.keyboard.press('a');
+  await page.keyboard.down('a');
   await expect(list).toBeHidden();
+  await page.keyboard.up('a');
   await expect(keysToggle).toHaveAttribute('aria-expanded', 'false');
 });
 
