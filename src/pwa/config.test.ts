@@ -162,8 +162,11 @@ describe('channels', () => {
     const deny = options('production').workbox?.navigateFallbackDenylist ?? [];
     expect(deny.some((re) => re.test('/gegenlenker/uat/'))).toBe(true);
     expect(deny.some((re) => re.test('/gegenlenker/uat/index.html'))).toBe(true);
+    expect(deny.some((re) => re.test('/gegenlenker/uat'))).toBe(true);
+    expect(deny.some((re) => re.test('/gegenlenker/uat?from=menu'))).toBe(true);
     expect(deny.some((re) => re.test('/gegenlenker/'))).toBe(false);
     expect(deny.some((re) => re.test('/gegenlenker/ukat/'))).toBe(false);
+    expect(deny.some((re) => re.test('/gegenlenker/uatx'))).toBe(false);
     expect(matches('production', `${origin}/gegenlenker/${texture}`)).toBe(true);
     expect(matches('production', `${origin}/gegenlenker/uat/${texture}`)).toBe(false);
     expect(matches('uat', `${origin}/gegenlenker/uat/${texture}`)).toBe(true);

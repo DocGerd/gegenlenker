@@ -3,10 +3,15 @@ export type Channel = 'production' | 'uat';
 /** The UAT build lives in this subdirectory of the production base. */
 export const UAT_DIR = 'uat/';
 
-/** Throws when `deployChannel` is not a channel, or UAT is built for a base that is not its own subdirectory. */
+/** Throws unless `deployChannel` is a channel and the base ends in the UAT subdirectory exactly when it is `uat`. */
 export function resolveChannel(deployChannel: string | undefined, base: string): Channel {
-  if (deployChannel === undefined || deployChannel === '' || deployChannel === 'production')
+  if (deployChannel === undefined || deployChannel === '' || deployChannel === 'production') {
+    // Production names on a UAT base would share the production keys and runtime cache; Vite
+    // appends a missing trailing slash, so the bare directory counts too.
+    if (base.replace(/\/?$/, '/').endsWith(`/${UAT_DIR}`))
+      throw new Error(`BASE_PATH "${base}" is a UAT base: set DEPLOY_CHANNEL=uat`);
     return 'production';
+  }
   if (deployChannel !== 'uat')
     throw new Error(`DEPLOY_CHANNEL must be "uat", got "${deployChannel}"`);
   if (!base.endsWith(`/${UAT_DIR}`))

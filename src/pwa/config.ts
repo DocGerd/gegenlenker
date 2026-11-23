@@ -104,8 +104,11 @@ export function pwaOptions(
       ],
       maximumFileSizeToCacheInBytes: MAX_PRECACHE_FILE_BYTES,
       navigateFallback: 'index.html',
-      // A navigation to the UAT build is not the production app shell.
-      navigateFallbackDenylist: uat ? [] : [new RegExp(`^${escapeRegExp(base)}${UAT_DIR}`)],
+      // A navigation to the UAT build is not the production app shell. Workbox tests pathname plus
+      // search, and `uat` without its slash is outside the UAT scope, so the production worker sees it.
+      navigateFallbackDenylist: uat
+        ? []
+        : [new RegExp(`^${escapeRegExp(base + UAT_DIR.slice(0, -1))}(?:[/?]|$)`)],
       // Workbox deletes every `-precache-` cache whose name contains the worker's scope, which
       // includes the UAT precache from the production worker. Revisions inside the one precache
       // are pruned on activate regardless; only a cache under an older Workbox name format is left.

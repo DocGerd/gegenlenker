@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { channelBuildState, channelNames, parseChannel, resolveChannel } from './channel';
 
 describe('resolveChannel', () => {
-  it('is production without a channel, whatever the base', () => {
+  it('is production without a channel, on any base but a UAT one', () => {
     expect(resolveChannel(undefined, '/gegenlenker/')).toBe('production');
     expect(resolveChannel('', '/')).toBe('production');
+    expect(() => resolveChannel(undefined, '/gegenlenker/uat/')).toThrow(/DEPLOY_CHANNEL=uat/);
+    expect(() => resolveChannel('production', '/gegenlenker/uat/')).toThrow(/DEPLOY_CHANNEL=uat/);
+    expect(() => resolveChannel(undefined, '/gegenlenker/uat')).toThrow(/DEPLOY_CHANNEL=uat/);
+    expect(resolveChannel(undefined, '/gegenlenker/uatx/')).toBe('production');
   });
 
   it('accepts UAT only on a base that is its own subdirectory', () => {
