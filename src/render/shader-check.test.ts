@@ -37,10 +37,7 @@ const device = (invalid: readonly string[] = [], pop?: () => Promise<null>): Dev
   };
 };
 
-const gpu = (
-  fragment: string | null,
-  options: { device?: Device } = {},
-): WebGPURenderer =>
+const gpu = (fragment: string | null, options: { device?: Device } = {}): WebGPURenderer =>
   ({
     debug: {
       getShaderAsync: () => {
@@ -109,7 +106,9 @@ describe('checkCompiled', () => {
 
 describe('verifyWgsl', () => {
   it('passes valid WGSL of both stages', async () => {
-    await expect(verifyWgsl(gpu(null, { device: device() }), [compiled()])).resolves.toBeUndefined();
+    await expect(
+      verifyWgsl(gpu(null, { device: device() }), [compiled()]),
+    ).resolves.toBeUndefined();
   });
 
   it('rejects when the device rejects either stage', async () => {
@@ -121,11 +120,14 @@ describe('verifyWgsl', () => {
 
   it.each([
     ['WebGL 2, which has no device', gpu(null)],
-    ['a lost device', (() => {
-      const g = gpu(null, { device: device(['var marker;']) });
-      markLost(g);
-      return g;
-    })()],
+    [
+      'a lost device',
+      (() => {
+        const g = gpu(null, { device: device(['var marker;']) });
+        markLost(g);
+        return g;
+      })(),
+    ],
   ])('checks nothing on %s', async (_, g) => {
     await expect(verifyWgsl(g, [compiled()])).resolves.toBeUndefined();
   });
@@ -136,6 +138,22 @@ describe('verifyWgsl', () => {
     const verdict = verifyWgsl(g, [compiled()]);
     await vi.advanceTimersByTimeAsync(WGSL_TIMEOUT_MS);
     await expect(verdict).resolves.toBeUndefined();
+  });
+
+  it('opens, fills and closes each scope in one synchronous turn, so no live frame error is captured', async () => {
+    const calls: string[] = [];
+    const recording: Device = {
+      pushErrorScope: () => calls.push('push'),
+      createShaderModule: () => calls.push('create'),
+      popErrorScope: () => {
+        calls.push('pop');
+        return Promise.resolve(null);
+      },
+    };
+    const pending = verifyWgsl(gpu(null, { device: recording }), [compiled(), compiled()]);
+    // nothing awaited yet: all four modules already went through push, create, pop
+    expect(calls).toEqual(Array.from({ length: 4 }, () => ['push', 'create', 'pop']).flat());
+    await pending;
   });
 
   it('is inconclusive when the scope cannot be popped', async () => {

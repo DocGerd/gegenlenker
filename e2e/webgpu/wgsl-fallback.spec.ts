@@ -22,7 +22,10 @@ function corruptModules(marker: string): void {
     descriptor: GPUShaderModuleDescriptor,
   ): GPUShaderModule {
     const broken = descriptor.code.includes(marker);
-    return create.call(this, broken ? { ...descriptor, code: `${descriptor.code}\n@@@` } : descriptor);
+    return create.call(
+      this,
+      broken ? { ...descriptor, code: `${descriptor.code}\n@@@` } : descriptor,
+    );
   };
 }
 

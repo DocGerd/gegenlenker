@@ -25,12 +25,7 @@ import atlasAUrl from './assets/yard-kit-atlas-a.ktx2?url';
 import atlasBUrl from './assets/yard-kit-atlas-b.ktx2?url';
 import leavesUrl from './assets/yard-kit-leaves.ktx2?url';
 import kitUrl from './assets/yard-kit.glb?url';
-import {
-  GRADE_SHADER_MARKER,
-  gradeDisabled,
-  type GradeSample,
-  setGraded,
-} from './grade';
+import { GRADE_SHADER_MARKER, gradeDisabled, type GradeSample, setGraded } from './grade';
 import type { Look } from './look';
 import {
   COCKPIT_LAYERS,

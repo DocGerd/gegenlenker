@@ -11,12 +11,7 @@ import {
 import { float, vertexColor } from 'three/tsl';
 import { MeshStandardNodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import { GRADE, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
-import {
-  buildSerially,
-  compileShader,
-  wgslAccepted,
-  type Compiled,
-} from './shader-check';
+import { buildSerially, compileShader, wgslAccepted, type Compiled } from './shader-check';
 import { gpuLost } from './seams';
 import { VehicleLightingModel } from './vehicle-pbr';
 
@@ -56,7 +51,10 @@ export class InteriorNodeMaterial extends MeshStandardNodeMaterial {
  * whether it compiled. three swaps a material whose node graph throws for a plain one and only logs
  * it, so the built shader must carry the marker.
  */
-export async function interiorShaderCompiles(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+export async function interiorShaderCompiles(
+  gpu: WebGPURenderer,
+  envMap: Texture,
+): Promise<boolean> {
   const built = await buildSerially(gpu, () => buildInteriorShader(gpu, envMap));
   return built !== null && (await wgslAccepted(gpu, built, 'Interior shader'));
 }

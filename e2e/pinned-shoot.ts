@@ -46,7 +46,7 @@ export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
 /** How long a web-first wait for a High first-load marker may take on software GL, against the 30 s default. */
 export const HIGH_WAIT_MS = 60_000;
 
-export const SETTINGS_KEY ='gegenlenker.settings.v1';
+export const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const FRAME_MS = 16;
 /** Frames stepped after the scene is ready, so every lazily built resource is in place. */
 const SETTLE_FRAMES = 30;
@@ -92,10 +92,7 @@ const BACKEND_READY = (v: string): boolean => v !== '';
 export type MarkerChecks = Readonly<Record<string, (value: string) => boolean>>;
 
 /** The `<html>` markers whose values say `preset`'s asynchronous attachments are in place; a shot before they land would differ. */
-export function readyMarkers(
-  preset: Preset,
-  overrides: MarkerChecks = {},
-): MarkerChecks {
+export function readyMarkers(preset: Preset, overrides: MarkerChecks = {}): MarkerChecks {
   const flags = QUALITY_FLAGS[preset];
   const drawn = Object.values<Attachment>(ATTACHMENTS).filter((a) =>
     a.flags.every((f) => flags[f]),

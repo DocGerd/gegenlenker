@@ -21,12 +21,7 @@ import concreteAlbedoUrl from './assets/concrete-albedo.ktx2?url';
 import concretePackedUrl from './assets/concrete-packed.ktx2?url';
 import paversAlbedoUrl from './assets/pavers-albedo.ktx2?url';
 import paversPackedUrl from './assets/pavers-packed.ktx2?url';
-import {
-  GRADE_SHADER_MARKER,
-  gradeDisabled,
-  type GradeSample,
-  setGraded,
-} from './grade';
+import { GRADE_SHADER_MARKER, gradeDisabled, type GradeSample, setGraded } from './grade';
 import { sampleLampLights } from './lamp-light';
 import { createGroundPbrMaterial, GROUND_PBR_MARKER } from './ground-pbr-material';
 import {

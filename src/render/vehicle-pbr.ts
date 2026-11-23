@@ -23,12 +23,7 @@ import {
 import type { LightingMode, ScenePalette } from '../contracts/render';
 import { createSceneSky, domeGround } from './scene-sky';
 import { GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
-import {
-  buildSerially,
-  compileShader,
-  wgslAccepted,
-  type Compiled,
-} from './shader-check';
+import { buildSerially, compileShader, wgslAccepted, type Compiled } from './shader-check';
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
@@ -177,7 +172,10 @@ export function replaceMaterial(
  * material whose node graph throws for a plain one and only logs it, so the built shader must carry
  * the marker.
  */
-export async function vehicleShaderCompiles(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+export async function vehicleShaderCompiles(
+  gpu: WebGPURenderer,
+  envMap: Texture,
+): Promise<boolean> {
   const built = await buildSerially(gpu, () => buildVehicleShader(gpu, envMap));
   return built !== null && (await wgslAccepted(gpu, built, 'Vehicle reflection shader'));
 }

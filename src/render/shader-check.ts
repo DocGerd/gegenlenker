@@ -103,7 +103,9 @@ export async function verifyWgsl(gpu: WebGPURenderer, built: readonly Compiled[]
   if (device === undefined || gpuLost(gpu)) return;
   const sources = built.flatMap(({ vertex, fragment }) => [vertex, fragment]);
   const errors = await Promise.all(
-    sources.map(async (code) => (code === null || code === '' ? null : await wgslError(device, code))),
+    sources.map(async (code) =>
+      code === null || code === '' ? null : await wgslError(device, code),
+    ),
   );
   const error = errors.find((message): message is string => message !== null);
   if (error !== undefined) throw new ShaderRejectedError(`the GPU rejected the WGSL: ${error}`);
