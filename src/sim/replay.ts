@@ -11,7 +11,7 @@ export const MAX_REPLAY_STEPS = 72_000;
 
 export type RunIds = Pick<InputLog, 'layoutId' | 'exerciseId' | 'truckId' | 'trailerId'>;
 
-export type RunMeta = RunIds & Pick<InputLog, 'lighting'>;
+export type RunMeta = RunIds & Pick<InputLog, 'lighting' | 'mirrorsOnly'>;
 
 export type InputRecorder = {
   record(step: number, control: ControlVector): void;
@@ -40,7 +40,7 @@ export function createInputRecorder(): InputRecorder {
     },
     finish(meta, steps) {
       return {
-        version: 2,
+        version: 3,
         ...meta,
         steps: Math.min(steps, MAX_REPLAY_STEPS),
         changes: [...changes],
@@ -147,11 +147,14 @@ export function parseInputLog(
   } catch {
     return null;
   }
-  if (!isRecord(data) || (data.version !== 1 && data.version !== 2)) return null;
+  if (!isRecord(data) || (data.version !== 1 && data.version !== 2 && data.version !== 3)) return null;
   const { layoutId, exerciseId, truckId, trailerId, steps, changes } = data;
   // Version 1 predates lighting: every such run was drawn by day.
   const lighting = data.version === 1 ? DEFAULT_LIGHTING : data.lighting;
   if (!isMember(LIGHTING_MODES, lighting)) return null;
+  // Versions 1 and 2 predate mirror-only runs: every such run had the top-down view.
+  const mirrorsOnly = data.version === 3 ? data.mirrorsOnly : false;
+  if (typeof mirrorsOnly !== 'boolean') return null;
   if (!isMember(LAYOUT_IDS, layoutId) || !isMember(TRUCK_IDS, truckId)) return null;
   if (!isMember(TRAILER_IDS, trailerId) || !isStep(steps) || !Array.isArray(changes)) return null;
   if (exerciseId !== null && !isMember(EXERCISE_IDS, exerciseId)) return null;
@@ -165,5 +168,15 @@ export function parseInputLog(
     if (prev !== undefined && change.step <= prev.step) return null;
     parsed.push({ step: change.step, control });
   }
-  return { version: 2, layoutId, exerciseId, truckId, trailerId, lighting, steps, changes: parsed };
+  return {
+    version: 3,
+    layoutId,
+    exerciseId,
+    truckId,
+    trailerId,
+    lighting,
+    mirrorsOnly,
+    steps,
+    changes: parsed,
+  };
 }

@@ -14,6 +14,7 @@ const defaults: Settings = {
   graphics: 'balanced',
   lighting: 'day',
   wideMirrors: true,
+  mirrorsOnly: false,
 };
 
 const stored: Settings = {
@@ -29,6 +30,7 @@ const stored: Settings = {
   graphics: 'low',
   lighting: 'night',
   wideMirrors: false,
+  mirrorsOnly: true,
 };
 
 describe('loadSettings', () => {

@@ -50,6 +50,7 @@ import {
 import { readScenePalette } from './palette';
 import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
+import { hasTopDown } from './viewports';
 import {
   AIDS_LAYER,
   enableLayers,
@@ -588,10 +589,14 @@ export function createThreeSceneRenderer(
         gl.render(b.scene, cockpitCamera);
       }
 
-      out.place(topDown, pixelRatio);
+      // A mirror-only drive has no top-down pane: the cockpit took the whole canvas.
+      const hasPane = hasTopDown(views);
+      if (hasPane) out.place(topDown, pixelRatio);
       const chaseWasShown = chaseShown;
-      chaseShown = frame.topDown === 'chase';
-      if (chaseShown) {
+      chaseShown = hasPane && frame.topDown === 'chase';
+      if (!hasPane) {
+        topDownRect = null;
+      } else if (chaseShown) {
         const view = frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW;
         // a reset or a switch to the view is a cut: the eye starts where the view puts it
         if (!chaseWasShown || (isDefault(view) && !isDefault(chaseView))) chaseArm.cut();

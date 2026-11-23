@@ -28,7 +28,7 @@ const meta = {
   truckId: 'man-le-18-280',
   trailerId: 'hueffermann-hpa-24-81-l',
 } as const;
-const recorded = { ...meta, lighting: 'day' } as const;
+const recorded = { ...meta, lighting: 'day', mirrorsOnly: false } as const;
 
 const ctl = (c: Partial<ControlVector>): ControlVector => ({
   steer: 0,
@@ -117,7 +117,7 @@ describe('replay', () => {
 
   it('rejects malformed logs', () => {
     const valid: InputLog = {
-      version: 2,
+      version: 3,
       ...recorded,
       steps: 10,
       changes: [
@@ -131,9 +131,11 @@ describe('replay', () => {
     expect(parse(null)).toBeNull();
     expect(parse('[]')).toBeNull();
     expect(parse('not json')).toBeNull();
-    expect(parse(json({ ...valid, version: 3 }))).toBeNull();
+    expect(parse(json({ ...valid, version: 4 }))).toBeNull();
     expect(parse(json({ ...valid, lighting: 'dusk' }))).toBeNull();
     expect(parse(json({ ...valid, lighting: undefined }))).toBeNull();
+    expect(parse(json({ ...valid, mirrorsOnly: undefined }))).toBeNull();
+    expect(parse(json({ ...valid, mirrorsOnly: 'yes' }))).toBeNull();
     expect(parse(json({ ...valid, truckId: 'scania-r' }))).toBeNull();
     expect(parse(json({ ...valid, steps: -1 }))).toBeNull();
     expect(parse(json({ ...valid, changes: [...valid.changes].reverse() }))).toBeNull();
@@ -146,7 +148,14 @@ describe('replay', () => {
 
   it('round-trips lighting and reads a version 1 log as day', () => {
     const fingerprint = (): string => 'data-a';
-    const night: InputLog = { version: 2, ...meta, lighting: 'night', steps: 10, changes: [] };
+    const night: InputLog = {
+      version: 3,
+      ...meta,
+      lighting: 'night',
+      mirrorsOnly: false,
+      steps: 10,
+      changes: [],
+    };
     expect(parseInputLog(serializeInputLog(night, fingerprint), fingerprint)).toEqual(night);
     const v1 = JSON.stringify({
       version: 1,
@@ -167,8 +176,24 @@ describe('replay', () => {
     expect(parseInputLog(v1Night, fingerprint)?.lighting).toBe('day');
   });
 
+  it('round-trips a mirror-only run and reads an older log as driven with the top view', () => {
+    const fingerprint = (): string => 'data-a';
+    const mirrors: InputLog = { version: 3, ...recorded, mirrorsOnly: true, steps: 10, changes: [] };
+    expect(parseInputLog(serializeInputLog(mirrors, fingerprint), fingerprint)).toEqual(mirrors);
+    const v2 = JSON.stringify({
+      version: 2,
+      ...meta,
+      lighting: 'day',
+      mirrorsOnly: true,
+      steps: 10,
+      changes: [],
+      fingerprint: 'data-a',
+    });
+    expect(parseInputLog(v2, fingerprint)).toEqual({ ...mirrors, mirrorsOnly: false });
+  });
+
   it('accepts a log only for the data that produced it', () => {
-    const valid: InputLog = { version: 2, ...recorded, steps: 10, changes: [] };
+    const valid: InputLog = { version: 3, ...recorded, steps: 10, changes: [] };
     const seen: unknown[] = [];
     const fingerprint = (ids: unknown): string => {
       seen.push(ids);

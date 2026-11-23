@@ -75,6 +75,7 @@ const MARKUP = `
       <label class="menu-field"><span class="menu-label" data-i18n="truck"></span><select class="menu-select" data-menu="truck"></select></label>
       <label class="menu-field"><span class="menu-label" data-i18n="trailer"></span><select class="menu-select" data-menu="trailer"></select></label>
       <label class="menu-field"><span class="menu-label" data-i18n="lighting"></span><select class="menu-select" data-menu="lighting"></select></label>
+      <label class="menu-field"><span class="menu-label" data-i18n="driveView"></span><select class="menu-select" data-menu="driveView"></select></label>
     </div>
     <p class="menu-note" data-i18n="estimateNote"></p>
   </section>
@@ -149,9 +150,11 @@ function replayContext(log: InputLog): string {
 
 /** The replay button's detail line; a night run says so, as it replays at night whatever the menu shows. */
 function replayLabel(log: InputLog): string {
-  return log.lighting === 'night'
-    ? `${replayContext(log)} · ${t('lightingNight')}`
-    : replayContext(log);
+  const notes = [
+    ...(log.lighting === 'night' ? [t('lightingNight')] : []),
+    ...(log.mirrorsOnly ? [t('driveViewMirrors')] : []),
+  ];
+  return [replayContext(log), ...notes].join(' · ');
 }
 
 function startButton(title: string, onClick: () => void, number?: number): HTMLButtonElement {
@@ -220,6 +223,7 @@ export function showMenu(
     const truck = query(container, 'truck', HTMLSelectElement);
     const trailer = query(container, 'trailer', HTMLSelectElement);
     const lighting = query(container, 'lighting', HTMLSelectElement);
+    const driveView = query(container, 'driveView', HTMLSelectElement);
     const language = query(container, 'language', HTMLSelectElement);
     const theme = query(container, 'theme', HTMLSelectElement);
     const graphics = query(container, 'graphics', HTMLSelectElement);
@@ -238,6 +242,14 @@ export function showMenu(
       lighting,
       LIGHTING_MODES.map((v) => [v, t(LIGHTING_NAME[v])]),
       settings.lighting,
+    );
+    fillSelect(
+      driveView,
+      [
+        ['standard', t('driveViewStandard')],
+        ['mirrors', t('driveViewMirrors')],
+      ],
+      settings.mirrorsOnly ? 'mirrors' : 'standard',
     );
     fillSelect(
       language,
@@ -310,11 +322,14 @@ export function showMenu(
     const refreshBest = (): void => {
       const best = bestResults();
       const { truckId, trailerId } = pair();
-      const { lighting } = currentSettings();
+      const { lighting, mirrorsOnly } = currentSettings();
       for (const { button, exercise } of exerciseButtons) {
         button.querySelectorAll('.menu-best').forEach((line) => line.remove());
         const lines = [false, true]
-          .map((assisted) => best[bestKey(exercise.id, truckId, trailerId, assisted, lighting)])
+          .map(
+            (assisted) =>
+              best[bestKey(exercise.id, truckId, trailerId, assisted, lighting, mirrorsOnly)],
+          )
           .filter((r) => r !== undefined)
           .map(bestLine);
         button.append(...(lines.length > 0 ? lines : [span('menu-best', t('noResult'))]));
@@ -339,6 +354,10 @@ export function showMenu(
         updateSettings({ lighting: mode });
         refreshBest();
       }
+    });
+    driveView.addEventListener('change', () => {
+      updateSettings({ mirrorsOnly: driveView.value === 'mirrors' });
+      refreshBest();
     });
     language.addEventListener('change', () => {
       const lang: Lang = language.value === 'en' ? 'en' : 'de';

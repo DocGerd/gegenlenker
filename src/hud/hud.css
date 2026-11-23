@@ -719,6 +719,30 @@
   transition: none;
 }
 
+/* Without the top-down pane the brief floats over the cockpit above its band, and the counters sit in the band, both left of the lever column. */
+.hud[data-mirrors] {
+  --hud-lever-clear: calc(
+    var(--space-4) + var(--safe-right) + var(--size-target) * 1.5 + var(--space-3)
+  );
+}
+
+.hud[data-mirrors] .hud-goal {
+  position: absolute;
+  right: var(--hud-lever-clear);
+  bottom: calc(var(--hud-band) + var(--space-3));
+  width: max-content;
+  max-width: min(24rem, calc(100% - var(--hud-inset) - var(--hud-lever-clear)));
+}
+
+.hud[data-mirrors] .hud-band {
+  padding-right: var(--hud-lever-clear);
+}
+
+.hud[data-mirrors] .hud-counters {
+  grid-template-columns: repeat(4, auto);
+  margin: 0 0 0 auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .hud-counters dd {
     transition: none;

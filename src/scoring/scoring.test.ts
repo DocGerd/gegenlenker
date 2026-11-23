@@ -66,6 +66,7 @@ function result(over: Partial<RunResult> = {}): RunResult {
     reached: true,
     assisted: false,
     lighting: 'day',
+    mirrorsOnly: false,
     waypointMissed: false,
     positionError: 0.1,
     angleError: 1,
@@ -81,11 +82,11 @@ describe('exerciseDone', () => {
   it('counts a reached result with any pair, ignoring other exercises and misses', () => {
     const other = result({ trailerId: 'hueffermann-hpa-24-81-l' });
     const best = {
-      [bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'day')]: result({
+      [bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'day', false)]: result({
         reached: false,
       }),
-      [bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l', false, 'day')]: other,
-      [bestKey('slalom', 'man-le-18-280', 'krone-azw-18', false, 'day')]: result({
+      [bestKey('reverse-bay', 'man-le-18-280', 'hueffermann-hpa-24-81-l', false, 'day', false)]: other,
+      [bestKey('slalom', 'man-le-18-280', 'krone-azw-18', false, 'day', false)]: result({
         exerciseId: 'slalom',
         reached: false,
       }),
@@ -96,7 +97,7 @@ describe('exerciseDone', () => {
   });
 });
 
-const KEY = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'day');
+const KEY = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'day', false);
 const INSIDE = { trailer: { x: 0, y: 0, heading: -0.1 } };
 
 describe('scoring', () => {
@@ -173,7 +174,7 @@ describe('scoring', () => {
       true,
       false,
       0,
-      'day',
+      'day', false,
     );
     expect(r).toMatchObject({
       exerciseId: 'reverse-bay',
@@ -198,7 +199,7 @@ describe('scoring', () => {
         true,
         false,
         0,
-        'day',
+        'day', false,
       ).reached,
     ).toBe(true);
   });
@@ -213,7 +214,7 @@ describe('scoring', () => {
       true,
       false,
       0,
-      'night',
+      'night', false,
     );
     expect(r.lighting).toBe('night');
   });
@@ -228,7 +229,7 @@ describe('scoring', () => {
       true,
       false,
       10,
-      'day',
+      'day', false,
     );
     expect(r.time).toBe(32.5);
   });
@@ -255,7 +256,7 @@ describe('scoring', () => {
       tracker.waypointVisited(),
       false,
       0,
-      'day',
+      'day', false,
     );
     expect(result.reached).toBe(false);
     expect(result.waypointMissed).toBe(true);
@@ -264,7 +265,7 @@ describe('scoring', () => {
   it('does not flag a waypoint missed when the exercise has none or it was visited', () => {
     const s = snap(INSIDE);
     expect(
-      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false, false, 0, 'day')
+      runResult(s, exercise(), 'man-le-18-280', 'krone-azw-18', false, false, false, 0, 'day', false)
         .waypointMissed,
     ).toBe(false);
     expect(
@@ -277,7 +278,7 @@ describe('scoring', () => {
         true,
         false,
         0,
-        'day',
+        'day', false,
       ).waypointMissed,
     ).toBe(false);
   });
@@ -361,6 +362,7 @@ describe('best results', () => {
       'hueffermann-hpa-24-81-l',
       false,
       'day',
+      false,
     );
     const raw = JSON.stringify({
       version: 2,
@@ -376,14 +378,14 @@ describe('best results', () => {
     expect(assisted.previous).toBeNull();
     expect(assisted.best[KEY]).toEqual(result({ time: 30 }));
     expect(
-      assisted.best[bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', true, 'day')]?.time,
+      assisted.best[bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', true, 'day', false)]?.time,
     ).toBe(10);
     expect(recordBest(assisted.best, result({ time: 40 })).previous?.time).toBe(30);
   });
 
   it('ranks night runs apart and leaves day keys unsuffixed', () => {
     expect(KEY).toBe('reverse-bay/man-le-18-280/krone-azw-18/unaided');
-    const nightKey = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'night');
+    const nightKey = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'night', false);
     expect(nightKey).toBe(`${KEY}/night`);
     const day = recordBest({}, result({ time: 30 })).best;
     const night = recordBest(day, result({ lighting: 'night', time: 50 }));
@@ -394,9 +396,42 @@ describe('best results', () => {
     expect(exerciseDone({ [nightKey]: result({ lighting: 'night' }) }, 'reverse-bay')).toBe(true);
   });
 
+  it('ranks mirror-only runs apart and reads bests stored before them as with the top view', () => {
+    const mirrorsKey = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'day', true);
+    expect(mirrorsKey).toBe(`${KEY}/mirrors`);
+    expect(bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'night', true)).toBe(
+      `${KEY}/night/mirrors`,
+    );
+    const top = recordBest({}, result({ time: 30 })).best;
+    const mirrors = recordBest(top, result({ mirrorsOnly: true, time: 50 }));
+    expect(mirrors.isNewBest).toBe(true);
+    expect(mirrors.previous).toBeNull();
+    expect(mirrors.best[KEY]?.time).toBe(30);
+    expect(mirrors.best[mirrorsKey]?.time).toBe(50);
+
+    const fingerprint = (): string => 'f';
+    const old: Record<string, unknown> = { ...result() };
+    delete old['mirrorsOnly'];
+    const raw = (results: Record<string, unknown>): string =>
+      JSON.stringify({ version: 2, results });
+    expect(parseBestResults(raw({ [KEY]: { ...old, fingerprint: 'f' } }), fingerprint)).toEqual({
+      [KEY]: result(),
+    });
+    const stored = result({ mirrorsOnly: true });
+    expect(
+      parseBestResults(serializeBestResults({ [mirrorsKey]: stored }, fingerprint), fingerprint),
+    ).toEqual({ [mirrorsKey]: stored });
+    // A mirror-only result under the plain key, or a non-boolean flag, is dropped.
+    const stray = { ...stored, fingerprint: 'f' };
+    expect(parseBestResults(raw({ [KEY]: stray }), fingerprint)).toEqual({});
+    expect(parseBestResults(raw({ [mirrorsKey]: { ...stray, mirrorsOnly: 1 } }), fingerprint)).toEqual(
+      {},
+    );
+  });
+
   it('reads bests stored before lighting as day and keeps night ones', () => {
     const fingerprint = (): string => 'f';
-    const nightKey = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'night');
+    const nightKey = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'night', false);
     const old: Record<string, unknown> = { ...result() };
     delete old['lighting'];
     const raw = (results: Record<string, unknown>): string =>
@@ -429,7 +464,7 @@ describe('best results', () => {
 
   it('keeps a stored result only for the data that produced it', () => {
     const other = result({ trailerId: 'hueffermann-hpa-24-81-l' });
-    const otherKey = bestKey(other.exerciseId, other.truckId, other.trailerId, false, 'day');
+    const otherKey = bestKey(other.exerciseId, other.truckId, other.trailerId, false, 'day', false);
     const fingerprint = (r: Pick<RunResult, 'exerciseId' | 'truckId' | 'trailerId'>): string =>
       r.trailerId === 'krone-azw-18' ? 'data-a' : 'data-b';
     const raw = (results: Record<string, unknown>): string =>
@@ -502,12 +537,13 @@ describe('replay events', () => {
 describe('runStartStep', () => {
   const control = (gear: 'P' | 'D', lever: number) => ({ steer: 0, lever, brake: false, gear });
   const log = (changes: InputLog['changes']): InputLog => ({
-    version: 2,
+    version: 3,
     layoutId: 'depot',
     exerciseId: null,
     truckId: 'man-le-18-280',
     trailerId: 'krone-azw-18',
     lighting: 'day',
+    mirrorsOnly: false,
     steps: 500,
     changes,
   });
@@ -540,7 +576,7 @@ describe('runSeconds', () => {
           true,
           false,
           start * DT,
-          'day',
+          'day', false,
         ).time;
         expect(tenth(runSeconds(end, start))).toBe(tenth(scored));
       }

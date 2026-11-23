@@ -30,6 +30,8 @@ export type Settings = {
   readonly graphics: GraphicsPreset;
   readonly lighting: LightingMode;
   readonly wideMirrors: boolean;
+  /** Drives without the top-down view; chosen in the menu like the lighting. */
+  readonly mirrorsOnly: boolean;
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
@@ -91,6 +93,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
     graphics: pick(GRAPHICS_PRESETS, s['graphics'], DEFAULT_GRAPHICS),
     lighting: pick(LIGHTING_MODES, s['lighting'], DEFAULT_LIGHTING),
     wideMirrors: flag(s['wideMirrors'], true),
+    mirrorsOnly: flag(s['mirrorsOnly'], false),
   };
 }
 
