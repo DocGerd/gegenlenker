@@ -23,6 +23,11 @@ const SHIFT_IMPROVEMENT = 0.05;
  * that ramps up can cost one: its first step is judged against a window still mostly of the old load.
  */
 const MAX_FAILED_DOWNS = 3;
+/**
+ * A kept step stays only while slow windows at its level are `MIN_IMPROVEMENT` faster than the one before it. A window
+ * this much slower than that one is a new load, judged like any other: undoing the step for it could park its level.
+ */
+const NEW_LOAD = 1.25;
 /** Startup hitches (shader links, texture uploads) follow a scene or an attach; they say nothing about steady load. */
 const WARM_UP_MS = 2000;
 const STEP = 0.15;
@@ -307,8 +312,13 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
         return scale();
       }
       const kept = keptFrom[level] ?? 0;
-      if (p90 > P90_LIMIT_MS && kept > 0 && mean > kept * (1 - MIN_IMPROVEMENT)) {
-        // The kept step lost its gain, so it was luck or the load changed; it did help once, so it is not counted.
+      if (
+        p90 > P90_LIMIT_MS &&
+        kept > 0 &&
+        mean > kept * (1 - MIN_IMPROVEMENT) &&
+        mean <= kept * NEW_LOAD
+      ) {
+        // The kept step lost its gain, most likely a lucky window kept it; it did help once, so this is not counted.
         keptFrom[level] = 0;
         return revert('down-lost');
       }

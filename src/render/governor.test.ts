@@ -267,7 +267,7 @@ describe('frame timer', () => {
         'stays near full resolution on rare 80 ms stalls, resizing every %i s',
         (warmEvery) => {
           const runs = sweep(0.06, 5 * V, warmEvery);
-          expect(Math.min(...runs.map((r) => r.min))).toBeGreaterThan(0.69);
+          expect(Math.min(...runs.map((r) => r.min))).toBeGreaterThan(0.54);
           expect(runs.filter((r) => r.end < 0.84).length).toBeLessThanOrEqual(2);
           expect(runs.filter((r) => r.end < 1).length).toBeLessThanOrEqual(8);
         },
@@ -295,6 +295,15 @@ describe('frame timer', () => {
       expect(kinds(timer).filter((k) => k === 'down-failed')).toHaveLength(1);
       const { end: calm } = drive(timer, () => V, 10, end);
       drive(timer, fillBound(25), 6, calm);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+    });
+
+    it('keeps the level that fits a fill-bound load through a long burst the scale cannot help', () => {
+      const timer = createFrameTimer();
+      const { end } = drive(timer, fillBound(25), 30);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
+      const { end: burst } = drive(timer, () => 3 * V, 40, end);
+      drive(timer, fillBound(25), 20, burst);
       expect(timer.scale()).toBeCloseTo(0.85, 10);
     });
 
