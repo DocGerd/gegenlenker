@@ -24,10 +24,16 @@ const SHIFT_IMPROVEMENT = 0.05;
  */
 const MAX_FAILED_DOWNS = 3;
 /**
- * A kept step stays only while slow windows at its level are `MIN_IMPROVEMENT` faster than the one before it. A window
- * this much slower than that one is a new load, judged like any other: undoing the step for it could park its level.
+ * A kept step stays only while slow windows at its level are, on average (`KEPT_MEMORY`), `MIN_IMPROVEMENT` faster than
+ * the one before it. A window this much slower than that one is a new load, judged like any other: undoing the step for
+ * it could park its level.
  */
 const NEW_LOAD = 1.25;
+/**
+ * Slow windows a kept step is judged on, as a running mean. Off vsync one window's mean is noisy, so judging each alone
+ * undoes a helpful step by chance sooner or later; a longer memory is slower to see a new load.
+ */
+const KEPT_MEMORY = 8;
 /** Startup hitches (shader links, texture uploads) follow a scene or an attach; they say nothing about steady load. */
 const WARM_UP_MS = 2000;
 const STEP = 0.15;
@@ -231,6 +237,9 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   const failedDowns = new Uint8Array(MAX_LEVEL + 1);
   /** Per level, `beforeStep` of the kept step down into it; 0 when it was entered otherwise. */
   const keptFrom = new Float64Array(MAX_LEVEL + 1);
+  /** Per level, the running mean of slow windows since the step into it was kept, and how many it holds. */
+  const keptMean = new Float64Array(MAX_LEVEL + 1);
+  const keptWindows = new Uint8Array(MAX_LEVEL + 1);
   const ring = new Float64Array(WINDOW);
   const scratch = new Float64Array(WINDOW);
   const scale = (): number => Math.max(FLOOR, 1 - level * STEP);
@@ -307,20 +316,22 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
           return revert('down-failed');
         }
         keptFrom[level] = from;
+        keptWindows[level] = 0;
         // The next decision takes a fresh window: one that passed by luck would step on at once.
         count = 0;
         return scale();
       }
       const kept = keptFrom[level] ?? 0;
-      if (
-        p90 > P90_LIMIT_MS &&
-        kept > 0 &&
-        mean > kept * (1 - MIN_IMPROVEMENT) &&
-        mean <= kept * NEW_LOAD
-      ) {
-        // The kept step lost its gain, most likely a lucky window kept it; it did help once, so this is not counted.
-        keptFrom[level] = 0;
-        return revert('down-lost');
+      if (p90 > P90_LIMIT_MS && kept > 0 && mean <= kept * NEW_LOAD) {
+        const n = Math.min((keptWindows[level] ?? 0) + 1, KEPT_MEMORY);
+        const running = (keptMean[level] ?? 0) + (mean - (keptMean[level] ?? 0)) / n;
+        keptWindows[level] = n;
+        keptMean[level] = running;
+        if (running > kept * (1 - MIN_IMPROVEMENT)) {
+          // The kept step lost its gain, most likely a lucky window kept it; it did help once, so this is not counted.
+          keptFrom[level] = 0;
+          return revert('down-lost');
+        }
       }
       if (p90 > P90_LIMIT_MS) {
         if (level < MAX_LEVEL && (failedDowns[level] ?? 0) < MAX_FAILED_DOWNS) {
