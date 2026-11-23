@@ -449,7 +449,7 @@ export function startDrive(
       renderer.render(frame);
       hud.update(snapshot, warning);
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
-      if (tracker !== null) hud.setGoal(tracker.goal(snapshot));
+      if (tracker !== null) hud.setGoal(tracker.goalCue(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
       hud.setTargetArrow(
         at && frame.topDownClear ? targetArrow(at, frame.topDownClear, ARROW_MARGIN) : null,

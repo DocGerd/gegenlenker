@@ -42,15 +42,34 @@ function stoppedInTarget(s: SimSnapshot, exercise: ExerciseDefinition): boolean 
 /** `away`: no cue (turn point pending or far from the target); `outside`: near the target but beyond a tolerance; `inside`: stopping now ends the run. */
 export type GoalState = 'away' | 'outside' | 'inside';
 
+/** Display data behind `GoalState`: the trailer rear's distance to the target in metres and which criterion holds. */
+export type GoalCue = {
+  state: GoalState;
+  distance: number;
+  positionOk: boolean;
+  angleOk: boolean;
+};
+
 export type RunTracker = {
   update(s: SimSnapshot): boolean;
   goal(s: SimSnapshot): GoalState;
+  goalCue(s: SimSnapshot): GoalCue;
   waypointVisited(): boolean;
 };
 
 export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
   const waypoint = exercise.waypoint;
   let waypointVisited = waypoint === null;
+  const cue = (s: SimSnapshot): GoalCue => {
+    const error = targetError(s, exercise.target);
+    const ok = withinTolerance(error, exercise.tolerances);
+    let state: GoalState = 'away';
+    if (waypointVisited) {
+      if (ok.position && ok.angle) state = 'inside';
+      else if (error.position <= exercise.target.length) state = 'outside';
+    }
+    return { state, distance: error.position, positionOk: ok.position, angleOk: ok.angle };
+  };
   return {
     update(s) {
       if (
@@ -62,13 +81,8 @@ export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
       }
       return waypointVisited && stoppedInTarget(s, exercise);
     },
-    goal(s) {
-      if (!waypointVisited) return 'away';
-      if (inTolerance(s, exercise)) return 'inside';
-      return targetError(s, exercise.target).position <= exercise.target.length
-        ? 'outside'
-        : 'away';
-    },
+    goal: (s) => cue(s).state,
+    goalCue: cue,
     waypointVisited: () => waypointVisited,
   };
 }
