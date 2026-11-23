@@ -36,9 +36,6 @@ export function showPauseSheet(
   title.id = 'pause-title';
   title.className = 'pause-title';
   title.textContent = t('paused');
-  const hint = document.createElement('p');
-  hint.className = 'pause-hint';
-  hint.textContent = t('restartHint');
   const resume = action('continue', actions.continue, true);
   const buttons = document.createElement('div');
   buttons.className = 'pause-actions';
@@ -49,7 +46,14 @@ export function showPauseSheet(
   );
   if (actions.leave !== null) buttons.append(action('leaveUnscored', actions.leave, false));
 
-  sheet.append(title, buttons, hint);
+  sheet.append(title, buttons);
+  // Nothing is scored in the free yard, so there is nothing to warn about.
+  if (actions.leave !== null) {
+    const hint = document.createElement('p');
+    hint.className = 'pause-hint';
+    hint.textContent = t('restartHint');
+    sheet.append(hint);
+  }
   // Focus must stay here: outside the dialog the driving keys would reach the paused run.
   const abort = new AbortController();
   box.addEventListener(
