@@ -304,6 +304,22 @@ describe('release:cut', { timeout: 60_000 }, () => {
     expect(() => releaseCut(makeFlow(empty).flow)).toThrow(/nothing to release/);
   });
 
+  it('refuses a patch release while hotfix/x.y.z takes that version', () => {
+    const repo = makeRepo({ pending: 'fixed' });
+    git(repo.work, 'push', 'origin', 'main:refs/heads/hotfix/1.0.1');
+    expect(() => releaseCut(makeFlow(repo).flow)).toThrow(/branch hotfix\/1.0.1 already exists/);
+  });
+
+  it('refuses a stale origin/develop instead of cutting at an old commit', () => {
+    const repo = makeRepo();
+    git(repo.work, 'config', 'remote.origin.fetch', '+refs/heads/main:refs/remotes/origin/main');
+    repo.commitOn('develop', fragment(8, 'fixed'), 'later work');
+    expect(() => releaseCut(makeFlow(repo).flow)).toThrow(
+      /origin\/develop differs from the remote/,
+    );
+    expect(remoteHeads(repo)).not.toContain('release/');
+  });
+
   it('refuses before the gitflow cutover', () => {
     const repo = makeRepo({ develop: false });
     expect(() => releaseCut(makeFlow(repo).flow)).toThrow(/origin\/develop does not exist/);
@@ -416,6 +432,17 @@ describe('release:backmerge', { timeout: 60_000 }, () => {
       '--title',
     ]);
     expect(create?.at(-1)).toMatch(/\n\nCloses #3\nCloses #9$/);
+  });
+
+  it('carries the closing lines of every version main has and the target lacks', () => {
+    const { repo, gh } = released();
+    land(repo, 'hotfix', '1.1.1');
+    gh.releases.add('v1.1.1');
+    gh.prs['base:release/1.1.0'] = [{ number: 12, body: 'Fixes #3' }];
+    gh.prs['base:hotfix/1.1.1'] = [{ number: 15, body: 'Closes #11' }];
+    gh.prs['head:hotfix/1.1.1'] = [{ number: 16, body: 'Closes #9' }];
+    expect(backMerge(makeFlow(repo, gh).flow)).toBe('develop');
+    expect(ghWrites(gh)[0]?.at(-1)).toMatch(/\n\nCloses #3\nCloses #9\nCloses #11$/);
   });
 
   it('refuses until the tag and the GitHub Release exist', () => {

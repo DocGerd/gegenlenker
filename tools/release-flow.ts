@@ -145,7 +145,22 @@ const openReleases = (flow: Flow, heads: ReadonlyMap<string, string>): string[] 
     .map(([name]) => name.slice('release/'.length))
     .sort(compareVersions);
 
-/** Fetches, then requires the two long-lived branches; a dirty tree is refused when asked. */
+const targetRef = (target: string): string => `refs/remotes/origin/${target}`;
+
+/** A fetch refspec that skips `branch` leaves its tracking ref stale while ls-remote is current. */
+const unsynced = (flow: Flow, heads: ReadonlyMap<string, string>, branch: string): string[] => {
+  const { status, stdout } = probe(flow, 'git', [
+    'rev-parse',
+    '--verify',
+    '--quiet',
+    targetRef(branch),
+  ]);
+  return status === 0 && stdout.trim() === heads.get(branch)
+    ? []
+    : [`origin/${branch} differs from the remote: git fetch origin ${branch}:${targetRef(branch)}`];
+};
+
+/** Fetches, then requires the two long-lived branches, current; a dirty tree is refused when asked. */
 const prelude = (flow: Flow, options: { clean: boolean }): Map<string, string> => {
   read(flow, 'git', ['fetch', '--tags', 'origin']);
   const problems: string[] = [];
@@ -155,7 +170,10 @@ const prelude = (flow: Flow, options: { clean: boolean }): Map<string, string> =
   if (!refExists(flow, DEVELOP))
     problems.push('origin/develop does not exist: the gitflow cutover has not happened');
   if (problems.length > 0) refuse(problems);
-  return remoteHeads(flow);
+  const heads = remoteHeads(flow);
+  const stale = ['main', 'develop'].flatMap((branch) => unsynced(flow, heads, branch));
+  if (stale.length > 0) refuse(stale);
+  return heads;
 };
 
 const nextPatch = (version: string): string => {
@@ -184,11 +202,12 @@ const versionArg = (version: string | undefined): void => {
     throw new Error(`version must be x.y.z, got ${version}`);
 };
 
-/** Problems with creating `branch` for `version`: a branch or tag of that name exists. */
-const taken = (flow: Flow, heads: ReadonlyMap<string, string>, branch: string, version: string) => {
+/** Problems with taking `version`: its release or hotfix branch, or its tag, exists. */
+const taken = (flow: Flow, heads: ReadonlyMap<string, string>, version: string) => {
   const out: string[] = [];
-  if (heads.has(branch) || refExists(flow, `refs/heads/${branch}`))
-    out.push(`branch ${branch} already exists`);
+  for (const branch of [`release/${version}`, `hotfix/${version}`])
+    if (heads.has(branch) || refExists(flow, `refs/heads/${branch}`))
+      out.push(`branch ${branch} already exists`);
   if (refExists(flow, `refs/tags/v${version}`)) out.push(`tag v${version} already exists`);
   return out;
 };
@@ -242,13 +261,13 @@ export const releaseCut = (flow: Flow, requested?: string): string => {
   if (version !== undefined) {
     if (compareVersions(version, released) <= 0)
       problems.push(`version ${version} must be above main's ${released}`);
-    problems.push(...taken(flow, heads, `release/${version}`, version));
+    problems.push(...taken(flow, heads, version));
   }
   if (problems.length > 0 || version === undefined) return refuse(problems);
 
   pushBranch(flow, DEVELOP, `release/${version}`);
   flow.log(
-    `release/${version} cut from origin/develop. Next: git fetch && git switch release/${version}, then pnpm release:prepare ${version} and a PR into it.`,
+    `release/${version} cut from origin/develop. Next: git switch -c feature/prepare-${version} origin/release/${version}, pnpm release:prepare ${version}, then a PR into release/${version}.`,
   );
   return version;
 };
@@ -269,7 +288,7 @@ export const hotfixCut = (flow: Flow): string => {
     problems.push(
       `release/${patch.join(', release/')} is a patch release and would take version ${version} too: put the fix into that release branch by PR instead`,
     );
-  problems.push(...taken(flow, heads, `hotfix/${version}`, version));
+  problems.push(...taken(flow, heads, version));
   if (problems.length > 0) return refuse(problems);
 
   pushBranch(flow, MAIN, `hotfix/${version}`);
@@ -304,7 +323,15 @@ const backMergeTarget = (flow: Flow, heads: ReadonlyMap<string, string>): string
   return open[0] === undefined ? 'develop' : `release/${open[0]}`;
 };
 
-const targetRef = (target: string): string => `refs/remotes/origin/${target}`;
+/** Versions tagged on origin/main that `target` lacks: what the back-merge brings in. */
+const incoming = (flow: Flow, target: string): string[] =>
+  lines(read(flow, 'git', ['tag', '--list', 'v*', '--merged', MAIN]))
+    .map((tag) => tag.slice(1))
+    .filter(
+      (version) =>
+        VERSION_RE.test(version) && !isAncestor(flow, `refs/tags/v${version}`, targetRef(target)),
+    )
+    .sort(compareVersions);
 
 /**
  * After a release or hotfix is tagged and published: cuts feature/back-merge-x.y.z from origin/main
@@ -338,15 +365,16 @@ export const backMerge = (flow: Flow, requested?: string): string => {
     problems.push(`${target} already contains origin/main: nothing to back-merge`);
   const head = `feature/back-merge-${version}`;
   if (heads.has(head) || refExists(flow, `refs/heads/${head}`))
-    problems.push(`branch ${head} already exists`);
+    problems.push(
+      `branch ${head} already exists; if an earlier run failed before opening its PR, delete the branch and rerun`,
+    );
   if (problems.length > 0) refuse(problems);
 
   const closing = closingLines(
-    [
-      ...prList(flow, '--base', `release/${version}`),
-      ...prList(flow, '--head', `release/${version}`),
-      ...prList(flow, '--head', `hotfix/${version}`),
-    ].map((pr) => (pr as { body?: string | null }).body),
+    incoming(flow, target)
+      .flatMap((each) => [`release/${each}`, `hotfix/${each}`])
+      .flatMap((branch) => [...prList(flow, '--base', branch), ...prList(flow, '--head', branch)])
+      .map((pr) => (pr as { body?: string | null }).body),
   );
   const body = [
     `Back-merge of v${version} into ${target}. Merge with a merge commit, never squash or rebase.`,

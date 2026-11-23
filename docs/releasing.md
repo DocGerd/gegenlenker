@@ -6,7 +6,7 @@ Only the owner cuts releases and hotfixes and merges into `main`. Agents merge r
 
 ## Commands
 
-Run each on a clean tree; the scripts read `origin/*` and push by refspec, so the working tree and the checked-out branch stay as they are. All three take `--dry-run`: it prints every `git` and `gh` step, runs the reads (including `git fetch`, which only updates remote-tracking refs and tags) and skips every write.
+Run each on a clean tree; the scripts read `origin/*` and push by refspec, so the working tree and the checked-out branch stay as they are. Each refuses when `origin/main` or `origin/develop` differs from the remote (a fetch refspec that skips them). All three take `--dry-run`: it prints every `git` and `gh` step, runs the reads (including `git fetch`, which only updates remote-tracking refs and tags) and skips every write.
 
 | Command                                     | Does                                                                                       |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -18,7 +18,7 @@ Run each on a clean tree; the scripts read `origin/*` and push by refspec, so th
 
 - `origin/main` is not an ancestor of `origin/develop` (a back-merge is missing);
 - the tree is dirty;
-- the version is not above `main`'s, or `release/X.Y.Z` or tag `vX.Y.Z` exists;
+- the version is not above `main`'s, or `release/X.Y.Z`, `hotfix/X.Y.Z` or tag `vX.Y.Z` exists;
 - another `release/*` is open (its tip is not on `main`) or nothing is pending.
 
 Without a version it derives one from `develop`'s pending entries the way `release:prepare` does (only `fixed` and `security` make a patch). The first release has no earlier version to bump from: pass it.
@@ -28,7 +28,7 @@ Without a version it derives one from `develop`'s pending entries the way `relea
 ## Release
 
 1. `pnpm release:cut`. Freeze: `release/X.Y.Z` takes only fixes, by PR, and a fix goes there only. `develop` stays open for the next version.
-2. On the release branch, `pnpm release:prepare X.Y.Z`, and a PR into `release/X.Y.Z` (rerun it when a fix adds a fragment).
+2. On a `feature/*` branch from `origin/release/X.Y.Z`, `pnpm release:prepare X.Y.Z`, and a PR into `release/X.Y.Z` (rerun it when a fix adds a fragment).
 3. PR `release/X.Y.Z` into `main`; CI runs the full gate and `release:check`. The owner merges it with a merge commit.
 4. The owner approves the `github-pages` deployment. After the deploy, the release job tags `vX.Y.Z` and publishes the GitHub Release.
 5. `pnpm release:backmerge`, then merge the PR with a merge commit, then `pnpm release:backmerge --verify`.
@@ -45,7 +45,7 @@ Rehearse with `pnpm hotfix:cut --dry-run` before the first real one.
 
 - Refuses until tag `vX.Y.Z` is on `origin/main` and a published GitHub Release `vX.Y.Z` exists. The version defaults to `main`'s.
 - Pushes `feature/back-merge-X.Y.Z` from `origin/main` (a dedicated head: the release branch is deleted on merge) and opens the PR with `gh pr create`.
-- The PR body carries a `Closes #n` line for every issue closed by the PRs merged into `release/X.Y.Z` and the PRs from `release/X.Y.Z` or `hotfix/X.Y.Z` into `main`: closing keywords act only on PRs into the default branch, so the issues close when the back-merge reaches `develop`.
+- The PR body carries a `Closes #n` line for every issue closed by the merged PRs into or from `release/X.Y.Z` and `hotfix/X.Y.Z`, for each version tagged on `main` that the target lacks: closing keywords act only on PRs into the default branch, so the issues close when the back-merge reaches `develop`.
 - Merge with a merge commit, never squash or rebase. Conflicts in `released.json`, `CHANGELOG.md` or `package.json`: merge the target into the back-merge branch locally and resolve there. A fragment edited on `develop` after the cut gives a modify/delete conflict: move the edit into `released.json`.
 - `--verify` fetches and checks `git merge-base --is-ancestor origin/main <target>`, against the open release in the hotfix case. A squashed or rebased back-merge fails it, and `release:cut` refuses until it passes.
 
