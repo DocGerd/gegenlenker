@@ -1,10 +1,10 @@
 {
-  "inputsSha256": "3e8214512c7af66dd035a96b487986a36a545b817a0afbcc625c894d0e0f0b25",
-  "pixelsSha256": "2ed5d644c5d73c34575acbbd53b45da7bfbcd9f0aaad620b9afe226c04ec068e",
+  "inputsSha256": "bef8426fe4229ca7d84647dcde2ce4ea1bb56e8d1b5c8c70f927a925eff4ec5a",
+  "pixelsSha256": "de09d3a1583307d4692557ea3f17084e351006cfb6af3e1a9fff8dbcc9f90bb0",
   "encoderVersion": "0.6.0",
-  "width": 2048,
-  "height": 2048,
-  "mipLevels": 12,
-  "ktx2Sha256": "084cb8504ebbb05e89845edcd69d0088d0ee29280d8e7f2cb7d438899f76973b",
-  "ktx2Bytes": 971900
+  "width": 1024,
+  "height": 1024,
+  "mipLevels": 11,
+  "ktx2Sha256": "5f1fb6f3a0f6d1affa8f2103f53bb65974b77df01e9f6b9fb383d2dfdf2de588",
+  "ktx2Bytes": 266789
 }
