@@ -249,11 +249,11 @@ export const ASSET_SOURCES: Readonly<Record<string, AssetSource>> = {
     changes: [
       {
         output: 'src/render/assets/concrete-albedo.ktx2',
-        text: 'the 2K diffuse map with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.',
+        text: 'the 2K diffuse map box-filtered to 1K in linear light, with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.',
       },
       {
         output: 'src/render/assets/concrete-packed.ktx2',
-        text: "the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.",
+        text: "the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map, each box-filtered from 2K to 1K, packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.",
       },
     ],
     rebuild:
@@ -295,11 +295,11 @@ export const ASSET_SOURCES: Readonly<Record<string, AssetSource>> = {
     changes: [
       {
         output: 'src/render/assets/asphalt-albedo.ktx2',
-        text: 'the 2K diffuse map with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.',
+        text: 'the 2K diffuse map box-filtered to 1K in linear light, with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.',
       },
       {
         output: 'src/render/assets/asphalt-packed.ktx2',
-        text: "the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.",
+        text: "the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map, each box-filtered from 2K to 1K, packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.",
       },
     ],
     rebuild:
@@ -341,11 +341,11 @@ export const ASSET_SOURCES: Readonly<Record<string, AssetSource>> = {
     changes: [
       {
         output: 'src/render/assets/pavers-albedo.ktx2',
-        text: 'the 2K diffuse map with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.',
+        text: 'the 2K diffuse map box-filtered to 1K in linear light, with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.',
       },
       {
         output: 'src/render/assets/pavers-packed.ktx2',
-        text: "the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.",
+        text: "the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map, each box-filtered from 2K to 1K, packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.",
       },
     ],
     rebuild:
