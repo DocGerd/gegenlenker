@@ -147,7 +147,8 @@ export function parseInputLog(
   } catch {
     return null;
   }
-  if (!isRecord(data) || (data.version !== 1 && data.version !== 2 && data.version !== 3)) return null;
+  if (!isRecord(data) || (data.version !== 1 && data.version !== 2 && data.version !== 3))
+    return null;
   const { layoutId, exerciseId, truckId, trailerId, steps, changes } = data;
   // Version 1 predates lighting: every such run was drawn by day.
   const lighting = data.version === 1 ? DEFAULT_LIGHTING : data.lighting;
