@@ -22,7 +22,8 @@ import {
 } from 'three/webgpu';
 import type { LightingMode, ScenePalette } from '../contracts/render';
 import { createSceneSky, domeGround } from './scene-sky';
-import { buildSerially, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
+import { GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
+import { buildSerially, compileShader, wgslAccepted, type Compiled } from './shader-check';
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
@@ -171,11 +172,16 @@ export function replaceMaterial(
  * material whose node graph throws for a plain one and only logs it, so the built shader must carry
  * the marker.
  */
-export function vehicleShaderCompiles(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
-  return buildSerially(gpu, () => buildVehicleShader(gpu, envMap));
+export async function vehicleShaderCompiles(
+  gpu: WebGPURenderer,
+  envMap: Texture,
+): Promise<boolean> {
+  const built = await buildSerially(gpu, () => buildVehicleShader(gpu, envMap));
+  return built !== null && (await wgslAccepted(gpu, built, 'Vehicle reflection shader'));
 }
 
-async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise<boolean> {
+/** The built program, or null when it failed. */
+async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise<Compiled | null> {
   const material = createVehicleMaterial(envMap, createLampEmission());
   // only High reflects, and High grades: check the graded variant the vehicles wear
   const graded = !gradeDisabled();
@@ -187,11 +193,11 @@ async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise
   scene.add(mesh);
   const { debug } = gpu;
   const previous = debug.onShaderError;
-  let accepted = true;
+  const verdict = { accepted: true };
   // only the WebGL 2 backend reports here; a node build error rejects compileAsync on either
   const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
     if (context.getShaderSource(fragment)?.includes(VEHICLE_SHADER_MARKER) === true) {
-      accepted = false;
+      verdict.accepted = false;
       console.warn(
         'Vehicle reflection shader failed',
         context.getShaderInfoLog(vertex),
@@ -209,16 +215,16 @@ async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise
   };
   debug.onShaderError = watcher;
   try {
-    const { fragmentShader } = await gpu.debug.getShaderAsync(scene, new PerspectiveCamera(), mesh);
+    const built = await compileShader(gpu, scene, new PerspectiveCamera(), mesh);
     const markers = graded ? [VEHICLE_SHADER_MARKER, GRADE_SHADER_MARKER] : [VEHICLE_SHADER_MARKER];
-    if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
+    if (!markers.every((marker) => built.fragment?.includes(marker) === true)) {
       console.warn('Vehicle reflection shader failed to build');
-      return false;
+      return null;
     }
-    return accepted;
+    return verdict.accepted ? built : null;
   } catch (error) {
     console.warn('Vehicle reflection shader failed', error);
-    return false;
+    return null;
   } finally {
     if (debug.onShaderError === watcher) debug.onShaderError = previous;
     material.dispose();

@@ -15,6 +15,7 @@ import {
 import type { WebGPURenderer } from 'three/webgpu';
 import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
+import { ShaderRejectedError } from './shader-check';
 
 /*
  * Runtime-cached KTX2 textures: authored files transcoded on the device to whatever compressed
@@ -268,6 +269,12 @@ export function startTextureSet<K extends string>({
       })
       .catch((error: unknown) => {
         loading = false;
+        if (error instanceof ShaderRejectedError) {
+          // the same shader fails again: no retry, as for a GLSL error
+          console.warn(`${label} shader rejected by the GPU`, error);
+          reject();
+          return;
+        }
         console.warn(
           `${label} load failed (attempt ${attempts} of ${MAX_ATTEMPTS}); keeping ${fallback}`,
           error,
