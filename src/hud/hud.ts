@@ -174,12 +174,20 @@ const SPLIT_ICON =
 const SPLIT_STEP = 0.02;
 const percent = (share: number): number => Math.round(share * 100);
 
-const button = (attr: string, value: string, key: MessageKey): string =>
-  `<button type="button" class="hud-toggle" ${attr}="${value}" data-i18n="${key}"></button>`;
+const CHECK_ICON =
+  '<svg class="hud-check" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l3 3 5-6" /></svg>';
 
-/** The meaning in the legend list is the toggle's description. */
+/** One segment of the joined view control. */
+const segmentButton = (view: string, key: MessageKey): string =>
+  `<button type="button" class="hud-toggle hud-segment" data-view="${view}" data-i18n="${key}"></button>`;
+
+/** A folding panel's chip. */
+const panelButton = (panel: string, key: MessageKey): string =>
+  `<button type="button" class="hud-toggle hud-chip" data-panel="${panel}" data-i18n="${key}"></button>`;
+
+/** The meaning in the legend list is the toggle's description; the ring fills with a tick while the aid is on. */
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
-  `<button type="button" class="hud-toggle" data-aid="${aid}" aria-describedby="aid-meaning-${aid}" data-i18n="${key}"></button>`;
+  `<button type="button" class="hud-toggle hud-chip" data-aid="${aid}" aria-describedby="aid-meaning-${aid}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
 const legendRow = ({ term, desc, viewOnly }: LegendRow): string => {
   const cls = viewOnly ? 'mono hud-legend-view' : 'mono';
@@ -233,7 +241,9 @@ const MARKUP = (
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
-        <div class="hud-group" role="group" aria-label="${t('labelView')}">${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
+        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${VIEWS.filter(([v]) => chase || v !== 'chase')
+          .map(([v, k]) => segmentButton(v, k))
+          .join('')}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
       <div class="hud-aids" data-hud="aids" data-chrome>
         <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
@@ -359,9 +369,6 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let view = opts.topDown;
   const aids = { ...opts.aids };
   const viewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
-  if (!opts.chase) {
-    for (const b of viewButtons) if (b.dataset['view'] === 'chase') setHidden(b, true);
-  }
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
   const panelButtons = [...hud.querySelectorAll<HTMLElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };

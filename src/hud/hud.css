@@ -520,10 +520,80 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-.hud-toggle[aria-pressed='true'] {
+/* The views are one joined control: the selected segment is filled. */
+.hud-segmented {
+  display: flex;
+}
+
+.hud-segment {
+  position: relative;
+  border-radius: 0;
+}
+
+.hud-segment + .hud-segment {
+  margin-left: -1px;
+}
+
+.hud-segment:first-child {
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.hud-segment:last-child {
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+.hud-segment:only-child {
+  border-radius: var(--radius-lg);
+}
+
+.hud-segment[aria-pressed='true'] {
+  z-index: 1;
   border-color: var(--color-accent);
   background: var(--color-accent);
   color: var(--color-on-accent);
+}
+
+.hud-segment:focus-visible {
+  z-index: 2;
+}
+
+/* Aids and panels are pill chips: a lighter tint (and a ticked ring on an aid), never the segment's fill. */
+.hud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border-radius: var(--radius-pill);
+}
+
+.hud-chip[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+  color: var(--color-accent-strong);
+}
+
+.hud-chip svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.hud-check path {
+  opacity: 0;
+}
+
+.hud-chip[aria-pressed='true'] .hud-check circle {
+  fill: currentcolor;
+}
+
+.hud-chip[aria-pressed='true'] .hud-check path {
+  opacity: 1;
+  stroke: var(--color-accent-tint);
 }
 
 .hud-toggle:disabled {
