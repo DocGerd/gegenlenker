@@ -11,7 +11,13 @@ import {
 import { float, vertexColor } from 'three/tsl';
 import { MeshStandardNodeMaterial, type WebGPURenderer } from 'three/webgpu';
 import { GRADE, GRADE_SHADER_MARKER, gradeDisabled, setGraded } from './grade';
-import { buildSerially, compileShader, wgslAccepted, type Compiled } from './shader-check';
+import {
+  buildSerially,
+  compileShader,
+  watchShaderErrors,
+  wgslAccepted,
+  type Compiled,
+} from './shader-check';
 import { gpuLost } from './seams';
 import { VehicleLightingModel } from './vehicle-pbr';
 
@@ -72,29 +78,16 @@ async function buildInteriorShader(gpu: WebGPURenderer, envMap: Texture): Promis
   sun.castShadow = true;
   const scene = new Scene();
   scene.add(mesh, sun, new LightProbe());
-  const { debug } = gpu;
-  const previous = debug.onShaderError;
   const verdict = { accepted: true };
   // only the WebGL 2 backend reports here; a node build error rejects the build on either
-  const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
-    if (context.getShaderSource(fragment)?.includes(INTERIOR_SHADER_MARKER) === true) {
+  const restore = watchShaderErrors(gpu, {
+    matches: (source) => source?.includes(INTERIOR_SHADER_MARKER) === true,
+    onMatch: (logs) => {
       verdict.accepted = false;
-      console.warn(
-        'Interior shader failed',
-        context.getShaderInfoLog(vertex),
-        context.getShaderInfoLog(fragment),
-        context.getProgramInfoLog(program),
-      );
-    } else if (previous !== null) previous(context, program, vertex, fragment);
-    else
-      console.error(
-        'Shader error',
-        context.getShaderInfoLog(vertex),
-        context.getShaderInfoLog(fragment),
-        context.getProgramInfoLog(program),
-      );
-  };
-  debug.onShaderError = watcher;
+      console.warn('Interior shader failed', ...logs());
+    },
+    unwatchedLabel: 'Shader error',
+  });
   try {
     const built = await compileShader(gpu, scene, new PerspectiveCamera(), mesh);
     const markers = graded
@@ -109,7 +102,7 @@ async function buildInteriorShader(gpu: WebGPURenderer, envMap: Texture): Promis
     console.warn('Interior shader failed', error);
     return null;
   } finally {
-    if (debug.onShaderError === watcher) debug.onShaderError = previous;
+    restore();
     material.dispose();
     geometry.dispose();
     sun.shadow.dispose();
