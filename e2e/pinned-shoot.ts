@@ -7,8 +7,12 @@ import { QUALITY_FLAGS } from '../src/render/quality.ts';
 // carry their `.ts` extension and reach only modules that import nothing at runtime.
 
 export type Preset = 'low' | 'balanced' | 'high';
-/** What a drive is rendered with: the stored `graphics` and `lighting` settings. */
-export type RenderConfig = { readonly preset: Preset; readonly lighting: LightingMode };
+/** What a drive is rendered with: the stored `graphics` and `lighting` settings; `theme` is only stored when given. */
+export type RenderConfig = {
+  readonly preset: Preset;
+  readonly lighting: LightingMode;
+  readonly theme?: 'system' | 'light' | 'dark';
+};
 export type Shot =
   | 'cockpit'
   | 'mirrorLeft'
@@ -169,7 +173,7 @@ function pinResolvePath(): void {
  */
 export async function startPinnedDrive(
   page: Page,
-  { preset, lighting }: RenderConfig,
+  { preset, lighting, theme }: RenderConfig,
   exercise: string,
   search = '',
   deadlineMs = SETTLE_DEADLINE_MS[preset],
@@ -177,7 +181,7 @@ export async function startPinnedDrive(
   await page.addInitScript(pinResolvePath);
   await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
     SETTINGS_KEY,
-    JSON.stringify({ version: 1, graphics: preset, lighting, topDown: 'follow' }),
+    JSON.stringify({ version: 1, graphics: preset, lighting, topDown: 'follow', theme }),
   ] as const);
   await page.clock.install({ time: 0 });
   await page.clock.pauseAt(1000);
