@@ -8,15 +8,17 @@ import {
   type ResultIds,
 } from '../scoring/best';
 import { MAX_REPLAY_STEPS, parseInputLog, serializeInputLog, type RunIds } from '../sim/replay';
+import { NAMES } from './channel';
 
-export const SETTINGS_KEY = 'gegenlenker.settings.v1';
-export const BEST_KEY = 'gegenlenker.best.v2';
+const { storagePrefix } = NAMES;
+export const SETTINGS_KEY = `${storagePrefix}.settings.v1`;
+export const BEST_KEY = `${storagePrefix}.best.v2`;
 // Bests before the assisted/unaided split cannot be classified, so they are dropped.
-const LEGACY_BEST_KEY = 'gegenlenker.best.v1';
-export const LAST_RUN_KEY = 'gegenlenker.lastRun.v1';
-export const WHATS_NEW_SEEN_KEY = 'gegenlenker.whatsNewSeen.v1';
+const LEGACY_BEST_KEY = `${storagePrefix}.best.v1`;
+export const LAST_RUN_KEY = `${storagePrefix}.lastRun.v1`;
+export const WHATS_NEW_SEEN_KEY = `${storagePrefix}.whatsNewSeen.v1`;
 
-const PROBE_KEY = 'gegenlenker.probe';
+const PROBE_KEY = `${storagePrefix}.probe`;
 
 let probed: Storage | null | undefined;
 

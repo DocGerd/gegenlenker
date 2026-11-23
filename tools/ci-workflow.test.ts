@@ -58,3 +58,12 @@ it('the release job fetches every tag, since its tag checks read the local clone
   );
   expect(checkout?.with?.['fetch-depth']).toBe(0);
 });
+
+// `check` accepts only a skipped e2e on push: any other gated job that skips there fails it.
+it('every gated job but e2e runs on push', () => {
+  const jobs = workflow().jobs;
+  for (const [name, job] of Object.entries(jobs)) {
+    if (NOT_GATED.has(name) || name === 'e2e') continue;
+    expect(job.if, name).toBeUndefined();
+  }
+});

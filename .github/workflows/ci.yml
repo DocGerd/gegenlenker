@@ -229,11 +229,50 @@ jobs:
           name: test-results-webgpu
           path: test-results/
 
+  # The UAT build shares the production origin and scope prefix: the production dist with a UAT build
+  # inside `uat/` proves each channel leaves the other's pages, keys and caches alone. Unlike e2e it
+  # also runs on push, because `check` tolerates only a skipped e2e.
+  channels:
+    needs: [lint, unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+        env:
+          BASE_PATH: /gegenlenker/
+      - run: pnpm build --outDir dist/uat
+        env:
+          BASE_PATH: /gegenlenker/uat/
+          DEPLOY_CHANNEL: uat
+      - id: playwright
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          restore-keys: playwright-${{ runner.os }}-
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e:channels
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-results-channels
+          path: test-results/
+
   # The required status check. `always()` keeps it running when a dependency
   # fails, so it fails instead of being skipped (a skipped check can pass).
   # Required: every need succeeds; on push only, e2e may be skipped.
   check:
-    needs: [lint, unit, e2e]
+    needs: [lint, unit, e2e, channels]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
