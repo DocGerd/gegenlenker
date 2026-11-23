@@ -410,8 +410,10 @@ jobs:
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
   # `develop` deploys the UAT build to `/gegenlenker/uat/`; the Pages artifact also republishes the
-  # production dist of the live `main` deploy, never rebuilt. The preflight fails before the owner is
-  # asked to approve if that dist cannot be found or verified.
+  # production dist of the live `main` deploy, never rebuilt. The develop checkout only builds; the
+  # jobs that read deployments or publish run `main`'s code, which only the owner merges, so a
+  # `develop` change cannot alter what verifies the site root. Until a release brings the script to
+  # `main`, they fail.
   build-uat:
     needs: check
     if: >-
@@ -420,11 +422,6 @@ jobs:
       github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      contents: read
-      actions: read
-      checks: read
-      deployments: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -444,16 +441,46 @@ jobs:
           name: uat-dist-${{ github.sha }}
           path: dist/uat
           if-no-files-found: error
+
+  # The production lookup, before the owner is asked to approve `deploy-uat`.
+  preflight-uat:
+    needs: check
+    if: >-
+      !cancelled() && needs.check.result == 'success' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      deployments: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
       - name: Preflight the production dist
-        run: node tools/uat-pages.ts "$RUNNER_TEMP/preflight" --prod-only
+        run: |
+          if [ ! -f tools/uat-pages.ts ]; then
+            echo "::error::main has no tools/uat-pages.ts: UAT deploys start once a release brings it there"
+            exit 1
+          fi
+          node tools/uat-pages.ts "$RUNNER_TEMP/pages" --prod-only
         env:
           GH_TOKEN: ${{ github.token }}
 
   # The lookup runs again here, after approval and inside the group: a `main` deploy may have landed
-  # since `build-uat`, and an older production dist would roll the site back.
+  # since the preflight, and an older production dist would roll the site back.
   deploy-uat:
-    needs: build-uat
-    if: ${{ !cancelled() && needs.build-uat.result == 'success' }}
+    needs: [build-uat, preflight-uat]
+    if: >-
+      ${{ !cancelled() && needs.build-uat.result == 'success' &&
+      needs.preflight-uat.result == 'success' }}
     concurrency:
       group: pages
       cancel-in-progress: false
@@ -473,12 +500,18 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: refs/heads/main
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
       - name: Assemble production and UAT
-        run: node tools/uat-pages.ts "$RUNNER_TEMP/pages"
+        run: |
+          if [ ! -f tools/uat-pages.ts ]; then
+            echo "::error::main has no tools/uat-pages.ts: UAT deploys start once a release brings it there"
+            exit 1
+          fi
+          node tools/uat-pages.ts "$RUNNER_TEMP/pages"
         env:
           GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
