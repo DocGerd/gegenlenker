@@ -194,6 +194,38 @@ describe('reduce', () => {
     expect(data).toBeCloseTo(s16(0.5), -1);
   });
 
+  it('averages each block into its own texel and leaves alpha as it is', () => {
+    // 4 x 4, one RGBA value per 2 x 2 block: blocks (0,0) 0.2, (1,0) 0.4, (0,1) 0.6, (1,1) 0.8
+    const block = (x: number, y: number): number => 0.2 * (1 + x + 2 * y);
+    const values: number[] = [];
+    for (let y = 0; y < 4; y++) {
+      for (let x = 0; x < 4; x++) {
+        const v = s16(block(x >> 1, y >> 1));
+        values.push(v, v, v, 65535);
+      }
+    }
+    const { samples } = reduce(image(4, 4, values), 2, true);
+    const colour = (v: number): number => s16(v);
+    expect([...samples]).toEqual([
+      colour(0.2),
+      colour(0.2),
+      colour(0.2),
+      65535,
+      colour(0.4),
+      colour(0.4),
+      colour(0.4),
+      65535,
+      colour(0.6),
+      colour(0.6),
+      colour(0.6),
+      65535,
+      colour(0.8),
+      colour(0.8),
+      colour(0.8),
+      65535,
+    ]);
+  });
+
   it('leaves an image already at the size and rejects one that does not divide', () => {
     const rgb = image(2, 3, new Array<number>(12).fill(100));
     expect(reduce(rgb, 2, true)).toBe(rgb);

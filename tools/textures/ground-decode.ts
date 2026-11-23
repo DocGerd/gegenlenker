@@ -32,12 +32,8 @@ type BasisModule = {
   KTX2File: new (data: Uint8Array) => KTX2File;
 };
 
-/** One mip level (the base by default) of a ground ktx2, decoded by the same Basis transcoder the app ships. */
-export async function decodeGroundTexture(
-  ktx2: Uint8Array,
-  root = ROOT,
-  level = 0,
-): Promise<Uint8Array> {
+/** The base level of a ground ktx2, decoded by the same Basis transcoder the app ships. */
+export async function decodeGroundTexture(ktx2: Uint8Array, root = ROOT): Promise<Uint8Array> {
   const dir = join(root, TRANSCODER_DIR);
   const script = readFileSync(join(dir, 'basis_transcoder.js'), 'utf8');
   const factory = runInNewContext(`${script}\n;BASIS`, {
@@ -60,8 +56,8 @@ export async function decodeGroundTexture(
   const file = new basis.KTX2File(ktx2);
   try {
     if (!file.isValid() || file.startTranscoding() === 0) throw new Error('ground.ktx2 is invalid');
-    const rgba = new Uint8Array(file.getImageTranscodedSizeInBytes(level, 0, 0, RGBA32));
-    if (file.transcodeImage(rgba, level, 0, 0, RGBA32, 0, -1, -1) === 0) {
+    const rgba = new Uint8Array(file.getImageTranscodedSizeInBytes(0, 0, 0, RGBA32));
+    if (file.transcodeImage(rgba, 0, 0, 0, RGBA32, 0, -1, -1) === 0) {
       throw new Error('ground.ktx2 failed to transcode');
     }
     return rgba;
