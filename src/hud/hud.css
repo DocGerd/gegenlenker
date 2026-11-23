@@ -538,9 +538,11 @@
   -webkit-tap-highlight-color: transparent;
 }
 
-/* The views are one joined control: the selected segment is filled. */
+/* The views are one joined control: the selected segment is filled. Too narrow a row wraps it instead of pushing it under the finish button. */
 .hud-segmented {
   display: flex;
+  flex-wrap: wrap;
+  row-gap: var(--space-1);
 }
 
 .hud-segment {
@@ -548,8 +550,9 @@
   border-radius: 0;
 }
 
-.hud-segment + .hud-segment {
-  margin-left: -1px;
+/* The shared border is taken from the right, so a wrapped row still starts flush. */
+.hud-segment:not(:last-child) {
+  margin-right: -1px;
 }
 
 .hud-segment:first-child {
