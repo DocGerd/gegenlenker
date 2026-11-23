@@ -211,7 +211,7 @@ const MARKUP = (
     <span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
-      <dl>
+      <dl data-hud="keys">
         ${legendRows(chase, look === true)
           .filter((row) => !(mirrorsOnly && TOP_DOWN_ROWS.includes(row.desc)))
           .map(legendRow)
@@ -311,6 +311,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   const cockpit = query(hud, 'cockpit', HTMLElement);
   const legend = query(hud, 'legend', HTMLElement);
+  const keysList = query(hud, 'keys', HTMLElement);
   const mirrors = MIRROR_KEYS.map((key) => query(hud, key, HTMLElement));
   const toastWrap = query(hud, 'toastWrap', HTMLElement);
   const toast = query(hud, 'toast', HTMLElement);
@@ -391,9 +392,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let shortCockpit = false;
   let allKeys = false;
   // On a short screen the brief and the key legend each have a state of their own; not persisted.
-  let short = false;
+  let shortScreen = false;
   /** The brief folds away on the first drive input: on a short screen, and where it floats over the cockpit. */
-  const foldsBrief = (): boolean => short || mirrorsOnly;
+  const foldsBrief = (): boolean => shortScreen || mirrorsOnly;
   let briefOpen = true;
   let briefDone = false;
   let keysOpen = false;
@@ -414,11 +415,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         'aria-pressed',
         String(!collapsed[b.dataset['panel'] as keyof CollapsedPanels]),
       );
-    const keysExpanded = short ? keysOpen : shortCockpit ? allKeys : !collapsed.keys;
+    const keysExpanded = shortScreen ? keysOpen : shortCockpit ? allKeys : !collapsed.keys;
     keysToggle.setAttribute('aria-expanded', String(keysExpanded));
-    legend.toggleAttribute('data-overlay', short);
-    legend.toggleAttribute('data-collapsed', short ? !keysOpen : !shortCockpit && collapsed.keys);
-    legend.toggleAttribute('data-drive-only', !short && shortCockpit && !allKeys);
+    legend.toggleAttribute('data-overlay', shortScreen);
+    legend.toggleAttribute(
+      'data-collapsed',
+      shortScreen ? !keysOpen : !shortCockpit && collapsed.keys,
+    );
+    legend.toggleAttribute('data-drive-only', !shortScreen && shortCockpit && !allKeys);
     setHidden(briefToggle, !foldsBrief());
     briefToggle.setAttribute('aria-expanded', String(briefOpen));
     goal.toggleAttribute('data-collapsed', foldsBrief() && !briefOpen);
@@ -426,6 +430,31 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     setHidden(gaugeBox, !aids.pivots || collapsed.gauges);
   };
   syncToggles();
+  /** Runs before anything measures the panels: the brief's state is part of their height. */
+  const syncShortScreen = (): void => {
+    const now = root.clientHeight < SHORT_SCREEN;
+    if (now === shortScreen) return;
+    shortScreen = now;
+    keysOpen = false;
+    briefOpen = !briefDone;
+    syncToggles();
+  };
+  /**
+   * The open key list of a short screen stands in the top-down pane, which no mirror reaches; hud.css
+   * keeps it clear of the lever and the finish button there. Offsets are from the legend's padding box.
+   */
+  const placeKeysList = (pane: Rect): void => {
+    if (!shortScreen) return;
+    const box = legend.getBoundingClientRect();
+    if (box.width === 0) return;
+    const stage = root.getBoundingClientRect();
+    const left = box.left - stage.left + legend.clientLeft;
+    const bottom = box.bottom - stage.top - legend.clientTop;
+    keysList.style.setProperty('--pane-left', `${pane.x - left}px`);
+    keysList.style.setProperty('--pane-bottom', `${bottom - pane.y - pane.height}px`);
+    keysList.style.setProperty('--pane-width', `${pane.width}px`);
+    keysList.style.setProperty('--pane-height', `${pane.height}px`);
+  };
 
   const selectView = (mode: TopDownMode): void => {
     view = mode;
@@ -460,7 +489,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   keysToggle.addEventListener(
     'click',
     () => {
-      if (short) {
+      if (shortScreen) {
         keysOpen = !keysOpen;
         syncToggles();
       } else if (shortCockpit) {
@@ -750,7 +779,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         c.brake !== lastControl.brake ||
         c.gear !== lastControl.gear);
     lastControl = c;
-    if (short && keysOpen && changed) {
+    if (shortScreen && keysOpen && changed) {
       keysOpen = false;
       syncToggles();
     }
@@ -815,14 +844,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     layout(views) {
       const { cockpit: c } = views;
-      const nowShort = root.clientHeight < SHORT_SCREEN;
-      if (nowShort !== short) {
-        short = nowShort;
-        keysOpen = false;
-        briefOpen = true;
-        hud.toggleAttribute('data-short', short);
-        syncToggles();
-      }
+      syncShortScreen();
       const spansRight = (r: Rect): boolean => r.x + r.width >= root.clientWidth - 1;
       setHidden(cockpit, c === null);
       if (c) {
@@ -855,6 +877,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       toastWrap.style.top = `${column.y}px`;
       toastWrap.style.width = `${column.width}px`;
       if (hasTopDown(views)) place(topDown, views.topDown);
+      placeKeysList(views.topDown);
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
@@ -887,6 +910,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (splitReset.disabled !== atDefault) splitReset.disabled = atDefault;
     },
     panelsBottom(paneWidth) {
+      syncShortScreen();
       const previous = topDown.style.width;
       topDown.style.width = `${paneWidth}px`;
       const top = topDown.getBoundingClientRect().top;

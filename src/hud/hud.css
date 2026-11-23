@@ -221,19 +221,24 @@
   display: none;
 }
 
-/* On a short screen the list floats above the toggle, so opening it neither resizes the legend nor moves the mirrors that clear it. */
+/* On a short screen the open list is an overlay in the top-down pane (hud.ts sets --pane-*), where no mirror reaches: opening it neither resizes the legend nor moves the mirrors. It stays below the finish button. */
 .hud-legend[data-overlay] {
   z-index: 2;
 }
 
 .hud-legend[data-overlay] dl {
+  --keys-side: 0px;
   position: absolute;
-  bottom: calc(100% + var(--space-2));
-  left: calc(-1px - var(--space-3));
+  left: calc(var(--pane-left) + var(--space-4));
+  bottom: calc(var(--pane-bottom) + var(--space-4) + var(--safe-bottom));
   box-sizing: border-box;
   width: max-content;
-  max-height: 60vh;
-  overflow-y: auto;
+  max-width: calc(var(--pane-width) - 2 * var(--space-4) - var(--keys-side));
+  max-height: calc(
+    var(--pane-height) - 2 * var(--space-4) - var(--safe-top) - var(--safe-bottom) -
+      var(--hud-target) - var(--space-2)
+  );
+  overflow: hidden;
   margin: 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
@@ -242,8 +247,21 @@
   box-shadow: var(--shadow-md);
 }
 
-.hud-legend[data-overlay]:not([data-collapsed]) svg {
-  transform: rotate(180deg);
+/* In landscape the pane holds the stop button and the lever at the screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). */
+@media (min-aspect-ratio: 1/1) {
+  .hud-legend[data-overlay] dl {
+    --keys-side: calc(
+      var(--size-target) * 1.5 + var(--space-4) + var(--safe-right) + var(--space-2)
+    );
+  }
+}
+
+/* Only in portrait does the top view reach the screen's left edge. */
+@media not (min-aspect-ratio: 1/1) {
+  .hud-legend[data-overlay] dl {
+    --keys-side: var(--safe-left);
+    left: calc(var(--pane-left) + var(--space-4) + var(--safe-left));
+  }
 }
 
 /* The header row would push the single column into the mirror: only the chevron stays, in the corner. */
