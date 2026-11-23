@@ -267,7 +267,7 @@ export const releaseCut = (flow: Flow, requested?: string): string => {
 
   pushBranch(flow, DEVELOP, `release/${version}`);
   flow.log(
-    `release/${version} cut from origin/develop. Next: git switch -c feature/prepare-${version} origin/release/${version}, pnpm release:prepare ${version}, then a PR into release/${version}.`,
+    `release/${version} cut from origin/develop. Next: git switch --no-track -c feature/prepare-${version} origin/release/${version}, pnpm release:prepare ${version}, then a PR into release/${version}.`,
   );
   return version;
 };
