@@ -1,7 +1,13 @@
 import { deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { PBR_ALBEDO_MEAN, PBR_PACKED } from '../../src/render/ground-pbr-pixels';
-import { albedoDetail, linearMeans, packNormalRoughnessOcclusion, unpackTexel } from './pbr-pack';
+import {
+  albedoDetail,
+  linearMeans,
+  packNormalRoughnessOcclusion,
+  reduce,
+  unpackTexel,
+} from './pbr-pack';
 import { decodePng, type PngImage } from './png';
 
 const image = (width: number, channels: number, values: number[]): PngImage => ({
@@ -169,5 +175,28 @@ describe('png decoder', () => {
     const interlaced = encodePng(1, 8, 1, [[0]]);
     interlaced[28] = 1;
     expect(() => decodePng(interlaced)).toThrow(/unsupported/);
+  });
+});
+
+describe('reduce', () => {
+  it('averages colour in linear light and data as it is', () => {
+    // a 2 x 2 black and white checker
+    const values = [0, 65535, 65535, 0];
+    const rgb = image(
+      2,
+      3,
+      values.flatMap((v) => [v, v, v]),
+    );
+    const [colour] = reduce(rgb, 1, true).samples;
+    const [data] = reduce(rgb, 1, false).samples;
+    // half the light is 0.7354 sRGB, half the value is 0.5
+    expect(colour).toBeCloseTo(s16(0.7354), -1);
+    expect(data).toBeCloseTo(s16(0.5), -1);
+  });
+
+  it('leaves an image already at the size and rejects one that does not divide', () => {
+    const rgb = image(2, 3, new Array<number>(12).fill(100));
+    expect(reduce(rgb, 2, true)).toBe(rgb);
+    expect(() => reduce(rgb, 3, true)).toThrow('cannot reduce');
   });
 });
