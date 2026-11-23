@@ -9,7 +9,7 @@ import type {
   ViewRects,
 } from '../contracts/render';
 import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
-import type { GoalCue } from '../scoring/score';
+import { isDrivingInput, type GoalCue } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
@@ -31,6 +31,8 @@ export type HudAction =
   | { type: 'collapse'; panel: keyof CollapsedPanels; collapsed: boolean }
   /** The aid legend opened or closed, which changes the height of the panels. */
   | { type: 'aidLegend' }
+  /** The exercise brief opened or collapsed, which changes the height of the panels. */
+  | { type: 'brief' }
   /** The button opening the pause sheet. */
   | { type: 'pause' };
 
@@ -150,6 +152,11 @@ const COMPACT_WIDTH_WITH_LEVER = 840;
  * mirrors' room. At 1280 wide the full list keeps class IV from this height; `layout.spec` pins it.
  */
 const SHORT_HEIGHT = 740;
+/**
+ * Screen heights (CSS px) below which the brief collapses on the first drive input and the key
+ * legend is an overlay that closes on the next one.
+ */
+const SHORT_SCREEN = 700;
 
 const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
 
@@ -205,7 +212,7 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean, look: boolean | undefi
   <div class="hud-mirror" data-hud="front" hidden></div>
   <div class="hud-mirror" data-hud="close" hidden></div>
   <div class="hud-topdown" data-hud="topDown">
-    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
+    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <div class="hud-group" role="group" aria-label="${t('labelView')}">${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
@@ -296,11 +303,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   goalDistance.setAttribute('aria-hidden', 'true');
   const goalState = document.createElement('span');
   goalCue.append(goalDistance, goalState);
+  const goal = query(hud, 'goal', HTMLElement);
   if (opts.exercise !== null) {
     query(hud, 'goalTitle', HTMLElement).textContent = opts.exercise.title;
     query(hud, 'goalBrief', HTMLElement).textContent = opts.exercise.brief;
-    setHidden(query(hud, 'goal', HTMLElement), false);
+    setHidden(goal, false);
   }
+  const briefToggle = query(hud, 'briefToggle', HTMLButtonElement);
+  briefToggle.title = t('briefToggle');
+  briefToggle.setAttribute('aria-label', t('briefToggle'));
 
   const coupling: Gauge = createGauge(t('couplingAngle'), opts.couplingLimit);
   const turntable: Gauge = createGauge(t('turntableAngle'), opts.turntableLimit);
@@ -349,6 +360,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   // On a short cockpit the chevron flips between the drive keys and the full list; not persisted.
   let shortCockpit = false;
   let allKeys = false;
+  // On a short screen the brief and the key legend each have a state of their own; not persisted.
+  let short = false;
+  let briefOpen = true;
+  let briefDone = false;
+  let keysOpen = false;
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
     for (const b of aidButtons) {
@@ -366,9 +382,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         'aria-pressed',
         String(!collapsed[b.dataset['panel'] as keyof CollapsedPanels]),
       );
-    keysToggle.setAttribute('aria-expanded', String(shortCockpit ? allKeys : !collapsed.keys));
-    legend.toggleAttribute('data-collapsed', !shortCockpit && collapsed.keys);
-    legend.toggleAttribute('data-drive-only', shortCockpit && !allKeys);
+    const keysExpanded = short ? keysOpen : shortCockpit ? allKeys : !collapsed.keys;
+    keysToggle.setAttribute('aria-expanded', String(keysExpanded));
+    legend.toggleAttribute('data-overlay', short);
+    legend.toggleAttribute('data-collapsed', short ? !keysOpen : !shortCockpit && collapsed.keys);
+    legend.toggleAttribute('data-drive-only', !short && shortCockpit && !allKeys);
+    setHidden(briefToggle, !short);
+    briefToggle.setAttribute('aria-expanded', String(briefOpen));
+    goal.toggleAttribute('data-collapsed', short && !briefOpen);
     setHidden(aidsBox, collapsed.aids);
     setHidden(gaugeBox, !aids.pivots || collapsed.gauges);
   };
@@ -407,10 +428,22 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   keysToggle.addEventListener(
     'click',
     () => {
-      if (shortCockpit) {
+      if (short) {
+        keysOpen = !keysOpen;
+        syncToggles();
+      } else if (shortCockpit) {
         allKeys = !allKeys;
         syncToggles();
       } else togglePanel('keys');
+    },
+    { signal },
+  );
+  briefToggle.addEventListener(
+    'click',
+    () => {
+      briefOpen = !briefOpen;
+      syncToggles();
+      emit({ type: 'brief' });
     },
     { signal },
   );
@@ -674,8 +707,32 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   };
   writeSpeed(0);
 
+  let lastControl: SimSnapshot['control'] | null = null;
+  /** On a short screen the first drive input collapses the brief, and any later change closes the key legend. */
+  const onControl = (c: SimSnapshot['control']): void => {
+    const changed =
+      lastControl !== null &&
+      (c.steer !== lastControl.steer ||
+        c.lever !== lastControl.lever ||
+        c.brake !== lastControl.brake ||
+        c.gear !== lastControl.gear);
+    lastControl = c;
+    if (short && keysOpen && changed) {
+      keysOpen = false;
+      syncToggles();
+    }
+    if (briefDone || !isDrivingInput(c)) return;
+    briefDone = true;
+    if (short && briefOpen) {
+      briefOpen = false;
+      syncToggles();
+      emit({ type: 'brief' });
+    }
+  };
+
   return {
     update(s, ahead = null) {
+      onControl(s.control);
       const tenths = Math.round(Math.abs(s.speed) * MS_TO_KMH * 10);
       if (tenths !== shownTenths) writeSpeed(tenths);
 
@@ -725,6 +782,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     layout(views) {
       const { cockpit: c } = views;
+      const nowShort = root.clientHeight < SHORT_SCREEN;
+      if (nowShort !== short) {
+        short = nowShort;
+        keysOpen = false;
+        briefOpen = true;
+        hud.toggleAttribute('data-short', short);
+        syncToggles();
+      }
       const spansRight = (r: Rect): boolean => r.x + r.width >= root.clientWidth - 1;
       setHidden(cockpit, c === null);
       if (c) {

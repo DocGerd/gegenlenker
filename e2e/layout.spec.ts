@@ -489,7 +489,7 @@ test('the key legend folds away and stays folded in the next run', async ({ page
 test('a short cockpit opens the key legend to the drive keys, and the chevron shows the rest', async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 585 });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await startStraightReverse(page, en.exerciseStraightReverse);
   const toggle = page.locator('[data-hud="keysToggle"]');
   const rows = page.locator('.hud-legend dt');
@@ -504,10 +504,78 @@ test('a short cockpit opens the key legend to the drive keys, and the chevron sh
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(view.first()).toBeVisible();
   await settled(page);
-  await expectMirrorsClearControls(page, { width: 1280, height: 585 });
+  await expectMirrorsClearControls(page, { width: 1280, height: 720 });
   await toggle.click();
   await expect(view.first()).toBeHidden();
 });
+
+test('below 700 px the brief collapses on the first drive input and the key legend is an overlay', async ({
+  page,
+}) => {
+  const size = { width: 1280, height: 585 };
+  await page.setViewportSize(size);
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const brief = page.locator('.hud-goal-brief');
+  const briefToggle = page.locator('[data-hud="briefToggle"]');
+  const keysToggle = page.locator('[data-hud="keysToggle"]');
+  const list = page.locator('.hud-legend dl');
+
+  await expect(brief).toBeVisible();
+  await expect(briefToggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(list).toBeHidden();
+  await expect(keysToggle).toHaveAttribute('aria-expanded', 'false');
+  await settled(page);
+  await expectMirrorsClearControls(page, size);
+  const closed = await boxes(page.locator('.hud-legend'));
+
+  // Open or closed, the legend is its toggle: the mirrors do not move for the list.
+  await keysToggle.click();
+  await expect(list).toBeVisible();
+  await expect(keysToggle).toHaveAttribute('aria-expanded', 'true');
+  await settled(page);
+  expect(await boxes(page.locator('.hud-legend'))).toEqual(closed);
+  await expectMirrorsClearControls(page, size);
+  await keysToggle.click();
+  await expect(list).toBeHidden();
+
+  // The first drive input collapses the brief; the next change closes an open list.
+  await page.keyboard.press('4');
+  await expect(brief).toBeHidden();
+  await expect(briefToggle).toHaveAttribute('aria-expanded', 'false');
+  await settled(page);
+  await expectMirrorsClearControls(page, size);
+  await briefToggle.click();
+  await expect(brief).toBeVisible();
+  await expect(briefToggle).toHaveAttribute('aria-expanded', 'true');
+
+  await page.keyboard.down('w');
+  await page.waitForTimeout(300);
+  await page.keyboard.up('w');
+  await keysToggle.click();
+  await expect(list).toBeVisible();
+  await page.waitForTimeout(1000);
+  await expect(list).toBeVisible();
+  await expect(brief).toBeVisible();
+  await page.keyboard.press('a');
+  await expect(list).toBeHidden();
+  await expect(keysToggle).toHaveAttribute('aria-expanded', 'false');
+});
+
+for (const [height, short] of [
+  [699, true],
+  [700, false],
+] as const) {
+  test(`the brief and the key legend ${short ? 'collapse' : 'stay as they are'} at 1280x${String(height)}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height });
+    await startStraightReverse(page, en.exerciseStraightReverse);
+    await expect(page.locator('[data-hud="briefToggle"]')).toBeVisible({ visible: short });
+    await expect(page.locator('.hud-legend[data-overlay]')).toHaveCount(short ? 1 : 0);
+    await page.keyboard.press('4');
+    await expect(page.locator('.hud-goal-brief')).toBeVisible({ visible: !short });
+  });
+}
 
 for (const [height, openFull] of [
   [739, false],

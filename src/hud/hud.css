@@ -154,7 +154,8 @@
   background: var(--color-surface);
 }
 
-.hud-legend-toggle {
+.hud-legend-toggle,
+.hud-goal-toggle {
   pointer-events: auto;
   display: flex;
   align-items: center;
@@ -168,12 +169,14 @@
   min-height: 24px;
 }
 
-.hud-legend-toggle:focus-visible {
+.hud-legend-toggle:focus-visible,
+.hud-goal-toggle:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.hud-legend-toggle svg {
+.hud-legend-toggle svg,
+.hud-goal-toggle svg {
   width: 14px;
   height: 14px;
   fill: none;
@@ -185,7 +188,8 @@
 }
 
 .hud-legend[data-collapsed] svg,
-.hud-legend[data-drive-only] svg {
+.hud-legend[data-drive-only] svg,
+.hud-goal[data-collapsed] .hud-goal-toggle svg {
   transform: rotate(-90deg);
 }
 
@@ -217,15 +221,40 @@
   display: none;
 }
 
+/* On a short screen the list floats above the toggle, so opening it neither resizes the legend nor moves the mirrors that clear it. */
+.hud-legend[data-overlay] {
+  z-index: 2;
+}
+
+.hud-legend[data-overlay] dl {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  left: calc(-1px - var(--space-3));
+  box-sizing: border-box;
+  width: max-content;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+.hud-legend[data-overlay]:not([data-collapsed]) svg {
+  transform: rotate(180deg);
+}
+
 /* The header row would push the single column into the mirror: only the chevron stays, in the corner. */
-.hud-cockpit[data-compact] .hud-legend:not([data-collapsed]) .hud-legend-toggle {
+.hud-cockpit[data-compact] .hud-legend:not([data-collapsed], [data-overlay]) .hud-legend-toggle {
   position: absolute;
   top: var(--space-1);
   right: var(--space-1);
   padding: var(--space-1);
 }
 
-.hud-cockpit[data-compact] .hud-legend:not([data-collapsed]) .hud-label {
+.hud-cockpit[data-compact] .hud-legend:not([data-collapsed], [data-overlay]) .hud-label {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -327,6 +356,21 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
+}
+
+.hud-goal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.hud-goal-toggle {
+  flex: none;
+}
+
+.hud-goal[data-collapsed] .hud-goal-brief {
+  display: none;
 }
 
 .hud-goal-title {

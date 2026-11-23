@@ -90,6 +90,7 @@ export const en = {
   aidTracks: 'Wheel tracks',
   aidGhost: 'Target ghost',
   aidLegend: 'What the aid lines mean',
+  briefToggle: 'Show or hide the exercise brief',
   legendPivots: 'Center lines of truck, drawbar and trailer; the gap is the angle.',
   legendPath:
     'Solid: trailer rear corners (reversing). Dashed: truck front corners (forward). Stop bar: where the held steer stops.',

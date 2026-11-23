@@ -96,6 +96,7 @@ export const de: Record<MessageKey, string> = {
   aidTracks: 'Radspuren',
   aidGhost: 'Zielbild',
   aidLegend: 'Was die Hilfslinien bedeuten',
+  briefToggle: 'Übungsbeschreibung ein- oder ausblenden',
   legendPivots: 'Mittellinien von Lkw, Deichsel und Anhänger; der Spalt ist der Winkel.',
   legendPath:
     'Durchgezogen: Anhänger hinten (rückwärts). Gestrichelt: Lkw vorn (vorwärts). Querbalken: Halt bei gehaltener Lenkung.',

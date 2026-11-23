@@ -376,7 +376,7 @@ export function startDrive(
         updateSettings({ topDownLayout: savedLayout });
       }
       arrange();
-    } else if (action.type === 'aidLegend') {
+    } else if (action.type === 'aidLegend' || action.type === 'brief') {
       arrange();
     } else if (action.type === 'collapse') {
       collapsed = { ...collapsed, [action.panel]: action.collapsed };
