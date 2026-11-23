@@ -65,19 +65,26 @@ export function classIVField(truck: TruckSpec, side: 'left' | 'right'): readonly
   ];
 }
 
+/** UN R46 15.2.4.5.1-.4: the class V field reaches this far (m) out from the cab side, behind and ahead of the ocular plane. */
+export const CLASS_V_OUT = 2;
+export const CLASS_V_BEHIND = 1.75;
+export const CLASS_V_AHEAD = 1;
+
 /**
- * UN R46 15.2.4.5: the class V field on the passenger side, reported only: from the cab side to 2 m
- * out, from 1.75 m behind to 1 m ahead of the ocular plane.
+ * UN R46 15.2.4.5.1-.4: the class V field on the passenger side, for a mirror mounted below 2.4 m: from the
+ * cab side to `CLASS_V_OUT` out, from `CLASS_V_BEHIND` behind to `CLASS_V_AHEAD` ahead of the ocular
+ * plane, cut at the bumper plane where that is nearer.
  */
 export function classVField(truck: TruckSpec): readonly Vec2[] {
-  const { width } = cabShellParams(truck);
+  const { width, frontX } = cabShellParams(truck);
   const { eye } = truckAnchors(truck);
   const half = width / 2;
+  const front = Math.min(eye.x + CLASS_V_AHEAD, frontX);
   return [
-    { x: eye.x + 1, y: -half },
-    { x: eye.x + 1, y: -half - 2 },
-    { x: eye.x - 1.75, y: -half - 2 },
-    { x: eye.x - 1.75, y: -half },
+    { x: front, y: -half },
+    { x: front, y: -half - CLASS_V_OUT },
+    { x: eye.x - CLASS_V_BEHIND, y: -half - CLASS_V_OUT },
+    { x: eye.x - CLASS_V_BEHIND, y: -half },
   ];
 }
 
@@ -109,4 +116,17 @@ export function frontMirrorMount(truck: TruckSpec): Vec3 {
     y: -(width / 2 - FRONT_INBOARD),
     z: CAB_HEIGHT - FRONT_BELOW_ROOF,
   };
+}
+
+/** Metres ahead of the ocular plane, and outboard of the cab's passenger side, that the class V mirror sits (near the A-pillar). */
+const CLOSE_AHEAD = 0.2;
+const CLOSE_OUTBOARD = 0.15;
+/** Below 2.4 m, so only R46 15.2.4.5.1-.4 apply; 2 m or more, as 15.2.2.7 requires. */
+const CLOSE_HEIGHT = 2.3;
+
+/** The class V mirror's eye in the body frame: a render estimate, not a vehicle Param. */
+export function closeMirrorMount(truck: TruckSpec): Vec3 {
+  const { width } = cabShellParams(truck);
+  const { eye } = truckAnchors(truck);
+  return { x: eye.x + CLOSE_AHEAD, y: -(width / 2 + CLOSE_OUTBOARD), z: CLOSE_HEIGHT };
 }

@@ -5,7 +5,7 @@ import { en } from '../src/i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
-import { startPinnedDrive } from './pinned-shoot';
+import { heavyAt, startPinnedDrive } from './pinned-shoot';
 
 type Size = { width: number; height: number };
 
@@ -99,7 +99,7 @@ async function blankRows(page: Page, x: number): Promise<number> {
 
 /**
  * The mirrors the default Balanced drive shows at the page's size: the two side mirrors, the class IV
- * mirrors under them and the front mirror where `computeViewports` finds room for them, given the key
+ * mirrors under them, the class V mirror above the right one and the front mirror where `computeViewports` finds room for them, given the key
  * legend as the page measured it.
  */
 async function expectedViews(page: Page, insets: Insets, wide: boolean) {
@@ -117,6 +117,7 @@ async function expectedViews(page: Page, insets: Insets, wide: boolean) {
   return computeViewports(size.width, size.height, 'drive', legend, insets, undefined, null, {
     front: QUALITY_FLAGS.balanced.frontMirror,
     wide: QUALITY_FLAGS.balanced.wideMirrors && wide,
+    close: QUALITY_FLAGS.balanced.closeMirror,
   });
 }
 
@@ -135,8 +136,8 @@ const wideSetting = (page: Page): Promise<boolean> =>
   }, SETTINGS_KEY);
 
 async function expectedMirrors(page: Page, insets: Insets): Promise<number> {
-  const { front, wideLeft } = await expectedViews(page, insets, await wideSetting(page));
-  return 2 + (wideLeft === null ? 0 : 2) + (front === null ? 0 : 1);
+  const { front, wideLeft, close } = await expectedViews(page, insets, await wideSetting(page));
+  return 2 + (wideLeft === null ? 0 : 2) + (front === null ? 0 : 1) + (close === null ? 0 : 1);
 }
 
 /**
@@ -272,6 +273,20 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
     expect((frontBox?.top ?? 0) - bracket, 'bracket inside the cockpit').toBeGreaterThanOrEqual(
       cockpitBox?.top ?? 0,
     );
+  }
+
+  // The class V mirror's housing arm reaches past its outer, right side, and stays on screen and clear.
+  const close = page.locator('[data-hud="close"]:not([hidden])');
+  if ((await close.count()) > 0) {
+    const [closeBox] = await boxes(close);
+    const [closeArm] = await armReach(close);
+    if (closeBox === undefined || closeArm === undefined) throw new Error('class V arm');
+    expect(closeArm, 'class V arm is drawn').toBeGreaterThan(0);
+    const armedClose = { ...closeBox, right: closeBox.right + closeArm };
+    expect(armedClose.right, 'class V arm on screen').toBeLessThanOrEqual(size.width);
+    for (const c of controlBoxes) {
+      expect(overlaps(armedClose, c), `${c.name} overlaps the class V housing`).toBe(false);
+    }
   }
 
   // The lamp row must not make the gear column taller than the gears and their label were alone.
@@ -502,13 +517,9 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
   }
 }
 
-/** Screen height below which the toast and the goal cue cannot clear the gear column. */
-const CRAMPED_HEIGHT = 420;
-
 /**
  * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
- * or the forward sight cone. With the front or class IV mirrors they also keep clear of the cockpit
- * label and every mirror; without them the layout is as it was before they existed.
+ * or the forward sight cone, the cockpit label and every mirror.
  */
 async function expectMessagesClear(page: Page, toast: string, goal: string): Promise<void> {
   await page.evaluate(
@@ -529,6 +540,32 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     .locator('[data-hud="toast"], [data-hud="goalCue"]')
     .evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
   expect(overflow, 'a word sticks out of a message').toEqual([0, 0]);
+  // Standing over the top view's panels, they must paint above them: the wrap takes no pointer events, so
+  // let it, or `elementFromPoint` skips it.
+  const covered = await page.evaluate(() => {
+    const wrap = document.querySelector('[data-hud="toastWrap"]');
+    if (!(wrap instanceof HTMLElement)) throw new Error('no toastWrap');
+    wrap.style.pointerEvents = 'auto';
+    const hidden: string[] = [];
+    for (const el of document.querySelectorAll('[data-hud="toast"], [data-hud="goalCue"]')) {
+      const r = el.getBoundingClientRect();
+      const mid = (r.top + r.bottom) / 2;
+      const points = [
+        [(r.left + r.right) / 2, mid],
+        [r.left + 12, mid],
+        [r.right - 12, mid],
+        [(r.left + r.right) / 2, r.top + 4],
+      ] as const;
+      for (const [x, y] of points) {
+        const top = document.elementFromPoint(x, y);
+        if (!top || !el.contains(top))
+          hidden.push(`${el.className} at ${Math.round(x)},${Math.round(y)}`);
+      }
+    }
+    wrap.style.pointerEvents = '';
+    return hidden;
+  });
+  expect(covered, 'a message is painted under another element').toEqual([]);
   const messages = await boxes(page.locator('[data-hud="toast"], [data-hud="goalCue"]'));
   expect(messages).toHaveLength(2);
   const controls = await boxes(
@@ -553,20 +590,16 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     bottom: centre.y + halfHeight,
   };
   const frontShown = (await page.locator('[data-hud="front"]:not([hidden])').count()) > 0;
-  // Every mirror the layout shows, class II and class IV rows among them, wherever the front or class IV
-  // mirrors are: they must not reach the toast. Without either the layout is main's, where a short screen
-  // lets the toast cover the cockpit label and a class II mirror.
   const wideShown = (await page.locator('[data-hud^="wide"]:not([hidden])').count()) > 0;
-  const mirrors =
-    frontShown || wideShown
-      ? await boxes(page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'))
-      : [];
-  if (frontShown || wideShown) expect(mirrors.length).toBeGreaterThanOrEqual(wideShown ? 5 : 4);
-  // On a screen this short even one toast line and the cue reach the gear column, as before the front
-  // mirror: the rule drops the mirror there, and only the fit is asserted.
-  const cramped = !frontShown && (page.viewportSize()?.height ?? Infinity) < CRAMPED_HEIGHT;
+  const closeShown = (await page.locator('[data-hud="close"]:not([hidden])').count()) > 0;
+  const mirrors = await boxes(
+    page.locator('.hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])'),
+  );
+  expect(mirrors).toHaveLength(
+    3 + (frontShown ? 1 : 0) + (wideShown ? 2 : 0) + (closeShown ? 1 : 0),
+  );
   for (const m of messages) {
-    for (const o of cramped ? [] : [...controls, cone, ...mirrors]) {
+    for (const o of [...controls, cone, ...mirrors]) {
       expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
     }
   }
@@ -875,6 +908,65 @@ test('the divider runs across the screen in portrait', async ({ page }) => {
     for (const d of divider) expect(overlaps(m, d), `${d.name} overlaps a mirror`).toBe(false);
   }
 });
+
+/** Where the class V mirror shows: wide and tall screens, the key legend open or folded away. */
+const closeScreens = [
+  { size: { width: 1920, height: 1080 }, folded: false },
+  { size: { width: 1920, height: 1080 }, folded: true },
+  { size: { width: 1080, height: 1920 }, folded: false },
+];
+
+for (const { size, folded } of closeScreens) {
+  test(
+    `the class V mirror sits above the right class II mirror at ${size.width}x${size.height} with the legend ${folded ? 'folded' : 'open'}, with the messages clear`,
+    heavyAt('balanced'),
+    async ({ browser }) => {
+      test.slow();
+      const context = await browser.newContext({ locale: 'en-US', viewport: size });
+      try {
+        const page = await context.newPage();
+        await startStraightReverse(page, en.exerciseStraightReverse);
+        if (folded) {
+          const toggle = page.locator('[data-hud="keysToggle"]');
+          await toggle.click();
+          await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+          await expect(page.locator('.hud-legend dl')).toBeHidden();
+          await hudReady(page);
+        }
+        const close = page.locator('[data-hud="close"]:not([hidden])');
+        await expect(close).toHaveCount(1);
+        const [closeBox] = await boxes(close);
+        const [rightBox] = await boxes(page.locator('[data-hud="mirrorRight"]'));
+        if (closeBox === undefined || rightBox === undefined) throw new Error('mirrors');
+        expect(closeBox.right, 'right-aligned with class II').toBeCloseTo(rightBox.right, 0);
+        expect(closeBox.bottom, 'above class II').toBeLessThanOrEqual(rightBox.top);
+        await expectMirrorsClearControls(page, size);
+        await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+      } finally {
+        await context.close();
+      }
+    },
+  );
+}
+
+/** Laptop viewports too small to leave class V room above class II. */
+for (const size of [
+  { width: 1280, height: 720 },
+  { width: 1366, height: 768 },
+  { width: 1536, height: 729 },
+]) {
+  test(`there is no class V mirror at ${size.width}x${size.height}`, async ({ browser }) => {
+    const context = await browser.newContext({ locale: 'en-US', viewport: size });
+    try {
+      const page = await context.newPage();
+      await startStraightReverse(page, en.exerciseStraightReverse);
+      await expect(page.locator('[data-hud="close"]')).toBeHidden();
+      await expect(page.locator('[data-hud="close"]:not([hidden])')).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+}
 
 /** Laptop viewports where class IV shows beside the open key legend; 1440x739 is the first to lose it if the legend grows. */
 const laptops: { size: Size; locale: string; messages: typeof en | typeof de }[] = [

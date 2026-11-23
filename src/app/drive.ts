@@ -13,7 +13,7 @@ import { createHud } from '../hud/hud';
 import { t } from '../i18n/i18n';
 import { createControls } from '../input/controls';
 import { isAction } from '../input/keymap';
-import { createTopDownInput } from '../input/top-down-input';
+import { createViewInput } from '../input/view-input';
 import { isDefaultView } from '../input/top-down-view';
 import { chaseViewAvailable, extraMirrors, interiorAvailable } from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
@@ -24,7 +24,7 @@ import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
 import { bodyFootprints } from '../sim/geometry';
 import { CONTACT_WARN_DISTANCE, DT } from '../sim/constants';
-import { contactAhead, NO_PREDICTION, predictCombination } from '../sim/predict';
+import { NO_PREDICTION, predictCombination, warnAhead, type Ahead } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
@@ -188,7 +188,7 @@ export function startDrive(
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
   let pathStale = true;
-  let warnContact = false;
+  let warning: Ahead = null;
   const frame: Frame = {
     snapshot,
     views: computeViewports(
@@ -213,7 +213,7 @@ export function startDrive(
   });
   live.push(() => controls.dispose());
   // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
-  const viewInput = createTopDownInput(view.surface, {
+  const viewInput = createViewInput(view.surface, {
     mode: topDown,
     getRect: () => frame.views.topDown,
     onChange(next) {
@@ -418,7 +418,7 @@ export function startDrive(
         const ahead = aids.path
           ? frame.predicted
           : predictCombination(params, snapshot, contacts, CONTACT_WARN_DISTANCE);
-        warnContact = snapshot.speed !== 0 && contactAhead(ahead);
+        warning = snapshot.speed !== 0 ? warnAhead(ahead) : null;
       }
       frame.snapshot = snapshot;
       frame.waypointVisited = tracker?.waypointVisited() ?? false;
@@ -426,7 +426,7 @@ export function startDrive(
       frame.aids = aids;
       frame.lamps = controls.lamps();
       renderer.render(frame);
-      hud.update(snapshot, warnContact);
+      hud.update(snapshot, warning);
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goal(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);

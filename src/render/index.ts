@@ -46,6 +46,7 @@ export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
 export const extraMirrors = (preset: GraphicsPreset, wideMirrors: boolean): ExtraMirrors => ({
   front: QUALITY_FLAGS[preset].frontMirror,
   wide: QUALITY_FLAGS[preset].wideMirrors && wideMirrors,
+  close: QUALITY_FLAGS[preset].closeMirror,
 });
 
 /** Whether the preset draws the cab interior and the mirror housings. */

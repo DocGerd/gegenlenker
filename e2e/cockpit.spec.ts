@@ -5,6 +5,7 @@ import { COCKPIT_FOV } from '../src/render/cockpit-camera';
 import { TRUCK_IDS } from '../src/contracts/vehicle';
 import { cabSight } from '../src/render/cab-sight';
 import { interiorLayout, pillarSpans } from '../src/render/cockpit-interior';
+import { QUALITY_FLAGS } from '../src/render/quality';
 import { REALISM_HUES } from '../src/render/realism-hues';
 import { truckById } from '../src/vehicles/registry';
 import {
@@ -144,7 +145,7 @@ test(
       near(litRight, PILLAR),
     ]).toEqual([true, true, true, true]);
 
-    await page.getByRole('button', { name: en.finish }).click();
+    await page.getByRole('button', { name: en.pause }).click();
     await page
       .getByRole('dialog', { name: en.paused })
       .getByRole('button', { name: en.leaveUnscored })
@@ -254,8 +255,11 @@ for (const pair of MIRROR_PAIRS) {
       async ({ page }) => {
         test.setTimeout(timeoutWithSettles(preset, 1));
         // Class IV is small at the default viewport: 1920x1080 gives its pixel probes room.
-        if (pair.left === 'wideLeft') await page.setViewportSize({ width: 1920, height: 1080 });
-        await pinnedDrive(page, preset);
+        // The class V mirror shows there too, where the preset draws it.
+        const roomy = pair.left === 'wideLeft';
+        if (roomy) await page.setViewportSize({ width: 1920, height: 1080 });
+        const close = roomy && QUALITY_FLAGS[preset].closeMirror ? 1 : 0;
+        await pinnedDrive(page, preset, DEFAULT_MIRRORS + close);
 
         // The vehicle stands behind the cab, so it fills the edge nearest the cab: the right edge of the
         // left mirror and the left edge of the right one. Without the horizontal flip that is swapped.

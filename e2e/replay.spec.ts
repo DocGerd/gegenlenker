@@ -9,7 +9,7 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
   await expect(page.locator('[data-hud="speed"]')).not.toHaveText('0.0 km/h');
   await page.waitForTimeout(500);
-  await page.getByRole('button', { name: en.finish }).click();
+  await page.getByRole('button', { name: en.pause }).click();
   await page
     .getByRole('dialog', { name: en.paused })
     .getByRole('button', { name: en.finish })
@@ -48,7 +48,7 @@ test('a night run replays at night after the stored setting switched to day', as
   await page.keyboard.press('4');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
   await page.waitForTimeout(500);
-  await page.getByRole('button', { name: en.finish }).click();
+  await page.getByRole('button', { name: en.pause }).click();
   await page
     .getByRole('dialog', { name: en.paused })
     .getByRole('button', { name: en.finish })
