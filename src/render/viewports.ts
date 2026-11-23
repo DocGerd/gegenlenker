@@ -504,11 +504,36 @@ function frontRect(
   return null;
 }
 
-/** Where the toast and the goal cue stand: the cockpit's top, between the left mirror and the front mirror. */
-export function messageColumn(views: ViewRects): Rect {
-  const base = views.cockpit ?? views.topDown;
-  const { front, mirrorLeft } = views;
-  if (front === null || mirrorLeft === null) return base;
+/**
+ * Where the toast and the goal cue stand. Beside the front mirror they take the cockpit's top between the
+ * left mirror and the front mirror. Without one they take the span between the class II mirrors where the
+ * stack fits there (`messagesFit`), else the top-down pane, below the finish button and clear of the lever.
+ */
+export function messageColumn(views: ViewRects, safeInsets?: Insets): Rect {
+  const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
+  if (cockpit === null || mirrorLeft === null || mirrorRight === null) return cockpit ?? topDown;
   const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
-  return { ...base, x, width: front.x - MESSAGE_GAP - x };
+  if (front !== null) return { ...cockpit, x, width: front.x - MESSAGE_GAP - x };
+  const insets = safeInsets ?? readSafeInsets();
+  const between = { x, width: mirrorRight.x - MESSAGE_GAP - x };
+  const cssWidth = Math.max(cockpit.x + cockpit.width, topDown.x + topDown.width);
+  const cssHeight = Math.max(cockpit.y + cockpit.height, topDown.y + topDown.height);
+  const controls = controlsHeight(cssWidth, cssHeight, insets);
+  if (
+    between.width - insets.left >= MIN_MESSAGE_WIDTH &&
+    messagesFit(cockpit, between, cssWidth, cssHeight, controls, insets)
+  ) {
+    return { ...cockpit, ...between };
+  }
+  // Below the finish button; in landscape also left of the stop button and lever, which stand at the
+  // screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css).
+  const target = tokenPx('--size-target', 44);
+  const drop = target + MESSAGE_GAP;
+  const lever = cssWidth >= cssHeight ? 1.5 * target + INSET + insets.right + MESSAGE_GAP : 0;
+  return {
+    ...topDown,
+    y: topDown.y + drop,
+    height: topDown.height - drop,
+    width: topDown.width - lever,
+  };
 }
