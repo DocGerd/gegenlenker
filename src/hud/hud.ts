@@ -84,7 +84,7 @@ function goalText(cue: GoalCue): string {
     ? cue.angleOk
       ? 'goalOutsideAngleOk'
       : 'goalOutsideAngleOff'
-    : 'goalOutsideDistanceOk';
+    : 'goalOutsidePositionOk';
   return t(key).replace('{dist}', formatNumber(cue.distance, 1));
 }
 

@@ -63,7 +63,7 @@ export const MESSAGE_KEYS = {
     'blockedCoupling',
     'blockedTurntable',
   ],
-  cue: ['goalInside', 'goalOutsideAngleOk', 'goalOutsideAngleOff', 'goalOutsideDistanceOk'],
+  cue: ['goalInside', 'goalOutsideAngleOk', 'goalOutsideAngleOff', 'goalOutsidePositionOk'],
 } as const satisfies Record<string, readonly MessageKey[]>;
 /**
  * A word's width at 14 px Geist, medium: no less than any measured word of these messages has

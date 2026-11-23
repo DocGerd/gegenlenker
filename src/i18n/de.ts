@@ -27,7 +27,7 @@ export const de: Record<MessageKey, string> = {
   goalInside: 'In der Toleranz – jetzt anhalten',
   goalOutsideAngleOk: '{dist} m · Winkel ok',
   goalOutsideAngleOff: '{dist} m · Winkel falsch',
-  goalOutsideDistanceOk: 'Abstand ok · Winkel falsch',
+  goalOutsidePositionOk: 'Position ok · Winkel falsch',
   truck: 'Lkw',
   trailer: 'Anhänger',
   best: 'Bestwert',

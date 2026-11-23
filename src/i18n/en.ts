@@ -21,7 +21,7 @@ export const en = {
   goalInside: 'In tolerance – stop now',
   goalOutsideAngleOk: '{dist} m · angle ok',
   goalOutsideAngleOff: '{dist} m · angle off',
-  goalOutsideDistanceOk: 'distance ok · angle off',
+  goalOutsidePositionOk: 'position ok · angle off',
   truck: 'Truck',
   trailer: 'Trailer',
   best: 'Best',
