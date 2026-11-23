@@ -432,6 +432,45 @@ test('the goal cue keeps its distance out of the live region', async ({ page }) 
   await expect(parts.nth(1)).not.toHaveAttribute('aria-hidden', /.*/);
 });
 
+const menuViews = [
+  { width: 1280, height: 585 },
+  { width: 390, height: 844 },
+];
+
+for (const { locale, messages } of locales) {
+  for (const size of menuViews) {
+    test(`the menu opens on the exercises at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      try {
+        const page = await context.newPage();
+        await page.goto('./');
+        const cards = page.locator('[data-menu="exercises"] .menu-start');
+        await expect(cards).toHaveCount(5);
+        await expect(page.locator('ol[data-menu="exercises"] > li')).toHaveCount(5);
+        await expect(page.locator('.menu-heading').first()).toHaveText(messages.exercises);
+        const setupFollows = await page
+          .locator('[data-menu="exercises"]')
+          .evaluate((el) =>
+            Boolean(
+              el.compareDocumentPosition(document.querySelector('[data-menu="truck"]') ?? el) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+            ),
+          );
+        expect(setupFollows).toBe(true);
+        const found = await boxes(cards);
+        if (size.width > size.height) {
+          // The second row starts within view, so more than one row of exercises shows.
+          expect(Math.max(...found.map((b) => b.top))).toBeLessThan(size.height - 100);
+        } else expect(found[0]?.bottom ?? Infinity).toBeLessThanOrEqual(size.height);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
 test('the key legend folds away and stays folded in the next run', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
@@ -1000,6 +1039,33 @@ for (const { size, locale, messages } of laptops) {
     try {
       const page = await context.newPage();
       await startStraightReverse(page, messages.exerciseStraightReverse);
+      await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
+      await expectMirrorsClearControls(page, size);
+      await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+// Look-around is offered on High only, so its legend row is one line taller there than at the default preset.
+for (const { size, locale, messages } of [
+  { size: { width: 1440, height: 739 }, locale: 'de-DE', messages: de },
+  { size: { width: 1536, height: 729 }, locale: 'en-US', messages: en },
+]) {
+  test(`the class IV mirrors show beside the legend with its look-around row on High at ${locale} ${size.width}x${size.height}`, async ({
+    browser,
+  }) => {
+    test.slow();
+    const context = await browser.newContext({ locale, viewport: size });
+    try {
+      const page = await context.newPage();
+      await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
+        SETTINGS_KEY,
+        JSON.stringify({ version: 1, graphics: 'high' }),
+      ] as const);
+      await startStraightReverse(page, messages.exerciseStraightReverse);
+      await expect(page.locator('.hud-legend')).toContainText(messages.lookAround);
       await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
       await expectMirrorsClearControls(page, size);
       await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);

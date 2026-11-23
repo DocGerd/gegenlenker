@@ -15,7 +15,12 @@ import { createControls } from '../input/controls';
 import { isAction } from '../input/keymap';
 import { createViewInput } from '../input/view-input';
 import { isDefaultView } from '../input/top-down-view';
-import { chaseViewAvailable, extraMirrors, interiorAvailable } from '../render';
+import {
+  chaseViewAvailable,
+  extraMirrors,
+  interiorAvailable,
+  lookAroundAvailable,
+} from '../render';
 import { clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay, perfRequested } from '../render/perf-overlay';
 import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
@@ -32,6 +37,7 @@ import { measureChrome } from './chrome';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { showPauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
+import { setNightDrive } from './theme';
 import { updateSettings, type Settings } from './settings';
 
 export type RunConfig = {
@@ -133,6 +139,8 @@ export function startDrive(
   const restart = (): void => {
     if (disposed) return;
     dispose();
+    // The next drive mounts asynchronously; a light frame in between would flash at night. `leave` and `loadFailed` clear it.
+    setNightDrive(lighting === 'night');
     onRestart();
   };
   const leaveUnscored = (): void => {
@@ -163,6 +171,8 @@ export function startDrive(
 
   const view = mountRenderStage(stage, stage, () => exit(false), lighting);
   cleanups.push(() => view.dispose());
+  setNightDrive(lighting === 'night');
+  cleanups.push(() => setNightDrive(false));
   // Released early when the stage halts behind a notice: nothing may drive or hold the screen under it.
   const live: (() => void)[] = [];
   const halt = (): void => {
@@ -178,6 +188,7 @@ export function startDrive(
   window.addEventListener('keydown', onEscape);
   live.push(() => window.removeEventListener('keydown', onEscape));
   const { renderer, graphics } = view;
+  const lookAround = lookAroundAvailable(graphics);
   renderer.setScene(layout, truck, trailer);
 
   let aids: AidFlags = settings.aids;
@@ -221,6 +232,14 @@ export function startDrive(
       dirty = true;
       hud.setViewChanged(!isDefaultView(next));
     },
+    look: {
+      getRect: () => frame.views.cockpit,
+      enabled: lookAround,
+      onChange(head) {
+        frame.head = head;
+        dirty = true;
+      },
+    },
   });
   live.push(() => viewInput.dispose());
   const hud = createHud(stage, {
@@ -235,6 +254,7 @@ export function startDrive(
     topDown,
     chase: chaseViewAvailable(graphics),
     interior: interiorAvailable(graphics),
+    look: lookAround,
     collapsed,
   });
   cleanups.push(() => hud.dispose());
@@ -388,6 +408,7 @@ export function startDrive(
         finish();
         return;
       }
+      viewInput.step(seconds);
       const clock =
         closeSheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;

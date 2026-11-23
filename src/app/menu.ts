@@ -30,6 +30,10 @@ const LAYOUT_NAME: Readonly<Record<LayoutId, MessageKey>> = {
   depot: 'layoutDepot',
   logistics: 'layoutLogistics',
 };
+const LAYOUT_BRIEF: Readonly<Record<LayoutId, MessageKey>> = {
+  depot: 'briefDepot',
+  logistics: 'briefLogistics',
+};
 const LANG_NAME: Readonly<Record<Lang, MessageKey>> = { de: 'langDe', en: 'langEn' };
 const THEME_NAME: Readonly<Record<Settings['theme'], MessageKey>> = {
   system: 'themeSystem',
@@ -54,24 +58,25 @@ const MARKUP = `
     <h1 class="menu-title" data-i18n="appName"></h1>
     <p class="menu-tagline" data-i18n="tagline"></p>
   </header>
+  <section class="menu-section">
+    <h2 class="menu-heading" data-i18n="exercises"></h2>
+    <ol class="menu-grid menu-list" data-menu="exercises"></ol>
+  </section>
+  <section class="menu-section">
+    <h2 class="menu-heading" data-i18n="freeYard"></h2>
+    <div class="menu-grid" data-menu="yards"></div>
+  </section>
+  <section class="menu-section" data-menu="replaySection">
+    <button type="button" class="menu-start" data-menu="replay"><span class="menu-start-title" data-i18n="replayLastRun"></span></button>
+  </section>
   <section class="menu-card">
+    <h2 class="menu-heading" data-i18n="vehicleSetup"></h2>
     <div class="menu-fields">
       <label class="menu-field"><span class="menu-label" data-i18n="truck"></span><select class="menu-select" data-menu="truck"></select></label>
       <label class="menu-field"><span class="menu-label" data-i18n="trailer"></span><select class="menu-select" data-menu="trailer"></select></label>
       <label class="menu-field"><span class="menu-label" data-i18n="lighting"></span><select class="menu-select" data-menu="lighting"></select></label>
     </div>
     <p class="menu-note" data-i18n="estimateNote"></p>
-  </section>
-  <section class="menu-section">
-    <h2 class="menu-heading" data-i18n="freeYard"></h2>
-    <div class="menu-grid" data-menu="yards"></div>
-  </section>
-  <section class="menu-section">
-    <h2 class="menu-heading" data-i18n="exercises"></h2>
-    <div class="menu-grid" data-menu="exercises"></div>
-  </section>
-  <section class="menu-section" data-menu="replaySection">
-    <button type="button" class="menu-start" data-menu="replay"><span class="menu-start-title" data-i18n="replayLastRun"></span></button>
   </section>
   <section class="menu-card">
     <h2 class="menu-heading" data-i18n="settings"></h2>
@@ -149,11 +154,17 @@ function replayLabel(log: InputLog): string {
     : replayContext(log);
 }
 
-function startButton(title: string, onClick: () => void): HTMLButtonElement {
+function startButton(title: string, onClick: () => void, number?: number): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'menu-start';
-  button.append(span('menu-start-title', title));
+  const heading = span('menu-start-title', title);
+  if (number !== undefined) {
+    const mark = span('menu-num', `${number}`);
+    mark.setAttribute('aria-hidden', 'true');
+    heading.prepend(mark);
+  }
+  button.append(heading);
   button.addEventListener('click', onClick);
   return button;
 }
@@ -258,11 +269,13 @@ export function showMenu(
     };
 
     query(container, 'yards', HTMLElement).append(
-      ...LAYOUT_IDS.map((layoutId) =>
-        startButton(t(LAYOUT_NAME[layoutId]), () =>
+      ...LAYOUT_IDS.map((layoutId) => {
+        const button = startButton(t(LAYOUT_NAME[layoutId]), () =>
           onStart({ layoutId, exercise: null, ...pair() }),
-        ),
-      ),
+        );
+        button.append(span('menu-brief', t(LAYOUT_BRIEF[layoutId])));
+        return button;
+      }),
     );
 
     const replaySection = query(container, 'replaySection', HTMLElement);
@@ -273,9 +286,11 @@ export function showMenu(
       button.addEventListener('click', replay.start);
     }
 
-    const exerciseButtons = exercises.map((exercise) => {
-      const button = startButton(t(EXERCISE_TITLE[exercise.id]), () =>
-        onStart({ layoutId: exercise.layout, exercise, ...pair() }),
+    const exerciseButtons = exercises.map((exercise, index) => {
+      const button = startButton(
+        t(EXERCISE_TITLE[exercise.id]),
+        () => onStart({ layoutId: exercise.layout, exercise, ...pair() }),
+        index + 1,
       );
       if (exerciseDone(bestResults(), exercise.id)) {
         button
@@ -285,7 +300,13 @@ export function showMenu(
       button.append(span('menu-brief', t(EXERCISE_BRIEF[exercise.id])), toleranceLine(exercise));
       return { button, exercise };
     });
-    query(container, 'exercises', HTMLElement).append(...exerciseButtons.map((e) => e.button));
+    query(container, 'exercises', HTMLElement).append(
+      ...exerciseButtons.map((e) => {
+        const item = document.createElement('li');
+        item.append(e.button);
+        return item;
+      }),
+    );
     const refreshBest = (): void => {
       const best = bestResults();
       const { truckId, trailerId } = pair();
