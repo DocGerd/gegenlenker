@@ -7,13 +7,13 @@
 ```
 pnpm perf:tablet [--throttle <n>] [--preset low|balanced|high|all] [--runs <n>]
                  [--quick | --pair <truck id>+<trailer id>] [--functional] [--no-perf] [--allow-software] [--skip-build]
-                 [--backend webgl2|webgpu|auto]
+                 [--backend webgl2|webgpu|auto] [--keep-traces]
 ```
 
 - `--throttle` is the CPU slowdown factor (default 4; use 6 for a pessimistic device).
 - `--runs` repeats every cell; a cell passes only if every run passes, which exposes governor flakiness.
 - `--no-perf` needs `--functional`. `--functional` adds checks for offline service worker, history back from a drive, wake lock and two-thumb touch (wheel and lever together). Any console error, failed request or lost or software WebGL context during a perf cell or check also fails it, as does a vehicle that does not move.
-- `--pair` limits the run to one vehicle pair. A run that ends below scale 1.00 keeps the resolution governor's trace (events and sampled frame intervals, from `window.__governor` under `?perf=1`) in a JSON file under the temp directory and prints its path.
+- `--pair` limits the run to one vehicle pair. A run that ends below scale 1.00 keeps the resolution governor's trace (events and sampled frame intervals, from `window.__governor` under `?perf=1`) in a JSON file under the temp directory and prints its path; `--keep-traces` keeps it for every run. The file also lists every overlay reading with its scale and time, so a step down followed by a step up shows. Measuring starts once the preset's attachments are in place (the `readyMarkers` of `e2e/pinned-shoot.ts`).
 - A cell passes at at least 58 fps with the resolution scale still at 1.00. The exit code is 1 when any cell or check fails (or every check skips), 2 when the harness itself fails or the options are invalid.
 - It aborts on a software renderer (SwiftShader, llvmpipe), where fps is meaningless; `--allow-software` overrides that for debugging the harness.
 - `--backend` sets the app's `?backend=` (see below) and fails a cell drawn on another backend; `auto` fails one not drawn on WebGPU, since it runs the WebGPU gate. The table names each cell's backend. For WebGPU it adds `--enable-unsafe-webgpu`, and on WSL `--use-webgpu-adapter=opengles`: WSL has no hardware Vulkan driver, so Dawn's OpenGL ES backend is its only hardware adapter, and that one runs in compatibility mode (no canvas MSAA).
@@ -38,7 +38,7 @@ WebGPU becomes the default (`DEFAULT_BACKEND_REQUEST` in `src/render/gpu-backend
 
 WSL offers no core hardware adapter, so the gate is unmet there; Chrome on Windows (D3D12) or Android (Vulkan) can run it.
 
-`pnpm shoot --out <dir> --backend webgpu` (`scripts/shoot.mjs`: builds, serves on a free port, shoots, always stops its own server; it takes the `shoot-views.mjs` arguments except `--url`) is the local WebGPU check (not CI: CI's Chromium has no WebGPU adapter, so CI e2e covers the fallback). It draws every view on SwiftShader's WebGPU adapter in Chromium's new headless mode and fails when the app does not run on WebGPU, logs a three.js problem or a page error, or draws the top-down view differently per preset. To compare with WebGL 2, shoot that side with `--new-headless` (the new headless mode wraps HUD text differently, which moves the top-down framing) and diff with `--diff`.
+`pnpm shoot --out <dir> --backend webgpu` (`scripts/shoot.mjs`: builds, serves on a free port, shoots, always stops its own server; it takes the `shoot-views.mjs` arguments except `--url`) is the local WebGPU look check. CI's `offline` e2e project has no WebGPU adapter, so it covers the fallback; the advisory `webgpu` CI job (`pnpm test:e2e:webgpu`, `e2e/webgpu/`) runs a smoke on the same SwiftShader adapter: every preset starts on WebGPU, visits each view, and fails on a `THREE.` WGSL error. The shoot draws every view on SwiftShader's WebGPU adapter in Chromium's new headless mode and fails when the app does not run on WebGPU, logs a three.js problem or a page error, or draws the top-down view differently per preset. To compare with WebGL 2, shoot that side with `--new-headless` (the new headless mode wraps HUD text differently, which moves the top-down framing) and diff with `--diff`.
 
 ## Frame target
 

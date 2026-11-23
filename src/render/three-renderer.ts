@@ -491,7 +491,7 @@ export function createThreeSceneRenderer(
       for (const { mirror } of mirrors) mirror.setSamples(quality.mirrorMsaa);
       if (built !== null) {
         applyLookTo(built);
-        timer.warmUp('quality');
+        timer.warmUp('quality', { liftParks: true });
       }
     },
 
@@ -500,7 +500,7 @@ export function createThreeSceneRenderer(
       lighting = mode;
       if (built !== null) {
         applyLookTo(built);
-        timer.warmUp('lighting');
+        timer.warmUp('lighting', { liftParks: true });
       }
     },
 

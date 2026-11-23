@@ -19,6 +19,44 @@ function squareSize(image: PngImage, what: string): number {
 }
 
 /**
+ * `image` box-filtered down to `edge` texels, on its 16-bit samples before anything is quantised.
+ * `srgb` colour is averaged in linear light, data (normal, roughness, occlusion) as it is. A texel
+ * of the result is what the mip level of that size would hold.
+ */
+export function reduce(image: PngImage, edge: number, srgb: boolean): PngImage {
+  const factor = image.width / edge;
+  if (image.width !== image.height || !Number.isInteger(factor) || factor < 1) {
+    throw new Error(
+      `a ${String(image.width)} x ${String(image.height)} image cannot reduce to ${String(edge)} texels`,
+    );
+  }
+  if (factor === 1) return image;
+  const { channels, samples, width } = image;
+  const samples16 = new Uint16Array(edge * edge * channels);
+  const taps = factor * factor;
+  for (let y = 0; y < edge; y++) {
+    for (let x = 0; x < edge; x++) {
+      for (let c = 0; c < channels; c++) {
+        const colour = srgb && c < 3;
+        let sum = 0;
+        for (let dy = 0; dy < factor; dy++) {
+          for (let dx = 0; dx < factor; dx++) {
+            const v =
+              (samples[((y * factor + dy) * width + x * factor + dx) * channels + c] ?? 0) / 65535;
+            sum += colour ? srgbToLinear(v) : v;
+          }
+        }
+        const mean = sum / taps;
+        samples16[(y * edge + x) * channels + c] = Math.round(
+          Math.min(1, Math.max(0, colour ? linearToSrgb(mean) : mean)) * 65535,
+        );
+      }
+    }
+  }
+  return { width: edge, height: edge, channels, samples: samples16 };
+}
+
+/**
  * The colour of a photograph as detail: each channel is divided by its own mean, so the map is
  * neutral on average and only its variation survives, then scaled to `PBR_ALBEDO_MEAN`. sRGB out.
  */

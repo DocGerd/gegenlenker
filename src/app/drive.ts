@@ -29,7 +29,7 @@ import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
 import { bodyFootprints } from '../sim/geometry';
 import { CONTACT_WARN_DISTANCE, DT } from '../sim/constants';
-import { contactAhead, NO_PREDICTION, predictCombination } from '../sim/predict';
+import { NO_PREDICTION, predictCombination, warnAhead, type Ahead } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
@@ -37,6 +37,7 @@ import { measureChrome } from './chrome';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { showPauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
+import { setNightDrive } from './theme';
 import { updateSettings, type Settings } from './settings';
 
 export type RunConfig = {
@@ -138,6 +139,8 @@ export function startDrive(
   const restart = (): void => {
     if (disposed) return;
     dispose();
+    // The next drive mounts asynchronously; a light frame in between would flash at night. `leave` and `loadFailed` clear it.
+    setNightDrive(lighting === 'night');
     onRestart();
   };
   const leaveUnscored = (): void => {
@@ -168,6 +171,8 @@ export function startDrive(
 
   const view = mountRenderStage(stage, stage, () => exit(false), lighting);
   cleanups.push(() => view.dispose());
+  setNightDrive(lighting === 'night');
+  cleanups.push(() => setNightDrive(false));
   // Released early when the stage halts behind a notice: nothing may drive or hold the screen under it.
   const live: (() => void)[] = [];
   const halt = (): void => {
@@ -194,7 +199,7 @@ export function startDrive(
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
   let pathStale = true;
-  let warnContact = false;
+  let warning: Ahead = null;
   const frame: Frame = {
     snapshot,
     views: computeViewports(
@@ -434,7 +439,7 @@ export function startDrive(
         const ahead = aids.path
           ? frame.predicted
           : predictCombination(params, snapshot, contacts, CONTACT_WARN_DISTANCE);
-        warnContact = snapshot.speed !== 0 && contactAhead(ahead);
+        warning = snapshot.speed !== 0 ? warnAhead(ahead) : null;
       }
       frame.snapshot = snapshot;
       frame.waypointVisited = tracker?.waypointVisited() ?? false;
@@ -442,7 +447,7 @@ export function startDrive(
       frame.aids = aids;
       frame.lamps = controls.lamps();
       renderer.render(frame);
-      hud.update(snapshot, warnContact);
+      hud.update(snapshot, warning);
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goal(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
