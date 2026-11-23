@@ -39,7 +39,7 @@ Work in a worktree per branch (`git worktree add ../gg-<slug> ...`, then `pnpm i
 3. Independent review of the PR diff: a reviewer other than the author reads it, posts one inline thread per finding, fixes land as PRs into `release/X.Y.Z`, every thread is resolved. The reviewer also checks the diff's changes to `.github/workflows/ci.yml` and the release scripts: the gate check below proves the steps ran, not that they still check anything.
 4. Wait for the PR's CI run to finish, then run the gate check below. It refuses: stop.
 5. `gh pr merge <n> --merge --match-head-commit <sha>`, with the `<sha>` the gate check verified. Merge commit only; the ruleset rejects anything else. Out of date: `main` moves only by a hotfix, so finish its back-merge into `release/X.Y.Z` (Hotfix, step 4) and run the gate check on the new head; never `update-branch`, which merges `main` into the release branch outside a PR.
-6. `gh pr list --base main` lists nothing: close any PR retargeted there.
+6. `gh pr list --base main --json number,headRefName --jq '.[] | select(.headRefName | test("^(release|hotfix)/") | not) | .number'` prints nothing: close each PR it prints, retargeted there.
 
 ### Gate check (before every merge into `main`)
 
@@ -51,7 +51,7 @@ The ruleset accepts a green `check` from any source, and a `develop` push or `wo
 
 ## 4. Stop for the owner
 
-`gh api repos/DocGerd/gegenlenker/pulls/<n> --jq .merge_commit_sha` is the merge commit; `gh run list --workflow ci.yml --event push --commit <merge-sha> --json databaseId,url,status` lists its run (wait until it appears). Tell the owner: approve the `github-pages` deployment of that run, with its URL, then wait. Do not approve it, and do not read or write `pending_deployments`.
+`gh api repos/DocGerd/gegenlenker/pulls/<n> --jq .merge_commit_sha` is the merge commit. After `git fetch origin`, `git rev-parse '<merge-sha>^{tree}' '<sha>^{tree}'` prints one tree twice (the merge ships the head that passed the gate check); if not, tell the owner not to approve, and stop. `gh run list --workflow ci.yml --event push --commit <merge-sha> --json databaseId,url,status` lists its run (wait until it appears). Tell the owner: approve the `github-pages` deployment of that run, with its URL, then wait. Do not approve it, and do not read or write `pending_deployments`.
 
 Pending UAT deploys of `develop` ahead of it in the `pages` queue are the owner's too: say so if the run waits (docs/releasing.md, UAT).
 
