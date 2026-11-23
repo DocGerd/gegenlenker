@@ -9,6 +9,7 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { attachmentsReady } from '../pinned-shoot.ts';
 import {
   type Backend,
   type Check,
@@ -41,8 +42,11 @@ const START_BUTTON = '[data-menu="yards"] button';
 const SETTLE_MS = 3_000;
 const SETTLE_DEADLINE_MS = 35_000;
 const SERVICE_WORKER_TIMEOUT_MS = 15_000;
+const ATTACHMENTS_DEADLINE_MS = 60_000;
 
 type Cell = { preset: Preset; pair: Pair; runs: Run[] };
+/** One overlay reading with the time since the drive started, so a step down then up shows in the trace. */
+type Timed = Reading & { t: number };
 type WakeLockLog = { requests: number; supported: boolean };
 
 const USAGE = `Usage: pnpm perf:tablet [options]
@@ -56,7 +60,8 @@ const USAGE = `Usage: pnpm perf:tablet [options]
   --allow-software   do not abort on a software GL renderer (results are not valid)
   --skip-build       reuse the existing dist/ (must be built with BASE_PATH=${BASE_PATH})
   --backend <name>   webgl2 | webgpu | auto: the app's ?backend= (default: the app's default)
-  --lighting <mode>  day | night: the stored lighting setting (default day)`;
+  --lighting <mode>  day | night: the stored lighting setting (default day)
+  --keep-traces      keep the governor trace of every run, not only one that ends below scale 1.00`;
 
 const wsl = existsSync(WSL_LIB);
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -222,7 +227,7 @@ async function readOverlay(page: Page): Promise<Reading | null> {
   return parseOverlay(text);
 }
 
-/** Keeps the governor trace of a run that ended below full resolution; a failure here warns and never fails the run. */
+/** Keeps the governor trace of a run; a failure here warns and never fails the run. */
 async function keepTrace(
   page: Page,
   traces: TraceSink,
@@ -239,7 +244,7 @@ async function keepTrace(
       return;
     }
     const path = traces.write(label, { ...context, trace });
-    console.log(`${label}: ended below scale 1.00, governor trace ${path}`);
+    console.log(`${label}: governor trace ${path}`);
   } catch (e) {
     console.warn(`${label}: could not keep the governor trace: ${message(e)}`);
   }
@@ -284,13 +289,26 @@ async function measure(
       null,
       { timeout: 30_000 },
     );
+    // Attachments landing warm the governor up and change the load: measure once they are in place.
+    const attachDeadline = Date.now() + ATTACHMENTS_DEADLINE_MS;
+    while (!(await attachmentsReady(page, preset)) && Date.now() < attachDeadline) {
+      await page.waitForTimeout(250);
+    }
+    if (!(await attachmentsReady(page, preset))) errors.push('attachments were not ready');
+    const started = Date.now();
+    const history: Timed[] = [];
+    const read = async (): Promise<Reading | null> => {
+      const reading = await readOverlay(page);
+      if (reading) history.push({ ...reading, t: Date.now() - started });
+      return reading;
+    };
     // The governor may still step the resolution down: wait until the scale holds.
-    let last = await readOverlay(page);
+    let last = await read();
     let since = Date.now();
     const deadline = Date.now() + SETTLE_DEADLINE_MS;
     while (Date.now() < deadline && Date.now() - since < SETTLE_MS) {
       await page.waitForTimeout(250);
-      const next = await readOverlay(page);
+      const next = await read();
       if (next && last && next.scale !== last.scale) since = Date.now();
       last = next ?? last;
     }
@@ -298,7 +316,7 @@ async function measure(
     const samples: Reading[] = [];
     for (const end = Date.now() + 12_000; Date.now() < end;) {
       await page.waitForTimeout(500);
-      const s = await readOverlay(page);
+      const s = await read();
       if (s) samples.push(s);
     }
     const final = samples.at(-1);
@@ -307,7 +325,7 @@ async function measure(
     errors.push(...samples.flatMap(readingProblems));
     const wrongBackend = backendProblem(opts.backend, final.gl);
     if (wrongBackend !== null) errors.push(wrongBackend);
-    if (final.scale < 1) {
+    if (final.scale < 1 || opts.keepTraces) {
       const label = `${preset}-${truckId}-${trailerId}-run${String(index + 1)}`;
       const { throttle, lighting, backend } = opts;
       await keepTrace(page, traces, label, {
@@ -317,6 +335,7 @@ async function measure(
         lighting,
         backend,
         reading: final,
+        readings: history,
       });
     }
     return {
@@ -336,7 +355,7 @@ async function measure(
   }
 }
 
-/** Governor traces of runs that ended below full resolution, kept in a directory that outlives the harness. */
+/** Governor traces, kept in a directory that outlives the harness. */
 type TraceSink = { write: (label: string, content: unknown) => string };
 
 function traceSink(): TraceSink {

@@ -69,6 +69,15 @@ export const timeoutWithSettles = (
   settles: number,
   workMs: number = PRESET_TIMEOUT_MS[preset],
 ): number => workMs + settles * 2 * SETTLE_DEADLINE_MS[preset];
+/**
+ * The `settle` deadlines on a `?backend=webgpu` page: SwiftShader builds every pipeline on the CPU,
+ * and High a sequence of them, so they outlast the WebGL ones (`SETTLE_DEADLINE_MS`).
+ */
+export const WEBGPU_SETTLE_DEADLINE_MS: Readonly<Record<Preset, number>> = {
+  low: 60_000,
+  balanced: 90_000,
+  high: 240_000,
+};
 /** Consecutive frames the framing input must hold before a shot, so a late chrome measurement cannot move it. */
 const STABLE_FRAMES = 5;
 const HIDE_ID = 'pinned-shoot-bare';
@@ -108,9 +117,46 @@ const BOX: Readonly<Record<Shot, string>> = {
 };
 const VIEW_KEY: Partial<Record<Shot, string>> = { follow: 'f', yard: 'y', chase: 'o' };
 
-/** Runs `frames` frames of the pinned clock. */
+/** The pages started on `?backend=webgpu`: their frames are only drawn once the GPU has run them. */
+const webgpuPages = new WeakSet<Page>();
+
+/**
+ * Runs in the page before the app: keeps every GPUDevice the app requests, so `step` can wait for
+ * the GPU. SwiftShader runs submitted work asynchronously, and a stepped clock outruns it.
+ */
+function captureGpuDevices(): void {
+  const devices: GPUDevice[] = [];
+  Object.assign(window, { gpuDevices: devices });
+  const request = Object.getOwnPropertyDescriptor(GPUAdapter.prototype, 'requestDevice')?.value as
+    GPUAdapter['requestDevice'] | undefined;
+  if (request === undefined) throw new Error('no requestDevice to wrap');
+  GPUAdapter.prototype.requestDevice = async function (
+    this: GPUAdapter,
+    ...args: Parameters<GPUAdapter['requestDevice']>
+  ): Promise<GPUDevice> {
+    const device = await request.apply(this, args);
+    devices.push(device);
+    return device;
+  };
+}
+
+/** Runs `frames` frames of the pinned clock; on a WebGPU page one at a time, each awaiting the GPU. */
 export async function step(page: Page, frames: number): Promise<void> {
-  await page.clock.runFor(frames * FRAME_MS);
+  if (!webgpuPages.has(page)) {
+    await page.clock.runFor(frames * FRAME_MS);
+    return;
+  }
+  for (let i = 0; i < frames; i++) {
+    await page.clock.runFor(FRAME_MS);
+    await page.evaluate(() =>
+      Promise.all(
+        (window as unknown as { gpuDevices: GPUDevice[] }).gpuDevices.map((d) =>
+          // a lost device never finishes its queue; the app falls back and the spec reads that
+          d.queue.onSubmittedWorkDone().catch(() => undefined),
+        ),
+      ).then(() => undefined),
+    );
+  }
 }
 
 /**
@@ -176,8 +222,12 @@ export async function startPinnedDrive(
   { preset, lighting, theme }: RenderConfig,
   exercise: string,
   search = '',
-  deadlineMs = SETTLE_DEADLINE_MS[preset],
+  deadlineMs?: number,
 ): Promise<void> {
+  if (new URLSearchParams(search).get('backend') === 'webgpu') {
+    webgpuPages.add(page);
+    await page.addInitScript(captureGpuDevices);
+  }
   await page.addInitScript(pinResolvePath);
   await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
     SETTINGS_KEY,
@@ -254,7 +304,7 @@ async function framingBox(page: Page): Promise<string | null> {
 export async function settle(
   page: Page,
   preset: Preset,
-  deadlineMs = SETTLE_DEADLINE_MS[preset],
+  deadlineMs = (webgpuPages.has(page) ? WEBGPU_SETTLE_DEADLINE_MS : SETTLE_DEADLINE_MS)[preset],
 ): Promise<void> {
   const notReady = (what: unknown): Error =>
     new Error(`${preset} not ready: ${JSON.stringify(what)}`);
