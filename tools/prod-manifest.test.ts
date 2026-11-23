@@ -38,6 +38,12 @@ it('changes when one byte of one file changes, and not otherwise', () => {
   );
 });
 
+it('refuses a hidden path, which neither artifact upload keeps', () => {
+  expect(() => prodManifest(tree({ 'index.html': 'x', '.well-known/a.txt': 'a' }))).toThrow(
+    'is hidden',
+  );
+});
+
 it('refuses an empty tree', () => {
   expect(() => prodManifest(tree({}))).toThrow('has no files');
 });

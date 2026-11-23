@@ -5,6 +5,8 @@ import { join } from 'node:path';
 const filesUnder = (dir: string, rel = ''): string[] =>
   readdirSync(join(dir, rel), { withFileTypes: true }).flatMap((entry) => {
     const path = rel === '' ? entry.name : `${rel}/${entry.name}`;
+    if (entry.name.startsWith('.'))
+      throw new Error(`${path} is hidden: the Pages and dist uploads both drop hidden files`);
     if (entry.isDirectory()) return filesUnder(dir, path);
     if (entry.isFile()) return [path];
     throw new Error(`${path} is neither a file nor a directory`);
