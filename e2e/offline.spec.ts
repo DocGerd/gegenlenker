@@ -222,7 +222,7 @@ test(
       .toEqual(drawn.map(() => 1));
 
     // The marker follows the preset: Balanced draws no reflections, so it is gone.
-    await page.getByRole('button', { name: en.finish }).click();
+    await page.getByRole('button', { name: en.pause }).click();
     await page
       .getByRole('dialog', { name: en.paused })
       .getByRole('button', { name: en.finish })

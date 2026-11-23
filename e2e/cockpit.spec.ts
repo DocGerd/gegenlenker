@@ -144,7 +144,7 @@ test(
       near(litRight, PILLAR),
     ]).toEqual([true, true, true, true]);
 
-    await page.getByRole('button', { name: en.finish }).click();
+    await page.getByRole('button', { name: en.pause }).click();
     await page
       .getByRole('dialog', { name: en.paused })
       .getByRole('button', { name: en.leaveUnscored })
