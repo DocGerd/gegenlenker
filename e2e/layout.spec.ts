@@ -437,9 +437,26 @@ test('a short cockpit opens the key legend to the drive keys, and the chevron sh
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(view.first()).toBeVisible();
+  await settled(page);
+  await expectMirrorsClearControls(page, { width: 1280, height: 585 });
   await toggle.click();
   await expect(view.first()).toBeHidden();
 });
+
+for (const [height, openFull] of [
+  [719, false],
+  [720, true],
+] as const) {
+  test(`the key legend opens to ${openFull ? 'the full list' : 'the drive keys'} at 1280x${String(height)}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height });
+    await startStraightReverse(page, en.exerciseStraightReverse);
+    await expect(page.locator('.hud-legend dt.hud-legend-view').first()).toBeVisible({
+      visible: openFull,
+    });
+  });
+}
 
 const handle = (page: Page) => page.locator('[data-hud="splitHandle"]');
 const splitBar = (page: Page) => page.locator('[data-hud="split"]');
@@ -920,6 +937,8 @@ const laptops: { size: Size; locale: string; messages: typeof en | typeof de }[]
     { width: 1470, height: 832 },
     { width: 1512, height: 788 },
     { width: 1280, height: 585 },
+    { width: 1280, height: 719 },
+    { width: 1280, height: 720 },
   ].flatMap((size) => locales.map((l) => ({ size, ...l }))),
   { size: { width: 1440, height: 739 }, locale: 'de-DE', messages: de },
 ];

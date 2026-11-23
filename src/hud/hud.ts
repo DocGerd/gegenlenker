@@ -142,8 +142,11 @@ const BUMP_MS = 250;
  */
 const COMPACT_WIDTH = 720;
 const COMPACT_WIDTH_WITH_LEVER = 840;
-/** Cockpit heights below which the legend opens to the drive keys only: the full list takes the mirrors' room. */
-const SHORT_HEIGHT = 700;
+/**
+ * Cockpit heights below which the legend opens to the drive keys only: the full list takes the
+ * mirrors' room. At 1280 wide the full list keeps class IV from this height; `layout.spec` pins it.
+ */
+const SHORT_HEIGHT = 720;
 
 const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
 
