@@ -341,8 +341,8 @@ jobs:
       # with `workflow_dispatch` on `main`: it uploads a new one and redeploys production from the
       # same build, so both match once that deploy is live. This upload precedes the gated deploy, and
       # one commit can have several such runs, so the consumer takes `prod-dist-<sha>` from the run of
-      # the last successful `github-pages` deployment, fails when it is missing, and never rebuilds
-      # production.
+      # the last successful `github-pages` deployment from `main`, fails when it is missing, and never
+      # rebuilds production.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: prod-dist-${{ github.sha }}
