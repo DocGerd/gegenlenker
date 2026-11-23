@@ -154,7 +154,8 @@
   background: var(--color-surface);
 }
 
-.hud-legend-toggle {
+.hud-legend-toggle,
+.hud-goal-toggle {
   pointer-events: auto;
   display: flex;
   align-items: center;
@@ -168,12 +169,14 @@
   min-height: 24px;
 }
 
-.hud-legend-toggle:focus-visible {
+.hud-legend-toggle:focus-visible,
+.hud-goal-toggle:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.hud-legend-toggle svg {
+.hud-legend-toggle svg,
+.hud-goal-toggle svg {
   width: 14px;
   height: 14px;
   fill: none;
@@ -185,7 +188,8 @@
 }
 
 .hud-legend[data-collapsed] svg,
-.hud-legend[data-drive-only] svg {
+.hud-legend[data-drive-only] svg,
+.hud-goal[data-collapsed] .hud-goal-toggle svg {
   transform: rotate(-90deg);
 }
 
@@ -217,15 +221,58 @@
   display: none;
 }
 
+/* On a short screen the open list is an overlay in the top-down pane (hud.ts sets --pane-*), where no mirror reaches: opening it neither resizes the legend nor moves the mirrors. It stays below the finish button. */
+.hud-legend[data-overlay] {
+  z-index: 2;
+}
+
+.hud-legend[data-overlay] dl {
+  --keys-side: 0px;
+  position: absolute;
+  left: calc(var(--pane-left) + var(--space-4));
+  bottom: calc(var(--pane-bottom) + var(--space-4) + var(--safe-bottom));
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(var(--pane-width) - 2 * var(--space-4) - var(--keys-side));
+  max-height: calc(
+    var(--pane-height) - 2 * var(--space-4) - var(--safe-top) - var(--safe-bottom) -
+      var(--hud-target) - var(--space-2)
+  );
+  overflow: hidden;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+}
+
+/* In landscape the pane holds the stop button and the lever at the screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). */
+@media (min-aspect-ratio: 1/1) {
+  .hud-legend[data-overlay] dl {
+    --keys-side: calc(
+      var(--size-target) * 1.5 + var(--space-4) + var(--safe-right) + var(--space-2)
+    );
+  }
+}
+
+/* Only in portrait does the top view reach the screen's left edge. */
+@media not (min-aspect-ratio: 1/1) {
+  .hud-legend[data-overlay] dl {
+    --keys-side: var(--safe-left);
+    left: calc(var(--pane-left) + var(--space-4) + var(--safe-left));
+  }
+}
+
 /* The header row would push the single column into the mirror: only the chevron stays, in the corner. */
-.hud-cockpit[data-compact] .hud-legend:not([data-collapsed]) .hud-legend-toggle {
+.hud-cockpit[data-compact] .hud-legend:not([data-collapsed], [data-overlay]) .hud-legend-toggle {
   position: absolute;
   top: var(--space-1);
   right: var(--space-1);
   padding: var(--space-1);
 }
 
-.hud-cockpit[data-compact] .hud-legend:not([data-collapsed]) .hud-label {
+.hud-cockpit[data-compact] .hud-legend:not([data-collapsed], [data-overlay]) .hud-label {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -327,6 +374,21 @@
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
+}
+
+.hud-goal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.hud-goal-toggle {
+  flex: none;
+}
+
+.hud-goal[data-collapsed] .hud-goal-brief {
+  display: none;
 }
 
 .hud-goal-title {
@@ -478,8 +540,8 @@
 
 .hud-toggle[aria-pressed='true'] {
   border-color: var(--color-accent);
-  background: var(--color-accent-tint);
-  color: var(--color-accent-strong);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
 }
 
 .hud-toggle:disabled {
@@ -673,6 +735,55 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-danger) 20%, var(--color-surface));
   transition: none;
+}
+
+/* Without the top-down pane the brief floats over the cockpit above its band, and the counters sit in the band, both left of the lever column. */
+.hud[data-mirrors] {
+  --hud-lever-clear: calc(
+    var(--space-4) + var(--safe-right) + var(--size-target) * 1.5 + var(--space-3)
+  );
+}
+
+.hud[data-mirrors] .hud-goal {
+  position: absolute;
+  right: var(--hud-lever-clear);
+  bottom: calc(var(--hud-band) + var(--space-3));
+  width: max-content;
+  max-width: min(24rem, calc(100% - var(--hud-inset) - var(--hud-lever-clear)));
+}
+
+.hud[data-mirrors] .hud-band {
+  padding-right: var(--hud-lever-clear);
+}
+
+.hud[data-mirrors] .hud-counters {
+  grid-template-columns: repeat(4, auto);
+  margin: 0 0 0 auto;
+}
+
+/* Portrait leaves the band too narrow between gears and lever: the counters wrap below the readouts, and the brief takes the key legend's place, so there is no legend. */
+@media not (min-aspect-ratio: 1/1) {
+  .hud[data-mirrors] .hud-legend {
+    display: none;
+  }
+
+  .hud[data-mirrors] .hud-band {
+    flex-wrap: wrap;
+    align-content: center;
+  }
+
+  .hud[data-mirrors] .hud-counters {
+    grid-template-columns: auto auto;
+  }
+}
+
+/* No pane to hold the short-screen key list: it floats above its toggle, which the full-width cockpit keeps clear of the mirrors. */
+.hud[data-mirrors] .hud-legend[data-overlay] dl {
+  left: -1px;
+  bottom: calc(100% + var(--space-2));
+  max-width: none;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {

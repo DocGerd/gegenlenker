@@ -37,6 +37,7 @@ import {
   checkCompiled,
   compileShader,
   verifyWgsl,
+  watchShaderErrors,
   type Compiled,
 } from './shader-check';
 
@@ -254,25 +255,18 @@ async function buildGrade(
 ): Promise<Compiled[]> {
   const samples: GradeSample[] = [];
   const built: Compiled[] = [];
-  const { debug } = gpu;
-  const previous = debug.onShaderError;
   const rejected: { log: string | null } = { log: null };
   // another asset may have chained its own hook behind this one: pass through once the check is over
   let active = true;
   const watched = new Set([GRADE_SHADER_MARKER]);
-  const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
-    const info = [
-      context.getShaderInfoLog(vertex),
-      context.getShaderInfoLog(fragment),
-      context.getProgramInfoLog(program),
-    ];
-    const source = context.getShaderSource(fragment);
-    if (active && source !== null && [...watched].some((marker) => source.includes(marker))) {
-      rejected.log = info.join(' ');
-    } else if (previous !== null) previous(context, program, vertex, fragment);
-    else console.error('Shader error', ...info);
-  };
-  debug.onShaderError = watcher;
+  const restore = watchShaderErrors(gpu, {
+    matches: (source) =>
+      active && source !== null && [...watched].some((marker) => source.includes(marker)),
+    onMatch: (logs) => {
+      rejected.log = logs().join(' ');
+    },
+    unwatchedLabel: 'Shader error',
+  });
   try {
     for (const make of makes) {
       const sample = make();
@@ -297,7 +291,7 @@ async function buildGrade(
     return built;
   } finally {
     active = false;
-    if (debug.onShaderError === watcher) debug.onShaderError = previous;
+    restore();
     for (const sample of samples) sample.dispose();
   }
 }

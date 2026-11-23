@@ -139,3 +139,43 @@ export async function verifyShader(
   await verifyWgsl(gpu, [built]);
   return built.fragment ?? '';
 }
+
+export interface ShaderErrorWatch {
+  /** Whether a failed program is the one watched, by its fragment source. */
+  readonly matches: (fragmentSource: string | null) => boolean;
+  /** Runs for a watched program; `logs` reads the vertex, fragment and program info logs. */
+  readonly onMatch: (logs: () => (string | null)[]) => void;
+  /** Also pass a watched program to the hook already in place. */
+  readonly forward?: boolean;
+  /** Prefix of the console error for a program nobody else reports. */
+  readonly unwatchedLabel: string;
+}
+
+/**
+ * Hooks the WebGL 2 backend's `onShaderError`, which only that backend calls. three skips its own
+ * report once the hook is set, so an unwatched program goes to the previous hook or the console.
+ * Returns the restore, which leaves a hook another asset chained on top of this one alone.
+ */
+export function watchShaderErrors(
+  gpu: WebGPURenderer,
+  { matches, onMatch, forward = false, unwatchedLabel }: ShaderErrorWatch,
+): () => void {
+  const { debug } = gpu;
+  const previous = debug.onShaderError;
+  const watcher: NonNullable<typeof previous> = (context, program, vertex, fragment) => {
+    const logs = (): (string | null)[] => [
+      context.getShaderInfoLog(vertex),
+      context.getShaderInfoLog(fragment),
+      context.getProgramInfoLog(program),
+    ];
+    const watched = matches(context.getShaderSource(fragment));
+    if (watched) onMatch(logs);
+    if (watched && !forward) return;
+    if (previous !== null) previous(context, program, vertex, fragment);
+    else console.error(unwatchedLabel, ...logs());
+  };
+  debug.onShaderError = watcher;
+  return () => {
+    if (debug.onShaderError === watcher) debug.onShaderError = previous;
+  };
+}
