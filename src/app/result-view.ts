@@ -75,6 +75,29 @@ function row(label: MessageKey, value: string, note: RowNote = {}): HTMLDivEleme
   return el;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** A check (reached) or a cross (not reached) beside the title text, so the verdict never rests on colour. */
+function verdictIcon(reached: boolean): SVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', 'result-icon');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', reached ? 'M5 12.5l4.5 4.5L19 7.5' : 'M6 6l12 12M18 6L6 18');
+  svg.append(path);
+  return svg;
+}
+
+function resultTitle(reached: boolean): HTMLHeadingElement {
+  const title = element(
+    'h1',
+    reached ? 'result-title result-title-reached' : 'result-title result-title-missed',
+  );
+  title.append(verdictIcon(reached), t(reached ? 'targetReached' : 'targetMissed'));
+  return title;
+}
+
 function action(label: MessageKey, onClick: () => void, primary: boolean): HTMLButtonElement {
   const button = element(
     'button',
@@ -102,7 +125,7 @@ export function showResult(
   const container = element('div', 'result');
   const card = element('section', 'result-card');
   // Focus lands on a button inside the card, so a screen reader reads the dialog name (the outcome) first.
-  const title = element('h1', 'result-title', t(result.reached ? 'targetReached' : 'targetMissed'));
+  const title = resultTitle(result.reached);
   title.id = 'result-title';
   card.setAttribute('role', 'dialog');
   card.setAttribute('aria-labelledby', title.id);
