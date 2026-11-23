@@ -155,6 +155,16 @@ test('the result focuses its primary action: Enter retries', async ({ page }) =>
   await expect(sheet(page)).toBeHidden();
 });
 
+test('the result dialog is named by its outcome, so focus entering it announces it', async ({
+  page,
+}) => {
+  await startAndRoll(page);
+  await finishRun(page);
+  const dialog = page.getByRole('dialog', { name: en.targetMissed });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: en.retry })).toBeFocused();
+});
+
 test('Escape leaves the result for the menu, and a miss is no best', async ({ page }) => {
   await startAndRoll(page);
   await finishRun(page);
