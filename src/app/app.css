@@ -246,6 +246,13 @@
   letter-spacing: var(--tracking-tight);
 }
 
+.whats-new-note {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--color-text-secondary);
+}
+
 .whats-new-group {
   align-self: stretch;
   min-width: 0;

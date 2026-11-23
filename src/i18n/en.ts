@@ -160,6 +160,7 @@ export const en = {
   whatsNewSince: 'Since your last visit',
   whatsNewLatest: 'Latest',
   whatsNewEarlier: 'Earlier changes',
+  whatsNewEnglishNote: 'The changelog entries are in English.',
   changeAdded: 'Added',
   changeChanged: 'Changed',
   changeDeprecated: 'Deprecated',
