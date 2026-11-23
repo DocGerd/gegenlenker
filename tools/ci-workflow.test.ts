@@ -16,7 +16,13 @@ interface Workflow {
       needs?: string[] | string;
       if?: string;
       permissions?: Permissions;
-      steps?: { uses?: string; run?: string; with?: Record<string, unknown> }[];
+      steps?: {
+        name?: string;
+        if?: string;
+        uses?: string;
+        run?: string;
+        with?: Record<string, unknown>;
+      }[];
     }
   >;
 }
@@ -66,6 +72,29 @@ it('every gated job but e2e runs on push', () => {
     if (NOT_GATED.has(name) || name === 'e2e') continue;
     expect(job.if, name).toBeUndefined();
   }
+});
+
+it('PRs into main run the head-branch guard and release:check, with the tags fetched first', () => {
+  const steps = workflow().jobs['lint']?.steps ?? [];
+  const guard = steps.findIndex((step) => step.run?.includes('release/* | hotfix/*') === true);
+  const check = steps.findIndex((step) => step.run?.includes('pnpm release:check') === true);
+  expect(guard).toBeGreaterThanOrEqual(0);
+  expect(check).toBeGreaterThan(guard);
+  for (const step of [steps[guard], steps[check]]) {
+    expect(step?.if).toContain("github.base_ref == 'main'");
+  }
+  expect(steps[check]?.run?.indexOf('git fetch')).toBeLessThan(
+    steps[check]?.run?.indexOf('pnpm release:check') ?? -1,
+  );
+  expect(steps[check]?.run).toContain("'refs/tags/*:refs/tags/*'");
+});
+
+it('only main deploys: develop pushes run the gate and nothing else', () => {
+  const { jobs } = workflow();
+  for (const name of ['build-pages', 'release']) {
+    expect(jobs[name]?.if, name).toContain("github.ref == 'refs/heads/main'");
+  }
+  expect(jobs['deploy']?.needs).toBe('build-pages');
 });
 
 it('every action is pinned to a full commit SHA', () => {

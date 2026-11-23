@@ -4,7 +4,8 @@ Issues and pull requests are welcome; review capacity is limited. By taking part
 
 ## Changes
 
-- Changes go through pull requests; `main` takes no direct pushes. Reference the issue it resolves with `Closes #<n>`.
+- Changes go through pull requests into `develop`, the default branch; `develop` and `main` take no direct pushes. Name the branch `feature/<slug>` and reference the issue it resolves with `Closes #<n>`.
+- `main` holds released versions only and accepts PRs from `release/*` and `hotfix/*` branches the owner cuts. Branch model, who merges what and the release steps: [docs/releasing.md](docs/releasing.md).
 - Titles and commits use a conventional prefix: `feat`, `fix`, `docs`, `ci`, `chore`, `refactor`, `perf`, `test`.
 - `pnpm install --frozen-lockfile`, then `pnpm verify` (lint, format, typecheck, unit and e2e tests) before opening a PR. `pnpm check` is the faster loop without e2e. Node and pnpm are pinned in `.nvmrc` and `package.json`.
 - New functionality and bug fixes come with tests of their logic and critical paths; there is no coverage target (see "Tests" in [CLAUDE.md](CLAUDE.md)).
