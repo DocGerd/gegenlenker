@@ -35,7 +35,7 @@ const wakeLockLog = (page: Page) =>
   page.evaluate(() => Reflect.get(window, '__wakeLock') as WakeLockLog);
 
 async function leaveRun(page: Page): Promise<void> {
-  await page.getByRole('button', { name: en.finish }).click();
+  await page.getByRole('button', { name: en.pause }).click();
   await page
     .getByRole('dialog', { name: en.paused })
     .getByRole('button', { name: en.leaveUnscored })
@@ -44,7 +44,7 @@ async function leaveRun(page: Page): Promise<void> {
 }
 
 async function finishRun(page: Page): Promise<void> {
-  await page.getByRole('button', { name: en.finish }).click();
+  await page.getByRole('button', { name: en.pause }).click();
   await page
     .getByRole('dialog', { name: en.paused })
     .getByRole('button', { name: en.finish })

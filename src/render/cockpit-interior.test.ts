@@ -85,19 +85,23 @@ type Shot<I extends CockpitInterior = FlatInterior> = {
   readonly front: Rect | null;
   /** The class IV mirrors under the class II ones; null where the window has no room for them. */
   readonly wide: readonly [Rect, Rect] | null;
+  /** The class V mirror above the right class II one; null where the window has no room for it. */
+  readonly close: Rect | null;
 };
 
-/** Every mirror rect of `shot`: the class IV and front mirrors' among them where the window has room for them. */
+/** Every mirror rect of `shot`: the class IV, front and class V mirrors' among them where the window has room for them. */
 const rectsOf = ({
   left,
   right,
   front,
   wide,
-}: Pick<Shot, 'left' | 'right' | 'front' | 'wide'>): Rect[] => [
+  close,
+}: Pick<Shot, 'left' | 'right' | 'front' | 'wide' | 'close'>): Rect[] => [
   left,
   right,
   ...(wide ?? []),
   ...(front === null ? [] : [front]),
+  ...(close === null ? [] : [close]),
 ];
 
 /**
@@ -116,7 +120,7 @@ function shootWith<I extends CockpitInterior>(
   insets?: Insets,
   mode: LightingMode = 'day',
 ): Shot<I> {
-  const { cockpit, mirrorLeft, mirrorRight, front, wideLeft, wideRight } = computeViewports(
+  const { cockpit, mirrorLeft, mirrorRight, front, wideLeft, wideRight, close } = computeViewports(
     width,
     height,
     'drive',
@@ -124,7 +128,7 @@ function shootWith<I extends CockpitInterior>(
     insets,
     undefined,
     null,
-    { front: true, wide: true },
+    { front: true, wide: true, close: true },
   );
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) throw new Error('no views');
   const pose = { x: 12, y: -7, heading };
@@ -140,7 +144,7 @@ function shootWith<I extends CockpitInterior>(
   scene.updateMatrixWorld();
   interior.place({ camera, cockpit, mirrorLeft, mirrorRight });
   const wide = wideLeft === null || wideRight === null ? null : ([wideLeft, wideRight] as const);
-  return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight, front, wide };
+  return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight, front, wide, close };
 }
 
 function shoot(
@@ -599,17 +603,25 @@ describe.each(CASES)(
         }
       });
 
-      it('keeps every part off the centre of each mirror rect, the front and class IV mirrors included', () => {
+      it('keeps every part off the centre of each mirror rect, the front, class IV and class V mirrors included', () => {
         let fronts = 0;
         let wides = 0;
+        let closes = 0;
         for (const [w, h] of windows) {
           const shot = shootRoute(w, h);
           if (shot.front !== null) fronts++;
           if (shot.wide !== null) wides++;
+          if (shot.close !== null) closes++;
           const { camera, interior, cockpit } = shot;
           const parts = drawn(interior);
           for (const rect of rectsOf(shot)) {
             const [x, y] = rectToNdc(cockpit, rect, 0.5, 0.5);
+            // class V is drawn over the headliner: it lies under the route's own cover, nowhere else
+            if (
+              rect === shot.close &&
+              mayCoverMirror(x, y, edgeShift(spec, camera.aspect, COCKPIT_FOV))
+            )
+              continue;
             expect(
               hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
               `${w}x${h}`,
@@ -618,6 +630,7 @@ describe.each(CASES)(
         }
         expect(fronts).toBeGreaterThan(windows.length / 2);
         expect(wides).toBeGreaterThan(windows.length / 4);
+        expect(closes).toBeGreaterThan(0);
       });
     });
   },

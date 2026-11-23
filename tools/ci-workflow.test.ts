@@ -3,9 +3,10 @@ import { join } from 'node:path';
 import { expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-const NOT_GATED = new Set(['check', 'build-pages', 'deploy']);
+// `webgpu` is advisory: it reports, but does not gate a merge.
+const NOT_GATED = new Set(['check', 'build-pages', 'deploy', 'webgpu']);
 
-it('check needs every job except the check itself and the deploy chain', () => {
+it('check needs every job except the check itself, the advisory job and the deploy chain', () => {
   const file = join(import.meta.dirname, '..', '.github', 'workflows', 'ci.yml');
   const jobs = (parse(readFileSync(file, 'utf8')) as { jobs: Record<string, { needs?: string[] }> })
     .jobs;

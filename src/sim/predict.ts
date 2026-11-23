@@ -119,6 +119,14 @@ export function predictCombination(
   return { lead, left, right, blocked, blockedAt };
 }
 
-/** First warning stage: the held steer leads into a contact within `CONTACT_WARN_DISTANCE`. */
-export const contactAhead = (p: Prediction): boolean =>
-  p.blocked === 'contact' && p.blockedAt !== null && p.blockedAt < CONTACT_WARN_DISTANCE;
+/** What the held steer runs into within `CONTACT_WARN_DISTANCE`: the first warning stage. */
+export type Ahead = 'contact' | 'limit' | null;
+
+export const warnAhead = (p: Prediction): Ahead => {
+  if (p.blocked === null || p.blockedAt === null || p.blockedAt >= CONTACT_WARN_DISTANCE) {
+    return null;
+  }
+  return p.blocked === 'contact' ? 'contact' : 'limit';
+};
+
+export const contactAhead = (p: Prediction): boolean => warnAhead(p) === 'contact';
