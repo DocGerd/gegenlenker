@@ -74,7 +74,7 @@ describe('keymap', () => {
 
   it('has legend text for every row', () => {
     for (const chase of [false, true]) {
-      for (const { term, desc } of legendRows(chase)) {
+      for (const { term, desc } of legendRows(chase, true)) {
         expect(en).toHaveProperty(desc);
         if (typeof term !== 'string') expect(en).toHaveProperty(term.key);
       }
@@ -85,6 +85,16 @@ describe('keymap', () => {
     const terms = (chase: boolean): unknown[] => legendRows(chase).map((r) => r.term);
     expect(terms(true)).toContainEqual({ key: 'keyOrbitTilt' });
     expect(terms(false)).not.toContainEqual({ key: 'keyOrbitTilt' });
+  });
+
+  it('binds the glance keys to the physical keys, and lists them only where the cockpit looks around', () => {
+    expect(actionFor('view', { code: 'KeyQ', key: 'a' })).toBe('glanceLeft');
+    expect(actionFor('view', { code: 'KeyE', key: 'e' })).toBe('glanceRight');
+    expect(actionFor('drive', { code: 'KeyE', key: 'e' })).toBeUndefined();
+    const terms = (look: boolean): unknown[] => legendRows(false, look).map((r) => r.term);
+    expect(terms(true)).toContain('Q / E');
+    expect(terms(false)).not.toContain('Q / E');
+    expect(legendRows(false, true).find((r) => r.term === 'Q / E')?.viewOnly).toBe(true);
   });
 
   it('offers the outside-view key only with the outside view', () => {

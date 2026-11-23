@@ -6,6 +6,7 @@ import {
   DEFAULT_LIGHTING,
   DEFAULT_TOP_DOWN_VIEW,
   GraphicsStartError,
+  HEAD_REST,
   type GraphicsBackend,
   type GraphicsPreset,
   type LightingMode,
@@ -574,9 +575,11 @@ export function createThreeSceneRenderer(
       }
 
       if (cockpit !== null) {
-        placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit);
+        const head = b.interior.looksAround === true ? (frame.head ?? HEAD_REST) : HEAD_REST;
+        placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit, head);
         b.interior.place({
           camera: cockpitCamera,
+          heading: snapshot.truck.heading,
           cockpit,
           mirrorLeft: leftRect,
           mirrorRight: rightRect,

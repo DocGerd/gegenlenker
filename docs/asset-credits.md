@@ -207,8 +207,8 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
   - `src/render/assets/concrete-albedo.ktx2`: the albedo detail of the yard on High, runtime-cached
   - `src/render/assets/concrete-packed.ktx2`: the normal, roughness and occlusion of the yard on High, runtime-cached
 - **Changes:**
-  - `src/render/assets/concrete-albedo.ktx2`: the 2K diffuse map with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.
-  - `src/render/assets/concrete-packed.ktx2`: the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.
+  - `src/render/assets/concrete-albedo.ktx2`: the 2K diffuse map box-filtered to 1K in linear light, with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.
+  - `src/render/assets/concrete-packed.ktx2`: the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map, each box-filtered from 2K to 1K, packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.
 - **Rebuild:** `pnpm texture concrete-albedo` and `pnpm texture concrete-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: download them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.
 
 ## Street asphalt: `asphalt_02`
@@ -230,8 +230,8 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
   - `src/render/assets/asphalt-albedo.ktx2`: the albedo detail of the street on High, runtime-cached
   - `src/render/assets/asphalt-packed.ktx2`: the normal, roughness and occlusion of the street on High, runtime-cached
 - **Changes:**
-  - `src/render/assets/asphalt-albedo.ktx2`: the 2K diffuse map with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.
-  - `src/render/assets/asphalt-packed.ktx2`: the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.
+  - `src/render/assets/asphalt-albedo.ktx2`: the 2K diffuse map box-filtered to 1K in linear light, with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.
+  - `src/render/assets/asphalt-packed.ktx2`: the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map, each box-filtered from 2K to 1K, packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.
 - **Rebuild:** `pnpm texture asphalt-albedo` and `pnpm texture asphalt-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: download them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.
 
 ## Pavement pavers: `concrete_pavers_02`
@@ -253,8 +253,8 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
   - `src/render/assets/pavers-albedo.ktx2`: the albedo detail of the pavement on High, runtime-cached
   - `src/render/assets/pavers-packed.ktx2`: the normal, roughness and occlusion of the pavement on High, runtime-cached
 - **Changes:**
-  - `src/render/assets/pavers-albedo.ktx2`: the 2K diffuse map with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.
-  - `src/render/assets/pavers-packed.ktx2`: the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.
+  - `src/render/assets/pavers-albedo.ktx2`: the 2K diffuse map box-filtered to 1K in linear light, with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.
+  - `src/render/assets/pavers-packed.ktx2`: the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map, each box-filtered from 2K to 1K, packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.
 - **Rebuild:** `pnpm texture pavers-albedo` and `pnpm texture pavers-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: download them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.
 
 <!-- credits:end -->

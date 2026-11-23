@@ -10,7 +10,7 @@ import {
 import { ENCODINGS, type Encoding } from '../assets/encodings';
 import { lfText, ROOT, sha256 } from '../assets/provenance';
 import { ASSET_SOURCES, type SourceFile } from '../assets/sources';
-import { albedoDetail, packNormalRoughnessOcclusion, type Pixels } from './pbr-pack';
+import { albedoDetail, packNormalRoughnessOcclusion, type Pixels, reduce } from './pbr-pack';
 import { decodePng, type PngImage } from './png';
 
 /** The `ASSET_SOURCES` id of each surface's photoscan. */
@@ -66,6 +66,7 @@ function sourceFile(surface: PbrSurface, which: SourceRole): SourceFile {
 export const pbrSourcesPresent = (surface: PbrSurface, role: PbrRole, root = ROOT): boolean =>
   ROLE_SOURCES[role].every((which) => existsSync(join(root, sourceFile(surface, which).path)));
 
+/** A source reduced to `PBR_SIZE`; only the diffuse colour is sRGB. */
 function readImage(root: string, surface: PbrSurface, which: SourceRole): PngImage {
   const file = sourceFile(surface, which);
   const path = join(root, file.path);
@@ -74,7 +75,7 @@ function readImage(root: string, surface: PbrSurface, which: SourceRole): PngIma
   if (sha256(bytes) !== file.sha256) {
     throw new Error(`${file.path} is not the registered file (${file.url})`);
   }
-  return decodePng(bytes);
+  return reduce(decodePng(bytes), PBR_SIZE, which === 'diffuse');
 }
 
 export function pbrPixels(surface: PbrSurface, role: PbrRole, root = ROOT): Pixels {
