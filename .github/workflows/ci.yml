@@ -175,6 +175,60 @@ jobs:
           name: test-results-${{ matrix.id }}
           path: test-results/
 
+  # Advisory: not in `check.needs`. Software WebGPU (SwiftShader, Chromium's new headless mode)
+  # builds every pipeline of each preset, so a WGSL error fails here. Skipped on push, like e2e.
+  webgpu:
+    if: github.event_name != 'push'
+    needs: [lint, unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+        env:
+          BASE_PATH: /gegenlenker/
+      - id: playwright
+        run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+          restore-keys: playwright-${{ runner.os }}-
+      - id: debs
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/playwright-debs
+          key: playwright-debs-${{ runner.os }}-${{ steps.playwright.outputs.version }}
+      - name: Seed apt with cached .debs
+        run: |
+          mkdir -p ~/.cache/playwright-debs
+          if compgen -G "$HOME/.cache/playwright-debs/*.deb" >/dev/null; then
+            sudo cp --update=none "$HOME"/.cache/playwright-debs/*.deb /var/cache/apt/archives/
+          fi
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Collect .debs for the cache
+        if: steps.debs.outputs.cache-hit != 'true'
+        run: |
+          if compgen -G '/var/cache/apt/archives/*.deb' >/dev/null; then
+            cp --update=none /var/cache/apt/archives/*.deb ~/.cache/playwright-debs/
+          else
+            echo '::warning::no .debs to cache'
+          fi
+      - run: pnpm test:e2e:webgpu
+      - if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-results-webgpu
+          path: test-results/
+
   # The required status check. `always()` keeps it running when a dependency
   # fails, so it fails instead of being skipped (a skipped check can pass).
   # Required: every need succeeds; on push only, e2e may be skipped.

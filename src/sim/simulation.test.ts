@@ -26,7 +26,7 @@ import {
   V_MAX,
 } from './constants';
 import { bodyFootprints } from './geometry';
-import { contactAhead, NO_PREDICTION, predictCombination } from './predict';
+import { contactAhead, NO_PREDICTION, predictCombination, warnAhead } from './predict';
 import { createSimulation } from './simulation';
 
 const CAP = 100_000;
@@ -789,6 +789,16 @@ describe('simulation', () => {
       const far = predictCombination(p, stand, wallAhead(10));
       expect(far.blockedAt).toBeCloseTo(10, 1);
       expect(contactAhead(far)).toBe(false);
+    });
+
+    it('warns of a limit stop like a contact, inside the warning distance only', () => {
+      const at = (blocked: 'contact' | 'coupling' | 'turntable', blockedAt: number) =>
+        warnAhead({ ...NO_PREDICTION, blocked, blockedAt });
+      expect(at('contact', 1)).toBe('contact');
+      expect(at('coupling', 1)).toBe('limit');
+      expect(at('turntable', 1)).toBe('limit');
+      expect(at('turntable', 10)).toBeNull();
+      expect(warnAhead(NO_PREDICTION)).toBeNull();
     });
 
     it('keeps both lines to the full horizon on a circle and ends them together at a block', () => {

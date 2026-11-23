@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_TOP_DOWN_LAYOUT, type Rect } from '../contracts/render';
+import { DEFAULT_TOP_DOWN_LAYOUT, type LegendBox, type Rect } from '../contracts/render';
 import { de } from '../i18n/de';
 import { en } from '../i18n/en';
+import { CLOSE_ASPECT, MIN_CLOSE_WIDTH } from './close-mirror';
 import { COCKPIT_FOV, coneTop, CONE_GAP, FRONT_GAP_PX, frontBand, VISOR } from './cockpit-band';
 import {
   computeViewports,
@@ -285,6 +286,7 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   Gegenrichtung: 99,
   In: 12,
   Kupplungswinkel: 116,
+  Limit: 32,
   Lkw: 27,
   Outside: 54,
   R: 10,
@@ -299,10 +301,12 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   at: 13,
   ausweichen: 80,
   away: 36,
+  countersteer: 86,
   der: 23,
   drawbar: 57,
   drive: 35,
   fahren: 43,
+  gegenlenken: 86,
   in: 12,
   jetzt: 32,
   limit: 29,
@@ -344,7 +348,7 @@ function referenceLines(text: string, width: number): number {
 }
 
 describe('computeViewports front mirror', () => {
-  const FRONT = { front: true, wide: false };
+  const FRONT = { front: true, wide: false, close: false };
   const apart = (a: Rect, b: Rect): boolean =>
     a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
   const sizes: (readonly [number, number])[] = [
@@ -514,7 +518,9 @@ describe('computeViewports front mirror', () => {
       Object.keys(en)
         .filter((key) => pattern.test(key))
         .sort();
-    expect([...MESSAGE_KEYS.toast].sort()).toEqual(keysOf(/^(blocked|contactAhead|selectGear)/));
+    expect([...MESSAGE_KEYS.toast].sort()).toEqual(
+      keysOf(/^(blocked|contactAhead|limitAhead|selectGear)/),
+    );
     expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Outside)$/));
   });
 
@@ -556,8 +562,8 @@ describe('computeViewports front mirror', () => {
 });
 
 describe('computeViewports class IV mirrors', () => {
-  const WIDE = { front: true, wide: true };
-  const PLAIN = { front: true, wide: false };
+  const WIDE = { front: true, wide: true, close: false };
+  const PLAIN = { front: true, wide: false, close: false };
   const apart = (a: Rect, b: Rect): boolean =>
     a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
   const sizes: (readonly [number, number])[] = [
@@ -742,5 +748,91 @@ describe('computeViewports class IV mirrors', () => {
     const v = views(w, h, WIDE, legend);
     if (v.wideRight === null) throw new Error('class IV beside the legend');
     expect(v.wideRight.y + v.wideRight.height).toBeGreaterThan(h - legend.height);
+  });
+});
+
+describe('computeViewports class V mirror', () => {
+  const ALL = { front: true, wide: true, close: true };
+  const NO_CLOSE = { ...ALL, close: false };
+  const apart = (a: Rect, b: Rect): boolean =>
+    a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+  const sizes: (readonly [number, number])[] = [
+    [390, 844],
+    [844, 390],
+    [1280, 720],
+    [1920, 1080],
+    [2560, 1440],
+  ];
+  for (let w = 320; w <= 2000; w += 40) {
+    for (let h = 320; h <= 2000; h += 40) sizes.push([w, h]);
+  }
+  const views = (w: number, h: number, extra: typeof ALL, legend: LegendBox | null = null) =>
+    computeViewports(w, h, 'drive', legend, undefined, undefined, null, extra);
+
+  it('is only there when asked for, and replay has none', () => {
+    for (const [w, h] of sizes) expect(views(w, h, NO_CLOSE).close, `${w}x${h}`).toBeNull();
+    const replay = computeViewports(800, 600, 'replay', null, undefined, undefined, null, ALL);
+    expect(replay.close).toBeNull();
+  });
+
+  it('sits right-aligned above the right class II mirror, no wider, clear of everything', () => {
+    let shown = 0;
+    for (const [w, h] of sizes) {
+      for (const legend of [null, { right: w - 40, height: 260 }]) {
+        const v = views(w, h, ALL, legend);
+        const { cockpit, mirrorRight, close, front } = v;
+        if (cockpit === null || mirrorRight === null) throw new Error('drive mode has mirrors');
+        if (close === null) continue;
+        shown++;
+        const at = `${w}x${h} ${JSON.stringify(legend)}`;
+        expect(close.width, at).toBe(CLOSE_ASPECT * close.height);
+        expect(close.width, at).toBeGreaterThanOrEqual(MIN_CLOSE_WIDTH);
+        expect(close.width, at).toBeLessThanOrEqual(mirrorRight.width);
+        expect(close.x + close.width, at).toBe(mirrorRight.x + mirrorRight.width);
+        expect(mirrorRight.y - (close.y + close.height), `${at} gap`).toBe(WIDE_GAP_PX);
+        expect(close.y, at).toBeGreaterThanOrEqual(cockpit.y + 32);
+        if (front !== null) expect(apart(close, front), at).toBe(true);
+        expect(apart(close, messageColumn(v)), at).toBe(true);
+      }
+    }
+    expect(shown).toBeGreaterThan(0);
+  });
+
+  it('never moves or resizes the other mirrors, the front mirror or the messages', () => {
+    for (const [w, h] of sizes) {
+      const on = views(w, h, ALL);
+      const off = views(w, h, NO_CLOSE);
+      expect({ ...on, close: null }, `${w}x${h}`).toEqual(off);
+      expect(messageColumn(on), `${w}x${h}`).toEqual(messageColumn(off));
+    }
+  });
+
+  it('shrinks to the room above class II and drops below the minimum width', () => {
+    const room = (w: number, h: number): number => {
+      const { mirrorRight, cockpit } = views(w, h, ALL);
+      return (mirrorRight?.y ?? 0) - WIDE_GAP_PX - ((cockpit?.y ?? 0) + 32);
+    };
+    let dropped = 0;
+    let shrunk = 0;
+    for (const [w, h] of sizes) {
+      const { close, mirrorRight } = views(w, h, ALL);
+      if (mirrorRight === null) continue;
+      const fits = Math.min(Math.floor(mirrorRight.width / CLOSE_ASPECT), room(w, h));
+      if (close === null) {
+        dropped++;
+        expect(CLOSE_ASPECT * fits, `${w}x${h}`).toBeLessThan(MIN_CLOSE_WIDTH);
+      } else {
+        expect(close.height, `${w}x${h}`).toBe(fits);
+        if (close.width < mirrorRight.width - 1) shrunk++;
+      }
+    }
+    expect(dropped).toBeGreaterThan(0);
+    expect(shrunk).toBeGreaterThan(0);
+  });
+
+  it('is present at 1920x1080 and absent on a small laptop', () => {
+    expect(views(1920, 1080, ALL).close).not.toBeNull();
+    expect(views(1280, 720, ALL).close).toBeNull();
+    expect(views(1366, 768, ALL).close).toBeNull();
   });
 });

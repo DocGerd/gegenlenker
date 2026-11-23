@@ -2,6 +2,7 @@ import {
   BoxGeometry,
   Box3,
   Camera,
+  Color,
   Group,
   Layers,
   Mesh,
@@ -23,6 +24,7 @@ import { lookFor } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { applyShell } from './glb-shells';
 import { createMirror } from './mirror';
+import { tint } from './tint';
 import {
   AIDS_LAYER,
   CAB_LAYER,
@@ -423,9 +425,8 @@ describe('sun shadow', () => {
   });
 
   it('lets a shell body cast, and its glass and lenses only take shadow', () => {
-    const body = new Mesh(new BoxGeometry());
-    const glass = new Mesh(new BoxGeometry());
-    const lens = new Mesh(new BoxGeometry());
+    const part = (): Mesh => new Mesh(tint(new BoxGeometry(), new Color(1, 1, 1)));
+    const [body, glass, lens] = [part(), part(), part()];
     const group = new Group();
     const swap = applyShell(
       group,
@@ -433,10 +434,11 @@ describe('sun shadow', () => {
       { toAids: [], remove: [], layer: PERSPECTIVE_LAYER },
       { material: new MeshBasicMaterial() },
     );
-    const [shell, shellGlass, shellLens] = meshes(group);
+    const [shell, clear, ...rest] = meshes(group);
     expect([shell?.castShadow, shell?.receiveShadow]).toEqual([true, true]);
-    expect([shellGlass?.castShadow, shellGlass?.receiveShadow]).toEqual([false, true]);
-    expect([shellLens?.castShadow, shellLens?.receiveShadow]).toEqual([false, true]);
+    expect([clear?.castShadow, clear?.receiveShadow]).toEqual([false, true]);
+    // glass and lenses share one draw
+    expect(rest).toHaveLength(0);
     swap.dispose();
   });
 });

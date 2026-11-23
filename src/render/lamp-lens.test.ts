@@ -245,11 +245,14 @@ function lampMeshes(root: Object3D): Mesh[] {
   return out;
 }
 
+/** A shell's vertices lead the mesh that draws it, alone or baked with the detail. */
+type Dark = { readonly mesh: Mesh; readonly vertices: number };
+
 /** Every mesh that draws lenses: one valid slot per vertex, lenses off the top-down view, the layout's slots lit. */
 function expectSlots(
   root: Object3D,
   layout: readonly Lamp[],
-  dark: readonly Mesh[],
+  dark: readonly Dark[],
   pbr: boolean,
 ): void {
   const meshes = lampMeshes(root);
@@ -273,7 +276,9 @@ function expectSlots(
     }
   }
   expect(shown).toEqual(new Set(layout.map((l) => slotOf(l.fns))));
-  for (const mesh of dark) expect(new Set(slotsOf(mesh))).toEqual(new Set([DARK_SLOT]));
+  for (const { mesh, vertices } of dark) {
+    expect(new Set(slotsOf(mesh).slice(0, vertices))).toEqual(new Set([DARK_SLOT]));
+  }
 }
 
 /** The slots a visual's lamp emission lights, read from the uniform array its lens meshes draw with. */
@@ -308,14 +313,24 @@ function snapshots(truck: TruckId, trailer: TrailerId): [SimSnapshot, SimSnapsho
   ];
 }
 
-const shellMeshes = (root: Object3D, shells: readonly Shell[]): Mesh[] => {
-  const out: Mesh[] = [];
-  root.traverse((o) => {
-    if (o instanceof Mesh && shells.some((s) => s.mesh.geometry === o.geometry))
-      out.push(o as Mesh);
+const shellMeshes = (root: Object3D, shells: readonly Shell[]): Dark[] =>
+  shells.flatMap(({ mesh: shell }) => {
+    const vertices = shell.geometry.getAttribute('position').count;
+    const first = new Vector3().fromBufferAttribute(shell.geometry.getAttribute('position'), 0);
+    const where = shell.localToWorld(first);
+    const found: Dark[] = [];
+    root.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      const position = (o as Mesh).geometry.getAttribute('position');
+      if (
+        (o as Mesh).geometry === shell.geometry ||
+        (position.count >= vertices &&
+          new Vector3().fromBufferAttribute(position, 0).distanceTo(where) < 1e-5)
+      )
+        found.push({ mesh: o as Mesh, vertices });
+    });
+    return found;
   });
-  return out;
-};
 
 describe.each(TRUCK_IDS)('lamp slots of the %s truck', (id) => {
   const spec = truckById(id);

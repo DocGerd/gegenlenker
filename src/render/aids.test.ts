@@ -223,6 +223,7 @@ describe('the aids layer corridor', () => {
         wideLeft: null,
         wideRight: null,
         front: null,
+        close: null,
         topDown: { x: 0, y: 0, width: 1, height: 1 },
       },
       topDown: 'follow',

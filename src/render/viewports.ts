@@ -14,6 +14,7 @@ import {
 import { de } from '../i18n/de';
 import { en, type MessageKey } from '../i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop, frontBand } from './cockpit-band';
+import { CLOSE_ASPECT, MIN_CLOSE_WIDTH } from './close-mirror';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -53,6 +54,7 @@ export const MIN_MESSAGE_WIDTH = 131 + 41 + 32;
 export const MESSAGE_KEYS = {
   toast: [
     'contactAhead',
+    'limitAhead',
     'selectGear',
     'blockedContactTruck',
     'blockedContactDrawbar',
@@ -238,6 +240,7 @@ export function computeViewports(
       wideLeft: null,
       wideRight: null,
       front: null,
+      close: null,
       topDown: full,
     };
   }
@@ -398,7 +401,28 @@ export function computeViewports(
     wideLeft: under(mirrorLeft),
     wideRight: under(mirrorRight),
     front,
+    close: extra.close ? closeRect(mirrorRight, floor) : null,
     topDown,
+  };
+}
+
+/**
+ * The class V mirror in the room left above the right class II mirror, right-aligned with it and no
+ * wider; nothing but that room limits it, so it never moves or shrinks the mirrors under it. Null below
+ * `MIN_CLOSE_WIDTH`.
+ */
+function closeRect(mirrorRight: Rect, ceiling: number): Rect | null {
+  const height = Math.min(
+    Math.floor(mirrorRight.width / CLOSE_ASPECT),
+    mirrorRight.y - WIDE_GAP_PX - ceiling,
+  );
+  const width = CLOSE_ASPECT * height;
+  if (width < MIN_CLOSE_WIDTH) return null;
+  return {
+    x: mirrorRight.x + mirrorRight.width - width,
+    y: mirrorRight.y - WIDE_GAP_PX - height,
+    width,
+    height,
   };
 }
 
