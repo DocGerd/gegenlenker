@@ -28,6 +28,7 @@ pnpm verify     # lint, format, typecheck, unit and e2e tests
 
 ## Documentation
 
+- [User guide](docs/usage.md): controls, views, exercises, settings, URL parameters, browser storage
 - [Vehicle data](docs/vehicle-data.md): sources and the generated table of estimated parameters
 - [Brand](docs/brand/BRAND.md)
 - [Wording glossary](docs/glossary.md)
