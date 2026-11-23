@@ -124,11 +124,16 @@ export function showResult(
   const exercise = exerciseById(result.exerciseId);
   const container = element('div', 'result');
   const card = element('section', 'result-card');
+  // Focus lands on a button inside the card, so a screen reader reads the dialog name (the outcome) first.
+  const title = resultTitle(result.reached);
+  title.id = 'result-title';
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-labelledby', title.id);
 
   const header = element('header', 'result-header');
   header.append(
     element('p', 'result-eyebrow', `${t('result')} · ${t(EXERCISE_TITLE[result.exerciseId])}`),
-    resultTitle(result.reached),
+    title,
     element('p', 'result-reason', t(result.assisted ? 'runWithAids' : 'runNoAids')),
   );
   if (result.waypointMissed) header.append(element('p', 'result-reason', t('waypointMissed')));
