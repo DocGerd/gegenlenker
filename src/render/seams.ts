@@ -10,7 +10,7 @@ import type { Look } from './look';
 /** three.js default layer: every camera sees it. */
 export const DEFAULT_LAYER = 0;
 export const AIDS_LAYER = 1; // seen by the top-down camera only
-/** Far plane of the cockpit, mirror and chase cameras. */
+/** Far plane of the cockpit and mirror cameras; the chase camera adds its farthest eye distance. */
 export const CAMERA_FAR = 400;
 export const PERSPECTIVE_LAYER = 2; // seen by the perspective cameras only
 export const CAB_LAYER = 3; // seen by the mirrors and the chase camera: the cockpit eye sits inside the cab
