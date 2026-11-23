@@ -97,6 +97,8 @@ const makeRepo = ({
   git(work, 'add', '-A');
   git(work, 'commit', '-m', 'main');
   git(work, 'push', 'origin', 'main');
+  // Newer git creates origin/HEAD on the first fetch, which a dry run must not be seen to do.
+  git(work, 'remote', 'set-head', 'origin', 'main');
   if (released) {
     git(work, 'tag', 'v1.0.0');
     git(work, 'push', 'origin', 'v1.0.0');
