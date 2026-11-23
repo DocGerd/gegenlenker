@@ -26,7 +26,6 @@ import atlasBUrl from './assets/yard-kit-atlas-b.ktx2?url';
 import leavesUrl from './assets/yard-kit-leaves.ktx2?url';
 import kitUrl from './assets/yard-kit.glb?url';
 import {
-  buildSerially,
   GRADE_SHADER_MARKER,
   gradeDisabled,
   type GradeSample,
@@ -40,6 +39,7 @@ import {
   PERSPECTIVE_LAYER,
   YARD_CASTER_LAYER,
 } from './seams';
+import { verifyShader } from './shader-check';
 import { startShells, type Shells } from './glb-shells';
 import { startTextureSet, TEXTURE_FAILED, type TextureMaps, type TextureSet } from './texture-set';
 import { VehicleLightingModel, type VehicleEnvironment } from './vehicle-pbr';
@@ -147,15 +147,16 @@ export async function precompileYardKit(
       const mesh = new Mesh(geometry, material);
       mesh.receiveShadow = material === materials.atlas;
       scene.add(mesh);
-      const { fragmentShader } = await buildSerially(renderer, () =>
-        renderer.debug.getShaderAsync(scene, camera, mesh),
-      );
-      scene.remove(mesh);
       const markers = graded
         ? [YARD_KIT_SHADER_MARKER, GRADE_SHADER_MARKER]
         : [YARD_KIT_SHADER_MARKER];
-      if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
-        throw new Error('the yard kit shader did not build');
+      try {
+        await verifyShader(renderer, scene, camera, mesh, {
+          subject: 'the yard kit shader',
+          markers,
+        });
+      } finally {
+        scene.remove(mesh);
       }
     }
     // a compile on a lost context passes vacuously

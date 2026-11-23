@@ -10,7 +10,7 @@ import {
 import type { WebGPURenderer } from 'three/webgpu';
 import groundUrl from './assets/ground.ktx2?url';
 import { createGroundMaterial } from './ground-material';
-import { buildSerially } from './grade';
+import { verifyShader } from './shader-check';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
 import { gpuLost } from './seams';
 import {
@@ -48,12 +48,10 @@ export async function precompileGround(
   const scene = new Scene();
   scene.add(mesh);
   try {
-    const { fragmentShader } = await buildSerially(renderer, () =>
-      renderer.debug.getShaderAsync(scene, new PerspectiveCamera(), mesh),
-    );
-    if (fragmentShader?.includes(GROUND_SHADER_MARKER) !== true) {
-      throw new Error('the ground shader did not build');
-    }
+    await verifyShader(renderer, scene, new PerspectiveCamera(), mesh, {
+      subject: 'the ground shader',
+      markers: [GROUND_SHADER_MARKER],
+    });
     // a compile on a lost context passes vacuously
     if (gpuLost(renderer)) throw new Error('the GPU context was lost');
   } finally {

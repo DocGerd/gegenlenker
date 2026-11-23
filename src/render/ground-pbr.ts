@@ -22,7 +22,6 @@ import concretePackedUrl from './assets/concrete-packed.ktx2?url';
 import paversAlbedoUrl from './assets/pavers-albedo.ktx2?url';
 import paversPackedUrl from './assets/pavers-packed.ktx2?url';
 import {
-  buildSerially,
   GRADE_SHADER_MARKER,
   gradeDisabled,
   type GradeSample,
@@ -31,7 +30,6 @@ import {
 import { sampleLampLights } from './lamp-light';
 import { createGroundPbrMaterial, GROUND_PBR_MARKER } from './ground-pbr-material';
 import {
-  countSamplers,
   PBR_SAMPLER_BUDGET,
   type PbrKey,
   SAMPLER_CEILING,
@@ -39,6 +37,7 @@ import {
 } from './ground-pbr-spec';
 import { createWornMarkingMaterial, MARK_BOX, MARKING_WEAR_MARKER } from './marking-wear';
 import { COCKPIT_LAYERS, enableLayers, gpuLost, PERSPECTIVE_LAYER } from './seams';
+import { verifyShader } from './shader-check';
 import { prepareShadow } from './sun-shadow';
 import { FLOOD_SHADOW } from './yard-lights';
 import {
@@ -93,21 +92,14 @@ export async function precompileGroundPbr(
       scene.add(mesh, wornMesh, ...lights, sun.target);
       const camera = new PerspectiveCamera();
       enableLayers(camera.layers, COCKPIT_LAYERS);
-      const built = async (target: Mesh, marker: string): Promise<string> => {
-        const { fragmentShader } = await buildSerially(renderer, () =>
-          renderer.debug.getShaderAsync(scene, camera, target),
-        );
-        if (![marker, ...gradeMarkers].every((m) => fragmentShader?.includes(m) === true)) {
-          throw new Error(`the ${marker} shader did not build`);
-        }
-        return fragmentShader ?? '';
-      };
-      const fragmentShader = await built(mesh, GROUND_PBR_MARKER);
+      const built = (target: Mesh, marker: string, maxSamplers?: number): Promise<string> =>
+        verifyShader(renderer, scene, camera, target, {
+          subject: `the ${marker} shader`,
+          markers: [marker, ...gradeMarkers],
+          ...(maxSamplers === undefined ? {} : { maxSamplers }),
+        });
+      await built(mesh, GROUND_PBR_MARKER, PBR_SAMPLER_BUDGET + (shadow ? SHADOW_SAMPLERS : 0));
       await built(wornMesh, MARKING_WEAR_MARKER);
-      const samplers = countSamplers(fragmentShader);
-      if (samplers > PBR_SAMPLER_BUDGET + (shadow ? SHADOW_SAMPLERS : 0)) {
-        throw new Error(`the PBR ground shader declares ${String(samplers)} samplers`);
-      }
     }
     // a compile on a lost context passes vacuously
     if (gpuLost(renderer)) throw new Error('the GPU context was lost');

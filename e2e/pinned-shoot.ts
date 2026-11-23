@@ -46,7 +46,7 @@ export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
 /** How long a web-first wait for a High first-load marker may take on software GL, against the 30 s default. */
 export const HIGH_WAIT_MS = 60_000;
 
-const SETTINGS_KEY = 'gegenlenker.settings.v1';
+export const SETTINGS_KEY ='gegenlenker.settings.v1';
 const FRAME_MS = 16;
 /** Frames stepped after the scene is ready, so every lazily built resource is in place. */
 const SETTLE_FRAMES = 30;
@@ -88,8 +88,14 @@ export const MIN_DRAWN_COLOURS = 40;
 /** Set once the renderer is ready and removed on a loss, so a settle after a loss waits for the new one. */
 const BACKEND_READY = (v: string): boolean => v !== '';
 
+/** Per `<html>` marker, whether its value says the attachment is in place. */
+export type MarkerChecks = Readonly<Record<string, (value: string) => boolean>>;
+
 /** The `<html>` markers whose values say `preset`'s asynchronous attachments are in place; a shot before they land would differ. */
-export function readyMarkers(preset: Preset): Readonly<Record<string, (value: string) => boolean>> {
+export function readyMarkers(
+  preset: Preset,
+  overrides: MarkerChecks = {},
+): MarkerChecks {
   const flags = QUALITY_FLAGS[preset];
   const drawn = Object.values<Attachment>(ATTACHMENTS).filter((a) =>
     a.flags.every((f) => flags[f]),
@@ -97,6 +103,7 @@ export function readyMarkers(preset: Preset): Readonly<Record<string, (value: st
   return {
     'data-render-backend': BACKEND_READY,
     ...Object.fromEntries(drawn.map((a) => [a.marker, a.ready])),
+    ...overrides,
   };
 }
 
@@ -211,7 +218,8 @@ function pinResolvePath(): void {
  * Opens a standstill drive of `exercise` on `config` with `performance.now`, timers and rAF frozen,
  * so the resolution governor and the sim only move when stepped, and pins the multisample resolve
  * to one path. Call on a fresh page; `search` is the app URL's query (`?backend=webgpu`);
- * `deadlineMs` bounds each phase of the `settle` that waits for the preset.
+ * `deadlineMs` bounds each phase of the `settle` that waits for the preset; `overrides` replace the
+ * ready check of a marker (a feature the test fails on purpose).
  */
 export async function startPinnedDrive(
   page: Page,
@@ -219,6 +227,7 @@ export async function startPinnedDrive(
   exercise: string,
   search = '',
   deadlineMs?: number,
+  overrides?: MarkerChecks,
 ): Promise<void> {
   if (new URLSearchParams(search).get('backend') === 'webgpu') {
     webgpuPages.add(page);
@@ -234,7 +243,7 @@ export async function startPinnedDrive(
   await page.goto(`./${withFramingFlag(search)}`);
   await page.getByRole('button', { name: new RegExp(`^${exercise}`) }).click();
   await page.locator('.hud-mirror:not([hidden])').nth(1).waitFor();
-  await settle(page, preset, deadlineMs);
+  await settle(page, preset, deadlineMs, overrides);
   const [backend, pinned] = await page.evaluate(() => {
     const html = document.documentElement;
     return [html.getAttribute('data-render-backend'), html.getAttribute('data-resolve-pinned')];
@@ -258,8 +267,9 @@ export async function attachmentsReady(page: Page, preset: Preset): Promise<bool
 async function attachments(
   page: Page,
   preset: Preset,
+  overrides?: MarkerChecks,
 ): Promise<{ ready: boolean; values: (string | null)[] }> {
-  const want = readyMarkers(preset);
+  const want = readyMarkers(preset, overrides);
   const values = await page.evaluate((names) => {
     const html = document.documentElement;
     return names.map((n) => html.getAttribute(n));
@@ -301,13 +311,14 @@ export async function settle(
   page: Page,
   preset: Preset,
   deadlineMs = (webgpuPages.has(page) ? WEBGPU_SETTLE_DEADLINE_MS : SETTLE_DEADLINE_MS)[preset],
+  overrides?: MarkerChecks,
 ): Promise<void> {
   const notReady = (what: unknown): Error =>
     new Error(`${preset} not ready: ${JSON.stringify(what)}`);
   const attachDeadline = Date.now() + deadlineMs;
   for (;;) {
     await step(page, 1);
-    const { ready, values } = await attachments(page, preset);
+    const { ready, values } = await attachments(page, preset, overrides);
     if (ready) break;
     if (Date.now() > attachDeadline) throw notReady(values);
     await page.waitForTimeout(25);

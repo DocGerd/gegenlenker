@@ -31,8 +31,14 @@ import {
   type NodeMaterial,
   type WebGPURenderer,
 } from 'three/webgpu';
-import { countSamplers } from './ground-pbr-spec';
 import { gpuLost } from './seams';
+import {
+  buildSerially,
+  checkCompiled,
+  compileShader,
+  verifyWgsl,
+  type Compiled,
+} from './shader-check';
 
 /*
  * The perspective grade: aerial perspective, then tone mapping, inside each
@@ -175,21 +181,6 @@ export function setGradeDisabled(off: boolean): void {
   for (const [material, entry] of entries) sync(material, entry);
 }
 
-const compiling = new WeakMap<WebGPURenderer, Promise<unknown>>();
-
-/**
- * Runs `build` after every earlier one on `gpu` has settled. three's `compileAsync` keeps one
- * precompilation state per renderer, so two overlapping shader builds break each other.
- */
-export function buildSerially<T>(gpu: WebGPURenderer, build: () => Promise<T>): Promise<T> {
-  const turn = (compiling.get(gpu) ?? Promise.resolve()).then(build);
-  compiling.set(
-    gpu,
-    turn.catch(() => undefined),
-  );
-  return turn;
-}
-
 /**
  * A mesh the grade check compiles, the lights it is lit by, and what releases it. `override` is the
  * scene's override material, so the sample builds the shadow pass's program; `markers` are the
@@ -249,18 +240,20 @@ export function precompileGrade(
 }
 
 /** Builds each sample of `makes` on `gpu`, as `precompileGrade` does for the grade's own. */
-export function precompileSamples(
+export async function precompileSamples(
   gpu: WebGPURenderer,
   makes: readonly (() => GradeSample)[],
 ): Promise<void> {
-  return buildSerially(gpu, () => buildGrade(gpu, makes));
+  const built = await buildSerially(gpu, () => buildGrade(gpu, makes));
+  await verifyWgsl(gpu, built);
 }
 
 async function buildGrade(
   gpu: WebGPURenderer,
   makes: readonly (() => GradeSample)[],
-): Promise<void> {
+): Promise<Compiled[]> {
   const samples: GradeSample[] = [];
+  const built: Compiled[] = [];
   const { debug } = gpu;
   const previous = debug.onShaderError;
   const rejected: { log: string | null } = { log: null };
@@ -290,22 +283,18 @@ async function buildGrade(
       const markers = sample.markers ?? [GRADE_SHADER_MARKER];
       const [first] = markers;
       if (first !== undefined) watched.add(first);
-      const { fragmentShader } = await debug.getShaderAsync(
-        scene,
-        new PerspectiveCamera(),
-        sample.mesh,
-      );
-      if (!markers.every((marker) => fragmentShader?.includes(marker) === true)) {
-        throw new Error('a graded shader did not build');
-      }
-      const samplers = countSamplers(fragmentShader ?? '');
-      if (sample.maxSamplers !== undefined && samplers > sample.maxSamplers) {
-        throw new Error(`a graded shader declares ${String(samplers)} samplers`);
-      }
+      const compiled = await compileShader(gpu, scene, new PerspectiveCamera(), sample.mesh);
+      checkCompiled(compiled, {
+        subject: 'a graded shader',
+        markers,
+        ...(sample.maxSamplers === undefined ? {} : { maxSamplers: sample.maxSamplers }),
+      });
+      built.push(compiled);
     }
     if (rejected.log !== null) {
       throw new Error(`a graded shader failed to compile: ${rejected.log}`);
     }
+    return built;
   } finally {
     active = false;
     if (debug.onShaderError === watcher) debug.onShaderError = previous;

@@ -3,6 +3,7 @@ import { WebGPURenderer } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startGroundTextures } from './ground-texture';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
+import { ShaderRejectedError } from './shader-check';
 import {
   describeTranscodeTarget,
   KTX2_LOAD_TIMEOUT_MS,
@@ -131,6 +132,24 @@ describe('texture set', () => {
     set.setEnabled(true);
     await settle();
     expect(states).toEqual([TEXTURE_FAILED]);
+  });
+
+  it('fails the set at once, without a retry, when the GPU rejects its shader', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    loaderTexture.queue = [texture(), texture(), texture(), texture()];
+    const precompile = vi.fn(() => Promise.reject(new ShaderRejectedError('wgsl')));
+    const states: (string | null)[] = [];
+    const set = startTextureSet({ ...options(precompile), onApplied: (s) => states.push(s) });
+    const apply = vi.fn();
+    set.onLoaded(apply);
+    set.attach(renderer());
+    set.setEnabled(true);
+    await settle();
+    expect(states).toEqual([TEXTURE_FAILED]);
+    set.setEnabled(true);
+    await settle();
+    expect(precompile).toHaveBeenCalledOnce();
+    expect(apply).not.toHaveBeenCalled();
   });
 });
 
