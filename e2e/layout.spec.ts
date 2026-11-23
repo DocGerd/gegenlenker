@@ -535,19 +535,34 @@ test('below 700 px the brief collapses on the first drive input and the key lege
   await settled(page);
   expect(await boxes(page.locator('.hud-legend'))).toEqual(closed);
   await expectMirrorsClearControls(page, size);
+  for (const other of [size, { width: 1024, height: 690 }, { width: 800, height: 600 }, size]) {
+    await page.setViewportSize(other);
+    await expect
+      .poll(async () => (await boxes(page.locator('.hud-topdown')))[0])
+      .toMatchObject({ right: other.width, bottom: other.height });
+    await settled(page);
+    await expect.poll(() => keyListTrouble(page)).toEqual([]);
+  }
   await keysToggle.click();
   await expect(list).toBeHidden();
 
-  // The first drive input collapses the brief; the next change closes an open list.
+  // The first drive input collapses the brief, also after a taller window in between.
   await page.keyboard.press('4');
   await expect(brief).toBeHidden();
   await expect(briefToggle).toHaveAttribute('aria-expanded', 'false');
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await expect(briefToggle).toBeHidden();
+  await expect(brief).toBeVisible();
+  await page.setViewportSize(size);
+  await expect(briefToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(brief).toBeHidden();
   await settled(page);
   await expectMirrorsClearControls(page, size);
   await briefToggle.click();
   await expect(brief).toBeVisible();
   await expect(briefToggle).toHaveAttribute('aria-expanded', 'true');
 
+  // A later control change closes an open list.
   await page.keyboard.down('w');
   await page.waitForTimeout(300);
   await page.keyboard.up('w');
@@ -601,6 +616,25 @@ const shortLandscape = { width: 844, height: 390 };
 const splitSizes = [...sizes, shortLandscape];
 
 /** Two animation frames: the legend's resize observer re-lays out after the first one. */
+/** What the open key list leaves or covers: it stands in the top-down pane, clear of the mirrors, the lever and the buttons. */
+async function keyListTrouble(page: Page): Promise<string[]> {
+  const [list] = await boxes(page.locator('.hud-legend dl'));
+  const [pane] = await boxes(page.locator('.hud-topdown'));
+  if (list === undefined || pane === undefined) return ['no list or no pane'];
+  const inside =
+    list.left >= pane.left &&
+    list.right <= pane.right &&
+    list.top >= pane.top &&
+    list.bottom <= pane.bottom;
+  const others = await boxes(
+    page.locator('.hud-mirror:not([hidden]), .ctl-stop, .ctl-lever, .hud-action'),
+  );
+  return [
+    ...(inside ? [] : ['outside the top-down pane']),
+    ...others.filter((o) => overlaps(list, o)).map((o) => o.name),
+  ];
+}
+
 const settled = (page: Page) =>
   page.evaluate(
     () =>
