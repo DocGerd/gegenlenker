@@ -190,9 +190,9 @@ const viewSegments = (chase: boolean): string =>
     .map(([v, k]) => segmentButton(v, k))
     .join('');
 
-/** A folding panel's chip. */
+/** A folding panel's chip; the ring fills with a tick while the panel shows. */
 const panelButton = (panel: string, key: MessageKey): string =>
-  `<button type="button" class="hud-toggle hud-chip" data-panel="${panel}" data-i18n="${key}"></button>`;
+  `<button type="button" class="hud-toggle hud-chip" data-panel="${panel}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
 /** The meaning in the legend list is the toggle's description; the ring fills with a tick while the aid is on. */
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>

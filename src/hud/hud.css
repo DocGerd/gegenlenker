@@ -578,7 +578,7 @@
   z-index: 2;
 }
 
-/* Aids and panels are pill chips: a lighter tint (and a ticked ring on an aid), never the segment's fill. */
+/* Aids and panels are pill chips: a lighter tint and a ticked ring, never the segment's fill. */
 .hud-chip {
   display: inline-flex;
   align-items: center;
@@ -586,7 +586,7 @@
   border-radius: var(--radius-pill);
 }
 
-/* The ring sits in the padding, so an aid chip grows little: the aid row and the info button still fit a laptop. */
+/* The ring sits in the padding, so a chip grows little: the aid row and the info button still fit a laptop. */
 .hud-toggle.hud-chip:has(.hud-check) {
   padding-left: 5px;
 }
