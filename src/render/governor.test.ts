@@ -49,8 +49,7 @@ function randomMisses(rate: number, seed: number, heavy = 2 * V): () => number {
 /** A fill-rate-bound GPU: the frame cost goes with the pixel count. */
 const fillBound = (fullMs: number) => (scale: number) => fullMs * scale * scale;
 
-const downs = (timer: Timer): number =>
-  timer.trace().events.filter((e) => e.kind === 'down').length;
+const kinds = (timer: Timer): string[] => timer.trace().events.map((e) => e.kind);
 
 describe('frame timer', () => {
   it.each([72, 90, 144])('keeps full resolution at a healthy %i Hz cadence', (hz) => {
@@ -97,7 +96,9 @@ describe('frame timer', () => {
       const timer = createFrameTimer();
       const { end } = run(timer, 40, 61);
       expect(timer.scale()).toBeCloseTo(0.85, 10);
-      return { timer, end };
+      // The settle frames and the window that keeps the step.
+      const { end: kept } = run(timer, 90, 63, end);
+      return { timer, end: kept };
     }
 
     it('restores full resolution after sustained headroom, and not before', () => {
@@ -223,69 +224,117 @@ describe('frame timer', () => {
   });
 
   describe('a load the scale cannot help', () => {
-    it.each([0.08, 0.12, 0.2])(
-      'steps down at most once per park on %d random misses, never to the floor',
-      (rate) => {
-        const timer = createFrameTimer();
-        const cost = randomMisses(rate, 1);
-        const { end } = drive(timer, cost, 30);
-        expect(downs(timer)).toBeLessThanOrEqual(1);
-        const { scales } = drive(timer, cost, 570, end);
-        expect(Math.min(...scales)).toBeGreaterThan(0.5);
-        const reverts = new Map<number, number[]>();
-        for (const e of timer.trace().events) {
-          if (e.kind === 'down-failed')
-            reverts.set(e.level, [...(reverts.get(e.level) ?? []), e.t]);
-        }
-        expect(reverts.size).toBeGreaterThan(0);
-        for (const times of reverts.values()) {
-          const gaps = times.slice(1).map((t, i) => t - (times[i] ?? 0));
-          expect(gaps[0] ?? Infinity).toBeGreaterThanOrEqual(32000);
-          for (let i = 1; i < gaps.length; i++) expect(gaps[i]).toBeGreaterThan(gaps[i - 1] ?? 0);
-        }
-      },
-    );
+    describe('on random misses, over many seeds', () => {
+      const SEEDS = 64;
+      const SECONDS = 300;
 
-    it.each([0.08, 0.12])(
-      'steps down at most one level on %d random misses, and ends at full resolution',
-      (rate) => {
+      /** Each seed's lowest and last scale, with a resize warm-up every `warmEvery` s. */
+      function sweep(rate: number, heavy: number, warmEvery: number) {
+        return Array.from({ length: SEEDS }, (_, i) => {
+          const timer = createFrameTimer();
+          const cost = randomMisses(rate, i + 1, heavy);
+          let now = 1000;
+          let min = 1;
+          for (let t = warmEvery; t <= SECONDS; t += warmEvery) {
+            const leg = drive(timer, cost, warmEvery, now);
+            now = leg.end;
+            min = Math.min(min, ...leg.scales);
+            if (t < SECONDS) timer.warmUp('resize');
+          }
+          return { min, end: timer.scale() };
+        });
+      }
+
+      // A step kept by luck can lead to one more, reverted within seconds.
+      it.each([
+        [0.08, SECONDS],
+        [0.08, 20],
+        [0.12, SECONDS],
+        [0.12, 20],
+        [0.2, SECONDS],
+        [0.2, 20],
+      ])(
+        'stays near full resolution on %d missed vsyncs, resizing every %i s',
+        (rate, warmEvery) => {
+          const runs = sweep(rate, 2 * V, warmEvery);
+          expect(Math.min(...runs.map((r) => r.min))).toBeGreaterThan(0.69);
+          expect(runs.filter((r) => r.min < 0.84).length).toBeLessThanOrEqual(4);
+          expect(runs.filter((r) => r.end < 1).length).toBeLessThanOrEqual(2);
+        },
+      );
+
+      it.each([SECONDS, 20])(
+        'stays near full resolution on rare 80 ms stalls, resizing every %i s',
+        (warmEvery) => {
+          const runs = sweep(0.06, 5 * V, warmEvery);
+          expect(Math.min(...runs.map((r) => r.min))).toBeGreaterThan(0.69);
+          expect(runs.filter((r) => r.end < 0.84).length).toBeLessThanOrEqual(2);
+          expect(runs.filter((r) => r.end < 1).length).toBeLessThanOrEqual(8);
+        },
+      );
+    });
+
+    it.each([
+      [25, 6, 0.85],
+      [36, 6, 0.7],
+      [80, 40, 0.5],
+    ])(
+      'steps a fill-bound load of %i ms down to the level that fits, and recovers',
+      (fullMs, seconds, fits) => {
         const timer = createFrameTimer();
-        const { scales } = drive(timer, randomMisses(rate, 1), 600);
-        expect(Math.min(...scales)).toBeCloseTo(0.85, 10);
+        const { end } = drive(timer, fillBound(fullMs), seconds);
+        expect(timer.scale()).toBeCloseTo(fits, 10);
+        drive(timer, () => V, 120, end);
         expect(timer.scale()).toBe(1);
       },
     );
 
-    it('lets a fill-bound load step down once the park a burst left has passed', () => {
+    it('lets a later fill-bound load step down after a burst the scale could not help', () => {
       const timer = createFrameTimer();
       const { end } = drive(timer, () => 2 * V, 6);
-      expect(timer.trace().events.some((e) => e.kind === 'down-failed')).toBe(true);
-      const { scales } = drive(timer, fillBound(25), 40, end);
-      expect(scales).toContain(0.85);
+      expect(kinds(timer).filter((k) => k === 'down-failed')).toHaveLength(1);
+      const { end: calm } = drive(timer, () => V, 10, end);
+      drive(timer, fillBound(25), 6, calm);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
     });
 
-    it('steps down to the level that fits a fill-bound load, and recovers', () => {
+    it('parks a level whose steps changed nothing until the preset or the lighting changes', () => {
       const timer = createFrameTimer();
-      const { end, scales } = drive(timer, fillBound(36), 6);
-      expect(scales).toEqual([1, 0.85, 0.7]);
-      const { scales: back } = drive(timer, () => V, 60, end);
-      expect(back.at(-1)).toBe(1);
+      const { end } = drive(timer, () => 2 * V, 30);
+      expect(kinds(timer).filter((k) => k === 'down-failed')).toHaveLength(3);
+      const { end: parked } = drive(timer, fillBound(25), 20, end);
+      expect(timer.scale()).toBe(1);
+      timer.warmUp('resize');
+      const { end: resized } = drive(timer, fillBound(25), 20, parked);
+      expect(timer.scale()).toBe(1);
+      timer.warmUp('lighting', { liftParks: true });
+      drive(timer, fillBound(25), 6, resized);
+      expect(timer.scale()).toBeCloseTo(0.85, 10);
     });
 
-    it('reaches the floor on a fill-bound load that even it cannot carry', () => {
-      const timer = createFrameTimer();
-      drive(timer, fillBound(80), 60);
-      expect(timer.scale()).toBe(0.5);
+    it('undoes a kept step whose gain is gone, without parking its level', () => {
+      const governor = createResolutionGovernor();
+      const feed = (ms: number, n: number) => {
+        for (let i = 0; i < n; i++) governor.sample(ms);
+      };
+      feed(25, 60);
+      feed(V, 63);
+      expect(governor.scale()).toBeCloseTo(0.85, 10);
+      feed(25, 60);
+      expect(governor.scale()).toBe(1);
+      expect(governor.trace().events.map((e) => e.kind)).toEqual(['down', 'down-lost']);
+      feed(25, 63);
+      expect(governor.scale()).toBeCloseTo(0.85, 10);
     });
 
     it('judges a heavier fill-bound load after a warm-up afresh', () => {
       const timer = createFrameTimer();
       const { end } = drive(timer, fillBound(25), 1.6);
       expect(timer.scale()).toBeCloseTo(0.85, 10);
-      timer.warmUp('quality');
+      timer.warmUp('quality', { liftParks: true });
       drive(timer, fillBound(40), 60, end);
       expect(timer.scale()).toBeLessThan(0.85);
-      expect(timer.trace().events.some((e) => e.kind === 'down-failed')).toBe(false);
+      expect(kinds(timer)).not.toContain('down-failed');
     });
 
     it('undoes a step a warm-up interrupted, so a load the scale cannot help stays at full resolution', () => {
@@ -295,16 +344,8 @@ describe('frame timer', () => {
       timer.warmUp('attach:shells');
       drive(timer, () => 25, 30, end);
       expect(timer.scale()).toBe(1);
-      expect(timer.trace().events.filter((e) => e.kind === 'down')).toHaveLength(2);
-    });
-
-    it('tries a parked level again once a warm-up changed the load', () => {
-      const timer = createFrameTimer();
-      const { end } = drive(timer, () => 40, 6);
-      expect(timer.trace().events.some((e) => e.kind === 'down-failed')).toBe(true);
-      timer.warmUp('quality');
-      drive(timer, fillBound(25), 6, end);
-      expect(timer.scale()).toBeCloseTo(0.85, 10);
+      expect(kinds(timer).filter((k) => k === 'down-failed')).toHaveLength(3);
+      expect(kinds(timer).filter((k) => k === 'down')).toHaveLength(4);
     });
 
     /** `stalls` frames of 80 ms among healthy ones, then healthy frames only. */
@@ -325,7 +366,7 @@ describe('frame timer', () => {
     it('steps down once on 7 stalls in a window, then recovers', () => {
       const governor = stallWindow(7);
       expect(governor.scale()).toBeCloseTo(0.85, 10);
-      for (let i = 0; i < 600; i++) governor.sample(V);
+      for (let i = 0; i < 700; i++) governor.sample(V);
       expect(governor.scale()).toBe(1);
       expect(governor.trace().events.map((e) => e.kind)).toEqual(['down', 'up', 'probe-held']);
     });
@@ -443,12 +484,17 @@ describe('frame timer', () => {
       expect(events.filter((e) => e.kind === 'up').every((e) => e.steady >= 4000)).toBe(true);
     });
 
-    it('records a step down that did not help, once', () => {
+    it('records each step down that did not help, until its level is parked', () => {
       const governor = createResolutionGovernor();
       for (let i = 0; i < 600; i++) governor.sample(40);
-      expect(governor.trace().events.map((e) => [e.kind, e.level])).toEqual([
+      const attempt = [
         ['down', 1],
         ['down-failed', 0],
+      ];
+      expect(governor.trace().events.map((e) => [e.kind, e.level])).toEqual([
+        ...attempt,
+        ...attempt,
+        ...attempt,
       ]);
       expect(governor.scale()).toBe(1);
     });
@@ -599,8 +645,13 @@ describe('a 60 Hz cadence with frame jitter', () => {
       governor,
       JITTER.map((ms) => ms + 1.5),
     );
-    // The replay cannot respond to the scale, so the step is reverted after it.
-    expect(governor.trace().events.map((e) => e.kind)).toEqual(['down', 'down-failed']);
+    // The replay cannot respond to the scale, so every step is reverted after it.
+    const attempt = ['down', 'down-failed'];
+    expect(governor.trace().events.map((e) => e.kind)).toEqual([
+      ...attempt,
+      ...attempt,
+      ...attempt,
+    ]);
     expect(governor.scale()).toBe(1);
   });
 
@@ -614,10 +665,18 @@ describe('a 60 Hz cadence with frame jitter', () => {
     expect(governor.scale()).toBeCloseTo(0.85, 10);
   });
 
-  it.each([20, 21, 25])('steps down, then back, when every frame takes %ims at any scale', (ms) => {
-    const governor = createResolutionGovernor();
-    feed(governor, new Array<number>(200).fill(ms));
-    expect(governor.trace().events.map((e) => e.kind)).toEqual(['down', 'down-failed']);
-    expect(governor.scale()).toBe(1);
-  });
+  it.each([20, 21, 25])(
+    'steps down and back three times, then stays, when every frame takes %ims at any scale',
+    (ms) => {
+      const governor = createResolutionGovernor();
+      feed(governor, new Array<number>(600).fill(ms));
+      const attempt = ['down', 'down-failed'];
+      expect(governor.trace().events.map((e) => e.kind)).toEqual([
+        ...attempt,
+        ...attempt,
+        ...attempt,
+      ]);
+      expect(governor.scale()).toBe(1);
+    },
+  );
 });

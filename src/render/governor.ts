@@ -18,8 +18,11 @@ const MIN_IMPROVEMENT = 0.1;
  */
 const SHIFT_SLACK = 0.05;
 const SHIFT_IMPROVEMENT = 0.05;
-/** A level whose step down was reverted is parked this long, doubling with each revert there: a burst cannot block a later fill-bound step for good. */
-const PARK_MS = MAX_HOLD_MS;
+/**
+ * A level whose step down was reverted this often is parked until the preset, the lighting or the scene changes. A load
+ * that ramps up can cost one: its first step is judged against a window still mostly of the old load.
+ */
+const MAX_FAILED_DOWNS = 3;
 /** Startup hitches (shader links, texture uploads) follow a scene or an attach; they say nothing about steady load. */
 const WARM_UP_MS = 2000;
 const STEP = 0.15;
@@ -36,6 +39,7 @@ const INTERVAL_CAP = 8192;
 export type GovernorEventKind =
   | 'down'
   | 'down-failed'
+  | 'down-lost'
   | 'up'
   | 'probe-failed'
   | 'probe-held'
@@ -46,6 +50,7 @@ export type GovernorEventKind =
 const KINDS: readonly GovernorEventKind[] = [
   'down',
   'down-failed',
+  'down-lost',
   'up',
   'probe-failed',
   'probe-held',
@@ -58,6 +63,7 @@ const KINDS: readonly GovernorEventKind[] = [
 const DECISIONS: ReadonlySet<GovernorEventKind> = new Set([
   'down',
   'down-failed',
+  'down-lost',
   'up',
   'probe-failed',
   'probe-held',
@@ -190,8 +196,11 @@ type Trace = ReturnType<typeof createTrace>;
 
 export function createResolutionGovernor(trace: Trace = createTrace()): {
   sample(frameMs: number): number;
-  /** Drops the samples of the window in progress, keeping the scale. `tag` names the cause in the trace. */
-  discardWindow: (tag?: string) => void;
+  /**
+   * Drops the samples of the window in progress, keeping the scale. `tag` names the cause in the trace; `liftParks`
+   * means the user changed the load (preset, lighting), so parked levels are tried again.
+   */
+  discardWindow: (tag?: string, options?: { liftParks?: boolean }) => void;
   /** Back to full resolution, remembering the hold and the failed probes. */
   restart: (tag?: string) => void;
   /** Back to full resolution and forgets everything learnt about the device. */
@@ -212,12 +221,11 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   let beforeStep = 0;
   /** Whether that window was slowed by a shift (`SHIFT_SLACK`). */
   let beforeShift = false;
-  /** ms sampled so far: the clock of the parks. */
-  let clock = 0;
   const failedProbes = new Uint8Array(MAX_LEVEL + 1);
-  /** Per level, when a step down that was reverted there may be tried again: until then a slower frame is not the scale's doing. */
-  const parkedUntil = new Float64Array(MAX_LEVEL + 1);
-  const parkMs = new Float64Array(MAX_LEVEL + 1).fill(PARK_MS);
+  /** Reverted steps down from each level (`MAX_FAILED_DOWNS`). */
+  const failedDowns = new Uint8Array(MAX_LEVEL + 1);
+  /** Per level, `beforeStep` of the kept step down into it; 0 when it was entered otherwise. */
+  const keptFrom = new Float64Array(MAX_LEVEL + 1);
   const ring = new Float64Array(WINDOW);
   const scratch = new Float64Array(WINDOW);
   const scale = (): number => Math.max(FLOOR, 1 - level * STEP);
@@ -244,10 +252,17 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       steady: held,
     });
   };
+  const revert = (k: GovernorEventKind): number => {
+    level--;
+    steady = 0;
+    count = 0;
+    settle = SETTLE_FRAMES;
+    note(k, '', level);
+    return scale();
+  };
   return {
     sample(frameMs) {
       trace.interval(frameMs);
-      clock += frameMs;
       sinceUp += frameMs;
       if (probing && sinceUp >= hold) {
         probing = false;
@@ -279,22 +294,26 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
             shift &&
             p90 <= P90_LIMIT_MS &&
             mean <= beforeStep * (1 - SHIFT_IMPROVEMENT));
+        const from = beforeStep;
         beforeStep = 0;
         if (!helped) {
           // A mean, not the p90: vsync quantises the p90 to whole frames.
-          level--;
-          const park = parkMs[level] ?? PARK_MS;
-          parkedUntil[level] = clock + park;
-          parkMs[level] = park * 2;
-          steady = 0;
-          count = 0;
-          settle = SETTLE_FRAMES;
-          note('down-failed', '', level);
-          return scale();
+          failedDowns[level - 1] = (failedDowns[level - 1] ?? 0) + 1;
+          return revert('down-failed');
         }
+        keptFrom[level] = from;
+        // The next decision takes a fresh window: one that passed by luck would step on at once.
+        count = 0;
+        return scale();
+      }
+      const kept = keptFrom[level] ?? 0;
+      if (p90 > P90_LIMIT_MS && kept > 0 && mean > kept * (1 - MIN_IMPROVEMENT)) {
+        // The kept step lost its gain, so it was luck or the load changed; it did help once, so it is not counted.
+        keptFrom[level] = 0;
+        return revert('down-lost');
       }
       if (p90 > P90_LIMIT_MS) {
-        if (level < MAX_LEVEL && clock >= (parkedUntil[level] ?? 0)) {
+        if (level < MAX_LEVEL && (failedDowns[level] ?? 0) < MAX_FAILED_DOWNS) {
           const failedProbe = probing;
           const left = level;
           if (failedProbe) {
@@ -320,6 +339,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
         if (steady >= hold) {
           const held = steady;
           level--;
+          keptFrom[level] = 0;
           steady = 0;
           sinceUp = 0;
           count = 0;
@@ -333,12 +353,12 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       }
       return scale();
     },
-    discardWindow(tag = '') {
-      // The load changed: a step awaiting its verdict is undone, so the new load is judged from where it was, and no park holds.
+    discardWindow(tag = '', { liftParks = false } = {}) {
+      // The load changed: a step awaiting its verdict is undone, so the new load is judged from where it was.
       const pending = beforeStep > 0;
       if (pending) level--;
       beforeStep = 0;
-      parkedUntil.fill(0);
+      if (liftParks) failedDowns.fill(0);
       note('warmup', tag);
       if (count > 0 || steady > 0 || pending) note('discard', tag);
       count = 0;
@@ -353,8 +373,8 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       toFull();
       hold = HOLD_MS;
       failedProbes.fill(0);
-      parkedUntil.fill(0);
-      parkMs.fill(PARK_MS);
+      failedDowns.fill(0);
+      keptFrom.fill(0);
     },
     scale,
     trace: () => trace.read(),
@@ -369,7 +389,7 @@ export function createFrameTimer(): {
   frame(now: number): void;
   resetTiming(tag?: string): void;
   /** Ignores the governor for a while: the next frames carry startup hitches, not steady load. */
-  warmUp(tag?: string): void;
+  warmUp(tag?: string, options?: { liftParks?: boolean }): void;
   resetScale(tag?: string): void;
   scale: () => number;
   fps(): number;
@@ -388,8 +408,8 @@ export function createFrameTimer(): {
   let ema = 0;
   let count = 0;
   let next = 0;
-  const warmUp = (tag?: string): void => {
-    governor.discardWindow(tag);
+  const warmUp = (tag?: string, options?: { liftParks?: boolean }): void => {
+    governor.discardWindow(tag, options);
     // Armed from the next frame: an attach can block the thread past any fixed grace.
     graceFromNextFrame = true;
     graceEnd = Infinity;
