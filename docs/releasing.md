@@ -2,7 +2,46 @@
 
 Reference for the gitflow release flow ([#366](https://github.com/DocGerd/gegenlenker/issues/366)). `main` holds only released, tagged, deployed versions; `develop` integrates; topic branches are `feature/*`; `release/*` and `hotfix/*` are reserved. Versions are SemVer, `package.json` is the single source, and the tag is `vX.Y.Z`.
 
-Only the owner cuts releases and hotfixes and merges into `main`. Agents merge reviewed, green PRs into `develop` and `release/*`, and back-merges.
+Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
+
+## Branches
+
+| Branch          | Role                                                  | Cut from  | Merges into                                                         |
+| --------------- | ----------------------------------------------------- | --------- | ------------------------------------------------------------------- |
+| `main`          | Released, tagged production code; merge commits only  | n/a       | n/a                                                                 |
+| `develop`       | Integration; default branch and default PR base       | `main`    | n/a                                                                 |
+| `feature/*`     | One change                                            | `develop` | `develop`                                                           |
+| `release/X.Y.Z` | Stabilisation: fixes, changelog fold and version only | `develop` | `main`, then back-merged to `develop`                               |
+| `hotfix/X.Y.Z`  | Urgent production fix                                 | `main`    | `main`, then back-merged to the open `release/*`, else to `develop` |
+
+- A change lands on one of `develop`, an open `release/*` or a `hotfix/*`, and reaches the others only by back-merge.
+- Merges into `main` and back-merges are merge commits, never squash or rebase.
+- A PR closes its issues when it reaches `develop`, the default branch: closed means integrated, not released.
+
+## Who does what
+
+- The owner decides to release and approves each `github-pages` deployment: that approval is what publishes the tag and the GitHub Release.
+- Agents cut `release/*` and `hotfix/*`, run `release:prepare` and `release:backmerge`, and merge reviewed PRs with green CI into `develop`, `release/*`, `main` and back-merges. They never approve a deployment.
+- `/release [X.Y.Z]` and `/release hotfix` (`.claude/skills/release/SKILL.md`) drive the whole procedure and stop for the approval.
+
+## CI
+
+- PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, and another run of the same commit also reports `check`. So `/release` merges a reviewed PR into `main` only once its own run passed the guard and `release:check`, and the owner's deployment approval is the last gate.
+- Changing a PR's base starts no run, and a re-run repeats the old one: after retargeting a PR, close and reopen it so CI checks it against the new base.
+- Pushes to `develop` and `main` run the gate without e2e, then deploy, each after the owner approves the `github-pages` deployment.
+- `main` builds and deploys production to the site root, then tags and publishes the release once the deploy succeeded. Its Pages artifact holds production alone, so a release needs nothing from `develop`, and `/uat/` is gone until the next `develop` deploy.
+- `develop` deploys its UAT build to `/gegenlenker/uat/` (see UAT).
+- `workflow_dispatch` of CI on `main` redeploys production; on `develop` it redeploys UAT.
+
+## UAT
+
+- Each `develop` deploy republishes production beside the UAT build: the production dist of the live `main` deploy, never rebuilt. `tools/uat-pages.ts` finds it from the last successful `deploy` job of a `push` or `workflow_dispatch` run on `main`, and fails closed unless that job's deployment succeeded, no newer production deployment did, the run holds exactly one unexpired `prod-dist-<sha>` uploaded before the job started, and the files match its manifest and commit exactly.
+- `preflight-uat` runs that lookup before the owner is asked to approve; `deploy-uat` repeats it after approval, inside the `pages` group, right before uploading, so a release deployed in between is the one republished.
+- Both run the script as `main` has it, never `develop`'s copy: `develop` supplies only the `uat-dist-<sha>` artifact of `build-uat`. The jobs themselves come from `develop`'s `ci.yml`, so a change to them takes effect on the next `develop` run. Until the first release brings the script to `main`, every UAT deploy fails at the preflight.
+- Both deploy jobs share the `pages` concurrency group with `queue: max`: they run one at a time, and a newer deploy never replaces a waiting one (beyond the queue limit, it is cancelled). Whether a job waiting for approval holds the group is undocumented: if a release deploy waits behind UAT deploys, approve or reject each one queued ahead of it (first in, first out), or cancel their runs. Approving UAT deploys out of order can leave an older `develop` under `/uat/`.
+- An expired `prod-dist-<sha>` fails the UAT deploy: run CI with `workflow_dispatch` on `main` and approve it, then run it on `develop`.
+- On approval, check the branch is `develop` and whether a commit since the last approved UAT deploy changed `.github/workflows/ci.yml`: that file decides what the deploy publishes, the site root included. Afterwards the site root is unchanged (what `main` last deployed) and `/uat/` serves the `develop` commit with its UAT title.
+- Roll back: `workflow_dispatch` of CI on `main` republishes production alone. To stop UAT deploys, reject them, or remove the `develop` deployment branch policy of `github-pages`.
 
 ## Commands
 
@@ -29,7 +68,7 @@ Without a version it derives one from `develop`'s pending entries the way `relea
 
 1. `pnpm release:cut`. Freeze: `release/X.Y.Z` takes only fixes, by PR, and a fix goes there only. `develop` stays open for the next version.
 2. On a `feature/*` branch from `origin/release/X.Y.Z`, `pnpm release:prepare X.Y.Z`, and a PR into `release/X.Y.Z` (rerun it when a fix adds a fragment).
-3. PR `release/X.Y.Z` into `main`; CI runs the full gate and `release:check`. The owner merges it with a merge commit.
+3. Merge or close every PR into `release/X.Y.Z` (merging deletes the branch, and GitHub retargets PRs still based on it to `main`), then PR `release/X.Y.Z` into `main`; CI runs the full gate and `release:check`. Merge it with a merge commit once reviewed and green.
 4. The owner approves the `github-pages` deployment. After the deploy, the release job tags `vX.Y.Z` and publishes the GitHub Release.
 5. `pnpm release:backmerge`, then merge the PR with a merge commit, then `pnpm release:backmerge --verify`.
 

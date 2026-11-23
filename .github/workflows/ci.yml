@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 permissions:
@@ -18,6 +18,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Steps, not a job: `check` fails on a skipped need. No ruleset rule restricts a PR's head
+      # branch, and the guard catches mistakes only (a PR can edit it, and a base change is the
+      # `edited` activity, which starts no run). The gate is `/release` (`.claude/skills/release`),
+      # which merges into `main` only once this step and `Check the release tree` succeeded in the
+      # PR's own run (it matches both by name), then the owner's approval of the deploy. A fork's
+      # `release/*` head is no release branch either.
+      - name: Only release and hotfix branches open PRs into main
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::PRs into main must come from this repository, not $HEAD_REPO"; exit 1
+          fi
+          case "$HEAD_REF" in
+            release/* | hotfix/*) ;;
+            *) echo "::error::PRs into main come from release/* or hotfix/* only, not $HEAD_REF"; exit 1 ;;
+          esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -30,6 +49,19 @@ jobs:
       - run: pnpm lint
       - run: pnpm format:check
       - run: pnpm typecheck
+      # `release:check` compares the head version with the local `v` tags, which a checkout omits.
+      # A fetch whose refspec matches no tag fails, so `ls-remote` asks first (exit 2: none yet).
+      - name: Check the release tree
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: |
+          status=0
+          git ls-remote --exit-code --tags --refs origin 'refs/tags/v*' > /dev/null || status=$?
+          if [ "$status" = 0 ]; then
+            git fetch --depth=1 origin 'refs/tags/v*:refs/tags/v*'
+          elif [ "$status" != 2 ]; then
+            exit "$status"
+          fi
+          pnpm release:check
       # The e2e slice table must partition each class: one `n` per class, every `1..n` once.
       - name: Check e2e slice table
         run: |
@@ -71,8 +103,8 @@ jobs:
   # per-test durations. Retune the table when a class's cost shifts; the lint job checks that every
   # `i` of each class appears in exactly one job, so each test runs once. Keep the job count under
   # the account's concurrent-job limit, or the last jobs queue.
-  # Skipped on push to main: the ruleset's strict required status checks (no bypass) make the
-  # merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
+  # Skipped on push to `main` and `develop`: the rulesets' strict required status checks (no bypass)
+  # make the merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
   # still runs it.
   e2e:
     if: github.event_name != 'push'
@@ -337,18 +369,11 @@ jobs:
           node scripts/prod-manifest.mjs dist > prod-manifest.txt
           (cd dist && sha256sum --check --quiet --strict ../prod-manifest.txt)
           printf '%s\n' "$GITHUB_SHA" > prod-commit.txt
-      # Artifacts expire (`retention-days` is capped by the repository setting, 90 days at most), but
-      # `main` changes only when a release is cut. Once the artifact has expired, run this workflow
-      # with `workflow_dispatch` on `main`: it uploads a new one and redeploys production from the
-      # same build, so both match once that deploy is live. This upload precedes the gated deploy, and
-      # one commit can have several such runs, so the consumer takes `prod-dist-<sha>` from the
-      # `push` or `workflow_dispatch` run on `main` (a `pull_request` run, forks included, runs its
-      # own copy of this file) whose `deploy` job last succeeded, in any attempt, with a successful
-      # `github-pages` deployment (GraphQL `CheckRun.deployment`; nothing documented links a
-      # deployment to its run). It fails unless that run holds exactly one, unexpired and created
-      # before that job started (a re-run may upload another), repeats the lookup in its own
-      # `pages`-group job right before deploying (a `main` deploy may land after its build), and
-      # never rebuilds production.
+      # `deploy-uat` republishes these bytes beside the UAT build (`tools/uat-pages.ts`). Artifacts
+      # expire (`retention-days` is capped by the repository setting, 90 days at most), but `main`
+      # changes only when a release is cut. Once the artifact has expired, run this workflow with
+      # `workflow_dispatch` on `main`: it uploads a new one and redeploys production from the same
+      # build, so both match once that deploy is live.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: prod-dist-${{ github.sha }}
@@ -363,12 +388,17 @@ jobs:
         with:
           path: dist
 
+  # Production publishes its dist alone, so a release needs nothing from `develop`; `/uat/` is gone
+  # until the next `deploy-uat`. One `pages` group for both deploy jobs: `queue: max` keeps every
+  # pending deploy instead of replacing the waiting one with the newest
+  # (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
   deploy:
     needs: build-pages
     if: ${{ !cancelled() && needs.build-pages.result == 'success' }}
     concurrency:
       group: pages
       cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -378,6 +408,117 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  # `develop` deploys the UAT build to `/gegenlenker/uat/`; the Pages artifact also republishes the
+  # production dist of the live `main` deploy, never rebuilt. The develop checkout only builds; the
+  # jobs that read deployments or publish run `main`'s `tools/uat-pages.ts`, which only a release
+  # changes. The jobs themselves are `develop`'s, so a change to them acts at once: the owner's
+  # approval of each UAT deploy is the gate. Until a release brings the script to `main`, they fail.
+  build-uat:
+    needs: check
+    if: >-
+      !cancelled() && needs.check.result == 'success' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build --outDir dist/uat
+        env:
+          BASE_PATH: /gegenlenker/uat/
+          DEPLOY_CHANNEL: uat
+      - run: grep -q 'src="/gegenlenker/uat/assets/' dist/uat/index.html
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: uat-dist-${{ github.sha }}
+          path: dist/uat
+          if-no-files-found: error
+
+  # The production lookup, before the owner is asked to approve `deploy-uat`.
+  preflight-uat:
+    needs: check
+    if: >-
+      !cancelled() && needs.check.result == 'success' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      deployments: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Preflight the production dist
+        run: |
+          if [ ! -f tools/uat-pages.ts ]; then
+            echo "::error::main has no tools/uat-pages.ts: UAT deploys start once a release brings it there"
+            exit 1
+          fi
+          node tools/uat-pages.ts "$RUNNER_TEMP/pages" --prod-only
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # The lookup runs again here, after approval and inside the group: a `main` deploy may have landed
+  # since the preflight, and an older production dist would roll the site back.
+  deploy-uat:
+    needs: [build-uat, preflight-uat]
+    if: >-
+      ${{ !cancelled() && needs.build-uat.result == 'success' &&
+      needs.preflight-uat.result == 'success' }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      deployments: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}uat/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Assemble production and UAT
+        run: |
+          if [ ! -f tools/uat-pages.ts ]; then
+            echo "::error::main has no tools/uat-pages.ts: UAT deploys start once a release brings it there"
+            exit 1
+          fi
+          node tools/uat-pages.ts "$RUNNER_TEMP/pages"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/pages/dist
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
 
