@@ -59,7 +59,8 @@ export type TopDownSplit = {
 export type TopDownMode = 'follow' | 'yard' | 'chase';
 /**
  * Relative to the mode's default framing; pan is in units of its base half-height, sim-plane axes (y up).
- * In `chase`, `zoom` divides the orbit distance, `panX` is the orbit yaw in radians and `panY` stays 0.
+ * In `chase`, `zoom` divides the orbit distance, `panX` is the orbit yaw in radians (wraps) and `panY` the tilt in
+ * radians from the default pitch.
  */
 export type TopDownView = {
   readonly zoom: number;
@@ -70,12 +71,14 @@ export const DEFAULT_TOP_DOWN_VIEW: TopDownView = { zoom: 1, panX: 0, panY: 0 };
 /** The views a drive can start in and settings can store; chase is a showcase and never persists. */
 export type DrivingView = Exclude<TopDownMode, 'chase'>;
 const rad = (degrees: number): number => (degrees * Math.PI) / 180;
-/** Chase camera azimuth from the truck's forward axis, counter-clockwise from above: the default pose and the most it may turn either way. */
-export const CHASE_AZIMUTH = { default: rad(38), limit: rad(70) } as const;
-/** `panX` range in `chase`: keeps the camera ahead of the cab front plane. */
-export const CHASE_YAW = {
-  min: -CHASE_AZIMUTH.limit - CHASE_AZIMUTH.default,
-  max: CHASE_AZIMUTH.limit - CHASE_AZIMUTH.default,
+/** Chase camera azimuth from the truck's forward axis, counter-clockwise from above: the default pose. */
+export const CHASE_AZIMUTH = { default: rad(38) } as const;
+/** Chase camera pitch above the horizon: the default pose and the range the tilt may reach. */
+export const CHASE_PITCH = { default: rad(14), min: rad(5), max: rad(75) } as const;
+/** `panY` range in `chase`: the tilt from the default pitch. */
+export const CHASE_TILT = {
+  min: CHASE_PITCH.min - CHASE_PITCH.default,
+  max: CHASE_PITCH.max - CHASE_PITCH.default,
 } as const;
 /** `zoom` range in `chase`. */
 export const CHASE_ZOOM = { min: 0.6, max: 2.5 } as const;

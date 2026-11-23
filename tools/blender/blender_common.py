@@ -67,19 +67,26 @@ def signed_area(poly):
 
 
 class Shape:
-    """Indexed polygons with one colour per face. Only convex, planar faces: no triangulation guesses."""
+    """Indexed polygons with one colour per face. Only convex, planar faces: no triangulation guesses.
+
+    `normals` is parallel to `faces`: None for a flat face, else one unit vector per corner (round
+    surfaces, so their facets shade as one).
+    """
 
     def __init__(self):
         self.verts = []
         self.faces = []
         self.colours = []
+        self.normals = []
 
-    def add(self, verts, faces, colour):
+    def add(self, verts, faces, colour, normals=None):
         base = len(self.verts)
         self.verts.extend(tuple(round(c, DECIMALS) for c in v) for v in verts)
-        for face in faces:
+        for k, face in enumerate(faces):
             self.faces.append(tuple(base + i for i in face))
             self.colours.append(colour)
+            corners = None if normals is None else normals[k]
+            self.normals.append(None if corners is None else [tuple(round(c, DECIMALS) for c in n) for n in corners])
 
     def extents(self):
         """Per face: ((x0, x1), (y0, y1), (z0, z1)), for checks on whole faces rather than vertices."""
@@ -127,10 +134,12 @@ class Shape:
         verts += [tuple(p1[k] + r[k] for k in range(3)) for r in ring]
         n = segments
         faces = [tuple(reversed(range(n))), tuple(range(n, 2 * n))]
+        normals = [None, None]
         for i in range(n):
             j = (i + 1) % n
             faces.append((i, j, n + j, n + i))
-        self.add(verts, faces, colour)
+            normals.append([[c / radius for c in ring[k]] for k in (i, j, j, i)])
+        self.add(verts, faces, colour, normals)
 
     def slab(self, p, q, outward, z, colour):
         """Plan segment p -> q thickened by `outward` (to its right, for a counter-clockwise outline)."""
@@ -156,7 +165,21 @@ class Shape:
                 (centre[1] + r1 * s1, centre[0] + r1 * c1),
                 (centre[1] + r0 * s1, centre[0] + r0 * c1),
             ]
+            first = len(self.faces)
             self.prism(poly, y[0], y[1], colour, frame="zx")
+            self.round_faces(range(first, len(self.faces)), centre, radii)
+
+    def round_faces(self, faces, centre, radii, eps=1e-5):
+        """Radial normals (x-z plane around centre) on the faces whose corners all lie on one of the two radii."""
+        for f in faces:
+            offsets = [(self.verts[i][0] - centre[0], self.verts[i][2] - centre[1]) for i in self.faces[f]]
+            dist = [math.hypot(dx, dz) for dx, dz in offsets]
+            for radius, sign in ((radii[1], 1.0), (radii[0], -1.0)):
+                if all(abs(d - radius) < eps for d in dist):
+                    self.normals[f] = [
+                        tuple(round(c, DECIMALS) for c in (sign * dx / d, 0.0, sign * dz / d))
+                        for (dx, dz), d in zip(offsets, dist)
+                    ]
 
 
 def reset_scene(name):
@@ -212,6 +235,13 @@ def add_object(name, shape, mat):
         raise RuntimeError(name + ": mesh.validate() repaired the geometry")
     if len(mesh.polygons) != len(shape.faces):
         raise RuntimeError("%s: %d polygons, expected %d" % (name, len(mesh.polygons), len(shape.faces)))
+    if any(n is not None for n in shape.normals):
+        # custom normals need smooth faces; every corner gets a normal, the flat faces their own
+        mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
+        corners = []
+        for poly, custom in zip(mesh.polygons, shape.normals):
+            corners.extend(custom if custom is not None else [tuple(poly.normal)] * poly.loop_total)
+        mesh.normals_split_custom_set(corners)
     attr = mesh.color_attributes.new(name="Color", type="FLOAT_COLOR", domain="CORNER")
     flat = []
     for face, colour in zip(shape.faces, shape.colours):

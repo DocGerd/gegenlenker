@@ -1,4 +1,4 @@
-import { CHASE_YAW, CHASE_ZOOM, type TopDownMode, type TopDownView } from '../contracts/render';
+import { CHASE_TILT, CHASE_ZOOM, type TopDownMode, type TopDownView } from '../contracts/render';
 
 export type Point = { readonly x: number; readonly y: number };
 /** The pane the view is shown in; `mode` selects the limits. */
@@ -16,7 +16,8 @@ export const ZOOM_LIMITS: Readonly<
   chase: CHASE_ZOOM,
 };
 
-const CHASE_YAW_PER_PIXEL = 0.01;
+const CHASE_RADIANS_PER_PIXEL = 0.01;
+const TAU = Math.PI * 2;
 
 /** Follow keeps the target this fraction of the visible half-extent from the centre at most. */
 const FOLLOW_TARGET_REACH = 0.8;
@@ -29,12 +30,19 @@ const MIN_PINCH_PIXELS = 1;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
+/** An angle in radians turned into (-π, π]. */
+export function wrapAngle(angle: number): number {
+  const turned = angle - TAU * Math.round(angle / TAU);
+  return turned <= -Math.PI ? Math.PI : turned;
+}
+
 /** Allowed `panX` range and the largest `|panY|`. */
-function panLimits(zoom: number, ctx: ViewContext): { x: readonly [number, number]; y: number } {
+function panLimits(
+  zoom: number,
+  ctx: ViewContext & { readonly mode: Exclude<TopDownMode, 'chase'> },
+): { x: readonly [number, number]; y: number } {
   const aspect = ctx.width / ctx.height;
   switch (ctx.mode) {
-    case 'chase':
-      return { x: [CHASE_YAW.min, CHASE_YAW.max], y: 0 };
     case 'follow': {
       const x = (FOLLOW_TARGET_REACH * aspect) / zoom;
       return { x: [-x, x], y: FOLLOW_TARGET_REACH / zoom };
@@ -49,7 +57,14 @@ function panLimits(zoom: number, ctx: ViewContext): { x: readonly [number, numbe
 export function clampView(view: TopDownView, ctx: ViewContext): TopDownView {
   const { min, max } = ZOOM_LIMITS[ctx.mode];
   const zoom = clamp(view.zoom, min, max);
-  const limit = panLimits(zoom, ctx);
+  if (ctx.mode === 'chase') {
+    return {
+      zoom,
+      panX: wrapAngle(view.panX),
+      panY: clamp(view.panY, CHASE_TILT.min, CHASE_TILT.max),
+    };
+  }
+  const limit = panLimits(zoom, { ...ctx, mode: ctx.mode });
   return {
     zoom,
     panX: clamp(view.panX, limit.x[0], limit.x[1]),
@@ -65,7 +80,13 @@ function fromCentre(p: Point, ctx: ViewContext): Point {
 
 /** Unclamped: the content under the finger follows it. */
 function pannedBy(view: TopDownView, dx: number, dy: number, ctx: ViewContext): TopDownView {
-  if (ctx.mode === 'chase') return { ...view, panX: view.panX - dx * CHASE_YAW_PER_PIXEL };
+  if (ctx.mode === 'chase') {
+    return {
+      ...view,
+      panX: view.panX - dx * CHASE_RADIANS_PER_PIXEL,
+      panY: view.panY + dy * CHASE_RADIANS_PER_PIXEL,
+    };
+  }
   const perPixel = 2 / (view.zoom * ctx.height);
   return { ...view, panX: view.panX - dx * perPixel, panY: view.panY + dy * perPixel };
 }

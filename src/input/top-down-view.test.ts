@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { CHASE_YAW, DEFAULT_TOP_DOWN_VIEW, type TopDownView } from '../contracts/render';
+import { CHASE_TILT, DEFAULT_TOP_DOWN_VIEW, type TopDownView } from '../contracts/render';
 import {
   ZOOM_LIMITS,
   clampView,
+  wrapAngle,
   isDefaultView,
   panBy,
   pinch,
@@ -160,12 +161,28 @@ describe('clampView', () => {
 describe('chase view', () => {
   const chase: ViewContext = { mode: 'chase', width: 600, height: 400 };
 
-  it('orbits on drag, never pans, and clamps the yaw to both ends', () => {
+  it('orbits on a horizontal drag and tilts on a vertical one', () => {
     const dragged = panBy(DEFAULT_TOP_DOWN_VIEW, -50, 80, chase);
     expect(dragged.panX).toBeGreaterThan(0);
-    expect(dragged.panY).toBe(0);
-    expect(panBy(DEFAULT_TOP_DOWN_VIEW, -1e6, 0, chase).panX).toBe(CHASE_YAW.max);
-    expect(panBy(DEFAULT_TOP_DOWN_VIEW, 1e6, 0, chase).panX).toBe(CHASE_YAW.min);
+    expect(dragged.panY).toBeGreaterThan(0);
+    expect(panBy(DEFAULT_TOP_DOWN_VIEW, 50, 0, chase).panX).toBeLessThan(0);
+  });
+
+  it('wraps the yaw at a full turn and clamps the tilt at both ends', () => {
+    const turned = panBy(DEFAULT_TOP_DOWN_VIEW, -(2 * Math.PI) / 0.01 - 30, 0, chase);
+    expect(turned.panX).toBeCloseTo(panBy(DEFAULT_TOP_DOWN_VIEW, -30, 0, chase).panX, 9);
+    expect(Math.abs(panBy(DEFAULT_TOP_DOWN_VIEW, -1e6, 0, chase).panX)).toBeLessThanOrEqual(
+      Math.PI,
+    );
+    expect(panBy(DEFAULT_TOP_DOWN_VIEW, 0, 1e6, chase).panY).toBe(CHASE_TILT.max);
+    expect(panBy(DEFAULT_TOP_DOWN_VIEW, 0, -1e6, chase).panY).toBe(CHASE_TILT.min);
+  });
+
+  it('turns any angle into (-π, π]', () => {
+    expect(wrapAngle(Math.PI)).toBe(Math.PI);
+    expect(wrapAngle(-Math.PI)).toBe(Math.PI);
+    expect(wrapAngle(3 * Math.PI)).toBe(Math.PI);
+    expect(wrapAngle(0.5 - 4 * Math.PI)).toBeCloseTo(0.5, 12);
   });
 
   it('clamps the distance at both ends, whatever the anchor', () => {
@@ -178,16 +195,9 @@ describe('chase view', () => {
     expect(zoomAt(DEFAULT_TOP_DOWN_VIEW, 0.001, at, chase).zoom).toBe(ZOOM_LIMITS.chase.min);
   });
 
-  it('forces panY to 0 whatever the view', () => {
-    for (const panY of [-3, 0.7]) {
-      const next = clampView(view(1, 0.2, panY), chase);
-      expect(next).toMatchObject({ zoom: 1, panX: 0.2 });
-      expect(next.panY).toBeCloseTo(0, 12);
-    }
-    expect(clampView(view(100, -100, 0), chase)).toMatchObject({
-      zoom: ZOOM_LIMITS.chase.max,
-      panX: CHASE_YAW.min,
-    });
+  it('clamps the tilt and the zoom of a view and keeps its yaw', () => {
+    expect(clampView(view(1, 0.2, -3), chase)).toMatchObject({ panX: 0.2, panY: CHASE_TILT.min });
+    expect(clampView(view(100, 7, 0), chase)).toMatchObject({ zoom: ZOOM_LIMITS.chase.max });
   });
 
   it('turns a pinch about a fixed midpoint into distance only', () => {
@@ -222,7 +232,7 @@ describe('chase view', () => {
     expect(next.zoom).toBeCloseTo(2, 9);
     expect(next.panX).toBeCloseTo(panBy(DEFAULT_TOP_DOWN_VIEW, 30, 10, chase).panX, 9);
     expect(next.panX).toBeLessThan(0);
-    expect(next.panY).toBe(0);
+    expect(next.panY).toBeCloseTo(panBy(DEFAULT_TOP_DOWN_VIEW, 30, 10, chase).panY, 9);
   });
 });
 
