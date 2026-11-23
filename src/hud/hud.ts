@@ -9,7 +9,7 @@ import type {
   ViewRects,
 } from '../contracts/render';
 import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
-import type { GoalCue } from '../scoring/score';
+import { isDrivingInput, type GoalCue } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
@@ -31,6 +31,8 @@ export type HudAction =
   | { type: 'collapse'; panel: keyof CollapsedPanels; collapsed: boolean }
   /** The aid legend opened or closed, which changes the height of the panels. */
   | { type: 'aidLegend' }
+  /** The exercise brief opened or collapsed, which changes the height of the panels. */
+  | { type: 'brief' }
   /** The button opening the pause sheet. */
   | { type: 'pause' };
 
@@ -150,6 +152,11 @@ const COMPACT_WIDTH_WITH_LEVER = 840;
  * mirrors' room. At 1280 wide the full list keeps class IV from this height; `layout.spec` pins it.
  */
 const SHORT_HEIGHT = 740;
+/**
+ * Screen heights (CSS px) below which the brief collapses on the first drive input and the key
+ * legend is an overlay that closes on the next one.
+ */
+const SHORT_SCREEN = 700;
 
 const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
 
@@ -187,7 +194,7 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean, look: boolean | undefi
     <span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
-      <dl>
+      <dl data-hud="keys">
         ${legendRows(chase, look === true)
           .map(legendRow)
           .join('')}
@@ -205,7 +212,7 @@ const MARKUP = (mode: HudOptions['mode'], chase: boolean, look: boolean | undefi
   <div class="hud-mirror" data-hud="front" hidden></div>
   <div class="hud-mirror" data-hud="close" hidden></div>
   <div class="hud-topdown" data-hud="topDown">
-    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-title" data-hud="goalTitle"></div><div class="hud-goal-brief" data-hud="goalBrief"></div></div>
+    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <div class="hud-group" role="group" aria-label="${t('labelView')}">${VIEWS.map(([v, k]) => button('data-view', v, k)).join('')}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => button('data-panel', p, k)).join('')}</div>
@@ -283,6 +290,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   const cockpit = query(hud, 'cockpit', HTMLElement);
   const legend = query(hud, 'legend', HTMLElement);
+  const keysList = query(hud, 'keys', HTMLElement);
   const mirrors = MIRROR_KEYS.map((key) => query(hud, key, HTMLElement));
   const toastWrap = query(hud, 'toastWrap', HTMLElement);
   const toast = query(hud, 'toast', HTMLElement);
@@ -296,11 +304,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   goalDistance.setAttribute('aria-hidden', 'true');
   const goalState = document.createElement('span');
   goalCue.append(goalDistance, goalState);
+  const goal = query(hud, 'goal', HTMLElement);
   if (opts.exercise !== null) {
     query(hud, 'goalTitle', HTMLElement).textContent = opts.exercise.title;
     query(hud, 'goalBrief', HTMLElement).textContent = opts.exercise.brief;
-    setHidden(query(hud, 'goal', HTMLElement), false);
+    setHidden(goal, false);
   }
+  const briefToggle = query(hud, 'briefToggle', HTMLButtonElement);
+  briefToggle.title = t('briefToggle');
+  briefToggle.setAttribute('aria-label', t('briefToggle'));
 
   const coupling: Gauge = createGauge(t('couplingAngle'), opts.couplingLimit);
   const turntable: Gauge = createGauge(t('turntableAngle'), opts.turntableLimit);
@@ -349,6 +361,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   // On a short cockpit the chevron flips between the drive keys and the full list; not persisted.
   let shortCockpit = false;
   let allKeys = false;
+  // On a short screen the brief and the key legend each have a state of their own; not persisted.
+  let shortScreen = false;
+  let briefOpen = true;
+  let briefDone = false;
+  let keysOpen = false;
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
     for (const b of aidButtons) {
@@ -366,13 +383,46 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         'aria-pressed',
         String(!collapsed[b.dataset['panel'] as keyof CollapsedPanels]),
       );
-    keysToggle.setAttribute('aria-expanded', String(shortCockpit ? allKeys : !collapsed.keys));
-    legend.toggleAttribute('data-collapsed', !shortCockpit && collapsed.keys);
-    legend.toggleAttribute('data-drive-only', shortCockpit && !allKeys);
+    const keysExpanded = shortScreen ? keysOpen : shortCockpit ? allKeys : !collapsed.keys;
+    keysToggle.setAttribute('aria-expanded', String(keysExpanded));
+    legend.toggleAttribute('data-overlay', shortScreen);
+    legend.toggleAttribute(
+      'data-collapsed',
+      shortScreen ? !keysOpen : !shortCockpit && collapsed.keys,
+    );
+    legend.toggleAttribute('data-drive-only', !shortScreen && shortCockpit && !allKeys);
+    setHidden(briefToggle, !shortScreen);
+    briefToggle.setAttribute('aria-expanded', String(briefOpen));
+    goal.toggleAttribute('data-collapsed', shortScreen && !briefOpen);
     setHidden(aidsBox, collapsed.aids);
     setHidden(gaugeBox, !aids.pivots || collapsed.gauges);
   };
   syncToggles();
+  /** Runs before anything measures the panels: the brief's state is part of their height. */
+  const syncShortScreen = (): void => {
+    const now = root.clientHeight < SHORT_SCREEN;
+    if (now === shortScreen) return;
+    shortScreen = now;
+    keysOpen = false;
+    briefOpen = !briefDone;
+    syncToggles();
+  };
+  /**
+   * The open key list of a short screen stands in the top-down pane, which no mirror reaches; hud.css
+   * keeps it clear of the lever and the finish button there. Offsets are from the legend's padding box.
+   */
+  const placeKeysList = (pane: Rect): void => {
+    if (!shortScreen) return;
+    const box = legend.getBoundingClientRect();
+    if (box.width === 0) return;
+    const stage = root.getBoundingClientRect();
+    const left = box.left - stage.left + legend.clientLeft;
+    const bottom = box.bottom - stage.top - legend.clientTop;
+    keysList.style.setProperty('--pane-left', `${pane.x - left}px`);
+    keysList.style.setProperty('--pane-bottom', `${bottom - pane.y - pane.height}px`);
+    keysList.style.setProperty('--pane-width', `${pane.width}px`);
+    keysList.style.setProperty('--pane-height', `${pane.height}px`);
+  };
 
   const selectView = (mode: TopDownMode): void => {
     view = mode;
@@ -407,10 +457,22 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   keysToggle.addEventListener(
     'click',
     () => {
-      if (shortCockpit) {
+      if (shortScreen) {
+        keysOpen = !keysOpen;
+        syncToggles();
+      } else if (shortCockpit) {
         allKeys = !allKeys;
         syncToggles();
       } else togglePanel('keys');
+    },
+    { signal },
+  );
+  briefToggle.addEventListener(
+    'click',
+    () => {
+      briefOpen = !briefOpen;
+      syncToggles();
+      emit({ type: 'brief' });
     },
     { signal },
   );
@@ -674,8 +736,32 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   };
   writeSpeed(0);
 
+  let lastControl: SimSnapshot['control'] | null = null;
+  /** On a short screen the first drive input collapses the brief, and any later change closes the key legend. */
+  const onControl = (c: SimSnapshot['control']): void => {
+    const changed =
+      lastControl !== null &&
+      (c.steer !== lastControl.steer ||
+        c.lever !== lastControl.lever ||
+        c.brake !== lastControl.brake ||
+        c.gear !== lastControl.gear);
+    lastControl = c;
+    if (shortScreen && keysOpen && changed) {
+      keysOpen = false;
+      syncToggles();
+    }
+    if (briefDone || !isDrivingInput(c)) return;
+    briefDone = true;
+    if (shortScreen && briefOpen) {
+      briefOpen = false;
+      syncToggles();
+      emit({ type: 'brief' });
+    }
+  };
+
   return {
     update(s, ahead = null) {
+      onControl(s.control);
       const tenths = Math.round(Math.abs(s.speed) * MS_TO_KMH * 10);
       if (tenths !== shownTenths) writeSpeed(tenths);
 
@@ -725,6 +811,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     layout(views) {
       const { cockpit: c } = views;
+      syncShortScreen();
       const spansRight = (r: Rect): boolean => r.x + r.width >= root.clientWidth - 1;
       setHidden(cockpit, c === null);
       if (c) {
@@ -757,6 +844,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       toastWrap.style.top = `${column.y}px`;
       toastWrap.style.width = `${column.width}px`;
       place(topDown, views.topDown);
+      placeKeysList(views.topDown);
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
@@ -789,6 +877,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (splitReset.disabled !== atDefault) splitReset.disabled = atDefault;
     },
     panelsBottom(paneWidth) {
+      syncShortScreen();
       const previous = topDown.style.width;
       topDown.style.width = `${paneWidth}px`;
       const top = topDown.getBoundingClientRect().top;
