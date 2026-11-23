@@ -18,7 +18,7 @@ import {
   storeResult,
 } from './storage';
 import { probeGraphics } from './graphics-check';
-import { applyTheme } from './theme';
+import { applyTheme, setNightDrive } from './theme';
 
 export function startApp(root: HTMLElement): void {
   const settings = loadSettings(readText(SETTINGS_KEY), detectLanguage(navigator.languages));
@@ -60,6 +60,7 @@ export function startApp(root: HTMLElement): void {
     onBack = exit;
   };
   const leave = (): void => {
+    setNightDrive(false);
     onBack = null;
     if (!held) return;
     held = false;

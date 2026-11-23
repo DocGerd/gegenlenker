@@ -132,6 +132,20 @@ describe('scoring', () => {
     expect(tracker.goal(snap({ ...INSIDE, trailerRear: { x: 16, y: 0 } }))).toBe('away');
   });
 
+  it('reports the distance and which criterion holds without changing the cue', () => {
+    const tracker = createRunTracker(exercise());
+    const far = snap({ ...INSIDE, trailerRear: { x: 3, y: 4 } });
+    expect(tracker.goalCue(far)).toEqual({
+      state: 'outside',
+      distance: 5,
+      positionOk: false,
+      angleOk: true,
+    });
+    const crooked = snap({ trailerRear: { x: 0, y: 0 }, trailer: { x: 0, y: 0, heading: 1 } });
+    expect(tracker.goalCue(crooked)).toMatchObject({ positionOk: true, angleOk: false });
+    expect(tracker.goalCue(snap(INSIDE))).toMatchObject({ state: 'inside' });
+  });
+
   it('requires the waypoint before the target counts', () => {
     const tracker = createRunTracker(exercise({ x: 90, y: 25 }));
     expect(tracker.update(snap(INSIDE))).toBe(false);

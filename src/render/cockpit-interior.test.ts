@@ -20,7 +20,14 @@ import {
   type PerspectiveCamera,
 } from 'three';
 import { describe, expect, it } from 'vitest';
-import type { LegendBox, LightingMode, Rect, ScenePalette } from '../contracts/render';
+import {
+  HEAD_REST,
+  type HeadPose,
+  type LegendBox,
+  type LightingMode,
+  type Rect,
+  type ScenePalette,
+} from '../contracts/render';
 import type { TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { truckById, trucks } from '../vehicles/registry';
@@ -48,13 +55,16 @@ import {
   MIN_PILLAR_WIDTH,
   MIRROR_GAP,
   pillarSpans,
+  placeInEye,
   VISOR,
   visorLeft,
 } from './cockpit-interior';
 import { parseMeshes } from './glb-shells';
+import { HEAD_LIMITS } from './head-look';
 import {
   createGlbInterior,
   type GlbInterior,
+  interiorParts,
   interiorShellFrom,
   type InteriorShell,
 } from './interior-glb';
@@ -119,6 +129,7 @@ function shootWith<I extends CockpitInterior>(
   spec: TruckSpec = truck,
   insets?: Insets,
   mode: LightingMode = 'day',
+  head: HeadPose = HEAD_REST,
 ): Shot<I> {
   const { cockpit, mirrorLeft, mirrorRight, front, wideLeft, wideRight, close } = computeViewports(
     width,
@@ -139,10 +150,12 @@ function shootWith<I extends CockpitInterior>(
   scene.add(truckObject);
   (interior.frame === 'truck' ? truckObject : scene).add(interior.object);
   const camera = createCockpitCamera();
-  placeCockpitCamera(camera, pose, truckAnchors(spec).eye, cockpit);
   interior.setLook(lookFor(flags, mode));
+  // as the renderer does: an interior fixed to the eye keeps the head forward
+  const turn = interior.looksAround === true ? head : HEAD_REST;
+  placeCockpitCamera(camera, pose, truckAnchors(spec).eye, cockpit, turn);
   scene.updateMatrixWorld();
-  interior.place({ camera, cockpit, mirrorLeft, mirrorRight });
+  interior.place({ camera, heading, cockpit, mirrorLeft, mirrorRight });
   const wide = wideLeft === null || wideRight === null ? null : ([wideLeft, wideRight] as const);
   return { camera, interior, cockpit, left: mirrorLeft, right: mirrorRight, front, wide, close };
 }
@@ -423,8 +436,11 @@ function shown(interior: CockpitInterior): Object3D[] {
   return found;
 }
 
+/** The meshes drawn, with the merged glb interior split back into its named parts. */
 function drawn(interior: CockpitInterior): Mesh[] {
-  return shown(interior).filter((o): o is Mesh => o instanceof Mesh);
+  return shown(interior)
+    .filter((o): o is Mesh => o instanceof Mesh)
+    .flatMap(interiorParts);
 }
 
 /** Every route on every truck. */
@@ -1015,5 +1031,95 @@ describe.each(trucks)('glb interior closes the cab above the windscreen of $id',
       Math.tan(Math.atan2(glassTop - anchors.eye.z, anchors.frontX - anchors.eye.x) + PITCH) /
       Math.tan(MathUtils.degToRad(COCKPIT_FOV / 2));
     if (topNdc < 1) expect(total).toBeGreaterThan(0);
+  });
+});
+
+describe.each(trucks)('glb interior of $id with the head turned', (spec) => {
+  const shootGlb = (w: number, h: number, head: HeadPose, mode: LightingMode = 'night') => {
+    const interior = createGlbInterior(spec);
+    interior.attach(GLB_SHELLS[spec.id] as InteriorShell);
+    return shootWith(interior, w, h, 0.7, null, QUALITY_FLAGS.high, spec, undefined, mode, head);
+  };
+  const deg = MathUtils.degToRad;
+  const LOOKS: readonly HeadPose[] = [
+    { yaw: deg(100), pitch: 0 },
+    { yaw: deg(-100), pitch: 0 },
+    { yaw: deg(40), pitch: HEAD_LIMITS.pitchUp },
+    { yaw: deg(-70), pitch: -HEAD_LIMITS.pitchDown },
+  ];
+  /** The world matrix of everything the interior draws, by name. */
+  const matrices = (interior: CockpitInterior): Map<string, number[]> =>
+    new Map(shown(interior).map((o) => [o.name, o.matrixWorld.toArray()]));
+
+  it('looks around only once the asset is drawn, not on the flat overlay', () => {
+    expect(createCockpitInterior(spec).looksAround).not.toBe(true);
+    const interior = createGlbInterior(spec);
+    interior.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
+    expect(interior.looksAround).toBe(false);
+    interior.attach(GLB_SHELLS[spec.id] as InteriorShell);
+    expect(interior.looksAround).toBe(true);
+  });
+
+  it('puts the lip where the eye-locked overlay does with the head forward', () => {
+    for (const [w, h] of REQUIRED) {
+      const { camera, interior } = shootGlb(w, h, HEAD_REST);
+      const lip = drawn(interior).find((m) => m.name === 'binnacle-lip');
+      if (lip === undefined) throw new Error('no lip');
+      const locked = new Group();
+      placeInEye(locked, camera);
+      locked.updateMatrixWorld();
+      lip.matrixWorld.toArray().forEach((v, i) => {
+        expect(v, `${w}x${h} [${i}]`).toBeCloseTo(locked.matrixWorld.toArray()[i] as number, 9);
+      });
+    }
+  });
+
+  it.each(LOOKS)('stays put in the cab, lip included, while the head turns %o', (head) => {
+    const forward = shootGlb(1280, 720, HEAD_REST);
+    const turned = shootGlb(1280, 720, head);
+    expect(turned.camera.matrixWorld.toArray()).not.toEqual(forward.camera.matrixWorld.toArray());
+    const rest = matrices(forward.interior);
+    expect(rest.has('binnacle-lip')).toBe(true);
+    const now = matrices(turned.interior);
+    expect([...now.keys()]).toEqual([...rest.keys()]);
+    for (const [name, matrix] of rest) expect(now.get(name), name).toEqual(matrix);
+  });
+
+  it('keeps a dash above the HUD band at every x over the whole pitch range', () => {
+    const y = bandTopNdc() + 0.02;
+    const { pitchUp, pitchDown } = HEAD_LIMITS;
+    for (const pitch of [-pitchDown, -pitchDown / 2, 0, pitchUp / 2, pitchUp]) {
+      for (const [w, h] of REQUIRED) {
+        const { camera, interior } = shootGlb(w, h, { yaw: 0, pitch });
+        const parts = drawn(interior);
+        for (let x = -1; x <= 1; x += 0.125) {
+          const names = hits(camera, parts, x, y);
+          expect(names, `pitch ${pitch} ${w}x${h} x=${x}`).toContain('interior');
+        }
+      }
+    }
+  });
+
+  it('stops the pitch up just short of where the dash sinks under the HUD band', () => {
+    const y = bandTopNdc() + 0.02;
+    const covered = (w: number, h: number, pitch: number): boolean => {
+      const { camera, interior } = shootGlb(w, h, { yaw: 0, pitch });
+      const parts = drawn(interior);
+      for (let x = -1; x <= 1; x += 0.125) {
+        if (!hits(camera, parts, x, y).includes('interior')) return false;
+      }
+      return true;
+    };
+    for (const [w, h] of REQUIRED) {
+      let [low, high] = [0, deg(20)];
+      expect(covered(w, h, low), `${w}x${h} forward`).toBe(true);
+      while (high - low > 1e-3) {
+        const mid = (low + high) / 2;
+        if (covered(w, h, mid)) low = mid;
+        else high = mid;
+      }
+      expect(low, `${w}x${h} the dash's own limit`).toBeGreaterThanOrEqual(HEAD_LIMITS.pitchUp);
+      expect(low - HEAD_LIMITS.pitchUp, `${w}x${h} slack`).toBeLessThan(deg(2));
+    }
   });
 });

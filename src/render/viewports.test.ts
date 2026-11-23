@@ -273,8 +273,8 @@ describe('top-down split', () => {
 /** Word widths in px at 14 px Geist medium, measured in the page (the toast's box, padding excluded). */
 const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   Anhänger: 65,
+  '{dist}': 30, // stands for the widest distance of the goal cue, "88,8"
   Anschlag: 63,
-  Außerhalb: 70,
   Berührung: 71,
   'Berührung:': 75,
   Contact: 53,
@@ -288,9 +288,11 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   Kupplungswinkel: 116,
   Limit: 32,
   Lkw: 27,
-  Outside: 54,
   R: 10,
   Select: 43,
+  Winkel: 46,
+  Position: 54,
+  position: 54,
   Toleranz: 56,
   Turntable: 62,
   ahead: 41,
@@ -306,11 +308,15 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   drawbar: 57,
   drive: 35,
   fahren: 43,
+  falsch: 42,
   gegenlenken: 86,
   in: 12,
   jetzt: 32,
   limit: 29,
+  m: 12,
   now: 28,
+  off: 18,
+  ok: 17,
   oder: 31,
   or: 14,
   other: 36,
@@ -328,6 +334,7 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   'wählen,': 51,
   zu: 16,
   '–': 8,
+  '·': 3,
 };
 const MEASURED_SPACE_PX = 3;
 
@@ -521,7 +528,7 @@ describe('computeViewports front mirror', () => {
     expect([...MESSAGE_KEYS.toast].sort()).toEqual(
       keysOf(/^(blocked|contactAhead|limitAhead|selectGear)/),
     );
-    expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Outside)$/));
+    expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Distance|Angle|Position)/));
   });
 
   it('puts the toast column between the class II mirrors without a front mirror, or else in the top-down pane', () => {
