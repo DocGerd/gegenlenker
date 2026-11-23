@@ -74,6 +74,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('storage keys', () => {
+  it('keeps the production keys stored settings, bests and seen-state live under', async () => {
+    const keys = await load(() => fakeStorage(1000));
+    expect([keys.SETTINGS_KEY, keys.BEST_KEY, keys.LAST_RUN_KEY, keys.WHATS_NEW_SEEN_KEY]).toEqual([
+      'gegenlenker.settings.v1',
+      'gegenlenker.best.v2',
+      'gegenlenker.lastRun.v1',
+      'gegenlenker.whatsNewSeen.v1',
+    ]);
+  });
+});
+
 describe('safeStorage probe', () => {
   it('returns the storage and leaves no probe key behind', async () => {
     const storage = fakeStorage(1000);

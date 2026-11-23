@@ -5,6 +5,7 @@ import { DEFAULT_GRAPHICS } from '../contracts/render';
 import { ASSET_REGISTRY } from '../render/asset-registry';
 import { QUALITY_FLAGS } from '../render/quality';
 import { MAX_PRECACHE_FILE_BYTES, RUNTIME_CACHE_MIN_ENTRIES, pwaOptions } from './config';
+import type { Channel } from './channel';
 
 const colors = { themeColor: '#ffffff', backgroundColor: '#ffffff' };
 const manifest = pwaOptions('/gegenlenker/', colors).manifest;
@@ -121,5 +122,55 @@ describe('asset registry', () => {
         MAX_PRECACHE_FILE_BYTES,
       );
     }
+  });
+});
+
+describe('channels', () => {
+  const origin = 'https://example.github.io';
+  const options = (channel: Channel) =>
+    pwaOptions(channel === 'uat' ? '/gegenlenker/uat/' : '/gegenlenker/', colors, channel);
+  const texture = 'assets/ground-AbC12_x.ktx2';
+  const runtime = (channel: Channel) => options(channel).workbox?.runtimeCaching?.[0];
+  const matches = (channel: Channel, href: string): boolean => {
+    const pattern = runtime(channel)?.urlPattern;
+    return pattern instanceof RegExp && pattern.test(href);
+  };
+
+  it('keeps the production runtime cache name and manifest identity', () => {
+    expect(runtime('production')?.options?.cacheName).toBe('ground-texture');
+    expect(options('production').manifest).toMatchObject({
+      name: 'Gegenlenker',
+      short_name: 'Gegenlenker',
+    });
+    expect(
+      pwaOptions('/gegenlenker/', colors).workbox?.runtimeCaching?.[0]?.options?.cacheName,
+    ).toBe('ground-texture');
+  });
+
+  it('gives UAT its own manifest identity on its own scope and its own runtime cache', () => {
+    expect(options('uat').manifest).toMatchObject({
+      name: 'Gegenlenker UAT',
+      short_name: 'Gegenlenker UAT',
+      id: '/gegenlenker/uat/',
+      scope: '/gegenlenker/uat/',
+      start_url: '/gegenlenker/uat/',
+    });
+    expect(runtime('uat')?.options?.cacheName).toBe('gegenlenker-uat-ground-texture');
+  });
+
+  it('keeps the production worker off the UAT build, whose scope it contains', () => {
+    const deny = options('production').workbox?.navigateFallbackDenylist ?? [];
+    expect(deny.some((re) => re.test('/gegenlenker/uat/'))).toBe(true);
+    expect(deny.some((re) => re.test('/gegenlenker/uat/index.html'))).toBe(true);
+    expect(deny.some((re) => re.test('/gegenlenker/'))).toBe(false);
+    expect(deny.some((re) => re.test('/gegenlenker/ukat/'))).toBe(false);
+    expect(matches('production', `${origin}/gegenlenker/${texture}`)).toBe(true);
+    expect(matches('production', `${origin}/gegenlenker/uat/${texture}`)).toBe(false);
+    expect(matches('uat', `${origin}/gegenlenker/uat/${texture}`)).toBe(true);
+  });
+
+  it('never turns on Workbox cleanup, which deletes every precache holding the worker scope', () => {
+    expect(options('production').workbox?.cleanupOutdatedCaches).toBe(false);
+    expect(options('uat').workbox?.cleanupOutdatedCaches).toBe(false);
   });
 });
