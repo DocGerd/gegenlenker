@@ -1,6 +1,7 @@
 [
   {
-    "version": null,
+    "version": "1.0.0",
+    "date": "2026-11-23",
     "entries": [
       {
         "id": "13.added",
@@ -157,6 +158,450 @@
         "category": "fixed",
         "prs": [112, 107],
         "en": "The clock rounds correctly and a double click no longer selects text; the cockpit layout fits 1280-pixel-wide windows, and Stop no longer covers the counters at 1024x700."
+      },
+      {
+        "id": "135.added",
+        "category": "added",
+        "prs": [135],
+        "en": "Detailed kerbs, precast walls, loading ramps and traffic-red cones in the cockpit and mirror views."
+      },
+      {
+        "id": "138.added",
+        "category": "added",
+        "prs": [138],
+        "en": "An outside view orbits the truck to show its cab, with drag to turn and wheel to zoom; it is not offered on the Low graphics preset."
+      },
+      {
+        "id": "139.added",
+        "category": "added",
+        "prs": [139],
+        "en": "THW-blue cab and body livery for both trucks in the mirrors and outside view, with a crew cab on the MAN and a tipper on the Arocs."
+      },
+      {
+        "id": "141.added",
+        "category": "added",
+        "prs": [141],
+        "en": "High graphics preset adds a detailed concrete and asphalt ground texture in the cockpit and mirror views."
+      },
+      {
+        "id": "143.added",
+        "category": "added",
+        "prs": [143],
+        "en": "THW livery for the low-loader and Lafette trailers in the mirrors and outside view."
+      },
+      {
+        "id": "145.added",
+        "category": "added",
+        "prs": [145],
+        "en": "High graphics preset adds sky reflections on vehicle glass and a satin paint sheen."
+      },
+      {
+        "id": "148.added",
+        "category": "added",
+        "prs": [148],
+        "en": "Cockpit view gains a cab interior frame (roof header, visor, A-pillars, dashboard edge) on the Balanced and High presets."
+      },
+      {
+        "id": "149.added",
+        "category": "added",
+        "prs": [149],
+        "en": "Resizable top-down view: drag or use the keyboard on the divider to change its share, saved per orientation."
+      },
+      {
+        "id": "150.fixed",
+        "category": "fixed",
+        "prs": [150],
+        "en": "Top-down path lines now show one matched left/right corridor from the leading end, with a stop bar and a legend explaining every aid."
+      },
+      {
+        "id": "156.changed",
+        "category": "changed",
+        "prs": [156],
+        "en": "The THW Kipper and Tieflader look more like the real vehicles, with a low three-way tipper body and a machine transporter with wheel troughs and ramps."
+      },
+      {
+        "id": "158.fixed",
+        "category": "fixed",
+        "prs": [158],
+        "en": "The render resolution no longer drops during startup hitches and recovers on its own once the device keeps up."
+      },
+      {
+        "id": "167.changed",
+        "category": "changed",
+        "prs": [167],
+        "en": "When the graphics stop during a run, they restart on their own instead of waiting for the browser."
+      },
+      {
+        "id": "170.changed",
+        "category": "changed",
+        "prs": [170],
+        "en": "Edges and thin parts such as fence bars are smoothed slightly differently, and the soft shadow under the vehicles is a little lighter."
+      },
+      {
+        "id": "172.added",
+        "category": "added",
+        "prs": [172],
+        "en": "Vehicle lamps follow UN R48: headlamps sit in the bumper, the rear clusters lower, and trailers gain drawbar and corner side markers. Only the stop and reversing lamps light so far, while braking and in reverse; the other lamps stay dark until the night mode arrives."
+      },
+      {
+        "id": "174.added",
+        "category": "added",
+        "prs": [174],
+        "en": "Groundwork for WebGPU graphics on supporting devices; nothing changes for now."
+      },
+      {
+        "id": "175.added",
+        "category": "added",
+        "prs": [175],
+        "en": "High graphics lights the cockpit, mirror and outside views from a real sky: a photographic cloudy sky that the vehicles reflect, a matching sun and sky light, softer highlights and distance haze."
+      },
+      {
+        "id": "232.changed",
+        "category": "changed",
+        "prs": [232],
+        "en": "The cockpit, mirror and outside views draw the yard markings lit on Balanced and High; the top-down view is unchanged."
+      },
+      {
+        "id": "235.changed",
+        "category": "changed",
+        "prs": [235],
+        "en": "The cockpit, mirror and outside views draw the target outline, tolerance band and waypoint gate lit on Balanced and High; the top-down view is unchanged."
+      },
+      {
+        "id": "238.changed",
+        "category": "changed",
+        "prs": [238],
+        "en": "Stored bests and replays from earlier versions were reset once."
+      },
+      {
+        "id": "245.added",
+        "category": "added",
+        "prs": [245],
+        "en": "On High, the cockpit, mirror and outside views draw the yard, street and pavement as photoscanned concrete, asphalt and pavers, with slab joints on the yard."
+      },
+      {
+        "id": "246.added",
+        "category": "added",
+        "prs": [246],
+        "en": "High graphics preset adds sun shadows from the vehicles and yard props in the cockpit, mirror and outside views."
+      },
+      {
+        "id": "247.added",
+        "category": "added",
+        "prs": [247],
+        "en": "On High, the ground is darker beside obstacles and props and shows tyre scuffs, oil drips, manholes and gully gratings on the yard and street."
+      },
+      {
+        "id": "249.added",
+        "category": "added",
+        "prs": [249],
+        "en": "The High graphics preset draws the yard's surroundings: halls, an office with flagpoles, a wash canopy, hedges, street trees and benches around the yard and street."
+      },
+      {
+        "id": "250.added",
+        "category": "added",
+        "prs": [250],
+        "en": "The High graphics preset draws the yard's painted markings worn in the cockpit, mirror and outside views, with every edge kept intact."
+      },
+      {
+        "id": "256.fixed",
+        "category": "fixed",
+        "prs": [256],
+        "en": "The cab windows no longer cast a false sun shadow on High, which keeps the cab interior lit."
+      },
+      {
+        "id": "260.changed",
+        "category": "changed",
+        "prs": [260],
+        "en": "Stored runs for both yards are reset once: street furniture beside the hall walls and gatehouse, the entrance sign posts and the plot fences along the street are now solid."
+      },
+      {
+        "id": "266.fixed",
+        "category": "fixed",
+        "prs": [266],
+        "en": "The driver now sits at the left seat of the cab instead of near the centre, so the cockpit view starts from the left."
+      },
+      {
+        "id": "267.fixed",
+        "category": "fixed",
+        "prs": [267],
+        "en": "The cockpit view now matches the left-hand seat: a wide left and a slim right windscreen pillar, a dashboard that dips towards the windscreen centre with an instrument hump straight ahead, and the sun visor over the driver."
+      },
+      {
+        "id": "268.added",
+        "category": "added",
+        "prs": [268],
+        "en": "The menu has a What's new screen that lists recent changes."
+      },
+      {
+        "id": "271.fixed",
+        "category": "fixed",
+        "prs": [271],
+        "en": "The cockpit eye now sits above the windscreen sill, so the view looks out over the dashboard line instead of through its lower edge."
+      },
+      {
+        "id": "272.added",
+        "category": "added",
+        "prs": [272],
+        "en": "Buildings, trees, fences and other yard surroundings now cast the sun's shadow on High."
+      },
+      {
+        "id": "274.added",
+        "category": "added",
+        "prs": [274],
+        "en": "The What's new menu entry shows a \"New\" badge and lists unseen changes first under \"Since your last visit\"."
+      },
+      {
+        "id": "276.changed",
+        "category": "changed",
+        "prs": [276],
+        "en": "On High graphics the cockpit shows a three-dimensional cab interior with a dashboard, door tops and steering wheel in place of the flat overlay."
+      },
+      {
+        "id": "277.added",
+        "category": "added",
+        "prs": [277],
+        "en": "The cab interior on High graphics is now lit by the sun and sky and shaded by the cab roof."
+      },
+      {
+        "id": "281.added",
+        "category": "added",
+        "prs": [281],
+        "en": "The menu has a Day/Night choice: night drives show the yard after dark, keep their own bests and replay at night."
+      },
+      {
+        "id": "283.changed",
+        "category": "changed",
+        "prs": [283],
+        "en": "The target outline has a dark edge so it stands out on the yard."
+      },
+      {
+        "id": "285.added",
+        "category": "added",
+        "prs": [285],
+        "en": "Lights and hazard lights switch with H and X or the new buttons under the gears."
+      },
+      {
+        "id": "287.added",
+        "category": "added",
+        "prs": [287],
+        "en": "At night on Balanced and High graphics, the headlights light the yard ahead and the reversing lamps light the ground behind truck and trailer."
+      },
+      {
+        "id": "288.added",
+        "category": "added",
+        "prs": [288],
+        "en": "At night, cones, posts and barriers shine in the headlights, side markers glow and the dashboard instruments light up."
+      },
+      {
+        "id": "290.added",
+        "category": "added",
+        "prs": [290],
+        "en": "At night on High, the headlamp beam and the trailer's rear light now cast shadows."
+      },
+      {
+        "id": "291.added",
+        "category": "added",
+        "prs": [291],
+        "en": "At night, the yard floodlights light the yard, street lamps throw warm pools on the road and the lamp heads glow."
+      },
+      {
+        "id": "292.added",
+        "category": "added",
+        "prs": [292],
+        "en": "At night, work floodlights on the truck body and on the trailer's rear come on when you reverse with the lights on, lighting the drawbar gap and the ground behind the trailer."
+      },
+      {
+        "id": "293.added",
+        "category": "added",
+        "prs": [293],
+        "en": "At night on High, two of the yard's floodlight masts cast shadows of the props across the yard."
+      },
+      {
+        "id": "296.fixed",
+        "category": "fixed",
+        "prs": [296],
+        "en": "Side marker lamps on the truck and trailers flash with the direction indicators when the hazard lights are on, as UN R48 allows."
+      },
+      {
+        "id": "299.changed",
+        "category": "changed",
+        "prs": [299],
+        "en": "The top-down view at night is darker, so the yard reads like a night yard while every target and marking stays readable."
+      },
+      {
+        "id": "301.changed",
+        "category": "changed",
+        "prs": [301],
+        "en": "Trucks and trailers now show a white lamp facing forward at each rear top corner, visible in both main mirrors at night, as UN R48 allows."
+      },
+      {
+        "id": "304.fixed",
+        "category": "fixed",
+        "prs": [304],
+        "en": "The render resolution stays at full on a device that keeps up, instead of dropping for no reason."
+      },
+      {
+        "id": "307.added",
+        "category": "added",
+        "prs": [307],
+        "en": "A front mirror at the top of the windscreen shows the ground ahead of the bumper, which the dash hides."
+      },
+      {
+        "id": "308.added",
+        "category": "added",
+        "prs": [308],
+        "en": "Wide-angle mirrors under the side mirrors show the ground beside the truck and the trailer swinging out."
+      },
+      {
+        "id": "314.added",
+        "category": "added",
+        "prs": [314],
+        "en": "A \"Wide-angle mirrors\" setting in the menu hides them and gives the main mirrors their full size back."
+      },
+      {
+        "id": "314.changed",
+        "category": "changed",
+        "prs": [314],
+        "en": "The wide-angle mirrors now show on laptop screens, with the main mirrors a little smaller to make room."
+      },
+      {
+        "id": "321.changed",
+        "category": "changed",
+        "prs": [321],
+        "en": "Straight reverse now starts with the combination slightly bent, so the trailer drifts off the line unless you correct it."
+      },
+      {
+        "id": "323.fixed",
+        "category": "fixed",
+        "prs": [323],
+        "en": "Night headlights now light the ground in front of each lamp, as two beams that merge further ahead, instead of one beam from between them."
+      },
+      {
+        "id": "324.added",
+        "category": "added",
+        "prs": [324],
+        "en": "At night, about a quarter of the office windows in the distant skyline glow warm on Balanced and High."
+      },
+      {
+        "id": "325.fixed",
+        "category": "fixed",
+        "prs": [325],
+        "en": "On short screens the warning and goal messages now stand between the side mirrors, or in the top view where they do not fit, instead of covering the cockpit label and the mirrors."
+      },
+      {
+        "id": "328.added",
+        "category": "added",
+        "prs": [328],
+        "en": "The outside view can be turned and tilted freely around the whole vehicle with drag, pinch, wheel or the keys `,` `.` `PgUp` `PgDn`, and `0` returns to the default view."
+      },
+      {
+        "id": "331.added",
+        "category": "added",
+        "prs": [331],
+        "en": "On High graphics the cockpit view can be looked around in by dragging with a finger or the mouse, or by holding `Q` or `E` to glance to a side; the view eases back on release."
+      },
+      {
+        "id": "333.fixed",
+        "category": "fixed",
+        "prs": [333],
+        "en": "On a device that is slow for reasons lowering the resolution cannot fix, the picture no longer drops to the lowest resolution and stays there."
+      },
+      {
+        "id": "334.added",
+        "category": "added",
+        "prs": [334],
+        "en": "A close-proximity mirror above the passenger-side mirror shows the ground right beside the cab on large windows."
+      },
+      {
+        "id": "346.fixed",
+        "category": "fixed",
+        "prs": [346],
+        "en": "The replay starts at the first driving input instead of idle time before it, and the steering readout shows no arrow at 0 %."
+      },
+      {
+        "id": "347.changed",
+        "category": "changed",
+        "prs": [347],
+        "en": "Wheel arches and mudguards shade smoothly, and the High-quality yard trees load faster."
+      },
+      {
+        "id": "348.changed",
+        "category": "changed",
+        "prs": [348],
+        "en": "The blocked toast is clearer, a limit stop ahead now warns, and the top-right button is labelled Pause."
+      },
+      {
+        "id": "350.changed",
+        "category": "changed",
+        "prs": [350],
+        "en": "On short screens the key list opens to the drive keys only, which leaves the mirrors their size; the Keys toggle opens the full list."
+      },
+      {
+        "id": "351.changed",
+        "category": "changed",
+        "prs": [351],
+        "en": "High graphics loads its ground textures from a much smaller download, so the first High start is faster."
+      },
+      {
+        "id": "352.changed",
+        "category": "changed",
+        "prs": [352],
+        "en": "The menu lists the numbered exercises first, with the vehicle and time of day below, and the free-yard cards describe themselves."
+      },
+      {
+        "id": "353.added",
+        "category": "added",
+        "prs": [353],
+        "en": "On a night drive with the System theme, the HUD and on-screen controls use the dark look; an explicit Light or Dark theme still wins."
+      },
+      {
+        "id": "356.changed",
+        "category": "changed",
+        "prs": [356],
+        "en": "The goal cue near the target now shows the distance and whether the angle is ok, and the result title has a colour and an icon."
+      },
+      {
+        "id": "360.fixed",
+        "category": "fixed",
+        "prs": [360],
+        "en": "The result screen is now announced by screen readers with its outcome when it opens."
+      },
+      {
+        "id": "363.added",
+        "category": "added",
+        "prs": [363],
+        "en": "In languages other than English, What's new shows a note that its entries are in English."
+      },
+      {
+        "id": "364.changed",
+        "category": "changed",
+        "prs": [364],
+        "en": "The view reset button has its own recentre icon, and selected toolbar toggles are now filled with the accent colour so the pressed state reads clearly in light and dark themes."
+      },
+      {
+        "id": "365.changed",
+        "category": "changed",
+        "prs": [365],
+        "en": "Below 700 px screen height the exercise brief collapses on the first drive input and the key legend opens as an overlay, leaving more of the top view and the cockpit free."
+      },
+      {
+        "id": "368.added",
+        "category": "added",
+        "prs": [368],
+        "en": "A \"Driving view\" choice in the menu drives a run with the mirrors only: the cockpit fills the window without the top view, the brief and counters stay on screen, and the run is ranked apart."
+      },
+      {
+        "id": "370.changed",
+        "category": "changed",
+        "prs": [370],
+        "en": "The view buttons are now one joined control with the selected view filled, aid and panel toggles are rounded chips with a lighter tint and a ticked ring, and the replay play button is a pill so it no longer looks like a selected option."
+      },
+      {
+        "id": "373.added",
+        "category": "added",
+        "prs": [373],
+        "en": "The menu and the What's new screen show the app version, or the build for a development build."
       }
     ]
   }
