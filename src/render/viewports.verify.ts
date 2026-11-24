@@ -385,7 +385,7 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
         'tablet portrait': [1485, 22.0],
       }),
       'drive balanced, notch, legend, panels steps, share min': known('#394', {
-        'tablet landscape': [21518, 46.0],
+        'tablet landscape': [21608, 46.0],
         'tablet portrait': [369, 46.0],
       }),
       'mirrors high, notch, legend': known('#393', { 'tablet portrait': [18593, 16.0] }),
