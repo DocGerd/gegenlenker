@@ -80,6 +80,8 @@ export type HudOptions = {
   collapsed: CollapsedPanels;
   /** No top-down pane: its brief and counters move into the cockpit, and its views, aids and gauges are gone. */
   mirrorsOnly?: boolean;
+  /** The stop button and lever column, which the toolbar stays clear of; absent where there are no controls. */
+  pedalsBox?: () => DOMRect;
 };
 
 const CONTACT_KEY: Record<BodyId, MessageKey> = {
@@ -469,7 +471,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const syncToolbarReserve = (): void => {
     topDown.removeAttribute('data-toolbar-reserve');
     if (!topDown.hasAttribute('data-reserve') || root.clientWidth < root.clientHeight) return;
-    const lever = root.querySelector('.ctl-pedals')?.getBoundingClientRect();
+    const lever = opts.pedalsBox?.();
     if (lever === undefined || lever.width === 0) return;
     const gap = parseFloat(getComputedStyle(root).getPropertyValue('--space-3')) || 12;
     const pane = topDown.getBoundingClientRect();
