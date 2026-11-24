@@ -56,7 +56,7 @@ import {
   type Insets,
   type PanelStack,
 } from './viewports';
-import { GEOM, HUD_THRESHOLDS, metricsAt, type Metrics } from './viewports-css';
+import { GEOM, HUD_THRESHOLDS, metricsAt, px, type Metrics } from './viewports-css';
 
 /* ------------------------------------------------------------------------------------------------
  * Bounds: every integer CSS width x height in each box. Phones are out of scope (no target).
@@ -122,6 +122,8 @@ function selection(): { readonly boxes: readonly Box[]; readonly custom: boolean
  * ---------------------------------------------------------------------------------------------- */
 
 const SPACE_4 = GEOM.space4;
+/** The view frame is drawn this far outside a mirror's rect: two rings of `--hud-stroke`. */
+const HUD_FRAME = 2 * px('var(--hud-stroke)');
 const TARGET = GEOM.target;
 const GEARS_W = GEOM.gearsW;
 const LEGEND_W = GEOM.legendW;
@@ -807,11 +809,14 @@ function evaluate(v: Variant, w: number, h: number): void {
     const bandProperty = atMinimum
       ? 'mirrors-above-controls-band (height at MIN_SQUEEZED_HEIGHT)'
       : 'mirrors-above-controls-band (height above minimum)';
-    if (!chk(bandProperty, room >= -1e-9)) {
+    // above the floor the view frame stays clear of the controls too; at it the window has no room left
+    const need = atMinimum ? 0 : HUD_FRAME;
+    if (!chk(bandProperty, room >= need - 1e-9)) {
       fail(
         bandProperty,
-        () => `${name} ${fmt(rect)} reaches ${-room} px into the controls (top ${h - controls})`,
-        -room,
+        () =>
+          `${name} ${fmt(rect)} leaves ${room} px above the controls (top ${h - controls}), needs ${need}`,
+        need - room,
       );
     }
     for (const control of controlBoxes) {

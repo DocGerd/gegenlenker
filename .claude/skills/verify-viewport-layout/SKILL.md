@@ -57,7 +57,7 @@ Check the first counterexample in a browser (`pnpm exec playwright screenshot` o
 
 ## Change properties or variants
 
-When a change intentionally alters a promise, edit the property in the spec in the same commit and say why in the commit message; do not add an exemption. A property at an escape the code documents (`MIN_SQUEEZED_HEIGHT` at `viewports.ts`) stays a separate named property whose failure is still a failure. To add a config input, add a `base(...)` entry to `VARIANTS`. To change what a property means, check it still fails on a mutation of `viewports.ts` (drop the offset, swap a min and max, remove a clamp), then revert it with `git restore src/render/viewports.ts`. A mutation that worsens a listed pair must print `WORSE`.
+When a change intentionally alters a promise, edit the property in the spec in the same commit and say why in the commit message; do not add an exemption. A property at an escape the code documents (`MIN_SQUEEZED_HEIGHT` at `viewports.ts`, the floor of a window with no room left) stays a separate named property whose failure is still a failure; above it a mirror also keeps the `--hud-frame` ring clear of the controls. To add a config input, add a `base(...)` entry to `VARIANTS`. To change what a property means, check it still fails on a mutation of `viewports.ts` (drop the offset, swap a min and max, remove a clamp), then revert it with `git restore src/render/viewports.ts`. A mutation that worsens a listed pair must print `WORSE`.
 
 ## Scope
 
