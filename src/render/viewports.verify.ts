@@ -275,6 +275,7 @@ const PROPERTIES = [
   'mirrors-above-hud-band',
   'mirrors-clear-of-legend',
   'wide-mirrors-clear-of-sight-cone',
+  'class-ii-clear-of-sight-cone',
   'mirrors-and-message-column-disjoint',
   'class-iv-hangs-under-class-ii',
   'class-ii-keeps-share-with-class-iv',
@@ -292,7 +293,7 @@ type Property = (typeof PROPERTIES)[number];
 
 /** What a property's magnitude measures: the sight cone in degrees, every other one in px (0 where it is a yes or no). */
 const unitOf = (p: Property): 'px' | 'deg' =>
-  p === 'wide-mirrors-clear-of-sight-cone' ? 'deg' : 'px';
+  p === 'wide-mirrors-clear-of-sight-cone' || p === 'class-ii-clear-of-sight-cone' ? 'deg' : 'px';
 
 /**
  * A finding's baseline in one (property, variant) pair and bounds, per box of the bounds: how many
@@ -325,38 +326,8 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
         'tablet portrait': [13919, 0.5],
       }),
     },
-    'wide-mirrors-clear-of-sight-cone': {
-      'drive balanced, share max': known('#392', { 'desktop 1440p': [1290, 0.22] }),
-      'drive high, home indicator, legend, panels steps, share max': known('#392', {
-        'desktop 1440p': [1290, 0.22],
-      }),
-      'drive balanced, notch': known('#392', {
-        'tablet landscape': [9807, 2.6876],
-        'tablet portrait': [138, 0.411],
-      }),
-      'drive balanced, notch, legend, panels steps, share min': known('#392', {
-        'tablet landscape': [239, 0.9333],
-        'tablet portrait': [21320, 2.9],
-      }),
-      'mirrors balanced': known('#392', {
-        'tablet portrait': [76556, 2.0203],
-        'tablet portrait 834': [146, 0.1191],
-      }),
-      'mirrors balanced, legend with all keys': known('#392', {
-        'tablet portrait': [76556, 2.0203],
-        'tablet portrait 834': [146, 0.1191],
-      }),
-      'mirrors high, notch, legend': known('#392', {
-        'tablet portrait': [130594, 4.7435],
-        'tablet portrait 834': [6660, 2.4034],
-      }),
-      'mirrors balanced, home indicator, legend': known('#392', {
-        'tablet portrait': [76556, 2.0203],
-        'tablet portrait 834': [146, 0.1191],
-      }),
-    },
     'message-column-valid': {
-      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [7224, 16.0] }),
+      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [3049, 16.0] }),
     },
   },
   full: {
@@ -408,101 +379,21 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
         'tablet portrait': [392, 27.203],
       }),
     },
-    'wide-mirrors-clear-of-sight-cone': {
-      'drive balanced, notch': known('#392', {
-        'laptop and desktop': [334574, 4.4033],
-        'tablet landscape': [67544, 5.0963],
-        'tablet portrait': [246125, 5.0963],
-      }),
-      'drive balanced': known('#392', {
-        'laptop and desktop': [169466, 1.4923],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [121236, 1.6914],
-      }),
-      'drive low': known('#392', {
-        'laptop and desktop': [169466, 1.4923],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [121236, 1.6914],
-      }),
-      'drive high': known('#392', {
-        'laptop and desktop': [169466, 1.4923],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [121236, 1.6914],
-      }),
-      'drive balanced, share max': known('#392', {
-        'laptop and desktop': [918200, 1.9733],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [181162, 1.9733],
-      }),
-      'drive balanced, legend': known('#392', {
-        'laptop and desktop': [169466, 1.4923],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [121236, 1.6914],
-      }),
-      'drive balanced, legend with all keys': known('#392', {
-        'laptop and desktop': [169466, 1.4923],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [121236, 1.6914],
-      }),
-      'drive balanced, panels steps': known('#392', {
-        'laptop and desktop': [169466, 1.4923],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [121236, 1.6914],
-      }),
-      'drive balanced, panels never fit': known('#392', {
-        'laptop and desktop': [169466, 1.4923],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [121236, 1.6914],
-      }),
-      'drive balanced, home indicator': known('#392', {
-        'laptop and desktop': [169466, 1.4923],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [121236, 1.6914],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#392', {
-        'laptop and desktop': [918200, 1.9733],
-        'tablet landscape': [43676, 1.6914],
-        'tablet portrait': [181162, 1.9733],
-      }),
-      'drive balanced, notch, legend, panels steps, share min': known('#392', {
-        'laptop and desktop': [48614, 1.6854],
-        'tablet landscape': [41441, 4.5761],
-        'tablet portrait': [258731, 4.5761],
-      }),
-      'mirrors high, notch, legend': known('#392', {
-        'laptop and desktop': [29239, 1.7195],
-        'tablet landscape': [24156, 2.8658],
-        'tablet portrait': [627722, 4.7435],
-      }),
-      'mirrors balanced': known('#392', {
-        'tablet landscape': [210, 0.2549],
-        'tablet portrait': [360223, 2.0203],
-      }),
-      'mirrors balanced, legend with all keys': known('#392', {
-        'tablet landscape': [298, 0.2549],
-        'tablet portrait': [360311, 2.0203],
-      }),
-      'mirrors balanced, home indicator, legend': known('#392', {
-        'tablet landscape': [298, 0.2549],
-        'tablet portrait': [360311, 2.0203],
-      }),
-      'drive balanced, share min': known('#392', { 'tablet portrait': [66022, 1.9484] }),
-    },
     'message-column-valid': {
       'drive balanced, notch': known('#394', {
         'tablet landscape': [21681, 22.0],
         'tablet portrait': [1485, 22.0],
       }),
       'drive balanced, notch, legend, panels steps, share min': known('#394', {
-        'tablet landscape': [21518, 46.0],
+        'tablet landscape': [21608, 46.0],
         'tablet portrait': [369, 46.0],
       }),
-      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [19224, 16.0] }),
+      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [14265, 16.0] }),
     },
     'message-stack-clear-of-sight-cone': {
       'mirrors high, notch, legend': known('#393', {
         'laptop and desktop': [10759, 176.3933],
-        'tablet landscape': [15547, 267.448],
+        'tablet landscape': [15302, 267.448],
       }),
     },
     'message-stack-clear-of-controls-and-hud-band': {
@@ -1020,12 +911,19 @@ function evaluate(v: Variant, w: number, h: number): void {
         depth(rect, legendBox),
       );
     }
-    if (name === 'wideLeft' || name === 'wideRight') {
-      // issue #265: class IV must not cover the sight cone, the circle of `CLEAR_CONE_DEG` about the view axis
+    // the sight cone is the circle of `CLEAR_CONE_DEG` about the view axis: class IV must not cover it
+    // (issue #265), nor class II (issue #392)
+    const coneProperty: Property | null =
+      name === 'wideLeft' || name === 'wideRight'
+        ? 'wide-mirrors-clear-of-sight-cone'
+        : name === 'mirrorLeft' || name === 'mirrorRight'
+          ? 'class-ii-clear-of-sight-cone'
+          : null;
+    if (coneProperty !== null) {
       const reach = coneDepth(rect, cockpit);
-      if (!chk('wide-mirrors-clear-of-sight-cone', reach <= 0)) {
+      if (!chk(coneProperty, reach <= 0)) {
         fail(
-          'wide-mirrors-clear-of-sight-cone',
+          coneProperty,
           () =>
             `${name} ${fmt(rect)} reaches ${reach.toFixed(2)} deg into the ${CLEAR_CONE_DEG} deg cone`,
           reach,
