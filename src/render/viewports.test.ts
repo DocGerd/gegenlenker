@@ -26,6 +26,7 @@ import {
   wrapLines,
   MIN_CLASS_II_SHARE,
   MIN_MIRROR_HEIGHT,
+  MIN_SQUEEZED_HEIGHT,
   MIN_WIDE_HEIGHT,
   MIN_WIDE_WIDTH,
   NO_INSETS,
@@ -53,8 +54,8 @@ describe('computeViewports mirrors', () => {
           expect(m.y, at).toBeGreaterThanOrEqual(cockpit.y);
           expect(m.y + m.height, at).toBeLessThanOrEqual(cockpit.y + cockpit.height);
           expect(m.width, at).toBeGreaterThan(0);
-          // With no room for the minimum height, the mirror keeps that size instead.
-          if (m.height !== MIN_MIRROR_HEIGHT) {
+          // With no room even for the squeezed minimum, the mirror keeps that size instead.
+          if (m.height > MIN_SQUEEZED_HEIGHT) {
             expect(m.y + m.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h));
           }
         }
@@ -74,7 +75,7 @@ describe('computeViewports key legend', () => {
           // The legend starts right of the left mirror, so only the right one can sit over it.
           const { mirrorRight: m } = computeViewports(w, h, 'drive', legend);
           if (m === null) throw new Error('drive mode has mirrors');
-          if (m.x < legend.right && m.height !== MIN_MIRROR_HEIGHT) {
+          if (m.x < legend.right && m.height > MIN_SQUEEZED_HEIGHT) {
             expect(m.y + m.height, `${w}x${h} legend to ${right}`).toBeLessThanOrEqual(
               h - legend.height,
             );
@@ -116,6 +117,17 @@ describe('computeViewports safe-area insets', () => {
       if (cockpit.x + cockpit.width >= w) {
         expect(mirrorRight.x + mirrorRight.width, at).toBeLessThanOrEqual(w - insets.right);
       }
+    }
+  });
+
+  it('shrink class II below the minimum height rather than reach into the inset controls', () => {
+    const [w, h] = [800, 801];
+    const { mirrorLeft, mirrorRight } = computeViewports(w, h, 'drive', null, insets);
+    for (const m of [mirrorLeft, mirrorRight]) {
+      if (m === null) throw new Error('drive mode has mirrors');
+      expect(m.height).toBeLessThan(MIN_MIRROR_HEIGHT);
+      expect(m.height).toBeGreaterThanOrEqual(MIN_SQUEEZED_HEIGHT);
+      expect(m.y + m.height).toBeLessThanOrEqual(h - controlsHeight(w, h, insets));
     }
   });
 
