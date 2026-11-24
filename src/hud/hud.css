@@ -693,20 +693,21 @@
   gap: var(--space-2);
 }
 
+/* Set by hud.ts where the unreserved toolbar would reach the lever column. */
+.hud-topdown[data-toolbar-reserve] .hud-toolbar {
+  max-width: calc(100% - var(--size-target) * 1.5 - var(--space-3));
+}
+
+/* The toolbar's reserve already covers part of the finish button's. */
+.hud-topdown[data-toolbar-reserve] .hud-goal[hidden] + .hud-toolbar [data-hud='views'] {
+  margin-right: max(
+    0px,
+    calc(var(--hud-action-w) + var(--space-4) - var(--size-target) * 1.5 - var(--space-3))
+  );
+}
+
 /* Landscape: the lever column with the Stop button sits at the screen's right edge, under the info row. */
 @media (min-aspect-ratio: 1/1) {
-  .hud-topdown[data-reserve] .hud-toolbar {
-    max-width: calc(100% - var(--size-target) * 1.5 - var(--space-3));
-  }
-
-  /* The toolbar's reserve already covers part of the finish button's. */
-  .hud-topdown[data-reserve] .hud-goal[hidden] + .hud-toolbar [data-hud='views'] {
-    margin-right: max(
-      0px,
-      calc(var(--hud-action-w) + var(--space-4) - var(--size-target) * 1.5 - var(--space-3))
-    );
-  }
-
   .hud-topdown[data-reserve] .hud-info {
     padding-right: calc(var(--space-4) + var(--size-target) * 1.5 + var(--space-3));
   }

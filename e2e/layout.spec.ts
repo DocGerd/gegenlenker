@@ -638,6 +638,8 @@ const splitBar = (page: Page) => page.locator('[data-hud="split"]');
 /** A short landscape screen: no panel row fits above the divider. */
 const shortLandscape = { width: 844, height: 390 };
 const splitSizes = [...sizes, shortLandscape];
+/** Laptops whose lever column stands well below the toolbar: the toolbar keeps its full width there. */
+const unreservedToolbar = new Set(['1280x800', '1366x768']);
 
 /** Two animation frames: the legend's resize observer re-lays out after the first one. */
 /** What the open key list leaves or covers: it stands in the top-down pane, clear of the mirrors, the lever and the buttons. */
@@ -865,6 +867,10 @@ for (const { locale, messages } of locales) {
         if (size !== shortLandscape) {
           await test.step('mirrors clear the controls', () =>
             expectMirrorsClearControls(page, size));
+        }
+        if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
+          await test.step('the toolbar takes no reserve against the lever column', () =>
+            expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve'));
         }
         await test.step('the toolbar clears the finish button and the controls', () =>
           expectToolbarClear(page));
@@ -1130,6 +1136,17 @@ test('folding and unfolding a panel re-measures the divider against the panels',
   await expect(aids).toHaveAttribute('aria-expanded', 'true');
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
   await expectDividerClearOrHidden(page, size);
+
+  // The angle readouts show only with the angle display aid, so their chip waits for it.
+  const gauges = page.locator('[data-panel="gauges"]');
+  const pivots = page.locator('[data-aid="pivots"]');
+  await expect(gauges).toHaveAttribute('aria-expanded', 'true');
+  await pivots.click();
+  await expect(gauges).toBeDisabled();
+  await expect(gauges).toHaveAttribute('aria-expanded', 'false');
+  await pivots.click();
+  await expect(gauges).toBeEnabled();
+  await expect(gauges).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('toggling the pivots aid re-measures the divider against the panels', async ({ page }) => {

@@ -251,7 +251,7 @@ const MARKUP = (
   <div class="hud-mirror" data-hud="close" hidden></div>
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
-    <div class="hud-toolbar">
+    <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
       <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
@@ -337,6 +337,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const toast = query(hud, 'toast', HTMLElement);
   const topDown = query(hud, 'topDown', HTMLElement);
   const infoRow = query(hud, 'info', HTMLElement);
+  const toolbar = query(hud, 'toolbar', HTMLElement);
   const gaugeBox = query(hud, 'gauges', HTMLElement);
   const speed = query(hud, 'speed', HTMLElement);
   const gearEl = query(hud, 'gear', HTMLElement);
@@ -382,7 +383,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const aids = { ...opts.aids };
   const viewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
-  const panelButtons = [...hud.querySelectorAll<HTMLElement>('[data-panel]')];
+  const panelButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
   const aidsBox = query(hud, 'aids', HTMLElement);
   const legendItems = new Map(
@@ -428,11 +429,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (b.disabled) b.title = t('aidTopViewOnly');
       else b.removeAttribute('title');
     }
-    for (const b of panelButtons)
-      b.setAttribute(
-        'aria-expanded',
-        String(!collapsed[b.dataset['panel'] as keyof CollapsedPanels]),
-      );
+    for (const b of panelButtons) {
+      const panel = b.dataset['panel'] as keyof CollapsedPanels;
+      // The angle readouts show only with the angle display aid.
+      b.disabled = panel === 'gauges' && !aids.pivots;
+      b.setAttribute('aria-expanded', String(!b.disabled && !collapsed[panel]));
+      if (b.disabled) b.title = t('panelGaugesNeedsAid');
+      else b.removeAttribute('title');
+    }
     const keysExpanded = shortScreen ? keysOpen : shortCockpit ? allKeys : !collapsed.keys;
     keysToggle.setAttribute('aria-expanded', String(keysExpanded));
     legend.toggleAttribute('data-overlay', shortScreen);
@@ -456,6 +460,25 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     keysOpen = false;
     briefOpen = !briefDone;
     syncToggles();
+  };
+  /**
+   * Landscape, the lever column stands at the screen's right edge, which the pane's right edge meets
+   * under `data-reserve`: the toolbar stops short of it only where, unreserved, it would come within
+   * `--space-3` of it.
+   */
+  const syncToolbarReserve = (): void => {
+    topDown.removeAttribute('data-toolbar-reserve');
+    if (!topDown.hasAttribute('data-reserve') || root.clientWidth < root.clientHeight) return;
+    const lever = root.querySelector('.ctl-pedals')?.getBoundingClientRect();
+    if (lever === undefined || lever.width === 0) return;
+    const gap = parseFloat(getComputedStyle(root).getPropertyValue('--space-3')) || 12;
+    const pane = topDown.getBoundingClientRect();
+    const leverLeft = pane.right - (root.getBoundingClientRect().right - lever.left) - gap;
+    const reaches = [...toolbar.querySelectorAll('.hud-toggle, .hud-aid-legend')].some((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.right > leverLeft && r.bottom > lever.top - gap;
+    });
+    topDown.toggleAttribute('data-toolbar-reserve', reaches);
   };
   /**
    * The open key list of a short screen stands in the top-down pane, which no mirror reaches; hud.css
@@ -901,6 +924,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
+      if (hasTopDown(views)) syncToolbarReserve();
       hasCockpit = c !== null;
       syncSplitHidden();
       if (c) {
@@ -932,7 +956,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     panelsBottom(paneWidth) {
       syncShortScreen();
       const previous = topDown.style.width;
+      const reserved = topDown.hasAttribute('data-toolbar-reserve');
       topDown.style.width = `${paneWidth}px`;
+      syncToolbarReserve();
       const top = topDown.getBoundingClientRect().top;
       let bottom = top;
       for (const child of topDown.children) {
@@ -948,6 +974,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         (el) => el.getBoundingClientRect().right > infoRight + 0.5,
       );
       topDown.style.width = previous;
+      topDown.toggleAttribute('data-toolbar-reserve', reserved);
       return overflows ? Infinity : bottom - top;
     },
     legendBox() {
