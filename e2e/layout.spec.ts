@@ -339,32 +339,39 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
 
 /**
- * `slot`: where a mirror-only drive too short for both messages between the mirrors puts them;
- * `keysOpen`: the key legend's chevron starts open.
+ * `slot`: where a mirror-only drive too short for both messages between the mirrors puts them, or
+ * `pane`: the drive screen puts them in the top-down pane; `keysOpen`: the key legend's chevron
+ * starts open.
  */
 const insetSizes: {
   width: number;
   height: number;
-  slot?: 'cue yields' | 'right of the cone';
+  slot?: 'cue yields' | 'right of the cone' | 'pane';
   keysOpen?: boolean;
+  german?: boolean;
 }[] = [
   { width: 1280, height: 720 },
   { width: 1024, height: 600 },
   { width: 900, height: 649 },
   { width: 768, height: 1024 },
   { width: 860, height: 860, keysOpen: true },
-  { width: 1024, height: 426, slot: 'cue yields' },
+  // the narrowest tablet: the longest German toast in the narrowest pane column
+  { width: 800, height: 426, slot: 'pane', german: true },
+  { width: 920, height: 426, slot: 'cue yields' },
   // over the brief's side of the cockpit
   { width: 1030, height: 426, slot: 'right of the cone' },
 ];
 
-for (const { slot, keysOpen = false, ...size } of insetSizes) {
-  const mirrorsOnly = slot !== undefined;
+for (const { slot, keysOpen = false, german = false, ...size } of insetSizes) {
+  const mirrorsOnly = slot !== undefined && slot !== 'pane';
   const screen = mirrorsOnly ? 'mirror-only drive' : 'drive screen';
-  test(`the ${screen} stays inside the safe area at ${size.width}x${size.height}`, async ({
-    browser,
-  }) => {
-    const context = await browser.newContext({ locale: 'en-US', viewport: size });
+  const copy = german ? de : en;
+  const at = `${size.width}x${size.height}${german ? ' in German' : ''}`;
+  test(`the ${screen} stays inside the safe area at ${at}`, async ({ browser }) => {
+    const context = await browser.newContext({
+      locale: german ? 'de-DE' : 'en-US',
+      viewport: size,
+    });
     const page = await context.newPage();
     const cdp = await context.newCDPSession(page);
     await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
@@ -381,7 +388,7 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
         ),
       )
       .toBe(`${insets.left}px`);
-    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+    await page.getByRole('button', { name: copy.exerciseStraightReverse }).click();
     await hudReady(page, { insets, mirrorsOnly });
     if (keysOpen) {
       await expect(page.locator('[data-hud="keysToggle"]')).toHaveAttribute(
@@ -437,7 +444,14 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
       const [column] = await boxes(wrap);
       expect(column?.left, 'the messages right of the sight cone').toBeGreaterThan(size.width / 2);
     }
-    await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+    if (slot === 'pane') {
+      const [column] = await boxes(wrap);
+      const [pane] = await boxes(page.locator('.hud-topdown'));
+      expect(column?.left, 'the messages in the top-down pane').toBeGreaterThanOrEqual(
+        pane?.left ?? Infinity,
+      );
+    }
+    await expectMessagesClear(page, copy.blockedTurntable, copy.goalInside);
     // the toast stands inside the wrap, which keeps clear of the safe area
     const messages = await boxes(
       page.locator(

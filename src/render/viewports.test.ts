@@ -22,6 +22,7 @@ import {
   MIN_FRONT_WIDTH,
   MIN_MESSAGE_WIDTH,
   SPACE_PX,
+  SOFT_HYPHEN,
   wordPx,
   wrapLines,
   MIN_CLASS_II_SHARE,
@@ -217,7 +218,8 @@ describe('top-down split', () => {
     }
     // Measured per width: the same screen with a roomier stack has a range again.
     const roomy = topDownSplit(844, 390, edges[1], null, NO_INSETS, () => 100);
-    expect(roomy.min).toBeCloseTo(0.25);
+    // the message column beside the stop button and lever sets the floor
+    expect(roomy.min).toBeCloseTo(Math.ceil(MIN_MESSAGE_WIDTH + 1.5 * 44 + 16 + 8) / 844);
     expect(roomy.max).toBeGreaterThan(roomy.min);
   });
 
@@ -228,6 +230,24 @@ describe('top-down split', () => {
     );
     expect(min * 1000).toBeGreaterThanOrEqual(300);
     expect(min * 1000).toBeLessThan(301.5);
+  });
+
+  it('keeps the landscape pane wide enough for the message column at its narrowest', () => {
+    let inPane = 0;
+    for (let w = 900; w <= 1400; w += 10) {
+      for (let h = 426; h <= w; h += 10) {
+        for (const inset of [NO_INSETS, insets]) {
+          const views = computeViewports(w, h, 'drive', null, inset, edges[0]);
+          const column = messageColumn(views, null, inset);
+          if (column.y === views.cockpit?.y) continue;
+          inPane++;
+          expect(column.width, `${w}x${h} left inset ${inset.left}`).toBeGreaterThanOrEqual(
+            MIN_MESSAGE_WIDTH,
+          );
+        }
+      }
+    }
+    expect(inPane).toBeGreaterThan(0);
   });
 
   it('tiles the screen and keeps the mirrors clear of the controls at both ends of the range', () => {
@@ -297,7 +317,10 @@ describe('top-down split', () => {
   });
 });
 
-/** Word widths in px at 14 px Geist medium, measured in the page (the toast's box, padding excluded). */
+/**
+ * Word widths in px at 14 px Geist medium, measured in the page (the toast's box, padding excluded); a
+ * word with a soft hyphen also its pieces at a break, the first with the hyphen shown (`min-content`).
+ */
 const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   Anhänger: 65,
   '{dist}': 30, // stands for the widest distance of the goal cue, "88,8"
@@ -309,10 +332,12 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   Coupling: 60,
   D: 10,
   Deichsel: 58,
-  Drehschemelwinkel: 131,
+  'Drehschemel\u00ADwinkel': 131,
+  'Drehschemel-': 93,
   Gegenrichtung: 99,
   In: 12,
-  Kupplungswinkel: 116,
+  'Kupplungs\u00ADwinkel': 116,
+  'Kupplungs-': 78,
   Limit: 32,
   Lkw: 27,
   R: 10,
@@ -358,6 +383,7 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   und: 25,
   voraus: 45,
   way: 28,
+  winkel: 44,
   'wählen,': 51,
   zu: 16,
   '–': 8,
@@ -365,17 +391,47 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
 };
 const MEASURED_SPACE_PX = 3;
 
-/** Greedy word wrap with the measured widths: what the browser does, give or take kerning. */
+/** A word's breaks at its soft hyphens: the piece before, hyphen shown, and the rest. */
+const softBreaks = (word: string): [string, string][] => {
+  const pieces = word.split(SOFT_HYPHEN);
+  return pieces
+    .slice(1)
+    .map((_, i) => [`${pieces.slice(0, i + 1).join('')}-`, pieces.slice(i + 1).join(SOFT_HYPHEN)]);
+};
+
+/**
+ * Greedy wrap with the measured widths at spaces and soft hyphens, the last break that fits taken:
+ * what the browser does, give or take kerning.
+ */
 function referenceLines(text: string, width: number): number {
+  const px = (word: string): number => MESSAGE_WORD_PX[word] ?? Infinity;
   let lines = 1;
   let used = 0;
   for (const word of text.split(/\s+/)) {
-    const px = MESSAGE_WORD_PX[word] ?? Infinity;
-    if (used === 0) used = px;
-    else if (used + MEASURED_SPACE_PX + px <= width) used += MEASURED_SPACE_PX + px;
-    else {
-      lines++;
-      used = px;
+    let rest = word;
+    for (;;) {
+      const at = used === 0 ? 0 : used + MEASURED_SPACE_PX;
+      if (at + px(rest) <= width) {
+        used = at + px(rest);
+        break;
+      }
+      const cut = softBreaks(rest).findLast(([head]) => at + px(head) <= width);
+      if (cut !== undefined) {
+        lines++;
+        used = 0;
+        rest = cut[1];
+      } else if (used > 0) {
+        lines++;
+        used = 0;
+      } else {
+        const first = softBreaks(rest)[0];
+        if (first === undefined) {
+          used = px(rest);
+          break;
+        }
+        lines++;
+        rest = first[1];
+      }
     }
   }
   return lines;
@@ -535,7 +591,10 @@ describe('computeViewports front mirror', () => {
 
   it('knows every word of the messages, and measured none wider than it assumes', () => {
     const texts = [...MESSAGE_KEYS.toast, ...MESSAGE_KEYS.cue].flatMap((key) => [en[key], de[key]]);
-    for (const word of texts.flatMap((text) => text.split(/\s+/))) {
+    const words = texts
+      .flatMap((text) => text.split(/\s+/))
+      .flatMap((word) => [word, ...softBreaks(word).flat()]);
+    for (const word of words) {
       expect(
         MESSAGE_WORD_PX[word],
         `${word} is unmeasured: add it to MESSAGE_WORD_PX`,
@@ -543,8 +602,11 @@ describe('computeViewports front mirror', () => {
       expect(wordPx(word), word).toBeGreaterThanOrEqual(MESSAGE_WORD_PX[word] ?? Infinity);
     }
     expect(SPACE_PX).toBeGreaterThanOrEqual(MEASURED_SPACE_PX);
-    // MIN_MESSAGE_WIDTH is built on the widest word
-    expect(Math.max(...Object.values(MESSAGE_WORD_PX))).toBe(MESSAGE_WORD_PX['Drehschemelwinkel']);
+    // MIN_MESSAGE_WIDTH is built on the widest word no soft hyphen breaks
+    const unbreakable = words.filter((word) => !word.includes(SOFT_HYPHEN));
+    const widest = Math.max(...unbreakable.map((word) => MESSAGE_WORD_PX[word] ?? Infinity));
+    expect(widest).toBe(MESSAGE_WORD_PX['Gegenrichtung']);
+    expect(MIN_MESSAGE_WIDTH).toBe(widest + 41 + 32);
   });
 
   it('gives the messages the whole column: the toast wrap has no side padding', () => {
@@ -1021,9 +1083,9 @@ describe('computeViewports mirror-only drive', () => {
 
   it('lets the goal cue yield to a toast where no span beside the mirrors holds both', () => {
     const notch = { top: 24, right: 48, bottom: 20, left: 48 };
-    const views = computeViewports(1024, 426, 'mirrors', null, notch, undefined, null, ALL);
+    const views = computeViewports(920, 426, 'mirrors', null, notch, undefined, null, ALL);
     expect(messageColumn(views, null, notch).cueYields).toBe(true);
-    const plain = computeViewports(1024, 426, 'mirrors', null, NO_INSETS, undefined, null, ALL);
+    const plain = computeViewports(920, 426, 'mirrors', null, NO_INSETS, undefined, null, ALL);
     expect(messageColumn(plain, null, NO_INSETS).cueYields).toBe(false);
   });
 });

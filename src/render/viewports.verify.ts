@@ -307,7 +307,6 @@ const unitOf = (p: Property): 'px' | 'deg' =>
 type BoxBaseline = readonly [failures: number, worst: number];
 type Baseline = { readonly issue: string; readonly boxes: Readonly<Record<string, BoxBaseline>> };
 type KnownTable = Readonly<Partial<Record<Property, Readonly<Record<string, Baseline>>>>>;
-const known = (issue: string, boxes: Record<string, BoxBaseline>): Baseline => ({ issue, boxes });
 /** Rounds a magnitude up to the 4 decimals a baseline holds. */
 const ceil4 = (x: number): number => Math.ceil(x * 1e4) / 1e4;
 
@@ -318,17 +317,7 @@ const ceil4 = (x: number): number => Math.ceil(x * 1e4) / 1e4;
  */
 const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable } = {
   default: {},
-  full: {
-    'message-column-valid': {
-      'drive balanced, notch': known('#394', {
-        'tablet landscape': [16540, 22.0],
-        'tablet portrait': [1, 22.0],
-      }),
-      'drive balanced, notch, legend, panels steps, share min': known('#394', {
-        'tablet landscape': [16468, 22.0],
-      }),
-    },
-  },
+  full: {},
 };
 
 type Failures = {

@@ -44,11 +44,12 @@ const MAX_FRONT_WIDTH = 240;
 /** CSS px between the toast column and the mirrors on either side of it. */
 export const MESSAGE_GAP = 8;
 /**
- * Narrowest toast column: the widest unbreakable word of a toast or goal cue ("Drehschemelwinkel",
- * 131 px at 14 px Geist, measured), the toast's padding and borders (41 px, warn border included)
- * and the 32 px its `max-width` leaves. `viewports.test.ts` pins the word, `layout.spec.ts` the fit.
+ * Narrowest toast column: the widest unbreakable word of a toast or goal cue ("Gegenrichtung", 99 px
+ * at 14 px Geist, measured; the longer compounds break at their soft hyphen), the toast's padding and
+ * borders (41 px, warn border included) and the 32 px its `max-width` leaves. `viewports.test.ts` pins
+ * the word, `layout.spec.ts` the fit.
  */
-export const MIN_MESSAGE_WIDTH = 131 + 41 + 32;
+export const MIN_MESSAGE_WIDTH = 99 + 41 + 32;
 /**
  * The toast and goal-cue messages `messagesFit` wraps. `viewports.test.ts` checks the lists against
  * the message tables.
@@ -67,11 +68,13 @@ export const MESSAGE_KEYS = {
   ],
   cue: ['goalInside', 'goalDistance', 'goalAngleOk', 'goalAngleOff', 'goalPositionOk'],
 } as const satisfies Record<string, readonly MessageKey[]>;
+/** Where a word may break, showing a hyphen (`wrapLines`). */
+export const SOFT_HYPHEN = '\u00AD';
 /**
  * A word's width at 14 px Geist, medium: no less than any measured word of these messages has
  * (`MESSAGE_WORD_PX` in `viewports.test.ts` holds the measurements), and its space.
  */
-export const wordPx = (word: string): number => 8 * word.length + 6;
+export const wordPx = (word: string): number => 8 * word.replaceAll(SOFT_HYPHEN, '').length + 6;
 export const SPACE_PX = 4;
 const MESSAGE_LINE = 22;
 const MESSAGE_BOX = 18;
@@ -173,10 +176,16 @@ function dividerExtent(orientation: Orientation, insets: Insets): number {
 export const orientationOf = (cssWidth: number, cssHeight: number): Orientation =>
   cssWidth >= cssHeight ? 'landscape' : 'portrait';
 
+/** What the landscape pane's message column leaves at the screen's right edge, for the stop button and lever. */
+function paneLever(insets: Insets): number {
+  return 1.5 * tokenPx('--size-target', 44) + INSET + insets.right + MESSAGE_GAP;
+}
+
 /**
  * The top-down share in use. It may not take the cockpit below what its controls need: in landscape
  * the wheel, gears and compact legend side by side, in portrait the controls plus the smallest
- * mirror above them; nor the top view below what its panels and the divider need (`panels`).
+ * mirror above them; nor the top view below what its panels and the divider need (`panels`), nor,
+ * in landscape and short of the default and the cockpit's need, below a `MIN_MESSAGE_WIDTH` column.
  * The default always stays allowed. Where it leaves no room for the divider, `min` and `max`
  * both equal the default.
  */
@@ -219,7 +228,10 @@ export function topDownSplit(
       else lo = mid;
     }
   } else if (panels !== null) hi = panels(cssWidth) + divider;
-  const min = Math.min(fallback, Math.max(limits.min, hi / extent));
+  const messages = landscape
+    ? Math.min(Math.ceil(MIN_MESSAGE_WIDTH + paneLever(insets)), extent - Math.ceil(cockpitNeeded))
+    : 0;
+  const min = Math.min(fallback, Math.max(limits.min, hi / extent, messages / extent));
   return { orientation, share: clamp(layout[orientation], min, max), min, max, fallback };
 }
 
@@ -509,17 +521,33 @@ function closeRect(mirrorRight: Rect, ceiling: number): Rect | null {
   };
 }
 
-/** Lines `text` takes in a box `width` px wide, by greedy word wrap over `wordPx`; a word wider than the box takes a line. */
+/**
+ * Lines `text` takes in a box `width` px wide, by greedy wrap over `wordPx` at spaces and soft hyphens
+ * (a break there ends the line with a hyphen); a piece wider than the box takes a line.
+ */
 export function wrapLines(text: string, width: number): number {
   let lines = 1;
   let used = 0;
   for (const word of text.split(/\s+/)) {
-    const px = wordPx(word);
-    if (used === 0) used = px;
-    else if (used + SPACE_PX + px <= width) used += SPACE_PX + px;
-    else {
-      lines++;
-      used = px;
+    let pieces = word.split(SOFT_HYPHEN);
+    while (pieces.length > 0) {
+      const at = used === 0 ? 0 : used + SPACE_PX;
+      const px = (n: number): number =>
+        n === pieces.length ? wordPx(pieces.join('')) : wordPx(`${pieces.slice(0, n).join('')}-`);
+      let n = pieces.length;
+      while (n > 0 && at + px(n) > width) n--;
+      if (n === 0 && used > 0) {
+        lines++;
+        used = 0;
+        continue;
+      }
+      n = Math.max(n, 1);
+      if (n === pieces.length) used = at + px(n);
+      else {
+        lines++;
+        used = 0;
+      }
+      pieces = pieces.slice(n);
     }
   }
   return lines;
@@ -694,7 +722,7 @@ export function messageColumn(
   const target = tokenPx('--size-target', 44);
   const landscape = cssWidth >= cssHeight;
   const drop = target + MESSAGE_GAP + (landscape ? 0 : insets.top);
-  const lever = landscape ? 1.5 * target + INSET + insets.right + MESSAGE_GAP : 0;
+  const lever = landscape ? paneLever(insets) : 0;
   const left = landscape ? 0 : insets.left;
   const right = landscape ? lever : insets.right;
   return {
