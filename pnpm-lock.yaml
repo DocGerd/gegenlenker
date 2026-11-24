@@ -49,8 +49,8 @@ importers:
         specifier: ^10.15.0
         version: 10.15.0
       ktx-parse:
-        specifier: 1.1.0
-        version: 1.1.0
+        specifier: 2.0.0
+        version: 2.0.0
       ktx2-encoder:
         specifier: 0.6.0
         version: 0.6.0
@@ -1912,6 +1912,9 @@ packages:
 
   ktx-parse@1.1.0:
     resolution: {integrity: sha512-mKp3y+FaYgR7mXWAbyyzpa/r1zDWeaunH+INJO4fou3hb45XuNSwar+7llrRyvpMWafxSIi99RNFJ05MHedaJQ==}
+
+  ktx-parse@2.0.0:
+    resolution: {integrity: sha512-PW38i6SBZagE7c4yCYru636ICCkhJ8FNjOzAdjGkC65BZ0gElQJvFenSGc62SHFj5Fg0ft+U38PPhMZsWYQLCg==}
 
   ktx2-encoder@0.6.0:
     resolution: {integrity: sha512-gEWkw2YUlhKO4hXhqVLQQWJ+fGJObsXIwz0pGjJMclnQ4MQU3SAtN1MzutjFxO3ejWvxHyvFk5kr8+RtLmHiTA==}
@@ -4587,6 +4590,8 @@ snapshots:
       '@keyv/serialize': 1.1.1
 
   ktx-parse@1.1.0: {}
+
+  ktx-parse@2.0.0: {}
 
   ktx2-encoder@0.6.0:
     dependencies:
