@@ -266,8 +266,8 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       steady: held,
     });
   };
-  const revert = (k: GovernorEventKind): number => {
-    level--;
+  const revert = (k: GovernorEventKind, to = level - 1): number => {
+    level = to;
     steady = 0;
     count = 0;
     settle = SETTLE_FRAMES;
@@ -330,7 +330,10 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
         if (running > kept * (1 - MIN_IMPROVEMENT)) {
           // The kept step lost its gain, most likely a lucky window kept it; it did help once, so this is not counted.
           keptFrom[level] = 0;
-          return revert('down-lost');
+          if (n < KEPT_MEMORY) return revert('down-lost');
+          // A full memory of slow windows is a new load, not luck: the levels above were kept against the old one.
+          for (let k = 1; k < level; k++) keptFrom[k] = 0;
+          return revert('down-lost', 0);
         }
       }
       if (p90 > P90_LIMIT_MS) {

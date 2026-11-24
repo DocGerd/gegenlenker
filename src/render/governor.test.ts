@@ -363,6 +363,23 @@ describe('frame timer', () => {
       expect(governor.scale()).toBeCloseTo(0.85, 10);
     });
 
+    it('leaves a level kept for a heavier load once a lighter load the scale cannot help replaces it', () => {
+      const SEEDS = 20;
+      const ends = Array.from({ length: SEEDS }, (_, i) => {
+        const timer = createFrameTimer();
+        const miss = seeded(i + 1);
+        let now = 1000;
+        while (now - 1000 < 600_000) {
+          now += Math.max(fillBound(28)(timer.scale()), V) + (miss() < 0.2 ? V : 0);
+          timer.frame(now);
+        }
+        expect(timer.scale()).toBeCloseTo(0.7, 10);
+        drive(timer, randomMisses(0.35, i + 101), 1800, now);
+        return { seed: i + 1, end: timer.scale() };
+      });
+      expect(ends.filter((r) => r.end !== 1)).toEqual([]);
+    });
+
     it('judges a heavier fill-bound load after a warm-up afresh', () => {
       const timer = createFrameTimer();
       const { end } = drive(timer, fillBound(25), 1.6);
