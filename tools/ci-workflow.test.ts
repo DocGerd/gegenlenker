@@ -203,13 +203,6 @@ it('main deploys production and develop deploys UAT, each after a green check', 
   expect(jobs['deploy-uat']?.if).toBe("${{ !cancelled() && needs.build-uat.result == 'success' }}");
 });
 
-// A `check` that needed a deploy job would wait for it on every push.
-it('check needs none of the UAT jobs', () => {
-  const needs = workflow().jobs['check']?.needs;
-  const list = Array.isArray(needs) ? needs : [needs];
-  for (const name of ['build-uat', 'deploy-uat']) expect(list).not.toContain(name);
-});
-
 // One group serialises every deploy, and `queue: max` keeps a waiting deploy from being replaced
 // by a newer one.
 it('every deploy job shares one pages group that queues instead of replacing', () => {

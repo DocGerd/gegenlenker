@@ -21,9 +21,9 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 ## Who does what
 
 - The owner decides to release and merges into `main`. That merge is the only gate: no deployment needs approval, so production deploys, tags and publishes the release right after it.
-- Agents cut `release/*` and `hotfix/*`, run `release:prepare` and `release:backmerge`, and merge reviewed PRs with green CI into `develop`, `release/*` and back-merges. They stop at a reviewed, gate-checked release or hotfix PR and hand the owner `gh pr merge <n> --merge --match-head-commit <sha>`; they never merge into `main`.
+- Agents cut `release/*` and `hotfix/*`, run `release:prepare` and `release:backmerge`, and merge reviewed PRs with green CI into `develop`, `release/*` and back-merges. They stop at a reviewed, gate-checked release or hotfix PR and hand the owner `gh pr merge <n> --merge --match-head-commit <sha>`; they never merge into `main` and never approve a deployment.
 - `/release [X.Y.Z]` and `/release hotfix` (`.claude/skills/release/SKILL.md`) drive the whole procedure and stop for the owner's merge.
-- Agents author as the owner's GitHub account, so no ruleset can tell them apart, and the `main` ruleset has no bypass list and no merger restriction. What keeps agents out of `main` is local only: the agent permission rules and auto-mode classifier. GitHub cannot enforce it.
+- Agents author as the owner's GitHub account, so no ruleset can tell them apart, and the `main` ruleset has no bypass list and no merger restriction. Only their instructions (CLAUDE.md, `/release`) keep agents out of `main`: no permission rule can tell a merge into `main` from one into `develop`, and GitHub cannot enforce it.
 
 ## CI
 
@@ -37,7 +37,7 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 ## UAT
 
 - Each `develop` deploy republishes production beside the UAT build: the production dist of the live `main` deploy, never rebuilt. `tools/uat-pages.ts` finds it from the last successful `deploy` job of a `push` or `workflow_dispatch` run on `main`, and fails closed unless that job's deployment succeeded, no newer production deployment did, the run holds exactly one unexpired `prod-dist-<sha>` uploaded before the job started, and the files match its manifest and commit exactly.
-- `deploy-uat` (environment `uat-pages`, no reviewer) runs the lookup inside the `pages` group, right before uploading, so a release deployed in between is the one republished.
+- `deploy-uat` (environment `uat-pages`, no reviewer) runs the lookup inside the `pages` group, right before uploading, so a release deployed while it waited is the one republished.
 - It runs the script as `main` has it, never `develop`'s copy: `develop` supplies only the `uat-dist-<sha>` artifact of `build-uat`. The job itself comes from `develop`'s `ci.yml`, so a change to it takes effect on the next `develop` run, and PR review of `develop` is the boundary. While `main` has no `tools/uat-pages.ts`, every UAT deploy fails.
 - Both deploy jobs share the `pages` concurrency group with `queue: max`: they run one at a time, and a newer deploy never replaces a waiting one (beyond the queue limit, it is cancelled).
 - An expired `prod-dist-<sha>` fails the UAT deploy: run CI with `workflow_dispatch` on `main`, then on `develop`.
