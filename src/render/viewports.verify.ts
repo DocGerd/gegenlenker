@@ -7,14 +7,12 @@
  * `expectMessagesClear` in `e2e/layout.spec.ts`, not from what `viewports.test.ts` tolerates. A failure
  * is a counterexample list, never a reason to shrink the bounds or loosen a property.
  */
-import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, it } from 'vitest';
 import {
   DEFAULT_TOP_DOWN_LAYOUT,
   NO_EXTRA_MIRRORS,
   TOP_DOWN_SHARE_LIMITS,
   type ExtraMirrors,
-  type GraphicsPreset,
   type LegendBox,
   type Rect,
   type TopDownLayout,
@@ -33,7 +31,7 @@ import {
   FRONT_GAP_PX,
   VISOR,
 } from './cockpit-band';
-import { QUALITY_FLAGS } from './quality';
+import { extraMirrors } from './index';
 import {
   computeViewports,
   controlsHeight,
@@ -56,6 +54,7 @@ import {
   type Insets,
   type PanelStack,
 } from './viewports';
+import { GEOM, HUD_THRESHOLDS, metricsAt, type Metrics } from './viewports-css.test';
 
 /* ------------------------------------------------------------------------------------------------
  * Bounds: every integer CSS width x height in each box. Phones are out of scope (no target).
@@ -74,12 +73,14 @@ type Box = {
 const DEFAULT_BOXES: readonly Box[] = [
   { name: 'laptop', w: [1280, 1600], h: [585, 800] },
   { name: 'desktop 1080p', w: [1900, 1940], h: [1060, 1100] },
+  { name: 'desktop 1080p window', w: [1900, 1940], h: [900, 1000] },
   { name: 'desktop 1440p', w: [2400, 2560], h: [1300, 1440] },
   { name: 'tablet landscape', w: [1000, 1200], h: [600, 800] },
   { name: 'tablet portrait', w: [600, 820], h: [900, 1200] },
+  { name: 'tablet portrait 834', w: [821, 850], h: [1100, 1210] },
 ];
 
-/** `VERIFY_LAYOUT=full`: every size from the short tablet and laptop to 2560x1440, portrait tablets to 1280x1600. */
+/** `VERIFY_LAYOUT=full`: one contiguous box over the laptops and desktops, and one each for tablets in landscape and portrait. */
 const FULL_BOXES: readonly Box[] = [
   { name: 'laptop and desktop', w: [1024, 2560], h: [426, 1440] },
   { name: 'tablet landscape', w: [800, 1023], h: [426, 1000] },
@@ -100,22 +101,23 @@ function boxes(): readonly Box[] {
 }
 
 /* ------------------------------------------------------------------------------------------------
- * CSS geometry the properties are measured against (tokens.css, controls.css, hud.css, e2e).
+ * CSS geometry the properties are measured against: read from the stylesheets (`viewports-css.test.ts`).
  * ---------------------------------------------------------------------------------------------- */
 
-const SPACE_4 = 16;
-const TARGET = 44;
-const GEARS_W = 2.1 * TARGET;
-const LEGEND_W = 176;
-const LABEL_BLOCK = 30;
-const STOP_BLOCK = 55;
-const STOP_GAP = 8;
-const GEARS_HEIGHT = 274.5;
-const COCKPIT_LABEL = 32;
+const SPACE_4 = GEOM.space4;
+const TARGET = GEOM.target;
+const GEARS_W = GEOM.gearsW;
+const LEGEND_W = GEOM.legendW;
+const LABEL_BLOCK = GEOM.labelBlock;
+const STOP_BLOCK = GEOM.stopBlock;
+const STOP_GAP = GEOM.stopGap;
+const GEARS_HEIGHT = GEOM.gearsHeight;
+const COCKPIT_LABEL = GEOM.cockpitLabel;
+const MESSAGE_LINE = GEOM.messageLine;
+const MESSAGE_BOX = GEOM.messageBox;
+/** Between the class II mirrors and the message column, as `viewports.ts` places it. */
 const MESSAGE_GAP = 8;
-const MESSAGE_LINE = 22;
-const MESSAGE_BOX = 18;
-const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+const PEDAL_W = GEOM.pedalW;
 
 /* ------------------------------------------------------------------------------------------------
  * Variants: a named, sampled list of config tuples (not a cross product).
@@ -135,14 +137,7 @@ type Variant = {
   readonly insets: Insets;
 };
 
-/** What `extraMirrors` (`render/index.ts`) makes of a preset and the class IV setting. */
-const extrasOf = (preset: GraphicsPreset, wideSetting: boolean): ExtraMirrors => ({
-  front: QUALITY_FLAGS[preset].frontMirror,
-  wide: QUALITY_FLAGS[preset].wideMirrors && wideSetting,
-  close: QUALITY_FLAGS[preset].closeMirror,
-});
-
-const BALANCED = extrasOf('balanced', true);
+const BALANCED = extraMirrors('balanced', true);
 /** A tablet's home indicator; and a landscape display cut-out (the test values in `viewports.test.ts`). */
 const HOME: Insets = { top: 0, right: 0, bottom: 20, left: 0 };
 const NOTCH: Insets = { top: 24, right: 48, bottom: 20, left: 48 };
@@ -164,9 +159,9 @@ const base = (name: string, over: Partial<Omit<Variant, 'name'>>): Variant => ({
 const VARIANTS: readonly Variant[] = [
   base('drive balanced', {}),
   base('drive, no extra mirrors', { extra: NO_EXTRA_MIRRORS }),
-  base('drive low', { extra: extrasOf('low', true) }),
-  base('drive high', { extra: extrasOf('high', true) }),
-  base('drive balanced, class IV off', { extra: extrasOf('balanced', false) }),
+  base('drive low', { extra: extraMirrors('low', true) }),
+  base('drive high', { extra: extraMirrors('high', true) }),
+  base('drive balanced, class IV off', { extra: extraMirrors('balanced', false) }),
   base('drive balanced, share min', { layout: SHARE_MIN }),
   base('drive balanced, share max', { layout: SHARE_MAX }),
   base('drive balanced, legend', { legend: 'measured' }),
@@ -182,7 +177,7 @@ const VARIANTS: readonly Variant[] = [
     layout: SHARE_MIN,
   }),
   base('drive high, home indicator, legend, panels steps, share max', {
-    extra: extrasOf('high', true),
+    extra: extraMirrors('high', true),
     insets: HOME,
     legend: 'measured',
     panels: 'steps',
@@ -192,7 +187,7 @@ const VARIANTS: readonly Variant[] = [
   base('mirrors balanced, legend with all keys', { mode: 'mirrors', legend: 'keysOpen' }),
   base('mirrors high, notch, legend', {
     mode: 'mirrors',
-    extra: extrasOf('high', true),
+    extra: extraMirrors('high', true),
     insets: NOTCH,
     legend: 'measured',
   }),
@@ -238,11 +233,7 @@ const LEGEND_BOXES = {
   full: { width: 315, height: 286 },
   mirrorsFull: { width: 303, height: 190 },
 };
-/** `hud.ts`: below this height a screen is short, below this a cockpit is short, and below these widths it is compact. */
-const SHORT_SCREEN = 700;
-const SHORT_HEIGHT = 740;
-const COMPACT_WIDTH = 720;
-const COMPACT_WIDTH_WITH_LEVER = 840;
+const { SHORT_SCREEN, SHORT_HEIGHT, COMPACT_WIDTH, COMPACT_WIDTH_WITH_LEVER } = HUD_THRESHOLDS;
 
 /* ------------------------------------------------------------------------------------------------
  * Properties, each one named check.
@@ -250,11 +241,13 @@ const COMPACT_WIDTH_WITH_LEVER = 840;
 
 const PROPERTIES = [
   'rects-finite-positive',
+  'drive-rects-present',
   'rects-inside-viewport',
   'screen-tiled-by-cockpit-and-top-down',
   'mirror-only-has-no-top-down-pane',
   'split-within-limits-and-clamp',
   'split-matches-top-down-rect',
+  'wheel-size-matches-css',
   'cockpit-keeps-room-for-controls (deficit over 0.5 px)',
   'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)',
   'extras-only-when-asked',
@@ -283,85 +276,102 @@ const PROPERTIES = [
 ] as const;
 type Property = (typeof PROPERTIES)[number];
 
-/** Variant name to the issue that tracks the counterexamples found in it. */
-type KnownTable = Readonly<Partial<Record<Property, Readonly<Record<string, string>>>>>;
+/** What a property's magnitude measures: the sight cone in degrees, every other one in px (0 where it is a yes or no). */
+const unitOf = (p: Property): 'px' | 'deg' =>
+  p === 'wide-mirrors-clear-of-sight-cone' ? 'deg' : 'px';
+
+/**
+ * A finding's baseline in one (property, variant) pair and bounds: how many checks fail and the worst
+ * magnitude, rounded up to 4 decimals. A pair that fails more often or worse than this is a regression.
+ */
+type Baseline = { readonly issue: string; readonly n: number; readonly worst: number };
+type KnownTable = Readonly<Partial<Record<Property, Readonly<Record<string, Baseline>>>>>;
+const known = (issue: string, n: number, worst = 0): Baseline => ({ issue, n, worst });
+/** Rounds a magnitude up to the 4 decimals a baseline holds. */
+const ceil4 = (x: number): number => Math.ceil(x * 1e4) / 1e4;
 
 /**
  * Counterexamples already filed as issues, per bounds. A counterexample in a listed (property, variant)
- * pair is KNOWN and does not fail the run; any other fails. A listed pair without one in its bounds is
- * STALE and fails too: the issue was fixed, remove the entry.
+ * pair is KNOWN and does not fail the run unless it is worse than the baseline; any other fails. A
+ * listed pair without one in its bounds is STALE and fails too: the issue was fixed, remove the entry.
  */
-const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable } = (() => {
-  const named = (issue: string, ...variants: string[]): Record<string, string> =>
-    Object.fromEntries(variants.map((v) => [v, issue]));
-  const rounding = 'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)';
-  const shareMax = [
-    'drive balanced, share max',
-    'drive high, home indicator, legend, panels steps, share max',
-  ];
-  const wideCone = named(
-    '#392',
-    ...shareMax,
-    'drive balanced, notch',
-    'drive balanced, notch, legend, panels steps, share min',
-    'mirrors balanced',
-    'mirrors balanced, legend with all keys',
-    'mirrors high, notch, legend',
-    'mirrors balanced, home indicator, legend',
-  );
-  const insetDrive = [
-    'drive balanced, notch',
-    'drive balanced, notch, legend, panels steps, share min',
-  ];
-  const nearSquare = [
-    'drive balanced, home indicator',
-    'drive balanced, notch',
-    'drive balanced, notch, legend, panels steps, share min',
-    'drive high, home indicator, legend, panels steps, share max',
-  ];
-  const base: KnownTable = {
-    [rounding]: named('#389', ...shareMax),
-    'wide-mirrors-clear-of-sight-cone': wideCone,
-    'message-column-valid': named('#393', 'mirrors high, notch, legend'),
-  };
-  return {
-    default: base,
-    full: {
-      ...base,
-      'wide-mirrors-clear-of-sight-cone': {
-        ...wideCone,
-        ...named(
-          '#392',
-          'drive balanced',
-          'drive low',
-          'drive high',
-          'drive balanced, legend',
-          'drive balanced, legend with all keys',
-          'drive balanced, panels steps',
-          'drive balanced, panels never fit',
-          'drive balanced, home indicator',
-          'drive balanced, share min',
-        ),
-      },
-      'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)': named('#390', ...nearSquare),
-      'mirrors-clear-of-control-boxes': named('#390', ...nearSquare),
-      'message-column-valid': {
-        ...named('#393', 'mirrors high, notch, legend'),
-        ...named('#394', ...insetDrive),
-      },
-      'message-stack-clear-of-sight-cone': named('#393', 'mirrors high, notch, legend'),
-      'message-stack-clear-of-controls-and-hud-band': named(
-        '#393',
-        'mirrors high, notch, legend',
-        'mirrors balanced, home indicator, legend',
-      ),
-      'message-stack-clear-of-legend': named('#391', 'drive balanced, legend with all keys'),
+const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable } = {
+  default: {
+    'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
+      'drive balanced, share max': known('#389', 49653, 0.5000),
+      'drive high, home indicator, legend, panels steps, share max': known('#389', 54261, 0.5000),
     },
-  };
-})();
+    'wide-mirrors-clear-of-sight-cone': {
+      'drive balanced, share max': known('#392', 1290, 0.2200),
+      'drive high, home indicator, legend, panels steps, share max': known('#392', 1290, 0.2200),
+      'drive balanced, notch': known('#392', 9945, 2.6876),
+      'drive balanced, notch, legend, panels steps, share min': known('#392', 21559, 2.9000),
+      'mirrors balanced': known('#392', 76702, 2.0203),
+      'mirrors balanced, legend with all keys': known('#392', 76702, 2.0203),
+      'mirrors high, notch, legend': known('#392', 137254, 4.7435),
+      'mirrors balanced, home indicator, legend': known('#392', 76702, 2.0203),
+    },
+    'message-column-valid': {
+      'mirrors high, notch, legend': known('#393', 7224, 16.0000),
+    },
+  },
+  full: {
+    'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
+      'drive balanced, share max': known('#389', 441470, 0.5000),
+      'drive high, home indicator, legend, panels steps, share max': known('#389', 419792, 0.5000),
+    },
+    'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)': {
+      'drive balanced, home indicator': known('#390', 966, 8.0000),
+      'drive balanced, notch': known('#390', 966, 8.0000),
+      'drive balanced, notch, legend, panels steps, share min': known('#390', 966, 8.0000),
+      'drive high, home indicator, legend, panels steps, share max': known('#390', 966, 8.0000),
+    },
+    'mirrors-clear-of-control-boxes': {
+      'drive balanced, home indicator': known('#390', 483, 27.2030),
+      'drive balanced, notch': known('#390', 483, 27.2030),
+      'drive balanced, notch, legend, panels steps, share min': known('#390', 483, 27.2030),
+      'drive high, home indicator, legend, panels steps, share max': known('#390', 483, 27.2030),
+    },
+    'wide-mirrors-clear-of-sight-cone': {
+      'drive balanced, notch': known('#392', 648243, 5.0963),
+      'drive balanced': known('#392', 334378, 1.6914),
+      'drive low': known('#392', 334378, 1.6914),
+      'drive high': known('#392', 334378, 1.6914),
+      'drive balanced, share max': known('#392', 1143038, 1.9733),
+      'drive balanced, legend': known('#392', 334378, 1.6914),
+      'drive balanced, legend with all keys': known('#392', 334378, 1.6914),
+      'drive balanced, panels steps': known('#392', 334378, 1.6914),
+      'drive balanced, panels never fit': known('#392', 334378, 1.6914),
+      'drive balanced, home indicator': known('#392', 334378, 1.6914),
+      'drive high, home indicator, legend, panels steps, share max': known('#392', 1143038, 1.9733),
+      'drive balanced, notch, legend, panels steps, share min': known('#392', 348786, 4.5761),
+      'mirrors high, notch, legend': known('#392', 681117, 4.7435),
+      'mirrors balanced': known('#392', 360433, 2.0203),
+      'mirrors balanced, legend with all keys': known('#392', 360609, 2.0203),
+      'mirrors balanced, home indicator, legend': known('#392', 360609, 2.0203),
+      'drive balanced, share min': known('#392', 66022, 1.9484),
+    },
+    'message-column-valid': {
+      'drive balanced, notch': known('#394', 23166, 22.0000),
+      'drive balanced, notch, legend, panels steps, share min': known('#394', 21887, 46.0000),
+      'mirrors high, notch, legend': known('#393', 19224, 16.0000),
+    },
+    'message-stack-clear-of-sight-cone': {
+      'mirrors high, notch, legend': known('#393', 26306, 267.4480),
+    },
+    'message-stack-clear-of-controls-and-hud-band': {
+      'mirrors high, notch, legend': known('#393', 26070, 98.6307),
+      'mirrors balanced, home indicator, legend': known('#393', 4, 92.4339),
+    },
+    'message-stack-clear-of-legend': {
+      'drive balanced, legend with all keys': known('#391', 2652, 315.7912),
+    },
+  },
+};
 
 type Failures = {
   n: number;
+  worst: number;
   examples: string[];
   box: { w0: number; w1: number; h0: number; h1: number };
 };
@@ -381,15 +391,22 @@ function chk(p: Property, held: boolean): boolean {
   return held;
 }
 
-function fail(p: Property, detail: () => string): void {
+/** Records a failure of `p`; `magnitude` is how far it fails (see `unitOf`), 0 where there is no measure. */
+function fail(p: Property, detail: () => string, magnitude = 0): void {
   const s = stats.get(p);
   if (s === undefined) throw new Error(p);
   let f = s.byVariant.get(cur.variant);
   if (f === undefined) {
-    f = { n: 0, examples: [], box: { w0: Infinity, w1: -Infinity, h0: Infinity, h1: -Infinity } };
+    f = {
+      n: 0,
+      worst: 0,
+      examples: [],
+      box: { w0: Infinity, w1: -Infinity, h0: Infinity, h1: -Infinity },
+    };
     s.byVariant.set(cur.variant, f);
   }
   f.n++;
+  f.worst = Math.max(f.worst, Number.isNaN(magnitude) ? Infinity : magnitude);
   f.box.w0 = Math.min(f.box.w0, cur.w);
   f.box.w1 = Math.max(f.box.w1, cur.w);
   f.box.h0 = Math.min(f.box.h0, cur.h);
@@ -408,30 +425,37 @@ const finite = (r: Rect): boolean =>
 const overlapX = (a: Rect, b: Rect): number => Math.min(right(a), right(b)) - Math.max(a.x, b.x);
 const overlapY = (a: Rect, b: Rect): number => Math.min(bottom(a), bottom(b)) - Math.max(a.y, b.y);
 const overlaps = (a: Rect, b: Rect): boolean => overlapX(a, b) > 1e-9 && overlapY(a, b) > 1e-9;
+/** How deep two overlapping rects reach into each other in px; grows with either side of the overlap. */
+const depth = (a: Rect, b: Rect): number =>
+  Math.hypot(Math.max(0, overlapX(a, b)), Math.max(0, overlapY(a, b)));
 const fmt = (r: Rect): string => `(${r.x},${r.y} ${r.width}x${r.height})`;
 
 /* Message stack: toast, gap, goal cue, as `expectMessagesClear` measures them (hud.css `.hud-toast`). */
 const toastTexts: readonly string[] = [en, de].flatMap((lang) =>
   MESSAGE_KEYS.toast.map((key) => lang[key]),
 );
-/** The goal cue shows the distance before the angle verdict. */
-const cueTexts: readonly string[] = [en, de].flatMap((lang) => [
-  lang.goalInside,
-  lang.goalPositionOk,
-  `${lang.goalDistance} ${lang.goalAngleOk}`,
-  `${lang.goalDistance} ${lang.goalAngleOff}`,
-]);
+/**
+ * The goal cue's texts: each key alone, except that the angle verdicts (`goalAngle*`) follow the distance
+ * (`goalDistance`), which is never shown alone.
+ */
+const cueTexts: readonly string[] = [en, de].flatMap((lang) =>
+  MESSAGE_KEYS.cue.flatMap((key) =>
+    key === 'goalDistance'
+      ? []
+      : [key.startsWith('goalAngle') ? `${lang.goalDistance} ${lang[key]}` : lang[key]],
+  ),
+);
 const mostLines = (texts: readonly string[], width: number): number =>
   Math.max(...texts.map((text) => wrapLines(text, width)));
 const stackCache = new Map<number, number>();
 /** Height of the longest toast, the gap and the goal cue in a column `room` px wide (left inset taken off). */
 function stackHeight(room: number): number {
-  const known = stackCache.get(room);
-  if (known !== undefined) return known;
-  // toast: its max-width leaves 32 px, padding and borders take 41; cue: padding and borders take 34
-  const toast = mostLines(toastTexts, room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX;
-  const cue = mostLines(cueTexts, room - 34) * MESSAGE_LINE + MESSAGE_BOX;
-  const total = toast + MESSAGE_GAP + cue;
+  const cached = stackCache.get(room);
+  if (cached !== undefined) return cached;
+  const toast =
+    mostLines(toastTexts, room - GEOM.toastMargin - GEOM.toastBox) * MESSAGE_LINE + MESSAGE_BOX;
+  const cue = mostLines(cueTexts, room - GEOM.cueBox) * MESSAGE_LINE + MESSAGE_BOX;
+  const total = toast + GEOM.stackGap + cue;
   stackCache.set(room, total);
   return total;
 }
@@ -441,8 +465,9 @@ type Named = { readonly name: string; readonly rect: Rect };
 /**
  * How far (degrees) the nearest point of `rect` lies inside the forward sight cone of the cockpit camera
  * (vertical FOV `COCKPIT_FOV`, the cockpit rect's aspect, no view offset); 0 where it lies outside.
- * Each angle is monotone in its screen axis, so the nearest point has the smaller |azimuth| and
- * |elevation| the rect's edges allow.
+ * The cone is the circle of `CLEAR_CONE_DEG` on the tangent plane, as `cockpit-band.ts` cuts it; a
+ * point's angle off the axis is the arctangent of its distance from the centre there, which grows with
+ * each of |x| and |y|, so the nearest point has the smaller |x| and |y| the rect's edges allow.
  */
 function coneDepth(rect: Rect, cockpit: Rect): number {
   const tan = Math.tan((COCKPIT_FOV * Math.PI) / 360);
@@ -453,14 +478,13 @@ function coneDepth(rect: Rect, cockpit: Rect): number {
   const x1 = (2 * (right(rect) - cockpit.x)) / cockpit.width - 1;
   const y0 = 1 - (2 * (bottom(rect) - cockpit.y)) / cockpit.height;
   const y1 = 1 - (2 * (rect.y - cockpit.y)) / cockpit.height;
-  const az = Math.atan(nearest(x0, x1) * aspect * tan);
-  const el = Math.atan(nearest(y0, y1) * tan);
-  return Math.max(0, CLEAR_CONE_DEG - (Math.hypot(az, el) * 180) / Math.PI);
+  const off = Math.atan(Math.hypot(nearest(x0, x1) * aspect * tan, nearest(y0, y1) * tan));
+  return Math.max(0, CLEAR_CONE_DEG - (off * 180) / Math.PI);
 }
 
 /**
  * The key legend as `hud.ts` shows it at this size, with the largest of its measured boxes (headless
- * Chromium, en and de, at 600x1062 to 2560x1440; `LEGEND_BOXES`). Null where it is hidden.
+ * Chromium, en and de; `LEGEND_BOXES`). Null where it is hidden.
  */
 function legendFor(
   kind: LegendKind,
@@ -468,12 +492,14 @@ function legendFor(
   views: ViewRects,
   w: number,
   h: number,
-  insets: Insets,
+  m: Metrics,
 ): { box: LegendBox; left: number; width: number } | null {
   const { cockpit } = views;
   if (kind === 'none' || cockpit === null) return null;
   if (mode === 'mirrors' && w < h) return null;
-  const compact = cockpit.width < (right(cockpit) >= w ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH);
+  // `spansRight` in hud.ts
+  const compact =
+    cockpit.width < (right(cockpit) >= w - 1 ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH);
   const state =
     h < SHORT_SCREEN
       ? LEGEND_BOXES.overlay
@@ -485,8 +511,8 @@ function legendFor(
             ? LEGEND_BOXES.mirrorsFull
             : LEGEND_BOXES.full;
   // `.hud-legend` stands at `--hud-inset` from the cockpit's left and above the HUD band
-  const left = 3 * SPACE_4 + wheelSize(w, h, insets) + GEARS_W + insets.left;
-  const lift = HUD_BAND_SHARE * cockpit.height + 12;
+  const left = m.hudInset;
+  const lift = HUD_BAND_SHARE * cockpit.height + GEOM.legendLift;
   return {
     box: { right: left + state.width, height: lift + state.height },
     left,
@@ -500,12 +526,13 @@ function evaluate(v: Variant, w: number, h: number): void {
   cur.w = w;
   cur.h = h;
   const { insets } = v;
+  const m = metricsAt(w, h, insets);
   const panels = panelsOf(v);
   const run = (legend: LegendBox | null, extra: ExtraMirrors): ViewRects =>
     computeViewports(w, h, v.mode, legend, insets, v.layout, panels, extra);
 
   const first = run(null, v.extra);
-  const legend = legendFor(v.legend, v.mode, first, w, h, insets);
+  const legend = legendFor(v.legend, v.mode, first, w, h, m);
   const views = legend === null ? first : run(legend.box, v.extra);
   const { cockpit, topDown } = views;
   const landscape = w >= h;
@@ -527,17 +554,19 @@ function evaluate(v: Variant, w: number, h: number): void {
   add('messageColumn', column);
 
   for (const { name, rect } of named) {
-    const sane =
-      finite(rect) &&
-      rect.width >= 0 &&
-      rect.height >= 0 &&
-      !(rect.width === 0 && name !== 'topDown');
+    // the top-down pane is zero-wide in the mirror-only drive
+    const noWidth = name === 'topDown' && v.mode === 'mirrors';
+    const sane = finite(rect) && rect.height > 0 && (rect.width > 0 || noWidth);
     if (!chk('rects-finite-positive', sane))
       fail('rects-finite-positive', () => `${name} ${fmt(rect)}`);
     const inside =
       rect.x >= 0 && rect.y >= 0 && right(rect) <= w + 1e-9 && bottom(rect) <= h + 1e-9;
     if (!chk('rects-inside-viewport', inside)) {
-      fail('rects-inside-viewport', () => `${name} ${fmt(rect)} in ${w}x${h}`);
+      fail(
+        'rects-inside-viewport',
+        () => `${name} ${fmt(rect)} in ${w}x${h}`,
+        Math.max(-rect.x, -rect.y, right(rect) - w, bottom(rect) - h),
+      );
     }
   }
 
@@ -549,9 +578,18 @@ function evaluate(v: Variant, w: number, h: number): void {
     }
     return;
   }
-  if (cockpit === null || views.mirrorLeft === null || views.mirrorRight === null) {
-    fail('rects-finite-positive', () => 'no cockpit or class II mirror in drive');
-    return;
+  const present = cockpit !== null && views.mirrorLeft !== null && views.mirrorRight !== null;
+  if (!chk('drive-rects-present', present)) {
+    fail('drive-rects-present', () => 'no cockpit or class II mirror in drive');
+  }
+  if (cockpit === null || views.mirrorLeft === null || views.mirrorRight === null) return;
+  const wheelCode = wheelSize(w, h, insets);
+  if (!chk('wheel-size-matches-css', Math.abs(wheelCode - m.wheel) <= 1e-9)) {
+    fail(
+      'wheel-size-matches-css',
+      () => `wheelSize ${wheelCode} px, --ctl-wheel ${m.wheel} px`,
+      Math.abs(wheelCode - m.wheel),
+    );
   }
   const { mirrorLeft, mirrorRight, wideLeft, wideRight, front, close } = views;
   const mirrorsOnly = v.mode === 'mirrors';
@@ -621,12 +659,13 @@ function evaluate(v: Variant, w: number, h: number): void {
       fail(
         'split-matches-top-down-rect',
         () => `pane ${have} px, share ${split.share} of ${extent}`,
+        Math.abs(have - split.share * extent) - 0.5,
       );
     }
     if (split.share > split.fallback + 1e-12) {
       const cockpitExtent = landscape ? cockpit.width : cockpit.height;
       const needed = landscape
-        ? insets.left + 3 * SPACE_4 + GEARS_W + LEGEND_W + wheelSize(w, h, insets)
+        ? insets.left + 3 * SPACE_4 + GEARS_W + LEGEND_W + m.wheel
         : COCKPIT_LABEL +
           MIN_MIRROR_HEIGHT +
           MESSAGE_GAP +
@@ -638,7 +677,7 @@ function evaluate(v: Variant, w: number, h: number): void {
           ? 'cockpit-keeps-room-for-controls (deficit over 0.5 px)'
           : 'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)';
       if (!chk(room, deficit <= 1e-9)) {
-        fail(room, () => `cockpit ${cockpitExtent} px, needs ${needed}`);
+        fail(room, () => `cockpit ${cockpitExtent} px, needs ${needed}`, deficit);
       }
     }
   }
@@ -649,15 +688,15 @@ function evaluate(v: Variant, w: number, h: number): void {
     [v.extra.wide, [wideLeft, wideRight]],
     [v.extra.close, [close]],
   ] as const) {
+    if (flag) continue;
     if (
-      !flag &&
       !chk(
         'extras-only-when-asked',
         rects.every((r) => r === null),
       )
     ) {
       fail('extras-only-when-asked', () => 'a mirror without its flag');
-    } else if (flag) chk('extras-only-when-asked', true);
+    }
   }
 
   /* mirrors */
@@ -666,8 +705,9 @@ function evaluate(v: Variant, w: number, h: number): void {
   );
   const topInset = cockpit.y === 0 ? insets.top : 0;
   const controls = controlsHeight(w, h, insets);
-  const wheel = wheelSize(w, h, insets);
-  const lever = clamp((landscape ? 0.38 : 0.24) * Math.min(w, h), 160, landscape ? 280 : 240) + 2;
+  const wheel = m.wheel;
+  // the wheel and the lever columns each add their 2 px border to the CSS size
+  const lever = m.lever + 2;
   const wheelBox: Rect = {
     x: SPACE_4 + insets.left,
     y: h - (SPACE_4 + insets.bottom + LABEL_BLOCK + wheel + 2),
@@ -675,24 +715,24 @@ function evaluate(v: Variant, w: number, h: number): void {
     height: SPACE_4 + insets.bottom + LABEL_BLOCK + wheel + 2,
   };
   const gearsBox: Rect = {
-    x: 2 * SPACE_4 + wheel + insets.left,
+    x: m.gearsLeft,
     y: h - SPACE_4 - insets.bottom - GEARS_HEIGHT,
     width: GEARS_W,
     height: SPACE_4 + insets.bottom + GEARS_HEIGHT,
   };
   const pedalsHeight = SPACE_4 + insets.bottom + STOP_BLOCK + STOP_GAP + LABEL_BLOCK + lever;
   const pedalsBox: Rect = {
-    x: w - SPACE_4 - insets.right - 1.5 * TARGET,
+    x: w - SPACE_4 - insets.right - PEDAL_W,
     y: h - pedalsHeight,
-    width: 1.5 * TARGET,
+    width: PEDAL_W,
     height: pedalsHeight,
   };
-  /** `.hud-action`: the pause button at the screen's top right corner, 96 px wide (`--hud-action-w`). */
+  /** `.hud-action`: the pause button at the screen's top right corner. */
   const pauseBox: Rect = {
-    x: w - SPACE_4 - insets.right - 96,
-    y: SPACE_4 + insets.top,
-    width: 96,
-    height: TARGET,
+    x: w - m.actionRight - GEOM.actionW,
+    y: m.actionTop,
+    width: GEOM.actionW,
+    height: GEOM.actionH,
   };
   const controlBoxes: Named[] = [
     { name: 'wheel', rect: wheelBox },
@@ -708,8 +748,8 @@ function evaluate(v: Variant, w: number, h: number): void {
   /** `.hud-gear` and `.hud-speed` stand in the HUD band, right of `--hud-inset`. */
   const readouts: Rect = {
     ...hudBand,
-    x: 3 * SPACE_4 + wheel + GEARS_W + insets.left,
-    width: right(cockpit) - (3 * SPACE_4 + wheel + GEARS_W + insets.left),
+    x: m.hudInset,
+    width: right(cockpit) - m.hudInset,
   };
   const legendBox: Rect | null =
     legend === null
@@ -735,30 +775,53 @@ function evaluate(v: Variant, w: number, h: number): void {
       rect.y >= cockpit.y &&
       bottom(rect) <= bottom(cockpit);
     if (!chk('mirrors-inside-cockpit', inCockpit)) {
-      fail('mirrors-inside-cockpit', () => `${name} ${fmt(rect)} cockpit ${fmt(cockpit)}`);
+      fail(
+        'mirrors-inside-cockpit',
+        () => `${name} ${fmt(rect)} cockpit ${fmt(cockpit)}`,
+        Math.max(
+          cockpit.x - rect.x,
+          right(rect) - right(cockpit),
+          cockpit.y - rect.y,
+          bottom(rect) - bottom(cockpit),
+        ),
+      );
     }
+    const safeRight = right(cockpit) >= w ? w - insets.right : right(cockpit);
     const safe =
       rect.x >= cockpit.x + insets.left &&
-      right(rect) <= (right(cockpit) >= w ? w - insets.right : right(cockpit)) &&
+      right(rect) <= safeRight &&
       rect.y >= cockpit.y + topInset;
     if (!chk('mirrors-inside-safe-area', safe)) {
       fail(
         'mirrors-inside-safe-area',
         () => `${name} ${fmt(rect)} insets ${JSON.stringify(insets)}`,
+        Math.max(
+          cockpit.x + insets.left - rect.x,
+          right(rect) - safeRight,
+          cockpit.y + topInset - rect.y,
+        ),
       );
     }
-    if (!chk('mirrors-below-cockpit-label', rect.y >= cockpit.y + topInset + COCKPIT_LABEL)) {
+    const labelEnd = cockpit.y + topInset + COCKPIT_LABEL;
+    if (!chk('mirrors-below-cockpit-label', rect.y >= labelEnd)) {
       fail(
         'mirrors-below-cockpit-label',
-        () => `${name} top ${rect.y}, label ends ${cockpit.y + topInset + COCKPIT_LABEL}`,
+        () => `${name} top ${rect.y}, label ends ${labelEnd}`,
+        labelEnd - rect.y,
       );
     }
     if (mirrorsOnly) {
-      const ok =
-        !overlaps(rect, pauseBox) &&
-        (!landscape || right(rect) <= w - SPACE_4 - insets.right - 1.5 * TARGET);
+      const leverEdge = w - SPACE_4 - insets.right - PEDAL_W;
+      const ok = !overlaps(rect, pauseBox) && (!landscape || right(rect) <= leverEdge);
       if (!chk('mirror-only-clear-of-pause-button-and-lever', ok)) {
-        fail('mirror-only-clear-of-pause-button-and-lever', () => `${name} ${fmt(rect)}`);
+        fail(
+          'mirror-only-clear-of-pause-button-and-lever',
+          () => `${name} ${fmt(rect)}`,
+          Math.max(
+            overlaps(rect, pauseBox) ? depth(rect, pauseBox) : 0,
+            landscape ? right(rect) - leverEdge : 0,
+          ),
+        );
       }
     }
     const room = h - controls - bottom(rect);
@@ -770,6 +833,7 @@ function evaluate(v: Variant, w: number, h: number): void {
       fail(
         bandProperty,
         () => `${name} ${fmt(rect)} reaches ${-room} px into the controls (top ${h - controls})`,
+        -room,
       );
     }
     for (const control of controlBoxes) {
@@ -777,6 +841,7 @@ function evaluate(v: Variant, w: number, h: number): void {
         fail(
           'mirrors-clear-of-control-boxes',
           () => `${name} ${fmt(rect)} overlaps ${control.name} ${fmt(control.rect)}`,
+          depth(rect, control.rect),
         );
       }
     }
@@ -784,22 +849,25 @@ function evaluate(v: Variant, w: number, h: number): void {
       fail(
         'mirrors-above-hud-band',
         () => `${name} ${fmt(rect)} reaches ${bottom(rect) - hudBand.y} px into the band`,
+        bottom(rect) - hudBand.y,
       );
     }
     if (legendBox !== null && !chk('mirrors-clear-of-legend', !overlaps(rect, legendBox))) {
       fail(
         'mirrors-clear-of-legend',
         () => `${name} ${fmt(rect)} overlaps legend ${fmt(legendBox)}`,
+        depth(rect, legendBox),
       );
     }
     if (name === 'wideLeft' || name === 'wideRight') {
       // issue #265: class IV must not cover the sight cone, the circle of `CLEAR_CONE_DEG` about the view axis
-      const depth = coneDepth(rect, cockpit);
-      if (!chk('wide-mirrors-clear-of-sight-cone', depth <= 0)) {
+      const reach = coneDepth(rect, cockpit);
+      if (!chk('wide-mirrors-clear-of-sight-cone', reach <= 0)) {
         fail(
           'wide-mirrors-clear-of-sight-cone',
           () =>
-            `${name} ${fmt(rect)} reaches ${depth.toFixed(2)} deg into the ${CLEAR_CONE_DEG} deg cone`,
+            `${name} ${fmt(rect)} reaches ${reach.toFixed(2)} deg into the ${CLEAR_CONE_DEG} deg cone`,
+          reach,
         );
       }
     }
@@ -816,6 +884,7 @@ function evaluate(v: Variant, w: number, h: number): void {
           'mirrors-and-message-column-disjoint',
           () =>
             `${a.name} ${fmt(a.rect)} and ${b.name} ${fmt(b.rect)} overlap by ${overlapX(a.rect, b.rect)}x${overlapY(a.rect, b.rect)}`,
+          depth(a.rect, b.rect),
         );
       }
     }
@@ -898,6 +967,7 @@ function evaluate(v: Variant, w: number, h: number): void {
     fail(
       'message-column-valid',
       () => `column ${fmt(column)} leaves ${room} px of ${MIN_MESSAGE_WIDTH}`,
+      MIN_MESSAGE_WIDTH - room,
     );
   }
   if (inCockpitColumn) {
@@ -911,7 +981,7 @@ function evaluate(v: Variant, w: number, h: number): void {
     }
     const stack: Rect = {
       x: column.x + insets.left,
-      y: cockpit.y + SPACE_4 + (landscape ? insets.top : 0),
+      y: cockpit.y + GEOM.stackTop + (landscape ? insets.top : 0),
       width: column.width - insets.left,
       height: stackHeight(column.width - insets.left),
     };
@@ -919,6 +989,7 @@ function evaluate(v: Variant, w: number, h: number): void {
       fail(
         'message-stack-clear-of-sight-cone',
         () => `stack ${fmt(stack)} cone ${fmt(cone)}: ${overlapY(stack, cone)} px deep`,
+        depth(stack, cone),
       );
     }
     for (const control of [...controlBoxes, { name: 'gear and speed readouts', rect: readouts }]) {
@@ -926,6 +997,7 @@ function evaluate(v: Variant, w: number, h: number): void {
         fail(
           'message-stack-clear-of-controls-and-hud-band',
           () => `stack ${fmt(stack)} overlaps ${control.name} ${fmt(control.rect)}`,
+          depth(stack, control.rect),
         );
       }
     }
@@ -933,13 +1005,15 @@ function evaluate(v: Variant, w: number, h: number): void {
       fail(
         'message-stack-clear-of-legend',
         () => `stack ${fmt(stack)} overlaps legend ${fmt(legendBox)}`,
+        depth(stack, legendBox),
       );
     }
-    for (const m of mirrors) {
-      if (!chk('message-stack-clear-of-mirrors', !overlaps(stack, m.rect))) {
+    for (const mirror of mirrors) {
+      if (!chk('message-stack-clear-of-mirrors', !overlaps(stack, mirror.rect))) {
         fail(
           'message-stack-clear-of-mirrors',
-          () => `stack ${fmt(stack)} overlaps ${m.name} ${fmt(m.rect)}`,
+          () => `stack ${fmt(stack)} overlaps ${mirror.name} ${fmt(mirror.rect)}`,
+          depth(stack, mirror.rect),
         );
       }
     }
@@ -949,23 +1023,34 @@ function evaluate(v: Variant, w: number, h: number): void {
       right(column) <= right(topDown) + 1e-9 &&
       column.y >= topDown.y + TARGET &&
       bottom(column) <= bottom(topDown) + 1e-9 &&
-      (!landscape || right(column) <= w - SPACE_4 - insets.right - 1.5 * TARGET);
+      (!landscape || right(column) <= w - SPACE_4 - insets.right - PEDAL_W);
     if (!chk('message-column-placement', placed)) {
       fail('message-column-placement', () => `column ${fmt(column)} pane ${fmt(topDown)}`);
     }
-    const need = SPACE_4 + stackHeight(column.width - insets.left);
+    const need = GEOM.stackTop + stackHeight(column.width - insets.left);
     if (!chk('message-stack-fits-pane', need <= column.height + 1e-9)) {
-      fail('message-stack-fits-pane', () => `stack needs ${need} px, column ${fmt(column)}`);
+      fail(
+        'message-stack-fits-pane',
+        () => `stack needs ${need} px, column ${fmt(column)}`,
+        need - column.height,
+      );
     }
   }
 }
 
 /* ------------------------------------------------------------------------------------------------ */
 
+/** A magnitude as a baseline holds it. */
+const shown = (x: number): string => ceil4(x).toFixed(4);
+/** Slack for float noise when a worst magnitude is compared with its baseline. */
+const EPSILON = 1e-9;
+
 /**
- * One line per property. A counterexample in a (property, variant) pair of `KNOWN_FINDINGS` is KNOWN and
- * does not fail; any other fails. A listed pair without a counterexample is STALE (fixed: remove it),
- * judged only in the named bounds.
+ * One line per property, and under a KNOWN one a line per listed pair with its numbers against the
+ * baseline. A counterexample in a pair of `KNOWN_FINDINGS` is KNOWN and does not fail, unless its count or
+ * worst magnitude exceeds the baseline (WORSE); any other pair fails (FAILED). A listed pair without a
+ * counterexample is STALE (fixed: remove it). The baselines and STALE hold for the named bounds only: a
+ * custom box is classified against the full table and compared with no baseline.
  */
 function report(known: KnownTable | null): { summary: string; details: string; failed: boolean } {
   const table = known ?? KNOWN_FINDINGS.full;
@@ -975,37 +1060,67 @@ function report(known: KnownTable | null): { summary: string; details: string; f
   for (const p of PROPERTIES) {
     const s = stats.get(p);
     if (s === undefined) continue;
+    const unit = unitOf(p);
     const listed = table[p] ?? {};
-    const unknown = [...s.byVariant].filter(([name]) => listed[name] === undefined);
+    const rows = [...s.byVariant].map(([name, f]) => {
+      const base = listed[name];
+      const worse =
+        known !== null &&
+        base !== undefined &&
+        (f.n > base.n || ceil4(f.worst) > base.worst + EPSILON);
+      return { name, f, base, worse };
+    });
+    const unknown = rows.filter((r) => r.base === undefined);
+    const worse = rows.filter((r) => r.worse);
     const stale =
       known === null ? [] : Object.keys(listed).filter((name) => !s.byVariant.has(name));
     // two properties count hits of a split-off case: no hit is good; a custom box need not reach every property
     const hitCounter = p.includes('MIN_MIRROR_HEIGHT') || p.includes('deficit over');
     const unreached = s.applied === 0 && known !== null && !hitCounter;
-    const total = [...s.byVariant.values()].reduce((n, f) => n + f.n, 0);
-    const issues = [...new Set([...s.byVariant.keys()].flatMap((name) => listed[name] ?? []))];
+    const total = rows.reduce((n, r) => n + r.f.n, 0);
+    const issues = [...new Set(rows.flatMap((r) => r.base?.issue ?? []))];
     const status =
       unknown.length > 0
         ? 'FAILED'
-        : stale.length > 0
-          ? 'STALE'
-          : unreached
-            ? 'NEVER APPLIED'
-            : s.applied === 0
-              ? 'not applied'
-              : total > 0
-                ? `KNOWN ${issues.join(' ')}`
-                : 'ok';
-    if (unknown.length > 0 || stale.length > 0 || unreached) failed = true;
+        : worse.length > 0
+          ? 'WORSE'
+          : stale.length > 0
+            ? 'STALE'
+            : unreached
+              ? 'NEVER APPLIED'
+              : s.applied === 0
+                ? 'not applied'
+                : total > 0
+                  ? `KNOWN ${issues.join(' ')}`
+                  : 'ok';
+    if (unknown.length > 0 || worse.length > 0 || stale.length > 0 || unreached) failed = true;
     summary.push(`${status.padEnd(13)} ${p}  (${total} of ${s.applied} checks failed)`);
-    for (const [name, f] of unknown) {
+    for (const { name, f, base, worse: isWorse } of rows) {
+      if (base === undefined) continue;
+      const against = (now: string, was: string | number): string =>
+        known === null ? now : `${now} (baseline ${was})`;
+      const less = known !== null && f.n < base.n && ceil4(f.worst) <= base.worst + EPSILON;
+      summary.push(
+        `    ${base.issue} [${name}]: ${against(`${f.n} failures`, base.n)}, worst ${against(`${shown(f.worst)} ${unit}`, `${base.worst.toFixed(4)} ${unit}`)}${isWorse ? '  WORSE' : less ? '  below the baseline: lower it' : ''}`,
+      );
+      if (isWorse) {
+        details.push(
+          `WORSE THAN BASELINE ${p} in variant [${name}] (${base.issue}): ${f.n} failures against ${base.n}, worst ${shown(f.worst)} ${unit} against ${base.worst.toFixed(4)}`,
+        );
+        for (const e of f.examples) details.push(`  e.g. ${e}`);
+      }
+    }
+    for (const { name, f, base } of rows) {
+      if (base !== undefined) continue;
       const { w0, w1, h0, h1 } = f.box;
-      details.push(`FAILED ${p} in variant [${name}]: ${f.n} x, w ${w0}..${w1}, h ${h0}..${h1}`);
+      details.push(
+        `FAILED ${p} in variant [${name}]: ${f.n} x, worst ${shown(f.worst)} ${unit}, w ${w0}..${w1}, h ${h0}..${h1}`,
+      );
       for (const e of f.examples) details.push(`  e.g. ${e}`);
     }
     for (const name of stale) {
       details.push(
-        `STALE ${p} in variant [${name}] (${listed[name]}): no counterexample in these bounds, remove it from KNOWN_FINDINGS`,
+        `STALE ${p} in variant [${name}] (${listed[name]?.issue ?? ''}): no counterexample in these bounds, remove it from KNOWN_FINDINGS`,
       );
     }
     if (unreached) details.push(`NEVER APPLIED ${p}: no check reached it in these bounds`);
@@ -1035,65 +1150,5 @@ describe('viewport layout, exhaustive over the bounds', () => {
       .join('; ');
     console.log(`bounds: ${bounds}\n${VARIANTS.length} variants\n${summary}`);
     if (failed) throw new Error(`layout properties violated\n${details}`);
-  });
-});
-
-/* The node fallbacks stand in for the CSS that a browser reads; they must equal it. */
-describe('viewports.ts fallbacks match the CSS', () => {
-  const read = (relative: string): string =>
-    readFileSync(new URL(relative, import.meta.url), 'utf8');
-  const source = read('./viewports.ts');
-  const tokens = read('../styles/tokens.css');
-  const controlsCss = read('../input/controls.css');
-  const cssPx = (name: string): number => {
-    const m = new RegExp(`${name}:\\s*([\\d.]+)px`).exec(tokens);
-    if (m?.[1] === undefined) throw new Error(`no ${name} in tokens.css`);
-    return Number(m[1]);
-  };
-
-  it('tokenPx fallbacks equal the token values', () => {
-    const calls = [...source.matchAll(/tokenPx\('(--[a-z0-9-]+)',\s*([A-Za-z0-9_.]+)\)/g)];
-    expect(calls.length).toBeGreaterThan(0);
-    const named = new Map<string, number>([['INSET', SPACE_4]]);
-    for (const [, name, fallback] of calls) {
-      if (name === undefined || fallback === undefined) throw new Error('call');
-      const value = named.get(fallback) ?? Number(fallback);
-      expect(value, `${name} fallback`).toBe(cssPx(name));
-    }
-  });
-
-  it('INSET and the control geometry equal the CSS', () => {
-    expect(Number(/const INSET = (\d+);/.exec(source)?.[1])).toBe(cssPx('--space-4'));
-    expect(Number(/const GEARS_WIDTH = ([\d.]+);/.exec(source)?.[1])).toBeCloseTo(
-      2.1 * cssPx('--size-target'),
-      9,
-    );
-    expect(Number(/const LEGEND_WIDTH = (\d+);/.exec(source)?.[1])).toBe(cssPx('--hud-legend-w'));
-    expect(tokens).toContain('--ctl-wheel: clamp(160px, 38vmin, 300px);');
-    expect(source).toContain('clamp(0.38 * Math.min(cssWidth, cssHeight), 160, 300)');
-    expect(source).toContain('const MIN_NARROW_WHEEL = 148;');
-    expect(tokens).toContain('max(\n        148px,\n        60vw');
-    expect(source).toContain('0.6 * cssWidth');
-    expect(controlsCss).toContain('--ctl-lever-height: clamp(160px, 24vmin, 240px);');
-    expect(source).toContain('clamp(0.24 * vmin, 160, 240)');
-  });
-
-  it('the legend thresholds equal those of hud.ts', () => {
-    const hud = read('../hud/hud.ts');
-    for (const [name, value] of [
-      ['SHORT_SCREEN', SHORT_SCREEN],
-      ['SHORT_HEIGHT', SHORT_HEIGHT],
-      ['COMPACT_WIDTH', COMPACT_WIDTH],
-      ['COMPACT_WIDTH_WITH_LEVER', COMPACT_WIDTH_WITH_LEVER],
-    ] as const) {
-      expect(Number(new RegExp(`const ${name} = (\\d+);`).exec(hud)?.[1]), name).toBe(value);
-    }
-  });
-
-  it('the safe insets default to zero without a display cut-out', () => {
-    for (const side of ['top', 'right', 'bottom', 'left']) {
-      expect(tokens).toContain(`--safe-${side}: env(safe-area-inset-${side}, 0px);`);
-    }
-    expect(NO_INSETS).toEqual({ top: 0, right: 0, bottom: 0, left: 0 });
   });
 });
