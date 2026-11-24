@@ -303,19 +303,13 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4) 0 0 var(--safe-left);
+  padding: var(--space-4) 0 0;
   box-sizing: border-box;
 }
 
 @media (min-aspect-ratio: 1/1) {
   .hud-toast-wrap {
     padding-top: calc(var(--space-4) + var(--safe-top));
-  }
-}
-
-@media not (min-aspect-ratio: 1/1) {
-  .hud-toast-wrap {
-    padding-right: var(--safe-right);
   }
 }
 
@@ -358,6 +352,11 @@
   border-color: var(--color-accent);
   background: var(--color-accent-tint);
   color: var(--color-accent-strong);
+}
+
+/* Where the column holds only one message at a time (`messageColumn`), the toast hides the goal cue. */
+.hud-toast-wrap[data-cue-yields] .hud-toast:not([hidden]) + .hud-goal-cue {
+  display: none;
 }
 
 .hud-toast-wrap[data-reserve] .hud-toast,

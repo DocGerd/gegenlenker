@@ -493,8 +493,8 @@ describe('computeViewports front mirror', () => {
         const at = `${w}x${h} left inset ${inset.left}`;
         expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
         expect(column.x + column.width, at).toBeLessThanOrEqual(front.x);
-        // the wrap pads its left by the inset
-        expect(column.width - inset.left, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
+        expect(column.x, at).toBeGreaterThanOrEqual(inset.left);
+        expect(column.width, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
       }
     }
     expect(shown).toBeGreaterThan(100);
@@ -555,14 +555,19 @@ describe('computeViewports front mirror', () => {
           count.between++;
           expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
           expect(column.x + column.width, at).toBeLessThanOrEqual(mirrorRight.x);
-          expect(column.width - insets.left, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
+          expect(column.x, at).toBeGreaterThanOrEqual(insets.left);
+          expect(column.width, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
         } else {
           count.pane++;
-          expect(column.x, at).toBe(topDown.x);
-          expect(column.x + column.width, at).toBeLessThanOrEqual(topDown.x + topDown.width);
-          if (w < h) expect(column.width, at).toBe(topDown.width);
-          // below the finish button, which the pane's first row holds
-          expect(column.y, at).toBeGreaterThanOrEqual(topDown.y + 44);
+          const portrait = w < h;
+          // in portrait the pane spans the screen, so the column keeps clear of the safe area
+          expect(column.x, at).toBe(topDown.x + (portrait ? insets.left : 0));
+          expect(column.x + column.width, at).toBeLessThanOrEqual(
+            topDown.x + topDown.width - (portrait ? insets.right : 0),
+          );
+          if (portrait) expect(column.width, at).toBe(topDown.width - insets.left - insets.right);
+          // below the finish button, which the pane's first row holds below the cut-out
+          expect(column.y, at).toBeGreaterThanOrEqual(topDown.y + 44 + (portrait ? insets.top : 0));
           expect(column.y + column.height, at).toBe(topDown.y + topDown.height);
         }
       }
@@ -571,9 +576,16 @@ describe('computeViewports front mirror', () => {
     expect(count.pane).toBeGreaterThan(100);
   });
 
-  it('puts the toast column in the whole top-down pane in replay', () => {
+  it('puts the toast column in the whole top-down pane in replay, clear of the safe area', () => {
     const views = computeViewports(800, 600, 'replay');
-    expect(messageColumn(views)).toEqual(views.topDown);
+    expect(messageColumn(views)).toEqual({ ...views.topDown, cueYields: false });
+    const insets = { top: 24, right: 48, bottom: 20, left: 48 };
+    expect(messageColumn(views, insets)).toEqual({
+      ...views.topDown,
+      x: 48,
+      width: 800 - 96,
+      cueYields: false,
+    });
   });
 });
 

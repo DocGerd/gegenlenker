@@ -427,7 +427,7 @@ export function computeViewports(
     let front: Rect | null = null;
     if (extra.front) {
       // the toast column left of it starts right of the left mirror
-      const leftLimit = messagesLeft + insets.left + MIN_MESSAGE_WIDTH + MESSAGE_GAP;
+      const leftLimit = messagesLeft + MIN_MESSAGE_WIDTH + MESSAGE_GAP;
       const fits = (rect: Rect): boolean =>
         messagesFit(
           cockpit,
@@ -543,7 +543,8 @@ function messageHeights(room: number): { toast: number; cue: number } {
 
 /**
  * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top, end above
- * the controls and the forward sight cone they would otherwise reach into.
+ * the controls, the HUD band and the forward sight cone they would otherwise reach into. Where the cue
+ * `yields`, only the taller of the two stands there at a time.
  */
 function messagesFit(
   cockpit: Rect,
@@ -552,10 +553,12 @@ function messagesFit(
   cssHeight: number,
   controls: number,
   insets: Insets,
+  yields = false,
 ): boolean {
-  const { toast, cue } = messageHeights(column.width - insets.left);
+  const { toast, cue } = messageHeights(column.width);
   const landscape = cssWidth >= cssHeight;
-  const bottom = cockpit.y + INSET + (landscape ? insets.top : 0) + toast + MESSAGE_GAP + cue;
+  const stack = yields ? Math.max(toast, cue) : toast + MESSAGE_GAP + cue;
+  const bottom = cockpit.y + INSET + (landscape ? insets.top : 0) + stack;
   const reaches = (x0: number, x1: number): boolean =>
     column.x < x1 && column.x + column.width > x0;
   const wheel = wheelSize(cssWidth, cssHeight, insets);
@@ -564,10 +567,17 @@ function messagesFit(
     const gearsTop = cssHeight - INSET - insets.bottom - GEARS_HEIGHT;
     if (bottom > Math.min(cssHeight - controls, gearsTop)) return false;
   }
+  if (bottom > cockpit.y + (1 - HUD_BAND_SHARE) * cockpit.height) return false;
+  const cone = coneBox(cockpit);
+  return !(reaches(cone.left, cone.right) && bottom > cone.top);
+}
+
+/** The forward sight cone's bounding box in `cockpit`. */
+function coneBox(cockpit: Rect): { left: number; right: number; top: number } {
   const half = (coneEdge(cockpit.width / cockpit.height, COCKPIT_FOV) * cockpit.width) / 2;
   const centre = cockpit.x + cockpit.width / 2;
-  const coneTopY = cockpit.y + ((1 - coneTop(COCKPIT_FOV)) / 2) * cockpit.height;
-  return !(reaches(centre - half, centre + half) && bottom > coneTopY);
+  const top = cockpit.y + ((1 - coneTop(COCKPIT_FOV)) / 2) * cockpit.height;
+  return { left: centre - half, right: centre + half, top };
 }
 
 /**
@@ -615,38 +625,64 @@ function frontRect(
   return null;
 }
 
+/** The toast column; where `cueYields`, the goal cue hides while a toast shows (hud.css). */
+export type MessageColumn = Rect & { readonly cueYields: boolean };
+
 /**
- * Where the toast and the goal cue stand. Beside the front mirror they take the cockpit's top between the
- * left mirror and the front mirror. Without one they take the span between the class II mirrors where the
- * stack fits there (`messagesFit`), else the top-down pane, below the finish button and clear of the lever;
- * with no such pane they keep the span between the mirrors.
+ * Where the toast and the goal cue stand, clear of the safe area. Beside the front mirror they take the
+ * cockpit's top between the left mirror and the front mirror. Without one they take the span between the
+ * class II mirrors where the stack fits there (`messagesFit`), else the top-down pane, below the finish
+ * button and clear of the lever. With no such pane, a span beside the sight cone, else the cue yields.
  */
-export function messageColumn(views: ViewRects, safeInsets?: Insets): Rect {
+export function messageColumn(views: ViewRects, safeInsets?: Insets): MessageColumn {
   const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
-  if (cockpit === null || mirrorLeft === null || mirrorRight === null) return cockpit ?? topDown;
-  const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
-  if (front !== null) return { ...cockpit, x, width: front.x - MESSAGE_GAP - x };
   const insets = safeInsets ?? readSafeInsets();
+  if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
+    const whole = cockpit ?? topDown;
+    return {
+      ...whole,
+      x: whole.x + insets.left,
+      width: whole.width - insets.left - insets.right,
+      cueYields: false,
+    };
+  }
+  const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
+  if (front !== null) return { ...cockpit, x, width: front.x - MESSAGE_GAP - x, cueYields: false };
   const between = { x, width: mirrorRight.x - MESSAGE_GAP - x };
   const cssWidth = Math.max(cockpit.x + cockpit.width, topDown.x + topDown.width);
   const cssHeight = Math.max(cockpit.y + cockpit.height, topDown.y + topDown.height);
   const controls = controlsHeight(cssWidth, cssHeight, insets);
-  if (
-    !hasTopDown(views) ||
-    (between.width - insets.left >= MIN_MESSAGE_WIDTH &&
-      messagesFit(cockpit, between, cssWidth, cssHeight, controls, insets))
-  ) {
-    return { ...cockpit, ...between };
+  const fits = (column: { readonly x: number; readonly width: number }, yields: boolean) =>
+    column.width >= MIN_MESSAGE_WIDTH &&
+    messagesFit(cockpit, column, cssWidth, cssHeight, controls, insets, yields);
+  if (fits(between, false)) return { ...cockpit, ...between, cueYields: false };
+  if (!hasTopDown(views)) {
+    const cone = coneBox(cockpit);
+    const beside = [
+      { x: cone.right, width: between.x + between.width - cone.right },
+      { x, width: cone.left - x },
+    ];
+    for (const yields of [false, true]) {
+      for (const column of yields ? [between, ...beside] : beside) {
+        if (fits(column, yields)) return { ...cockpit, ...column, cueYields: yields };
+      }
+    }
+    return { ...cockpit, ...between, cueYields: true };
   }
   // Below the finish button; in landscape also left of the stop button and lever, which stand at the
-  // screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css).
+  // screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). In portrait the pane spans the screen.
   const target = tokenPx('--size-target', 44);
-  const drop = target + MESSAGE_GAP;
-  const lever = cssWidth >= cssHeight ? 1.5 * target + INSET + insets.right + MESSAGE_GAP : 0;
+  const landscape = cssWidth >= cssHeight;
+  const drop = target + MESSAGE_GAP + (landscape ? 0 : insets.top);
+  const lever = landscape ? 1.5 * target + INSET + insets.right + MESSAGE_GAP : 0;
+  const left = landscape ? 0 : insets.left;
+  const right = landscape ? lever : insets.right;
   return {
     ...topDown,
+    x: topDown.x + left,
     y: topDown.y + drop,
     height: topDown.height - drop,
-    width: topDown.width - lever,
+    width: topDown.width - left - right,
+    cueYields: false,
   };
 }
