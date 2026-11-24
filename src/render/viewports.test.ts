@@ -38,6 +38,7 @@ import {
   type Insets,
   type PanelStack,
 } from './viewports';
+import { declared, padding, px, SOURCE } from './viewports-css';
 
 describe('computeViewports mirrors', () => {
   it('stay inside the cockpit and above the controls at every size', () => {
@@ -510,8 +511,8 @@ describe('computeViewports front mirror', () => {
         const at = `${w}x${h} left inset ${inset.left}`;
         expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
         expect(column.x + column.width, at).toBeLessThanOrEqual(front.x);
-        // the wrap pads its left by the inset
-        expect(column.width - inset.left, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
+        expect(column.x, at).toBeGreaterThanOrEqual(inset.left);
+        expect(column.width, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
       }
     }
     expect(shown).toBeGreaterThan(100);
@@ -546,6 +547,15 @@ describe('computeViewports front mirror', () => {
     expect(Math.max(...Object.values(MESSAGE_WORD_PX))).toBe(MESSAGE_WORD_PX['Drehschemelwinkel']);
   });
 
+  it('gives the messages the whole column: the toast wrap has no side padding', () => {
+    // `messagesFit` and the layout spec take the column's width as the toasts' room
+    const sides = padding(SOURCE.hud, '.hud-toast-wrap');
+    expect([px(sides.left), px(sides.right)]).toEqual([0, 0]);
+    for (const side of ['padding-left', 'padding-right']) {
+      expect(() => declared(SOURCE.hud, '.hud-toast-wrap', side)).toThrow(`no ${side}`);
+    }
+  });
+
   it('lists exactly the toast and goal-cue messages', () => {
     const keysOf = (pattern: RegExp): string[] =>
       Object.keys(en)
@@ -572,14 +582,19 @@ describe('computeViewports front mirror', () => {
           count.between++;
           expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
           expect(column.x + column.width, at).toBeLessThanOrEqual(mirrorRight.x);
-          expect(column.width - insets.left, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
+          expect(column.x, at).toBeGreaterThanOrEqual(insets.left);
+          expect(column.width, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
         } else {
           count.pane++;
-          expect(column.x, at).toBe(topDown.x);
-          expect(column.x + column.width, at).toBeLessThanOrEqual(topDown.x + topDown.width);
-          if (w < h) expect(column.width, at).toBe(topDown.width);
-          // below the finish button, which the pane's first row holds
-          expect(column.y, at).toBeGreaterThanOrEqual(topDown.y + 44);
+          const portrait = w < h;
+          // in portrait the pane spans the screen, so the column keeps clear of the safe area
+          expect(column.x, at).toBe(topDown.x + (portrait ? insets.left : 0));
+          expect(column.x + column.width, at).toBeLessThanOrEqual(
+            topDown.x + topDown.width - (portrait ? insets.right : 0),
+          );
+          if (portrait) expect(column.width, at).toBe(topDown.width - insets.left - insets.right);
+          // below the finish button, which the pane's first row holds below the cut-out
+          expect(column.y, at).toBeGreaterThanOrEqual(topDown.y + 44 + (portrait ? insets.top : 0));
           expect(column.y + column.height, at).toBe(topDown.y + topDown.height);
         }
       }
@@ -599,9 +614,16 @@ describe('computeViewports front mirror', () => {
     expect(column.y + column.height).toBe(open.topDown.y + open.topDown.height);
   });
 
-  it('puts the toast column in the whole top-down pane in replay', () => {
+  it('puts the toast column in the whole top-down pane in replay, clear of the safe area', () => {
     const views = computeViewports(800, 600, 'replay');
-    expect(messageColumn(views, null)).toEqual(views.topDown);
+    expect(messageColumn(views, null)).toEqual({ ...views.topDown, cueYields: false });
+    const insets = { top: 24, right: 48, bottom: 20, left: 48 };
+    expect(messageColumn(views, null, insets)).toEqual({
+      ...views.topDown,
+      x: 48,
+      width: 800 - 96,
+      cueYields: false,
+    });
   });
 });
 
@@ -1028,6 +1050,15 @@ describe('computeViewports mirror-only drive', () => {
       const column = messageColumn(views, null, NO_INSETS);
       expect(column.x, `${w}x${h}`).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
       expect(column.x + column.width, `${w}x${h}`).toBeLessThanOrEqual((front ?? mirrorRight).x);
+      expect(column.cueYields, `${w}x${h}`).toBe(false);
     }
+  });
+
+  it('lets the goal cue yield to a toast where no span beside the mirrors holds both', () => {
+    const notch = { top: 24, right: 48, bottom: 20, left: 48 };
+    const views = computeViewports(1024, 426, 'mirrors', null, notch, undefined, null, ALL);
+    expect(messageColumn(views, null, notch).cueYields).toBe(true);
+    const plain = computeViewports(1024, 426, 'mirrors', null, NO_INSETS, undefined, null, ALL);
+    expect(messageColumn(plain, null, NO_INSETS).cueYields).toBe(false);
   });
 });

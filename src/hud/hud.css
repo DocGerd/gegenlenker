@@ -303,19 +303,13 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4) 0 0 var(--safe-left);
+  padding: var(--space-4) 0 0;
   box-sizing: border-box;
 }
 
 @media (min-aspect-ratio: 1/1) {
   .hud-toast-wrap {
     padding-top: calc(var(--space-4) + var(--safe-top));
-  }
-}
-
-@media not (min-aspect-ratio: 1/1) {
-  .hud-toast-wrap {
-    padding-right: var(--safe-right);
   }
 }
 
@@ -358,6 +352,11 @@
   border-color: var(--color-accent);
   background: var(--color-accent-tint);
   color: var(--color-accent-strong);
+}
+
+/* Where the column holds only one message at a time (`messageColumn`), the toast hides the goal cue. */
+.hud-toast-wrap[data-cue-yields] .hud-toast:not([hidden]) + .hud-goal-cue {
+  display: none;
 }
 
 .hud-toast-wrap[data-reserve] .hud-toast,
@@ -567,6 +566,19 @@
   border-radius: var(--radius-lg);
 }
 
+/* A wrapped control rounds the ends of each visual row (hud.ts sets the attributes). */
+.hud-segment[data-row-start] {
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.hud-segment[data-row-end] {
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+.hud-segment[data-row-start][data-row-end] {
+  border-radius: var(--radius-lg);
+}
+
 .hud-segment[aria-pressed='true'] {
   z-index: 1;
   border-color: var(--color-accent);
@@ -578,7 +590,7 @@
   z-index: 2;
 }
 
-/* Aids and panels are pill chips: a lighter tint and a ticked ring, never the segment's fill. */
+/* Aids and panels are pill chips: a lighter tint, never the segment's fill; aids carry a ticked ring, panels a chevron. */
 .hud-chip {
   display: inline-flex;
   align-items: center;
@@ -586,12 +598,17 @@
   border-radius: var(--radius-pill);
 }
 
-/* The ring sits in the padding, so a chip grows little: the aid row and the info button still fit a laptop. */
+/* The ring or the chevron sits in the padding, so a chip grows little: the aid row and the info button still fit a laptop. */
 .hud-toggle.hud-chip:has(.hud-check) {
   padding-left: 5px;
 }
 
-.hud-chip[aria-pressed='true'] {
+.hud-toggle.hud-chip:has(.hud-fold) {
+  padding-right: 5px;
+}
+
+.hud-chip[aria-pressed='true'],
+.hud-chip[aria-expanded='true'] {
   border-color: var(--color-accent);
   background: var(--color-accent-tint);
   color: var(--color-accent-strong);
@@ -607,6 +624,10 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
+}
+
+.hud-chip[aria-expanded='false'] .hud-fold {
+  transform: rotate(-90deg);
 }
 
 .hud-check path {
@@ -682,6 +703,19 @@
 .hud-gauges {
   display: flex;
   gap: var(--space-2);
+}
+
+/* Set by hud.ts where the unreserved toolbar would reach the lever column. */
+.hud-topdown[data-toolbar-reserve] .hud-toolbar {
+  max-width: calc(100% - var(--size-target) * 1.5 - var(--space-3));
+}
+
+/* The toolbar's reserve already covers part of the finish button's. */
+.hud-topdown[data-toolbar-reserve] .hud-goal[hidden] + .hud-toolbar [data-hud='views'] {
+  margin-right: max(
+    0px,
+    calc(var(--hud-action-w) + var(--space-4) - var(--size-target) * 1.5 - var(--space-3))
+  );
 }
 
 /* Landscape: the lever column with the Stop button sits at the screen's right edge, under the info row. */
