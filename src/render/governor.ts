@@ -240,6 +240,13 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   /** Per level, the running mean of slow windows since the step into it was kept, and how many it holds. */
   const keptMean = new Float64Array(MAX_LEVEL + 1);
   const keptWindows = new Uint8Array(MAX_LEVEL + 1);
+  /**
+   * The level left by a kept step that lost its gain over a full memory, or lost it again after that, whose own kept step
+   * may stem from an older load; 0 for none. If the step from it fails, the scale stopped helping there: its kept step is
+   * dropped and the level above is doubted, so a steady load stops at the first step that still helps and a new load the
+   * scale cannot help climbs back to full resolution.
+   */
+  let doubted = 0;
   const ring = new Float64Array(WINDOW);
   const scratch = new Float64Array(WINDOW);
   const scale = (): number => Math.max(FLOOR, 1 - level * STEP);
@@ -251,6 +258,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
     probing = false;
     settle = 0;
     beforeStep = 0;
+    doubted = 0;
   };
   const note = (
     k: GovernorEventKind,
@@ -312,7 +320,14 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
         beforeStep = 0;
         if (!helped) {
           // A mean, not the p90: vsync quantises the p90 to whole frames.
-          failedDowns[level - 1] = (failedDowns[level - 1] ?? 0) + 1;
+          const left = level - 1;
+          failedDowns[left] = (failedDowns[left] ?? 0) + 1;
+          if (left > 0 && left === doubted) {
+            keptFrom[left] = 0;
+            doubted = left - 1;
+            return revert('down-failed', left - 1);
+          }
+          doubted = 0;
           return revert('down-failed');
         }
         keptFrom[level] = from;
@@ -327,13 +342,12 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
         const running = (keptMean[level] ?? 0) + (mean - (keptMean[level] ?? 0)) / n;
         keptWindows[level] = n;
         keptMean[level] = running;
+        if (n === KEPT_MEMORY && doubted === level - 1) doubted = 0;
         if (running > kept * (1 - MIN_IMPROVEMENT)) {
           // The kept step lost its gain, most likely a lucky window kept it; it did help once, so this is not counted.
           keptFrom[level] = 0;
-          if (n < KEPT_MEMORY) return revert('down-lost');
-          // A full memory of slow windows is a new load, not luck: the levels above were kept against the old one.
-          for (let k = 1; k < level; k++) keptFrom[k] = 0;
-          return revert('down-lost', 0);
+          doubted = n === KEPT_MEMORY || doubted === level || doubted === level - 1 ? level - 1 : 0;
+          return revert('down-lost');
         }
       }
       if (p90 > P90_LIMIT_MS) {
@@ -382,6 +396,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       const pending = beforeStep > 0;
       if (pending) level--;
       beforeStep = 0;
+      doubted = 0;
       if (liftParks) failedDowns.fill(0);
       note('warmup', tag);
       if (count > 0 || steady > 0 || pending) note('discard', tag);

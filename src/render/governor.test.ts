@@ -380,6 +380,23 @@ describe('frame timer', () => {
       expect(ends.filter((r) => r.end !== 1)).toEqual([]);
     });
 
+    it('keeps a steady fill-bound load off full resolution once settled, though its kept step gains little', () => {
+      const SEEDS = 8;
+      const runs = Array.from({ length: SEEDS }, (_, i) => {
+        const timer = createFrameTimer();
+        const miss = seeded(i + 1);
+        let now = 1000;
+        let max = 0;
+        while (now - 1000 < 600_000) {
+          now += Math.max(fillBound(39)(timer.scale()), V) + (miss() < 0.1 ? V : 0);
+          timer.frame(now);
+          if (now - 1000 > 120_000) max = Math.max(max, timer.scale());
+        }
+        return { seed: i + 1, max };
+      });
+      expect(runs.filter((r) => r.max === 1)).toEqual([]);
+    });
+
     it('judges a heavier fill-bound load after a warm-up afresh', () => {
       const timer = createFrameTimer();
       const { end } = drive(timer, fillBound(25), 1.6);
