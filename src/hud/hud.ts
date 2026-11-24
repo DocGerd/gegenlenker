@@ -807,6 +807,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     }
   };
 
+  const legendBox = (): LegendBox | null => {
+    const r = legend.getBoundingClientRect();
+    if (r.width === 0) return null;
+    const stage = root.getBoundingClientRect();
+    return { right: r.right - stage.left, height: stage.bottom - r.top };
+  };
+
   return {
     update(s, ahead = null) {
       onControl(s.control);
@@ -888,7 +895,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         }
       });
       const insets = readSafeInsets();
-      const column = messageColumn(views, insets);
+      const column = messageColumn(views, legendBox(), insets);
       toastWrap.style.left = `${column.x}px`;
       toastWrap.style.top = `${column.y}px`;
       toastWrap.style.width = `${column.width}px`;
@@ -952,12 +959,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       topDown.style.width = previous;
       return overflows ? Infinity : bottom - top;
     },
-    legendBox() {
-      const r = legend.getBoundingClientRect();
-      if (r.width === 0) return null;
-      const stage = root.getBoundingClientRect();
-      return { right: r.right - stage.left, height: stage.bottom - r.top };
-    },
+    legendBox,
     onLegendResize(cb) {
       const observer = new ResizeObserver(cb);
       observer.observe(legend);

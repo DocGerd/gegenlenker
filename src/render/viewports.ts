@@ -437,6 +437,7 @@ export function computeViewports(
           cssHeight,
           controls,
           insets,
+          legend,
         );
       front = frontRect(
         cockpit,
@@ -544,8 +545,8 @@ function messageHeights(room: number): { toast: number; cue: number } {
 
 /**
  * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top, end above
- * the controls, the HUD band and the forward sight cone they would otherwise reach into. Where the cue
- * `yields`, only the taller of the two stands there at a time.
+ * the controls, the key legend, the HUD band and the forward sight cone they would otherwise reach
+ * into. Where the cue `yields`, only the taller of the two stands there at a time.
  */
 function messagesFit(
   cockpit: Rect,
@@ -554,6 +555,7 @@ function messagesFit(
   cssHeight: number,
   controls: number,
   insets: Insets,
+  legend: LegendBox | null,
   yields = false,
 ): boolean {
   const { toast, cue } = messageHeights(column.width);
@@ -567,6 +569,13 @@ function messagesFit(
   if (reaches(INSET + insets.left, gearsLeft + GEARS_WIDTH)) {
     const gearsTop = cssHeight - INSET - insets.bottom - GEARS_HEIGHT;
     if (bottom > Math.min(cssHeight - controls, gearsTop)) return false;
+  }
+  if (
+    legend !== null &&
+    reaches(INSET + insets.left, legend.right) &&
+    bottom > cssHeight - legend.height
+  ) {
+    return false;
   }
   if (bottom > cockpit.y + (1 - HUD_BAND_SHARE) * cockpit.height) return false;
   const cone = coneBox(cockpit);
@@ -635,7 +644,11 @@ export type MessageColumn = Rect & { readonly cueYields: boolean };
  * class II mirrors where the stack fits there (`messagesFit`), else the top-down pane, below the finish
  * button and clear of the lever. With no such pane, a span beside the sight cone, else the cue yields.
  */
-export function messageColumn(views: ViewRects, safeInsets?: Insets): MessageColumn {
+export function messageColumn(
+  views: ViewRects,
+  legend: LegendBox | null,
+  safeInsets?: Insets,
+): MessageColumn {
   const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
   const insets = safeInsets ?? readSafeInsets();
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
@@ -655,7 +668,7 @@ export function messageColumn(views: ViewRects, safeInsets?: Insets): MessageCol
   const controls = controlsHeight(cssWidth, cssHeight, insets);
   const fits = (column: { readonly x: number; readonly width: number }, yields: boolean) =>
     column.width >= MIN_MESSAGE_WIDTH &&
-    messagesFit(cockpit, column, cssWidth, cssHeight, controls, insets, yields);
+    messagesFit(cockpit, column, cssWidth, cssHeight, controls, insets, legend, yields);
   if (fits(between, false)) return { ...cockpit, ...between, cueYields: false };
   if (!hasTopDown(views)) {
     const cone = coneBox(cockpit);

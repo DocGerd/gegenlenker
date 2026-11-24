@@ -193,7 +193,7 @@ const world = (): World => {
 };
 
 const sleeps: number[] = [];
-const build = (w: World, prodOnly = false): ReturnType<typeof assemble> & { out?: string } => {
+const build = (w: World): ReturnType<typeof assemble> & { out?: string } => {
   sleeps.length = 0;
   const out = join(tempDir(), 'pages');
   return Object.assign(
@@ -202,7 +202,6 @@ const build = (w: World, prodOnly = false): ReturnType<typeof assemble> & { out?
       { repo: REPO, runId: String(UAT_RUN), sha: UAT_SHA, out },
       {
         extract: extractJson,
-        prodOnly,
         sleep: (ms) => {
           sleeps.push(ms);
           return Promise.resolve();
@@ -415,8 +414,6 @@ describe('assembling the UAT Pages tree', () => {
     const w = world();
     w.artifacts[UAT_RUN] = [artifact(299, `uat-dist-${OLD_SHA}`, 40, UAT_ZIP)];
     await expect(build(w)).rejects.toThrow(/not one live uat-dist-c+/);
-    // `--prod-only` (the preflight) stops after production.
-    await expect(build(w, true)).resolves.toMatchObject({ run: { id: 2 } });
   });
 
   it('refuses an existing output directory', async () => {

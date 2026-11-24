@@ -1318,6 +1318,20 @@ for (const { size, folded } of closeScreens) {
   );
 }
 
+test('a short portrait cockpit keeps the messages clear of the open key legend', async ({
+  page,
+}) => {
+  const size = { width: 840, height: 841 };
+  await page.setViewportSize(size);
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const toggle = page.locator('[data-hud="keysToggle"]');
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.hud-legend dt.hud-legend-view').first()).toBeVisible();
+  await settled(page);
+  await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+});
+
 /** Laptop viewports too small to leave class V room above class II. */
 for (const size of [
   { width: 1280, height: 720 },
