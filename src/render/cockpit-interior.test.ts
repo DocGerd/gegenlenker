@@ -619,11 +619,21 @@ describe.each(CASES)(
         }
       });
 
+      // Near-square and small portrait windows, where the room above the controls is short and class
+      // II sits at the label floor: a step of 20 px falls between the coarse sweep's samples.
+      const tight: (readonly [number, number])[] = [];
+      for (let w = 640; w <= 820; w += 20) {
+        for (let h = 660; h <= 840; h += 20) tight.push([w, h]);
+      }
+      for (let w = 360; w <= 540; w += 20) {
+        for (let h = 440; h <= 600; h += 20) tight.push([w, h]);
+      }
+
       it('keeps every part off the centre of each mirror rect, the front, class IV and class V mirrors included', () => {
         let fronts = 0;
         let wides = 0;
         let closes = 0;
-        for (const [w, h] of windows) {
+        for (const [w, h] of [...windows, ...tight]) {
           const shot = shootRoute(w, h);
           if (shot.front !== null) fronts++;
           if (shot.wide !== null) wides++;
