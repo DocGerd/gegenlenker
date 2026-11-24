@@ -316,33 +316,8 @@ const ceil4 = (x: number): number => Math.ceil(x * 1e4) / 1e4;
  * A listed pair without one in its bounds is STALE and fails too: the issue was fixed, remove the entry.
  */
 const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable } = {
-  default: {
-    'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
-      'drive balanced, share max': known('#389', {
-        laptop: [19738, 0.5],
-        'tablet landscape': [20604, 0.5],
-        'tablet portrait': [9311, 0.5],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#389', {
-        laptop: [19738, 0.5],
-        'tablet landscape': [20604, 0.5],
-        'tablet portrait': [13919, 0.5],
-      }),
-    },
-  },
+  default: {},
   full: {
-    'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
-      'drive balanced, share max': known('#389', {
-        'laptop and desktop': [312245, 0.5],
-        'tablet landscape': [20310, 0.5],
-        'tablet portrait': [108915, 0.5],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#389', {
-        'laptop and desktop': [302952, 0.5],
-        'tablet landscape': [3326, 0.5],
-        'tablet portrait': [113514, 0.5],
-      }),
-    },
     'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)': {
       'drive balanced, home indicator': known('#390', {
         'tablet landscape': [182, 7.0],
