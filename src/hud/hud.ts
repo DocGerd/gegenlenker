@@ -413,6 +413,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let briefOpen = true;
   let briefDone = false;
   let keysOpen = false;
+  /** A wrapped view control rounds each visual row's ends: its segments carry `data-row-start` / `data-row-end`. */
+  const syncSegmentRows = (): void => {
+    viewButtons.forEach((b, i) => {
+      const prev = viewButtons[i - 1];
+      const next = viewButtons[i + 1];
+      b.toggleAttribute('data-row-start', prev === undefined || prev.offsetTop !== b.offsetTop);
+      b.toggleAttribute('data-row-end', next === undefined || next.offsetTop !== b.offsetTop);
+    });
+  };
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
     for (const b of aidButtons) {
@@ -901,6 +910,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (hasTopDown(views)) {
         place(topDown, views.topDown);
         placeKeysList(views.topDown);
+        syncSegmentRows();
       }
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));

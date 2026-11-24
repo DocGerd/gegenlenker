@@ -1056,6 +1056,46 @@ test('opening the aid legend re-measures the divider against the panels', async 
   await expect(handle(page)).toHaveAttribute('aria-valuemax', max ?? '');
 });
 
+for (const { locale } of locales) {
+  test(`a wrapped view control rounds the ends of each row at ${locale} 740x649`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale, viewport: { width: 740, height: 649 } });
+    try {
+      const page = await context.newPage();
+      await page.goto('./');
+      await page.locator('[data-menu="yards"] .menu-start').first().click();
+      await expect(page.locator('.ctl-wheel')).toBeVisible();
+      await expect(page.locator('.hud-segment').last()).toBeVisible();
+      await settled(page);
+      const rows = await page.locator('.hud-segment').evaluateAll((els) => {
+        const byRow = new Map<number, { left: string[]; right: string[] }[]>();
+        for (const el of els) {
+          const style = getComputedStyle(el);
+          const row = byRow.get(el.getBoundingClientRect().top) ?? [];
+          row.push({
+            left: [style.borderTopLeftRadius, style.borderBottomLeftRadius],
+            right: [style.borderTopRightRadius, style.borderBottomRightRadius],
+          });
+          byRow.set(el.getBoundingClientRect().top, row);
+        }
+        return [...byRow.values()];
+      });
+      expect(rows.length, 'the view control wraps').toBeGreaterThan(1);
+      for (const row of rows) {
+        row.forEach((seg, i) => {
+          const round = (corners: string[], rounded: boolean) =>
+            expect(corners.every((c) => parseFloat(c) > 0) === rounded).toBe(true);
+          round(seg.left, i === 0);
+          round(seg.right, i === row.length - 1);
+        });
+      }
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 test('folding and unfolding a panel re-measures the divider against the panels', async ({
   page,
 }) => {
