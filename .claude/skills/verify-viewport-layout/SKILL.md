@@ -65,14 +65,14 @@ When a change intentionally alters a promise, edit the property in the spec in t
 - Config inputs are sampled: `VARIANTS` lists mode (drive, mirrors, replay), the extras per preset (and none) and the class IV setting, share clamp extremes, a measured legend per size (and with the chevron open on a short cockpit), a stand-in panel stack and a never-fitting one, and no, home-indicator and notch insets.
 - `tokenPx` and `readSafeInsets` use their node fallbacks; `viewports-css.test.ts` checks them, the control constants, `wheelSize` and `controlsHeight` against the CSS files. The legend boxes and states are measured assumptions, checked only for the `hud.ts` thresholds.
 - Constants the spec imports move with the code, so changing their value is not detected; a wrong use of them is. From `viewports.ts`: `MIN_CLASS_II_SHARE`, `MIN_MESSAGE_WIDTH` (only its toast padding and margin part is tied to the CSS), `MIN_FRONT_WIDTH`, `MIN_WIDE_WIDTH`, `WIDE_GAP_PX`, `MIN_MIRROR_HEIGHT`, `FRONT_ASPECT`, `MESSAGE_GAP` (the gap beside the message column; the test ties its value to the CSS gap between toast and cue only); from `close-mirror.ts`: `CLOSE_ASPECT`, `MIN_CLOSE_WIDTH`; from `cockpit-band.ts`: `FRONT_GAP_PX`, `VISOR`, `CLEAR_CONE_DEG`, `COCKPIT_FOV`. `HUD_BAND_SHARE` is checked against `--hud-band` by `tokens.test.ts`. Also unchecked: the cockpit label's clearance (no CSS source gives `COCKPIT_LABEL`, so the model keeps its own value and the test only asserts it is at least the label's height) and the border allowance the wheel and lever columns add. The gear column's height is read from `GEAR_COLUMN_HEIGHT` in `e2e/layout.spec.ts`.
-- Not covered: real browser layout and CSS (`e2e/layout.spec.ts` does that), the measured panel heights (`hud.panelsBottom`), the cockpit label's width and the toast boxes' real widths (the message stack is modelled from `hud.css` padding and `wrapLines`).
+- Not covered: real browser layout and CSS (`e2e/layout.spec.ts` does that), the measured panel heights (`hud.panelsBottom`), the cockpit label's width, the toast boxes' real widths (the message stack is modelled from `hud.css` padding and `wrapLines`), the mirror-only brief (`.hud[data-mirrors] .hud-goal`, sized by its text) and the replay message column (replay returns before the message properties; `viewports.test.ts` checks it).
 
 ## Coverage record
 
-Sync commit: `605938a`, the last commit that touched the covered files when this verification was last synced. A skill cannot hold its own SHA, so staleness is measured against the covered files:
+Sync commit: `857c97a`, the last commit that touched the covered files when this verification was last synced. A skill cannot hold its own SHA, so staleness is measured against the covered files:
 
 ```
-git log --oneline 605938a..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
+git log --oneline 857c97a..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
 ```
 
 With the code at the sync commit and the spec synced to it, the check exits 0: every counterexample is a known finding, filed as an issue and listed in `KNOWN_FINDINGS`.
