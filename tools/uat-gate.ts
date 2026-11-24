@@ -36,6 +36,11 @@ export const PATH_FILES = [
   'src/pwa/config.ts',
   'tools/changelog.ts',
 ] as const;
+/**
+ * Root config files that Vite, PostCSS or pnpm pick up by name when present, so adding or removing
+ * one changes the build: every match in the tree is compared, not only the ones listed above.
+ */
+export const CONFIG_FILE = /^(?:(?:vite|postcss)\.config\.(?:[cm]?[jt]s)|\.npmrc|\.pnpmfile\.cjs)$/;
 /** Other workflows and local actions, which could publish too; `ci.yml` is compared parsed. */
 export const PATH_DIRS = ['.github/workflows/', '.github/actions/'] as const;
 
@@ -147,6 +152,7 @@ const fileShas = async (api: Api, repo: string, commit: string): Promise<Map<str
     if (
       path === WORKFLOW_FILE ||
       (PATH_FILES as readonly string[]).includes(path) ||
+      CONFIG_FILE.test(path) ||
       PATH_DIRS.some((dir) => path.startsWith(dir))
     )
       shas.set(path, sha);
