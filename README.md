@@ -1,3 +1,9 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/brand/banner-dark.webp">
+  <source media="(prefers-color-scheme: light)" srcset="docs/brand/banner-light.webp">
+  <img alt="A blue truck with a drawbar trailer reversing toward a marked parking bay, with traffic cones nearby" src="docs/brand/banner-light.webp" width="100%">
+</picture>
+
 # Gegenlenker
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DocGerd/gegenlenker/badge)](https://scorecard.dev/viewer/?uri=github.com/DocGerd/gegenlenker)
