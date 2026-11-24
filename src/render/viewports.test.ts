@@ -3,7 +3,15 @@ import { DEFAULT_TOP_DOWN_LAYOUT, type LegendBox, type Rect } from '../contracts
 import { de } from '../i18n/de';
 import { en } from '../i18n/en';
 import { CLOSE_ASPECT, MIN_CLOSE_WIDTH } from './close-mirror';
-import { COCKPIT_FOV, coneTop, CONE_GAP, FRONT_GAP_PX, frontBand, VISOR } from './cockpit-band';
+import {
+  CLEAR_CONE_DEG,
+  COCKPIT_FOV,
+  coneTop,
+  CONE_GAP,
+  FRONT_GAP_PX,
+  frontBand,
+  VISOR,
+} from './cockpit-band';
 import {
   computeViewports,
   controlsHeight,
@@ -721,6 +729,41 @@ describe('computeViewports class IV mirrors', () => {
       }
     }
     expect(checked).toBeGreaterThan(20);
+  });
+
+  it('keeps class II and class IV out of the forward sight cone, with and without side insets', () => {
+    const tan = Math.tan((COCKPIT_FOV * Math.PI) / 360);
+    const nearest = (lo: number, hi: number): number =>
+      lo <= 0 && hi >= 0 ? 0 : Math.min(Math.abs(lo), Math.abs(hi));
+    /** Degrees off the cockpit camera's axis of the point of `r` nearest it. */
+    const offAxis = (r: Rect, c: Rect): number => {
+      const x = nearest((2 * (r.x - c.x)) / c.width - 1, (2 * (r.x + r.width - c.x)) / c.width - 1);
+      const y = nearest(
+        1 - (2 * (r.y + r.height - c.y)) / c.height,
+        1 - (2 * (r.y - c.y)) / c.height,
+      );
+      return (Math.atan(Math.hypot((x * c.width * tan) / c.height, y * tan)) * 180) / Math.PI;
+    };
+    const notch = { top: 24, right: 48, bottom: 20, left: 48 };
+    // smaller screens (phones, no target) can leave class II in the cone at its least share
+    const targets = sizes.filter(([w, h]) => Math.min(w, h) >= 600 && Math.max(w, h) >= 800);
+    let wide = 0;
+    for (const [w, h] of targets) {
+      for (const mode of ['drive', 'mirrors'] as const) {
+        for (const insets of [NO_INSETS, notch]) {
+          const v = computeViewports(w, h, mode, null, insets, undefined, null, WIDE);
+          const { cockpit, mirrorLeft, mirrorRight, wideLeft, wideRight } = v;
+          if (cockpit === null) throw new Error('drive and mirror-only have a cockpit');
+          if (wideLeft !== null) wide++;
+          for (const r of [mirrorLeft, mirrorRight, wideLeft, wideRight]) {
+            if (r === null) continue;
+            const at = `${w}x${h} ${mode} ${JSON.stringify(insets)} ${JSON.stringify(r)}`;
+            expect(offAxis(r, cockpit), at).toBeGreaterThanOrEqual(CLEAR_CONE_DEG);
+          }
+        }
+      }
+    }
+    expect(wide).toBeGreaterThan(100);
   });
 
   it('is shown at the required landscape sizes', () => {

@@ -89,8 +89,8 @@ export const WIDE_GAP_PX = 16;
  */
 export const MIN_WIDE_WIDTH = 96;
 /**
- * Class II never drops below this share of the linear size it has without class IV; below it, class IV
- * is dropped. Low enough to show class IV on the laptop viewports `viewports.test.ts` lists.
+ * Class II never drops below this share of the linear size it has without class IV and the sight cone;
+ * below it class IV is dropped. Low enough to show class IV on the laptop viewports `viewports.test.ts` lists.
  */
 export const MIN_CLASS_II_SHARE = 0.72;
 /** The class IV mirror's height at `width`. */
@@ -310,11 +310,52 @@ export function computeViewports(
     }
     return { y, width: Math.round((fullWidth * height) / wanted), height };
   };
+  // The forward sight cone, `CLEAR_CONE_DEG` about the view axis, is a circle about the cockpit's centre in px.
+  const cone = {
+    x: cockpit.x + cockpit.width / 2,
+    y: cockpit.y + cockpit.height / 2,
+    r: (coneTop(COCKPIT_FOV) * cockpit.height) / 2,
+  };
+  const covers = (x: number, y: number, width: number, height: number): boolean =>
+    Math.hypot(
+      Math.max(0, x - cone.x, cone.x - x - width),
+      Math.max(0, y - cone.y, cone.y - y - height),
+    ) < cone.r;
+  /** Whether either class II column `width` wide, from `y` to `y + height`, reaches into the cone. */
+  const inCone = (y: number, width: number, height: number): boolean =>
+    covers(left, y, width, height) || covers(right - width, y, width, height);
+  /** The bottom edge both class II columns `width` wide must stay above to clear the cone. */
+  const coneBottom = (width: number): number => {
+    const side = (x: number): number => {
+      const gap = Math.max(0, x - cone.x, cone.x - x - width);
+      return gap >= cone.r ? Infinity : cone.y - Math.sqrt(cone.r ** 2 - gap ** 2);
+    };
+    return Math.min(side(left), side(right - width));
+  };
+  /**
+   * `fit`, or where it covers the sight cone the largest class II mirror down to `MIN_CLASS_II_SHARE` of
+   * it that clears the cone, moved up no higher than `floor`; else the smallest at `floor`.
+   */
+  const clearOfCone = (fit: Column): Column => {
+    if (!inCone(fit.y, fit.width, fit.height)) return fit;
+    const highest = Math.min(fit.y, floor);
+    const least = Math.max(MIN_MIRROR_HEIGHT, Math.ceil(MIN_CLASS_II_SHARE * fit.height));
+    let smallest = fit;
+    for (let height = fit.height; height >= least; height--) {
+      const width = Math.round((fullWidth * height) / wanted);
+      if (width < Math.ceil(MIN_CLASS_II_SHARE * fit.width)) break;
+      // where it covers the cone in place, the lowest whole-px top strictly above it
+      const y = inCone(fit.y, width, height) ? Math.ceil(coneBottom(width) - height) - 1 : fit.y;
+      if (y >= highest) return { y, width, height };
+      smallest = { y: highest, width, height };
+    }
+    return smallest;
+  };
   /**
    * With class IV: the largest class II mirror that leaves the stack (class II, a gap, class IV) its
-   * bottom `clear` above the viewport bottom, at most `maxWidth` wide, its top no higher than
-   * `minTop`, and no smaller than `MIN_CLASS_II_SHARE` of `reference`, the size it has without class IV.
-   * Null where nothing fits.
+   * bottom `clear` above the viewport bottom and clear of the sight cone, at most `maxWidth` wide, its
+   * top no higher than `minTop`, and no smaller than `MIN_CLASS_II_SHARE` of `reference`, the size it
+   * has without class IV and the cone. Null where nothing fits.
    */
   const stackFit = (
     clear: number,
@@ -333,14 +374,21 @@ export function computeViewports(
       if (width < least.width) break;
       const stack = height + WIDE_GAP_PX + wideHeight(width);
       const y = Math.min(preferred, Math.max(minTop, ceiling - stack));
-      if (y + stack <= ceiling) return { y, width, height };
+      if (
+        y + stack <= ceiling &&
+        !inCone(y, width, height) &&
+        !inCone(y + height + WIDE_GAP_PX, width, wideHeight(width))
+      ) {
+        return { y, width, height };
+      }
     }
     return null;
   };
   /**
    * The class II mirror's placement and whether class IV hangs under it. Where the legend reaches
    * under the right mirror the choice is between sitting above it and beside it: the placement that
-   * holds class IV wins, then the larger one. Class IV is dropped where none does.
+   * holds class IV wins, then the larger one. Class IV is dropped where none does; class II yields to
+   * the sight cone (`clearOfCone`).
    */
   const choose = (wide: boolean, minTop: number): Column & { readonly wide: boolean } => {
     // The mirror only shrinks and moves inward from its full width, so that width is the worst case.
@@ -361,11 +409,13 @@ export function computeViewports(
         (a, c) => (a === undefined || area(c) > area(a) ? c : a),
         undefined,
       );
-    const plain = best(options.map((o) => plainFit(o.clear, o.maxWidth)));
-    if (plain === undefined) throw new Error('a placement');
+    const fits = options.map((o) => plainFit(o.clear, o.maxWidth));
+    const reference = best(fits);
+    const plain = best(fits.map(clearOfCone));
+    if (reference === undefined || plain === undefined) throw new Error('a placement');
     if (!wide) return { ...plain, wide: false };
     const stacked = best(
-      options.flatMap((o) => stackFit(o.clear, o.maxWidth, plain, minTop) ?? []),
+      options.flatMap((o) => stackFit(o.clear, o.maxWidth, reference, minTop) ?? []),
     );
     return stacked === undefined ? { ...plain, wide: false } : { ...stacked, wide: true };
   };
