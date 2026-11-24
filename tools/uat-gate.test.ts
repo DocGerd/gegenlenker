@@ -49,14 +49,14 @@ interface Fixture {
   trees: Record<string, Tree>;
 }
 
-/** A `develop` deployment of Actions, by default. */
+/** A `develop` deployment of the actor who triggered the run, by default. */
 const deployment = (id: number, sha: string, minute: number, own = {}): TestDeployment => ({
   id,
   sha,
   created_at: at(minute),
   environment: 'github-pages',
   ref: 'develop',
-  creator: { login: 'github-actions[bot]' },
+  creator: { login: 'DocGerd' },
   ...own,
 });
 /** The CI run of `sha` whose `deploy-uat-gated` job made deployment `id`, by default. */
@@ -157,7 +157,7 @@ const withHead = (head: Partial<Tree>, base: Partial<Tree> = {}): Fixture => {
 };
 
 describe('findBaseline', () => {
-  it('takes the newest approved deployment whose latest status is a success', async () => {
+  it('takes the newest approved deployment that succeeded, even if a later deploy made it inactive', async () => {
     const fixture: Fixture = {
       deployments: [deployment(1, PROD, 1), deployment(3, HEAD, 30), deployment(2, UAT, 10)],
       statuses: {
@@ -171,8 +171,8 @@ describe('findBaseline', () => {
       runs: [runOf(1, PROD), runOf(2, UAT), runOf(3, HEAD)],
       trees: {},
     };
-    // 3 is still pending and 2 was superseded, so only 1 is both live and approved.
-    expect(await findBaseline(mockApi(fixture), REPO)).toBe(PROD);
+    // 3 never succeeded; 2 did, and `inactive` only says a later deploy replaced it.
+    expect(await findBaseline(mockApi(fixture), REPO)).toBe(UAT);
   });
 
   it('fails when no deployment succeeded', async () => {
@@ -180,13 +180,23 @@ describe('findBaseline', () => {
     await expect(findBaseline(api, REPO)).rejects.toThrow('no approved UAT github-pages');
   });
 
+  it.each([['failure'], ['error'], ['queued'], ['in_progress'], ['inactive']])(
+    'skips a history that never succeeded (%s)',
+    async (state) => {
+      const statuses = {
+        1: [
+          { id: 10, state: 'waiting', created_at: at(2) },
+          { id: 11, state, created_at: at(3) },
+        ],
+      };
+      const api = mockApi({ ...approved(), statuses });
+      await expect(findBaseline(api, REPO)).rejects.toThrow('no approved UAT');
+    },
+  );
+
   // Each variant is a record that must not count as the owner's approval of the UAT deploy path.
   it.each<[string, Partial<Fixture>]>([
     ['a production deployment of main', { deployments: [deployment(1, PROD, 1, { ref: 'main' })] }],
-    [
-      'a deployment made by a user',
-      { deployments: [deployment(1, PROD, 1, { creator: { login: 'someone' } })] },
-    ],
     [
       'another environment',
       { deployments: [deployment(1, PROD, 1, { environment: 'uat-pages' })] },

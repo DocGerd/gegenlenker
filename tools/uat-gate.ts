@@ -69,9 +69,6 @@ const time = (iso: string): number => Date.parse(iso);
 /** The workflow whose runs the baseline must come from, and its job that waits for the owner. */
 export const WORKFLOW = 'ci.yml';
 export const GATED_JOB = 'deploy-uat-gated';
-export const DEPLOYER = 'github-actions[bot]';
-
-type Creator = Deployment & { creator?: { login?: string } | null };
 
 /** Whether `deployment` is the one the successful `GATED_JOB` of a `develop` run of this repo made. */
 const approvedByJob = async (api: Api, repo: string, deployment: Deployment): Promise<boolean> => {
@@ -107,30 +104,26 @@ const approvedByJob = async (api: Api, repo: string, deployment: Deployment): Pr
 
 /**
  * The commit of the newest owner-approved UAT deployment: a `github-pages` deployment of `develop`
- * made by Actions, whose latest status is `success`, and which a successful `GATED_JOB` of a CI run
- * of that commit produced. A production approval, or a deployment made through the API, is no
- * approval of the UAT deploy path.
+ * that succeeded at some point (a later deploy marks it `inactive`) and that a successful
+ * `GATED_JOB` of a CI run of that commit produced. A production approval, or a deployment made
+ * through the API, is no approval of the UAT deploy path.
  */
 export const findBaseline = async (api: Api, repo: string): Promise<string> => {
   const deployments = (
     (await api.list(
       `/repos/${repo}/deployments?environment=${ENVIRONMENT}&per_page=100`,
-    )) as Creator[]
+    )) as Deployment[]
   )
-    .filter(
-      (deployment) =>
-        deployment.environment === ENVIRONMENT &&
-        deployment.ref === UAT_REF &&
-        deployment.creator?.login === DEPLOYER,
-    )
+    .filter((deployment) => deployment.environment === ENVIRONMENT && deployment.ref === UAT_REF)
     .sort((a, b) => time(b.created_at) - time(a.created_at) || b.id - a.id);
   for (const deployment of deployments) {
-    const statuses = (
-      (await api.list(
-        `/repos/${repo}/deployments/${String(deployment.id)}/statuses?per_page=100`,
-      )) as DeploymentStatus[]
-    ).sort((a, b) => time(b.created_at) - time(a.created_at) || b.id - a.id);
-    if (statuses[0]?.state === 'success' && (await approvedByJob(api, repo, deployment)))
+    const statuses = (await api.list(
+      `/repos/${repo}/deployments/${String(deployment.id)}/statuses?per_page=100`,
+    )) as DeploymentStatus[];
+    if (
+      statuses.some(({ state }) => state === 'success') &&
+      (await approvedByJob(api, repo, deployment))
+    )
       return deployment.sha;
   }
   throw new Error(`no approved UAT ${ENVIRONMENT} deployment`);
