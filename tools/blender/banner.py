@@ -1,8 +1,10 @@
-"""Gegenlenker README hero banner: builds the scene in the open Blender and renders it.
+"""Gegenlenker README hero banner: builds the scene in the open Blender and renders a PNG.
 
-Run inside Blender (MCP execute_blender_code or `blender -P`). Inputs: the committed glbs under
-src/render/assets. Never calls read_factory_settings (it would disable the MCP add-on).
-Override before exec: ASSETS (glb dir), OUT (png path), W, H, ENGINE, SAMPLES, DARK.
+Run inside Blender (MCP `execute_blender_code` or `blender -P`), once per look; encode the PNGs to
+docs/brand/banner-{light,dark}.webp afterwards. Inputs come from the committed glbs. Never calls
+read_factory_settings (it would disable the MCP add-on).
+Globals set before exec: ASSETS (required, dir of src/render/assets, Blender-readable path),
+OUT (required, png path), W, H, ENGINE, SAMPLES, DARK (night look).
 """
 import math
 import os
@@ -10,13 +12,16 @@ import os
 import bpy
 from mathutils import Vector
 
-ASSETS = globals().get("ASSETS", r"\\wsl.localhost\Ubuntu\home\pkuhn\truck-maneuver-sim\src\render\assets")
+for _name in ("ASSETS", "OUT"):
+    if _name not in globals():
+        raise RuntimeError(f"banner.py: set {_name} before running")
+ASSETS = globals()["ASSETS"]
+OUT = globals()["OUT"]
 W = globals().get("W", 2560)
-H = globals().get("H", 800)  # 3.2:1 = 1280x400, the hangarfit banner ratio
+H = globals().get("H", 800)
 ENGINE = globals().get("ENGINE", "BLENDER_EEVEE")
 SAMPLES = globals().get("SAMPLES", 64)
 DARK = globals().get("DARK", False)
-OUT = globals().get("OUT", r"\\wsl.localhost\Ubuntu\tmp\claude-1000\-home-pkuhn-truck-maneuver-sim\26b8ec39-15df-4759-abf4-8ca66d979737\scratchpad\banner\banner-v2-%s.png" % ("dark" if DARK else "light"))
 
 # --- brand colours (docs/brand/BRAND.md) -------------------------------------------------------
 
@@ -197,7 +202,7 @@ box("kerb", (400, 0.35, 0.22), (0, 21.8, 0.0), m_band)
 for i, x in enumerate(range(-40, 41, 5)):
     box(f"wall{i}", (4.9, 0.35, 1.6), (x, 23.5, 0.8), m_conc)
 
-# expansion joints: a faint slab grid (as in the sibling repos' banners), darker than the yard
+# expansion joints: a faint slab grid, darker than the yard
 m_joint = mat("joint", "#b5bac1", 0.95)
 for k in range(-12, 9):
     box(f"jx{k}", (0.07, 80, 0.012), (k * 5, 0, 0.005), m_joint)
