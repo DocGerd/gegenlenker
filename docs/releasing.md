@@ -21,7 +21,7 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 ## Who does what
 
 - The owner decides to release and approves each `github-pages` deployment: that approval is what publishes the tag and the GitHub Release. A UAT deploy needs it only when the UAT deploy path changed (see UAT).
-- Agents cut `release/*` and `hotfix/*`, run `release:prepare` and `release:backmerge`, and merge reviewed PRs with green CI into `develop`, `release/*`, `main` and back-merges. They never approve a deployment.
+- Agents cut `release/*` and `hotfix/*`, run `release:prepare` and `release:backmerge`, and merge reviewed PRs with green CI into `develop`, `release/*` and back-merges. Only the owner merges into `main`, with the command `/release` hands over after the gate check. Agents never approve a deployment.
 - `/release [X.Y.Z]` and `/release hotfix` (`.claude/skills/release/SKILL.md`) drive the whole procedure and stop for the approval.
 
 ## CI
