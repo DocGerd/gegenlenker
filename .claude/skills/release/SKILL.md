@@ -1,6 +1,6 @@
 ---
 name: release
-description: 'Cut, ship and back-merge a Gegenlenker release or hotfix end to end: /release [X.Y.Z] or /release hotfix. Stops once for the owner to approve the github-pages deployment.'
+description: 'Cut, ship and back-merge a Gegenlenker release or hotfix end to end: /release [X.Y.Z] or /release hotfix. Stops for the owner to merge into main and to approve the github-pages deployment.'
 argument-hint: '[X.Y.Z | hotfix]'
 disable-model-invocation: true
 ---
@@ -12,7 +12,7 @@ Drives [docs/releasing.md](../../../docs/releasing.md) end to end; read it first
 - `/release` or `/release X.Y.Z`: release. The first release has no earlier version to bump from: pass it (`/release 1.0.0`).
 - `/release hotfix`: hotfix, see the end.
 
-Agents run every step and merge the reviewed, green PRs, including into `main`. The owner only approves the `github-pages` deployment: never approve it and never touch `pending_deployments`.
+Agents run every step and merge the reviewed, green PRs, except into `main`: only the owner merges there (step 3.5). The owner also approves the `github-pages` deployment: never approve it and never touch `pending_deployments`.
 
 Guard hook: keep each `git push` in its own command with an explicit refspec (`git push -u origin HEAD:refs/heads/<branch>`); pass `gh api` bodies with `--raw-field`/`-F`, never `-f`.
 
@@ -38,7 +38,7 @@ Work in a worktree per branch (`git worktree add ../gg-<slug> ...`, then `pnpm i
 2. `gh pr create --base main --head release/X.Y.Z --title "chore: release X.Y.Z" --body "Release X.Y.Z."`; no `Closes` line: the back-merge carries them.
 3. Independent review of the PR diff: a reviewer other than the author reads it, posts one inline thread per finding, fixes land as PRs into `release/X.Y.Z`, every thread is resolved. The reviewer also checks the diff's changes to `.github/workflows/ci.yml` and the release scripts: the gate check below proves the steps ran, not that they still check anything.
 4. Wait for the PR's CI run to finish, then run the gate check below. It refuses: stop.
-5. `gh pr merge <n> --merge --match-head-commit <sha>`, with the `<sha>` the gate check verified. Merge commit only; the ruleset rejects anything else. Out of date: `main` moves only by a hotfix, so finish its back-merge into `release/X.Y.Z` (Hotfix, step 4) and run the gate check on the new head; never `update-branch`, which merges `main` into the release branch outside a PR.
+5. Hand the owner `gh pr merge <n> --merge --match-head-commit <sha>`, with the `<sha>` the gate check verified, and wait for the merge; never run it yourself. Merge commit only; the ruleset rejects anything else. Out of date: `main` moves only by a hotfix, so finish its back-merge into `release/X.Y.Z` (Hotfix, step 4) and run the gate check on the new head; never `update-branch`, which merges `main` into the release branch outside a PR.
 6. `gh pr list --base main --json number,headRefName --jq '.[] | select(.headRefName | test("^(release|hotfix)/") | not) | .number'` prints nothing: close each PR it prints, retargeted there.
 
 ### Gate check (before every merge into `main`)
@@ -71,7 +71,7 @@ Pending gated UAT deploys of `develop` (`deploy-uat-gated`) ahead of it in the `
 
 1. `pnpm hotfix:cut --dry-run`, show it, then `pnpm hotfix:cut` (version = next patch above `main`). Refuses before the first release, and when an open patch release would take the same version: then the fix goes into that release branch by PR.
 2. `git fetch origin`, `git worktree add --track -b hotfix/X.Y.Z ../gg-hotfix-X.Y.Z origin/hotfix/X.Y.Z`; commit the fix, push the branch, and open its PR into `main` (title `fix: hotfix X.Y.Z`) so the fragment can link it. Then commit the fragment, `pnpm release:prepare X.Y.Z`, commit, `pnpm check`, push.
-3. The independent review of section 3, wait for CI, the gate check, merge with `--match-head-commit`, then sections 4 and 5. Skip the freeze rule.
+3. The independent review of section 3, wait for CI, the gate check, hand the owner the merge command (section 3, step 5), then sections 4 and 5. Skip the freeze rule.
 4. `pnpm release:backmerge`: the target is the open `release/*` if any, else `develop`. Into a release branch, `released.json`, `CHANGELOG.md` and `package.json` conflict: keep the release version with its group above the hotfix group, then `pnpm changelog`. Then review, merge and `--verify` as in section 6.
 
 ## Recovery

@@ -21,12 +21,12 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 ## Who does what
 
 - The owner decides to release and approves each `github-pages` deployment: that approval is what publishes the tag and the GitHub Release. A UAT deploy needs it only when the UAT deploy path changed (see UAT).
-- Agents cut `release/*` and `hotfix/*`, run `release:prepare` and `release:backmerge`, and merge reviewed PRs with green CI into `develop`, `release/*`, `main` and back-merges. They never approve a deployment.
-- `/release [X.Y.Z]` and `/release hotfix` (`.claude/skills/release/SKILL.md`) drive the whole procedure and stop for the approval.
+- Agents cut `release/*` and `hotfix/*`, run `release:prepare` and `release:backmerge`, and merge reviewed PRs with green CI into `develop`, `release/*` and back-merges. Only the owner merges into `main`, with the command `/release` hands over after the gate check. Agents never approve a deployment.
+- `/release [X.Y.Z]` and `/release hotfix` (`.claude/skills/release/SKILL.md`) drive the whole procedure and stop for the owner's merge and approval.
 
 ## CI
 
-- PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, and another run of the same commit also reports `check`. So `/release` merges a reviewed PR into `main` only once its own run passed the guard and `release:check`, and the owner's deployment approval is the last gate.
+- PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, and another run of the same commit also reports `check`. So `/release` hands the owner the merge into `main` only once its own run passed the guard and `release:check`; the owner's merge and deployment approval are the last gates.
 - Changing a PR's base starts no run, and a re-run repeats the old one: after retargeting a PR, close and reopen it so CI checks it against the new base.
 - Pushes to `develop` and `main` run the gate without e2e, then deploy. `main` waits for the owner's approval of the `github-pages` deployment; `develop` does only when the UAT deploy path changed.
 - `main` builds and deploys production to the site root, then tags and publishes the release once the deploy succeeded. Its Pages artifact holds production alone, so a release needs nothing from `develop`, and `/uat/` is gone until the next `develop` deploy.
@@ -72,7 +72,7 @@ Without a version it derives one from `develop`'s pending entries the way `relea
 
 1. `pnpm release:cut`. Freeze: `release/X.Y.Z` takes only fixes, by PR, and a fix goes there only. `develop` stays open for the next version.
 2. On a `feature/*` branch from `origin/release/X.Y.Z`, `pnpm release:prepare X.Y.Z`, and a PR into `release/X.Y.Z` (rerun it when a fix adds a fragment).
-3. Merge or close every PR into `release/X.Y.Z` (merging deletes the branch, and GitHub retargets PRs still based on it to `main`), then PR `release/X.Y.Z` into `main`; CI runs the full gate and `release:check`. Merge it with a merge commit once reviewed and green.
+3. Merge or close every PR into `release/X.Y.Z` (merging deletes the branch, and GitHub retargets PRs still based on it to `main`), then PR `release/X.Y.Z` into `main`; CI runs the full gate and `release:check`. Once it is reviewed and green, the owner merges it with a merge commit.
 4. The owner approves the `github-pages` deployment. After the deploy, the release job tags `vX.Y.Z` and publishes the GitHub Release.
 5. `pnpm release:backmerge`, then merge the PR with a merge commit, then `pnpm release:backmerge --verify`.
 
