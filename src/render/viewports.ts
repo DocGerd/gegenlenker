@@ -30,9 +30,9 @@ const MIRROR_SCALE = 1.22;
 export const HUD_BAND_SHARE = 0.18;
 /** The band's top edge as NDC y of the cockpit view: nothing a trainee must see lies below it. */
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
-/** Smallest mirror height, unless the room above the controls is smaller: then `MIN_SQUEEZED_HEIGHT`. */
+/** Smallest mirror height; where the room above the controls and `MIRROR_GAP` is smaller, class II shrinks to that room. */
 export const MIN_MIRROR_HEIGHT = 48;
-/** Smallest class II height where the room above the controls is under `MIN_MIRROR_HEIGHT`; below it the mirror reaches into the controls. */
+/** The least class II shrinks to; where the room is smaller, it keeps this height and reaches into `MIRROR_GAP`, then the controls. */
 export const MIN_SQUEEZED_HEIGHT = 40;
 /**
  * Narrowest and widest the front mirror gets, in CSS px. The narrowest is wide enough that a 0.3 m

@@ -259,7 +259,7 @@ describe('top-down split', () => {
             expect(m.y, at).toBeGreaterThanOrEqual(cockpit.y);
             // The default layout may itself leave no room; only a range this module widened must clear.
             const { share, fallback } = topDownSplit(w, h, layout, legend, inset, stack(inset));
-            if (share !== fallback && m.height !== MIN_MIRROR_HEIGHT) {
+            if (share !== fallback) {
               expect(m.y + m.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h, inset));
             }
             if (share !== fallback && h >= w) {
