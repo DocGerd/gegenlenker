@@ -380,6 +380,52 @@ describe('frame timer', () => {
       expect(ends.filter((r) => r.end !== 1)).toEqual([]);
     });
 
+    it.each([0.15, 0.2, 0.25, 0.3])(
+      'retries a level kept for a heavier load once %d misses the scale cannot help replace it',
+      (rate) => {
+        const SEEDS = 8;
+        const ends = Array.from({ length: SEEDS }, (_, i) => {
+          const timer = createFrameTimer();
+          const miss = seeded(i + 1);
+          let now = 1000;
+          while (now - 1000 < 600_000) {
+            now += Math.max(fillBound(28)(timer.scale()), V) + (miss() < 0.2 ? V : 0);
+            timer.frame(now);
+          }
+          expect(timer.scale()).toBeLessThan(1);
+          drive(timer, randomMisses(rate, i + 101), 1800, now);
+          return { seed: i + 1, end: timer.scale() };
+        });
+        expect(ends.filter((r) => r.end !== 1)).toEqual([]);
+      },
+    );
+
+    it.each([
+      [28, 0.2],
+      [39, 0.1],
+    ])(
+      'changes the scale of a steady %i ms fill load with %d missed frames at most once a minute once settled',
+      (fullMs, rate) => {
+        const SEEDS = 8;
+        const MINUTES = 60;
+        const changes = Array.from({ length: SEEDS }, (_, i) => {
+          const timer = createFrameTimer();
+          const miss = seeded(i + 1);
+          let now = 1000;
+          let last = timer.scale();
+          let n = 0;
+          while (now - 1000 < MINUTES * 60_000) {
+            now += Math.max(fillBound(fullMs)(timer.scale()), V) + (miss() < rate ? V : 0);
+            timer.frame(now);
+            if (now - 1000 > 60_000 && timer.scale() !== last) n++;
+            last = timer.scale();
+          }
+          return n;
+        });
+        expect(Math.max(...changes)).toBeLessThan(MINUTES);
+      },
+    );
+
     it('keeps a steady fill-bound load off full resolution once settled, though its kept step gains little', () => {
       const SEEDS = 8;
       const runs = Array.from({ length: SEEDS }, (_, i) => {

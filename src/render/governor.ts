@@ -34,6 +34,14 @@ const NEW_LOAD = 1.25;
  * undoes a helpful step by chance sooner or later; a longer memory is slower to see a new load.
  */
 const KEPT_MEMORY = 8;
+/**
+ * A load the scale cannot help that replaces a heavier one can stay under a kept step's bar, so it neither loses the
+ * step nor leaves room for a probe up. A level that cannot step further is retried from the level above after this much
+ * slow time there, doubling each time the retry keeps it.
+ */
+const RECHECK_MS = MAX_HOLD_MS;
+/** Bounds how long such a load keeps a level stepped down; each retry costs about a window at the level above. */
+const MAX_RECHECK_MS = 8 * MAX_HOLD_MS;
 /** Startup hitches (shader links, texture uploads) follow a scene or an attach; they say nothing about steady load. */
 const WARM_UP_MS = 2000;
 const STEP = 0.15;
@@ -51,6 +59,7 @@ export type GovernorEventKind =
   | 'down'
   | 'down-failed'
   | 'down-lost'
+  | 'recheck'
   | 'up'
   | 'probe-failed'
   | 'probe-held'
@@ -62,6 +71,7 @@ const KINDS: readonly GovernorEventKind[] = [
   'down',
   'down-failed',
   'down-lost',
+  'recheck',
   'up',
   'probe-failed',
   'probe-held',
@@ -75,6 +85,7 @@ const DECISIONS: ReadonlySet<GovernorEventKind> = new Set([
   'down',
   'down-failed',
   'down-lost',
+  'recheck',
   'up',
   'probe-failed',
   'probe-held',
@@ -247,6 +258,11 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
    * scale cannot help climbs back to full resolution.
    */
   let doubted = 0;
+  /** Slow time at a level that cannot step further (`RECHECK_MS`), and the wait for the next retry. */
+  let quiet = 0;
+  let recheckAfter = RECHECK_MS;
+  /** Whether the step awaiting its verdict is such a retry. */
+  let rechecking = false;
   const ring = new Float64Array(WINDOW);
   const scratch = new Float64Array(WINDOW);
   const scale = (): number => Math.max(FLOOR, 1 - level * STEP);
@@ -259,6 +275,8 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
     settle = 0;
     beforeStep = 0;
     doubted = 0;
+    quiet = 0;
+    rechecking = false;
   };
   const note = (
     k: GovernorEventKind,
@@ -277,6 +295,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   const revert = (k: GovernorEventKind, to = level - 1): number => {
     level = to;
     steady = 0;
+    quiet = 0;
     count = 0;
     settle = SETTLE_FRAMES;
     note(k, '', level);
@@ -318,10 +337,14 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
             mean <= beforeStep * (1 - SHIFT_IMPROVEMENT));
         const from = beforeStep;
         beforeStep = 0;
+        const retried = rechecking;
+        rechecking = false;
         if (!helped) {
           // A mean, not the p90: vsync quantises the p90 to whole frames.
           const left = level - 1;
-          failedDowns[left] = (failedDowns[left] ?? 0) + 1;
+          // A retry is judged on one window, so a chance failure must not park a level that still helps.
+          if (retried) keptFrom[level] = 0;
+          else failedDowns[left] = (failedDowns[left] ?? 0) + 1;
           if (left > 0 && left === doubted) {
             keptFrom[left] = 0;
             doubted = left - 1;
@@ -330,8 +353,14 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
           doubted = 0;
           return revert('down-failed');
         }
-        keptFrom[level] = from;
-        keptWindows[level] = 0;
+        if (retried) {
+          // The step still helps; a new bar from one window would put it at risk of a chance loss on every retry.
+          keptFrom[level] = Math.max(keptFrom[level] ?? 0, from);
+          recheckAfter = Math.min(recheckAfter * 2, MAX_RECHECK_MS);
+        } else {
+          keptFrom[level] = from;
+          keptWindows[level] = 0;
+        }
         // The next decision takes a fresh window: one that passed by luck would step on at once.
         count = 0;
         return scale();
@@ -360,10 +389,23 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
             hold = Math.min(hold * 2, MAX_HOLD_MS);
           }
           level++;
+          quiet = 0;
           beforeStep = mean;
           beforeShift = shift;
           settle = SETTLE_FRAMES;
           note(failedProbe ? 'probe-failed' : 'down', '', left);
+        } else {
+          rechecking = false;
+          if (level > 0) {
+            quiet += sum;
+            if (quiet >= recheckAfter) {
+              // Judged again on the load of now; if it fails, the levels above follow as after a lost step.
+              doubted = level - 1;
+              rechecking = true;
+              probing = false;
+              return revert('recheck');
+            }
+          }
         }
         probing = false;
         steady = 0;
@@ -379,6 +421,8 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
           level--;
           keptFrom[level] = 0;
           steady = 0;
+          quiet = 0;
+          rechecking = false;
           sinceUp = 0;
           count = 0;
           probing = true;
@@ -394,10 +438,17 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
     discardWindow(tag = '', { liftParks = false } = {}) {
       // The load changed: a step awaiting its verdict is undone, so the new load is judged from where it was.
       const pending = beforeStep > 0;
-      if (pending) level--;
+      if (pending) {
+        level--;
+        quiet = 0;
+      }
       beforeStep = 0;
       doubted = 0;
-      if (liftParks) failedDowns.fill(0);
+      rechecking = false;
+      if (liftParks) {
+        failedDowns.fill(0);
+        recheckAfter = RECHECK_MS;
+      }
       note('warmup', tag);
       if (count > 0 || steady > 0 || pending) note('discard', tag);
       count = 0;
@@ -414,6 +465,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       failedProbes.fill(0);
       failedDowns.fill(0);
       keptFrom.fill(0);
+      recheckAfter = RECHECK_MS;
     },
     scale,
     trace: () => trace.read(),
