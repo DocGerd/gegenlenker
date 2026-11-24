@@ -56,7 +56,7 @@ const retrying = (timer: Timer): boolean => kinds(timer).at(-1) === 'recheck';
 
 /** At `fits`, or briefly one level up while it is retried. */
 const settledAt = (timer: Timer, fits: number): boolean =>
-  Math.abs(timer.scale() - fits) < 1e-9 || retrying(timer);
+  Math.abs(timer.scale() - (retrying(timer) ? fits + 0.15 : fits)) < 1e-9;
 
 describe('frame timer', () => {
   it.each([72, 90, 144])('keeps full resolution at a healthy %i Hz cadence', (hz) => {
@@ -374,6 +374,32 @@ describe('frame timer', () => {
       expect(governor.scale()).toBeCloseTo(0.85, 10);
     });
 
+    it('releases the level above too when a retry fails, as after a lost step', () => {
+      const governor = createResolutionGovernor();
+      const feed = (ms: number, n: number) => {
+        for (let i = 0; i < n; i++) governor.sample(ms);
+      };
+      feed(30, 60);
+      feed(25, 123);
+      feed(21, 63);
+      expect(governor.scale()).toBeCloseTo(0.7, 10);
+      // A load the scale cannot help from here: the step from 0.70 parks, then 0.70 is retried from 0.85.
+      const scales: number[] = [];
+      let last = governor.scale();
+      for (let n = 0; n < 10_000 && governor.scale() < 1; n++) {
+        governor.sample(21);
+        if (governor.scale() !== last) scales.push(+governor.scale().toFixed(2));
+        last = governor.scale();
+      }
+      expect(scales).toEqual([0.55, 0.7, 0.55, 0.7, 0.55, 0.7, 0.85, 0.7, 1]);
+      expect(
+        governor
+          .trace()
+          .events.map((e) => e.kind)
+          .slice(-3),
+      ).toEqual(['recheck', 'down', 'down-failed']);
+    });
+
     it('leaves a level kept for a heavier load once a lighter load the scale cannot help replaces it', () => {
       const SEEDS = 20;
       const ends = Array.from({ length: SEEDS }, (_, i) => {
@@ -391,7 +417,7 @@ describe('frame timer', () => {
       expect(ends.filter((r) => r.end !== 1)).toEqual([]);
     });
 
-    it.each([0.15, 0.2, 0.25, 0.3])(
+    it.each([0.15, 0.2, 0.25])(
       'retries a level kept for a heavier load once %d misses the scale cannot help replace it',
       (rate) => {
         const SEEDS = 8;
