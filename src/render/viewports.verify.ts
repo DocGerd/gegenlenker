@@ -327,7 +327,7 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
       }),
     },
     'message-column-valid': {
-      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [7224, 16.0] }),
+      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [3049, 16.0] }),
     },
   },
   full: {
@@ -388,7 +388,7 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
         'tablet landscape': [21608, 46.0],
         'tablet portrait': [369, 46.0],
       }),
-      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [18593, 16.0] }),
+      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [14265, 16.0] }),
     },
     'message-stack-clear-of-sight-cone': {
       'mirrors high, notch, legend': known('#393', {

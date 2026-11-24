@@ -353,9 +353,10 @@ export function computeViewports(
   };
   /**
    * With class IV: the largest class II mirror that leaves the stack (class II, a gap, class IV) its
-   * bottom `clear` above the viewport bottom and clear of the sight cone, at most `maxWidth` wide, its
-   * top no higher than `minTop`, and no smaller than `MIN_CLASS_II_SHARE` of `reference`, the size it
-   * has without class IV and the cone. Null where nothing fits.
+   * bottom `clear` above the viewport bottom and clear of the sight cone (moved up for it as
+   * `clearOfCone` moves class II), at most `maxWidth` wide, its top no higher than `minTop`, and no
+   * smaller than `MIN_CLASS_II_SHARE` of `reference`, the size it has without class IV and the cone.
+   * Null where nothing fits.
    */
   const stackFit = (
     clear: number,
@@ -373,14 +374,14 @@ export function computeViewports(
       const width = Math.round((fullWidth * height) / wanted);
       if (width < least.width) break;
       const stack = height + WIDE_GAP_PX + wideHeight(width);
-      const y = Math.min(preferred, Math.max(minTop, ceiling - stack));
-      if (
-        y + stack <= ceiling &&
-        !inCone(y, width, height) &&
-        !inCone(y + height + WIDE_GAP_PX, width, wideHeight(width))
-      ) {
-        return { y, width, height };
-      }
+      const fit = Math.min(preferred, Math.max(minTop, ceiling - stack));
+      if (fit + stack > ceiling) continue;
+      // where the stack covers the cone in place, the lowest whole-px top that keeps it above the cone
+      const y =
+        inCone(fit, width, height) || inCone(fit + height + WIDE_GAP_PX, width, wideHeight(width))
+          ? Math.ceil(coneBottom(width) - stack) - 1
+          : fit;
+      if (y >= Math.min(fit, minTop)) return { y, width, height };
     }
     return null;
   };
