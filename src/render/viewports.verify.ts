@@ -283,12 +283,15 @@ const PROPERTIES = [
   'front-mirror-geometry',
   'close-mirror-geometry',
   'message-column-valid',
+  'message-column-inside-safe-area',
   'message-column-placement',
+  'message-cue-yields-only-without-room',
   'message-stack-fits-pane',
   'message-stack-clear-of-sight-cone',
   'message-stack-clear-of-controls-and-hud-band',
   'message-stack-clear-of-legend',
   'message-stack-clear-of-mirrors',
+  'message-stack-clear-of-action-button',
 ] as const;
 type Property = (typeof PROPERTIES)[number];
 
@@ -314,36 +317,15 @@ const ceil4 = (x: number): number => Math.ceil(x * 1e4) / 1e4;
  * A listed pair without one in its bounds is STALE and fails too: the issue was fixed, remove the entry.
  */
 const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable } = {
-  default: {
-    'message-column-valid': {
-      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [3049, 16.0] }),
-    },
-  },
+  default: {},
   full: {
     'message-column-valid': {
       'drive balanced, notch': known('#394', {
-        'tablet landscape': [21681, 22.0],
-        'tablet portrait': [1485, 22.0],
+        'tablet landscape': [16540, 22.0],
+        'tablet portrait': [1, 22.0],
       }),
       'drive balanced, notch, legend, panels steps, share min': known('#394', {
-        'tablet landscape': [21608, 46.0],
-        'tablet portrait': [369, 46.0],
-      }),
-      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [14265, 16.0] }),
-    },
-    'message-stack-clear-of-sight-cone': {
-      'mirrors high, notch, legend': known('#393', {
-        'laptop and desktop': [10759, 176.3933],
-        'tablet landscape': [15302, 267.448],
-      }),
-    },
-    'message-stack-clear-of-controls-and-hud-band': {
-      'mirrors high, notch, legend': known('#393', {
-        'laptop and desktop': [19981, 93.2417],
-        'tablet landscape': [6089, 98.6307],
-      }),
-      'mirrors balanced, home indicator, legend': known('#393', {
-        'tablet landscape': [4, 92.4339],
+        'tablet landscape': [16468, 22.0],
       }),
     },
   },
@@ -434,17 +416,26 @@ const cueTexts: readonly string[] = [en, de].flatMap((lang) =>
 );
 const mostLines = (texts: readonly string[], width: number): number =>
   Math.max(...texts.map((text) => wrapLines(text, width)));
-const stackCache = new Map<number, number>();
-/** Height of the longest toast, the gap and the goal cue in a column `room` px wide (left inset taken off). */
-function stackHeight(room: number): number {
+const stackCache = new Map<number, { toast: number; cue: number }>();
+/** Heights of the longest toast and of the goal cue in a column `room` px wide. */
+function messageHeights(room: number): { toast: number; cue: number } {
   const cached = stackCache.get(room);
   if (cached !== undefined) return cached;
-  const toast =
-    mostLines(toastTexts, room - GEOM.toastMargin - GEOM.toastBox) * MESSAGE_LINE + MESSAGE_BOX;
-  const cue = mostLines(cueTexts, room - GEOM.cueBox) * MESSAGE_LINE + MESSAGE_BOX;
-  const total = toast + GEOM.stackGap + cue;
-  stackCache.set(room, total);
-  return total;
+  const heights = {
+    toast:
+      mostLines(toastTexts, room - GEOM.toastMargin - GEOM.toastBox) * MESSAGE_LINE + MESSAGE_BOX,
+    cue: mostLines(cueTexts, room - GEOM.cueBox) * MESSAGE_LINE + MESSAGE_BOX,
+  };
+  stackCache.set(room, heights);
+  return heights;
+}
+/**
+ * Height of the longest toast, the gap and the goal cue in a column `room` px wide; where the cue
+ * `yields` to a toast, of the taller one alone.
+ */
+function stackHeight(room: number, yields = false): number {
+  const { toast, cue } = messageHeights(room);
+  return yields ? Math.max(toast, cue) : toast + GEOM.stackGap + cue;
 }
 
 type Named = { readonly name: string; readonly rect: Rect };
@@ -951,7 +942,7 @@ function evaluate(v: Variant, w: number, h: number): void {
     column.height === cockpit.height &&
     column.x >= cockpit.x &&
     right(column) <= right(cockpit);
-  const room = inCockpitColumn ? column.width - insets.left : column.width;
+  const room = column.width;
   if (
     !chk(
       'message-column-valid',
@@ -964,8 +955,46 @@ function evaluate(v: Variant, w: number, h: number): void {
       MIN_MESSAGE_WIDTH - room,
     );
   }
+  const safeOut = Math.max(insets.left - column.x, right(column) - (w - insets.right));
+  if (!chk('message-column-inside-safe-area', safeOut <= 1e-9)) {
+    fail(
+      'message-column-inside-safe-area',
+      () => `column ${fmt(column)} insets ${JSON.stringify(insets)}`,
+      safeOut,
+    );
+  }
+  /** The stack in a cockpit column at `x`, `width` wide, and what it overlaps. */
+  const cockpitStack = (x: number, width: number, yields: boolean): Rect => ({
+    x,
+    y: cockpit.y + GEOM.stackTop + (landscape ? insets.top : 0),
+    width,
+    height: stackHeight(width, yields),
+  });
+  const obstacles: Named[] = [
+    { name: 'sight cone', rect: cone },
+    ...controlBoxes,
+    { name: 'gear and speed readouts', rect: readouts },
+    ...(legendBox === null ? [] : [{ name: 'legend', rect: legendBox }]),
+    ...mirrors,
+    { name: 'action button', rect: pauseBox },
+  ];
+  // The cue yields only in the mirror-only drive, and only where no span beside the mirrors holds both.
+  const limit = (front ?? mirrorRight).x - MESSAGE_GAP;
+  const fullFits = (): boolean =>
+    [
+      { x0: right(mirrorLeft) + MESSAGE_GAP, x1: limit },
+      { x0: right(cone), x1: limit },
+      { x0: right(mirrorLeft) + MESSAGE_GAP, x1: cone.x },
+    ].some(({ x0, x1 }) => {
+      if (x1 - x0 < MIN_MESSAGE_WIDTH) return false;
+      const stack = cockpitStack(x0, x1 - x0, false);
+      return obstacles.every((o) => !overlaps(stack, o.rect));
+    });
+  const yieldOk = !column.cueYields || (mirrorsOnly && inCockpitColumn && !fullFits());
+  if (!chk('message-cue-yields-only-without-room', yieldOk)) {
+    fail('message-cue-yields-only-without-room', () => `column ${fmt(column)} yields`);
+  }
   if (inCockpitColumn) {
-    const limit = (front ?? mirrorRight).x - MESSAGE_GAP;
     const placed = column.x >= right(mirrorLeft) + MESSAGE_GAP && right(column) <= limit + 1e-9;
     if (!chk('message-column-placement', placed)) {
       fail(
@@ -973,12 +1002,7 @@ function evaluate(v: Variant, w: number, h: number): void {
         () => `column ${fmt(column)} between ${right(mirrorLeft)} and ${limit}`,
       );
     }
-    const stack: Rect = {
-      x: column.x + insets.left,
-      y: cockpit.y + GEOM.stackTop + (landscape ? insets.top : 0),
-      width: column.width - insets.left,
-      height: stackHeight(column.width - insets.left),
-    };
+    const stack = cockpitStack(column.x, column.width, column.cueYields);
     if (!chk('message-stack-clear-of-sight-cone', !overlaps(stack, cone))) {
       fail(
         'message-stack-clear-of-sight-cone',
@@ -1011,6 +1035,13 @@ function evaluate(v: Variant, w: number, h: number): void {
         );
       }
     }
+    if (!chk('message-stack-clear-of-action-button', !overlaps(stack, pauseBox))) {
+      fail(
+        'message-stack-clear-of-action-button',
+        () => `stack ${fmt(stack)} overlaps ${fmt(pauseBox)}`,
+        depth(stack, pauseBox),
+      );
+    }
   } else {
     const placed =
       column.x >= topDown.x &&
@@ -1021,12 +1052,21 @@ function evaluate(v: Variant, w: number, h: number): void {
     if (!chk('message-column-placement', placed)) {
       fail('message-column-placement', () => `column ${fmt(column)} pane ${fmt(topDown)}`);
     }
-    const need = GEOM.stackTop + stackHeight(column.width - insets.left);
+    const top = GEOM.stackTop + (landscape ? insets.top : 0);
+    const need = top + stackHeight(column.width);
     if (!chk('message-stack-fits-pane', need <= column.height + 1e-9)) {
       fail(
         'message-stack-fits-pane',
         () => `stack needs ${need} px, column ${fmt(column)}`,
         need - column.height,
+      );
+    }
+    const stack: Rect = { ...column, y: column.y + top, height: need - top };
+    if (!chk('message-stack-clear-of-action-button', !overlaps(stack, pauseBox))) {
+      fail(
+        'message-stack-clear-of-action-button',
+        () => `stack ${fmt(stack)} overlaps ${fmt(pauseBox)}`,
+        depth(stack, pauseBox),
       );
     }
   }

@@ -14,7 +14,7 @@ import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
 import { goalCueTexts } from './goal-cue';
-import { hasTopDown, messageColumn } from '../render/viewports';
+import { hasTopDown, messageColumn, readSafeInsets } from '../render/viewports';
 import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
 import { aidSwatch } from './aid-swatches';
 import type { Ahead } from '../sim/predict';
@@ -922,16 +922,21 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
           el.style.setProperty('--hud-above-height', `${above.height}px`);
         }
       });
-      const column = messageColumn(views, legendBox());
+      const insets = readSafeInsets();
+      const column = messageColumn(views, legendBox(), insets);
       toastWrap.style.left = `${column.x}px`;
       toastWrap.style.top = `${column.y}px`;
       toastWrap.style.width = `${column.width}px`;
+      toastWrap.toggleAttribute('data-cue-yields', column.cueYields);
       if (hasTopDown(views)) {
         place(topDown, views.topDown);
         placeKeysList(views.topDown);
       }
       // The finish/menu button sits at the screen's top-right corner.
-      toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));
+      toastWrap.toggleAttribute(
+        'data-reserve',
+        column.y < 1 && column.x + column.width >= root.clientWidth - insets.right - 1,
+      );
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
       if (hasTopDown(views)) syncToolbarReserve();
       hasCockpit = c !== null;
