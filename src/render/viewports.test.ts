@@ -259,13 +259,18 @@ describe('top-down split', () => {
     }
   });
 
-  it('leaves a landscape cockpit wide enough for the wheel, gears and legend', () => {
-    for (const [w, h] of sizes.filter(([a, b]) => a >= b)) {
-      const { share, fallback } = topDownSplit(w, h, edges[1], null, insets, stack(insets));
+  it('leaves the cockpit the room its controls need', () => {
+    for (const [w, h] of sizes) {
+      const { share, fallback } = topDownSplit(w, h, edges[1], legend, insets, stack(insets));
       if (share === fallback) continue;
-      const { cockpit } = computeViewports(w, h, 'drive', null, insets, edges[1], stack(insets));
-      const needed = insets.left + 3 * 16 + 92.4 + 176 + wheelSize(w, h, insets);
-      expect(cockpit?.width, `${w}x${h}`).toBeGreaterThanOrEqual(needed - 1);
+      const { cockpit } = computeViewports(w, h, 'drive', legend, insets, edges[1], stack(insets));
+      const landscape = w >= h;
+      const needed = landscape
+        ? insets.left + 3 * 16 + 92.4 + 176 + wheelSize(w, h, insets)
+        : 32 + MIN_MIRROR_HEIGHT + 8 + Math.max(controlsHeight(w, h, insets), legend.height);
+      expect(landscape ? cockpit?.width : cockpit?.height, `${w}x${h}`).toBeGreaterThanOrEqual(
+        needed,
+      );
     }
   });
 

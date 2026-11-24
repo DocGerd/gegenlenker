@@ -365,17 +365,12 @@ export const verifyProdDist = (root: string, sha: string): string => {
 export const assemble = async (
   api: Api,
   { repo, runId, sha, out }: { repo: string; runId: string; sha: string; out: string },
-  {
-    extract = unzip,
-    prodOnly = false,
-    ...options
-  }: Options & { extract?: Extract; prodOnly?: boolean } = {},
+  { extract = unzip, ...options }: Options & { extract?: Extract } = {},
 ): Promise<ProdDist> => {
   if (existsSync(out)) throw new Error(`${out} exists`);
   const prod = await findProdDist(api, repo, options);
   await fetchArtifact(api, repo, prod.artifact, out, extract);
   const manifest = verifyProdDist(out, prod.run.head_sha);
-  if (prodOnly) return prod;
 
   const dist = join(out, 'dist');
   await fetchArtifact(
@@ -401,24 +396,19 @@ const env = (name: string): string => {
 };
 
 const main = async (): Promise<void> => {
-  const [out, flag, ...rest] = process.argv.slice(2);
-  if (out === undefined || rest.length > 0 || (flag !== undefined && flag !== '--prod-only'))
-    throw new Error('usage: node tools/uat-pages.ts <out-dir> [--prod-only]');
-  const prodOnly = flag === '--prod-only';
+  const [out, ...rest] = process.argv.slice(2);
+  if (out === undefined || rest.length > 0)
+    throw new Error('usage: node tools/uat-pages.ts <out-dir>');
   const api = restApi({
     token: env('GH_TOKEN'),
     apiUrl: process.env['GITHUB_API_URL'] ?? 'https://api.github.com',
   });
-  const prod = await assemble(
-    api,
-    {
-      repo: env('GITHUB_REPOSITORY'),
-      runId: prodOnly ? '' : env('GITHUB_RUN_ID'),
-      sha: prodOnly ? '' : env('GITHUB_SHA'),
-      out,
-    },
-    { prodOnly },
-  );
+  const prod = await assemble(api, {
+    repo: env('GITHUB_REPOSITORY'),
+    runId: env('GITHUB_RUN_ID'),
+    sha: env('GITHUB_SHA'),
+    out,
+  });
   console.log(
     `::notice::production ${prod.run.head_sha} from ${PROD_JOB} job ${String(prod.job.id)} (run ${String(prod.run.id)}, deployment ${String(prod.deployment.id)})`,
   );
