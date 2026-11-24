@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.0.1",
+    "date": "2026-11-24",
+    "entries": [
+      {
+        "id": "409.fixed",
+        "category": "fixed",
+        "prs": [409],
+        "en": "The side and wide-angle mirrors no longer cover the view straight ahead: the side mirrors move up or shrink, and the wide-angle mirrors are left out where they would cover it."
+      }
+    ]
+  },
+  {
     "version": "1.0.0",
     "date": "2026-11-23",
     "entries": [
