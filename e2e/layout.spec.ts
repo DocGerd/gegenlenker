@@ -340,7 +340,7 @@ const insets = { top: 24, left: 48, bottom: 20, right: 48 };
 
 /**
  * `slot`: where a mirror-only drive too short for both messages between the mirrors puts them;
- * `keysOpen`: with the key legend's chevron open.
+ * `keysOpen`: the key legend's chevron starts open.
  */
 const insetSizes: {
   width: number;
@@ -384,10 +384,10 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
     await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
     await hudReady(page, { insets, mirrorsOnly });
     if (keysOpen) {
-      const toggle = page.locator('[data-hud="keysToggle"]');
-      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
-      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-      await settled(page);
+      await expect(page.locator('[data-hud="keysToggle"]')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
     }
 
     const placed = await boxes(
