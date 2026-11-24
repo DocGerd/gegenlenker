@@ -667,6 +667,19 @@ const settled = (page: Page) =>
       }),
   );
 
+async function startFreeYard(page: Page, label: string): Promise<void> {
+  await page.goto('./');
+  await page.getByRole('button', { name: label }).click();
+  // No exercise, so no counters or brief: the toolbar and the controls are what stands.
+  await expect(page.locator('.hud-gauge')).toHaveCount(2);
+  await expect(page.locator('.hud-toolbar .hud-toggle').first()).toBeVisible();
+  await expect(page.locator('.ctl-stop')).toBeVisible();
+  await expect
+    .poll(() => page.locator('.hud-mirror:not([hidden])').count())
+    .toBeGreaterThanOrEqual(2);
+  await settled(page);
+}
+
 async function startStraightReverse(page: Page, label: string): Promise<void> {
   await page.goto('./');
   await page.getByRole('button', { name: label }).click();
@@ -821,6 +834,23 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
   }
 }
 
+/** The toolbar's buttons keep clear of the finish button and the controls (the folded brief's reserve included). */
+async function expectToolbarClear(page: Page): Promise<void> {
+  const toolbar = await boxes(page.locator('.hud-toolbar .hud-toggle'));
+  const others = await boxes(
+    page.locator(
+      '.hud-action, .ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever',
+    ),
+  );
+  expect(toolbar.length).toBeGreaterThan(0);
+  for (const b of toolbar) {
+    for (const o of others) {
+      const gap = Math.max(b.left - o.right, o.left - b.right, b.top - o.bottom, o.top - b.bottom);
+      expect(gap, `${b.name} touches ${o.name}`).toBeGreaterThan(0);
+    }
+  }
+}
+
 for (const { locale, messages } of locales) {
   for (const size of splitSizes) {
     const at = `${locale} ${size.width}x${size.height}`;
@@ -836,11 +866,31 @@ for (const { locale, messages } of locales) {
           await test.step('mirrors clear the controls', () =>
             expectMirrorsClearControls(page, size));
         }
+        await test.step('the toolbar clears the finish button and the controls', () =>
+          expectToolbarClear(page));
         await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
           expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
           expectDividerClears(page, size));
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
+// Without an exercise there is no brief: the view row takes its place beside the finish button, and wraps.
+for (const { locale, messages } of locales) {
+  for (const size of sizes.filter((s) => s.width <= 1024)) {
+    test(`the free yard toolbar stays clear at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      try {
+        const page = await context.newPage();
+        await startFreeYard(page, messages.layoutDepot);
+        await expectToolbarClear(page);
       } finally {
         await context.close();
       }
@@ -1066,18 +1116,18 @@ test('folding and unfolding a panel re-measures the divider against the panels',
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
 
   const aids = page.locator('[data-panel="aids"]');
-  await expect(aids).toHaveAttribute('aria-pressed', 'true');
+  await expect(aids).toHaveAttribute('aria-expanded', 'true');
   await aids.click();
-  await expect(aids).toHaveAttribute('aria-pressed', 'false');
+  await expect(aids).toHaveAttribute('aria-expanded', 'false');
   await expect(handle(page)).toBeVisible();
   await expectDividerClearOrHidden(page, size);
 
   // The folded state is stored: the next run starts with the aids panel folded and the divider in place.
   await startStraightReverse(page, en.exerciseStraightReverse);
-  await expect(aids).toHaveAttribute('aria-pressed', 'false');
+  await expect(aids).toHaveAttribute('aria-expanded', 'false');
   await expect(handle(page)).toBeVisible();
   await aids.click();
-  await expect(aids).toHaveAttribute('aria-pressed', 'true');
+  await expect(aids).toHaveAttribute('aria-expanded', 'true');
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
   await expectDividerClearOrHidden(page, size);
 });

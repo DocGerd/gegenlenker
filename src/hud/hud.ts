@@ -177,6 +177,9 @@ const SPLIT_ICON =
 const SPLIT_STEP = 0.02;
 const percent = (share: number): number => Math.round(share * 100);
 
+const FOLD_ICON =
+  '<svg class="hud-fold" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
+
 const CHECK_ICON =
   '<svg class="hud-check" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l3 3 5-6" /></svg>';
 
@@ -190,9 +193,9 @@ const viewSegments = (chase: boolean): string =>
     .map(([v, k]) => segmentButton(v, k))
     .join('');
 
-/** A folding panel's chip; the ring fills with a tick while the panel shows. */
+/** A folding panel's chip is a disclosure: the chevron points down while the panel shows. */
 const panelButton = (panel: string, key: MessageKey): string =>
-  `<button type="button" class="hud-toggle hud-chip" data-panel="${panel}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
+  `<button type="button" class="hud-toggle hud-chip" data-panel="${panel}" aria-controls="hud-panel-${panel}"><span data-i18n="${key}"></span>${FOLD_ICON}</button>`;
 
 /** The meaning in the legend list is the toggle's description; the ring fills with a tick while the aid is on. */
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
@@ -251,13 +254,13 @@ const MARKUP = (
     <div class="hud-toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
-      <div class="hud-aids" data-hud="aids" data-chrome>
+      <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
         <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
       </div>
     </div>
     <div class="hud-info" data-hud="info">
-      <div class="hud-gauges" data-hud="gauges" data-chrome></div>
+      <div class="hud-gauges" id="hud-panel-gauges" data-hud="gauges" data-chrome></div>
       ${
         mode === 'exercise'
           ? `<dl class="hud-counters" data-hud="counters" data-chrome>
@@ -427,7 +430,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     }
     for (const b of panelButtons)
       b.setAttribute(
-        'aria-pressed',
+        'aria-expanded',
         String(!collapsed[b.dataset['panel'] as keyof CollapsedPanels]),
       );
     const keysExpanded = shortScreen ? keysOpen : shortCockpit ? allKeys : !collapsed.keys;
