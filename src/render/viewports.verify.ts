@@ -44,6 +44,7 @@ import {
   MIN_FRONT_WIDTH,
   MIN_MESSAGE_WIDTH,
   MIN_MIRROR_HEIGHT,
+  MIN_SQUEEZED_HEIGHT,
   MIN_WIDE_WIDTH,
   NO_INSETS,
   orientationOf,
@@ -270,7 +271,7 @@ const PROPERTIES = [
   'mirrors-below-cockpit-label',
   'mirror-only-clear-of-pause-button-and-lever',
   'mirrors-above-controls-band (height above minimum)',
-  'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)',
+  'mirrors-above-controls-band (height at MIN_SQUEEZED_HEIGHT)',
   'mirrors-clear-of-control-boxes',
   'mirrors-above-hud-band',
   'mirrors-clear-of-legend',
@@ -314,71 +315,11 @@ const ceil4 = (x: number): number => Math.ceil(x * 1e4) / 1e4;
  */
 const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable } = {
   default: {
-    'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
-      'drive balanced, share max': known('#389', {
-        laptop: [19738, 0.5],
-        'tablet landscape': [20604, 0.5],
-        'tablet portrait': [9311, 0.5],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#389', {
-        laptop: [19738, 0.5],
-        'tablet landscape': [20604, 0.5],
-        'tablet portrait': [13919, 0.5],
-      }),
-    },
     'message-column-valid': {
       'mirrors high, notch, legend': known('#393', { 'tablet portrait': [3049, 16.0] }),
     },
   },
   full: {
-    'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
-      'drive balanced, share max': known('#389', {
-        'laptop and desktop': [312245, 0.5],
-        'tablet landscape': [20310, 0.5],
-        'tablet portrait': [108915, 0.5],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#389', {
-        'laptop and desktop': [302952, 0.5],
-        'tablet landscape': [3326, 0.5],
-        'tablet portrait': [113514, 0.5],
-      }),
-    },
-    'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)': {
-      'drive balanced, home indicator': known('#390', {
-        'tablet landscape': [182, 7.0],
-        'tablet portrait': [784, 8.0],
-      }),
-      'drive balanced, notch': known('#390', {
-        'tablet landscape': [182, 7.0],
-        'tablet portrait': [784, 8.0],
-      }),
-      'drive balanced, notch, legend, panels steps, share min': known('#390', {
-        'tablet landscape': [182, 7.0],
-        'tablet portrait': [784, 8.0],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#390', {
-        'tablet landscape': [182, 7.0],
-        'tablet portrait': [784, 8.0],
-      }),
-    },
-    'mirrors-clear-of-control-boxes': {
-      'drive balanced, home indicator': known('#390', {
-        'tablet landscape': [91, 26.9259],
-        'tablet portrait': [392, 27.203],
-      }),
-      'drive balanced, notch': known('#390', {
-        'tablet landscape': [91, 26.9259],
-        'tablet portrait': [392, 27.203],
-      }),
-      'drive balanced, notch, legend, panels steps, share min': known('#390', {
-        'tablet landscape': [91, 26.9259],
-        'tablet portrait': [392, 27.203],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#390', {
-        'tablet landscape': [91, 26.9259],
-        'tablet portrait': [392, 27.203],
-      }),
-    },
     'message-column-valid': {
       'drive balanced, notch': known('#394', {
         'tablet landscape': [21681, 22.0],
@@ -403,12 +344,6 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
       }),
       'mirrors balanced, home indicator, legend': known('#393', {
         'tablet landscape': [4, 92.4339],
-      }),
-    },
-    'message-stack-clear-of-legend': {
-      'drive balanced, legend with all keys': known('#391', {
-        'tablet landscape': [1326, 315.7912],
-        'tablet portrait': [1326, 315.7912],
       }),
     },
   },
@@ -602,7 +537,7 @@ function evaluate(v: Variant, w: number, h: number): void {
   add('front', views.front);
   add('close', views.close);
   add('topDown', topDown);
-  const column = messageColumn(views, insets);
+  const column = messageColumn(views, legend?.box ?? null, insets);
   add('messageColumn', column);
 
   for (const { name, rect } of named) {
@@ -877,9 +812,9 @@ function evaluate(v: Variant, w: number, h: number): void {
       }
     }
     const room = h - controls - bottom(rect);
-    const atMinimum = rect.height === MIN_MIRROR_HEIGHT;
+    const atMinimum = rect.height === MIN_SQUEEZED_HEIGHT;
     const bandProperty = atMinimum
-      ? 'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)'
+      ? 'mirrors-above-controls-band (height at MIN_SQUEEZED_HEIGHT)'
       : 'mirrors-above-controls-band (height above minimum)';
     if (!chk(bandProperty, room >= -1e-9)) {
       fail(
@@ -1150,7 +1085,7 @@ function report(known: KnownTable | null): { summary: string; details: string; f
     const stale =
       known === null ? [] : Object.keys(listed).filter((name) => !s.byVariant.has(name));
     // two properties count hits of a split-off case: no hit is good; a custom box need not reach every property
-    const hitCounter = p.includes('MIN_MIRROR_HEIGHT') || p.includes('deficit over');
+    const hitCounter = p.includes('MIN_SQUEEZED_HEIGHT') || p.includes('deficit over');
     const unreached = s.applied === 0 && known !== null && !hitCounter;
     const total = rows.reduce((n, r) => n + r.f.n, 0);
     const issues = [...new Set(rows.flatMap((r) => r.base?.issue ?? []))];

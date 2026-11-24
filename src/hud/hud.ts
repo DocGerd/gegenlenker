@@ -835,6 +835,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     }
   };
 
+  const legendBox = (): LegendBox | null => {
+    const r = legend.getBoundingClientRect();
+    if (r.width === 0) return null;
+    const stage = root.getBoundingClientRect();
+    return { right: r.right - stage.left, height: stage.bottom - r.top };
+  };
+
   return {
     update(s, ahead = null) {
       onControl(s.control);
@@ -915,7 +922,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
           el.style.setProperty('--hud-above-height', `${above.height}px`);
         }
       });
-      const column = messageColumn(views);
+      const column = messageColumn(views, legendBox());
       toastWrap.style.left = `${column.x}px`;
       toastWrap.style.top = `${column.y}px`;
       toastWrap.style.width = `${column.width}px`;
@@ -979,12 +986,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       topDown.toggleAttribute('data-toolbar-reserve', reserved);
       return overflows ? Infinity : bottom - top;
     },
-    legendBox() {
-      const r = legend.getBoundingClientRect();
-      if (r.width === 0) return null;
-      const stage = root.getBoundingClientRect();
-      return { right: r.right - stage.left, height: stage.bottom - r.top };
-    },
+    legendBox,
     onLegendResize(cb) {
       const observer = new ResizeObserver(cb);
       observer.observe(legend);
