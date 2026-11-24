@@ -271,6 +271,8 @@ describe('decide', () => {
     ['a new local action', { '.github/actions/x/action.yml': 'new' }],
     ['a new Vite config', { 'vite.config.mjs': 'new' }],
     ['a new PostCSS config', { 'postcss.config.cjs': 'new' }],
+    ['a new .postcssrc', { '.postcssrc': 'new' }],
+    ['a new .postcssrc.mjs', { '.postcssrc.mjs': 'new' }],
     ['a new .npmrc', { '.npmrc': 'new' }],
     ['a new pnpm hook', { '.pnpmfile.cjs': 'new' }],
   ])('gates a change to %s', async (_name, change) => {

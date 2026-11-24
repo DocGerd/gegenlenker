@@ -40,7 +40,8 @@ export const PATH_FILES = [
  * Root config files that Vite, PostCSS or pnpm pick up by name when present, so adding or removing
  * one changes the build: every match in the tree is compared, not only the ones listed above.
  */
-export const CONFIG_FILE = /^(?:(?:vite|postcss)\.config\.(?:[cm]?[jt]s)|\.npmrc|\.pnpmfile\.cjs)$/;
+export const CONFIG_FILE =
+  /^(?:(?:vite|postcss)\.config\.(?:[cm]?[jt]s)|\.postcssrc(?:\.(?:json|ya?ml|[cm]?[jt]s))?|\.npmrc|\.pnpmfile\.cjs)$/;
 /** Other workflows and local actions, which could publish too; `ci.yml` is compared parsed. */
 export const PATH_DIRS = ['.github/workflows/', '.github/actions/'] as const;
 
