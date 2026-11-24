@@ -381,12 +381,11 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
     },
     'message-column-valid': {
       'drive balanced, notch': known('#394', {
-        'tablet landscape': [21681, 22.0],
-        'tablet portrait': [1485, 22.0],
+        'tablet landscape': [16540, 22.0],
+        'tablet portrait': [1, 22.0],
       }),
       'drive balanced, notch, legend, panels steps, share min': known('#394', {
-        'tablet landscape': [21608, 46.0],
-        'tablet portrait': [369, 46.0],
+        'tablet landscape': [16468, 22.0],
       }),
     },
     'message-stack-clear-of-legend': {
