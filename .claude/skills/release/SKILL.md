@@ -1,6 +1,6 @@
 ---
 name: release
-description: 'Cut, ship and back-merge a Gegenlenker release or hotfix end to end: /release [X.Y.Z] or /release hotfix. Stops once for the owner to approve the github-pages deployment.'
+description: 'Cut, ship and back-merge a Gegenlenker release or hotfix end to end: /release [X.Y.Z] or /release hotfix. Stops for the owner to merge into main and to approve the github-pages deployment.'
 argument-hint: '[X.Y.Z | hotfix]'
 disable-model-invocation: true
 ---
@@ -71,7 +71,7 @@ Pending gated UAT deploys of `develop` (`deploy-uat-gated`) ahead of it in the `
 
 1. `pnpm hotfix:cut --dry-run`, show it, then `pnpm hotfix:cut` (version = next patch above `main`). Refuses before the first release, and when an open patch release would take the same version: then the fix goes into that release branch by PR.
 2. `git fetch origin`, `git worktree add --track -b hotfix/X.Y.Z ../gg-hotfix-X.Y.Z origin/hotfix/X.Y.Z`; commit the fix, push the branch, and open its PR into `main` (title `fix: hotfix X.Y.Z`) so the fragment can link it. Then commit the fragment, `pnpm release:prepare X.Y.Z`, commit, `pnpm check`, push.
-3. The independent review of section 3, wait for CI, the gate check, merge with `--match-head-commit`, then sections 4 and 5. Skip the freeze rule.
+3. The independent review of section 3, wait for CI, the gate check, hand the owner the merge command (section 3, step 5), then sections 4 and 5. Skip the freeze rule.
 4. `pnpm release:backmerge`: the target is the open `release/*` if any, else `develop`. Into a release branch, `released.json`, `CHANGELOG.md` and `package.json` conflict: keep the release version with its group above the hotfix group, then `pnpm changelog`. Then review, merge and `--verify` as in section 6.
 
 ## Recovery
