@@ -339,20 +339,28 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
 
 const insetSizes = [
-  { width: 1280, height: 720 },
-  { width: 1024, height: 600 },
-  { width: 900, height: 649 },
-  { width: 768, height: 1024 },
+  { width: 1280, height: 720, mirrorsOnly: false },
+  { width: 1024, height: 600, mirrorsOnly: false },
+  { width: 900, height: 649, mirrorsOnly: false },
+  { width: 768, height: 1024, mirrorsOnly: false },
+  { width: 860, height: 860, mirrorsOnly: false },
+  { width: 1024, height: 426, mirrorsOnly: true },
 ];
 
-for (const size of insetSizes) {
-  test(`the drive screen stays inside the safe area at ${size.width}x${size.height}`, async ({
+for (const { mirrorsOnly, ...size } of insetSizes) {
+  const screen = mirrorsOnly ? 'mirror-only drive' : 'drive screen';
+  test(`the ${screen} stays inside the safe area at ${size.width}x${size.height}`, async ({
     browser,
   }) => {
     const context = await browser.newContext({ locale: 'en-US', viewport: size });
     const page = await context.newPage();
     const cdp = await context.newCDPSession(page);
     await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+    if (mirrorsOnly) {
+      await page.addInitScript((key) => {
+        localStorage.setItem(key, JSON.stringify({ version: 1, mirrorsOnly: true }));
+      }, SETTINGS_KEY);
+    }
     await page.goto('./');
     await expect
       .poll(() =>
@@ -362,13 +370,14 @@ for (const size of insetSizes) {
       )
       .toBe(`${insets.left}px`);
     await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
-    await hudReady(page, { insets });
+    await hudReady(page, { insets, mirrorsOnly });
 
     const placed = await boxes(
       page.locator(
         [
           '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever',
-          '.hud-action, .hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-legend',
+          // the mirror-only drive hides the gauges with the top-down pane
+          `.hud-action, .hud-goal:not([hidden]), ${mirrorsOnly ? '' : '.hud-gauge, '}.hud-counters, .hud-legend`,
           '.hud-gear, .hud-speed, .hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])',
         ].join(', '),
       ),
@@ -400,6 +409,26 @@ for (const size of insetSizes) {
     for (const m of mirrors) {
       for (const c of controls) {
         expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
+      }
+    }
+
+    if (mirrorsOnly) {
+      // too short for both messages anywhere beside the mirrors
+      await expect(page.locator('[data-hud="toastWrap"]')).toHaveAttribute('data-cue-yields');
+    }
+    await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+    // the toast stands inside the wrap, which keeps clear of the safe area
+    const messages = await boxes(
+      page.locator(
+        '[data-hud="toastWrap"], [data-hud="toast"]:visible, [data-hud="goalCue"]:visible',
+      ),
+    );
+    for (const b of messages) {
+      const at = `${b.name} in the safe area`;
+      expect(b.left, at).toBeGreaterThanOrEqual(insets.left);
+      expect(b.right, at).toBeLessThanOrEqual(size.width - insets.right);
+      if (landscape && !b.name.includes('toast-wrap')) {
+        expect(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(insets.top);
       }
     }
     await context.close();
@@ -735,7 +764,8 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
 
 /**
  * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
- * or the forward sight cone, the cockpit label and every mirror.
+ * or the forward sight cone, the cockpit label and every mirror. Where the column holds one message at
+ * a time (`data-cue-yields`), the cue hides while the toast shows, and each is checked alone.
  */
 async function expectMessagesClear(page: Page, toast: string, goal: string): Promise<void> {
   await page.evaluate(
@@ -752,10 +782,27 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     },
     [toast, goal] as const,
   );
-  const overflow = await page
-    .locator('[data-hud="toast"], [data-hud="goalCue"]')
-    .evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
-  expect(overflow, 'a word sticks out of a message').toEqual([0, 0]);
+  const cue = page.locator('[data-hud="goalCue"]');
+  if ((await page.locator('[data-hud="toastWrap"][data-cue-yields]').count()) === 0) {
+    await expectShownMessagesClear(page, 2);
+    return;
+  }
+  await expect(cue, 'the goal cue yields to the toast').toBeHidden();
+  await expectShownMessagesClear(page, 1);
+  await page.locator('[data-hud="toast"]').evaluate((el) => {
+    if (el instanceof HTMLElement) el.hidden = true;
+  });
+  await expect(cue).toBeVisible();
+  await expectShownMessagesClear(page, 1);
+}
+
+async function expectShownMessagesClear(page: Page, count: number): Promise<void> {
+  const shown = page.locator('[data-hud="toast"]:visible, [data-hud="goalCue"]:visible');
+  await expect(shown).toHaveCount(count);
+  const overflow = await shown.evaluateAll((els) =>
+    els.map((el) => el.scrollWidth - el.clientWidth),
+  );
+  expect(overflow, 'a word sticks out of a message').toEqual(Array<number>(count).fill(0));
   // Standing over the top view's panels, they must paint above them: the wrap takes no pointer events, so
   // let it, or `elementFromPoint` skips it.
   const covered = await page.evaluate(() => {
@@ -764,6 +811,7 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     wrap.style.pointerEvents = 'auto';
     const hidden: string[] = [];
     for (const el of document.querySelectorAll('[data-hud="toast"], [data-hud="goalCue"]')) {
+      if (!el.checkVisibility()) continue;
       const r = el.getBoundingClientRect();
       const mid = (r.top + r.bottom) / 2;
       const points = [
@@ -782,11 +830,16 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     return hidden;
   });
   expect(covered, 'a message is painted under another element').toEqual([]);
-  const messages = await boxes(page.locator('[data-hud="toast"], [data-hud="goalCue"]'));
-  expect(messages).toHaveLength(2);
+  const messages = await boxes(shown);
+  expect(messages).toHaveLength(count);
+  // Without the top-down pane the brief and the counters stand in the cockpit too.
+  const mirrorsOnly = (await page.locator('.hud[data-mirrors]').count()) > 0;
   const controls = await boxes(
     page.locator(
-      '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend, .hud-gear, .hud-speed',
+      [
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend, .hud-gear, .hud-speed, .hud-action',
+        ...(mirrorsOnly ? ['.hud-goal:not([hidden]), .hud-counters'] : []),
+      ].join(', '),
     ),
   );
   const [cockpit] = await boxes(page.locator('.hud-cockpit'));
@@ -916,6 +969,8 @@ for (const size of [
         await page.goto('./');
         await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
         await hudReady(page, { mirrorsOnly: true });
+        // both messages fit at once here, so the two-message check holds
+        await expect(page.locator('[data-hud="toastWrap"]')).not.toHaveAttribute('data-cue-yields');
         // Portrait has no room for the key legend beside the brief.
         if (size.width < size.height) await expect(page.locator('.hud-legend')).toBeHidden();
         await expectMirrorsClearControls(page, size);
