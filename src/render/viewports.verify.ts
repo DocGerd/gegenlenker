@@ -381,12 +381,6 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
         'tablet landscape': [4, 92.4339],
       }),
     },
-    'message-stack-clear-of-legend': {
-      'drive balanced, legend with all keys': known('#391', {
-        'tablet landscape': [1326, 315.7912],
-        'tablet portrait': [1326, 315.7912],
-      }),
-    },
   },
 };
 
@@ -578,7 +572,7 @@ function evaluate(v: Variant, w: number, h: number): void {
   add('front', views.front);
   add('close', views.close);
   add('topDown', topDown);
-  const column = messageColumn(views, insets);
+  const column = messageColumn(views, legend?.box ?? null, insets);
   add('messageColumn', column);
 
   for (const { name, rect } of named) {
