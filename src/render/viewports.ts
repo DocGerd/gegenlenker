@@ -200,7 +200,8 @@ export function topDownSplit(
       MIN_MIRROR_HEIGHT +
       MIRROR_GAP +
       Math.max(controlsHeight(cssWidth, cssHeight, insets), legend?.height ?? 0);
-  const max = Math.min(limits.max, Math.max(fallback, 1 - cockpitNeeded / extent));
+  // The cockpit is whole px (`computeViewports` rounds the pane), so it keeps the need only when rounded up.
+  const max = Math.min(limits.max, Math.max(fallback, 1 - Math.ceil(cockpitNeeded) / extent));
   const divider = dividerExtent(orientation, insets);
   // Landscape the panels wrap with the pane's width, so a wider pane is what makes room; portrait the
   // width is fixed and the pane's height must hold the panels.
