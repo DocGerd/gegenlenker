@@ -80,6 +80,8 @@ export type HudOptions = {
   collapsed: CollapsedPanels;
   /** No top-down pane: its brief and counters move into the cockpit, and its views, aids and gauges are gone. */
   mirrorsOnly?: boolean;
+  /** The stop button and lever column, which the toolbar stays clear of; absent where there are no controls. */
+  pedalsBox?: () => DOMRect;
 };
 
 const CONTACT_KEY: Record<BodyId, MessageKey> = {
@@ -177,6 +179,9 @@ const SPLIT_ICON =
 const SPLIT_STEP = 0.02;
 const percent = (share: number): number => Math.round(share * 100);
 
+const FOLD_ICON =
+  '<svg class="hud-fold" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
+
 const CHECK_ICON =
   '<svg class="hud-check" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M8 12.5l3 3 5-6" /></svg>';
 
@@ -190,9 +195,9 @@ const viewSegments = (chase: boolean): string =>
     .map(([v, k]) => segmentButton(v, k))
     .join('');
 
-/** A folding panel's chip; the ring fills with a tick while the panel shows. */
+/** A folding panel's chip is a disclosure: the chevron points down while the panel shows. */
 const panelButton = (panel: string, key: MessageKey): string =>
-  `<button type="button" class="hud-toggle hud-chip" data-panel="${panel}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
+  `<button type="button" class="hud-toggle hud-chip" data-panel="${panel}" aria-controls="hud-panel-${panel}"><span data-i18n="${key}"></span>${FOLD_ICON}</button>`;
 
 /** The meaning in the legend list is the toggle's description; the ring fills with a tick while the aid is on. */
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
@@ -248,16 +253,16 @@ const MARKUP = (
   <div class="hud-mirror" data-hud="close" hidden></div>
   <div class="hud-topdown" data-hud="topDown">
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
-    <div class="hud-toolbar">
+    <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
-      <div class="hud-aids" data-hud="aids" data-chrome>
+      <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
         <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
       </div>
     </div>
     <div class="hud-info" data-hud="info">
-      <div class="hud-gauges" data-hud="gauges" data-chrome></div>
+      <div class="hud-gauges" id="hud-panel-gauges" data-hud="gauges" data-chrome></div>
       ${
         mode === 'exercise'
           ? `<dl class="hud-counters" data-hud="counters" data-chrome>
@@ -334,6 +339,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const toast = query(hud, 'toast', HTMLElement);
   const topDown = query(hud, 'topDown', HTMLElement);
   const infoRow = query(hud, 'info', HTMLElement);
+  const toolbar = query(hud, 'toolbar', HTMLElement);
   const gaugeBox = query(hud, 'gauges', HTMLElement);
   const speed = query(hud, 'speed', HTMLElement);
   const gearEl = query(hud, 'gear', HTMLElement);
@@ -379,7 +385,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const aids = { ...opts.aids };
   const viewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
-  const panelButtons = [...hud.querySelectorAll<HTMLElement>('[data-panel]')];
+  const panelButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
   const aidsBox = query(hud, 'aids', HTMLElement);
   const legendItems = new Map(
@@ -425,11 +431,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (b.disabled) b.title = t('aidTopViewOnly');
       else b.removeAttribute('title');
     }
-    for (const b of panelButtons)
-      b.setAttribute(
-        'aria-pressed',
-        String(!collapsed[b.dataset['panel'] as keyof CollapsedPanels]),
-      );
+    for (const b of panelButtons) {
+      const panel = b.dataset['panel'] as keyof CollapsedPanels;
+      // The angle readouts show only with the angle display aid.
+      b.disabled = panel === 'gauges' && !aids.pivots;
+      b.setAttribute('aria-expanded', String(!b.disabled && !collapsed[panel]));
+      if (b.disabled) b.title = t('panelGaugesNeedsAid');
+      else b.removeAttribute('title');
+    }
     const keysExpanded = shortScreen ? keysOpen : shortCockpit ? allKeys : !collapsed.keys;
     keysToggle.setAttribute('aria-expanded', String(keysExpanded));
     legend.toggleAttribute('data-overlay', shortScreen);
@@ -453,6 +462,25 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     keysOpen = false;
     briefOpen = !briefDone;
     syncToggles();
+  };
+  /**
+   * Landscape, the lever column stands at the screen's right edge, which the pane's right edge meets
+   * under `data-reserve`: the toolbar stops short of it only where, unreserved, it would come within
+   * `--space-3` of it.
+   */
+  const syncToolbarReserve = (): void => {
+    topDown.removeAttribute('data-toolbar-reserve');
+    if (!topDown.hasAttribute('data-reserve') || root.clientWidth < root.clientHeight) return;
+    const lever = opts.pedalsBox?.();
+    if (lever === undefined || lever.width === 0) return;
+    const gap = parseFloat(getComputedStyle(root).getPropertyValue('--space-3')) || 12;
+    const pane = topDown.getBoundingClientRect();
+    const leverLeft = pane.right - (root.getBoundingClientRect().right - lever.left) - gap;
+    const reaches = [...toolbar.querySelectorAll('.hud-toggle, .hud-aid-legend')].some((el) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.right > leverLeft && r.bottom > lever.top - gap;
+    });
+    topDown.toggleAttribute('data-toolbar-reserve', reaches);
   };
   /**
    * The open key list of a short screen stands in the top-down pane, which no mirror reaches; hud.css
@@ -905,6 +933,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
+      if (hasTopDown(views)) syncToolbarReserve();
       hasCockpit = c !== null;
       syncSplitHidden();
       if (c) {
@@ -936,7 +965,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     panelsBottom(paneWidth) {
       syncShortScreen();
       const previous = topDown.style.width;
+      const reserved = topDown.hasAttribute('data-toolbar-reserve');
       topDown.style.width = `${paneWidth}px`;
+      syncToolbarReserve();
       const top = topDown.getBoundingClientRect().top;
       let bottom = top;
       for (const child of topDown.children) {
@@ -952,6 +983,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         (el) => el.getBoundingClientRect().right > infoRight + 0.5,
       );
       topDown.style.width = previous;
+      topDown.toggleAttribute('data-toolbar-reserve', reserved);
       return overflows ? Infinity : bottom - top;
     },
     legendBox,
