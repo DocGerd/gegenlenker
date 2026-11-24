@@ -566,6 +566,19 @@
   border-radius: var(--radius-lg);
 }
 
+/* A wrapped control rounds the ends of each visual row (hud.ts sets the attributes). */
+.hud-segment[data-row-start] {
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.hud-segment[data-row-end] {
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+.hud-segment[data-row-start][data-row-end] {
+  border-radius: var(--radius-lg);
+}
+
 .hud-segment[aria-pressed='true'] {
   z-index: 1;
   border-color: var(--color-accent);

@@ -419,6 +419,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let briefOpen = true;
   let briefDone = false;
   let keysOpen = false;
+  /** A wrapped view control rounds each visual row's ends: its segments carry `data-row-start` / `data-row-end`. */
+  const syncSegmentRows = (): void => {
+    viewButtons.forEach((b, i) => {
+      const prev = viewButtons[i - 1];
+      const next = viewButtons[i + 1];
+      b.toggleAttribute('data-row-start', prev === undefined || prev.offsetTop !== b.offsetTop);
+      b.toggleAttribute('data-row-end', next === undefined || next.offsetTop !== b.offsetTop);
+    });
+  };
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
     for (const b of aidButtons) {
@@ -941,6 +950,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (hasTopDown(views)) syncToolbarReserve();
       hasCockpit = c !== null;
       syncSplitHidden();
+      // After the reserves, which narrow the toolbar.
+      if (hasTopDown(views)) syncSegmentRows();
       if (c) {
         const td = views.topDown;
         const landscape = root.clientWidth >= root.clientHeight;
