@@ -37,6 +37,7 @@ import {
   type Insets,
   type PanelStack,
 } from './viewports';
+import { declared, padding, px, SOURCE } from './viewports-css';
 
 describe('computeViewports mirrors', () => {
   it('stay inside the cockpit and above the controls at every size', () => {
@@ -532,6 +533,15 @@ describe('computeViewports front mirror', () => {
     expect(SPACE_PX).toBeGreaterThanOrEqual(MEASURED_SPACE_PX);
     // MIN_MESSAGE_WIDTH is built on the widest word
     expect(Math.max(...Object.values(MESSAGE_WORD_PX))).toBe(MESSAGE_WORD_PX['Drehschemelwinkel']);
+  });
+
+  it('gives the messages the whole column: the toast wrap has no side padding', () => {
+    // `messagesFit` and the layout spec take the column's width as the toasts' room
+    const sides = padding(SOURCE.hud, '.hud-toast-wrap');
+    expect([px(sides.left), px(sides.right)]).toEqual([0, 0]);
+    for (const side of ['padding-left', 'padding-right']) {
+      expect(() => declared(SOURCE.hud, '.hud-toast-wrap', side)).toThrow(`no ${side}`);
+    }
   });
 
   it('lists exactly the toast and goal-cue messages', () => {
