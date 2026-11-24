@@ -269,6 +269,14 @@ describe('top-down split', () => {
     }
   });
 
+  it('keeps the whole landscape need once the pane rounds to whole px', () => {
+    const max = { landscape: 1, portrait: 1 };
+    const { cockpit } = computeViewports(1280, 586, 'drive', null, NO_INSETS, max, null);
+    expect(cockpit?.width).toBeGreaterThanOrEqual(
+      3 * 16 + 92.4 + 176 + wheelSize(1280, 586, NO_INSETS),
+    );
+  });
+
   it('is the whole screen in replay whatever the layout', () => {
     expect(computeViewports(1280, 720, 'replay', null, undefined, edges[1]).topDown).toEqual({
       x: 0,
