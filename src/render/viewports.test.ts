@@ -489,7 +489,7 @@ describe('computeViewports front mirror', () => {
           continue;
         }
         shown++;
-        const column = messageColumn(views);
+        const column = messageColumn(views, null);
         const at = `${w}x${h} left inset ${inset.left}`;
         expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
         expect(column.x + column.width, at).toBeLessThanOrEqual(front.x);
@@ -549,7 +549,7 @@ describe('computeViewports front mirror', () => {
         if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
           throw new Error('drive mode has mirrors');
         }
-        const column = messageColumn(views, insets);
+        const column = messageColumn(views, null, insets);
         const at = `${w}x${h} left inset ${insets.left}`;
         if (column.y === cockpit.y) {
           count.between++;
@@ -571,9 +571,20 @@ describe('computeViewports front mirror', () => {
     expect(count.pane).toBeGreaterThan(100);
   });
 
+  it('moves the toast column into the top-down pane where its stack would cover the open key legend', () => {
+    const legend = { right: 755, height: 381 };
+    const open = computeViewports(840, 841, 'drive', legend, NO_INSETS);
+    const closed = computeViewports(840, 841, 'drive', null, NO_INSETS);
+    expect(messageColumn(closed, null, NO_INSETS).y).toBe(closed.cockpit?.y);
+    const column = messageColumn(open, legend, NO_INSETS);
+    expect(column.x).toBe(open.topDown.x);
+    expect(column.y).toBeGreaterThanOrEqual(open.topDown.y + 44);
+    expect(column.y + column.height).toBe(open.topDown.y + open.topDown.height);
+  });
+
   it('puts the toast column in the whole top-down pane in replay', () => {
     const views = computeViewports(800, 600, 'replay');
-    expect(messageColumn(views)).toEqual(views.topDown);
+    expect(messageColumn(views, null)).toEqual(views.topDown);
   });
 });
 
@@ -660,7 +671,7 @@ describe('computeViewports class IV mirrors', () => {
             expect(wide.y + wide.height, at).toBeLessThanOrEqual(h - legend.height);
           }
           if (front !== null) expect(apart(wide, front), at).toBe(true);
-          if (front !== null) expect(apart(wide, messageColumn(v)), at).toBe(true);
+          if (front !== null) expect(apart(wide, messageColumn(v, null)), at).toBe(true);
         }
         expect(mirrorLeft.width, at).toBe(mirrorRight.width);
         expect(mirrorLeft.height, at).toBe(mirrorRight.height);
@@ -877,7 +888,7 @@ describe('computeViewports class V mirror', () => {
         expect(mirrorRight.y - (close.y + close.height), `${at} gap`).toBe(WIDE_GAP_PX);
         expect(close.y, at).toBeGreaterThanOrEqual(cockpit.y + 32);
         if (front !== null) expect(apart(close, front), at).toBe(true);
-        expect(apart(close, messageColumn(v)), at).toBe(true);
+        expect(apart(close, messageColumn(v, null)), at).toBe(true);
       }
     }
     expect(shown).toBeGreaterThan(0);
@@ -888,7 +899,7 @@ describe('computeViewports class V mirror', () => {
       const on = views(w, h, ALL);
       const off = views(w, h, NO_CLOSE);
       expect({ ...on, close: null }, `${w}x${h}`).toEqual(off);
-      expect(messageColumn(on), `${w}x${h}`).toEqual(messageColumn(off));
+      expect(messageColumn(on, null), `${w}x${h}`).toEqual(messageColumn(off, null));
     }
   });
 
@@ -962,7 +973,7 @@ describe('computeViewports mirror-only drive', () => {
       const views = mirrorsOnly(w, h);
       const { mirrorLeft, mirrorRight, front } = views;
       if (mirrorLeft === null || mirrorRight === null) throw new Error('mirrors');
-      const column = messageColumn(views, NO_INSETS);
+      const column = messageColumn(views, null, NO_INSETS);
       expect(column.x, `${w}x${h}`).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
       expect(column.x + column.width, `${w}x${h}`).toBeLessThanOrEqual((front ?? mirrorRight).x);
     }

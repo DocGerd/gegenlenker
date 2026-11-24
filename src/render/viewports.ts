@@ -436,6 +436,7 @@ export function computeViewports(
           cssHeight,
           controls,
           insets,
+          legend,
         );
       front = frontRect(
         cockpit,
@@ -543,7 +544,7 @@ function messageHeights(room: number): { toast: number; cue: number } {
 
 /**
  * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top, end above
- * the controls and the forward sight cone they would otherwise reach into.
+ * the controls, the key legend and the forward sight cone they would otherwise reach into.
  */
 function messagesFit(
   cockpit: Rect,
@@ -552,6 +553,7 @@ function messagesFit(
   cssHeight: number,
   controls: number,
   insets: Insets,
+  legend: LegendBox | null,
 ): boolean {
   const { toast, cue } = messageHeights(column.width - insets.left);
   const landscape = cssWidth >= cssHeight;
@@ -563,6 +565,13 @@ function messagesFit(
   if (reaches(INSET + insets.left, gearsLeft + GEARS_WIDTH)) {
     const gearsTop = cssHeight - INSET - insets.bottom - GEARS_HEIGHT;
     if (bottom > Math.min(cssHeight - controls, gearsTop)) return false;
+  }
+  if (
+    legend !== null &&
+    reaches(INSET + insets.left, legend.right) &&
+    bottom > cssHeight - legend.height
+  ) {
+    return false;
   }
   const half = (coneEdge(cockpit.width / cockpit.height, COCKPIT_FOV) * cockpit.width) / 2;
   const centre = cockpit.x + cockpit.width / 2;
@@ -621,7 +630,11 @@ function frontRect(
  * stack fits there (`messagesFit`), else the top-down pane, below the finish button and clear of the lever;
  * with no such pane they keep the span between the mirrors.
  */
-export function messageColumn(views: ViewRects, safeInsets?: Insets): Rect {
+export function messageColumn(
+  views: ViewRects,
+  legend: LegendBox | null,
+  safeInsets?: Insets,
+): Rect {
   const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) return cockpit ?? topDown;
   const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
@@ -634,7 +647,7 @@ export function messageColumn(views: ViewRects, safeInsets?: Insets): Rect {
   if (
     !hasTopDown(views) ||
     (between.width - insets.left >= MIN_MESSAGE_WIDTH &&
-      messagesFit(cockpit, between, cssWidth, cssHeight, controls, insets))
+      messagesFit(cockpit, between, cssWidth, cssHeight, controls, insets, legend))
   ) {
     return { ...cockpit, ...between };
   }
