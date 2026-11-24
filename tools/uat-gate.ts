@@ -1,15 +1,19 @@
 // Decides whether a `develop` UAT deploy needs the owner's approval: only when the UAT deploy path
-// changed since the last owner-approved `github-pages` deployment. Every doubt gates. Both commits
-// are read through the API, never checked out, and this script runs from `main` so that a
-// `develop` change cannot weaken it. Plain Node (`.ts` imports, no packages): YAML goes through `yq`.
+// changed since the last owner-approved UAT deployment. Every doubt gates. Both commits are read
+// through the API, never checked out, and the script runs from `main`'s copy. It catches accidental
+// changes to the path; the workflow that honours its verdict is `develop`'s own. Plain Node (`.ts`
+// imports, no packages): YAML goes through `yq`.
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 import {
   ENVIRONMENT,
   restApi,
   type Api,
+  UAT_REF,
   type Deployment,
   type DeploymentStatus,
+  type Job,
+  type Run,
 } from './uat-pages.ts';
 
 export const WORKFLOW_FILE = '.github/workflows/ci.yml';
@@ -62,22 +66,74 @@ const canonical = (value: unknown): unknown => {
 
 const time = (iso: string): number => Date.parse(iso);
 
-/** The commit of the newest `github-pages` deployment whose latest status is `success`. */
+/** The workflow whose runs the baseline must come from, and its job that waits for the owner. */
+export const WORKFLOW = 'ci.yml';
+export const GATED_JOB = 'deploy-uat-gated';
+export const DEPLOYER = 'github-actions[bot]';
+
+type Creator = Deployment & { creator?: { login?: string } | null };
+
+/** Whether `deployment` is the one the successful `GATED_JOB` of a `develop` run of this repo made. */
+const approvedByJob = async (api: Api, repo: string, deployment: Deployment): Promise<boolean> => {
+  const runs = (
+    (await api.list(
+      `/repos/${repo}/actions/workflows/${WORKFLOW}/runs?head_sha=${deployment.sha}&per_page=100`,
+      'workflow_runs',
+    )) as Run[]
+  ).filter(
+    (run) =>
+      run.head_sha === deployment.sha &&
+      run.head_branch === UAT_REF &&
+      (run.event === 'push' || run.event === 'workflow_dispatch'),
+  );
+  for (const run of runs) {
+    const jobs = (await api.list(
+      `/repos/${repo}/actions/runs/${String(run.id)}/jobs?filter=all&per_page=100`,
+      'jobs',
+    )) as Job[];
+    for (const job of jobs) {
+      if (job.name !== GATED_JOB || job.conclusion !== 'success') continue;
+      const checkRun = `/repos/${repo}/check-runs/${String(job.id)}`;
+      if (!job.check_run_url.endsWith(checkRun)) continue;
+      const link = (await api.get(checkRun)) as {
+        id?: number;
+        deployment?: { id?: number } | null;
+      };
+      if (link.id === job.id && link.deployment?.id === deployment.id) return true;
+    }
+  }
+  return false;
+};
+
+/**
+ * The commit of the newest owner-approved UAT deployment: a `github-pages` deployment of `develop`
+ * made by Actions, whose latest status is `success`, and which a successful `GATED_JOB` of a CI run
+ * of that commit produced. A production approval, or a deployment made through the API, is no
+ * approval of the UAT deploy path.
+ */
 export const findBaseline = async (api: Api, repo: string): Promise<string> => {
   const deployments = (
     (await api.list(
       `/repos/${repo}/deployments?environment=${ENVIRONMENT}&per_page=100`,
-    )) as Deployment[]
-  ).sort((a, b) => time(b.created_at) - time(a.created_at) || b.id - a.id);
+    )) as Creator[]
+  )
+    .filter(
+      (deployment) =>
+        deployment.environment === ENVIRONMENT &&
+        deployment.ref === UAT_REF &&
+        deployment.creator?.login === DEPLOYER,
+    )
+    .sort((a, b) => time(b.created_at) - time(a.created_at) || b.id - a.id);
   for (const deployment of deployments) {
     const statuses = (
       (await api.list(
         `/repos/${repo}/deployments/${String(deployment.id)}/statuses?per_page=100`,
       )) as DeploymentStatus[]
     ).sort((a, b) => time(b.created_at) - time(a.created_at) || b.id - a.id);
-    if (statuses[0]?.state === 'success') return deployment.sha;
+    if (statuses[0]?.state === 'success' && (await approvedByJob(api, repo, deployment)))
+      return deployment.sha;
   }
-  throw new Error(`no successful ${ENVIRONMENT} deployment`);
+  throw new Error(`no approved UAT ${ENVIRONMENT} deployment`);
 };
 
 interface Tree {

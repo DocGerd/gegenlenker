@@ -389,7 +389,7 @@ jobs:
           path: dist
 
   # Production publishes its dist alone, so a release needs nothing from `develop`; `/uat/` is gone
-  # until the next `deploy-uat`. One `pages` group for both deploy jobs: `queue: max` keeps every
+  # until a UAT deploy runs. One `pages` group for every deploy job: `queue: max` keeps every
   # pending deploy instead of replacing the waiting one with the newest
   # (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
   deploy:
@@ -414,10 +414,9 @@ jobs:
   # `develop` deploys the UAT build to `/gegenlenker/uat/`; the Pages artifact also republishes the
   # production dist of the live `main` deploy, never rebuilt. The develop checkout only builds; the
   # jobs that read deployments or publish run `main`'s `tools/uat-pages.ts` and `tools/uat-gate.ts`,
-  # which only a release changes. The jobs themselves are `develop`'s, so a change to them acts at
-  # once: the owner's approval is the gate, which `preflight-uat` waives only while the UAT deploy
-  # path equals that of the last approved deployment. Until a release brings the scripts to `main`,
-  # every UAT deploy is gated, and fails at the preflight if `uat-pages.ts` is missing too.
+  # which only a release changes. The jobs themselves are `develop`'s, and so is the wiring that
+  # honours the gate's verdict: the gate catches accidental changes to the UAT deploy path, and PR
+  # review of `develop` is the boundary. While `main` lacks `uat-gate.ts`, every deploy is gated.
   build-uat:
     needs: check
     if: >-

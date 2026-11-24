@@ -27,11 +27,47 @@ interface Tree {
   workflow: string;
   truncated?: boolean;
 }
+interface TestDeployment {
+  id: number;
+  sha: string;
+  created_at: string;
+  environment: string;
+  ref: string;
+  creator: { login: string };
+}
+interface TestRun {
+  id: number;
+  event: string;
+  head_branch: string;
+  head_sha: string;
+  jobs: { id: number; name: string; conclusion: string; deployment: number }[];
+}
 interface Fixture {
-  deployments: { id: number; sha: string; created_at: string }[];
+  deployments: TestDeployment[];
   statuses: Record<number, { id: number; state: string; created_at: string }[]>;
+  runs: TestRun[];
   trees: Record<string, Tree>;
 }
+
+/** A `develop` deployment of Actions, by default. */
+const deployment = (id: number, sha: string, minute: number, own = {}): TestDeployment => ({
+  id,
+  sha,
+  created_at: at(minute),
+  environment: 'github-pages',
+  ref: 'develop',
+  creator: { login: 'github-actions[bot]' },
+  ...own,
+});
+/** The CI run of `sha` whose `deploy-uat-gated` job made deployment `id`, by default. */
+const runOf = (id: number, sha: string, own: Partial<TestRun> = {}): TestRun => ({
+  id: 1000 + id,
+  event: 'push',
+  head_branch: 'develop',
+  head_sha: sha,
+  jobs: [{ id: 2000 + id, name: 'deploy-uat-gated', conclusion: 'success', deployment: id }],
+  ...own,
+});
 
 const job = (name: string, runsOn = 'ubuntu-latest'): string => `  ${name}: { runs-on: ${runsOn} }`;
 const ci = ({ drop = '', swap = '', extra = '' } = {}): string =>
@@ -51,7 +87,7 @@ const files = (): Files =>
   );
 
 /** The REST answers for these deployments, trees and blobs. */
-const mockApi = ({ deployments, statuses, trees }: Fixture): Api => {
+const mockApi = ({ deployments, statuses, runs, trees }: Fixture): Api => {
   const blobs = new Map<string, string>();
   const treeOf = (commit: string): unknown => {
     const tree = trees[commit];
@@ -72,11 +108,27 @@ const mockApi = ({ deployments, statuses, trees }: Fixture): Api => {
     list: (path) => {
       const id = /deployments\/(\d+)\/statuses/.exec(path)?.[1];
       if (id !== undefined) return Promise.resolve(statuses[Number(id)] ?? []);
+      const sha = /workflows\/ci\.yml\/runs\?head_sha=(\w+)&/.exec(path)?.[1];
+      // The API filters by commit; answering with every run proves the tool does not trust it.
+      if (sha !== undefined) return Promise.resolve(runs);
+      const runId = /actions\/runs\/(\d+)\/jobs/.exec(path)?.[1];
+      if (runId !== undefined)
+        return Promise.resolve(
+          (runs.find((run) => run.id === Number(runId))?.jobs ?? []).map((each) => ({
+            ...each,
+            check_run_url: `https://api.github.com/repos/${REPO}/check-runs/${String(each.id)}`,
+          })),
+        );
       if (path.includes('/deployments?environment=github-pages&'))
         return Promise.resolve(deployments);
       return Promise.reject(new Error(`unexpected list ${path}`));
     },
     get: (path) => {
+      const checkRun = /check-runs\/(\d+)$/.exec(path)?.[1];
+      if (checkRun !== undefined) {
+        const found = runs.flatMap((run) => run.jobs).find((each) => each.id === Number(checkRun));
+        return Promise.resolve({ id: found?.id, deployment: { id: found?.deployment } });
+      }
       const commit = /git\/trees\/([0-9a-f]+)\?recursive=1$/.exec(path)?.[1];
       if (commit !== undefined) return Promise.resolve(treeOf(commit));
       const text = blobs.get(/git\/blobs\/(.+)$/.exec(path)?.[1] ?? '');
@@ -89,8 +141,9 @@ const mockApi = ({ deployments, statuses, trees }: Fixture): Api => {
 
 /** `PROD` is the approved deployment; `HEAD` is the same deploy path. */
 const approved = (): Fixture => ({
-  deployments: [{ id: 1, sha: PROD, created_at: at(1) }],
+  deployments: [deployment(1, PROD, 1)],
   statuses: { 1: [{ id: 10, state: 'success', created_at: at(2) }] },
+  runs: [runOf(1, PROD)],
   trees: {
     [PROD]: { files: files(), workflow: ci() },
     [HEAD]: { files: files(), workflow: ci() },
@@ -104,13 +157,9 @@ const withHead = (head: Partial<Tree>, base: Partial<Tree> = {}): Fixture => {
 };
 
 describe('findBaseline', () => {
-  it('takes the newest deployment whose latest status is a success', async () => {
-    const api = mockApi({
-      deployments: [
-        { id: 1, sha: PROD, created_at: at(1) },
-        { id: 3, sha: HEAD, created_at: at(30) },
-        { id: 2, sha: UAT, created_at: at(10) },
-      ],
+  it('takes the newest approved deployment whose latest status is a success', async () => {
+    const fixture: Fixture = {
+      deployments: [deployment(1, PROD, 1), deployment(3, HEAD, 30), deployment(2, UAT, 10)],
       statuses: {
         1: [{ id: 10, state: 'success', created_at: at(2) }],
         2: [
@@ -119,15 +168,66 @@ describe('findBaseline', () => {
         ],
         3: [{ id: 30, state: 'queued', created_at: at(31) }],
       },
+      runs: [runOf(1, PROD), runOf(2, UAT), runOf(3, HEAD)],
       trees: {},
-    });
+    };
     // 3 is still pending and 2 was superseded, so only 1 is both live and approved.
-    expect(await findBaseline(api, REPO)).toBe(PROD);
+    expect(await findBaseline(mockApi(fixture), REPO)).toBe(PROD);
   });
 
   it('fails when no deployment succeeded', async () => {
-    const api = mockApi({ deployments: [], statuses: {}, trees: {} });
-    await expect(findBaseline(api, REPO)).rejects.toThrow('no successful github-pages');
+    const api = mockApi({ ...approved(), deployments: [] });
+    await expect(findBaseline(api, REPO)).rejects.toThrow('no approved UAT github-pages');
+  });
+
+  // Each variant is a record that must not count as the owner's approval of the UAT deploy path.
+  it.each<[string, Partial<Fixture>]>([
+    ['a production deployment of main', { deployments: [deployment(1, PROD, 1, { ref: 'main' })] }],
+    [
+      'a deployment made by a user',
+      { deployments: [deployment(1, PROD, 1, { creator: { login: 'someone' } })] },
+    ],
+    [
+      'another environment',
+      { deployments: [deployment(1, PROD, 1, { environment: 'uat-pages' })] },
+    ],
+    ['a run of another commit', { runs: [runOf(1, UAT)] }],
+    ['a run of another branch', { runs: [runOf(1, PROD, { head_branch: 'main' })] }],
+    ['a run of a pull request', { runs: [runOf(1, PROD, { event: 'pull_request' })] }],
+    [
+      'another job',
+      {
+        runs: [
+          runOf(1, PROD, {
+            jobs: [{ id: 2001, name: 'deploy', conclusion: 'success', deployment: 1 }],
+          }),
+        ],
+      },
+    ],
+    [
+      'a failed job',
+      {
+        runs: [
+          runOf(1, PROD, {
+            jobs: [{ id: 2001, name: 'deploy-uat-gated', conclusion: 'failure', deployment: 1 }],
+          }),
+        ],
+      },
+    ],
+    [
+      'a job of another deployment',
+      {
+        runs: [
+          runOf(1, PROD, {
+            jobs: [{ id: 2001, name: 'deploy-uat-gated', conclusion: 'success', deployment: 9 }],
+          }),
+        ],
+      },
+    ],
+    ['no run', { runs: [] }],
+  ])('skips %s', async (_name, change) => {
+    const api = mockApi({ ...approved(), ...change });
+    await expect(findBaseline(api, REPO)).rejects.toThrow('no approved UAT');
   });
 });
 
