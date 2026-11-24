@@ -6,6 +6,8 @@ A trainer for maneuvering a truck with a turntable drawbar trailer: reverse, ste
 
 Live, the latest release: https://docgerd.github.io/gegenlenker/ ([releases](https://github.com/DocGerd/gegenlenker/releases))
 
+UAT, the current `develop` build: https://docgerd.github.io/gegenlenker/uat/
+
 ## Quickstart
 
 Requires Node and pnpm as pinned in `.nvmrc` and `package.json`.

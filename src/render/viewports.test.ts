@@ -3,7 +3,15 @@ import { DEFAULT_TOP_DOWN_LAYOUT, type LegendBox, type Rect } from '../contracts
 import { de } from '../i18n/de';
 import { en } from '../i18n/en';
 import { CLOSE_ASPECT, MIN_CLOSE_WIDTH } from './close-mirror';
-import { COCKPIT_FOV, coneTop, CONE_GAP, FRONT_GAP_PX, frontBand, VISOR } from './cockpit-band';
+import {
+  CLEAR_CONE_DEG,
+  COCKPIT_FOV,
+  coneTop,
+  CONE_GAP,
+  FRONT_GAP_PX,
+  frontBand,
+  VISOR,
+} from './cockpit-band';
 import {
   computeViewports,
   controlsHeight,
@@ -721,6 +729,75 @@ describe('computeViewports class IV mirrors', () => {
       }
     }
     expect(checked).toBeGreaterThan(20);
+  });
+
+  it('keeps class II and class IV out of the forward sight cone, with and without side insets', () => {
+    const tan = Math.tan((COCKPIT_FOV * Math.PI) / 360);
+    const nearest = (lo: number, hi: number): number =>
+      lo <= 0 && hi >= 0 ? 0 : Math.min(Math.abs(lo), Math.abs(hi));
+    /** Degrees off the cockpit camera's axis of the point of `r` nearest it. */
+    const offAxis = (r: Rect, c: Rect): number => {
+      const x = nearest((2 * (r.x - c.x)) / c.width - 1, (2 * (r.x + r.width - c.x)) / c.width - 1);
+      const y = nearest(
+        1 - (2 * (r.y + r.height - c.y)) / c.height,
+        1 - (2 * (r.y - c.y)) / c.height,
+      );
+      return (Math.atan(Math.hypot((x * c.width * tan) / c.height, y * tan)) * 180) / Math.PI;
+    };
+    const notch = { top: 24, right: 48, bottom: 20, left: 48 };
+    // smaller screens (phones, no target) can leave class II in the cone at its least share
+    const targets = sizes.filter(([w, h]) => Math.min(w, h) >= 600 && Math.max(w, h) >= 800);
+    let wide = 0;
+    for (const [w, h] of targets) {
+      for (const mode of ['drive', 'mirrors'] as const) {
+        for (const insets of [NO_INSETS, notch]) {
+          const v = computeViewports(w, h, mode, null, insets, undefined, null, WIDE);
+          const { cockpit, mirrorLeft, mirrorRight, wideLeft, wideRight } = v;
+          if (cockpit === null) throw new Error('drive and mirror-only have a cockpit');
+          if (wideLeft !== null) wide++;
+          for (const r of [mirrorLeft, mirrorRight, wideLeft, wideRight]) {
+            if (r === null) continue;
+            const at = `${w}x${h} ${mode} ${JSON.stringify(insets)} ${JSON.stringify(r)}`;
+            expect(offAxis(r, cockpit), at).toBeGreaterThanOrEqual(CLEAR_CONE_DEG);
+          }
+        }
+      }
+    }
+    expect(wide).toBeGreaterThan(100);
+  });
+
+  it('keeps class II at least MIN_CLASS_II_SHARE of its size without class IV and the sight cone', () => {
+    const notch = { top: 24, right: 48, bottom: 20, left: 48 };
+    // Without side insets the mirrors sit further out, beside the cone; where the cockpit is the same,
+    // that class II is no larger than the inset one without the cone (a smaller left inset only grows the wheel).
+    const sideless = { ...notch, left: 0, right: 0 };
+    let coneShrunk = 0;
+    for (const [w, h] of [[800, 730] as const, ...sizes]) {
+      for (const mode of ['drive', 'mirrors'] as const) {
+        const on = computeViewports(w, h, mode, null, notch, undefined, null, WIDE);
+        const off = computeViewports(w, h, mode, null, notch, undefined, null, PLAIN);
+        const free = computeViewports(w, h, mode, null, sideless, undefined, null, PLAIN);
+        if (JSON.stringify(on.cockpit) !== JSON.stringify(free.cockpit)) continue;
+        const [a, b, ref] = [on.mirrorLeft, off.mirrorLeft, free.mirrorLeft];
+        if (a === null || b === null || ref === null) throw new Error('drive mode has mirrors');
+        if (on.wideLeft === null) continue;
+        if (b.width < ref.width) coneShrunk++;
+        const at = `${w}x${h} ${mode}`;
+        expect(a.width, at).toBeGreaterThanOrEqual(Math.ceil(MIN_CLASS_II_SHARE * ref.width));
+        expect(a.height, at).toBeGreaterThanOrEqual(Math.ceil(MIN_CLASS_II_SHARE * ref.height));
+      }
+    }
+    expect(coneShrunk).toBeGreaterThan(0);
+  });
+
+  it('moves the stack up out of the sight cone before it shrinks class II', () => {
+    const on = views(1168, 1018, WIDE, null);
+    const off = views(1168, 1018, PLAIN, null);
+    if (on.mirrorLeft === null || off.mirrorLeft === null)
+      throw new Error('drive mode has mirrors');
+    expect(on.wideLeft).not.toBeNull();
+    expect(on.mirrorLeft.width).toBe(off.mirrorLeft.width);
+    expect(on.mirrorLeft.y).toBeLessThan(off.mirrorLeft.y);
   });
 
   it('is shown at the required landscape sizes', () => {

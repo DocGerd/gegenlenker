@@ -389,7 +389,7 @@ jobs:
           path: dist
 
   # Production publishes its dist alone, so a release needs nothing from `develop`; `/uat/` is gone
-  # until the next `deploy-uat`. One `pages` group for both deploy jobs: `queue: max` keeps every
+  # until a UAT deploy runs. One `pages` group for every deploy job: `queue: max` keeps every
   # pending deploy instead of replacing the waiting one with the newest
   # (https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idconcurrency).
   deploy:
@@ -413,9 +413,10 @@ jobs:
 
   # `develop` deploys the UAT build to `/gegenlenker/uat/`; the Pages artifact also republishes the
   # production dist of the live `main` deploy, never rebuilt. The develop checkout only builds; the
-  # jobs that read deployments or publish run `main`'s `tools/uat-pages.ts`, which only a release
-  # changes. The jobs themselves are `develop`'s, so a change to them acts at once: the owner's
-  # approval of each UAT deploy is the gate. Until a release brings the script to `main`, they fail.
+  # jobs that read deployments or publish run `main`'s `tools/uat-pages.ts` and `tools/uat-gate.ts`,
+  # which only a release changes. The jobs themselves are `develop`'s, and so is the wiring that
+  # honours the gate's verdict: the gate catches accidental changes to the UAT deploy path, and PR
+  # review of `develop` is the boundary. While `main` lacks `uat-gate.ts`, every deploy is gated.
   build-uat:
     needs: check
     if: >-
@@ -444,7 +445,9 @@ jobs:
           path: dist/uat
           if-no-files-found: error
 
-  # The production lookup, before the owner is asked to approve `deploy-uat`.
+  # The production lookup, and whether the owner must approve the deploy: `gated` is `false` only
+  # when `tools/uat-gate.ts` of `main` says so, so a missing script, a failure or any other output
+  # gates.
   preflight-uat:
     needs: check
     if: >-
@@ -458,6 +461,8 @@ jobs:
       actions: read
       checks: read
       deployments: read
+    outputs:
+      gated: ${{ steps.gate.outputs.gated }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -475,14 +480,73 @@ jobs:
           node tools/uat-pages.ts "$RUNNER_TEMP/pages" --prod-only
         env:
           GH_TOKEN: ${{ github.token }}
+      - id: gate
+        name: Decide whether the deploy needs approval
+        run: |
+          gated=true
+          if [ -f tools/uat-gate.ts ]; then
+            verdict=$(node tools/uat-gate.ts) || verdict=
+            if [ "$verdict" = ungated ]; then gated=false; fi
+          fi
+          echo "gated=$gated" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
 
-  # The lookup runs again here, after approval and inside the group: a `main` deploy may have landed
-  # since the preflight, and an older production dist would roll the site back.
+  # The lookup runs again here, inside the group: a `main` deploy may have landed since the
+  # preflight, and an older production dist would roll the site back. `deploy-uat` (environment
+  # `uat-pages`, no reviewer) takes an unchanged UAT deploy path; `deploy-uat-gated` (`github-pages`,
+  # the owner approves) takes everything else. The two differ only in `if` and environment.
   deploy-uat:
     needs: [build-uat, preflight-uat]
     if: >-
       ${{ !cancelled() && needs.build-uat.result == 'success' &&
-      needs.preflight-uat.result == 'success' }}
+      needs.preflight-uat.result == 'success' &&
+      needs.preflight-uat.outputs.gated == 'false' }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      deployments: read
+      pages: write
+      id-token: write
+    environment:
+      name: uat-pages
+      url: ${{ steps.deployment.outputs.page_url }}uat/
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Assemble production and UAT
+        run: |
+          if [ ! -f tools/uat-pages.ts ]; then
+            echo "::error::main has no tools/uat-pages.ts: UAT deploys start once a release brings it there"
+            exit 1
+          fi
+          node tools/uat-pages.ts "$RUNNER_TEMP/pages"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/pages/dist
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+
+  deploy-uat-gated:
+    needs: [build-uat, preflight-uat]
+    if: >-
+      ${{ !cancelled() && needs.build-uat.result == 'success' &&
+      needs.preflight-uat.result == 'success' &&
+      needs.preflight-uat.outputs.gated != 'false' }}
     concurrency:
       group: pages
       cancel-in-progress: false
