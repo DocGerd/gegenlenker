@@ -882,7 +882,7 @@ for (const { locale, messages } of locales) {
 
 // Without an exercise there is no brief: the view row takes its place beside the finish button, and wraps.
 for (const { locale, messages } of locales) {
-  for (const size of sizes.filter((s) => s.width <= 1024)) {
+  for (const size of splitSizes.filter((s) => s.width <= 1024)) {
     test(`the free yard toolbar stays clear at ${locale} ${size.width}x${size.height}`, async ({
       browser,
     }) => {
