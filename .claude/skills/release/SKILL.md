@@ -1,6 +1,6 @@
 ---
 name: release
-description: 'Cut, ship and back-merge a Gegenlenker release or hotfix end to end: /release [X.Y.Z] or /release hotfix. Stops for the owner to merge into main and to approve the github-pages deployment.'
+description: 'Cut, ship and back-merge a Gegenlenker release or hotfix end to end: /release [X.Y.Z] or /release hotfix. Stops at a gate-checked, reviewed PR for the owner to merge into main.'
 argument-hint: '[X.Y.Z | hotfix]'
 disable-model-invocation: true
 ---
@@ -12,7 +12,7 @@ Drives [docs/releasing.md](../../../docs/releasing.md) end to end; read it first
 - `/release` or `/release X.Y.Z`: release. The first release has no earlier version to bump from: pass it (`/release 1.0.0`).
 - `/release hotfix`: hotfix, see the end.
 
-Agents run every step and merge the reviewed, green PRs, except into `main`: only the owner merges there (step 3.5). The owner also approves the `github-pages` deployment: never approve it and never touch `pending_deployments`.
+Agents run every step and merge the reviewed, green PRs, except into `main`: only the owner merges there (step 3.5), and that merge is the only gate: no deployment needs approval.
 
 Guard hook: keep each `git push` in its own command with an explicit refspec (`git push -u origin HEAD:refs/heads/<branch>`); pass `gh api` bodies with `--raw-field`/`-F`, never `-f`.
 
@@ -49,11 +49,9 @@ The ruleset accepts a green `check` from any source, and a `develop` push or `wo
 2. `gh api "repos/DocGerd/gegenlenker/actions/workflows/ci.yml/runs?event=pull_request&head_sha=<sha>" --jq '.workflow_runs | max_by(.run_number) | [.id, .status, .head_branch] | @tsv'` prints `<run-id>`, `completed` and the same head branch: the newest `pull_request` run of that commit.
 3. `gh api "repos/DocGerd/gegenlenker/actions/runs/<run-id>/jobs?per_page=100" --jq '[(.jobs[] | select(.name == "lint") | .steps[] | select(.name == "Only release and hotfix branches open PRs into main" or .name == "Check the release tree") | .conclusion), (.jobs[] | select(.name == "check") | .conclusion)] | join(" ")'` prints exactly `success success success`: the guard and release-tree steps of `lint` in `.github/workflows/ci.yml`, then `check`. `skipped` means that run did not see base `main`: close and reopen the PR, then check again.
 
-## 4. Stop for the owner
+## 4. After the owner's merge
 
-`gh api repos/DocGerd/gegenlenker/pulls/<n> --jq .merge_commit_sha` is the merge commit. After `git fetch origin`, `git rev-parse '<merge-sha>^{tree}' '<sha>^{tree}'` prints one tree twice (the merge ships the head that passed the gate check); if not, tell the owner not to approve, and stop. `gh run list --workflow ci.yml --event push --commit <merge-sha> --json databaseId,url,status` lists its run (wait until it appears). Tell the owner: approve the `github-pages` deployment of that run, with its URL, then wait. Do not approve it, and do not read or write `pending_deployments`.
-
-Pending gated UAT deploys of `develop` (`deploy-uat-gated`) ahead of it in the `pages` queue are the owner's too: say so if the run waits (docs/releasing.md, UAT).
+`gh api repos/DocGerd/gegenlenker/pulls/<n> --jq .merge_commit_sha` is the merge commit. After `git fetch origin`, `git rev-parse '<merge-sha>^{tree}' '<sha>^{tree}'` prints one tree twice (the merge ships the head that passed the gate check); if not, tell the owner and stop. `gh run list --workflow ci.yml --event push --commit <merge-sha> --json databaseId,url,status` lists its run (wait until it appears); it deploys on its own.
 
 ## 5. Wait and verify
 
@@ -82,7 +80,7 @@ Pending gated UAT deploys of `develop` (`deploy-uat-gated`) ahead of it in the `
 - `check` red on a PR into `release/X.Y.Z` or `main`: fix on a `feature/*` branch into the release branch (never directly; a hotfix takes it as a commit on `hotfix/X.Y.Z`), rerun prepare if a fragment changed, wait for green. A PR whose base changed starts no run: close and reopen it.
 - `release:check` fails on the `main` PR (pending fragments, version mismatch): rerun `release:prepare X.Y.Z` on a fresh `feature/prepare-X.Y.Z` PR into the release branch.
 - Merge refused: a ruleset (up to date, resolved threads, merge method) names the reason; resolve it, never bypass. If the harness denies `gh pr merge`, do not retry: hand the owner the exact command.
-- Deploy waiting a long time: the owner has not approved, or gated UAT deploys are queued ahead; say so, do not touch deployments. Rejected: the owner's decision; stop and report. Cancelled or failed: `gh run rerun <id> --failed` (the owner approves again), else `gh workflow run ci.yml --ref main` redeploys production, and the release job follows the deploy.
+- Deploy waiting a long time: other deploys are queued ahead in the `pages` group; say so, do not touch deployments. Cancelled or failed: `gh run rerun <id> --failed`, else `gh workflow run ci.yml --ref main` redeploys production, and the release job follows the deploy.
 - `release` job failed: `gh run rerun <id> --failed`; it is idempotent (a no-op once tagged and published). An `::error::` from it again (a tag on another commit, a draft or tagless release) is no transient failure: stop and report. Never delete or move a tag: releases are immutable, a wrong one burns its version.
 - `release:backmerge` refuses `tag does not exist` or `no published GitHub Release`: the release job has not finished; wait and rerun. `branch feature/back-merge-X.Y.Z already exists` with no PR: ask the owner to delete it, rerun.
 - Back-merge conflicts: in a worktree on `feature/back-merge-X.Y.Z`, `git merge origin/<target>`, resolve (docs/releasing.md, Back-merge: a fragment edited on `develop` after the cut becomes a `released.json` edit), commit, push the branch in its own command.

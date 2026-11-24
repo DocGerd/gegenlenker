@@ -5,17 +5,15 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-// `webgpu` is advisory: it reports, but does not gate a merge. `release` tags after `deploy`. The
-// deploy chains can wait for the owner's approval, so a gate on them would hold every merge.
+// `webgpu` is advisory: it reports, but does not gate a merge. `release` tags after `deploy`, and
+// the deploy chains run only after a push, so a gate on them would hold every merge.
 const NOT_GATED = new Set([
   'check',
   'build-pages',
   'deploy',
   'release',
   'build-uat',
-  'preflight-uat',
   'deploy-uat',
-  'deploy-uat-gated',
   'webgpu',
 ]);
 
@@ -199,36 +197,27 @@ it('main deploys production and develop deploys UAT, each after a green check', 
   expect(jobs['release']?.if).toBe(
     "${{ !cancelled() && needs.deploy.result == 'success' && github.ref == 'refs/heads/main' }}",
   );
-  for (const name of ['build-uat', 'preflight-uat']) {
-    expect(jobs[name]?.needs, name).toBe('check');
-    expect(jobs[name]?.if, name).toBe(DEVELOP_ONLY);
-  }
-  const deployUat = (gate: string): string =>
-    "${{ !cancelled() && needs.build-uat.result == 'success' && " +
-    `needs.preflight-uat.result == 'success' && needs.preflight-uat.outputs.gated ${gate} 'false' }}`;
-  for (const name of ['deploy-uat', 'deploy-uat-gated'])
-    expect(jobs[name]?.needs, name).toEqual(['build-uat', 'preflight-uat']);
-  expect(jobs['deploy-uat']?.if).toBe(deployUat('=='));
-  expect(jobs['deploy-uat-gated']?.if).toBe(deployUat('!='));
-  expect(jobs['preflight-uat']?.outputs).toEqual({ gated: '${{ steps.gate.outputs.gated }}' });
+  expect(jobs['build-uat']?.needs).toBe('check');
+  expect(jobs['build-uat']?.if).toBe(DEVELOP_ONLY);
+  expect(jobs['deploy-uat']?.needs).toBe('build-uat');
+  expect(jobs['deploy-uat']?.if).toBe("${{ !cancelled() && needs.build-uat.result == 'success' }}");
 });
 
-// Approval-gated: a `check` that needed them would wait for the owner on every develop push.
+// A `check` that needed a deploy job would wait for it on every push.
 it('check needs none of the UAT jobs', () => {
   const needs = workflow().jobs['check']?.needs;
   const list = Array.isArray(needs) ? needs : [needs];
-  for (const name of ['build-uat', 'preflight-uat', 'deploy-uat', 'deploy-uat-gated'])
-    expect(list).not.toContain(name);
+  for (const name of ['build-uat', 'deploy-uat']) expect(list).not.toContain(name);
 });
 
-// Whether a job waiting for approval holds its group is undocumented. One group serialises every
-// deploy either way, and `queue: max` keeps a waiting deploy from being replaced by a newer one.
+// One group serialises every deploy, and `queue: max` keeps a waiting deploy from being replaced
+// by a newer one.
 it('every deploy job shares one pages group that queues instead of replacing', () => {
   const { jobs } = workflow();
   const inPages = Object.entries(jobs)
     .filter(([, job]) => job.concurrency?.['group'] === 'pages')
     .map(([name]) => name);
-  expect(inPages.sort()).toEqual(['deploy', 'deploy-uat', 'deploy-uat-gated']);
+  expect(inPages.sort()).toEqual(['deploy', 'deploy-uat']);
   for (const name of inPages)
     expect(jobs[name]?.concurrency, name).toEqual({
       group: 'pages',
@@ -237,15 +226,10 @@ it('every deploy job shares one pages group that queues instead of replacing', (
     });
 });
 
-// Only the unapproved twin may leave `github-pages`, whose environment requires the owner.
-it('the UAT twins differ in their condition and environment only', () => {
+it('production deploys to github-pages and UAT to uat-pages', () => {
   const { jobs } = workflow();
-  const [free, gated] = [jobs['deploy-uat'], jobs['deploy-uat-gated']];
   expect(jobs['deploy']?.environment?.name).toBe('github-pages');
-  expect(free?.environment?.name).toBe('uat-pages');
-  expect(gated?.environment?.name).toBe('github-pages');
-  expect(free?.environment?.url).toBe(gated?.environment?.url);
-  expect({ ...free, if: '', environment: '' }).toEqual({ ...gated, if: '', environment: '' });
+  expect(jobs['deploy-uat']?.environment?.name).toBe('uat-pages');
 });
 
 // Only a release changes `main`: a `develop` change to the script must not reach the code that
@@ -262,8 +246,8 @@ it('the jobs that read deployments or publish run main code only, without packag
       );
     })
     .map(([name]) => name);
-  expect(privileged.sort()).toEqual(['deploy', 'deploy-uat', 'deploy-uat-gated', 'preflight-uat']);
-  for (const name of ['deploy-uat', 'deploy-uat-gated', 'preflight-uat']) {
+  expect(privileged.sort()).toEqual(['deploy', 'deploy-uat']);
+  for (const name of ['deploy-uat']) {
     const steps = jobs[name]?.steps ?? [];
     const checkouts = steps.filter((step) => step.uses?.startsWith('actions/checkout@') === true);
     expect(checkouts, name).toHaveLength(1);
@@ -309,74 +293,31 @@ describe('the UAT pages step', () => {
   };
 
   it('fails with a clear error while main lacks the script, never running another copy', () => {
-    for (const job of ['preflight-uat', 'deploy-uat', 'deploy-uat-gated']) {
-      const { cwd, env, seen } = checkout(false);
-      const result = spawnSync('bash', ['-e', '-c', step(job)], { cwd, env, encoding: 'utf8' });
-      expect(result.status, job).toBe(1);
-      expect(result.stdout, job).toContain('::error::main has no tools/uat-pages.ts');
-      expect(existsSync(seen), job).toBe(false);
-    }
+    const { cwd, env, seen } = checkout(false);
+    const result = spawnSync('bash', ['-e', '-c', step('deploy-uat')], {
+      cwd,
+      env,
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('::error::main has no tools/uat-pages.ts');
+    expect(existsSync(seen)).toBe(false);
   });
 
-  it('runs the script from main: production only to preflight, the whole tree to deploy', () => {
-    for (const [job, args] of [
-      ['preflight-uat', ['/runner/temp/pages', '--prod-only']],
-      ['deploy-uat', ['/runner/temp/pages']],
-      ['deploy-uat-gated', ['/runner/temp/pages']],
-    ] as const) {
-      const { cwd, env, seen } = checkout(true);
-      expect(runStep(step(job), cwd, env), job).toBe(0);
-      expect(JSON.parse(readFileSync(seen, 'utf8')), job).toEqual(args);
-    }
+  it('runs the script from main and assembles the whole tree', () => {
+    const { cwd, env, seen } = checkout(true);
+    expect(runStep(step('deploy-uat'), cwd, env)).toBe(0);
+    expect(JSON.parse(readFileSync(seen, 'utf8'))).toEqual(['/runner/temp/pages']);
   });
 });
 
 it('a UAT deploy uploads the assembled tree right after assembling it, then deploys', () => {
-  for (const name of ['deploy-uat', 'deploy-uat-gated']) {
-    const steps = workflow().jobs[name]?.steps ?? [];
-    const assemble = steps.findIndex((step) => step.name === 'Assemble production and UAT');
-    expect(steps[assemble + 1]?.uses, name).toMatch(/^actions\/upload-pages-artifact@/);
-    expect(steps[assemble + 1]?.with?.['path'], name).toBe('${{ runner.temp }}/pages/dist');
-    expect(steps[assemble + 2]?.uses, name).toMatch(/^actions\/deploy-pages@/);
-    expect(steps.slice(assemble + 3), name).toEqual([]);
-  }
-});
-
-// A missing script, a failing one or anything but its affirmative answer must gate.
-describe('the UAT gate step', () => {
-  const gate = (): string => {
-    const step = workflow().jobs['preflight-uat']?.steps?.find((each) => each.id === 'gate');
-    expect(step?.env).toEqual({ GH_TOKEN: '${{ github.token }}' });
-    return step?.run ?? '';
-  };
-  const gated = (script: string | undefined): string => {
-    const cwd = mkdtempSync(join(tmpdir(), 'ci-gate-'));
-    dirs.push(cwd);
-    if (script !== undefined) {
-      mkdirSync(join(cwd, 'tools'));
-      writeFileSync(join(cwd, 'package.json'), '{"type":"module"}');
-      writeFileSync(join(cwd, 'tools', 'uat-gate.ts'), script);
-    }
-    const output = join(cwd, 'output');
-    writeFileSync(output, '');
-    const env = { ...process.env, GITHUB_OUTPUT: output };
-    expect(runStep(gate(), cwd, env)).toBe(0);
-    return readFileSync(output, 'utf8');
-  };
-
-  it.each([
-    ['ungated', "console.log('ungated');", 'gated=false\n'],
-    ['anything else', "console.log('ungated yes');", 'gated=true\n'],
-    ['nothing', '', 'gated=true\n'],
-    ['a failure after answering', "console.log('ungated'); process.exitCode = 1;", 'gated=true\n'],
-    ['a crash', "throw new Error('boom');", 'gated=true\n'],
-  ])('%s', (_name, script, expected) => {
-    expect(gated(script)).toBe(expected);
-  });
-
-  it('gates while main lacks the script', () => {
-    expect(gated(undefined)).toBe('gated=true\n');
-  });
+  const steps = workflow().jobs['deploy-uat']?.steps ?? [];
+  const assemble = steps.findIndex((step) => step.name === 'Assemble production and UAT');
+  expect(steps[assemble + 1]?.uses).toMatch(/^actions\/upload-pages-artifact@/);
+  expect(steps[assemble + 1]?.with?.['path']).toBe('${{ runner.temp }}/pages/dist');
+  expect(steps[assemble + 2]?.uses).toMatch(/^actions\/deploy-pages@/);
+  expect(steps.slice(assemble + 3)).toEqual([]);
 });
 
 it('the UAT build uses the UAT channel and base, and uploads it for the deploy', () => {
