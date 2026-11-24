@@ -619,11 +619,21 @@ describe.each(CASES)(
         }
       });
 
+      // Near-square and small portrait windows, where the room above the controls is short and class
+      // II sits at the label floor: a step of 20 px falls between the coarse sweep's samples.
+      const tight: (readonly [number, number])[] = [];
+      for (let w = 640; w <= 820; w += 20) {
+        for (let h = 660; h <= 840; h += 20) tight.push([w, h]);
+      }
+      for (let w = 360; w <= 540; w += 20) {
+        for (let h = 440; h <= 600; h += 20) tight.push([w, h]);
+      }
+
       it('keeps every part off the centre of each mirror rect, the front, class IV and class V mirrors included', () => {
         let fronts = 0;
         let wides = 0;
         let closes = 0;
-        for (const [w, h] of windows) {
+        for (const [w, h] of [...windows, ...tight]) {
           const shot = shootRoute(w, h);
           if (shot.front !== null) fronts++;
           if (shot.wide !== null) wides++;
@@ -647,6 +657,23 @@ describe.each(CASES)(
         expect(fronts).toBeGreaterThan(windows.length / 2);
         expect(wides).toBeGreaterThan(windows.length / 4);
         expect(closes).toBeGreaterThan(0);
+      });
+
+      it('keeps every part off the lower three quarters of each class II mirror rect', () => {
+        for (const [w, h] of [...windows, ...tight]) {
+          const { camera, interior, cockpit, left, right } = shootRoute(w, h);
+          const parts = drawn(interior);
+          for (const rect of [left, right]) {
+            // just inside: the header's edge is a chord polyline, a hair below its curve
+            for (const u of [0, 0.5, 1]) {
+              const [x, y] = rectToNdc(cockpit, rect, u, 0.26);
+              expect(
+                hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
+                `${w}x${h} u=${u}`,
+              ).toEqual([]);
+            }
+          }
+        }
       });
     });
   },

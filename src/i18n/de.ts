@@ -108,6 +108,7 @@ export const de: Record<MessageKey, string> = {
   aidTopViewOnly: 'Nur in den Ansichten Folgen und Ganzer Hof sichtbar',
   panelAids: 'Hilfen',
   panelGauges: 'Winkel',
+  panelGaugesNeedsAid: 'Nur bei eingeschalteter Winkelanzeige sichtbar',
   targetDirection: 'Richtung zum Ziel',
   finish: 'Beenden',
   leaveUnscored: 'Ohne Wertung verlassen',

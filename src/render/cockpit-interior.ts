@@ -96,6 +96,31 @@ export function interiorLayout(
   return into;
 }
 
+/**
+ * How far the header's edge must rise, in NDC, so the headliner stays off the lower three quarters of
+ * each mirror rect: the edge is an arch, so its lowest point over a rect is at one of the rect's
+ * sides. 0 where the edge is already clear, or without a mirror.
+ */
+export function headerLift(
+  cockpit: Rect,
+  mirrors: readonly (Rect | null)[],
+  shift: number,
+): number {
+  let lift = 0;
+  for (const rect of mirrors) {
+    if (rect === null) continue;
+    const ndcX = (x: number): number => (2 * (x - cockpit.x)) / cockpit.width - 1;
+    const centreY = 1 - (2 * (rect.y + rect.height / 2 - cockpit.y)) / cockpit.height;
+    const edge = Math.min(
+      headerEdge(ndcX(rect.x), shift),
+      headerEdge(ndcX(rect.x + rect.width), shift),
+    );
+    // a quarter of the rect's height above its centre
+    lift = Math.max(lift, centreY + rect.height / cockpit.height / 2 - edge);
+  }
+  return lift;
+}
+
 export type PillarSpans = { left: PillarSpan | null; right: PillarSpan | null };
 
 /**
@@ -277,9 +302,9 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
   const right = add('pillar-right', 0, pillar());
   const left = add('pillar-left', 0, pillar());
   // One draw for the static parts; later triangles cover earlier ones, since nothing is depth tested.
-  const buildFrame = (shift: number, visor: number): BufferGeometry => {
+  const buildFrame = (shift: number, visor: number, lift: number): BufferGeometry => {
     const dash = (x: number): number => Math.max(dashEdge(x, shift), hump(x));
-    const header = (x: number): number => headerEdge(x, shift);
+    const header = (x: number): number => headerEdge(x, shift) + lift;
     const parts = [
       strip(
         (x) => dash(x) - DASH_LIP,
@@ -313,17 +338,19 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
   };
   let shift = MAX_SHIFT;
   let visor = VISOR.left;
-  const frame = add('frame', 1, buildFrame(shift, visor));
+  let lift = 0;
+  const frame = add('frame', 1, buildFrame(shift, visor, lift));
   const lip = createBinnacleLip();
   object.add(lip.mesh);
   object.visible = false;
-  /** The windscreen centre and the mirror move with the pane: the frame is rebuilt only when one of them does. */
-  const shape = (nextShift: number, nextVisor: number): void => {
-    if (nextShift === shift && nextVisor === visor) return;
+  /** The windscreen centre and the mirrors move with the pane: the frame is rebuilt only when one of them does. */
+  const shape = (nextShift: number, nextVisor: number, nextLift: number): void => {
+    if (nextShift === shift && nextVisor === visor && nextLift === lift) return;
     shift = nextShift;
     visor = nextVisor;
+    lift = nextLift;
     const previous = frame.geometry;
-    frame.geometry = buildFrame(shift, visor);
+    frame.geometry = buildFrame(shift, visor, lift);
     geometries[geometries.indexOf(previous)] = frame.geometry;
     previous.dispose();
   };
@@ -344,7 +371,8 @@ export function createCockpitInterior(truck: TruckSpec): FlatInterior {
     place({ camera, cockpit, mirrorLeft, mirrorRight }) {
       placeInEye(object, camera);
       interiorLayout(cockpit, mirrorLeft, mirrorRight, layout);
-      shape(edgeShift(truck, camera.aspect, camera.fov), visorLeft(layout.left));
+      const centre = edgeShift(truck, camera.aspect, camera.fov);
+      shape(centre, visorLeft(layout.left), headerLift(cockpit, [mirrorLeft, mirrorRight], centre));
       const spans = pillarSpans(sight, camera.aspect, camera.fov, layout);
       placePillar(left, -1, spans.left);
       placePillar(right, 1, spans.right);
