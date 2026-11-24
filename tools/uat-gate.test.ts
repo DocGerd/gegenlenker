@@ -269,9 +269,30 @@ describe('decide', () => {
     ['another workflow', { '.github/workflows/scorecard.yml': 'changed' }],
     ['a new workflow', { '.github/workflows/new.yml': 'new' }],
     ['a new local action', { '.github/actions/x/action.yml': 'new' }],
+    ['a new Vite config', { 'vite.config.mjs': 'new' }],
+    ['a new PostCSS config', { 'postcss.config.cjs': 'new' }],
+    ['a new .postcssrc', { '.postcssrc': 'new' }],
+    ['a new .postcssrc.mjs', { '.postcssrc.mjs': 'new' }],
+    ['a new .npmrc', { '.npmrc': 'new' }],
+    ['a new pnpm hook', { '.pnpmfile.cjs': 'new' }],
   ])('gates a change to %s', async (_name, change) => {
     const verdict = await run(withHead({ files: { ...files(), ...change } }));
     expect(verdict.gated).toBe(true);
+  });
+
+  it('gates when a config file is removed, and ignores lookalikes', async () => {
+    const extra = { 'vite.config.mjs': 'x', '.npmrc': 'x' };
+    const removed = await run(withHead({}, { files: { ...files(), ...extra } }));
+    expect(removed.gated).toBe(true);
+    const lookalikes = {
+      'src/vite.config.mjs': 'x',
+      'vite.config.json': 'x',
+      'docs/.npmrc': 'x',
+      'postcss.config.mjs.bak': 'x',
+    };
+    expect(await run(withHead({ files: { ...files(), ...lookalikes } }))).toEqual({
+      gated: false,
+    });
   });
 
   it('gates when the baseline lacks a UAT job, a file or a complete tree', async () => {
