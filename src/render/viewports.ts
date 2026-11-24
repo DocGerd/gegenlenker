@@ -533,7 +533,7 @@ const cueTexts = (): string[] =>
     `${lang.goalDistance} ${lang.goalAngleOff}`,
   ]);
 
-/** Heights of the longest toast and of the goal cue in a column `room` px wide (the left inset already taken off). */
+/** Heights of the longest toast and of the goal cue in a column `room` px wide. */
 function messageHeights(room: number): { toast: number; cue: number } {
   // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
   return {
