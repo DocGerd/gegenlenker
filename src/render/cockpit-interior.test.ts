@@ -658,6 +658,23 @@ describe.each(CASES)(
         expect(wides).toBeGreaterThan(windows.length / 4);
         expect(closes).toBeGreaterThan(0);
       });
+
+      it('keeps every part off the lower three quarters of each class II mirror rect', () => {
+        for (const [w, h] of [...windows, ...tight]) {
+          const { camera, interior, cockpit, left, right } = shootRoute(w, h);
+          const parts = drawn(interior);
+          for (const rect of [left, right]) {
+            // just inside: the header's edge is a chord polyline, a hair below its curve
+            for (const u of [0, 0.5, 1]) {
+              const [x, y] = rectToNdc(cockpit, rect, u, 0.26);
+              expect(
+                hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
+                `${w}x${h} u=${u}`,
+              ).toEqual([]);
+            }
+          }
+        }
+      });
     });
   },
 );
