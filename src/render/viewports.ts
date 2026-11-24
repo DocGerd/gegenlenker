@@ -40,7 +40,7 @@ export const MIN_MIRROR_HEIGHT = 48;
 export const MIN_FRONT_WIDTH = 122;
 const MAX_FRONT_WIDTH = 240;
 /** CSS px between the toast column and the mirrors on either side of it. */
-const MESSAGE_GAP = 8;
+export const MESSAGE_GAP = 8;
 /**
  * Narrowest toast column: the widest unbreakable word of a toast or goal cue ("Drehschemelwinkel",
  * 131 px at 14 px Geist, measured), the toast's padding and borders (41 px, warn border included)

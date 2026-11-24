@@ -37,6 +37,7 @@ import {
   controlsHeight,
   FRONT_ASPECT,
   HUD_BAND_SHARE,
+  MESSAGE_GAP,
   MESSAGE_KEYS,
   messageColumn,
   MIN_CLASS_II_SHARE,
@@ -54,7 +55,7 @@ import {
   type Insets,
   type PanelStack,
 } from './viewports';
-import { GEOM, HUD_THRESHOLDS, metricsAt, type Metrics } from './viewports-css.test';
+import { GEOM, HUD_THRESHOLDS, metricsAt, type Metrics } from './viewports-css';
 
 /* ------------------------------------------------------------------------------------------------
  * Bounds: every integer CSS width x height in each box. Phones are out of scope (no target).
@@ -68,7 +69,7 @@ type Box = {
 
 /**
  * Default: each box is exhaustive, the boxes are not contiguous. Laptops incl. the short ones in
- * CLAUDE.md (1536x729 to 1280x585), 1080p and 1440p desktops, tablets in landscape and portrait.
+ * CLAUDE.md, 1080p and 1440p desktops, tablets in landscape and portrait.
  */
 const DEFAULT_BOXES: readonly Box[] = [
   { name: 'laptop', w: [1280, 1600], h: [585, 800] },
@@ -89,19 +90,34 @@ const FULL_BOXES: readonly Box[] = [
 
 const range = (text: string | undefined): readonly [number, number] | null => {
   const m = /^(\d+)-(\d+)$/.exec(text ?? '');
-  return m?.[1] !== undefined && m[2] !== undefined ? [Number(m[1]), Number(m[2])] : null;
+  if (m?.[1] === undefined || m[2] === undefined) return null;
+  const [low, high] = [Number(m[1]), Number(m[2])];
+  return low <= high ? [low, high] : null;
 };
 
-/** `VERIFY_LAYOUT_W=a-b VERIFY_LAYOUT_H=c-d` replaces the boxes with one (for mutation runs and bisecting). */
-function boxes(): readonly Box[] {
-  const w = range(process.env['VERIFY_LAYOUT_W']);
-  const h = range(process.env['VERIFY_LAYOUT_H']);
-  if (w !== null && h !== null) return [{ name: 'custom', w, h }];
-  return process.env['VERIFY_LAYOUT'] === 'full' ? FULL_BOXES : DEFAULT_BOXES;
+/**
+ * `VERIFY_LAYOUT_W=a-b VERIFY_LAYOUT_H=c-d` replaces the boxes with one (for mutation runs and bisecting);
+ * one of them alone, or a malformed one, throws rather than running the named bounds unjudged.
+ */
+function selection(): { readonly boxes: readonly Box[]; readonly custom: boolean } {
+  const wText = process.env['VERIFY_LAYOUT_W'];
+  const hText = process.env['VERIFY_LAYOUT_H'];
+  if (wText === undefined && hText === undefined) {
+    return {
+      boxes: process.env['VERIFY_LAYOUT'] === 'full' ? FULL_BOXES : DEFAULT_BOXES,
+      custom: false,
+    };
+  }
+  const w = range(wText);
+  const h = range(hText);
+  if (w === null || h === null) {
+    throw new Error('VERIFY_LAYOUT_W and VERIFY_LAYOUT_H must both be set, each as <min>-<max>');
+  }
+  return { boxes: [{ name: 'custom', w, h }], custom: true };
 }
 
 /* ------------------------------------------------------------------------------------------------
- * CSS geometry the properties are measured against: read from the stylesheets (`viewports-css.test.ts`).
+ * CSS geometry the properties are measured against: read from the stylesheets (`viewports-css.ts`).
  * ---------------------------------------------------------------------------------------------- */
 
 const SPACE_4 = GEOM.space4;
@@ -115,8 +131,6 @@ const GEARS_HEIGHT = GEOM.gearsHeight;
 const COCKPIT_LABEL = GEOM.cockpitLabel;
 const MESSAGE_LINE = GEOM.messageLine;
 const MESSAGE_BOX = GEOM.messageBox;
-/** Between the class II mirrors and the message column, as `viewports.ts` places it. */
-const MESSAGE_GAP = 8;
 const PEDAL_W = GEOM.pedalW;
 
 /* ------------------------------------------------------------------------------------------------
@@ -281,90 +295,92 @@ const unitOf = (p: Property): 'px' | 'deg' =>
   p === 'wide-mirrors-clear-of-sight-cone' ? 'deg' : 'px';
 
 /**
- * A finding's baseline in one (property, variant) pair and bounds: how many checks fail and the worst
- * magnitude, rounded up to 4 decimals. A pair that fails more often or worse than this is a regression.
+ * A finding's baseline in one (property, variant) pair and bounds, per box of the bounds: how many
+ * checks fail and the worst magnitude, rounded up to 4 decimals. A box that fails more often or worse
+ * is a regression; one that fails less often or milder must be lowered to the new numbers.
  */
-type Baseline = { readonly issue: string; readonly n: number; readonly worst: number };
+type BoxBaseline = readonly [failures: number, worst: number];
+type Baseline = { readonly issue: string; readonly boxes: Readonly<Record<string, BoxBaseline>> };
 type KnownTable = Readonly<Partial<Record<Property, Readonly<Record<string, Baseline>>>>>;
-const known = (issue: string, n: number, worst = 0): Baseline => ({ issue, n, worst });
+const known = (issue: string, boxes: Record<string, BoxBaseline>): Baseline => ({ issue, boxes });
 /** Rounds a magnitude up to the 4 decimals a baseline holds. */
 const ceil4 = (x: number): number => Math.ceil(x * 1e4) / 1e4;
 
 /**
  * Counterexamples already filed as issues, per bounds. A counterexample in a listed (property, variant)
- * pair is KNOWN and does not fail the run unless it is worse than the baseline; any other fails. A
- * listed pair without one in its bounds is STALE and fails too: the issue was fixed, remove the entry.
+ * pair is KNOWN and does not fail the run while it equals the baseline in every box; any other fails.
+ * A listed pair without one in its bounds is STALE and fails too: the issue was fixed, remove the entry.
  */
 const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable } = {
   default: {
     'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
-      'drive balanced, share max': known('#389', 49653, 0.5000),
-      'drive high, home indicator, legend, panels steps, share max': known('#389', 54261, 0.5000),
+      'drive balanced, share max': known('#389', { 'laptop': [19738, 0.5], 'tablet landscape': [20604, 0.5], 'tablet portrait': [9311, 0.5] }),
+      'drive high, home indicator, legend, panels steps, share max': known('#389', { 'laptop': [19738, 0.5], 'tablet landscape': [20604, 0.5], 'tablet portrait': [13919, 0.5] }),
     },
     'wide-mirrors-clear-of-sight-cone': {
-      'drive balanced, share max': known('#392', 1290, 0.2200),
-      'drive high, home indicator, legend, panels steps, share max': known('#392', 1290, 0.2200),
-      'drive balanced, notch': known('#392', 9945, 2.6876),
-      'drive balanced, notch, legend, panels steps, share min': known('#392', 21559, 2.9000),
-      'mirrors balanced': known('#392', 76702, 2.0203),
-      'mirrors balanced, legend with all keys': known('#392', 76702, 2.0203),
-      'mirrors high, notch, legend': known('#392', 137254, 4.7435),
-      'mirrors balanced, home indicator, legend': known('#392', 76702, 2.0203),
+      'drive balanced, share max': known('#392', { 'desktop 1440p': [1290, 0.22] }),
+      'drive high, home indicator, legend, panels steps, share max': known('#392', { 'desktop 1440p': [1290, 0.22] }),
+      'drive balanced, notch': known('#392', { 'tablet landscape': [9807, 2.6876], 'tablet portrait': [138, 0.411] }),
+      'drive balanced, notch, legend, panels steps, share min': known('#392', { 'tablet landscape': [239, 0.9333], 'tablet portrait': [21320, 2.9] }),
+      'mirrors balanced': known('#392', { 'tablet portrait': [76556, 2.0203], 'tablet portrait 834': [146, 0.1191] }),
+      'mirrors balanced, legend with all keys': known('#392', { 'tablet portrait': [76556, 2.0203], 'tablet portrait 834': [146, 0.1191] }),
+      'mirrors high, notch, legend': known('#392', { 'tablet portrait': [130594, 4.7435], 'tablet portrait 834': [6660, 2.4034] }),
+      'mirrors balanced, home indicator, legend': known('#392', { 'tablet portrait': [76556, 2.0203], 'tablet portrait 834': [146, 0.1191] }),
     },
     'message-column-valid': {
-      'mirrors high, notch, legend': known('#393', 7224, 16.0000),
+      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [7224, 16.0] }),
     },
   },
   full: {
     'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
-      'drive balanced, share max': known('#389', 441470, 0.5000),
-      'drive high, home indicator, legend, panels steps, share max': known('#389', 419792, 0.5000),
+      'drive balanced, share max': known('#389', { 'laptop and desktop': [312245, 0.5], 'tablet landscape': [20310, 0.5], 'tablet portrait': [108915, 0.5] }),
+      'drive high, home indicator, legend, panels steps, share max': known('#389', { 'laptop and desktop': [302952, 0.5], 'tablet landscape': [3326, 0.5], 'tablet portrait': [113514, 0.5] }),
     },
     'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)': {
-      'drive balanced, home indicator': known('#390', 966, 8.0000),
-      'drive balanced, notch': known('#390', 966, 8.0000),
-      'drive balanced, notch, legend, panels steps, share min': known('#390', 966, 8.0000),
-      'drive high, home indicator, legend, panels steps, share max': known('#390', 966, 8.0000),
+      'drive balanced, home indicator': known('#390', { 'tablet landscape': [182, 7.0], 'tablet portrait': [784, 8.0] }),
+      'drive balanced, notch': known('#390', { 'tablet landscape': [182, 7.0], 'tablet portrait': [784, 8.0] }),
+      'drive balanced, notch, legend, panels steps, share min': known('#390', { 'tablet landscape': [182, 7.0], 'tablet portrait': [784, 8.0] }),
+      'drive high, home indicator, legend, panels steps, share max': known('#390', { 'tablet landscape': [182, 7.0], 'tablet portrait': [784, 8.0] }),
     },
     'mirrors-clear-of-control-boxes': {
-      'drive balanced, home indicator': known('#390', 483, 27.2030),
-      'drive balanced, notch': known('#390', 483, 27.2030),
-      'drive balanced, notch, legend, panels steps, share min': known('#390', 483, 27.2030),
-      'drive high, home indicator, legend, panels steps, share max': known('#390', 483, 27.2030),
+      'drive balanced, home indicator': known('#390', { 'tablet landscape': [91, 26.9259], 'tablet portrait': [392, 27.203] }),
+      'drive balanced, notch': known('#390', { 'tablet landscape': [91, 26.9259], 'tablet portrait': [392, 27.203] }),
+      'drive balanced, notch, legend, panels steps, share min': known('#390', { 'tablet landscape': [91, 26.9259], 'tablet portrait': [392, 27.203] }),
+      'drive high, home indicator, legend, panels steps, share max': known('#390', { 'tablet landscape': [91, 26.9259], 'tablet portrait': [392, 27.203] }),
     },
     'wide-mirrors-clear-of-sight-cone': {
-      'drive balanced, notch': known('#392', 648243, 5.0963),
-      'drive balanced': known('#392', 334378, 1.6914),
-      'drive low': known('#392', 334378, 1.6914),
-      'drive high': known('#392', 334378, 1.6914),
-      'drive balanced, share max': known('#392', 1143038, 1.9733),
-      'drive balanced, legend': known('#392', 334378, 1.6914),
-      'drive balanced, legend with all keys': known('#392', 334378, 1.6914),
-      'drive balanced, panels steps': known('#392', 334378, 1.6914),
-      'drive balanced, panels never fit': known('#392', 334378, 1.6914),
-      'drive balanced, home indicator': known('#392', 334378, 1.6914),
-      'drive high, home indicator, legend, panels steps, share max': known('#392', 1143038, 1.9733),
-      'drive balanced, notch, legend, panels steps, share min': known('#392', 348786, 4.5761),
-      'mirrors high, notch, legend': known('#392', 681117, 4.7435),
-      'mirrors balanced': known('#392', 360433, 2.0203),
-      'mirrors balanced, legend with all keys': known('#392', 360609, 2.0203),
-      'mirrors balanced, home indicator, legend': known('#392', 360609, 2.0203),
-      'drive balanced, share min': known('#392', 66022, 1.9484),
+      'drive balanced, notch': known('#392', { 'laptop and desktop': [334574, 4.4033], 'tablet landscape': [67544, 5.0963], 'tablet portrait': [246125, 5.0963] }),
+      'drive balanced': known('#392', { 'laptop and desktop': [169466, 1.4923], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [121236, 1.6914] }),
+      'drive low': known('#392', { 'laptop and desktop': [169466, 1.4923], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [121236, 1.6914] }),
+      'drive high': known('#392', { 'laptop and desktop': [169466, 1.4923], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [121236, 1.6914] }),
+      'drive balanced, share max': known('#392', { 'laptop and desktop': [918200, 1.9733], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [181162, 1.9733] }),
+      'drive balanced, legend': known('#392', { 'laptop and desktop': [169466, 1.4923], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [121236, 1.6914] }),
+      'drive balanced, legend with all keys': known('#392', { 'laptop and desktop': [169466, 1.4923], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [121236, 1.6914] }),
+      'drive balanced, panels steps': known('#392', { 'laptop and desktop': [169466, 1.4923], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [121236, 1.6914] }),
+      'drive balanced, panels never fit': known('#392', { 'laptop and desktop': [169466, 1.4923], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [121236, 1.6914] }),
+      'drive balanced, home indicator': known('#392', { 'laptop and desktop': [169466, 1.4923], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [121236, 1.6914] }),
+      'drive high, home indicator, legend, panels steps, share max': known('#392', { 'laptop and desktop': [918200, 1.9733], 'tablet landscape': [43676, 1.6914], 'tablet portrait': [181162, 1.9733] }),
+      'drive balanced, notch, legend, panels steps, share min': known('#392', { 'laptop and desktop': [48614, 1.6854], 'tablet landscape': [41441, 4.5761], 'tablet portrait': [258731, 4.5761] }),
+      'mirrors high, notch, legend': known('#392', { 'laptop and desktop': [29239, 1.7195], 'tablet landscape': [24156, 2.8658], 'tablet portrait': [627722, 4.7435] }),
+      'mirrors balanced': known('#392', { 'tablet landscape': [210, 0.2549], 'tablet portrait': [360223, 2.0203] }),
+      'mirrors balanced, legend with all keys': known('#392', { 'tablet landscape': [298, 0.2549], 'tablet portrait': [360311, 2.0203] }),
+      'mirrors balanced, home indicator, legend': known('#392', { 'tablet landscape': [298, 0.2549], 'tablet portrait': [360311, 2.0203] }),
+      'drive balanced, share min': known('#392', { 'tablet portrait': [66022, 1.9484] }),
     },
     'message-column-valid': {
-      'drive balanced, notch': known('#394', 23166, 22.0000),
-      'drive balanced, notch, legend, panels steps, share min': known('#394', 21887, 46.0000),
-      'mirrors high, notch, legend': known('#393', 19224, 16.0000),
+      'drive balanced, notch': known('#394', { 'tablet landscape': [21681, 22.0], 'tablet portrait': [1485, 22.0] }),
+      'drive balanced, notch, legend, panels steps, share min': known('#394', { 'tablet landscape': [21518, 46.0], 'tablet portrait': [369, 46.0] }),
+      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [19224, 16.0] }),
     },
     'message-stack-clear-of-sight-cone': {
-      'mirrors high, notch, legend': known('#393', 26306, 267.4480),
+      'mirrors high, notch, legend': known('#393', { 'laptop and desktop': [10759, 176.3933], 'tablet landscape': [15547, 267.448] }),
     },
     'message-stack-clear-of-controls-and-hud-band': {
-      'mirrors high, notch, legend': known('#393', 26070, 98.6307),
-      'mirrors balanced, home indicator, legend': known('#393', 4, 92.4339),
+      'mirrors high, notch, legend': known('#393', { 'laptop and desktop': [19981, 93.2417], 'tablet landscape': [6089, 98.6307] }),
+      'mirrors balanced, home indicator, legend': known('#393', { 'tablet landscape': [4, 92.4339] }),
     },
     'message-stack-clear-of-legend': {
-      'drive balanced, legend with all keys': known('#391', 2652, 315.7912),
+      'drive balanced, legend with all keys': known('#391', { 'tablet landscape': [1326, 315.7912], 'tablet portrait': [1326, 315.7912] }),
     },
   },
 };
@@ -372,6 +388,7 @@ const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable 
 type Failures = {
   n: number;
   worst: number;
+  perBox: Map<string, { n: number; worst: number }>;
   examples: string[];
   box: { w0: number; w1: number; h0: number; h1: number };
 };
@@ -381,7 +398,7 @@ const EXAMPLES = 3;
 const stats = new Map<Property, Stat>(
   PROPERTIES.map((p) => [p, { applied: 0, byVariant: new Map() }]),
 );
-const cur = { variant: '', w: 0, h: 0 };
+const cur = { box: '', variant: '', w: 0, h: 0 };
 
 /** Counts an evaluation of `p` and returns whether it held; the caller reports the detail only on failure. */
 function chk(p: Property, held: boolean): boolean {
@@ -400,13 +417,19 @@ function fail(p: Property, detail: () => string, magnitude = 0): void {
     f = {
       n: 0,
       worst: 0,
+      perBox: new Map(),
       examples: [],
       box: { w0: Infinity, w1: -Infinity, h0: Infinity, h1: -Infinity },
     };
     s.byVariant.set(cur.variant, f);
   }
+  const worst = Number.isNaN(magnitude) ? Infinity : magnitude;
   f.n++;
-  f.worst = Math.max(f.worst, Number.isNaN(magnitude) ? Infinity : magnitude);
+  f.worst = Math.max(f.worst, worst);
+  const inBox = f.perBox.get(cur.box) ?? { n: 0, worst: 0 };
+  inBox.n++;
+  inBox.worst = Math.max(inBox.worst, worst);
+  f.perBox.set(cur.box, inBox);
   f.box.w0 = Math.min(f.box.w0, cur.w);
   f.box.w1 = Math.max(f.box.w1, cur.w);
   f.box.h0 = Math.min(f.box.h0, cur.h);
@@ -1046,11 +1069,13 @@ const shown = (x: number): string => ceil4(x).toFixed(4);
 const EPSILON = 1e-9;
 
 /**
- * One line per property, and under a KNOWN one a line per listed pair with its numbers against the
- * baseline. A counterexample in a pair of `KNOWN_FINDINGS` is KNOWN and does not fail, unless its count or
- * worst magnitude exceeds the baseline (WORSE); any other pair fails (FAILED). A listed pair without a
- * counterexample is STALE (fixed: remove it). The baselines and STALE hold for the named bounds only: a
- * custom box is classified against the full table and compared with no baseline.
+ * One line per property, and under a KNOWN one a line per listed (variant, box) with its numbers against
+ * the baseline. A counterexample in a pair of `KNOWN_FINDINGS` is KNOWN and does not fail while every box
+ * equals its baseline. A box that fails more often or deeper is WORSE; one that fails less often or milder
+ * is BELOW BASELINE, which fails too so that the baseline is lowered and cannot hide a later regression;
+ * a pair that is not listed is FAILED. A listed pair without a counterexample is STALE (fixed: remove it).
+ * The baselines and STALE hold for the named bounds only: a custom box is classified against the full
+ * table and compared with no baseline.
  */
 function report(known: KnownTable | null): { summary: string; details: string; failed: boolean } {
   const table = known ?? KNOWN_FINDINGS.full;
@@ -1064,14 +1089,28 @@ function report(known: KnownTable | null): { summary: string; details: string; f
     const listed = table[p] ?? {};
     const rows = [...s.byVariant].map(([name, f]) => {
       const base = listed[name];
-      const worse =
-        known !== null &&
-        base !== undefined &&
-        (f.n > base.n || ceil4(f.worst) > base.worst + EPSILON);
-      return { name, f, base, worse };
+      const worse: string[] = [];
+      const below: string[] = [];
+      if (known !== null && base !== undefined) {
+        for (const [box, now] of f.perBox) {
+          const was = base.boxes[box];
+          if (was === undefined || now.n > was[0] || ceil4(now.worst) > was[1] + EPSILON) {
+            worse.push(box);
+          }
+        }
+        for (const [box, was] of Object.entries(base.boxes)) {
+          const now = f.perBox.get(box);
+          if (worse.includes(box)) continue;
+          if (now === undefined || now.n < was[0] || ceil4(now.worst) < was[1] - EPSILON) {
+            below.push(box);
+          }
+        }
+      }
+      return { name, f, base, worse, below };
     });
     const unknown = rows.filter((r) => r.base === undefined);
-    const worse = rows.filter((r) => r.worse);
+    const worse = rows.filter((r) => r.worse.length > 0);
+    const below = rows.filter((r) => r.below.length > 0);
     const stale =
       known === null ? [] : Object.keys(listed).filter((name) => !s.byVariant.has(name));
     // two properties count hits of a split-off case: no hit is good; a custom box need not reach every property
@@ -1084,30 +1123,57 @@ function report(known: KnownTable | null): { summary: string; details: string; f
         ? 'FAILED'
         : worse.length > 0
           ? 'WORSE'
-          : stale.length > 0
-            ? 'STALE'
-            : unreached
-              ? 'NEVER APPLIED'
-              : s.applied === 0
-                ? 'not applied'
-                : total > 0
-                  ? `KNOWN ${issues.join(' ')}`
-                  : 'ok';
-    if (unknown.length > 0 || worse.length > 0 || stale.length > 0 || unreached) failed = true;
-    summary.push(`${status.padEnd(13)} ${p}  (${total} of ${s.applied} checks failed)`);
-    for (const { name, f, base, worse: isWorse } of rows) {
+          : below.length > 0
+            ? 'BELOW BASELINE'
+            : stale.length > 0
+              ? 'STALE'
+              : unreached
+                ? 'NEVER APPLIED'
+                : s.applied === 0
+                  ? 'not applied'
+                  : total > 0
+                    ? `KNOWN ${issues.join(' ')}`
+                    : 'ok';
+    if (
+      unknown.length > 0 ||
+      worse.length > 0 ||
+      below.length > 0 ||
+      stale.length > 0 ||
+      unreached
+    ) {
+      failed = true;
+    }
+    summary.push(`${status.padEnd(14)} ${p}  (${total} of ${s.applied} checks failed)`);
+    for (const row of rows) {
+      const { name, f, base } = row;
       if (base === undefined) continue;
-      const against = (now: string, was: string | number): string =>
-        known === null ? now : `${now} (baseline ${was})`;
-      const less = known !== null && f.n < base.n && ceil4(f.worst) <= base.worst + EPSILON;
-      summary.push(
-        `    ${base.issue} [${name}]: ${against(`${f.n} failures`, base.n)}, worst ${against(`${shown(f.worst)} ${unit}`, `${base.worst.toFixed(4)} ${unit}`)}${isWorse ? '  WORSE' : less ? '  below the baseline: lower it' : ''}`,
-      );
-      if (isWorse) {
-        details.push(
-          `WORSE THAN BASELINE ${p} in variant [${name}] (${base.issue}): ${f.n} failures against ${base.n}, worst ${shown(f.worst)} ${unit} against ${base.worst.toFixed(4)}`,
+      const names = [...new Set([...f.perBox.keys(), ...Object.keys(base.boxes)])];
+      for (const box of names) {
+        const now = f.perBox.get(box) ?? { n: 0, worst: 0 };
+        const was = base.boxes[box];
+        const against = (current: string, baseline: string): string =>
+          known === null || was === undefined ? current : `${current} (baseline ${baseline})`;
+        const flag = row.worse.includes(box)
+          ? '  WORSE'
+          : row.below.includes(box)
+            ? '  BELOW BASELINE: lower it'
+            : '';
+        summary.push(
+          `    ${base.issue} [${name}] ${box}: ${against(`${now.n} failures`, String(was?.[0]))}, worst ${against(`${shown(now.worst)} ${unit}`, `${was?.[1].toFixed(4)} ${unit}`)}${flag}`,
         );
-        for (const e of f.examples) details.push(`  e.g. ${e}`);
+        const now4 = `${now.n} failures, worst ${shown(now.worst)} ${unit}`;
+        const was4 = `${was?.[0]} failures, worst ${was?.[1].toFixed(4)} ${unit}`;
+        if (row.worse.includes(box)) {
+          details.push(
+            `WORSE THAN BASELINE ${p} in variant [${name}], box [${box}] (${base.issue}): ${now4} against ${was4}`,
+          );
+          for (const e of f.examples) details.push(`  e.g. ${e}`);
+        }
+        if (row.below.includes(box)) {
+          details.push(
+            `BELOW BASELINE ${p} in variant [${name}], box [${box}] (${base.issue}): ${now4} against ${was4}; lower the baseline in KNOWN_FINDINGS to the current numbers`,
+          );
+        }
       }
     }
     for (const { name, f, base } of rows) {
@@ -1115,6 +1181,9 @@ function report(known: KnownTable | null): { summary: string; details: string; f
       const { w0, w1, h0, h1 } = f.box;
       details.push(
         `FAILED ${p} in variant [${name}]: ${f.n} x, worst ${shown(f.worst)} ${unit}, w ${w0}..${w1}, h ${h0}..${h1}`,
+      );
+      details.push(
+        `  per box: ${[...f.perBox].map(([box, now]) => `${box}=${now.n}/${shown(now.worst)}`).join('; ')}`,
       );
       for (const e of f.examples) details.push(`  e.g. ${e}`);
     }
@@ -1130,14 +1199,15 @@ function report(known: KnownTable | null): { summary: string; details: string; f
 
 describe('viewport layout, exhaustive over the bounds', () => {
   it('keeps every property at every integer size, for every variant', () => {
-    for (const box of boxes()) {
+    const { boxes, custom } = selection();
+    for (const box of boxes) {
+      cur.box = box.name;
       for (let w = box.w[0]; w <= box.w[1]; w++) {
         for (let h = box.h[0]; h <= box.h[1]; h++) {
           for (const v of VARIANTS) evaluate(v, w, h);
         }
       }
     }
-    const custom = process.env['VERIFY_LAYOUT_W'] !== undefined;
     const { summary, details, failed } = report(
       custom
         ? null
@@ -1145,7 +1215,7 @@ describe('viewport layout, exhaustive over the bounds', () => {
           ? KNOWN_FINDINGS.full
           : KNOWN_FINDINGS.default,
     );
-    const bounds = boxes()
+    const bounds = boxes
       .map((b) => `${b.name} ${b.w[0]}..${b.w[1]} x ${b.h[0]}..${b.h[1]}`)
       .join('; ');
     console.log(`bounds: ${bounds}\n${VARIANTS.length} variants\n${summary}`);
