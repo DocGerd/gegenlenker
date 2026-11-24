@@ -910,13 +910,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (hasTopDown(views)) {
         place(topDown, views.topDown);
         placeKeysList(views.topDown);
-        syncSegmentRows();
       }
       // The finish/menu button sits at the screen's top-right corner.
       toastWrap.toggleAttribute('data-reserve', column.y < 1 && spansRight(column));
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
       hasCockpit = c !== null;
       syncSplitHidden();
+      // After the reserves, which narrow the toolbar.
+      if (hasTopDown(views)) syncSegmentRows();
       if (c) {
         const td = views.topDown;
         const landscape = root.clientWidth >= root.clientHeight;
