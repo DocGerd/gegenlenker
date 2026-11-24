@@ -376,6 +376,19 @@ export function computeViewports(
       width: Math.max(MIN_WIDE_WIDTH, Math.ceil(MIN_CLASS_II_SHARE * reference.width)),
       height: Math.max(MIN_MIRROR_HEIGHT, Math.ceil(MIN_CLASS_II_SHARE * reference.height)),
     };
+    // The smallest stack the minimum allows must fit with the rounding of the reference width, the
+    // ceilings of the minimum, the stack's width and class IV's height to spare. A bound linear in the
+    // room is crossed once as the share grows; the search below alone flips back and forth where
+    // those roundings differ from one share to the next.
+    const referenceWidth = (fullWidth * reference.height) / wanted + 0.5;
+    const widthBound = Math.max(MIN_WIDE_WIDTH, MIN_CLASS_II_SHARE * referenceWidth) + 1;
+    const heightBound = Math.max(
+      Math.max(MIN_MIRROR_HEIGHT, MIN_CLASS_II_SHARE * reference.height) + 1,
+      ((widthBound - 0.5) * wanted) / fullWidth + 1,
+    );
+    const stackBound =
+      heightBound + WIDE_GAP_PX + ((fullWidth * heightBound) / wanted + 0.5) / WIDE_ASPECT + 0.5;
+    if (stackBound > ceiling - Math.min(preferred, minTop)) return null;
     const start = plainFit(clear, maxWidth).height;
     for (let height = start; height >= least.height; height--) {
       const width = Math.round((fullWidth * height) / wanted);
