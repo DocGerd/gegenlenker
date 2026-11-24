@@ -338,16 +338,28 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
 
-const insetSizes = [
-  { width: 1280, height: 720, mirrorsOnly: false },
-  { width: 1024, height: 600, mirrorsOnly: false },
-  { width: 900, height: 649, mirrorsOnly: false },
-  { width: 768, height: 1024, mirrorsOnly: false },
-  { width: 860, height: 860, mirrorsOnly: false },
-  { width: 1024, height: 426, mirrorsOnly: true },
+/**
+ * `slot`: where a mirror-only drive too short for both messages between the mirrors puts them;
+ * `keysOpen`: with the key legend's chevron open.
+ */
+const insetSizes: {
+  width: number;
+  height: number;
+  slot?: 'cue yields' | 'right of the cone';
+  keysOpen?: boolean;
+}[] = [
+  { width: 1280, height: 720 },
+  { width: 1024, height: 600 },
+  { width: 900, height: 649 },
+  { width: 768, height: 1024 },
+  { width: 860, height: 860, keysOpen: true },
+  { width: 1024, height: 426, slot: 'cue yields' },
+  // over the brief's side of the cockpit
+  { width: 1030, height: 426, slot: 'right of the cone' },
 ];
 
-for (const { mirrorsOnly, ...size } of insetSizes) {
+for (const { slot, keysOpen = false, ...size } of insetSizes) {
+  const mirrorsOnly = slot !== undefined;
   const screen = mirrorsOnly ? 'mirror-only drive' : 'drive screen';
   test(`the ${screen} stays inside the safe area at ${size.width}x${size.height}`, async ({
     browser,
@@ -371,6 +383,12 @@ for (const { mirrorsOnly, ...size } of insetSizes) {
       .toBe(`${insets.left}px`);
     await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
     await hudReady(page, { insets, mirrorsOnly });
+    if (keysOpen) {
+      const toggle = page.locator('[data-hud="keysToggle"]');
+      if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      await settled(page);
+    }
 
     const placed = await boxes(
       page.locator(
@@ -412,9 +430,12 @@ for (const { mirrorsOnly, ...size } of insetSizes) {
       }
     }
 
-    if (mirrorsOnly) {
-      // too short for both messages anywhere beside the mirrors
-      await expect(page.locator('[data-hud="toastWrap"]')).toHaveAttribute('data-cue-yields');
+    const wrap = page.locator('[data-hud="toastWrap"]');
+    if (slot === 'cue yields') await expect(wrap).toHaveAttribute('data-cue-yields');
+    else await expect(wrap).not.toHaveAttribute('data-cue-yields');
+    if (slot === 'right of the cone') {
+      const [column] = await boxes(wrap);
+      expect(column?.left, 'the messages right of the sight cone').toBeGreaterThan(size.width / 2);
     }
     await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
     // the toast stands inside the wrap, which keeps clear of the safe area
