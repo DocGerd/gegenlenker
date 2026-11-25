@@ -81,7 +81,7 @@ it('the release job fetches every tag, since its tag checks read the local clone
   expect(checkout?.with?.['fetch-depth']).toBe(0);
 });
 
-// `check` accepts only a skipped e2e on push: any other gated job that skips there fails it.
+// `check` accepts only a skipped e2e, and only on a push to `main`: any other gated job that skips fails it.
 it('every gated job but e2e runs on push', () => {
   const jobs = workflow().jobs;
   for (const [name, job] of Object.entries(jobs)) {
@@ -181,11 +181,12 @@ describe('the release-tree step on a PR into main', () => {
 });
 
 const DEVELOP_ONLY =
-  "!cancelled() && needs.check.result == 'success' && " +
+  "!cancelled() && needs.lint.result == 'success' && needs.unit.result == 'success' && " +
+  "needs.channels.result == 'success' && " +
   "(github.event_name == 'push' || github.event_name == 'workflow_dispatch') && " +
   "github.ref == 'refs/heads/develop'";
 
-it('main deploys production and develop deploys UAT, each after a green check', () => {
+it('main deploys production after a green check and develop deploys UAT after the fast jobs', () => {
   const { jobs } = workflow();
   expect(jobs['build-pages']?.if).toBe(
     "!cancelled() && needs.check.result == 'success' && " +
@@ -197,7 +198,7 @@ it('main deploys production and develop deploys UAT, each after a green check', 
   expect(jobs['release']?.if).toBe(
     "${{ !cancelled() && needs.deploy.result == 'success' && github.ref == 'refs/heads/main' }}",
   );
-  expect(jobs['build-uat']?.needs).toBe('check');
+  expect(jobs['build-uat']?.needs).toEqual(['lint', 'unit', 'channels']);
   expect(jobs['build-uat']?.if).toBe(DEVELOP_ONLY);
   expect(jobs['deploy-uat']?.needs).toBe('build-uat');
   expect(jobs['deploy-uat']?.if).toBe("${{ !cancelled() && needs.build-uat.result == 'success' }}");
