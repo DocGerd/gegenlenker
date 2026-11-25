@@ -1,0 +1,74 @@
+import { type Page } from '@playwright/test';
+import { expect, test } from './fixtures';
+import { en } from '../src/i18n/en';
+
+const stop = (page: Page) => page.locator('[data-ctl="stop"]');
+const gear = (page: Page, g: string) => page.locator(`.ctl-gear[data-gear="${g}"]`);
+
+async function startDrive(page: Page): Promise<void> {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(page.locator('[data-hud="speed"]')).toHaveText('0.0 km/h');
+}
+
+test('Enter on a focused gear selects it', async ({ page }) => {
+  await startDrive(page);
+  await expect(gear(page, 'P')).toHaveAttribute('aria-pressed', 'true');
+  await gear(page, 'D').focus();
+  await page.keyboard.press('Enter');
+  await expect(gear(page, 'D')).toHaveAttribute('aria-pressed', 'true');
+  await expect(gear(page, 'P')).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('Enter on a focused Stop brakes while held', async ({ page }) => {
+  await startDrive(page);
+  await stop(page).focus();
+  await page.keyboard.down('Enter');
+  await expect(stop(page)).toHaveAttribute('data-active', '');
+  await page.keyboard.up('Enter');
+  await expect(stop(page)).not.toHaveAttribute('data-active');
+});
+
+test('the drive exposes no unnamed image', async ({ page }) => {
+  await startDrive(page);
+  const snapshot = await page.locator('body').ariaSnapshot();
+  expect(snapshot).not.toMatch(/^\s*- img(?!\s+"[^"]+")/m);
+});
+
+test('Tab from the last pause button wraps to Continue and keeps page focus', async ({ page }) => {
+  await startDrive(page);
+  await page.keyboard.press('Escape');
+  const sheet = page.getByRole('dialog', { name: en.paused });
+  await expect(sheet).toBeVisible();
+  const buttons = sheet.getByRole('button');
+  const resume = sheet.getByRole('button', { name: en.continue });
+  await buttons.last().focus();
+  await page.keyboard.press('Tab');
+  await expect(resume).toBeFocused();
+  expect(await resume.evaluate((el) => el.matches(':focus-visible'))).toBe(true);
+  expect(await page.evaluate(() => document.hasFocus())).toBe(true);
+
+  await page.keyboard.press('Shift+Tab');
+  await expect(buttons.last()).toBeFocused();
+});
+
+test('the replay slider announces the visible time', async ({ page }) => {
+  await startDrive(page);
+  await page.keyboard.press('4');
+  for (let i = 0; i < 5; i++) await page.keyboard.press('w');
+  await page.waitForTimeout(1000);
+  await page.keyboard.press('Escape');
+  await page
+    .getByRole('dialog', { name: en.paused })
+    .getByRole('button', { name: en.finish })
+    .click();
+  await page.getByRole('button', { name: en.replay }).click();
+  const scrubber = page.getByRole('slider', { name: en.timeline });
+  await expect(scrubber).toBeVisible();
+  await page.getByRole('button', { name: en.pause }).click();
+  await scrubber.fill(String(Math.round(Number(await scrubber.getAttribute('max')) / 2)));
+  const time = page.locator('.replay-time');
+  await expect(time).toHaveText(/ \/ /);
+  const label = (await time.textContent()) ?? '';
+  await expect(scrubber).toHaveAttribute('aria-valuetext', label);
+});

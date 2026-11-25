@@ -212,8 +212,12 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   scrubber.step = '1';
   scrubber.value = String(startStep);
   scrubber.setAttribute('aria-label', t('timeline'));
+  // The slider is announced by its time, not the raw step.
+  const timeText = (step: number): string => `${runLabel(step)} / ${total}`;
+  scrubber.setAttribute('aria-valuetext', timeText(startStep));
   scrubber.addEventListener('input', () => {
     position = Number(scrubber.value);
+    scrubber.setAttribute('aria-valuetext', timeText(position));
     dirty = true;
   });
   const addMarkers = (): void => {
@@ -344,7 +348,8 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
         }
         // Follows the target, not the cursor, so a catching-up rebuild does not drag the thumb.
         scrubber.value = String(Math.min(log.steps, Math.floor(position)));
-        timeLabel.textContent = `${runLabel(snapshot.step)} / ${total}`;
+        timeLabel.textContent = timeText(snapshot.step);
+        scrubber.setAttribute('aria-valuetext', timeLabel.textContent);
         readout.textContent = readoutText(snapshot);
       }
       if (scan !== null && advance(scan, log.steps, WORK_BUDGET_MS)) {

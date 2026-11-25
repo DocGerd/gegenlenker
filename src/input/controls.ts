@@ -52,7 +52,7 @@ const markup = (lockToLockTurns: number): string => `
     <span class="ctl-label" data-i18n="steer"></span>
     <div class="ctl-wheel-box">
       <div class="ctl-wheel" data-ctl="wheel">
-        <svg viewBox="-50 -50 100 100" data-ctl="wheel-art">
+        <svg viewBox="-50 -50 100 100" data-ctl="wheel-art" aria-hidden="true">
           <circle class="ctl-rim" r="29" />
           <path class="ctl-spokes" d="M-29 0H29M0 0V29" />
           <circle class="ctl-hub" r="7" />
@@ -195,9 +195,32 @@ export function createControls(
 
   // Two brake sources, so releasing one cannot release a Stop button a finger still holds.
   let pointerBrake = false;
+  let enterBrake = false;
   const syncBrake = (): void => {
-    state.brake = pointerBrake || keyboard.brake;
+    state.brake = pointerBrake || enterBrake || keyboard.brake;
   };
+  // Enter on the focused button brakes like Space: held while pressed.
+  stop.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (enterBrake) return;
+      state.lever = 0;
+      enterBrake = true;
+    },
+    { signal },
+  );
+  stop.addEventListener(
+    'keyup',
+    (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      enterBrake = false;
+    },
+    { signal },
+  );
+  stop.addEventListener('blur', () => (enterBrake = false), { signal });
   bindDrag(
     stop,
     {
@@ -228,15 +251,20 @@ export function createControls(
   );
 
   for (const button of gears.querySelectorAll<HTMLElement>('[data-gear]')) {
+    const select = (): void => {
+      state.gear = button.dataset['gear'] as Gear;
+    };
     button.addEventListener(
       'pointerdown',
       (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
         e.preventDefault();
-        state.gear = button.dataset['gear'] as Gear;
+        select();
       },
       { signal },
     );
+    // Keyboard and assistive technology activate with a `click` that has no pointer behind it.
+    button.addEventListener('click', (e) => e.detail === 0 && select(), { signal });
   }
 
   let lastAngle: number | null = null;
