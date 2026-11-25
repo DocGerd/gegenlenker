@@ -503,10 +503,16 @@ for (const start of starts) {
     await page.goto('./');
     await page.getByRole('button', { name: start.label }).click();
 
+    // a hidden button measures at the top: count the shown ones, in the outside view with its free camera too
     const buttons = page.locator('.hud-toolbar button:visible');
     await expect(buttons.first()).toBeVisible();
-    const rows = new Set((await boxes(buttons)).map((b) => Math.round(b.top)));
-    expect(rows.size).toBeLessThanOrEqual(2);
+    const rows = async (): Promise<number> =>
+      new Set((await boxes(buttons)).map((b) => Math.round(b.top))).size;
+    expect(await rows()).toBeLessThanOrEqual(2);
+    await page.keyboard.press('o');
+    await expect(page.locator('[data-hud="freeCamera"]')).toBeVisible();
+    expect(await rows(), 'outside view').toBeLessThanOrEqual(2);
+    await page.keyboard.press('f');
 
     await expect(page.locator('.hud-info')).toBeVisible();
     const [info] = await boxes(page.locator('.hud-info'));
