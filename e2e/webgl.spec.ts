@@ -27,7 +27,9 @@ test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ pa
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
 });
 
-test('the menu first load fetches no three.js chunk', async ({ page }) => {
+test('the menu loads no three.js chunk until a drive starts', async ({ page }) => {
+  // The page's own requests only: the service worker precaches the chunk in the background, and
+  // Playwright reports those fetches on the context, not the page.
   const chunks: string[] = [];
   page.on('request', (r) => {
     if (/\/assets\/three-/.test(r.url())) chunks.push(r.url());
@@ -37,6 +39,10 @@ test('the menu first load fetches no three.js chunk', async ({ page }) => {
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
   await page.waitForLoadState('networkidle');
   expect(chunks).toEqual([]);
+
+  // Positive control: a renamed or split chunk would keep the empty check above green.
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect.poll(() => chunks.length).toBeGreaterThan(0);
 });
 
 /**
