@@ -299,6 +299,23 @@ describe('frame timer', () => {
         });
         expect(runs.filter((r) => Math.abs(r.end - fits) > 1e-9 || r.above > 0.05)).toEqual([]);
       });
+
+      it('leaves a level parked by chance for the kept step into it, on seeds that stayed high', () => {
+        const runs = [512, 863].map((seed) => {
+          const timer = createFrameTimer();
+          const miss = seeded(seed);
+          let now = 1000;
+          let above = 0;
+          while (now - 1000 < SECONDS * 1000) {
+            const ms = Math.max(fillBound(28)(timer.scale()), V) + (miss() < 0.2 ? V : 0);
+            if (now - 1000 >= SETTLED_MS && timer.scale() > 0.7 + 1e-9) above += ms;
+            now += ms;
+            timer.frame(now);
+          }
+          return { seed, end: timer.scale(), above: above / (now - 1000 - SETTLED_MS) };
+        });
+        expect(runs.filter((r) => Math.abs(r.end - 0.7) > 1e-9 || r.above > 0.05)).toEqual([]);
+      });
     });
 
     it.each([
@@ -379,6 +396,32 @@ describe('frame timer', () => {
       });
       expect(ends.filter((r) => r.end !== 1)).toEqual([]);
     });
+
+    it.each([
+      [28, 0.2],
+      [39, 0.1],
+    ])(
+      'changes the scale of a steady %i ms fill load with %d missed frames at most once a minute once settled',
+      (fullMs, rate) => {
+        const SEEDS = 8;
+        const MINUTES = 60;
+        const changes = Array.from({ length: SEEDS }, (_, i) => {
+          const timer = createFrameTimer();
+          const miss = seeded(i + 1);
+          let now = 1000;
+          let last = timer.scale();
+          let n = 0;
+          while (now - 1000 < MINUTES * 60_000) {
+            now += Math.max(fillBound(fullMs)(timer.scale()), V) + (miss() < rate ? V : 0);
+            timer.frame(now);
+            if (now - 1000 > 60_000 && timer.scale() !== last) n++;
+            last = timer.scale();
+          }
+          return n;
+        });
+        expect(Math.max(...changes)).toBeLessThan(MINUTES);
+      },
+    );
 
     it('keeps a steady fill-bound load off full resolution once settled, though its kept step gains little', () => {
       const SEEDS = 8;

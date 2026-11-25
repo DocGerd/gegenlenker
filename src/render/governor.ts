@@ -20,7 +20,8 @@ const SHIFT_SLACK = 0.05;
 const SHIFT_IMPROVEMENT = 0.05;
 /**
  * A level whose step down was reverted this often is parked until the preset, the lighting or the scene changes. A load
- * that ramps up can cost one: its first step is judged against a window still mostly of the old load.
+ * that ramps up can cost one: its first step is judged against a window still mostly of the old load. A park at a level
+ * a kept step led into can also be chance, since that load follows the scale (`PARK_RETRY_MS`).
  */
 const MAX_FAILED_DOWNS = 3;
 /**
@@ -34,6 +35,12 @@ const NEW_LOAD = 1.25;
  * undoes a helpful step by chance sooner or later; a longer memory is slower to see a new load.
  */
 const KEPT_MEMORY = 8;
+/**
+ * Slow time at a parked level a kept step led into before its step is tried once more; each try doubles the wait. One
+ * that holds lifts a single failure, so a level whose load ignores the scale stays parked at a cost of one window per
+ * try.
+ */
+const PARK_RETRY_MS = HOLD_MS;
 /** Startup hitches (shader links, texture uploads) follow a scene or an attach; they say nothing about steady load. */
 const WARM_UP_MS = 2000;
 const STEP = 0.15;
@@ -51,6 +58,7 @@ export type GovernorEventKind =
   | 'down'
   | 'down-failed'
   | 'down-lost'
+  | 'unpark'
   | 'up'
   | 'probe-failed'
   | 'probe-held'
@@ -62,6 +70,7 @@ const KINDS: readonly GovernorEventKind[] = [
   'down',
   'down-failed',
   'down-lost',
+  'unpark',
   'up',
   'probe-failed',
   'probe-held',
@@ -75,6 +84,7 @@ const DECISIONS: ReadonlySet<GovernorEventKind> = new Set([
   'down',
   'down-failed',
   'down-lost',
+  'unpark',
   'up',
   'probe-failed',
   'probe-held',
@@ -247,6 +257,10 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
    * scale cannot help climbs back to full resolution.
    */
   let doubted = 0;
+  /** Slow time at a parked level (`PARK_RETRY_MS`), each level's wait, and whether the pending step is such a try. */
+  let parkQuiet = 0;
+  const parkWait = new Float64Array(MAX_LEVEL + 1).fill(PARK_RETRY_MS);
+  let unparking = false;
   const ring = new Float64Array(WINDOW);
   const scratch = new Float64Array(WINDOW);
   const scale = (): number => Math.max(FLOOR, 1 - level * STEP);
@@ -259,6 +273,8 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
     settle = 0;
     beforeStep = 0;
     doubted = 0;
+    parkQuiet = 0;
+    unparking = false;
   };
   const note = (
     k: GovernorEventKind,
@@ -277,6 +293,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   const revert = (k: GovernorEventKind, to = level - 1): number => {
     level = to;
     steady = 0;
+    parkQuiet = 0;
     count = 0;
     settle = SETTLE_FRAMES;
     note(k, '', level);
@@ -318,10 +335,13 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
             mean <= beforeStep * (1 - SHIFT_IMPROVEMENT));
         const from = beforeStep;
         beforeStep = 0;
+        const unparked = unparking;
+        unparking = false;
+        const left = level - 1;
         if (!helped) {
           // A mean, not the p90: vsync quantises the p90 to whole frames.
-          const left = level - 1;
-          failedDowns[left] = (failedDowns[left] ?? 0) + 1;
+          // A try at a parked level is not counted: the park stays and its wait has doubled.
+          if (!unparked) failedDowns[left] = (failedDowns[left] ?? 0) + 1;
           if (left > 0 && left === doubted) {
             keptFrom[left] = 0;
             doubted = left - 1;
@@ -330,6 +350,8 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
           doubted = 0;
           return revert('down-failed');
         }
+        // One window kept it: that lifts one failure, not the park's backoff.
+        if (unparked) failedDowns[left] = MAX_FAILED_DOWNS - 1;
         keptFrom[level] = from;
         keptWindows[level] = 0;
         // The next decision takes a fresh window: one that passed by luck would step on at once.
@@ -351,8 +373,16 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
         }
       }
       if (p90 > P90_LIMIT_MS) {
-        if (level < MAX_LEVEL && (failedDowns[level] ?? 0) < MAX_FAILED_DOWNS) {
-          const failedProbe = probing;
+        const parked = level < MAX_LEVEL && (failedDowns[level] ?? 0) >= MAX_FAILED_DOWNS;
+        if (parked && kept > 0) {
+          parkQuiet += sum;
+          if (parkQuiet >= (parkWait[level] ?? PARK_RETRY_MS)) {
+            parkWait[level] = 2 * (parkWait[level] ?? PARK_RETRY_MS);
+            unparking = true;
+          }
+        }
+        if (level < MAX_LEVEL && (!parked || unparking)) {
+          const failedProbe = probing && !unparking;
           const left = level;
           if (failedProbe) {
             // The step up did not hold: the headroom was borrowed, so wait longer and count the failure.
@@ -360,10 +390,11 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
             hold = Math.min(hold * 2, MAX_HOLD_MS);
           }
           level++;
+          parkQuiet = 0;
           beforeStep = mean;
           beforeShift = shift;
           settle = SETTLE_FRAMES;
-          note(failedProbe ? 'probe-failed' : 'down', '', left);
+          note(unparking ? 'unpark' : failedProbe ? 'probe-failed' : 'down', '', left);
         }
         probing = false;
         steady = 0;
@@ -379,6 +410,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
           level--;
           keptFrom[level] = 0;
           steady = 0;
+          parkQuiet = 0;
           sinceUp = 0;
           count = 0;
           probing = true;
@@ -397,7 +429,11 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       if (pending) level--;
       beforeStep = 0;
       doubted = 0;
-      if (liftParks) failedDowns.fill(0);
+      unparking = false;
+      if (liftParks) {
+        failedDowns.fill(0);
+        parkWait.fill(PARK_RETRY_MS);
+      }
       note('warmup', tag);
       if (count > 0 || steady > 0 || pending) note('discard', tag);
       count = 0;
@@ -414,6 +450,7 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
       failedProbes.fill(0);
       failedDowns.fill(0);
       keptFrom.fill(0);
+      parkWait.fill(PARK_RETRY_MS);
     },
     scale,
     trace: () => trace.read(),
