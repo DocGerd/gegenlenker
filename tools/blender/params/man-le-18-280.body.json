@@ -1,6 +1,6 @@
 {
   "id": "man-le-18-280",
-  "schema": 4,
+  "schema": 5,
   "kind": "tarp",
   "width": 2.49,
   "rearX": -1.1,
@@ -11,12 +11,18 @@
   "relief": 0.03,
   "rearAxleX": 0,
   "rearTrack": 1.8,
-  "twin": { "offset": 0.15, "width": 0.26 },
+  "rearTyres": { "offsets": [0], "width": 0.3 },
   "wheelRadius": 0.5,
   "rail": { "halfGap": 0.45, "width": 0.2 },
   "marking": { "zLow": 1.15, "zHigh": 1.25, "endMargin": 0.1 },
   "tailLamp": { "inset": 0.1, "width": 0.42, "sill": 0.015, "height": 0.08 },
-  "hues": { "body": "#00387b", "white": "#f6f6f6", "black": "#101214" },
+  "hues": {
+    "body": "#00387b",
+    "white": "#f6f6f6",
+    "black": "#101214",
+    "silver": "#a5a5a5",
+    "red": "#d0201c"
+  },
   "mounts": [
     {
       "id": "side-marker-0-left",

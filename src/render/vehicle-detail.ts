@@ -8,7 +8,12 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
-import { CAB_GAP, CONTOUR_STRIP as STRIP, MARKING_END_MARGIN as END_MARGIN } from './body-dims';
+import {
+  CAB_GAP,
+  CONTOUR_STRIP as STRIP,
+  MARKING_END_MARGIN as END_MARGIN,
+  type RearTyreSet,
+} from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
 import { tint } from './tint';
 import { DARK_SLOT, slotOf, withSlot } from './lamp-lens';
@@ -193,8 +198,7 @@ export type TruckDetailParams = {
   readonly railBottom: number;
   readonly rearAxleX: number;
   readonly rearTrack: number;
-  readonly twinOffset: number;
-  readonly twinWidth: number;
+  readonly rearTyres: RearTyreSet;
   readonly wheelRadius: number;
 };
 
@@ -242,7 +246,8 @@ export function truckDetail(p: TruckDetailParams): {
   sideMarking(c, truckSideRun(p.spec, p.frontX - p.bodyFront - CAB_GAP), hw);
   lamps(c, layout, ['body'], false);
   for (const side of [-1, 1]) {
-    const half = p.twinOffset + p.twinWidth / 2 + FLAP_MARGIN;
+    const { offsets, width } = p.rearTyres;
+    const half = Math.max(...offsets.map(Math.abs)) + width / 2 + FLAP_MARGIN;
     mudflap(
       c,
       p.spec.mudflap,
@@ -252,12 +257,12 @@ export function truckDetail(p: TruckDetailParams): {
       p.wheelRadius,
       p.rearX + RELIEF,
     );
-    for (const twin of [-1, 1]) {
+    for (const offset of offsets) {
       wheelFaces(
         c,
         p.wheelRadius,
-        p.twinWidth,
-        [p.rearAxleX, (side * p.rearTrack) / 2 + twin * p.twinOffset, p.wheelRadius],
+        width,
+        [p.rearAxleX, (side * p.rearTrack) / 2 + offset, p.wheelRadius],
         true,
       );
     }
