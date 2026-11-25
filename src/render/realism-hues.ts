@@ -4,7 +4,6 @@ export const REALISM_HUES = {
   signalYellow: 0xf9a800, // RAL 1003 impact guard, underrun bars
   chevronBlack: 0x101214,
   contourSide: 0xeeeeea, // ECE R48/R104 contour marking, sides: white, as on the THW fleet
-  contourSideYellow: 0xf2c200, // the lafette glb's baked side contour, until that shell is rebuilt white
   contourRear: 0xd0201c, // contour marking, rear
   tailLamp: 0xc8102e,
   sideMarker: 0xffb000,
@@ -27,10 +26,10 @@ export const REALISM_HUES = {
   nightHorizon: 0x18243f, // night sky dome at the horizon; the haze fades to it
   nightZenith: 0x03050a, // night sky dome overhead
   thwBlue: 0x00387b, // THW cab, body and tarpaulin; RAL 5002 sRGB approximation
-  thwBlueDeep: 0x00214a, // low-loader side members and crossmembers, a darker THW blue
   liveryWhite: 0xf6f6f6, // THW bumper, corners, arches and side stripe; RAL 9016
   beaconBlue: 0x1f6fe5, // roof light bar lens
   headliner: 0x6f716a, // cab roof header lining
+  deckWood: 0x4b3c30, // low-loader plank deck, dark weathered hardwood
 } as const;
 
 export type RealismHueKey = keyof typeof REALISM_HUES;

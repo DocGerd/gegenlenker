@@ -53,6 +53,9 @@ export function validateTrailer(t: TrailerSpec): string[] {
   if ((t.rearAxleSpacing !== undefined) !== count > 1) {
     problems.push(`${t.id}: rear axle spacing must be set exactly for multi-axle groups`);
   }
+  if ((t.rampHeight !== undefined) !== (t.body === 'low-loader')) {
+    problems.push(`${t.id}: ramp height must be set exactly for low-loaders`);
+  }
   if (
     t.lengthToEye !== undefined &&
     t.drawbar.value + t.wheelbase.value + t.rearOverhang.value !== t.lengthToEye.value

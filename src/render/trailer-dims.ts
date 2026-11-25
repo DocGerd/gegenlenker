@@ -1,6 +1,5 @@
-import { TRUCK_IDS, type TrailerSpec } from '../contracts/vehicle';
-import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
-import { truckById } from '../vehicles/registry';
+import type { TrailerSpec } from '../contracts/vehicle';
+import { trailerAnchors } from '../vehicles/anchors';
 import {
   CONTOUR_STRIP,
   MARKER_HEIGHT,
@@ -87,7 +86,6 @@ export const LOW_LOADER = {
   slopeDrop: 0.2,
   frontLength: 1.6, // raised front section over the dolly
   frontRise: 0.15,
-  rampAboveEye: 0.1, // folded ramps stand this far above the highest cockpit eye
 } as const;
 
 /** Where the low-loader shell's deck breaks, in the trailer body frame. */
@@ -96,8 +94,9 @@ export function lowLoaderDeck(spec: TrailerSpec) {
   const rearDeck = deck - LOW_LOADER.slopeDrop;
   const lampTop = rearDeck + metres(spec.tailLamp.sill) + metres(spec.tailLamp.height);
   const slopeEnd = a.rearX + LOW_LOADER.carrierDepth + RAMP_THICKNESS; // ramps fold up in between
-  const eye = Math.max(...TRUCK_IDS.map((id) => truckAnchors(truckById(id)).eye.z));
-  if (!Number.isFinite(eye)) throw new Error('lowLoaderDeck: no truck eye to fold the ramps above');
+  if (spec.rampHeight === undefined) {
+    throw new Error(`lowLoaderDeck: ${spec.id} has no ramp height`);
+  }
   return {
     carrierX: round(a.rearX + LOW_LOADER.carrierDepth),
     slopeEnd: round(slopeEnd),
@@ -107,7 +106,7 @@ export function lowLoaderDeck(spec: TrailerSpec) {
     carrierTop: round(lampTop + 2 * CONTOUR_STRIP),
     frontStart: round(a.frontX - LOW_LOADER.frontLength),
     frontDeck: round(deck + LOW_LOADER.frontRise),
-    rampTop: round(eye + LOW_LOADER.rampAboveEye),
+    rampTop: metres(spec.rampHeight),
   };
 }
 
@@ -143,16 +142,18 @@ export function lafetteGuard(spec: TrailerSpec) {
 const HUES = {
   'low-loader': {
     base: hex(REALISM_HUES.thwBlue),
-    frame: hex(REALISM_HUES.thwBlueDeep),
+    wood: hex(REALISM_HUES.deckWood),
     black: hex(REALISM_HUES.chevronBlack),
     silver: hex(REALISM_HUES.whiteAluminium),
+    red: hex(REALISM_HUES.contourRear),
+    yellow: hex(REALISM_HUES.signalYellow),
   },
   lafette: {
     base: hex(REALISM_HUES.chevronBlack),
     white: hex(REALISM_HUES.liveryWhite),
     silver: hex(REALISM_HUES.whiteAluminium),
     yellow: hex(REALISM_HUES.signalYellow),
-    contour: hex(REALISM_HUES.contourSideYellow),
+    contour: hex(REALISM_HUES.contourSide),
   },
 } as const;
 
