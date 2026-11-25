@@ -49,5 +49,6 @@ It costs fill rate: SwiftShader frames, which CI e2e draws on, are slower than w
 ## Other tools
 
 - `pnpm preview:stop [--port <n>]` stops the listener on this checkout's e2e preview port (the one `pnpm test:e2e` prints) or the given port, and nothing else; use it instead of `pkill -f` on an orphaned preview.
+- `E2E_GPU=1 pnpm test:e2e` (WSL2 with WSLg and a GPU): the `offline` project in headed, off-screen Chromium on the real GPU (Mesa d3d12), much faster than SwiftShader; it fails fast on a software renderer. It drops the layout checks in `GPU_TEXT_METRICS` (`playwright.config.ts`) and can flake pixel-hash specs (the cockpit drag test), so CI's SwiftShader run stays the gate.
 - `pnpm test:perf` runs `e2e/perf/four-views.perf.ts` against the `?probe` page (see `src/render/probe.ts`) and owns the automated thresholds for the four-view layout.
 - The manual check on a physical tablet is in `CLAUDE.md` ("Tablet perf check").
