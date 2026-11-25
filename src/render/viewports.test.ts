@@ -862,17 +862,30 @@ describe('computeViewports class IV mirrors', () => {
           if (v.mirrorLeft === null) throw new Error('drive mode has mirrors');
           const now = { wide: v.wideLeft !== null, ...v.mirrorLeft };
           const at = `${w}x${h} pane ${pane} ${JSON.stringify(extra)}`;
-          if (prev !== null) {
+          if (prev === null) expect(now.wide, `${at}: class IV at the smallest share`).toBe(true);
+          else {
             expect(prev.wide || !now.wide, `${at}: class IV returns`).toBe(true);
             if (prev.wide === now.wide) {
               expect(now.width, at).toBeLessThanOrEqual(prev.width);
-              expect(now.height, at).toBeLessThanOrEqual(prev.height);
+              // a fractional controls height (768 wide) can move the search's px grid by its fraction
+              expect(now.height, at).toBeLessThan(prev.height + 1);
             }
           }
           prev = now;
         }
       }
     }
+  });
+
+  it('keeps class IV where the share does not change the room', () => {
+    // a 1080p laptop at 150%, landscape at the smallest and the default share; mirror-only at 1366x768
+    for (const landscape of [0.25, DEFAULT_TOP_DOWN_LAYOUT.landscape]) {
+      const layout = { ...DEFAULT_TOP_DOWN_LAYOUT, landscape };
+      const v = computeViewports(1280, 585, 'drive', null, NO_INSETS, layout, null, WIDE);
+      expect(v.wideLeft, `share ${String(landscape)}`).not.toBeNull();
+    }
+    const mirrors = computeViewports(1366, 768, 'mirrors', null, NO_INSETS, undefined, null, WIDE);
+    expect(mirrors.wideLeft).not.toBeNull();
   });
 
   it('moves the stack up out of the sight cone before it shrinks class II', () => {
