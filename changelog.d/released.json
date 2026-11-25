@@ -1,5 +1,89 @@
 [
   {
+    "version": "1.1.0",
+    "date": "2026-11-25",
+    "entries": [
+      {
+        "id": "417.fixed",
+        "category": "fixed",
+        "prs": [417],
+        "en": "The cockpit no longer ends half a pixel short of the room its controls need when the top-down view is at its largest."
+      },
+      {
+        "id": "418.fixed",
+        "category": "fixed",
+        "prs": [418],
+        "en": "The render resolution more often returns to full when a heavy scene gives way to a lighter load that lowering it cannot help."
+      },
+      {
+        "id": "419.fixed",
+        "category": "fixed",
+        "prs": [419],
+        "en": "The side mirrors shrink instead of reaching into the on-screen controls on tablet-sized windows with a bottom inset."
+      },
+      {
+        "id": "420.fixed",
+        "category": "fixed",
+        "prs": [420],
+        "en": "In a short portrait cockpit with the key legend open, the toast and goal messages no longer cover the key list."
+      },
+      {
+        "id": "421.changed",
+        "category": "changed",
+        "prs": [421],
+        "en": "The Aids and Angles chips show a chevron that points down while their panel is open, the Angles chip is unavailable while the angle display is off, and the toolbar keeps clear of the Stop button in narrow windows."
+      },
+      {
+        "id": "425.fixed",
+        "category": "fixed",
+        "prs": [425],
+        "en": "On a short screen without the top view, the goal cue now steps aside while a warning shows, so neither covers the forward view or the gear buttons."
+      },
+      {
+        "id": "427.fixed",
+        "category": "fixed",
+        "prs": [427],
+        "en": "The headliner no longer covers the left side mirror on near-square portrait windows."
+      },
+      {
+        "id": "430.fixed",
+        "category": "fixed",
+        "prs": [430],
+        "en": "The view control keeps rounded ends on each row when it wraps on a narrow window."
+      },
+      {
+        "id": "431.fixed",
+        "category": "fixed",
+        "prs": [431],
+        "en": "The class II mirror and the wide-angle mirror no longer flip back and forth while you drag the top view divider on a portrait tablet."
+      },
+      {
+        "id": "432.fixed",
+        "category": "fixed",
+        "prs": [432],
+        "en": "Class II mirrors on short windows keep their gap above the controls instead of letting the view frame touch the control labels."
+      },
+      {
+        "id": "434.fixed",
+        "category": "fixed",
+        "prs": [434],
+        "en": "On narrow landscape screens the longest German messages fit beside the stop button and lever, and the long angle words break with a hyphen."
+      },
+      {
+        "id": "435.changed",
+        "category": "changed",
+        "prs": [435],
+        "en": "Below 700 px window height the aid legend opens over the top view and closes on your next control input, and the counters stand beside the angle gauges."
+      },
+      {
+        "id": "439.fixed",
+        "category": "fixed",
+        "prs": [439],
+        "en": "The key list on short screens opens clear of the toolbar buttons, the divider and the messages."
+      }
+    ]
+  },
+  {
     "version": "1.0.1",
     "date": "2026-11-24",
     "entries": [
