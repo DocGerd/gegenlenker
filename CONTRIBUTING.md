@@ -18,7 +18,6 @@ Issues and pull requests are welcome; review capacity is limited. By taking part
 - `DocGerd` is the sole maintainer and decides what is merged and released.
 - The roadmap is the open [GitHub issues](https://github.com/DocGerd/gegenlenker/issues).
 - Coding standards are the ESLint configuration (`pnpm lint`) and [CLAUDE.md](CLAUDE.md).
-- New functionality and bug fixes require tests (see "Changes").
 
 ## Where to look
 
