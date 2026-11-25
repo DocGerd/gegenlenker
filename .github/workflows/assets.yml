@@ -1,0 +1,49 @@
+name: Assets
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/assets.yml
+      - scripts/fetch-asset-sources.mjs
+      - tools/assets/**
+      - tools/textures/**
+      - src/render/assets/**
+      - src/render/hdri-light.ts
+      - src/render/ground-pbr-pixels.ts
+      - src/render/ground-texture-pixels.ts
+      - src/render/asset-registry.ts
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - vitest.config.ts
+      - .nvmrc
+  schedule:
+    - cron: '30 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: assets-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Advisory: no ruleset requires it and `check` does not need it. The unit job skips the tests
+  # whose sources are not committed; this one downloads them (a hash mismatch fails the fetch and
+  # names the file), so the committed pixels are shown to reproduce under the current encoder and
+  # dependencies. The 3 yard-kit atlas tests still skip: they need the Blender bake.
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm assets:fetch
+      - run: pnpm exec vitest run --reporter=verbose tools/textures/sky-build.test.ts tools/textures/pbr-build.test.ts tools/assets/textures.test.ts

@@ -27,7 +27,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/yard-kit-atlas-a.ktx2`: the colour map, box-filtered into the 512 × 512 cladding tile, tinted to the cladding hue.
   - `src/render/assets/yard-kit-atlas-b.ktx2`: the normal map's x and y, the roughness and, where the set has one, the AO map, box-filtered into the same tile.
-- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
+- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded by `pnpm assets:fetch` to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
 
 ## Yard-kit tile: `CorrugatedSteel007A`
 
@@ -57,7 +57,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/yard-kit-atlas-a.ktx2`: the colour map, box-filtered into the 512 × 512 door tile, tinted to the door hue.
   - `src/render/assets/yard-kit-atlas-b.ktx2`: the normal map's x and y, the roughness and, where the set has one, the AO map, box-filtered into the same tile.
-- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
+- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded by `pnpm assets:fetch` to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
 
 ## Yard-kit tile: `concrete_floor_02`
 
@@ -80,7 +80,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/yard-kit-atlas-a.ktx2`: the colour map, box-filtered into the 512 × 512 concrete tile, with its contrast scaled to 0.8.
   - `src/render/assets/yard-kit-atlas-b.ktx2`: the normal map's x and y, the roughness and, where the set has one, the AO map, box-filtered into the same tile.
-- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
+- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded by `pnpm assets:fetch` to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
 
 ## Yard-kit tile: `Facade001`
 
@@ -106,7 +106,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/yard-kit-atlas-a.ktx2`: the colour map, box-filtered into the 256 × 256 glazing tile.
   - `src/render/assets/yard-kit-atlas-b.ktx2`: the normal map's x and y, the roughness and, where the set has one, the AO map, box-filtered into the same tile.
-- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
+- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded by `pnpm assets:fetch` to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
 
 ## Yard-kit tile: `container_side`
 
@@ -129,7 +129,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/yard-kit-atlas-a.ktx2`: the colour map, box-filtered into the 256 × 256 container tile, tinted to the container hue.
   - `src/render/assets/yard-kit-atlas-b.ktx2`: the normal map's x and y, the roughness and, where the set has one, the AO map, box-filtered into the same tile.
-- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
+- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded by `pnpm assets:fetch` to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
 
 ## Yard-kit leaves: `LeafSet009`
 
@@ -149,7 +149,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
   - `src/render/assets/yard-kit-leaves.ktx2`: the leaf cards of the yard kit trees, hedge and grass tuft, runtime-cached
 - **Changes:**
   - `src/render/assets/yard-kit-leaves.ktx2`: the six leaves cut from the colour and opacity maps at 256 × 256, scattered into the lime, maple and hedge clusters and tinted to each cluster hue.
-- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
+- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded by `pnpm assets:fetch` to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
 
 ## Yard-kit leaves: `Foliage001`
 
@@ -169,7 +169,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
   - `src/render/assets/yard-kit-leaves.ktx2`: the leaf cards of the yard kit trees, hedge and grass tuft, runtime-cached
 - **Changes:**
   - `src/render/assets/yard-kit-leaves.ktx2`: the colour and opacity maps box-filtered to 512 × 512 as the grass tuft card, tinted to the tuft hue.
-- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
+- **Rebuild:** `tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded by `pnpm assets:fetch` to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.
 
 ## Sky: `kloofendal_48d_partly_cloudy_puresky`
 
@@ -186,7 +186,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/sky.ktx2`: the upper hemisphere only, at 4096 × 1024. Texels brighter than 20× the median luminance are scaled down to it, and each channel is stored as x / (1 + x) in sRGB, encoded as UASTC KTX2 with a single level (no mipmaps).
   - `src/render/hdri-light.ts`: baked from the same `.hdr`. It holds the sun direction and irradiance, the SH9 sky radiance with the sun clamped out, and the horizon colours.
-- **Rebuild:** `pnpm texture sky` (`tools/textures/sky-pixels.ts`) writes both outputs from the 4k `.hdr`, which is not committed: download it to the git-ignored path above. The build checks its SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` and `tools/textures/sky-build.test.ts` fail when they are stale.
+- **Rebuild:** `pnpm texture sky` (`tools/textures/sky-pixels.ts`) writes both outputs from the 4k `.hdr`, which is not committed: `pnpm assets:fetch` downloads it to the git-ignored path above. The build checks its SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` and `tools/textures/sky-build.test.ts` fail when they are stale.
 
 ## Yard concrete: `brushed_concrete`
 
@@ -209,7 +209,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/concrete-albedo.ktx2`: the 2K diffuse map box-filtered to 1K in linear light, with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.
   - `src/render/assets/concrete-packed.ktx2`: the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map, each box-filtered from 2K to 1K, packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.
-- **Rebuild:** `pnpm texture concrete-albedo` and `pnpm texture concrete-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: download them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.
+- **Rebuild:** `pnpm texture concrete-albedo` and `pnpm texture concrete-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: `pnpm assets:fetch` downloads them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.
 
 ## Street asphalt: `asphalt_02`
 
@@ -232,7 +232,7 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/asphalt-albedo.ktx2`: the 2K diffuse map box-filtered to 1K in linear light, with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.
   - `src/render/assets/asphalt-packed.ktx2`: the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map, each box-filtered from 2K to 1K, packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.
-- **Rebuild:** `pnpm texture asphalt-albedo` and `pnpm texture asphalt-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: download them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.
+- **Rebuild:** `pnpm texture asphalt-albedo` and `pnpm texture asphalt-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: `pnpm assets:fetch` downloads them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.
 
 ## Pavement pavers: `concrete_pavers_02`
 
@@ -255,6 +255,6 @@ The entries below are generated from `tools/assets/sources.ts` by `pnpm credits`
 - **Changes:**
   - `src/render/assets/pavers-albedo.ktx2`: the 2K diffuse map box-filtered to 1K in linear light, with each channel divided by its own mean and scaled to a linear mean of 0.4, so only its variation remains, encoded as ETC1S sRGB KTX2 with mipmaps.
   - `src/render/assets/pavers-packed.ktx2`: the OpenGL normal map's X and Y, the roughness (green) and the ambient occlusion (red) of the AO / roughness / metalness map, each box-filtered from 2K to 1K, packed into the four channels of one linear texture, encoded as UASTC KTX2 with mipmaps. The normal's Z is rebuilt in the shader.
-- **Rebuild:** `pnpm texture pavers-albedo` and `pnpm texture pavers-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: download them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.
+- **Rebuild:** `pnpm texture pavers-albedo` and `pnpm texture pavers-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: `pnpm assets:fetch` downloads them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.
 
 <!-- credits:end -->
