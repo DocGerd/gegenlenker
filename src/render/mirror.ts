@@ -74,9 +74,9 @@ export const CLASS_II_MIRRORS: readonly MirrorSpec[] = [CLASS_II_LEFT, CLASS_II_
  * Class IV looks this far outward of straight back, and down: its field is the ground beside the
  * truck. It renders at the rect's full pixel ratio, and at half rate: each side on alternate frames.
  */
-export const WIDE_YAW = MathUtils.degToRad(25);
+export const WIDE_YAW = MathUtils.degToRad(22);
 const CLASS_IV = {
-  pitch: MathUtils.degToRad(-21),
+  pitch: MathUtils.degToRad(-20),
   roll: 0,
   fov: 64,
   aspect: WIDE_ASPECT,
