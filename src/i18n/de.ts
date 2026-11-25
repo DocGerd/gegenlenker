@@ -41,6 +41,8 @@ export const de: Record<MessageKey, string> = {
   replayLastRun: 'Letzte Fahrt ansehen',
   estimateNote: 'Einige Maße sind geschätzt.',
   settings: 'Einstellungen',
+  settingsGeneral: 'Allgemein',
+  settingsGraphics: 'Grafik',
   language: 'Sprache',
   theme: 'Darstellung',
   themeSystem: 'System',

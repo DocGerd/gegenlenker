@@ -35,6 +35,8 @@ export const en = {
   replayLastRun: 'Replay last run',
   estimateNote: 'Some dimensions are estimates.',
   settings: 'Settings',
+  settingsGeneral: 'General',
+  settingsGraphics: 'Graphics',
   language: 'Language',
   theme: 'Theme',
   themeSystem: 'System',
