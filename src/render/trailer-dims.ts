@@ -153,7 +153,7 @@ const HUES = {
     white: hex(REALISM_HUES.liveryWhite),
     silver: hex(REALISM_HUES.whiteAluminium),
     yellow: hex(REALISM_HUES.signalYellow),
-    contour: hex(REALISM_HUES.contourSide),
+    contour: hex(REALISM_HUES.contourSideYellow),
   },
 } as const;
 
