@@ -1,5 +1,6 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import { THREE_FREE_RENDER } from './tools/three-free-render.ts';
 
 const CORE = ['src/{contracts,vehicles,sim,scoring,content}/**'];
 const THREE = ['three', 'three/*'];
@@ -19,15 +20,25 @@ const THREE_IMPORT_CALL = {
   selector: 'ImportExpression[source.value=/^three(\\/|$)/]',
   message: THREE_MESSAGE,
 };
-const layers = (names, message) => ({
-  regex: `^(\\.\\./)+(${names.join('|')})(/|$)`,
+const layerSource = (names) => `^(\\.\\.\\/)+(${names.join('|')})(\\/|$)`;
+const layers = (names, message) => ({ regex: layerSource(names), message });
+const dynamicLayers = (names, message) => ({
+  selector: `ImportExpression[source.value=/${layerSource(names)}/]`,
   message,
 });
+// `import { type X } from 'three'` still loads the module under verbatimModuleSyntax.
+const THREE_INLINE_TYPE = {
+  selector: `:matches(ImportDeclaration, ExportNamedDeclaration, ExportAllDeclaration)[source.value=/^three(\\/|$)/][importKind!='type'][exportKind!='type']`,
+  message: 'A Three.js import here must be `import type`',
+};
+const RENDER_BELOW = 'render sits below the app shell, hud and input';
+const HUD_INPUT_BELOW = 'hud and input sit below the app shell';
 const THREE_IMPORT_TYPE = {
   selector: 'TSImportType[argument.literal.value=/^three(\\/|$)/]',
   message: THREE_MESSAGE,
 };
 const CORE_MESSAGE = 'Core modules import no Three.js, DOM, or UI layers';
+const CORE_ABOVE = ['render', 'app', 'hud', 'input', 'pwa', 'i18n'];
 const CORE_PATTERNS = [
   {
     group: [
@@ -41,39 +52,10 @@ const CORE_PATTERNS = [
     ],
     message: CORE_MESSAGE,
   },
-  layers(['render', 'app', 'hud', 'input', 'pwa', 'i18n'], CORE_MESSAGE),
+  layers(CORE_ABOVE, CORE_MESSAGE),
 ];
 const THREE_PATTERN = { group: THREE, message: THREE_MESSAGE };
 const restrictImports = (...patterns) => ['error', { patterns }];
-
-// Render modules used outside src/render that load no Three.js at runtime (a `three` import
-// there would pull it into the PWA config, tools and the vite config).
-const THREE_FREE_RENDER = [
-  'asset-registry',
-  'body-dims',
-  'cab-dims',
-  'cab-sight',
-  'cockpit-band',
-  'follow-framing',
-  'free-look',
-  'gpu-backend',
-  'ground-pbr-pixels',
-  'ground-texture-pixels',
-  'ground-texture-spec',
-  'hdri-light',
-  'head-look',
-  'interior-dims',
-  'lamp-layout',
-  'livery',
-  'palette',
-  'perf-overlay',
-  'quality',
-  'realism-hues',
-  'seams',
-  'trailer-dims',
-  'viewports',
-  'yard-kit-dims',
-].map((name) => `src/render/${name}.ts`);
 
 export default tseslint.config(
   { ignores: ['dist', 'node_modules', '.remember', '.claude', '.superpowers'] },
@@ -103,19 +85,21 @@ export default tseslint.config(
   {
     files: ['src/{hud,input}/**/*.ts'],
     rules: {
-      'no-restricted-imports': restrictImports(
-        THREE_PATTERN,
-        layers(['app'], 'hud and input sit below the app shell'),
-      ),
+      'no-restricted-imports': restrictImports(THREE_PATTERN, layers(['app'], HUD_INPUT_BELOW)),
+      'no-restricted-syntax': [
+        'error',
+        THREE_IMPORT_CALL,
+        THREE_IMPORT_TYPE,
+        dynamicLayers(['app'], HUD_INPUT_BELOW),
+      ],
     },
   },
   {
     files: ['src/render/**/*.ts'],
     ignores: ['**/*.test.ts'],
     rules: {
-      'no-restricted-imports': restrictImports(
-        layers(['app', 'hud', 'input'], 'render sits below the app shell, hud and input'),
-      ),
+      'no-restricted-imports': restrictImports(layers(['app', 'hud', 'input'], RENDER_BELOW)),
+      'no-restricted-syntax': ['error', dynamicLayers(['app', 'hud', 'input'], RENDER_BELOW)],
     },
   },
   {
@@ -127,9 +111,15 @@ export default tseslint.config(
           allowTypeImports: true,
           message: 'This render module is used outside render and must stay free of Three.js',
         },
-        layers(['app', 'hud', 'input'], 'render sits below the app shell, hud and input'),
+        layers(['app', 'hud', 'input'], RENDER_BELOW),
       ),
-      'no-restricted-syntax': ['error', THREE_IMPORT_CALL, THREE_IMPORT_TYPE],
+      'no-restricted-syntax': [
+        'error',
+        THREE_IMPORT_CALL,
+        THREE_IMPORT_TYPE,
+        THREE_INLINE_TYPE,
+        dynamicLayers(['app', 'hud', 'input'], RENDER_BELOW),
+      ],
     },
   },
   {
@@ -155,7 +145,12 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': restrictImports(...CORE_PATTERNS),
       'no-restricted-globals': ['error', ...DOM_GLOBALS],
-      'no-restricted-syntax': ['error', THREE_IMPORT_CALL, THREE_IMPORT_TYPE],
+      'no-restricted-syntax': [
+        'error',
+        THREE_IMPORT_CALL,
+        THREE_IMPORT_TYPE,
+        dynamicLayers(CORE_ABOVE, CORE_MESSAGE),
+      ],
     },
   },
   {
