@@ -503,7 +503,7 @@ for (const start of starts) {
     await page.goto('./');
     await page.getByRole('button', { name: start.label }).click();
 
-    const buttons = page.locator('.hud-toolbar button');
+    const buttons = page.locator('.hud-toolbar button:visible');
     await expect(buttons.first()).toBeVisible();
     const rows = new Set((await boxes(buttons)).map((b) => Math.round(b.top)));
     expect(rows.size).toBeLessThanOrEqual(2);

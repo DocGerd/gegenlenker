@@ -393,6 +393,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let view = opts.topDown;
   const aids = { ...opts.aids };
   const viewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
+  /** Only in the outside view, so the other views keep the toolbar's two rows. */
+  const freeCamera = hud.querySelector<HTMLButtonElement>('[data-hud="freeCamera"]');
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
   const panelButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
@@ -431,6 +433,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   };
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
+    if (freeCamera !== null) setHidden(freeCamera, view !== 'chase');
     for (const b of aidButtons) {
       const aid = b.dataset['aid'] as keyof AidFlags;
       b.setAttribute('aria-pressed', String(aids[aid]));
@@ -607,7 +610,6 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     if (view !== 'chase') selectView('chase');
     emit({ type: 'freeCamera' });
   };
-  const freeCamera = hud.querySelector<HTMLButtonElement>('[data-hud="freeCamera"]');
   if (freeCamera !== null) {
     const label = `${t('freeCamera')} (K)`;
     freeCamera.title = label;

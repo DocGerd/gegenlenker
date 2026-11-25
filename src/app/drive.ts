@@ -385,6 +385,8 @@ export function startDrive(
       viewInput.setMode(topDown);
       dirty = true;
       if (topDown !== 'chase') updateSettings({ topDown });
+      // the free camera button comes and goes with the outside view, which changes the toolbar's height
+      arrange();
     } else if (action.type === 'resetView') {
       viewInput.reset();
     } else if (action.type === 'freeCamera') {
