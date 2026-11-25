@@ -7,6 +7,7 @@
 # Gegenlenker
 
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/DocGerd/gegenlenker/badge)](https://scorecard.dev/viewer/?uri=github.com/DocGerd/gegenlenker)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/17033/badge)](https://www.bestpractices.dev/projects/17033)
 
 A trainer for maneuvering a truck with a turntable drawbar trailer: reverse, steer against the trailer and dock it, in the browser and offline-capable.
 
