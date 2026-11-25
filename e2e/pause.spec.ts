@@ -224,6 +224,22 @@ test('a Space held through the finish does not activate the focused result butto
   await expect(speed(page)).toHaveText('0.0 km/h');
 });
 
+test('an Enter held through the finish does not activate the focused result button', async ({
+  page,
+}) => {
+  await startAndRoll(page);
+  await page.keyboard.down('Enter');
+  await finishRun(page);
+  await expect(page.getByRole('button', { name: en.retry })).toBeFocused();
+  await page.keyboard.down('Enter'); // auto-repeat
+  await page.keyboard.up('Enter');
+  await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
+
+  // Once released, a fresh press works again.
+  await page.keyboard.press('Enter');
+  await expect(speed(page)).toHaveText('0.0 km/h');
+});
+
 const gear = (page: Page) => page.locator('[data-hud="gear"]');
 const toast = (page: Page) => page.locator('[data-hud="toast"]');
 

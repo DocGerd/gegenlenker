@@ -1,5 +1,6 @@
 import { t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
+import { ignoreHeldBrakeKeys } from './held-keys';
 
 export type NoticeAction = {
   readonly label: MessageKey;
@@ -34,20 +35,7 @@ export function showNotice(
   });
   box.append(text, row);
   parent.append(box);
-  // A run ends while a brake key (Space, Enter) may still be held; its repeats and release must not click the focused
-  // button. A code is free after its next fresh press or release.
-  const held = new Set(['Space', 'Enter', 'NumpadEnter']);
-  const guardHeld = (e: KeyboardEvent): void => {
-    if (!held.has(e.code)) return;
-    if (e.type === 'keydown' && !e.repeat) {
-      held.delete(e.code);
-      return;
-    }
-    if (e.type === 'keyup') held.delete(e.code);
-    e.preventDefault();
-  };
-  box.addEventListener('keydown', guardHeld, true);
-  box.addEventListener('keyup', guardHeld, true);
+  ignoreHeldBrakeKeys(box);
   // Focus leaves what the cover hides.
   buttons[0]?.focus();
   return box;
