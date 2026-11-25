@@ -210,9 +210,9 @@ describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
     async (_name, screen) => {
       const { mesh, glass } = await readShell(id, 'cab');
       const face = cabFront(truckById(id));
-      // The glb's front face: what sits above the frame within the front 0.2 m and not ahead of it,
-      // which leaves out the tow coupling, the bumper, the roof fittings further back and the class VI
-      // mirror head on its boom.
+      // The glb's front face: what sits above the frame within the front 0.2 m, neither ahead of it
+      // nor outside the side walls, which leaves out the tow coupling, the bumper, the roof fittings
+      // further back and the mirror heads.
       const box = new Box3();
       const point = new Vector3();
       // the windscreen is a mesh of its own
@@ -223,7 +223,8 @@ describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
           if (
             point.y >= face.bottom - 1e-3 &&
             point.x >= face.x - 0.2 &&
-            point.x <= face.x + RELIEF + 1e-3
+            point.x <= face.x + RELIEF + 1e-3 &&
+            Math.abs(point.z) <= face.halfWidth + RELIEF + 1e-3
           ) {
             box.expandByPoint(point);
           }

@@ -1,10 +1,10 @@
 {
-  "scriptSha256": "64f34400b62c25578ac8847d9fafb387e207df4808ba72dd021fb39d1594bc27",
+  "scriptSha256": "10276a64f26f86e61bccb9ae1fcbfb5deb24ca8155f247dd47253bfa68416498",
   "commonSha256": "abe05cc92cbb135b9f5a5f45ede294e05d806f898b697def0568f37338475673",
   "lampCommonSha256": "faf6705e3804e422b5392ca4d6715775f06356df6342d91a7a4606ace9d202ea",
-  "paramsSha256": "1ac61e26d087fd8da96ca91e1744fd70ca45d04c25848804bd393182ad8403f8",
+  "paramsSha256": "5087f71b94f6807f14be3a8fa94b33095f4978cd3de5173b6369b6a61f04ac4c",
   "blenderVersion": "5.3.0",
   "gltfTransformVersion": "v4.5.1",
-  "glbSha256": "70af1a5fc032b87fe0114ea9ea33f70b76bd7ffe30073cb90b5b6c4212d2004e",
-  "glbBytes": 18124
+  "glbSha256": "72e80616b2ef668afb63b9c37604f71da7f079bce035eec9a874e435ac2aafb9",
+  "glbBytes": 17964
 }

@@ -113,12 +113,12 @@ describe('resolution', () => {
     expect(eye.y).toBeCloseTo(0.6, 12);
     expect(eye.z).toBeCloseTo(2.35, 12);
     const mirrorRight = truckAnchors(man).mirrorRight;
-    expect(mirrorRight.x).toBeCloseTo(4.62, 12);
-    expect(mirrorRight.y).toBeCloseTo(-1.45, 12);
+    expect(mirrorRight.x).toBeCloseTo(5.005, 12);
+    expect(mirrorRight.y).toBeCloseTo(-1.5, 12);
     expect(mirrorRight.z).toBeCloseTo(2.55, 12);
     const mirrorLeft = truckAnchors(arocs).mirrorLeft;
-    expect(mirrorLeft.x).toBeCloseTo(4.65, 12);
-    expect(mirrorLeft.y).toBeCloseTo(1.6, 12);
+    expect(mirrorLeft.x).toBeCloseTo(5.135, 12);
+    expect(mirrorLeft.y).toBeCloseTo(1.67, 12);
     expect(mirrorLeft.z).toBeCloseTo(2.55, 12);
     const axles = trailerAnchors(hueffermann).rearAxles.map((a) => a.x);
     expect(axles).toHaveLength(2);

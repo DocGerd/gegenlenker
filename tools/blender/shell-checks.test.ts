@@ -179,4 +179,15 @@ describe.skipIf(!python)('cab_shell.py geometry checks', () => {
       /a mirror head reaches its camera/,
     );
   });
+
+  it('refuse side mirror arms that miss the A-pillar', () => {
+    const { mirrors } = arocs;
+    const back = (m: typeof mirrors.mirrorLeft) => ({ ...m, x: m.x - 0.3 });
+    const moved = {
+      ...mirrors,
+      mirrorLeft: back(mirrors.mirrorLeft),
+      wideLeft: back(mirrors.wideLeft),
+    };
+    expect(cab({ ...arocs, mirrors: moved })).toMatch(/the mirrorLeft arms miss the A-pillar/);
+  });
 });
