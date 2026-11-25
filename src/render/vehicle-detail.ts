@@ -253,11 +253,13 @@ export function truckDetail(p: TruckDetailParams): {
       p.rearX + RELIEF,
     );
     for (const twin of [-1, 1]) {
-      wheelFaces(c, p.wheelRadius, p.twinWidth, [
-        p.rearAxleX,
-        (side * p.rearTrack) / 2 + twin * p.twinOffset,
+      wheelFaces(
+        c,
         p.wheelRadius,
-      ], true);
+        p.twinWidth,
+        [p.rearAxleX, (side * p.rearTrack) / 2 + twin * p.twinOffset, p.wheelRadius],
+        true,
+      );
     }
   }
 
