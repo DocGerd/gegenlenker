@@ -8,19 +8,13 @@ import {
   type TopDownView,
 } from '../contracts/render';
 import { KIT_FOOTPRINTS } from '../content/kit';
-import {
-  isKitDecor,
-  type KitPiece,
-  type Obstacle,
-  type Rect2,
-  type ResolvedLayout,
-} from '../contracts/layout';
+import { isKitDecor, type KitPiece, type Obstacle, type ResolvedLayout } from '../contracts/layout';
 import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { resolveCombination } from '../vehicles/resolve';
 import { CAB_HEIGHT, FRAME_TOP } from './cab-dims';
-import { clampFreePose, FREE_FOV, poseFromGaze } from './free-look';
+import { FREE_FOV, poseFromGaze } from './free-look';
 import { CAMERA_FAR, CHASE_LAYERS, enableLayers } from './seams';
 
 const CHASE_FOV = FREE_FOV;
@@ -379,14 +373,11 @@ export function placeFreeCamera(
 }
 
 /** Where `camera` (placed by either function) is and looks, as a pose to continue from. */
-export function cameraPose(camera: PerspectiveCamera, bounds: Rect2): FreePose {
+export function cameraPose(camera: PerspectiveCamera): FreePose {
   camera.getWorldDirection(look);
   const { position } = camera;
-  return clampFreePose(
-    poseFromGaze(
-      { x: position.x, y: -position.z, z: position.y },
-      { x: look.x, y: -look.z, z: look.y },
-    ),
-    bounds,
+  return poseFromGaze(
+    { x: position.x, y: -position.z, z: position.y },
+    { x: look.x, y: -look.z, z: look.y },
   );
 }

@@ -40,7 +40,7 @@ export type LookOptions = {
   readonly onChange: (head: HeadPose) => void;
 };
 
-/** The outside view's free camera: the eye stays inside `bounds`. */
+/** The outside view's free camera: the eye flies inside `bounds`, or in from where the orbit left it. */
 export type FreeOptions = {
   readonly bounds: Rect2;
   /** The pose the free camera flies from now, or null once it ended. */
@@ -198,8 +198,11 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
     ahead: false,
     back: false,
   };
+  /** The physical key holding each: a modifier can change `key` before the release (`,` with Shift is `<`). */
+  const heldBy = new Map<string, HeldKey>();
   const releaseHeld = (): void => {
     held.turnLeft = held.turnRight = held.up = held.down = held.ahead = held.back = false;
+    heldBy.clear();
   };
   const fly = (next: FreePose): void => {
     if (flying === undefined || free === null || sameFreePose(next, free)) return;
@@ -331,8 +334,10 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
       const action = actionFor('view', e);
       const chase = mode === 'chase';
       const key = free === null ? undefined : heldKeyOf(action);
-      if (key !== undefined) held[key] = true;
-      else if (action === 'resetView' && free !== null) {
+      if (key !== undefined) {
+        held[key] = true;
+        heldBy.set(e.code, key);
+      } else if (action === 'resetView' && free !== null) {
         endFree();
         commit(DEFAULT_TOP_DOWN_VIEW);
       } else if (action === 'zoomIn') commit(zoomAt(view, KEY_ZOOM, centre(ctx), ctx));
@@ -358,7 +363,8 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
     const action = actionFor('view', e);
     if (action === 'glanceLeft') glance.left = false;
     else if (action === 'glanceRight') glance.right = false;
-    const key = heldKeyOf(action);
+    const key = heldBy.get(e.code) ?? heldKeyOf(action);
+    heldBy.delete(e.code);
     if (key !== undefined) held[key] = false;
   };
   const letGoAll = (): void => {
@@ -386,7 +392,7 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
       }
       if (flying === undefined || mode !== 'chase') return;
       releaseHeld();
-      free = clampFreePose(pose, flying.bounds);
+      free = clampFreePose(pose, flying.bounds, pose);
       flying.onChange(free);
     },
     relayout() {

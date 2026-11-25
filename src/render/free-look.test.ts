@@ -126,6 +126,17 @@ describe('flying along the gaze', () => {
     expect(flyBy(START, 1e6, BOUNDS).x).toBe(BOUNDS.maxX);
     expect(flyBy({ ...START, pitch: FREE_PITCH.min }, 1e6, BOUNDS).z).toBe(FREE_MIN_HEIGHT);
   });
+
+  it('starts outside the limits where the orbit was, goes no further out and back in', () => {
+    const outside = { ...START, x: BOUNDS.maxX + 20, z: FREE_MAX_HEIGHT + 10 };
+    expect(clampFreePose(outside, BOUNDS, outside)).toEqual(outside);
+    const away = flyBy({ ...outside, pitch: FREE_PITCH.max }, 100, BOUNDS);
+    expect(away.x).toBe(outside.x);
+    expect(away.z).toBe(outside.z);
+    const back = flyBy({ ...outside, yaw: Math.PI, pitch: FREE_PITCH.min }, 5, BOUNDS);
+    expect(back.x).toBeLessThan(outside.x);
+    expect(back.z).toBeLessThan(outside.z);
+  });
 });
 
 describe('flyStep', () => {

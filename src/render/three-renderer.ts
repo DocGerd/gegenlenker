@@ -38,7 +38,6 @@ import {
 } from './chase-camera';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
-import { clampFreePose } from './free-look';
 import { createFrameTimer } from './governor';
 import { createFrame, type Frame } from './frame-target';
 import { describeAdapter } from './gpu-backend';
@@ -88,8 +87,6 @@ type Built = {
   readonly cabFront: CabFront;
   readonly palette: ScenePalette;
   readonly yardBounds: Rect2;
-  /** The layout's bounds, which the free camera's eye stays inside. */
-  readonly bounds: Rect2;
   readonly colliders: readonly ChaseCollider[];
   readonly extent: CombinationExtent;
   /** Metres from the follow centre that bound the whole combination. */
@@ -483,7 +480,6 @@ export function createThreeSceneRenderer(
         cabFront: cabFront(truck),
         palette,
         yardBounds: fitBounds(nextLayout),
-        bounds: nextLayout.bounds,
         colliders: chaseColliders(nextLayout),
         extent,
         radius: boundingRadius(extent),
@@ -629,7 +625,7 @@ export function createThreeSceneRenderer(
           clear: relativeTo(topDown, frame.topDownClear ?? topDown),
         };
         if (frame.freePose !== undefined) {
-          placeFreeCamera(chaseCamera, clampFreePose(frame.freePose, b.bounds), rig, paneFrame);
+          placeFreeCamera(chaseCamera, frame.freePose, rig, paneFrame);
         } else {
           placeChaseCamera(chaseCamera, rig, paneFrame, view, (limit, open) =>
             chaseArm.hold(limit, open, performance.now()),
@@ -665,7 +661,7 @@ export function createThreeSceneRenderer(
     },
 
     chasePose() {
-      return chaseShown && built !== null ? cameraPose(chaseCamera, built.bounds) : null;
+      return chaseShown && built !== null ? cameraPose(chaseCamera) : null;
     },
 
     project(x, y) {

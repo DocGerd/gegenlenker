@@ -10,8 +10,8 @@ export const FREE_FOV = 40;
 /** Metres the free eye stays above the ground; a building under it lifts it further when placed. */
 export const FREE_MIN_HEIGHT = 1.5;
 /**
- * The highest the eye goes: from here over a corner of the layout bounds the skyline stays inside
- * the far plane (`chase-camera.test.ts` pins it).
+ * The highest the eye flies up to, unless it starts higher from the orbit: from here over a corner
+ * of the layout bounds the skyline stays inside the far plane (`chase-camera.test.ts` pins it).
  */
 export const FREE_MAX_HEIGHT = 60;
 export const FREE_PITCH = { min: rad(-85), max: rad(45) } as const;
@@ -41,12 +41,18 @@ export type FreeInput = {
   readonly fly: number;
 };
 
-export function clampFreePose(pose: FreePose, bounds: Rect2): FreePose {
+/**
+ * Holds the eye inside `bounds` and the height range, or no further outside them than `from` is: the
+ * orbit's eye can be outside, and a flight that starts there must not jump.
+ */
+export function clampFreePose(pose: FreePose, bounds: Rect2, from?: FreePose): FreePose {
   const turned = pose.yaw - TAU * Math.round(pose.yaw / TAU);
+  const within = (v: number, lo: number, hi: number, at: number | undefined): number =>
+    at === undefined ? clamp(v, lo, hi) : clamp(v, Math.min(lo, at), Math.max(hi, at));
   return {
-    x: clamp(pose.x, bounds.minX, bounds.maxX),
-    y: clamp(pose.y, bounds.minY, bounds.maxY),
-    z: clamp(pose.z, FREE_MIN_HEIGHT, FREE_MAX_HEIGHT),
+    x: within(pose.x, bounds.minX, bounds.maxX, from?.x),
+    y: within(pose.y, bounds.minY, bounds.maxY, from?.y),
+    z: within(pose.z, FREE_MIN_HEIGHT, FREE_MAX_HEIGHT, from?.z),
     yaw: turned <= -Math.PI ? Math.PI : turned,
     pitch: clamp(pose.pitch, FREE_PITCH.min, FREE_PITCH.max),
   };
@@ -72,6 +78,7 @@ export function lookBy(
   return clampFreePose(
     { ...pose, yaw: pose.yaw + dx * perPx, pitch: pose.pitch + dy * perPx },
     bounds,
+    pose,
   );
 }
 
@@ -95,6 +102,7 @@ export function panBy(
       z: pose.z + dy * perPx,
     },
     bounds,
+    pose,
   );
 }
 
@@ -104,6 +112,7 @@ export function flyBy(pose: FreePose, distance: number, bounds: Rect2): FreePose
   return clampFreePose(
     { ...pose, x: pose.x + gx * distance, y: pose.y + gy * distance, z: pose.z + gz * distance },
     bounds,
+    pose,
   );
 }
 
@@ -121,7 +130,7 @@ export function flyStep(
     pitch: pose.pitch + input.pitch * PITCH_RATE * seconds,
   };
   const speed = Math.max(FLY_MIN_SPEED, FLY_SPEED_PER_METRE * pose.z);
-  return flyBy(clampFreePose(turned, bounds), input.fly * speed * seconds, bounds);
+  return flyBy(clampFreePose(turned, bounds, pose), input.fly * speed * seconds, bounds);
 }
 
 /** `factor` is a wheel notch as `wheelFactor` reads it: above 1 flies forward. */

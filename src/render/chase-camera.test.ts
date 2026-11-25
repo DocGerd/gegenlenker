@@ -430,13 +430,27 @@ describe('free camera', () => {
       { zoom: CHASE_ZOOM.min, panX: -1, panY: CHASE_TILT.min },
     ]) {
       const orbit = place(free(rig), frame, view);
-      const pose = cameraPose(orbit, BOUNDS);
+      const pose = cameraPose(orbit);
       const flown = createChaseCamera();
       placeFreeCamera(flown, pose, free(rig), frame);
       expect(flown.position.distanceTo(orbit.position)).toBeLessThan(1e-9);
       expect(flown.quaternion.angleTo(orbit.quaternion)).toBeLessThan(1e-9);
       expect(flown.projectionMatrix.equals(orbit.projectionMatrix)).toBe(true);
     }
+  });
+
+  it('continues from an orbit eye outside the layout bounds without a jump', () => {
+    // zoomed out at the yard's far edge, the eye is beyond the bounds
+    const edge = posed(0, 0, { x: 5, y: 65, heading: -Math.PI / 2 }, 0, 0).rig;
+    const orbit = place(free(edge), frame, {
+      zoom: CHASE_ZOOM.min,
+      panX: 2.7,
+      panY: CHASE_TILT.min,
+    });
+    expect(-orbit.position.z).toBeGreaterThan(BOUNDS.maxY);
+    const flown = createChaseCamera();
+    placeFreeCamera(flown, cameraPose(orbit), free(edge), frame);
+    expect(flown.position.distanceTo(orbit.position)).toBeLessThan(1e-9);
   });
 
   it('lifts an eye over a building to its roof without changing the pose', () => {

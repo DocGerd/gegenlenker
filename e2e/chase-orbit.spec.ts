@@ -110,11 +110,18 @@ test(
     await page.keyboard.press('k');
     await expect(freeButton).toHaveAttribute('aria-pressed', 'true');
     expect(hash(await chaseShot(page)), 'free camera entry').toBe(hash(first));
+    // only a started flight enables the reset at the default orbit; the pressed button shows from the key
+    await expect(resetButton).toBeEnabled();
     await page.keyboard.down('Period');
     const flown = await chaseShot(page);
+    // released with Shift down, the key reads `>`: it still stops the turn
+    await page.keyboard.down('Shift');
     await page.keyboard.up('Period');
+    await page.keyboard.up('Shift');
     expect(await distinctColours(page, flown), 'turned').toBeGreaterThan(MIN_DRAWN_COLOURS);
     expect(hash(flown), 'turned differs from the orbit').not.toBe(hash(first));
+    const stopped = hash(await chaseShot(page));
+    expect(hash(await chaseShot(page)), 'stopped once released').toBe(stopped);
     await page.keyboard.press('0');
     await expect(freeButton).toHaveAttribute('aria-pressed', 'false');
     expect(hash(await chaseShot(page)), 'reset leaves the free camera').toBe(hash(first));
