@@ -81,7 +81,7 @@ import {
   type CockpitInterior,
   type RendererParts,
 } from './seams';
-import { bandTopNdc, computeViewports, type Insets } from './viewports';
+import { bandTopNdc, computeViewports, MIN_MIRROR_HEIGHT, type Insets } from './viewports';
 
 const truck = truckById('man-le-18-280');
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
@@ -456,7 +456,13 @@ describe.each(CASES)(
       interior.setLook(lookFor(flags, 'day'));
       return interior;
     };
-    const shootRoute = (width: number, height: number, heading = 0.7, mode: LightingMode = 'day') =>
+    const shootRoute = (
+      width: number,
+      height: number,
+      heading = 0.7,
+      mode: LightingMode = 'day',
+      insets?: Insets,
+    ) =>
       shootWith(
         make(spec, palette),
         width,
@@ -465,7 +471,7 @@ describe.each(CASES)(
         null,
         QUALITY_FLAGS[presets[0] ?? 'high'],
         spec,
-        undefined,
+        insets,
         mode,
       );
 
@@ -657,6 +663,42 @@ describe.each(CASES)(
         expect(fronts).toBeGreaterThan(windows.length / 2);
         expect(wides).toBeGreaterThan(windows.length / 4);
         expect(closes).toBeGreaterThan(0);
+      });
+
+      // A display cut-out and home indicator, near square: class II shrinks below its minimum height.
+      const notch: Insets = { top: 24, right: 48, bottom: 20, left: 48 };
+      const notched: (readonly [number, number])[] = [
+        [640, 660],
+        [700, 740],
+        [800, 820],
+      ];
+
+      it('keeps the sight cone and class II mirrors that safe-area insets shrink clear of every part', () => {
+        for (const [w, h] of notched) {
+          const { camera, interior, cockpit, left, right } = shootRoute(w, h, 0.7, 'day', notch);
+          expect(left.height, `${w}x${h}`).toBeLessThan(MIN_MIRROR_HEIGHT);
+          const parts = drawn(interior);
+          for (const rect of [left, right]) {
+            for (const [u, v] of [
+              [0.5, 0.5],
+              [0, 0.26],
+              [0.5, 0.26],
+              [1, 0.26],
+            ] as const) {
+              const [x, y] = rectToNdc(cockpit, rect, u, v);
+              expect(
+                hits(camera, parts, x, y).filter((name) => !underMirror.includes(name)),
+                `${w}x${h} (${u}, ${v})`,
+              ).toEqual([]);
+            }
+          }
+          const along = crossingAlong(camera, parts);
+          for (let az = -cone; az <= cone + 1e-9; az += cone / 6) {
+            for (let el = -cone; el <= cone + 1e-9; el += cone / 6) {
+              if (Math.hypot(az, el) <= cone) expect(along(az, el), `${w}x${h}`).toEqual([]);
+            }
+          }
+        }
       });
 
       it('keeps every part off the lower three quarters of each class II mirror rect', () => {
