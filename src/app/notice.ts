@@ -28,5 +28,9 @@ export function showNotice(
   });
   box.append(text, row);
   parent.append(box);
+  // Focus leaves what the cover hides, and Tab reaches the primary action next. Not the button itself: a key held
+  // when a run halts (Space, the brake) would click it on release.
+  text.tabIndex = -1;
+  text.focus();
   return box;
 }

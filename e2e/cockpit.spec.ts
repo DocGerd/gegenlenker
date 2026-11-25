@@ -328,8 +328,10 @@ for (const pair of MIRROR_PAIRS) {
           expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
           // Low's flat vehicle tokens are as bright as the yard, so the class IV edge cannot tell them apart by
           // brightness there; the side flip is pinned in `wide-mirror.test.ts`.
+          // The lower rows show little dark vehicle (a single rear tyre, white contour stripes), but an
+          // unflipped mirror shows yard on this edge, above 0.9 like the outer one.
           if (pair.left !== 'wideLeft' || preset !== 'low') {
-            expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
+            expect(innerYard, `${side} inner edge`).toBeLessThan(0.8);
           }
         }
       },

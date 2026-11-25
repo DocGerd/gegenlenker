@@ -29,7 +29,7 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 
 - PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, and another run of the same commit also reports `check`. So `/release` hands the owner the merge into `main` only once its own run passed the guard and `release:check`; the owner's merge is the last gate.
 - Changing a PR's base starts no run, and a re-run repeats the old one: after retargeting a PR, close and reopen it so CI checks it against the new base.
-- Pushes to `develop` and `main` run the gate without e2e, then deploy, without approval.
+- Pushes to `main` run the gate without e2e, then deploy, without approval. Pushes to `develop` run the full gate including e2e (the `develop` ruleset does not require up-to-date PRs), one run at a time: a newer push replaces a waiting run, never a running one. The UAT deploy waits for the previous `develop` run but not for its own e2e. A red `develop` blocks merges into it until fixed or reverted.
 - `main` builds and deploys production to the site root, then tags and publishes the release once the deploy succeeded. Its Pages artifact holds production alone, so a release needs nothing from `develop`, and `/uat/` is gone until the next `develop` deploy.
 - `develop` deploys its UAT build to `/gegenlenker/uat/` (see UAT).
 - `workflow_dispatch` of CI on `main` redeploys production; on `develop` it redeploys UAT.

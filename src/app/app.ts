@@ -226,6 +226,30 @@ export function startApp(root: HTMLElement): void {
     );
   };
 
+  // Errors outside the frame loop (input, timers, promises) otherwise leave a stuck screen without a word.
+  // Not over a drive or replay: the stage would run on blind under the cover, and its frame boundary has its own notice.
+  let failed: HTMLElement | null = null;
+  const runFailed = (): void => {
+    if (failed?.isConnected === true || screen.querySelector('.drive, .replay') !== null) return;
+    failed = showNotice(
+      screen,
+      'appFailed',
+      { label: 'reload', run: () => location.reload() },
+      {
+        label: 'dismiss',
+        run: () => {
+          failed?.remove();
+        },
+      },
+    );
+  };
+  // Not `preventDefault`ed: the browser still reports it, so the e2e console guard sees it. A null `error` is
+  // a browser-internal report (such as the ResizeObserver loop notice), not a fault of the app.
+  window.addEventListener('error', (event) => {
+    if (event.error != null) runFailed();
+  });
+  window.addEventListener('unhandledrejection', runFailed);
+
   menu();
   startUpdatePrompt(root);
   void requestPersistentStorage();

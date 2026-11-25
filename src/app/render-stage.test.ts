@@ -75,8 +75,13 @@ function element(): HTMLElement {
 vi.stubGlobal('document', doc);
 vi.stubGlobal('window', { addEventListener: () => undefined });
 vi.stubGlobal('performance', { now: () => now });
-vi.stubGlobal('requestAnimationFrame', () => 1);
-vi.stubGlobal('cancelAnimationFrame', () => undefined);
+const scheduled: FrameRequestCallback[] = [];
+vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+  scheduled.push(callback);
+  return scheduled.length;
+});
+const cancelled: number[] = [];
+vi.stubGlobal('cancelAnimationFrame', (id: number) => void cancelled.push(id));
 vi.stubGlobal('location', { reload: () => undefined });
 vi.stubGlobal(
   'ResizeObserver',
@@ -125,6 +130,8 @@ describe('render stage recovery', () => {
     doc.visibilityState = 'visible';
     doc.listeners.clear();
     now = 0;
+    scheduled.length = 0;
+    cancelled.length = 0;
     showNotice.mockClear();
     warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -239,5 +246,37 @@ describe('render stage recovery', () => {
     await flush();
     expect(notices()).toEqual(['contextLost']);
     expect(fake.disposed).toBe(0);
+  });
+
+  it('stops after one throwing frame, logs it and shows the run notice', async () => {
+    const { hooks } = await mount();
+    const boom = new Error('boom');
+    hooks.frame.mockImplementation(() => {
+      throw boom;
+    });
+    await startLatest();
+    expect(scheduled).toHaveLength(1);
+    scheduled[0]?.(16);
+    expect(scheduled).toHaveLength(2);
+    expect(cancelled.at(-1)).toBe(2);
+    expect(hooks.frame).toHaveBeenCalledOnce();
+    expect(error).toHaveBeenCalledWith('Frame failed', boom);
+    expect(notices()).toEqual(['runFailed']);
+    expect(hooks.halted).toHaveBeenCalledOnce();
+    doc.show();
+    expect(scheduled).toHaveLength(2);
+  });
+
+  it('rethrows a frame that left the screen before it threw, for the screen-level notice', async () => {
+    const { stage, hooks } = await mount();
+    const boom = new Error('boom');
+    hooks.frame.mockImplementation(() => {
+      stage.dispose();
+      throw boom;
+    });
+    await startLatest();
+    expect(() => scheduled[0]?.(16)).toThrow(boom);
+    expect(notices()).toEqual([]);
+    expect(hooks.halted).not.toHaveBeenCalled();
   });
 });

@@ -4,19 +4,28 @@ import type { TrailerId, TruckId } from '../contracts/vehicle';
 
 export type CabStyle = 'day' | 'crew';
 export type TruckBodyKind = 'tipper' | 'tarp';
+/** Twin rear tyres per side, or one wide single (4x4 off-road tyres, as on the front axle). */
+export type RearTyres = 'twin' | 'single';
 
 /**
  * How a truck looks in the perspective views. Render estimates, not Params: the sim and the
- * top-down view keep the vehicle data's dimensions, so a longer crew cab changes no fingerprint.
+ * top-down view keep the vehicle data's dimensions, so a longer crew cab or single rear tyres
+ * change no fingerprint, and the top-down wheel tokens stay twins.
  */
 export type TruckLook = {
   readonly cab: { readonly style: CabStyle; readonly length: number };
-  readonly body: { readonly kind: TruckBodyKind };
+  readonly body: { readonly kind: TruckBodyKind; readonly rearTyres: RearTyres };
 };
 
 export const TRUCK_LOOKS = {
-  'arocs-1835-ak': { cab: { style: 'day', length: 2.2 }, body: { kind: 'tipper' } },
-  'man-le-18-280': { cab: { style: 'crew', length: 3 }, body: { kind: 'tarp' } },
+  'arocs-1835-ak': {
+    cab: { style: 'day', length: 2.2 },
+    body: { kind: 'tipper', rearTyres: 'twin' },
+  },
+  'man-le-18-280': {
+    cab: { style: 'crew', length: 3 },
+    body: { kind: 'tarp', rearTyres: 'single' },
+  },
 } as const satisfies Record<TruckId, TruckLook>;
 
 export type TrailerShellKind = 'low-loader' | 'lafette';
