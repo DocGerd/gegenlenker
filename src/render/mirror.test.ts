@@ -158,7 +158,7 @@ describe('mirror spec', () => {
     mirror.place(new Vector3(), 0);
     mirror.capture(gl, new Scene(), 64, 48, 0, 0);
     expect(mirror.camera.rotation.z).toBe(0);
-    expect(mirror.camera.rotation.x).toBe(MathUtils.degToRad(-4));
+    expect(mirror.camera.rotation.x).toBe(MathUtils.degToRad(-8));
     expect(mirror.camera.fov).toBe(46);
     expect(mirror.camera.aspect).toBeCloseTo(4 / 3);
   });

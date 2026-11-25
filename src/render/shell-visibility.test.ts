@@ -296,6 +296,54 @@ function sampleGround(polygon: readonly Vec2[], step: number): Vec2[] {
   return [...points, ...polygon];
 }
 
+/** Share of the half-frame, in normalised device coordinates, that the class II field keeps clear of each frame edge. */
+const FIELD_MARGIN = 0.1;
+
+/** The narrowest and the widest class II rect, width over height, of drive and mirror-only screens. */
+function classIIAspects(): readonly [number, number] {
+  let narrowest = Infinity;
+  let widest = 0;
+  for (const mode of ['drive', 'mirrors'] as const) {
+    for (let w = 640; w <= 2560; w += 80) {
+      for (let h = 360; h <= 1440; h += 60) {
+        const rect = computeViewports(w, h, mode, null, NO_INSETS).mirrorLeft;
+        if (rect === null) continue;
+        narrowest = Math.min(narrowest, rect.width / rect.height);
+        widest = Math.max(widest, rect.width / rect.height);
+      }
+    }
+  }
+  return [narrowest, widest];
+}
+
+describe.each(TRUCK_IDS)('class II aim: %s', (id) => {
+  it.each(['left', 'right'] as const)(
+    'frames the whole R46 field on the %s side at every class II aspect',
+    (side) => {
+      const key = side === 'left' ? 'mirrorLeft' : 'mirrorRight';
+      for (const aspect of classIIAspects()) {
+        const mirror = createMirror();
+        const position = new Vector3();
+        mirror.place(
+          position,
+          mirrorPose(STRAIGHT, truckAnchors(truckById(id))[key], side, id, position),
+        );
+        mirror.camera.aspect = aspect;
+        mirror.camera.updateProjectionMatrix();
+        mirror.camera.updateMatrixWorld(true);
+        // the field is a ground polygon and the frustum convex: its corners suffice
+        for (const p of classIIField(id, side)) {
+          const ndc = new Vector3(p.x, 0, -p.y).project(mirror.camera);
+          const at = `${aspect.toFixed(2)}: ${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
+          expect(Math.abs(ndc.x), at).toBeLessThan(1 - FIELD_MARGIN);
+          expect(Math.abs(ndc.y), at).toBeLessThan(1 - FIELD_MARGIN);
+          expect(ndc.z, at).toBeLessThan(1);
+        }
+      }
+    },
+  );
+});
+
 // The class V and VI fields are checked against the cab in close-mirror.test.ts and front-mirror.test.ts.
 describe.each(TRUCK_IDS)('the cab and its mirror heads on the class II and IV fields: %s', (id) => {
   const truck = truckById(id);

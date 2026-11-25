@@ -23,12 +23,12 @@ import { FRONT_ASPECT, WIDE_ASPECT } from './viewports';
 
 const NEAR = 0.2;
 /**
- * Class II mirrors look this far outward of straight back. The MAN's heads stand as far out as the
- * Arocs', and its class II turns further in to keep the body side in view (shell-visibility.test.ts).
+ * Class II mirrors look this far outward of straight back, per truck: enough to frame the body side and
+ * the whole R46 field (shell-visibility.test.ts).
  */
 const CLASS_II_YAW: Readonly<Record<TruckId, number>> = {
   'man-le-18-280': MathUtils.degToRad(4),
-  'arocs-1835-ak': MathUtils.degToRad(7),
+  'arocs-1835-ak': MathUtils.degToRad(6),
 };
 
 /** One mirror's camera and capture schedule; angles in radians, `fov` in degrees (three's convention). */
@@ -54,7 +54,7 @@ export type MirrorSpec = {
 
 const CLASS_II = {
   yaw: null,
-  pitch: MathUtils.degToRad(-4),
+  pitch: MathUtils.degToRad(-8),
   roll: 0,
   fov: 46,
   aspect: null,
