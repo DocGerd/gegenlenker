@@ -1,10 +1,5 @@
-import {
-  GraphicsStartError,
-  type GraphicsPreset,
-  type LightingMode,
-  type SceneRenderer,
-} from '../contracts/render';
-import { createSceneRenderer } from '../render';
+import { GraphicsStartError, type GraphicsPreset, type LightingMode } from '../contracts/render';
+import { createSceneRenderer, type SceneRenderer } from '../render';
 import { currentSettings } from './settings';
 import { showNotice } from './notice';
 

@@ -11,17 +11,69 @@ const DOM_GLOBALS = [
   'performance',
   'requestAnimationFrame',
 ];
-const NONDETERMINISTIC_GLOBALS = [
-  'globalThis',
-  'self',
-  'location',
-  'matchMedia',
-  'fetch',
-  'sessionStorage',
-  'indexedDB',
-  'setTimeout',
-  'setInterval',
+// The rest of core's ambient surface is fenced by tsconfig.core.json (lib ES2022, no types).
+const ES_AMBIENT_GLOBALS = ['globalThis', 'Intl'];
+
+const THREE_MESSAGE = 'Only src/render imports Three.js';
+const THREE_IMPORT_CALL = {
+  selector: 'ImportExpression[source.value=/^three(\\/|$)/]',
+  message: THREE_MESSAGE,
+};
+const layers = (names, message) => ({
+  regex: `^(\\.\\./)+(${names.join('|')})(/|$)`,
+  message,
+});
+const THREE_IMPORT_TYPE = {
+  selector: 'TSImportType[argument.literal.value=/^three(\\/|$)/]',
+  message: THREE_MESSAGE,
+};
+const CORE_MESSAGE = 'Core modules import no Three.js, DOM, or UI layers';
+const CORE_PATTERNS = [
+  {
+    group: [
+      ...THREE,
+      '**/render/**',
+      '**/app/**',
+      '**/hud/**',
+      '**/input/**',
+      '**/pwa/**',
+      '**/i18n/**',
+    ],
+    message: CORE_MESSAGE,
+  },
+  layers(['render', 'app', 'hud', 'input', 'pwa', 'i18n'], CORE_MESSAGE),
 ];
+const THREE_PATTERN = { group: THREE, message: THREE_MESSAGE };
+const restrictImports = (...patterns) => ['error', { patterns }];
+
+// Render modules used outside src/render that load no Three.js at runtime (a `three` import
+// there would pull it into the PWA config, tools and the vite config).
+const THREE_FREE_RENDER = [
+  'asset-registry',
+  'body-dims',
+  'cab-dims',
+  'cab-sight',
+  'cockpit-band',
+  'follow-framing',
+  'free-look',
+  'gpu-backend',
+  'ground-pbr-pixels',
+  'ground-texture-pixels',
+  'ground-texture-spec',
+  'hdri-light',
+  'head-look',
+  'interior-dims',
+  'lamp-layout',
+  'livery',
+  'palette',
+  'perf-overlay',
+  'quality',
+  'realism-hues',
+  'seams',
+  'trailer-dims',
+  'viewports',
+  'yard-kit-dims',
+].map((name) => `src/render/${name}.ts`);
 
 export default tseslint.config(
   { ignores: ['dist', 'node_modules', '.remember', '.claude', '.superpowers'] },
@@ -44,10 +96,40 @@ export default tseslint.config(
     files: ['**/*.ts'],
     ignores: ['src/render/**', 'dev/**', ...CORE],
     rules: {
-      'no-restricted-imports': [
-        'error',
-        { patterns: [{ group: THREE, message: 'Only src/render imports Three.js' }] },
-      ],
+      'no-restricted-imports': restrictImports(THREE_PATTERN),
+      'no-restricted-syntax': ['error', THREE_IMPORT_CALL, THREE_IMPORT_TYPE],
+    },
+  },
+  {
+    files: ['src/{hud,input}/**/*.ts'],
+    rules: {
+      'no-restricted-imports': restrictImports(
+        THREE_PATTERN,
+        layers(['app'], 'hud and input sit below the app shell'),
+      ),
+    },
+  },
+  {
+    files: ['src/render/**/*.ts'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': restrictImports(
+        layers(['app', 'hud', 'input'], 'render sits below the app shell, hud and input'),
+      ),
+    },
+  },
+  {
+    files: THREE_FREE_RENDER,
+    rules: {
+      'no-restricted-imports': restrictImports(
+        {
+          ...THREE_PATTERN,
+          allowTypeImports: true,
+          message: 'This render module is used outside render and must stay free of Three.js',
+        },
+        layers(['app', 'hud', 'input'], 'render sits below the app shell, hud and input'),
+      ),
+      'no-restricted-syntax': ['error', THREE_IMPORT_CALL, THREE_IMPORT_TYPE],
     },
   },
   {
@@ -56,7 +138,7 @@ export default tseslint.config(
       'no-restricted-imports': [
         'error',
         {
-          patterns: [{ group: THREE, message: 'Only src/render imports Three.js' }],
+          patterns: [THREE_PATTERN],
           paths: [
             {
               name: '@playwright/test',
@@ -71,37 +153,26 @@ export default tseslint.config(
   {
     files: CORE,
     rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: [
-                ...THREE,
-                '**/render/**',
-                '**/app/**',
-                '**/hud/**',
-                '**/input/**',
-                '**/pwa/**',
-                '**/i18n/**',
-              ],
-              message: 'Core modules import no Three.js, DOM, or UI layers',
-            },
-            {
-              regex: '^(\\.\\./)+(render|app|hud|input|pwa|i18n)(/|$)',
-              message: 'Core modules import no Three.js, DOM, or UI layers',
-            },
-          ],
-        },
-      ],
+      'no-restricted-imports': restrictImports(...CORE_PATTERNS),
       'no-restricted-globals': ['error', ...DOM_GLOBALS],
+      'no-restricted-syntax': ['error', THREE_IMPORT_CALL, THREE_IMPORT_TYPE],
+    },
+  },
+  {
+    files: ['src/sim/**'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': restrictImports(
+        ...CORE_PATTERNS,
+        layers(['scoring'], 'The sim does not import scoring'),
+      ),
     },
   },
   {
     files: CORE,
     ignores: ['**/*.test.ts'],
     rules: {
-      'no-restricted-globals': ['error', ...DOM_GLOBALS, ...NONDETERMINISTIC_GLOBALS],
+      'no-restricted-globals': ['error', ...DOM_GLOBALS, ...ES_AMBIENT_GLOBALS],
       'no-restricted-properties': [
         'error',
         { object: 'Math', property: 'random', message: 'Core modules are deterministic' },
@@ -110,6 +181,7 @@ export default tseslint.config(
       'no-restricted-syntax': [
         'error',
         { selector: 'ImportExpression', message: 'Core modules import statically' },
+        THREE_IMPORT_TYPE,
         { selector: 'MetaProperty', message: 'Core modules do not read module metadata' },
         {
           selector: ":matches(NewExpression, CallExpression)[callee.name='Date']",
