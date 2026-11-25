@@ -8,7 +8,14 @@ import { truckAnchors } from '../vehicles/anchors';
 import { trucks } from '../vehicles/registry';
 import { cabShellParams, CAB_HEIGHT, FRAME_TOP } from './cab-dims';
 import { parseShell } from './glb-shells';
-import { CLASS_VI, createMirror, mirrorAnchor, mirrorFacing, mirrorMounts } from './mirror';
+import {
+  CLASS_VI,
+  createMirror,
+  mirrorAnchor,
+  mirrorFacing,
+  mirrorMounts,
+  mirrorYaw,
+} from './mirror';
 import { MIN_FRONT_WIDTH } from './viewports';
 import { CLASS_VI_REACH, classVIField, frontMirrorMount, insidePolygon } from './mirror-fields';
 
@@ -24,7 +31,7 @@ function frontCamera(spec: TruckSpec) {
   const facing = mirrorFacing(
     STRAIGHT,
     mirrorAnchor(CLASS_VI, mirrorMounts(spec)),
-    CLASS_VI.yaw,
+    mirrorYaw(CLASS_VI, spec.id),
     position,
   );
   mirror.place(position, facing);

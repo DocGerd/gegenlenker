@@ -1,9 +1,19 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box3, Frustum, Matrix4, type Mesh, Object3D, Triangle, Vector3 } from 'three';
+import {
+  Box3,
+  DoubleSide,
+  Frustum,
+  Matrix4,
+  type Mesh,
+  Object3D,
+  Raycaster,
+  Triangle,
+  Vector3,
+} from 'three';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_TOP_DOWN_VIEW } from '../contracts/render';
-import type { Pose2 } from '../contracts/sim';
+import type { Pose2, Vec2 } from '../contracts/sim';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import { joints, type KinematicState } from '../sim/kinematics';
 import { truckAnchors } from '../vehicles/anchors';
@@ -19,7 +29,17 @@ import {
 } from './chase-camera';
 import { placePose } from './coords';
 import { parseShell, parseTrailerShell, type ShellKind } from './glb-shells';
-import { createMirror, mirrorPose } from './mirror';
+import {
+  CLASS_II_LEFT,
+  CLASS_II_RIGHT,
+  CLASS_IV_LEFT,
+  CLASS_IV_RIGHT,
+  createMirror,
+  mirrorAnchor,
+  mirrorMounts,
+  mirrorPose,
+} from './mirror';
+import { classIVField, insidePolygon } from './mirror-fields';
 import { computeViewports, NO_INSETS } from './viewports';
 
 /*
@@ -72,6 +92,7 @@ function mirrorFrusta(id: TruckId, screen: readonly [number, number]) {
       STRAIGHT,
       anchors[side],
       side === 'mirrorLeft' ? 'left' : 'right',
+      id,
       position,
     );
     mirror.place(position, facing);
@@ -190,8 +211,9 @@ describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
     async (_name, screen) => {
       const { mesh, glass } = await readShell(id, 'cab');
       const face = cabFront(truckById(id));
-      // The glb's front face: what sits above the frame within the front 0.2 m, which leaves out the
-      // tow coupling, the bumper and the roof fittings further back.
+      // The glb's front face: what sits above the frame within the front 0.2 m, neither ahead of it
+      // nor outside the side walls, which leaves out the tow coupling, the bumper, the roof fittings
+      // further back and the mirror heads.
       const box = new Box3();
       const point = new Vector3();
       // the windscreen is a mesh of its own
@@ -199,7 +221,14 @@ describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
         const positions = part.geometry.getAttribute('position');
         for (let i = 0; i < positions.count; i++) {
           point.fromBufferAttribute(positions, i).applyMatrix4(part.matrixWorld);
-          if (point.y >= face.bottom - 1e-3 && point.x >= face.x - 0.2) box.expandByPoint(point);
+          if (
+            point.y >= face.bottom - 1e-3 &&
+            point.x >= face.x - 0.2 &&
+            point.x <= face.x + RELIEF + 1e-3 &&
+            Math.abs(point.z) <= face.halfWidth + RELIEF + 1e-3
+          ) {
+            box.expandByPoint(point);
+          }
         }
       }
       expect(box.max.x).toBeCloseTo(face.x + RELIEF, 3);
@@ -235,6 +264,118 @@ describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
       for (const corner of corners) {
         expect(frustum.containsPoint(corner), corner.toArray().join(',')).toBe(true);
       }
+    },
+  );
+});
+
+/** Where the class II field below is taken to end: the horizon. */
+const HORIZON = 60;
+
+/** UN R46 15.2.4.2: class II shows a strip 1 m wide from 4 m behind the ocular points, 5 m wide from 30 m. */
+function classIIField(id: TruckId, side: 'left' | 'right'): readonly Vec2[] {
+  const { eye } = truckAnchors(truckById(id));
+  const sign = side === 'left' ? 1 : -1;
+  const half = truckById(id).width.value / 2000;
+  const edge = (behind: number, out: number): Vec2 => ({
+    x: eye.x - behind,
+    y: sign * (half + out),
+  });
+  return [edge(4, 0), edge(4, 1), edge(30, 1), edge(30, 5), edge(HORIZON, 5), edge(HORIZON, 0)];
+}
+
+/** Ground samples of `polygon` on a `step` m grid, and its corners. */
+function sampleGround(polygon: readonly Vec2[], step: number): Vec2[] {
+  const xs = polygon.map((p) => p.x);
+  const ys = polygon.map((p) => p.y);
+  const points: Vec2[] = [];
+  for (let x = Math.min(...xs); x <= Math.max(...xs) + 1e-9; x += step) {
+    for (let y = Math.min(...ys); y <= Math.max(...ys) + 1e-9; y += step) {
+      if (insidePolygon(polygon, { x, y })) points.push({ x, y });
+    }
+  }
+  return [...points, ...polygon];
+}
+
+/** Share of the half-frame, in normalised device coordinates, that the class II field keeps clear of each frame edge. */
+const FIELD_MARGIN = 0.1;
+
+/** The narrowest and the widest class II rect, width over height, of drive and mirror-only screens. */
+function classIIAspects(): readonly [number, number] {
+  let narrowest = Infinity;
+  let widest = 0;
+  for (const mode of ['drive', 'mirrors'] as const) {
+    for (let w = 640; w <= 2560; w += 80) {
+      for (let h = 360; h <= 1440; h += 60) {
+        const rect = computeViewports(w, h, mode, null, NO_INSETS).mirrorLeft;
+        if (rect === null) continue;
+        narrowest = Math.min(narrowest, rect.width / rect.height);
+        widest = Math.max(widest, rect.width / rect.height);
+      }
+    }
+  }
+  return [narrowest, widest];
+}
+
+describe.each(TRUCK_IDS)('class II aim: %s', (id) => {
+  it.each(['left', 'right'] as const)(
+    'frames the whole R46 field on the %s side at every class II aspect',
+    (side) => {
+      const key = side === 'left' ? 'mirrorLeft' : 'mirrorRight';
+      for (const aspect of classIIAspects()) {
+        const mirror = createMirror();
+        const position = new Vector3();
+        mirror.place(
+          position,
+          mirrorPose(STRAIGHT, truckAnchors(truckById(id))[key], side, id, position),
+        );
+        mirror.camera.aspect = aspect;
+        mirror.camera.updateProjectionMatrix();
+        mirror.camera.updateMatrixWorld(true);
+        // the field is a ground polygon and the frustum convex: its corners suffice
+        for (const p of classIIField(id, side)) {
+          const ndc = new Vector3(p.x, 0, -p.y).project(mirror.camera);
+          const at = `${aspect.toFixed(2)}: ${p.x.toFixed(2)}, ${p.y.toFixed(2)}`;
+          expect(Math.abs(ndc.x), at).toBeLessThan(1 - FIELD_MARGIN);
+          expect(Math.abs(ndc.y), at).toBeLessThan(1 - FIELD_MARGIN);
+          expect(ndc.z, at).toBeLessThan(1);
+        }
+      }
+    },
+  );
+});
+
+// The class V and VI fields are checked against the cab in close-mirror.test.ts and front-mirror.test.ts.
+describe.each(TRUCK_IDS)('the cab and its mirror heads on the class II and IV fields: %s', (id) => {
+  const truck = truckById(id);
+  const mirrors = [
+    { spec: CLASS_II_LEFT, field: classIIField(id, 'left') },
+    { spec: CLASS_II_RIGHT, field: classIIField(id, 'right') },
+    { spec: CLASS_IV_LEFT, field: classIVField(truck, 'left') },
+    { spec: CLASS_IV_RIGHT, field: classIVField(truck, 'right') },
+  ];
+
+  it.each(mirrors.map((m) => [m.spec.anchor, m] as const))(
+    'hide none of the %s field from its camera',
+    async (_anchor, { spec, field }) => {
+      const mesh = await read(id, 'cab');
+      (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((m) => {
+        m.side = DoubleSide;
+      });
+      mesh.updateMatrixWorld(true);
+      const mount = mirrorAnchor(spec, mirrorMounts(truck));
+      const camera = new Vector3(mount.x, mount.z, -mount.y);
+      const raycaster = new Raycaster();
+      const blocked = (p: Vec2): boolean => {
+        const toTarget = new Vector3(p.x, 0, -p.y).sub(camera);
+        raycaster.set(camera, toTarget.clone().normalize());
+        raycaster.far = toTarget.length() - 1e-3;
+        return raycaster.intersectObject(mesh, false).length > 0;
+      };
+      // control: the cab hides the ground beyond its far side from the same camera
+      expect(blocked({ x: mount.x, y: -Math.sign(mount.y) * 0.5 })).toBe(true);
+      const points = sampleGround(field, 0.5);
+      expect(points.length).toBeGreaterThan(100);
+      expect(points.filter(blocked)).toEqual([]);
     },
   );
 });

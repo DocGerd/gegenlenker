@@ -42,6 +42,12 @@ const near = (pixel: number[] | undefined, want: readonly number[]): boolean =>
 /** The sky gradient at the top of the Low view is blue-dominant; the yard ground is light grey. */
 const isSky = (p: number[] | undefined): boolean =>
   p !== undefined && (p[2] ?? 0) - (p[0] ?? 0) > 40;
+/**
+ * Class IV sees only the hazy band above the horizon, a fainter blue; bright, so the dark blue of the
+ * vehicle on the inner edge does not pass for it.
+ */
+const isHorizonSky = (p: number[] | undefined): boolean =>
+  p !== undefined && (p[2] ?? 0) - (p[0] ?? 0) > 25 && p.reduce((a, b) => a + b, 0) > 300;
 const isGround = (p: number[] | undefined): boolean =>
   p !== undefined && p.reduce((a, b) => a + b, 0) > 400;
 
@@ -237,18 +243,21 @@ const MIRROR_PAIRS = [
     name: 'each mirror',
     left: 'mirrorLeft',
     right: 'mirrorRight',
+    sky: isSky,
     presets: ['low', 'balanced', 'high'],
   },
   {
     name: 'each class IV mirror',
     left: 'wideLeft',
     right: 'wideRight',
+    sky: isHorizonSky,
     presets: ['low', 'balanced', 'high'],
   },
 ] as const satisfies readonly {
   name: string;
   left: string;
   right: string;
+  sky: (p: number[] | undefined) => boolean;
   presets: readonly Preset[];
 }[];
 
@@ -314,7 +323,9 @@ for (const pair of MIRROR_PAIRS) {
               side,
               // Sky above and ground below first: only a drawn frame can pass, so absence at the edge means something.
               drawn:
-                centre.slice(0, -1).some(isSky) && !ground.some(isSky) && ground.some(isGround),
+                centre.slice(0, -1).some(pair.sky) &&
+                !ground.some(pair.sky) &&
+                ground.some(isGround),
               outerYard: yardShare(edges[outer]),
               innerYard: yardShare(edges[inner]),
             };

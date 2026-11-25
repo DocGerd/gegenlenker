@@ -20,6 +20,7 @@ import {
   mirrorAnchor,
   mirrorFacing,
   mirrorMounts,
+  mirrorYaw,
 } from './mirror';
 import {
   CLASS_IV_FAR,
@@ -45,7 +46,12 @@ const SIDES = [
 function wideCamera(truck: TruckSpec, spec: MirrorSpec, pose: Pose2 = STRAIGHT) {
   const mirror = createMirror(spec);
   const position = new Vector3();
-  const facing = mirrorFacing(pose, mirrorAnchor(spec, mirrorMounts(truck)), spec.yaw, position);
+  const facing = mirrorFacing(
+    pose,
+    mirrorAnchor(spec, mirrorMounts(truck)),
+    mirrorYaw(spec, truck.id),
+    position,
+  );
   mirror.place(position, facing);
   mirror.camera.aspect = spec.aspect ?? 1;
   mirror.camera.updateProjectionMatrix();

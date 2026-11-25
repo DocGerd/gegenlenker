@@ -6,6 +6,7 @@ import { cabShellParams } from '../../src/render/cab-dims';
 import { interiorShellParams } from '../../src/render/interior-dims';
 import { bodyLampParams, cabLampParams, trailerLampParams } from '../../src/render/lamp-layout';
 import { TRUCK_LOOKS } from '../../src/render/livery';
+import { cabMirrorParams } from '../../src/render/mirror-fields';
 import { trailerShellParams } from '../../src/render/trailer-dims';
 import { trailerById, truckById } from '../../src/vehicles/registry';
 import { yardKitParams } from './kit-params';
@@ -83,6 +84,7 @@ export const ASSETS: readonly Asset[] = [
     asset(id, 'cab', () => ({
       ...cabShellParams(truckById(id)),
       ...cabLampParams(truckById(id), TRUCK_LOOKS[id].cab.length),
+      ...cabMirrorParams(truckById(id)),
     })),
     asset(id, 'body', () => ({
       ...bodyShellParams(truckById(id)),

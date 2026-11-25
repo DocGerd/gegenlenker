@@ -12,7 +12,7 @@ import {
 } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import type { Pose2 } from '../contracts/sim';
-import type { TruckSpec, Vec3 } from '../contracts/vehicle';
+import type { TruckId, TruckSpec, Vec3 } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { bodyToThree } from './coords';
 import { CLASS_V } from './close-mirror';
@@ -22,8 +22,14 @@ import { CAMERA_FAR, enableLayers, MIRROR_LAYERS } from './seams';
 import { FRONT_ASPECT, WIDE_ASPECT } from './viewports';
 
 const NEAR = 0.2;
-/** Class II mirrors look this far outward of straight back. */
-export const MIRROR_YAW = MathUtils.degToRad(7);
+/**
+ * Class II mirrors look this far outward of straight back, per truck: enough to frame the body side and
+ * the whole R46 field (shell-visibility.test.ts).
+ */
+const CLASS_II_YAW: Readonly<Record<TruckId, number>> = {
+  'man-le-18-280': MathUtils.degToRad(4),
+  'arocs-1835-ak': MathUtils.degToRad(6),
+};
 
 /** One mirror's camera and capture schedule; angles in radians, `fov` in degrees (three's convention). */
 export type MirrorSpec = {
@@ -31,8 +37,8 @@ export type MirrorSpec = {
   readonly anchor: 'mirrorLeft' | 'mirrorRight' | 'wideLeft' | 'wideRight' | 'front' | 'close';
   /** The view rect the mirror fills. */
   readonly view: 'mirrorLeft' | 'mirrorRight' | 'wideLeft' | 'wideRight' | 'front' | 'close';
-  /** From straight back; positive turns toward the truck's right. */
-  readonly yaw: number;
+  /** From straight back; positive turns toward the truck's right. Null: outward by the truck's class II yaw (`mirrorYaw`). */
+  readonly yaw: number | null;
   readonly pitch: number;
   readonly roll: number;
   /** Vertical field of view. */
@@ -47,7 +53,8 @@ export type MirrorSpec = {
 };
 
 const CLASS_II = {
-  pitch: MathUtils.degToRad(-4),
+  yaw: null,
+  pitch: MathUtils.degToRad(-8),
   roll: 0,
   fov: 46,
   aspect: null,
@@ -60,13 +67,11 @@ export const CLASS_II_LEFT: MirrorSpec = {
   ...CLASS_II,
   anchor: 'mirrorLeft',
   view: 'mirrorLeft',
-  yaw: -MIRROR_YAW,
 };
 export const CLASS_II_RIGHT: MirrorSpec = {
   ...CLASS_II,
   anchor: 'mirrorRight',
   view: 'mirrorRight',
-  yaw: MIRROR_YAW,
 };
 export const CLASS_II_MIRRORS: readonly MirrorSpec[] = [CLASS_II_LEFT, CLASS_II_RIGHT];
 
@@ -74,11 +79,11 @@ export const CLASS_II_MIRRORS: readonly MirrorSpec[] = [CLASS_II_LEFT, CLASS_II_
  * Class IV looks this far outward of straight back, and down: its field is the ground beside the
  * truck. It renders at the rect's full pixel ratio, and at half rate: each side on alternate frames.
  */
-export const WIDE_YAW = MathUtils.degToRad(25);
+export const WIDE_YAW = MathUtils.degToRad(22);
 const CLASS_IV = {
-  pitch: MathUtils.degToRad(-18),
+  pitch: MathUtils.degToRad(-20),
   roll: 0,
-  fov: 64,
+  fov: 62,
   aspect: WIDE_ASPECT,
   targetScale: 1,
   cadence: 2,
@@ -111,7 +116,7 @@ export const CLASS_VI: MirrorSpec = {
   yaw: Math.PI,
   pitch: MathUtils.degToRad(-80),
   roll: Math.PI,
-  fov: 48,
+  fov: 47,
   aspect: FRONT_ASPECT,
   targetScale: 1,
   cadence: 1,
@@ -156,13 +161,21 @@ export function mirrorFacing(pose: Pose2, anchor: Vec3, yaw: number, out: Vector
   return pose.heading + Math.PI + yaw;
 }
 
-/** `mirrorFacing` for a class II mirror on `side`. */
+/** The yaw `spec` looks along on truck `id`, from straight back. */
+export function mirrorYaw(spec: MirrorSpec, id: TruckId): number {
+  if (spec.yaw !== null) return spec.yaw;
+  return spec.anchor === 'mirrorLeft' ? -CLASS_II_YAW[id] : CLASS_II_YAW[id];
+}
+
+/** `mirrorFacing` for the class II mirror on `side` of truck `id`. */
 export const mirrorPose = (
   pose: Pose2,
   anchor: Vec3,
   side: 'left' | 'right',
+  id: TruckId,
   out: Vector3,
-): number => mirrorFacing(pose, anchor, side === 'left' ? -MIRROR_YAW : MIRROR_YAW, out);
+): number =>
+  mirrorFacing(pose, anchor, mirrorYaw(side === 'left' ? CLASS_II_LEFT : CLASS_II_RIGHT, id), out);
 
 /** WebGPU takes 1 or 4 samples and WebGL 2 guarantees at least 4, so any request maps to 0 or 4. */
 export const mirrorSamples = (requested: number): number => (requested >= 4 ? 4 : 0);

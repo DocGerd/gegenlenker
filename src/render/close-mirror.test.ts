@@ -18,6 +18,7 @@ import {
   mirrorFacing,
   MIRRORS,
   mirrorMounts,
+  mirrorYaw,
 } from './mirror';
 import {
   CLASS_V_AHEAD,
@@ -39,7 +40,7 @@ function closeCamera(truck: TruckSpec) {
   const facing = mirrorFacing(
     STRAIGHT,
     mirrorAnchor(SPEC, mirrorMounts(truck)),
-    SPEC.yaw,
+    mirrorYaw(SPEC, truck.id),
     position,
   );
   mirror.place(position, facing);
