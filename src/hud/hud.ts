@@ -506,6 +506,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     keysList.style.setProperty('--pane-bottom', `${bottom - pane.y - pane.height}px`);
     keysList.style.setProperty('--pane-width', `${pane.width}px`);
     keysList.style.setProperty('--pane-height', `${pane.height}px`);
+    // The list grows up from the pane's bottom: it stops under the toolbar's lowest row.
+    const rows = [...toolbar.querySelectorAll('.hud-group')].map((g) => g.getBoundingClientRect());
+    const low = Math.max(...rows.filter((r) => r.width > 0).map((r) => r.bottom), 0);
+    const gap = parseFloat(getComputedStyle(root).getPropertyValue('--space-2')) || 8;
+    keysList.style.setProperty('--keys-top', `${low - stage.top - pane.y + gap}px`);
   };
 
   /** The aid legend of a short screen opens over the top view, below the aids chips (hud.css); the offset is from the pane's top. */
