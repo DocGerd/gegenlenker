@@ -1,5 +1,6 @@
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
+import { startExercise } from './menu-flow';
 
 // A service worker would answer the chunk request itself, past page.route.
 test.use({ serviceWorkers: 'block' });
@@ -17,7 +18,7 @@ test('Retry loads the drive screen once the failed chunk request can succeed', a
   });
 
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.getByRole('alertdialog', { name: en.loadFailed })).toBeVisible();
   await expect(page.getByRole('button', { name: en.retry })).toBeFocused();
 

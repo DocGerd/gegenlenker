@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { en } from '../src/i18n/en';
 import {
   bareScreenshot,
   distinctColours,
@@ -13,6 +12,7 @@ import {
   step,
   timeoutWithSettles,
 } from './pinned-shoot';
+import { exerciseEntry } from './menu-flow';
 import { collectThreeProblems } from './three-problems';
 
 const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
@@ -45,7 +45,7 @@ test(
     await startPinnedDrive(
       page,
       { preset: 'balanced', lighting: 'day' },
-      en.exerciseStraightReverse,
+      exerciseEntry('straight-reverse'),
     );
     const first = await shoot(page, 'chase');
     expect(await distinctColours(page, first), 'default view').toBeGreaterThan(MIN_DRAWN_COLOURS);

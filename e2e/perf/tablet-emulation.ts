@@ -9,6 +9,8 @@ import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import { en } from '../../src/i18n/en.ts';
+import { startYard } from '../menu-flow.ts';
 import { attachmentsReady } from '../pinned-shoot.ts';
 import {
   type Backend,
@@ -38,7 +40,6 @@ const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 13; SM-T870) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 const WSL_LIB = '/usr/lib/wsl/lib';
 const WAKE_LOCK_KEY = '__tabletWakeLock';
-const START_BUTTON = '[data-menu="yards"] button';
 const SETTLE_MS = 3_000;
 const SETTLE_DEADLINE_MS = 35_000;
 const SERVICE_WORKER_TIMEOUT_MS = 15_000;
@@ -213,7 +214,7 @@ function glRenderer(page: Page): Promise<string> {
 }
 
 async function startDrive(page: Page): Promise<void> {
-  await page.locator(START_BUTTON).first().click();
+  await startYard(page, en, 'depot');
   await page.locator('.ctl-wheel').waitFor();
 }
 
@@ -269,7 +270,7 @@ async function measure(
     const cdp = await context.newCDPSession(page);
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: opts.throttle });
     await page.goto(`${base}?perf=1${opts.backend === null ? '' : `&backend=${opts.backend}`}`);
-    await page.locator(START_BUTTON).first().click();
+    await startYard(page, en, 'depot');
     await page.locator('.hud-mirror:not([hidden])').first().waitFor({ timeout: 60_000 });
     // Four-view layout, then drive forward.
     await page.keyboard.press('4');
@@ -462,7 +463,7 @@ async function checkHistoryBack({ page }: Fixture): Promise<string> {
   await page.getByText('Paused', { exact: true }).first().waitFor({ timeout: 10_000 });
   if (page.url().startsWith('about:')) throw new Error('back left the app instead of pausing');
   await page.getByRole('button', { name: 'Menu', exact: true }).last().click();
-  await page.locator(START_BUTTON).first().waitFor({ timeout: 10_000 });
+  await page.getByRole('heading', { name: en.appName }).waitFor({ timeout: 10_000 });
   return 'back from the drive pauses; Menu returns to the menu';
 }
 

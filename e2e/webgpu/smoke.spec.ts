@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { expect, test } from '../fixtures';
-import { en } from '../../src/i18n/en';
 import { QUALITY_FLAGS } from '../../src/render/quality';
 import type { LightingMode } from '../../src/contracts/render';
 import {
@@ -14,6 +13,7 @@ import {
   WEBGPU_SETTLE_DEADLINE_MS,
   type Preset,
 } from '../pinned-shoot';
+import { exerciseEntry } from '../menu-flow';
 
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 const LIGHTINGS: readonly LightingMode[] = ['day', 'night'];
@@ -45,7 +45,7 @@ for (const lighting of LIGHTINGS) {
       await startPinnedDrive(
         page,
         { preset, lighting },
-        en.exerciseStraightReverse,
+        exerciseEntry('straight-reverse'),
         '?backend=webgpu',
       );
       await expect(html).toHaveAttribute('data-render-backend', 'webgpu', {

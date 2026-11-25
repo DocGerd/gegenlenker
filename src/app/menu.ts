@@ -1,5 +1,5 @@
 import { exercises } from '../content/registry';
-import { LAYOUT_IDS, type LayoutId } from '../contracts/layout';
+import { LAYOUT_IDS } from '../contracts/layout';
 import {
   GRAPHICS_PRESETS,
   LIGHTING_MODES,
@@ -21,6 +21,7 @@ import { bestKey, exerciseDone } from '../scoring/best';
 import { offlineStatus, onOfflineStatus } from '../pwa/offline-status';
 import { trailers, trucks } from '../vehicles/registry';
 import type { RunConfig } from './drive';
+import { LAYOUT_BRIEF } from './entry-keys';
 import { EXERCISE_BRIEF, EXERCISE_TITLE, LAYOUT_NAME, replayContext } from './exercise-text';
 import { currentSettings, updateSettings, type Settings } from './settings';
 import { bestResults } from './storage';
@@ -28,10 +29,6 @@ import { buildLabel } from './build-info';
 import { CHANNEL } from './channel';
 import { applyTheme } from './theme';
 
-const LAYOUT_BRIEF: Readonly<Record<LayoutId, MessageKey>> = {
-  depot: 'briefDepot',
-  logistics: 'briefLogistics',
-};
 const LANG_NAME: Readonly<Record<Lang, MessageKey>> = { de: 'langDe', en: 'langEn' };
 const THEME_NAME: Readonly<Record<Settings['theme'], MessageKey>> = {
   system: 'themeSystem',

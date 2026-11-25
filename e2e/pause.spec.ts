@@ -1,6 +1,7 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
+import { exerciseEntry, startControl, startExercise, startYard, toTitle } from './menu-flow';
 
 const speed = (page: Page) => page.locator('[data-hud="speed"]');
 const clock = (page: Page) => page.locator('[data-hud="time"]');
@@ -17,7 +18,7 @@ async function finishRun(page: Page): Promise<void> {
 
 async function startAndRoll(page: Page): Promise<void> {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(speed(page)).toHaveText('0.0 km/h');
   await page.keyboard.press('4');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
@@ -73,7 +74,7 @@ test('restart leaves no result and no replay', async ({ page }) => {
 
   // A reload returns to the menu, where an unscored restart must have stored nothing.
   await page.reload();
-  await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
+  await toTitle(page, en);
   await expect(page.getByRole('button', { name: en.replayLastRun })).toHaveCount(0);
 });
 
@@ -87,7 +88,7 @@ test('finish scores, back leaves the result, and the replay names the exercise',
   await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
 
   await page.goBack();
-  await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
+  await toTitle(page, en);
   const replay = page.getByRole('button', { name: en.replayLastRun });
   await expect(replay).toContainText(en.exerciseStraightReverse);
 });
@@ -103,7 +104,7 @@ test('the result prints angles as <n>° without a space', async ({ page }) => {
 
 test('the sheet covers the messages', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   const toast = page.locator('[data-hud="toast"]');
   await expect(toast).toBeVisible();
   await page.keyboard.press('Escape');
@@ -147,7 +148,7 @@ test('a restarted drive still pauses on back', async ({ page }) => {
 
 test('the free yard sheet leaves through Menu without a stale entry', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.layoutDepot }).click();
+  await startYard(page, en, 'depot');
   await page.locator('[data-hud="action"]').click();
   await sheet(page).getByRole('button', { name: en.menu }).click();
   await expect(menuHeading(page)).toBeVisible();
@@ -198,8 +199,7 @@ test('Escape leaves the result for the menu, and a miss is no best', async ({ pa
   await startAndRoll(page);
   await finishRun(page);
   await page.keyboard.press('Escape');
-  await expect(menuHeading(page)).toBeVisible();
-  expect(await historyState(page)).toBeNull();
+  await toTitle(page, en);
   await expect(page.getByText(en.targetMissed)).toHaveCount(0);
   await expect(page.getByRole('button', { name: en.replayLastRun })).toBeVisible();
 });
@@ -254,7 +254,7 @@ const toast = (page: Page) => page.locator('[data-hud="toast"]');
 
 test('driving keys reach the run after Escape closes the sheet', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(speed(page)).toHaveText('0.0 km/h');
   await page.keyboard.press('Escape');
   await expect(sheet(page)).toBeVisible();
@@ -266,7 +266,7 @@ test('driving keys reach the run after Escape closes the sheet', async ({ page }
 
 test('driving keys reach the run after Restart', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(speed(page)).toHaveText('0.0 km/h');
   await page.keyboard.press('Escape');
   await sheet(page).getByRole('button', { name: en.restart }).click();
@@ -278,7 +278,7 @@ test('driving keys reach the run after Restart', async ({ page }) => {
 
 test('the start hints to select R or D until a gear is chosen', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(speed(page)).toHaveText('0.0 km/h');
   await expect(toast(page)).toHaveText(en.selectGear);
   await expect(page.locator('[data-hud="toastWrap"]')).toHaveAttribute('role', 'status');
@@ -292,7 +292,7 @@ test('the start hints to select R or D until a gear is chosen', async ({ page })
 
 test('the free yard pause sheet has no restart hint', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.layoutDepot }).click();
+  await startYard(page, en, 'depot');
   await page.getByRole('button', { name: en.pause }).click();
   await expect(sheet(page)).toBeVisible();
   await expect(sheet(page).getByText(en.restartHint)).toHaveCount(0);
@@ -302,13 +302,12 @@ test('leaving without scoring stores no result and no replay', async ({ page }) 
   await startAndRoll(page);
   await page.keyboard.press('Escape');
   await sheet(page).getByRole('button', { name: en.leaveUnscored }).click();
-  await expect(menuHeading(page)).toBeVisible();
-  expect(await historyState(page)).toBeNull();
+  await toTitle(page, en);
   await expect(page.getByText(en.targetMissed)).toHaveCount(0);
   await expect(page.getByRole('button', { name: en.replayLastRun })).toHaveCount(0);
 
   await page.reload();
-  await expect(menuHeading(page)).toBeVisible();
+  await toTitle(page, en);
   await expect(page.getByRole('button', { name: en.replayLastRun })).toHaveCount(0);
 });
 
@@ -316,7 +315,7 @@ test('a double click on an exercise card leaves no text selected on the drive sc
   page,
 }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).dblclick();
+  await startControl(page, en, exerciseEntry('straight-reverse')).dblclick();
   await expect(speed(page)).toHaveText('0.0 km/h');
   expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
 });

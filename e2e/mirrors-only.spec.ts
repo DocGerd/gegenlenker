@@ -1,5 +1,13 @@
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
+import {
+  chooseRunOption,
+  exerciseEntry,
+  openSetup,
+  runOptionValue,
+  startExercise,
+  toTitle,
+} from './menu-flow';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 
@@ -12,8 +20,7 @@ test('a mirror-only run has no top-down pane, keeps the brief and finish, and re
     }
   }, SETTINGS_KEY);
   await page.goto('./');
-  await page.getByRole('combobox', { name: en.driveView }).selectOption('mirrors');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse', { driveView: 'mirrors' });
 
   const hud = page.locator('.hud');
   await expect(hud).toHaveAttribute('data-mirrors', '');
@@ -71,31 +78,36 @@ test('a mirror-only run has no top-down pane, keeps the brief and finish, and re
 });
 
 test('the menu keeps the mirror-only choice and the replay line says so', async ({ page }) => {
+  const entry = exerciseEntry('straight-reverse');
   await page.addInitScript((key) => {
     if (localStorage.getItem(key) === null) {
       localStorage.setItem(key, JSON.stringify({ version: 1, graphics: 'low' }));
     }
   }, SETTINGS_KEY);
   await page.goto('./');
-  const choice = page.getByRole('combobox', { name: en.driveView });
-  await expect(choice).toHaveValue('standard');
-  await choice.selectOption('mirrors');
+  await openSetup(page, en, entry);
+  await expect.poll(() => runOptionValue(page, en, 'driveView')).toBe('standard');
+  await chooseRunOption(page, en, 'driveView', 'mirrors');
   await page.reload();
-  await expect(choice).toHaveValue('mirrors');
+  await openSetup(page, en, entry);
+  await expect.poll(() => runOptionValue(page, en, 'driveView')).toBe('mirrors');
 
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await page.getByRole('button', { name: en.pause }).click();
   await page
     .getByRole('dialog', { name: en.paused })
     .getByRole('button', { name: en.finish })
     .click();
   await page.getByRole('button', { name: en.menu }).click();
-  await choice.selectOption('standard');
+  await toTitle(page, en);
+  await openSetup(page, en, entry);
+  await chooseRunOption(page, en, 'driveView', 'standard');
+  await toTitle(page, en);
   await expect(page.getByRole('button', { name: en.replayLastRun })).toContainText(
     en.driveViewMirrors,
   );
 
-  await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('.hud-topdown')).toBeVisible();
   await expect(page.locator('.hud')).not.toHaveAttribute('data-mirrors');
 });

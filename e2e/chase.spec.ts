@@ -1,6 +1,7 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
+import { startExercise } from './menu-flow';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 
@@ -12,7 +13,7 @@ async function start(page: Page, settings: object): Promise<void> {
     [SETTINGS_KEY, JSON.stringify({ version: 1, ...settings })] as const,
   );
   await page.goto('./?framing=1');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('[data-view="follow"]')).toBeVisible();
 }
 

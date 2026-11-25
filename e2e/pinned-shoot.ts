@@ -2,6 +2,7 @@ import type { Page } from '@playwright/test';
 import type { LightingMode, ScenePaletteKey } from '../src/contracts/render';
 import { ATTACHMENTS, type Attachment } from '../src/render/asset-registry.ts';
 import { QUALITY_FLAGS } from '../src/render/quality.ts';
+import { pageMessages, startEntry, type MenuEntry } from './menu-flow.ts';
 
 // Imported by scripts/shoot-views.mjs through Node's type stripping: no enums, and runtime imports
 // carry their `.ts` extension and reach only modules that import nothing at runtime.
@@ -216,7 +217,7 @@ function pinResolvePath(): void {
 }
 
 /**
- * Opens a standstill drive of `exercise` on `config` with `performance.now`, timers and rAF frozen,
+ * Opens a standstill drive of the menu `entry` on `config` with `performance.now`, timers and rAF frozen,
  * so the resolution governor and the sim only move when stepped, and pins the multisample resolve
  * to one path. Call on a fresh page; `search` is the app URL's query (`?backend=webgpu`);
  * `deadlineMs` bounds each phase of the `settle` that waits for the preset; `overrides` replace the
@@ -225,7 +226,7 @@ function pinResolvePath(): void {
 export async function startPinnedDrive(
   page: Page,
   { preset, lighting, theme }: RenderConfig,
-  exercise: string,
+  entry: MenuEntry,
   search = '',
   deadlineMs?: number,
   overrides?: MarkerChecks,
@@ -242,7 +243,7 @@ export async function startPinnedDrive(
   await page.clock.install({ time: 0 });
   await page.clock.pauseAt(1000);
   await page.goto(`./${withFramingFlag(search)}`);
-  await page.getByRole('button', { name: new RegExp(`^${exercise}`) }).click();
+  await startEntry(page, await pageMessages(page), entry);
   await page.locator('.hud-mirror:not([hidden])').nth(1).waitFor();
   await settle(page, preset, deadlineMs, overrides);
   const [backend, pinned] = await page.evaluate(() => {

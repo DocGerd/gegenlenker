@@ -24,6 +24,7 @@ import {
   step,
   timeoutWithSettles,
 } from './pinned-shoot';
+import { chooseSetting, exerciseEntry, startExercise } from './menu-flow';
 
 /** An unlit vertex colour reaches the canvas as its hue, give or take the rounding of the sRGB frame target. */
 const TOLERANCE = 1;
@@ -55,7 +56,7 @@ const isGround = (p: number[] | undefined): boolean =>
 const DEFAULT_MIRRORS = 5;
 
 async function drive(page: Page): Promise<void> {
-  await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(DEFAULT_MIRRORS);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }
@@ -66,7 +67,7 @@ async function drive(page: Page): Promise<void> {
  * drive takes seconds on software GL), and the preset's attachments are in place before they read.
  */
 async function pinnedDrive(page: Page, preset: Preset, mirrors = DEFAULT_MIRRORS): Promise<void> {
-  await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
+  await startPinnedDrive(page, { preset, lighting: 'day' }, exerciseEntry('straight-reverse'));
   await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(mirrors);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }
@@ -162,7 +163,7 @@ test(
       .getByRole('dialog', { name: en.paused })
       .getByRole('button', { name: en.leaveUnscored })
       .click();
-    await page.locator('[data-menu="graphics"]').selectOption('low');
+    await chooseSetting(page, en, 'graphics', 'low');
     await drive(page);
     await settle(page, 'low');
 

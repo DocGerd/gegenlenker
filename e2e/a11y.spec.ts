@@ -1,13 +1,14 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
+import { exerciseEntry, startControl, startExercise } from './menu-flow';
 
 const stop = (page: Page) => page.locator('[data-ctl="stop"]');
 const gear = (page: Page, g: string) => page.locator(`.ctl-gear[data-gear="${g}"]`);
 
 async function startDrive(page: Page): Promise<void> {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('[data-hud="speed"]')).toHaveText('0.0 km/h');
 }
 
@@ -92,7 +93,7 @@ test('a notice ignores an Enter held from before it appeared', async ({ page }) 
     });
   });
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).focus();
+  await startControl(page, en, exerciseEntry('straight-reverse')).focus();
   await page.keyboard.down('Enter');
   const notice = page.getByRole('alertdialog', { name: en.noWebgl });
   await expect(notice).toBeVisible();

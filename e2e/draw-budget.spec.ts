@@ -1,6 +1,5 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { en } from '../src/i18n/en';
 import { DRAW_CALL_BUDGET, QUALITY_FLAGS } from '../src/render/quality';
 import { drawnBackend, parseOverlay } from './perf/tablet-logic';
 import { FREE_FOV } from '../src/render/free-look';
@@ -13,6 +12,7 @@ import {
   step,
   timeoutWithSettles,
 } from './pinned-shoot';
+import { exerciseEntry } from './menu-flow';
 
 // High at night is the one lit scene with the sun's shadow pass taken out, the aids unlit and the lamps' passes in.
 const RUNS: readonly { preset: Preset; lighting: LightingMode }[] = [
@@ -55,7 +55,7 @@ async function drawnCalls(page: Page, { preset, lighting }: Run, what: string): 
 async function startAtFullSize(page: Page, { preset, lighting }: Run): Promise<void> {
   // every mirror draws at this size: budget the worst case
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await startPinnedDrive(page, { preset, lighting }, en.exerciseStraightReverse, '?perf=1');
+  await startPinnedDrive(page, { preset, lighting }, exerciseEntry('straight-reverse'), '?perf=1');
 }
 
 /** One pointer drag from the pane's centre, `dx` px right and `dy` px down, as the free camera reads it. */

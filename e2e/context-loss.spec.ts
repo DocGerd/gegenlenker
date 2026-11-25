@@ -16,6 +16,7 @@ import {
   step,
   timeoutWithSettles,
 } from './pinned-shoot';
+import { exerciseEntry, startExercise } from './menu-flow';
 
 const high = { timeout: HIGH_WAIT_MS };
 /** Frames the sim runs under a pressed lever before the speed gauge is read. */
@@ -62,7 +63,7 @@ async function loseAndReplace(page: Page): Promise<void> {
 
 async function startDrive(page: Page): Promise<void> {
   await page.goto('./');
-  await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
+  await startExercise(page, en, 'straight-reverse');
 }
 
 test(
@@ -72,7 +73,11 @@ test(
     test.setTimeout(timeoutWithSettles('high', 2, 180_000));
     const problems = collectLogs(page);
     await watchFailedAttachments(page);
-    await startPinnedDrive(page, { preset: 'high', lighting: 'day' }, en.exerciseStraightReverse);
+    await startPinnedDrive(
+      page,
+      { preset: 'high', lighting: 'day' },
+      exerciseEntry('straight-reverse'),
+    );
     const html = page.locator('html');
     await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
     await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
@@ -131,7 +136,11 @@ test('the cockpit looks the same after a loss as before it', { tag: HEAVY }, asy
   test.setTimeout(timeoutWithSettles('high', 2, 180_000));
   const problems = collectLogs(page);
   await watchFailedAttachments(page);
-  await startPinnedDrive(page, { preset: 'high', lighting: 'day' }, en.exerciseStraightReverse);
+  await startPinnedDrive(
+    page,
+    { preset: 'high', lighting: 'day' },
+    exerciseEntry('straight-reverse'),
+  );
   const hash = async (): Promise<string> => {
     const png = await shoot(page, 'cockpit');
     expect(await distinctColours(page, png)).toBeGreaterThan(MIN_DRAWN_COLOURS);
