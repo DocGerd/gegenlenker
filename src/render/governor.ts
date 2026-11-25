@@ -238,7 +238,10 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
   let probing = false;
   let settle = 0;
   let lastP90 = 0;
-  /** Mean interval of the window that caused the last step down; 0 when no step awaits its verdict. */
+  /**
+   * Mean interval of the window that caused the last step down (of the level's slow windows for a retry,
+   * `PARK_RETRY_MS`); 0 when no step awaits its verdict.
+   */
   let beforeStep = 0;
   /** Whether that window was slowed by a shift (`SHIFT_SLACK`). */
   let beforeShift = false;
@@ -391,7 +394,9 @@ export function createResolutionGovernor(trace: Trace = createTrace()): {
           }
           level++;
           parkQuiet = 0;
-          beforeStep = mean;
+          // A retry is judged on the level's running mean: judged on one window, a heavy one before a light one keeps a step
+          // the load ignores, and its kept test, measured from that heavy window, never undoes it.
+          beforeStep = unparking && mean <= kept * NEW_LOAD ? (keptMean[left] ?? mean) : mean;
           beforeShift = shift;
           settle = SETTLE_FRAMES;
           note(unparking ? 'unpark' : failedProbe ? 'probe-failed' : 'down', '', left);

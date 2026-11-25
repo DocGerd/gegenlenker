@@ -300,21 +300,22 @@ describe('frame timer', () => {
         expect(runs.filter((r) => Math.abs(r.end - fits) > 1e-9 || r.above > 0.05)).toEqual([]);
       });
 
-      it('leaves a level parked by chance for the kept step into it, on seeds that stayed high', () => {
-        const runs = [512, 863].map((seed) => {
+      // Seeds a chance park left above the fit (512, 863), or a retry kept by luck left below it (318, 740, 1024).
+      it('retries a level parked by chance without keeping a step its load ignores', () => {
+        const runs = [512, 863, 318, 740, 1024].map((seed) => {
           const timer = createFrameTimer();
           const miss = seeded(seed);
           let now = 1000;
-          let above = 0;
+          let off = 0;
           while (now - 1000 < SECONDS * 1000) {
             const ms = Math.max(fillBound(28)(timer.scale()), V) + (miss() < 0.2 ? V : 0);
-            if (now - 1000 >= SETTLED_MS && timer.scale() > 0.7 + 1e-9) above += ms;
+            if (now - 1000 >= SETTLED_MS && Math.abs(timer.scale() - 0.7) > 1e-9) off += ms;
             now += ms;
             timer.frame(now);
           }
-          return { seed, end: timer.scale(), above: above / (now - 1000 - SETTLED_MS) };
+          return { seed, end: timer.scale(), off: off / (now - 1000 - SETTLED_MS) };
         });
-        expect(runs.filter((r) => Math.abs(r.end - 0.7) > 1e-9 || r.above > 0.05)).toEqual([]);
+        expect(runs.filter((r) => Math.abs(r.end - 0.7) > 1e-9 || r.off > 0.05)).toEqual([]);
       });
     });
 
