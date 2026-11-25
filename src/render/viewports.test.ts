@@ -877,6 +877,13 @@ describe('computeViewports class IV mirrors', () => {
     }
   });
 
+  it('keeps class IV in portrait until it first stops fitting', () => {
+    // 834x1194: at pane 529 the smallest stack is 1 px taller than the room
+    const layout = { ...DEFAULT_TOP_DOWN_LAYOUT, portrait: 528 / 1194 };
+    const v = computeViewports(834, 1194, 'drive', null, NO_INSETS, layout, null, WIDE);
+    expect(v.wideLeft).not.toBeNull();
+  });
+
   it('keeps class IV where the share does not change the room', () => {
     // a 1080p laptop at 150%, landscape at the smallest and the default share; mirror-only at 1366x768
     for (const landscape of [0.25, DEFAULT_TOP_DOWN_LAYOUT.landscape]) {
