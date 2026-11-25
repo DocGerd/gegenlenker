@@ -842,6 +842,61 @@ describe('computeViewports class IV mirrors', () => {
     expect(coneShrunk).toBeGreaterThan(0);
   });
 
+  it('drops class IV once as the top-down share grows, and never brings it back', () => {
+    const tablets: (readonly [number, number])[] = [
+      [800, 1280],
+      [768, 1024],
+      [810, 1080],
+      [820, 1180],
+      [834, 1194],
+      [1024, 1366],
+      [744, 1133],
+    ];
+    const withClose = { front: true, wide: true, close: true };
+    const wideOnly = { front: false, wide: true, close: false };
+    for (const extra of [WIDE, withClose, wideOnly]) {
+      for (const [w, h] of tablets) {
+        // every whole-px pane height, so each cockpit height the share can reach is visited once
+        let prev: { wide: boolean; width: number; height: number } | null = null;
+        for (let pane = Math.ceil(0.3 * h); pane <= Math.floor(0.6 * h); pane++) {
+          const layout = { landscape: 0.4, portrait: pane / h };
+          const v = computeViewports(w, h, 'drive', null, NO_INSETS, layout, null, extra);
+          if (v.mirrorLeft === null) throw new Error('drive mode has mirrors');
+          const now = { wide: v.wideLeft !== null, ...v.mirrorLeft };
+          const at = `${w}x${h} pane ${pane} ${JSON.stringify(extra)}`;
+          if (prev === null) expect(now.wide, `${at}: class IV at the smallest share`).toBe(true);
+          else {
+            expect(prev.wide || !now.wide, `${at}: class IV returns`).toBe(true);
+            if (prev.wide === now.wide) {
+              expect(now.width, at).toBeLessThanOrEqual(prev.width);
+              // a fractional controls height (768 wide) can move the search's px grid by its fraction
+              expect(now.height, at).toBeLessThan(prev.height + 1);
+            }
+          }
+          prev = now;
+        }
+      }
+    }
+  });
+
+  it('keeps class IV in portrait until it first stops fitting', () => {
+    // 834x1194: at pane 529 the smallest stack is 1 px taller than the room
+    const layout = { ...DEFAULT_TOP_DOWN_LAYOUT, portrait: 528 / 1194 };
+    const v = computeViewports(834, 1194, 'drive', null, NO_INSETS, layout, null, WIDE);
+    expect(v.wideLeft).not.toBeNull();
+  });
+
+  it('keeps class IV where the share does not change the room', () => {
+    // a 1080p laptop at 150%, landscape at the smallest and the default share; mirror-only at 1366x768
+    for (const landscape of [0.25, DEFAULT_TOP_DOWN_LAYOUT.landscape]) {
+      const layout = { ...DEFAULT_TOP_DOWN_LAYOUT, landscape };
+      const v = computeViewports(1280, 585, 'drive', null, NO_INSETS, layout, null, WIDE);
+      expect(v.wideLeft, `share ${String(landscape)}`).not.toBeNull();
+    }
+    const mirrors = computeViewports(1366, 768, 'mirrors', null, NO_INSETS, undefined, null, WIDE);
+    expect(mirrors.wideLeft).not.toBeNull();
+  });
+
   it('moves the stack up out of the sight cone before it shrinks class II', () => {
     const on = views(1168, 1018, WIDE, null);
     const off = views(1168, 1018, PLAIN, null);
