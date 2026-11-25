@@ -28,7 +28,9 @@ describe('menu options', () => {
       const { choices } = OPTION_FIELDS[id];
       expect(choices.length).toBeGreaterThanOrEqual(2);
       for (const { value } of choices) {
-        expect(optionValue({ ...settings, ...optionPatch(id, value) }, id)).toBe(value);
+        const patch = optionPatch(id, value);
+        expect(patch).not.toBeNull();
+        expect(optionValue({ ...settings, ...patch }, id)).toBe(value);
       }
       expect(optionPatch(id, 'nonsense')).toBeNull();
     }
