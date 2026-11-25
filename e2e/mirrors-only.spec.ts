@@ -100,11 +100,14 @@ test('the menu keeps the mirror-only choice and the replay line says so', async 
     .click();
   await page.getByRole('button', { name: en.menu }).click();
   await toTitle(page, en);
+  await openSetup(page, en, entry);
+  await chooseRunOption(page, en, 'driveView', 'standard');
+  await toTitle(page, en);
   await expect(page.getByRole('button', { name: en.replayLastRun })).toContainText(
     en.driveViewMirrors,
   );
 
-  await startExercise(page, en, 'straight-reverse', { driveView: 'standard' });
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('.hud-topdown')).toBeVisible();
   await expect(page.locator('.hud')).not.toHaveAttribute('data-mirrors');
 });

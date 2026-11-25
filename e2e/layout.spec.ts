@@ -10,7 +10,6 @@ import {
   chooseSetting,
   entryName,
   exerciseEntry,
-  openSetup,
   settingValue,
   startEntry,
   startExercise,
@@ -2111,10 +2110,8 @@ test('the wide-angle mirrors setting hides class IV, gives class II its full siz
     const withWide = await left();
 
     await page.goto('./');
-    await openSetup(page, en, exerciseEntry('straight-reverse'));
     await chooseSetting(page, en, 'wideMirrors', 'off');
     await page.reload();
-    await openSetup(page, en, exerciseEntry('straight-reverse'));
     await expect.poll(() => settingValue(page, en, 'wideMirrors')).toBe('off');
     await startExercise(page, en, 'straight-reverse');
     await hudReady(page);
@@ -2128,7 +2125,6 @@ test('the wide-angle mirrors setting hides class IV, gives class II its full siz
     expect(without.height).toBeGreaterThan(withWide.height);
 
     await page.goto('./');
-    await openSetup(page, en, exerciseEntry('straight-reverse'));
     await chooseSetting(page, en, 'wideMirrors', 'on');
     await startExercise(page, en, 'straight-reverse');
     await hudReady(page);
