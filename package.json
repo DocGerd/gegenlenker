@@ -17,7 +17,7 @@
     "lint": "eslint . --max-warnings 0",
     "format": "node scripts/format.mjs --write",
     "format:check": "node scripts/format.mjs --check",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
     "test": "vitest run",
     "test:e2e": "playwright test --project offline",
     "test:e2e:channels": "E2E_CHANNELS=1 playwright test --project channels",

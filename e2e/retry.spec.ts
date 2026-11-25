@@ -18,7 +18,8 @@ test('Retry loads the drive screen once the failed chunk request can succeed', a
 
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
-  await expect(page.getByText(en.loadFailed)).toBeVisible();
+  await expect(page.getByRole('alertdialog', { name: en.loadFailed })).toBeVisible();
+  await expect(page.getByRole('button', { name: en.retry })).toBeFocused();
 
   offline = false;
   await page.getByRole('button', { name: en.retry }).click();

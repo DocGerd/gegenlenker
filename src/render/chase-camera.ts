@@ -3,6 +3,7 @@ import {
   CHASE_AZIMUTH,
   CHASE_PITCH,
   CHASE_ZOOM,
+  type FreePose,
   type Rect,
   type TopDownView,
 } from '../contracts/render';
@@ -13,9 +14,10 @@ import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { resolveCombination } from '../vehicles/resolve';
 import { CAB_HEIGHT, FRAME_TOP } from './cab-dims';
+import { FREE_FOV, poseFromGaze } from './free-look';
 import { CAMERA_FAR, CHASE_LAYERS, enableLayers } from './seams';
 
-const CHASE_FOV = 40;
+const CHASE_FOV = FREE_FOV;
 /** Distance beyond the one that just fits the combination. */
 const FIT_MARGIN = 1.1;
 const MIN_ASPECT = 0.3;
@@ -328,15 +330,54 @@ export function placeChaseCamera(
   const y = centre.y + horizontal * Math.sin(azimuth);
   aim.set(centre.x, middle, -centre.y);
   eye.set(x, Math.max(middle + distance * Math.sin(pitch), colliderTop(rig, x, y)), -y);
-  camera.fov = CHASE_FOV;
-  camera.aspect = frameAspect(frame);
   camera.position.copy(eye);
   camera.lookAt(aim);
-  // Moves the aim from the pane's centre to the free rect's.
+  frameCamera(camera, frame);
+}
+
+/** Sets the lens for `frame` and moves the aim from the pane's centre to the free rect's. */
+function frameCamera(camera: PerspectiveCamera, frame: ChaseFrame): void {
+  camera.fov = CHASE_FOV;
+  camera.aspect = frameAspect(frame);
   const { clear } = frame;
   const shiftX = clear.x + clear.width / 2 - frame.width / 2;
   const shiftY = clear.y + clear.height / 2 - frame.height / 2;
   camera.setViewOffset(frame.width, frame.height, -shiftX, -shiftY, frame.width, frame.height);
   camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
+}
+
+const look = new Vector3();
+
+/**
+ * Flies the camera from `pose`, framed as the orbit is. The pose is never changed: the eye is lifted
+ * over a collider that stands where it is, so leaving the building lets it drop back.
+ */
+export function placeFreeCamera(
+  camera: PerspectiveCamera,
+  pose: FreePose,
+  rig: ChaseRig,
+  frame: ChaseFrame,
+): void {
+  if (frame.width <= 0 || frame.height <= 0) return;
+  const lifted = Math.max(pose.z, colliderTop(rig, pose.x, pose.y));
+  eye.set(pose.x, lifted, -pose.y);
+  look.set(
+    Math.cos(pose.pitch) * Math.cos(pose.yaw),
+    Math.sin(pose.pitch),
+    -Math.cos(pose.pitch) * Math.sin(pose.yaw),
+  );
+  camera.position.copy(eye);
+  camera.lookAt(aim.copy(eye).add(look));
+  frameCamera(camera, frame);
+}
+
+/** Where `camera` (placed by either function) is and looks, as a pose to continue from. */
+export function cameraPose(camera: PerspectiveCamera): FreePose {
+  camera.getWorldDirection(look);
+  const { position } = camera;
+  return poseFromGaze(
+    { x: position.x, y: -position.z, z: position.y },
+    { x: look.x, y: -look.z, z: look.y },
+  );
 }

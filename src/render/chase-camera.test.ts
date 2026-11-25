@@ -24,6 +24,8 @@ import { CAB_HEIGHT, RELIEF } from './cab-dims';
 import {
   CHASE_MAX_DISTANCE,
   cabFront,
+  cameraPose,
+  placeFreeCamera,
   chaseColliders,
   createChaseArm,
   chaseDistance,
@@ -35,6 +37,7 @@ import {
   type ChaseFrame,
   type ChaseRig,
 } from './chase-camera';
+import { FREE_MAX_HEIGHT } from './free-look';
 import { parseShell } from './glb-shells';
 import { KEYS } from './palette';
 import { AIDS_LAYER, CAB_LAYER, CAMERA_FAR, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
@@ -397,6 +400,86 @@ describe('chase camera', () => {
     expect(chaseDistance(rig.extent, rig.face, collapsed)).toBeLessThan(CAMERA_FAR);
     const far = place(free(rig), collapsed, { zoom: CHASE_ZOOM.min, panX: 0, panY: 0 });
     expect(far.position.distanceTo(aimOf(rig))).toBeLessThanOrEqual(CHASE_MAX_DISTANCE + 1e-9);
+  });
+});
+
+describe('free camera', () => {
+  const { rig } = posed(0, 0, POSES[0] as Pose2, 0, 0);
+  const frame = FRAMES[1] as ChaseFrame;
+
+  it('keeps the skyline inside the far plane from the highest eye over any corner of the layout bounds', () => {
+    const vertices = skylineGeometry(skylineBuildings(BOUNDS)).getAttribute('position');
+    const vertex = new Vector3();
+    const eye = new Vector3();
+    let reach = 0;
+    for (let i = 0; i < vertices.count; i++) {
+      vertex.set(vertices.getX(i), vertices.getY(i), vertices.getZ(i));
+      for (const x of [BOUNDS.minX, BOUNDS.maxX]) {
+        for (const y of [BOUNDS.minY, BOUNDS.maxY]) {
+          reach = Math.max(reach, vertex.distanceTo(eye.set(x, FREE_MAX_HEIGHT, -y)));
+        }
+      }
+    }
+    expect(reach).toBeLessThan(CAMERA_FAR);
+  });
+
+  it('continues from the orbit camera without a jump', () => {
+    for (const view of [
+      DEFAULT_TOP_DOWN_VIEW,
+      { zoom: 1.7, panX: 2.1, panY: CHASE_TILT.max },
+      { zoom: CHASE_ZOOM.min, panX: -1, panY: CHASE_TILT.min },
+    ]) {
+      const orbit = place(free(rig), frame, view);
+      const pose = cameraPose(orbit);
+      const flown = createChaseCamera();
+      placeFreeCamera(flown, pose, free(rig), frame);
+      expect(flown.position.distanceTo(orbit.position)).toBeLessThan(1e-9);
+      expect(flown.quaternion.angleTo(orbit.quaternion)).toBeLessThan(1e-9);
+      expect(flown.projectionMatrix.equals(orbit.projectionMatrix)).toBe(true);
+    }
+  });
+
+  it('continues from an orbit eye outside the layout bounds without a jump', () => {
+    // zoomed out at the yard's far edge, the eye is beyond the bounds
+    const edge = posed(0, 0, { x: 5, y: 65, heading: -Math.PI / 2 }, 0, 0).rig;
+    const orbit = place(free(edge), frame, {
+      zoom: CHASE_ZOOM.min,
+      panX: 2.7,
+      panY: CHASE_TILT.min,
+    });
+    expect(-orbit.position.z).toBeGreaterThan(BOUNDS.maxY);
+    const flown = createChaseCamera();
+    placeFreeCamera(flown, cameraPose(orbit), free(edge), frame);
+    expect(flown.position.distanceTo(orbit.position)).toBeLessThan(1e-9);
+  });
+
+  it('lifts an eye over a building to its roof without changing the pose', () => {
+    const roof = 9;
+    const hall = {
+      obb: { cx: 5, cy: 5, halfLength: 6, halfWidth: 4, heading: 0.3 },
+      height: roof,
+    };
+    const over = { x: 5, y: 5, z: 3, yaw: 0, pitch: -0.2 };
+    const before = { ...over };
+    const camera = createChaseCamera();
+    placeFreeCamera(camera, over, { ...rig, colliders: [hall] }, frame);
+    expect(camera.position.y).toBeGreaterThan(roof);
+    expect(camera.position.x).toBe(5);
+    expect(over).toEqual(before);
+    placeFreeCamera(camera, { ...over, x: 40 }, { ...rig, colliders: [hall] }, frame);
+    expect(camera.position.y).toBe(3);
+  });
+
+  it('leaves the camera alone on a zero-size pane', () => {
+    const camera = createChaseCamera();
+    const before = camera.position.clone();
+    const none = { x: 0, y: 0, width: 0, height: 0 };
+    placeFreeCamera(camera, { x: 1, y: 2, z: 9, yaw: 0, pitch: 0 }, free(rig), {
+      width: 0,
+      height: 0,
+      clear: none,
+    });
+    expect(camera.position).toEqual(before);
   });
 });
 

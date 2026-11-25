@@ -84,6 +84,7 @@ export const en = {
   viewYard: 'Whole yard',
   viewChase: 'Outside view',
   resetView: 'Reset view',
+  freeCamera: 'Free camera',
   viewSize: 'View size',
   resetViewSize: 'Reset view size',
   resetViewAndSize: 'Reset view / size',

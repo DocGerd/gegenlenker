@@ -622,7 +622,8 @@
 }
 
 .hud-chip[aria-pressed='true'],
-.hud-chip[aria-expanded='true'] {
+.hud-chip[aria-expanded='true'],
+.hud-icon[aria-pressed='true'] {
   border-color: var(--color-accent);
   background: var(--color-accent-tint);
   color: var(--color-accent-strong);
@@ -1069,4 +1070,25 @@
   .hud-toggle.hud-split-reset {
     align-self: flex-end;
   }
+}
+
+/* The free camera button stands over the pane's bottom edge, in the divider's reserve: landscape beside the divider strip, portrait in the divider bar's row, left of the handle (hud.ts hides it where the panels reach that edge). The box is the pane's, so hud.ts places it like the divider. */
+.hud-pane-tools {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 0 calc(var(--space-4) + var(--safe-bottom)) calc(var(--size-target) + var(--space-2));
+  pointer-events: none;
+}
+
+@media not (min-aspect-ratio: 1/1) {
+  .hud-pane-tools {
+    padding: 0 0 0 calc(var(--space-4) + var(--safe-left));
+  }
+}
+
+/* An open key list or aid legend of a short screen opens from the same corner: the button steps aside, keeping its box. */
+.hud-pane-tools .hud-toggle[data-covered] {
+  visibility: hidden;
 }

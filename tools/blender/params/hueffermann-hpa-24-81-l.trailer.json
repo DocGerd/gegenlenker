@@ -49,9 +49,16 @@
     "carrierTop": 0.92,
     "frontStart": 4.9,
     "frontDeck": 0.85,
-    "rampTop": 2.55
+    "rampTop": 3.06
   },
-  "hues": { "base": "#00387b", "frame": "#00214a", "black": "#101214", "silver": "#a5a5a5" },
+  "hues": {
+    "base": "#00387b",
+    "wood": "#4b3c30",
+    "black": "#101214",
+    "silver": "#a5a5a5",
+    "red": "#d0201c",
+    "yellow": "#f9a800"
+  },
   "lenses": [],
   "brackets": [],
   "mounts": [

@@ -18,6 +18,7 @@ export const hueffermannHpa2481L: TrailerSpec = {
   width: sourced(2550, SOURCES.H),
   track: estimate(2040, typical),
   deckHeight: estimate(700, typical),
+  rampHeight: sourced(3060, SOURCES.H),
   couplingLimit: estimate(80, limitBasis),
   turntableLimit: estimate(85, limitBasis),
   underrunGuard: {

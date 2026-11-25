@@ -10,13 +10,14 @@ import {
   PRESET_TIMEOUT_MS,
   shoot,
   startPinnedDrive,
+  step,
   timeoutWithSettles,
 } from './pinned-shoot';
 import { collectThreeProblems } from './three-problems';
 
 const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
-/** Sim milliseconds that draw the frames a view change needs. */
-const REDRAW_MS = 500;
+/** Pinned frames that draw a view change; a view change commits at once, so each further frame only costs a render. */
+const REDRAW_FRAMES = 3;
 /** `,` or `.` presses that turn the camera half way round: 5 degrees each. */
 const HALF_TURN_PRESSES = 36;
 
@@ -28,7 +29,7 @@ async function pane(page: Page): Promise<{ x: number; y: number; width: number; 
 
 /** The chase pane as it is now, after the frames a change needs. */
 async function chaseShot(page: Page): Promise<Buffer> {
-  return bareScreenshot(page, await pane(page), () => page.clock.runFor(REDRAW_MS));
+  return bareScreenshot(page, await pane(page), () => step(page, REDRAW_FRAMES));
 }
 
 async function press(page: Page, key: string, times: number): Promise<void> {
@@ -104,6 +105,27 @@ test(
     await page.keyboard.press('f');
     await expect(page.locator('[data-view="follow"]')).toHaveAttribute('aria-pressed', 'true');
     expect(hash(await shoot(page, 'chase')), 'back from follow').toBe(hash(first));
+
+    // the free camera starts exactly where the orbit was, turns while a key is held, and leaves with the reset
+    const freeButton = page.locator('[data-hud="freeCamera"]');
+    await page.keyboard.press('k');
+    await expect(freeButton).toHaveAttribute('aria-pressed', 'true');
+    expect(hash(await chaseShot(page)), 'free camera entry').toBe(hash(first));
+    // only a started flight enables the reset at the default orbit; the pressed button shows from the key
+    await expect(resetButton).toBeEnabled();
+    await page.keyboard.down('Period');
+    const flown = await chaseShot(page);
+    // released with Shift down, the key reads `>`: it still stops the turn
+    await page.keyboard.down('Shift');
+    await page.keyboard.up('Period');
+    await page.keyboard.up('Shift');
+    expect(await distinctColours(page, flown), 'turned').toBeGreaterThan(MIN_DRAWN_COLOURS);
+    expect(hash(flown), 'turned differs from the orbit').not.toBe(hash(first));
+    const stopped = hash(await chaseShot(page));
+    expect(hash(await chaseShot(page)), 'stopped once released').toBe(stopped);
+    await page.keyboard.press('0');
+    await expect(freeButton).toHaveAttribute('aria-pressed', 'false');
+    expect(hash(await chaseShot(page)), 'reset leaves the free camera').toBe(hash(first));
     expect(three).toEqual([]);
   },
 );

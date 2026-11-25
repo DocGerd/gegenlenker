@@ -22,6 +22,8 @@ test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ pa
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
   await expect(page.getByText(en.noWebgl)).toBeVisible();
   expect(chunks).toEqual([]);
+  await expect(page.getByRole('alertdialog', { name: en.noWebgl })).toBeVisible();
+  await expect(page.getByRole('button', { name: en.back })).toBeFocused();
 
   await page.getByRole('button', { name: en.back }).click();
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
