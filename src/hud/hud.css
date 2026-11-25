@@ -221,7 +221,7 @@
   display: none;
 }
 
-/* On a short screen the open list is an overlay in the top-down pane (hud.ts sets --pane-* and --keys-top), where no mirror reaches: opening it neither resizes the legend nor moves the mirrors. It stands under the toolbar and beside the divider strip, and under the toasts and the finish button. */
+/* On a short screen the open list is an overlay in the top-down pane (hud.ts sets --pane-* and --keys-top), where no mirror reaches: opening it neither resizes the legend nor moves the mirrors. It opens below the toolbar and the finish button, beside the divider strip; the toasts paint over it. */
 .hud-legend[data-overlay] {
   z-index: 2;
 }
@@ -310,8 +310,9 @@
   margin-bottom: 0;
 }
 
+/* Level with the short-screen key list, which comes earlier in the DOM, and with the pause sheet and the notices (app.css), which come later: over the one, under the others. */
 .hud-toast-wrap {
-  z-index: 3;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;

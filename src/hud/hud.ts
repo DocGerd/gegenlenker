@@ -572,6 +572,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         keysOpen = !keysOpen;
         if (keysOpen) aidOpen = false;
         syncToggles();
+        // A hidden list keeps its scroll; it opens at the top.
+        if (keysOpen) keysList.scrollTop = 0;
       } else if (shortCockpit) {
         allKeys = !allKeys;
         syncToggles();

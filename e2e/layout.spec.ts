@@ -991,6 +991,26 @@ test('a swipe on the open aid legend scrolls it, and neither steers, drives nor 
   }
 });
 
+test('the key list of a short screen opens at its top again', async ({ page }) => {
+  await page.setViewportSize({ width: 1172, height: 426 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const list = page.locator(KEY_LIST);
+  await keysToggle(page).click();
+  await expect(list).toBeVisible();
+  await settled(page);
+  expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight), 'no room to scroll').toBe(
+    true,
+  );
+  await list.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await keysToggle(page).click();
+  await expect(list).toBeHidden();
+  await keysToggle(page).click();
+  await expect(list).toBeVisible();
+  expect(await list.evaluate((el) => el.scrollTop)).toBe(0);
+});
+
 test('the messages stay clear of the controls with the aid legend open on a short portrait screen', async ({
   page,
 }) => {
