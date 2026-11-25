@@ -2,17 +2,13 @@ import { Group, type RenderTarget } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
-import {
-  GraphicsStartError,
-  type RenderFrame,
-  type SceneRenderer,
-  type ScenePalette,
-} from '../contracts/render';
+import { GraphicsStartError, type RenderFrame, type ScenePalette } from '../contracts/render';
 import { createContactQuery } from '../sim/collision';
 import { NO_PREDICTION } from '../sim/predict';
 import { createSimulation } from '../sim/simulation';
 import { resolveCombination } from '../vehicles/resolve';
 import { trailerById, truckById } from '../vehicles/registry';
+import type { SceneRenderer } from './scene-renderer';
 import { createThreeSceneRenderer } from './three-renderer';
 import { computeViewports } from './viewports';
 

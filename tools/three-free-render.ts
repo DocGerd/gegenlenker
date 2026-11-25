@@ -1,0 +1,29 @@
+// Render modules used outside src/render that load no Three.js at runtime (a `three` import
+// there would pull it into the PWA config, tools and the vite config). Linted in
+// `eslint.config.js`, closed over transitively by `three-free-render.test.ts`.
+export const THREE_FREE_RENDER = [
+  'asset-registry',
+  'body-dims',
+  'cab-dims',
+  'cab-sight',
+  'cockpit-band',
+  'follow-framing',
+  'free-look',
+  'gpu-backend',
+  'ground-pbr-pixels',
+  'ground-texture-pixels',
+  'ground-texture-spec',
+  'hdri-light',
+  'head-look',
+  'interior-dims',
+  'lamp-layout',
+  'livery',
+  'palette',
+  'perf-overlay',
+  'quality',
+  'realism-hues',
+  'seams',
+  'trailer-dims',
+  'viewports',
+  'yard-kit-dims',
+].map((name) => `src/render/${name}.ts`);

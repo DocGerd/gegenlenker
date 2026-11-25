@@ -4,8 +4,9 @@ import {
   type ExtraMirrors,
   type GraphicsPreset,
   type LightingMode,
-  type SceneRenderer,
 } from '../contracts/render';
+import type { SceneRenderer } from './scene-renderer';
+export type { SceneRenderer };
 import type { Texture } from 'three';
 import { proceduralAids } from './aids';
 import { proceduralEnvironment } from './environment';

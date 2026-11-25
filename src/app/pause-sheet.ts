@@ -63,6 +63,26 @@ export function showPauseSheet(
     },
     { signal: abort.signal },
   );
+  // Tab from the last button would leave the page, and the focusout guard only sees focus already gone.
+  box.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key !== 'Tab') return;
+      const focusable = [...sheet.querySelectorAll('button')];
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (first === undefined || last === undefined) return;
+      const from = document.activeElement;
+      if (e.shiftKey ? from === first : from === last) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (!(from instanceof Node && sheet.contains(from))) {
+        e.preventDefault();
+        resume.focus();
+      }
+    },
+    { signal: abort.signal },
+  );
   box.append(sheet);
   parent.append(box);
   resume.focus();
