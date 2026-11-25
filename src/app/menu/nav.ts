@@ -1,4 +1,4 @@
-import { entryKey, entryOf, type EntryRef } from './catalogue';
+import { entryKey, entryOf, type EntryKind, type EntryRef, type Role } from './catalogue';
 import { screenOf, type ScreenId } from './graph';
 
 export type Level = {
@@ -38,6 +38,13 @@ const push = (state: NavState, from: Level, next: Level): NavState => ({
   stack: [...state.stack.slice(0, -1), from, next],
 });
 
+const listKey = (of: { role: Role; kind: EntryKind }): string => `${of.role}:${of.kind}`;
+
+const listsEntry = (screen: ScreenId, entry: EntryRef): boolean => {
+  const { list } = screenOf(screen);
+  return list !== undefined && listKey(list) === listKey(entry);
+};
+
 const defaultSteps = (entry: EntryRef): number => entryOf(entry).steps.length;
 
 export function navigate(
@@ -53,7 +60,7 @@ export function navigate(
       return push(state, { ...top, focus: item.id }, { screen: item.target.screen, focus: null });
     }
     case 'pick':
-      if (screenOf(top.screen).kind !== 'entries') return state;
+      if (!listsEntry(top.screen, event.entry)) return state;
       return push(
         state,
         { ...top, focus: entryKey(event.entry) },

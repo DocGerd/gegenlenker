@@ -56,6 +56,19 @@ describe('menu navigation', () => {
     expect(navigate(TITLE, { type: 'open', item: 'nope' })).toBe(TITLE);
   });
 
+  it('pick of an entry the list does not hold changes nothing', () => {
+    const yards = navigate(TITLE, { type: 'open', item: 'freeYard' });
+    expect(navigate(yards, { type: 'pick', entry: EXERCISE })).toBe(yards);
+  });
+
+  it('next with the catalogue steps stays on the only step', () => {
+    const setup = run([
+      { type: 'open', item: 'exercises' },
+      { type: 'pick', entry: EXERCISE },
+    ]);
+    expect(topOf(navigate(setup, { type: 'next' })).step).toBe(0);
+  });
+
   it('pick and next outside their screens change nothing', () => {
     expect(navigate(TITLE, { type: 'pick', entry: EXERCISE })).toBe(TITLE);
     expect(navigate(TITLE, { type: 'next' })).toBe(TITLE);
