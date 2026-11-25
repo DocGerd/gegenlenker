@@ -353,7 +353,7 @@ const insetSizes: {
   { width: 900, height: 649 },
   { width: 768, height: 1024 },
   { width: 860, height: 860, keysOpen: true },
-  { width: 1024, height: 426, slot: 'cue yields' },
+  { width: 950, height: 426, slot: 'cue yields' },
   // over the brief's side of the cockpit
   { width: 1030, height: 426, slot: 'right of the cone' },
 ];
@@ -455,6 +455,42 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
     await context.close();
   });
 }
+
+test('the longest German toast fits the narrowest pane column, inside the safe area, at 800x426', async ({
+  browser,
+}) => {
+  const size = { width: 800, height: 426 };
+  const context = await browser.newContext({ locale: 'de-DE', viewport: size });
+  try {
+    const page = await context.newPage();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+    await page.goto('./');
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue('--safe-left'),
+        ),
+      )
+      .toBe(`${insets.left}px`);
+    await page.getByRole('button', { name: de.exerciseStraightReverse }).click();
+    await hudReady(page, { insets });
+    const [column] = await boxes(page.locator('[data-hud="toastWrap"]'));
+    const [pane] = await boxes(page.locator('.hud-topdown'));
+    expect(column?.left, 'the messages in the top-down pane').toBeGreaterThanOrEqual(
+      pane?.left ?? Infinity,
+    );
+    await expectMessagesClear(page, de.blockedTurntable, de.goalInside);
+    const messages = await boxes(
+      page.locator('[data-hud="toast"]:visible, [data-hud="goalCue"]:visible'),
+    );
+    for (const b of messages) {
+      expect(b.right, `${b.name} in the safe area`).toBeLessThanOrEqual(size.width - insets.right);
+    }
+  } finally {
+    await context.close();
+  }
+});
 
 const starts = [
   { name: 'exercise', label: en.exerciseStraightReverse },
