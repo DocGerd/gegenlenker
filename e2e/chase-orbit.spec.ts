@@ -10,13 +10,14 @@ import {
   PRESET_TIMEOUT_MS,
   shoot,
   startPinnedDrive,
+  step,
   timeoutWithSettles,
 } from './pinned-shoot';
 import { collectThreeProblems } from './three-problems';
 
 const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
-/** Sim milliseconds that draw the frames a view change needs. */
-const REDRAW_MS = 500;
+/** Pinned frames that draw a view change; a view change commits at once, so each further frame only costs a render. */
+const REDRAW_FRAMES = 3;
 /** `,` or `.` presses that turn the camera half way round: 5 degrees each. */
 const HALF_TURN_PRESSES = 36;
 
@@ -28,7 +29,7 @@ async function pane(page: Page): Promise<{ x: number; y: number; width: number; 
 
 /** The chase pane as it is now, after the frames a change needs. */
 async function chaseShot(page: Page): Promise<Buffer> {
-  return bareScreenshot(page, await pane(page), () => page.clock.runFor(REDRAW_MS));
+  return bareScreenshot(page, await pane(page), () => step(page, REDRAW_FRAMES));
 }
 
 async function press(page: Page, key: string, times: number): Promise<void> {
