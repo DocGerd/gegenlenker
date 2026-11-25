@@ -160,6 +160,17 @@ export type HeadPose = {
   readonly pitch: number;
 };
 export const HEAD_REST: HeadPose = { yaw: 0, pitch: 0 };
+/**
+ * The free camera of the outside view: eye position in the sim plane (metres, z up) and look
+ * direction, yaw counter-clockwise from the x axis like a heading, pitch positive up (radians).
+ */
+export type FreePose = {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  readonly yaw: number;
+  readonly pitch: number;
+};
 export type RenderFrame = {
   readonly snapshot: SimSnapshot;
   readonly views: ViewRects;
@@ -174,6 +185,8 @@ export type RenderFrame = {
   readonly lamps?: LampSwitches;
   /** Absent means looking straight ahead; ignored where the cockpit draws no interior asset. */
   readonly head?: HeadPose;
+  /** Absent means the outside view orbits; set, it flies from this pose. Ignored in the other views. */
+  readonly freePose?: FreePose;
   /** Absent means not yet passed. */
   readonly waypointVisited?: boolean;
 };
@@ -223,6 +236,8 @@ export interface SceneRenderer {
   setLighting(mode: LightingMode): void;
   resize(cssWidth: number, cssHeight: number): void;
   render(frame: RenderFrame): void;
+  /** The outside view's camera as of the last render, to start a free camera from; null while it was not drawn. */
+  chasePose(): FreePose | null;
   /** Sim-plane point to screen CSS px as of the last render; null before the first. */
   project(x: number, y: number): { readonly x: number; readonly y: number } | null;
   /** Reports an animation frame on which the caller chose not to render, so frame timing still sees it. */

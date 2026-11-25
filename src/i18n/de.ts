@@ -90,6 +90,7 @@ export const de: Record<MessageKey, string> = {
   viewYard: 'Ganzer Hof',
   viewChase: 'Außenansicht',
   resetView: 'Ansicht zurücksetzen',
+  freeCamera: 'Freie Kamera',
   viewSize: 'Ansichtsgröße',
   resetViewSize: 'Ansichtsgröße zurücksetzen',
   resetViewAndSize: 'Standardansicht',

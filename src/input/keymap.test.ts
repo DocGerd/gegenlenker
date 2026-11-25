@@ -7,6 +7,7 @@ const US_CODES: Record<string, readonly string[]> = {
   f: ['KeyF'],
   y: ['KeyY'],
   o: ['KeyO'],
+  k: ['KeyK'],
   '+': ['Equal', 'NumpadAdd'],
   '=': ['Equal'],
   '-': ['Minus', 'NumpadSubtract'],

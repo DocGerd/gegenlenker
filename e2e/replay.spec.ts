@@ -39,6 +39,18 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   await scrubber.fill('0');
   await expect(scrubber).toHaveValue(String(first));
   await expect(time).toHaveText(`0.0 s / ${total}`);
+
+  // Balanced offers the outside view and the free camera, as the drive does
+  const outside = page.getByRole('button', { name: en.viewChase });
+  const free = page.getByRole('button', { name: en.freeCamera });
+  await expect(outside).toBeVisible();
+  await expect(free).toHaveAttribute('aria-pressed', 'false');
+  await free.click();
+  await expect(outside).toHaveAttribute('aria-pressed', 'true');
+  await expect(free).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('k');
+  await expect(free).toHaveAttribute('aria-pressed', 'false');
+  await expect(outside).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('a night run replays at night after the stored setting switched to day', async ({ page }) => {
@@ -71,4 +83,7 @@ test('a night run replays at night after the stored setting switched to day', as
   await page.getByRole('button', { name: en.replayLastRun }).click();
   await expect(page.getByRole('slider', { name: en.timeline })).toBeVisible();
   await expect(html).toHaveAttribute('data-render-lighting', 'night');
+  // Low has no outside view, so no free camera either
+  await expect(page.getByRole('button', { name: en.viewChase })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: en.freeCamera })).toHaveCount(0);
 });

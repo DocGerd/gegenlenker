@@ -27,8 +27,10 @@ import {
   chaseColliders,
   combinationExtent,
   createChaseArm,
+  cameraPose,
   createChaseCamera,
   placeChaseCamera,
+  placeFreeCamera,
   vehicleCentre,
   type CabFront,
   type ChaseCollider,
@@ -248,6 +250,7 @@ export function createThreeSceneRenderer(
   let chaseShown = false;
   const chaseArm = createChaseArm();
   let chaseView = DEFAULT_TOP_DOWN_VIEW;
+  let chaseFlown = false;
   const lead = { x: 0, y: 0 };
   let leadAt = -1;
   /** Bumped by every `init` and by `dispose`, so a superseded start drops its renderer. */
@@ -593,31 +596,41 @@ export function createThreeSceneRenderer(
       const hasPane = hasTopDown(views);
       if (hasPane) out.place(topDown, pixelRatio);
       const chaseWasShown = chaseShown;
+      const chaseWasFlown = chaseFlown;
       chaseShown = hasPane && frame.topDown === 'chase';
+      chaseFlown = chaseShown && frame.freePose !== undefined;
       if (!hasPane) {
         topDownRect = null;
       } else if (chaseShown) {
         const view = frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW;
-        // a reset or a switch to the view is a cut: the eye starts where the view puts it
-        if (!chaseWasShown || (isDefault(view) && !isDefault(chaseView))) chaseArm.cut();
+        // a reset, a switch to the view or the end of a flight is a cut: the eye starts where the view puts it
+        if (
+          !chaseWasShown ||
+          chaseWasFlown !== chaseFlown ||
+          (isDefault(view) && !isDefault(chaseView))
+        ) {
+          chaseArm.cut();
+        }
         chaseView = view;
-        placeChaseCamera(
-          chaseCamera,
-          {
-            truck: snapshot.truck,
-            centre: vehicleCentre(snapshot, b.anchors.frontX),
-            extent: b.extent,
-            face: b.cabFront,
-            colliders: b.colliders,
-          },
-          {
-            width: topDown.width,
-            height: topDown.height,
-            clear: relativeTo(topDown, frame.topDownClear ?? topDown),
-          },
-          view,
-          (limit, open) => chaseArm.hold(limit, open, performance.now()),
-        );
+        const rig = {
+          truck: snapshot.truck,
+          centre: vehicleCentre(snapshot, b.anchors.frontX),
+          extent: b.extent,
+          face: b.cabFront,
+          colliders: b.colliders,
+        };
+        const paneFrame = {
+          width: topDown.width,
+          height: topDown.height,
+          clear: relativeTo(topDown, frame.topDownClear ?? topDown),
+        };
+        if (frame.freePose !== undefined) {
+          placeFreeCamera(chaseCamera, frame.freePose, rig, paneFrame);
+        } else {
+          placeChaseCamera(chaseCamera, rig, paneFrame, view, (limit, open) =>
+            chaseArm.hold(limit, open, performance.now()),
+          );
+        }
         gl.render(b.scene, chaseCamera);
       } else {
         placeTopDown(frame, topDown, b);
@@ -645,6 +658,10 @@ export function createThreeSceneRenderer(
       out.present();
       // includes the one output pass that draws the frame target to the canvas
       drawCalls = gl.info.render.drawCalls;
+    },
+
+    chasePose() {
+      return chaseShown && built !== null ? cameraPose(chaseCamera) : null;
     },
 
     project(x, y) {
