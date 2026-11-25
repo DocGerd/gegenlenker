@@ -22,7 +22,7 @@ export const TWIN_OFFSET = 0.15;
 /** The perspective rear tyres on each side: lateral offsets from the half track, and their width. */
 export type RearTyreSet = { readonly offsets: readonly number[]; readonly width: number };
 
-/** Perspective-only: the top-down wheel tokens and blob shadows always draw the twins. */
+/** Perspective-only, as are the contact blobs that follow it: the top-down wheel tokens always draw the twins. */
 export const rearTyreSet = (tyres: RearTyres): RearTyreSet =>
   tyres === 'twin'
     ? { offsets: [-TWIN_OFFSET, TWIN_OFFSET], width: TWIN_WHEEL_WIDTH }
@@ -52,11 +52,17 @@ export const TIPPER_SHELL = { wallHeight: 0.6, headboardHeight: 1.1 } as const;
 
 /**
  * More of what `tools/blender/body_shell.py` builds the rear stalk lamps on, besides `TIPPER_RIM`
- * and `TARP_TOP`: how far a tipper's corner posts stand proud, and the tarpaulin's inset and crown.
+ * and `TARP_TOP`: how far a tipper's corner posts stand proud, and the tarpaulin's inset, crown and
+ * setback from the rear face.
  * The script owns the numbers and `body-dims.test.ts` pins them; they are not Params, so they stay
  * out of the glb inputs.
  */
-export const BODY_SHELL = { postProud: 0.06, tarpInset: 0.04, tarpCrown: 0.06 } as const;
+export const BODY_SHELL = {
+  postProud: 0.06,
+  tarpInset: 0.04,
+  tarpCrown: 0.06,
+  tarpSetback: 0.02,
+} as const;
 
 /** Body front in the top-down view, behind the 2.2 m cab box. */
 export const bodyFrontX = (frontX: number, cabLength = CAB_LENGTH): number =>

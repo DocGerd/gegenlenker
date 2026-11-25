@@ -166,9 +166,15 @@ const REAR_VIEW = { out: 0.06, depth: 0.05, margin: 0.03, lift: 0.02 } as const;
 const MAX_PROTRUSION = 0.095;
 /**
  * The truck body's rear top corner: the lens top above the floor, how far the shell stands out past
- * the body's side there, and how far the bracket reaches inboard to the shell's top.
+ * the body's side there, how far the bracket reaches inboard to the shell's top, and how far forward
+ * of the rear face the shell's top starts.
  */
-function truckRearCorner(spec: TruckSpec): { top: number; edge: number; reach: number } {
+function truckRearCorner(spec: TruckSpec): {
+  top: number;
+  edge: number;
+  reach: number;
+  setback: number;
+} {
   const hw = metres(spec.width) / 2;
   if (TRUCK_LOOKS[spec.id].body.kind === 'tipper') {
     // on the corner post, outboard of it
@@ -176,6 +182,7 @@ function truckRearCorner(spec: TruckSpec): { top: number; edge: number; reach: n
       top: FLOOR_TOP + TIPPER_SHELL.wallHeight + TIPPER_RIM,
       edge: hw + BODY_SHELL.postProud,
       reach: 0,
+      setback: 0,
     };
   }
   // at the tarpaulin's top, outboard of its side, on a bracket from the crown
@@ -183,6 +190,7 @@ function truckRearCorner(spec: TruckSpec): { top: number; edge: number; reach: n
     top: TARP_TOP,
     edge: hw - BODY_SHELL.tarpInset,
     reach: BODY_SHELL.tarpCrown,
+    setback: BODY_SHELL.tarpSetback,
   };
 }
 
@@ -202,18 +210,25 @@ function rearViewLamps(
   edge: number,
   z: Range,
   reach = 0,
+  setback = 0,
 ): void {
   const out = Math.min(REAR_VIEW.out, hw + MAX_PROTRUSION - edge);
+  const height: Range = [z[0] - REAR_VIEW.margin, z[1] + REAR_VIEW.lift];
   for (const side of SIDES) {
     const across = lateral(side, edge, edge + out);
     sink.brackets.push({
       part,
-      box: boxOf([rear - REAR_VIEW.depth, rear], lateral(side, edge - reach, edge + out), [
-        z[0] - REAR_VIEW.margin,
-        z[1] + REAR_VIEW.lift,
-      ]),
+      box: boxOf([rear - REAR_VIEW.depth, rear], lateral(side, edge - reach, edge + out), height),
       shell: false,
     });
+    // inboard of the lens, the bracket runs on to a shell that starts ahead of the rear face
+    if (setback > 0 && reach > 0) {
+      sink.brackets.push({
+        part,
+        box: boxOf([rear, rear + setback], lateral(side, edge - reach, edge), height),
+        shell: false,
+      });
+    }
     sink.lamps.push({
       id: `end-outline-view-${sideName(side)}`,
       fns: ['end-outline-front'],
@@ -481,7 +496,16 @@ export function truckLamps(spec: TruckSpec, cabLength = CAB_LENGTH): LampLayout 
 
   const corner = truckRearCorner(spec);
   const top = corner.top - REAR_VIEW.lift;
-  rearViewLamps(sink, 'body', rear, hw, corner.edge, [top - SMALL_LAMP.height, top], corner.reach);
+  rearViewLamps(
+    sink,
+    'body',
+    rear,
+    hw,
+    corner.edge,
+    [top - SMALL_LAMP.height, top],
+    corner.reach,
+    corner.setback,
+  );
 
   // posts through the front wall (a tipper's headboard, a tarp's front) carry the work lamps over the body
   const bodyFront = bodyFrontX(front, cabLength);
