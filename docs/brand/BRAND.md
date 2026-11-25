@@ -106,7 +106,8 @@ Vehicle detail, yard props (fence grid, hall cladding and roofs, containers, mas
 | ----------------- | --------- | --------------------------------------------------------- |
 | `signalYellow`    | `#f9a800` | impact guard and underrun bars, RAL 1003                  |
 | `chevronBlack`    | `#101214` | chevrons on the impact guard, grille, mudflaps            |
-| `contourSide`     | `#f2c200` | contour marking at the sides (ECE R48/R104 style)         |
+| `contourSide`     | `#eeeeea` | contour marking at the sides, white (ECE R48/R104 style)  |
+| `contourSideYellow` | `#f2c200` | the lafette glb's baked side contour, until rebuilt white |
 | `contourRear`     | `#d0201c` | contour marking at the rear                               |
 | `tailLamp`        | `#c8102e` | tail lamps                                                |
 | `sideMarker`      | `#ffb000` | amber side markers                                        |
