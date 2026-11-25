@@ -154,10 +154,10 @@ export function showResult(
       passed: position?.passed,
       delta: delta('positionError', 2, ' m'),
     }),
-    row('angleError', `${formatNumber(result.angleError, 1)} °`, {
-      limit: `${formatNumber(exercise.tolerances.angle, 1)} °`,
+    row('angleError', `${formatNumber(result.angleError, 1)}°`, {
+      limit: `${formatNumber(exercise.tolerances.angle, 1)}°`,
       passed: angle?.passed,
-      delta: delta('angleError', 1, ' °'),
+      delta: delta('angleError', 1, '°'),
     }),
   );
   if (exercise.waypoint !== null) {

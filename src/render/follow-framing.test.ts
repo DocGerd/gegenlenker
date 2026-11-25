@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { Rect } from '../contracts/render';
-import { clearRect, followFraming, leadTarget, targetArrow, yardFraming } from './follow-framing';
+import {
+  arrowClearRect,
+  clearRect,
+  followFraming,
+  leadTarget,
+  targetArrow,
+  yardFraming,
+} from './follow-framing';
 
 const pane: Rect = { x: 614, y: 0, width: 410, height: 600 };
 const toolbar: Rect = { x: 630, y: 16, width: 256, height: 414 };
@@ -137,6 +144,37 @@ describe('targetArrow', () => {
     expect(arrow).not.toBeNull();
     expect(arrow?.x).toBeCloseTo(clear.x + 20, 6);
     expect(Math.abs(arrow?.angle ?? 0)).toBeGreaterThan(Math.PI / 2);
+  });
+});
+
+describe('arrowClearRect', () => {
+  // The view-size divider: a handle and its reset button on the pane's left edge, bottom corner.
+  const handle: Rect = { x: 614, y: 440, width: 44, height: 88 };
+  const reset: Rect = { x: 614, y: 388, width: 44, height: 44 };
+
+  it('keeps the arrow off the divider wherever the target is', () => {
+    const clear = arrowClearRect(pane, [toolbar, pedals], [handle, reset]);
+    for (const target of [
+      { x: 100, y: 500 },
+      { x: 100, y: 400 },
+      { x: 100, y: 100 },
+      { x: 700, y: 900 },
+    ]) {
+      const arrow = targetArrow(target, clear, 24);
+      expect(arrow).not.toBeNull();
+      for (const box of [handle, reset]) {
+        const hit =
+          (arrow?.x ?? 0) + 14 > box.x &&
+          (arrow?.x ?? 0) - 14 < box.x + box.width &&
+          (arrow?.y ?? 0) + 14 > box.y &&
+          (arrow?.y ?? 0) - 14 < box.y + box.height;
+        expect(hit, JSON.stringify(target)).toBe(false);
+      }
+    }
+  });
+
+  it('is the framing clear rect without a divider', () => {
+    expect(arrowClearRect(pane, [toolbar, pedals], [])).toEqual(clearRect(pane, [toolbar, pedals]));
   });
 });
 

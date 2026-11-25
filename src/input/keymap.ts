@@ -98,7 +98,7 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     action: 'brake',
     match: { by: 'code', values: ['Space'] },
     scope: 'drive',
-    legend: { term: { key: 'keySpace' }, desc: 'brake' },
+    legend: { term: { key: 'keySpace' }, desc: 'stop' },
   },
   {
     action: 'gearP',

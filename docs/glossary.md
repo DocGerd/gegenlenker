@@ -42,6 +42,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | App version, shown for a release build          | version                                     | Version                                      |
 | Shown instead of a version for any other build  | development build                           | Entwicklungsstand                            |
 | Badge of the test build deployed for acceptance | UAT                                         | Abnahmetest                                  |
+| Stop button or Space: lever to zero and brake   | stop                                        | Stopp                                        |
 | Speed readout and label                         | speed                                       | Tempo                                        |
 | Gear readout and label                          | gear                                        | Fahrstufe                                    |
 | Steering readout and label                      | steer                                       | Lenken                                       |

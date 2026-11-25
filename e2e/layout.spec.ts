@@ -1566,6 +1566,49 @@ for (const size of [
   }
 }
 
+for (const size of [
+  { width: 1536, height: 729 },
+  { width: 1280, height: 585 },
+  { width: 768, height: 1024 },
+]) {
+  for (const { locale, messages } of locales) {
+    test(`the replay names the exercise and its corner stays clear at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      try {
+        const page = await context.newPage();
+        await page.goto('./');
+        await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
+        await expect(page.locator('[data-hud="speed"]')).toBeVisible();
+        await page.getByRole('button', { name: messages.pause }).click();
+        await page
+          .getByRole('dialog', { name: messages.paused })
+          .getByRole('button', { name: messages.finish })
+          .click();
+        await page.getByRole('button', { name: messages.replay }).click();
+        const title = page.getByRole('heading', { name: messages.exerciseStraightReverse });
+        await expect(title).toBeVisible();
+        await expect(page.locator('.replay-readout')).toBeVisible();
+        const [head] = await boxes(title);
+        const [readout] = await boxes(page.locator('.replay-readout'));
+        const [map] = await boxes(page.locator('.replay-map'));
+        const [bar] = await boxes(page.locator('.replay-bar'));
+        if (!head || !readout || !map || !bar) throw new Error('replay boxes missing');
+        expect(overlaps(head, readout), 'the title overlaps the readout').toBe(false);
+        expect(overlaps(head, bar), 'the title overlaps the bar').toBe(false);
+        for (const box of [head, readout]) {
+          expect(box.left, `${box.name} inside the map`).toBeGreaterThanOrEqual(map.left);
+          expect(box.right, `${box.name} inside the map`).toBeLessThanOrEqual(map.right);
+          expect(box.bottom, `${box.name} inside the map`).toBeLessThanOrEqual(map.bottom);
+        }
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
 /**
  * The cockpit pane is drawn from the first row down. On a pinned drive: a free-running software-GL
  * frame takes seconds, which a screenshot poll would spend waiting for.

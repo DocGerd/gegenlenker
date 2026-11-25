@@ -53,6 +53,15 @@ export function clearRect(pane: Rect, chrome: readonly Rect[]): Rect {
   return best ?? pane;
 }
 
+/** The rect the target arrow stays in: the framing's clear rect, also off the view-size divider. */
+export function arrowClearRect(
+  pane: Rect,
+  chrome: readonly Rect[],
+  divider: readonly Rect[],
+): Rect {
+  return clearRect(pane, [...chrome, ...divider]);
+}
+
 /**
  * Unit vector (or zero) the leading end travels along: signed speed first, then the selected gear.
  * Forward the truck leads; reversing the trailer rear does, along the trailer's heading.
