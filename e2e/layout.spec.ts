@@ -696,9 +696,10 @@ const KEY_LIST = '.hud-legend dl';
 const AID_LIST = '[data-hud="aidLegend"]';
 
 /**
- * What an open overlay of a short screen leaves or covers: it stands in the top-down pane, whole, clear
- * of the mirrors and the controls, and where `strict` also of the divider and the toolbar. The key list
- * is not held to those two: on develop it covers the divider (#433) and, at 1172x426, the toolbar.
+ * What an open overlay of a short screen leaves or covers: it stands in the top-down pane, clear of the
+ * mirrors and the controls, and where `strict` also of the divider and the toolbar. The key list is not
+ * held to those two: on develop it covers the divider (#433) and, at 1172x426, the toolbar. Taller than
+ * its room, it scrolls: its first item shows whole and every item can be scrolled into view.
  */
 async function overlayTrouble(page: Page, sel: string, strict = true): Promise<string[]> {
   const list = page.locator(sel);
@@ -710,7 +711,39 @@ async function overlayTrouble(page: Page, sel: string, strict = true): Promise<s
     box.right <= pane.right &&
     box.top >= pane.top &&
     box.bottom <= pane.bottom;
-  const clipped = await list.evaluate((el) => el.scrollHeight > el.clientHeight);
+  const scroll = await list.evaluate((el) => {
+    const style = getComputedStyle(el);
+    const scrollable = /auto|scroll/.test(style.overflowY) && style.pointerEvents !== 'none';
+    const from = el.scrollTop;
+    // Whole within the padding box, at the current scroll.
+    const whole = (item: Element): boolean => {
+      const top = el.getBoundingClientRect().top + el.clientTop;
+      const r = item.getBoundingClientRect();
+      return r.top >= top - 0.5 && r.bottom <= top + el.clientHeight + 0.5;
+    };
+    el.scrollTop = 0;
+    const items = [...el.children].filter((item) => item.getClientRects().length > 0);
+    const first = items[0] !== undefined && whole(items[0]);
+    // Scrolled down to its bottom, an item shows whole, or from there up if it is taller than the view.
+    const unreachable = items.flatMap((item, i) => {
+      const view = el.getBoundingClientRect().top + el.clientTop + el.clientHeight;
+      el.scrollTop += Math.max(0, item.getBoundingClientRect().bottom - view);
+      const r = item.getBoundingClientRect();
+      const reached =
+        whole(item) || (r.height > el.clientHeight && Math.abs(r.bottom - view) <= 0.5);
+      return reached ? [] : [`item ${String(i + 1)} out of reach`];
+    });
+    el.scrollTop = from;
+    return {
+      clipped: el.scrollHeight > el.clientHeight,
+      scrollable,
+      first,
+      unreachable: [
+        ...unreachable,
+        ...(el.scrollWidth > el.clientWidth ? ['cut at the side'] : []),
+      ],
+    };
+  });
   const others = await boxes(
     page.locator(
       [
@@ -726,7 +759,9 @@ async function overlayTrouble(page: Page, sel: string, strict = true): Promise<s
   );
   return [
     ...(inside ? [] : ['outside the top-down pane']),
-    ...(clipped ? ['clipped'] : []),
+    ...(scroll.clipped && !scroll.scrollable ? ['clipped and not scrollable'] : []),
+    ...(scroll.first ? [] : ['first item cut']),
+    ...scroll.unreachable,
     ...others.filter((o) => overlaps(box, o)).map((o) => o.name),
   ];
 }
@@ -897,6 +932,69 @@ for (const { locale, messages } of locales) {
     }
   });
 }
+
+test('a swipe on the open aid legend scrolls it, and neither steers, drives nor moves the top view', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    locale: 'en-US',
+    viewport: { width: 800, height: 600 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  try {
+    const page = await context.newPage();
+    await startStraightReverse(page, en.exerciseStraightReverse);
+    const list = page.locator(AID_LIST);
+    await aidToggle(page).tap();
+    await expect(list).toBeVisible();
+    await settled(page);
+    const scrollTop = () => list.evaluate((el) => el.scrollTop);
+    expect(
+      await list.evaluate((el) => el.scrollHeight > el.clientHeight),
+      'no room to scroll',
+    ).toBe(true);
+    const controls = () =>
+      Promise.all([
+        page.locator('[data-ctl="lever"]').evaluate((el) => el.style.getPropertyValue('--lever')),
+        page.locator('[data-ctl="wheel-art"]').evaluate((el) => el.style.transform),
+      ]);
+    const before = await controls();
+    const [box] = await boxes(list);
+    if (box === undefined) throw new Error('no legend');
+    const x = (box.left + box.right) / 2;
+    const cdp = await context.newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', y?: number) =>
+      cdp.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints: y === undefined ? [] : [{ x, y, id: 1 }],
+      });
+    await touch('touchStart', box.bottom - 8);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', box.bottom - 8 - i * 10);
+    await touch('touchEnd');
+    await expect.poll(scrollTop).toBeGreaterThan(0);
+    // A tap during the fling only stops it.
+    await expect
+      .poll(async () => {
+        const from = await scrollTop();
+        await settled(page);
+        await page.waitForTimeout(100);
+        return (await scrollTop()) === from;
+      })
+      .toBe(true);
+    await expect(list).toBeVisible();
+    expect(await controls()).toEqual(before);
+    await expect(page.locator('[data-hud="resetView"]')).toBeDisabled();
+    // Opened again, it starts at the top.
+    await aidToggle(page).tap();
+    await expect(list).toBeHidden();
+    await aidToggle(page).tap();
+    await expect(list).toBeVisible();
+    expect(await scrollTop()).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
 
 test('the messages stay clear of the controls with the aid legend open on a short portrait screen', async ({
   page,

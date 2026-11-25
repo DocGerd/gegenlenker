@@ -859,8 +859,12 @@
   left: var(--aid-left);
   max-width: min(26em, calc(100% - var(--aid-left) - var(--space-4) - var(--aid-side)));
   max-height: calc(100% - var(--aid-top) - var(--space-4) - var(--safe-bottom) - var(--aid-bar));
-  overflow: hidden;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
   box-shadow: var(--shadow-md);
+  /* Where the list is taller than its room it scrolls: it takes its own pointer events, so a swipe or wheel on it never reaches the top view. */
+  pointer-events: auto;
+  touch-action: pan-y;
 }
 
 /* Portrait: the divider is a bar along the pane's bottom edge, and no lever stands in the pane. */

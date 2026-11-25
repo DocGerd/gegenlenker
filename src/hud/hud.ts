@@ -554,6 +554,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       aidOpen = !aidOpen;
       if (aidOpen && shortScreen) keysOpen = false;
       syncToggles();
+      // A hidden list keeps its scroll; it opens at the top.
+      if (aidOpen) aidLegend.scrollTop = 0;
       emit({ type: 'aidLegend' });
     },
     { signal },
