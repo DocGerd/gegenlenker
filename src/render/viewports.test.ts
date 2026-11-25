@@ -55,9 +55,10 @@ describe('computeViewports mirrors', () => {
           expect(m.y, at).toBeGreaterThanOrEqual(cockpit.y);
           expect(m.y + m.height, at).toBeLessThanOrEqual(cockpit.y + cockpit.height);
           expect(m.width, at).toBeGreaterThan(0);
-          // With no room even for the squeezed minimum, the mirror keeps that size instead.
+          // Only a window with no room at all keeps the squeezed minimum and reaches into the controls;
+          // otherwise the 6 px `--hud-frame` drawn outside the rect clears them too.
           if (m.height > MIN_SQUEEZED_HEIGHT) {
-            expect(m.y + m.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h));
+            expect(m.y + m.height + 6, at).toBeLessThanOrEqual(h - controlsHeight(w, h));
           }
         }
       }
@@ -121,14 +122,15 @@ describe('computeViewports safe-area insets', () => {
     }
   });
 
-  it('shrink class II below the minimum height rather than reach into the inset controls', () => {
+  it('shrink class II below the minimum height rather than reach its frame into the inset controls', () => {
     const [w, h] = [800, 801];
     const { mirrorLeft, mirrorRight } = computeViewports(w, h, 'drive', null, insets);
     for (const m of [mirrorLeft, mirrorRight]) {
       if (m === null) throw new Error('drive mode has mirrors');
       expect(m.height).toBeLessThan(MIN_MIRROR_HEIGHT);
-      expect(m.height).toBeGreaterThanOrEqual(MIN_SQUEEZED_HEIGHT);
-      expect(m.y + m.height).toBeLessThanOrEqual(h - controlsHeight(w, h, insets));
+      expect(m.height).toBeGreaterThan(MIN_SQUEEZED_HEIGHT);
+      // the 8 px gap holds the 6 px `--hud-frame` drawn outside the rect
+      expect(m.y + m.height + 8).toBeLessThanOrEqual(h - controlsHeight(w, h, insets));
     }
   });
 

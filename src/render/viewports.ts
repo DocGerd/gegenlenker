@@ -32,8 +32,12 @@ export const HUD_BAND_SHARE = 0.18;
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
 /** Smallest mirror height; where the room above the controls and `MIRROR_GAP` is smaller, class II shrinks to that room. */
 export const MIN_MIRROR_HEIGHT = 48;
-/** The least class II shrinks to; where the room is smaller, it keeps this height and reaches into `MIRROR_GAP`, then the controls. */
-export const MIN_SQUEEZED_HEIGHT = 40;
+/**
+ * The least class II shrinks to, for a window with no room left: the least height whose width still
+ * rounds to a whole px (`wanted` is at most twice `fullWidth`). Only there does the mirror reach into
+ * `MIRROR_GAP` and the controls.
+ */
+export const MIN_SQUEEZED_HEIGHT = 1;
 /**
  * Narrowest and widest the front mirror gets, in CSS px. The narrowest is wide enough that a 0.3 m
  * cone base spans 6 px anywhere in the class VI field (`front-mirror.test.ts` derives it from the
