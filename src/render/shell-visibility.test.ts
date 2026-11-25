@@ -44,12 +44,13 @@ const readTrailer = async (id: TrailerId) => {
 };
 
 /**
- * Share of the body shell's vertices a mirror frames, per truck: about 0.8 of the measured share on
- * both screens. The Arocs' is lower, as its subframe and tailgate add vertices the mirrors do not frame.
+ * Share of the body shell's surface a mirror frames, per truck: about 0.8 of the lower measured share
+ * on both screens. By area, so detail that adds vertices without surface does not move it. The Arocs'
+ * is lower, as more of the tipper's surface lies outside the mirrors' frusta.
  */
 const BODY_FLOOR: Record<TruckId, number> = {
-  'man-le-18-280': 0.37,
-  'arocs-1835-ak': 0.15,
+  'man-le-18-280': 0.12,
+  'arocs-1835-ak': 0.045,
 };
 
 const STRAIGHT: Pose2 = { x: 0, y: 0, heading: 0 };
@@ -107,22 +108,6 @@ function worldTriangles(mesh: Mesh, place: Pose2): [Vector3, Vector3, Vector3][]
   ]);
 }
 
-/** Shell vertices inside each mirror's frustum, truck at the straight pose, mirrors placed as the renderer does. */
-function verticesInMirrors(mesh: Mesh, id: TruckId, screen: readonly [number, number]) {
-  const frusta = mirrorFrusta(id, screen);
-  const positions = mesh.geometry.getAttribute('position');
-  const world = new Vector3();
-  const count = (frustum: Frustum): number => {
-    let inside = 0;
-    for (let i = 0; i < positions.count; i++) {
-      world.fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
-      if (frustum.containsPoint(world)) inside++;
-    }
-    return inside;
-  };
-  return { left: count(frusta.left), right: count(frusta.right), total: positions.count };
-}
-
 /** Share of the shell's surface area, by triangle centroid, that each mirror frames. */
 function areaInMirrors(mesh: Mesh, id: TruckId, screen: readonly [number, number], place: Pose2) {
   const frusta = mirrorFrusta(id, screen);
@@ -144,9 +129,9 @@ function areaInMirrors(mesh: Mesh, id: TruckId, screen: readonly [number, number
 describe.each(TRUCK_IDS)('mirror frustums on the straight pose: %s', (id) => {
   describe.each(Object.entries(SCREENS))('%s screen', (_name, screen) => {
     it('frame the body shell in both mirrors', async () => {
-      const seen = verticesInMirrors(await read(id, 'body'), id, screen);
-      expect(seen.left / seen.total).toBeGreaterThan(BODY_FLOOR[id]);
-      expect(seen.right / seen.total).toBeGreaterThan(BODY_FLOOR[id]);
+      const seen = areaInMirrors(await read(id, 'body'), id, screen, STRAIGHT);
+      expect(seen.left).toBeGreaterThan(BODY_FLOOR[id]);
+      expect(seen.right).toBeGreaterThan(BODY_FLOOR[id]);
     });
   });
 });

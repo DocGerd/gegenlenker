@@ -22,6 +22,7 @@ import {
   FLOOR_TOP,
   RAIL_HALF_GAP,
   RAIL_WIDTH,
+  rearTyreSet,
   TIPPER_WALL_TOP,
   TRUCK_WHEEL_WIDTH,
   TWIN_OFFSET,
@@ -467,16 +468,13 @@ export function proceduralTruck(
     );
   }
 
+  // the wheel mesh is hidden under the body top-down, where the schematic draws twins for every look
+  const rearTyres = rearTyreSet(look.body.rearTyres);
   const rearWheels: BufferGeometry[] = [];
   for (const side of [-1, 1]) {
-    for (const twin of [-1, 1]) {
+    for (const offset of rearTyres.offsets) {
       rearWheels.push(
-        wheelAt(
-          TRUCK_WHEEL_RADIUS,
-          TWIN_WHEEL_WIDTH,
-          a.rearAxle.x,
-          (side * rearTrack) / 2 + twin * TWIN_OFFSET,
-        ),
+        wheelAt(TRUCK_WHEEL_RADIUS, rearTyres.width, a.rearAxle.x, (side * rearTrack) / 2 + offset),
       );
     }
   }
@@ -508,13 +506,12 @@ export function proceduralTruck(
     railBottom: RAIL_BOTTOM,
     rearAxleX: a.rearAxle.x,
     rearTrack,
-    twinOffset: TWIN_OFFSET,
-    twinWidth: TWIN_WHEEL_WIDTH,
+    rearTyres,
     wheelRadius: TRUCK_WHEEL_RADIUS,
   };
   const detail = truckDetail(detailParams);
 
-  const wheelSpan = TWIN_OFFSET * 2 + TWIN_WHEEL_WIDTH;
+  const wheelSpan = 2 * Math.max(...rearTyres.offsets.map(Math.abs)) + rearTyres.width;
   const truckBlobs = [
     bodyBlob(a.rearX, a.frontX, -hw, hw, BODY_SHADOW.alpha),
     ...[-1, 1].map((side) =>

@@ -17,5 +17,6 @@ describe('BODY_SHELL', () => {
     expect(Number(constant('TARP_TOP'))).toBe(TARP_TOP);
     expect(Number(constant('TARP_INSET'))).toBe(BODY_SHELL.tarpInset);
     expect(Number(constant('TARP_CROWN'))).toBe(BODY_SHELL.tarpCrown);
+    expect(script).toContain(`shape.prism(section, rear + ${BODY_SHELL.tarpSetback}, front`);
   });
 });
