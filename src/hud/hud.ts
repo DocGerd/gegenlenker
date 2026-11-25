@@ -24,6 +24,8 @@ import './hud.css';
 export type HudAction =
   | { type: 'topDown'; mode: TopDownMode }
   | { type: 'resetView' }
+  /** The free camera button or its key: toggles it, entering the outside view first when another is shown. */
+  | { type: 'freeCamera' }
   /** A proposed top-down share for an orientation; `commit` ends a drag or is a key press, so it is worth storing. */
   | { type: 'split'; orientation: Orientation; share: number; commit: boolean }
   | { type: 'splitReset' }
@@ -48,6 +50,8 @@ export type Hud = {
   onLegendResize(cb: () => void): void;
   /** The reset-view button is enabled while the top-down view differs from its default framing. */
   setViewChanged(changed: boolean): void;
+  /** Shows the free camera button as pressed while it flies. */
+  setFree(on: boolean): void;
   /** The divider between the views: its value, range and orientation. */
   setSplit(split: TopDownSplit): void;
   /**
@@ -174,6 +178,9 @@ const INFO_ICON =
 const RESET_VIEW_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 3v4M12 17v4M3 12h4M17 12h4" /></svg>';
 
+const FREE_CAMERA_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z" /><circle cx="12" cy="13" r="3.5" /></svg>';
+
 const SPLIT_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM14 5v14" /></svg>';
 /** Key steps move the divider by this share of the screen. */
@@ -220,6 +227,7 @@ const TOP_DOWN_ROWS: readonly MessageKey[] = [
   'zoom',
   'panView',
   'orbitTilt',
+  'freeCamera',
   'resetViewAndSize',
 ];
 
@@ -256,7 +264,7 @@ const MARKUP = (
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
-        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
+        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${chase ? `<button type="button" class="hud-toggle hud-icon" data-hud="freeCamera" aria-pressed="false">${FREE_CAMERA_ICON}</button>` : ''}${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
       <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
         <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
@@ -594,6 +602,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   resetView.title = t('resetView');
   resetView.setAttribute('aria-label', t('resetView'));
   resetView.addEventListener('click', () => emit({ type: 'resetView' }), { signal });
+  /** Another view switches to the outside view first, so the segments follow. */
+  const toggleFree = (): void => {
+    if (view !== 'chase') selectView('chase');
+    emit({ type: 'freeCamera' });
+  };
+  const freeCamera = hud.querySelector<HTMLButtonElement>('[data-hud="freeCamera"]');
+  if (freeCamera !== null) {
+    const label = `${t('freeCamera')} (K)`;
+    freeCamera.title = label;
+    freeCamera.setAttribute('aria-label', label);
+    freeCamera.addEventListener('click', toggleFree, { signal });
+  }
   query(hud, 'action', HTMLElement).addEventListener('click', () => emit({ type: 'pause' }), {
     signal,
   });
@@ -793,6 +813,20 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         !e.altKey
       ) {
         emit({ type: 'splitReset' });
+        e.preventDefault();
+      }
+      if (
+        freeCamera !== null &&
+        viewAction === 'freeCamera' &&
+        !mirrorsOnly &&
+        !e.defaultPrevented &&
+        !e.repeat &&
+        !isFormField(e.target) &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        toggleFree();
         e.preventDefault();
       }
       if (
@@ -1044,6 +1078,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     setViewChanged(changed) {
       if (resetView.disabled === changed) resetView.disabled = !changed;
+    },
+    setFree(on) {
+      freeCamera?.setAttribute('aria-pressed', String(on));
     },
     setTargetArrow(next) {
       setHidden(arrow, next === null);

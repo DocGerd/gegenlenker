@@ -3,6 +3,7 @@ import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exerc
 import type { LayoutId } from '../contracts/layout';
 import {
   DEFAULT_TOP_DOWN_LAYOUT,
+  DEFAULT_TOP_DOWN_VIEW,
   TOP_DOWN_SHARE_LIMITS,
   type AidFlags,
   type RenderFrame,
@@ -239,6 +240,18 @@ export function startDrive(
       dirty = true;
       hud.setViewChanged(!isDefaultView(next));
     },
+    free: {
+      bounds: layout.bounds,
+      onChange(pose) {
+        if (pose === null) delete frame.freePose;
+        else frame.freePose = pose;
+        dirty = true;
+        hud.setFree(pose !== null);
+        hud.setViewChanged(
+          pose !== null || !isDefaultView(frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW),
+        );
+      },
+    },
     look: {
       getRect: () => frame.views.cockpit,
       enabled: lookAround,
@@ -374,6 +387,15 @@ export function startDrive(
       if (topDown !== 'chase') updateSettings({ topDown });
     } else if (action.type === 'resetView') {
       viewInput.reset();
+    } else if (action.type === 'freeCamera') {
+      // the flight starts from where the outside view's camera was drawn, once the next frame has
+      if (frame.freePose !== undefined) {
+        viewInput.setFree(null);
+      } else {
+        enterFree = !enterFree;
+        hud.setFree(enterFree);
+      }
+      dirty = true;
     } else if (action.type === 'split' || action.type === 'splitReset') {
       if (size === null) return;
       const reset = action.type === 'splitReset';
@@ -406,6 +428,7 @@ export function startDrive(
   });
 
   let accumulator = 0;
+  let enterFree = false;
   view.start({
     resized(width, height) {
       size = { width, height };
@@ -459,6 +482,12 @@ export function startDrive(
       frame.aids = aids;
       frame.lamps = controls.lamps();
       renderer.render(frame);
+      if (enterFree) {
+        enterFree = false;
+        const pose = renderer.chasePose();
+        if (pose !== null) viewInput.setFree(pose);
+        else hud.setFree(false);
+      }
       hud.update(snapshot, warning);
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goalCue(snapshot));

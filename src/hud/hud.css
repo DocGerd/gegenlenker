@@ -622,7 +622,8 @@
 }
 
 .hud-chip[aria-pressed='true'],
-.hud-chip[aria-expanded='true'] {
+.hud-chip[aria-expanded='true'],
+.hud-icon[aria-pressed='true'] {
   border-color: var(--color-accent);
   background: var(--color-accent-tint);
   color: var(--color-accent-strong);

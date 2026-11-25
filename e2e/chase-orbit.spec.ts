@@ -104,6 +104,20 @@ test(
     await page.keyboard.press('f');
     await expect(page.locator('[data-view="follow"]')).toHaveAttribute('aria-pressed', 'true');
     expect(hash(await shoot(page, 'chase')), 'back from follow').toBe(hash(first));
+
+    // the free camera starts exactly where the orbit was, turns while a key is held, and leaves with the reset
+    const freeButton = page.locator('[data-hud="freeCamera"]');
+    await page.keyboard.press('k');
+    await expect(freeButton).toHaveAttribute('aria-pressed', 'true');
+    expect(hash(await chaseShot(page)), 'free camera entry').toBe(hash(first));
+    await page.keyboard.down('Period');
+    const flown = await chaseShot(page);
+    await page.keyboard.up('Period');
+    expect(await distinctColours(page, flown), 'turned').toBeGreaterThan(MIN_DRAWN_COLOURS);
+    expect(hash(flown), 'turned differs from the orbit').not.toBe(hash(first));
+    await page.keyboard.press('0');
+    await expect(freeButton).toHaveAttribute('aria-pressed', 'false');
+    expect(hash(await chaseShot(page)), 'reset leaves the free camera').toBe(hash(first));
     expect(three).toEqual([]);
   },
 );
