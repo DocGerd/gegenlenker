@@ -5,7 +5,8 @@ import { requestPersistentStorage } from '../pwa/persist';
 import { startUpdatePrompt } from '../pwa/update-prompt';
 import './app.css';
 import type { DriveOutcome, RunConfig } from './drive';
-import { showMenu } from './menu';
+import { showMenu } from './menu/index';
+import type { NavState } from './menu/nav';
 import { showNotice } from './notice';
 import { showResult, type ResultContext } from './result-view';
 import { currentSettings, initSettings, loadSettings } from './settings';
@@ -67,7 +68,9 @@ export function startApp(root: HTMLElement): void {
     ownBack = true;
     history.back();
   };
+  let closeMenu: (() => void) | null = null;
   const loadFailed = (error: unknown, retry: () => void): void => {
+    closeMenu?.();
     console.error(error);
     leave();
     const dismiss = (next: () => void) => () => {
@@ -78,11 +81,12 @@ export function startApp(root: HTMLElement): void {
       screen,
       'loadFailed',
       { label: 'retry', run: dismiss(retry) },
-      { label: 'back', run: dismiss(menu) },
+      { label: 'back', run: dismiss(() => menu()) },
     );
   };
 
   const noWebgl = (): void => {
+    closeMenu?.();
     leave();
     const notice = showNotice(screen, 'noWebgl', {
       label: 'back',
@@ -94,15 +98,16 @@ export function startApp(root: HTMLElement): void {
   };
 
   // Loaded on demand so the menu paints without parsing three.js.
-  const drive = (run: RunConfig): void => {
+  // `mounted` runs once the drive has taken over the screen and its history entry.
+  const drive = (run: RunConfig, mounted?: () => void): void => {
     probeGraphics()
       .then((backend) => {
         if (backend === null) noWebgl();
-        else loadDrive(run);
+        else loadDrive(run, mounted);
       })
-      .catch((error: unknown) => loadFailed(error, () => drive(run)));
+      .catch((error: unknown) => loadFailed(error, () => drive(run, mounted)));
   };
-  const loadDrive = (run: RunConfig): void => {
+  const loadDrive = (run: RunConfig, mounted?: () => void): void => {
     import('./drive')
       .then((m) => {
         let back: (() => void) | null = null;
@@ -120,8 +125,9 @@ export function startApp(root: HTMLElement): void {
             menu();
           },
         });
+        mounted?.();
       })
-      .catch((error: unknown) => loadFailed(error, () => drive(run)));
+      .catch((error: unknown) => loadFailed(error, () => drive(run, mounted)));
   };
   const replay = (log: InputLog, onExit: () => void): void => {
     probeGraphics()
@@ -182,48 +188,41 @@ export function startApp(root: HTMLElement): void {
       menu();
     });
   };
-  const whatsNew = (): void => {
-    import('./whats-new')
-      .then((m) => {
-        const close = m.showWhatsNew(screen, () => {
-          close();
-          leave();
-          menu('whatsNew');
-        });
-        enter(() => {
-          close();
-          menu('whatsNew');
-        });
-      })
-      .catch((error: unknown) => loadFailed(error, whatsNew));
-  };
-  const menu = (focus: string | null = null): void => {
+  const menu = (initial?: NavState): void => {
+    closeMenu?.();
     const log = lastRun();
-    const close = showMenu(
+    const handle = showMenu(
       screen,
-      (run) => {
-        close();
-        drive(run);
+      {
+        start: (run) => {
+          drive(run, () => closeMenu?.());
+        },
+        replay:
+          log === null
+            ? null
+            : {
+                log,
+                start: () => {
+                  closeMenu?.();
+                  replay(log, () => {
+                    leave();
+                    menu();
+                  });
+                },
+              },
+        hasNews: () => import('./whats-new-seen').then((m) => m.hasUnseen()),
+        hold: enter,
+        release: leave,
+        failed: (error, retry) => {
+          loadFailed(error, () => menu(retry));
+        },
       },
-      log === null
-        ? null
-        : {
-            log,
-            start: () => {
-              close();
-              replay(log, () => {
-                leave();
-                menu();
-              });
-            },
-          },
-      () => {
-        close();
-        whatsNew();
-      },
-      import('./whats-new-seen').then((m) => m.hasUnseen()),
-      focus,
+      initial,
     );
+    closeMenu = () => {
+      closeMenu = null;
+      handle.close();
+    };
   };
 
   // Errors outside the frame loop (input, timers, promises) otherwise leave a stuck screen without a word.
