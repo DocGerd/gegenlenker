@@ -1119,6 +1119,7 @@ for (const size of [
       const breaks = await labels.evaluateAll((els) =>
         els.map((el) => {
           const bad: string[] = [];
+          let wraps = 0;
           const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
           for (let node = walker.nextNode(); node; node = walker.nextNode()) {
             const text = node.textContent ?? '';
@@ -1131,6 +1132,7 @@ for (const size of [
               const rect = [...range.getClientRects()].filter((r) => r.width > 0).at(-1);
               if (!rect || text[i] === ' ') continue;
               if (last && rect.top - last.top > 2) {
+                wraps++;
                 const at = text[last.char];
                 const next = text[last.char + 1];
                 if (at !== '\u00AD' && next !== '\u00AD' && next !== ' ') {
@@ -1140,10 +1142,18 @@ for (const size of [
               last = { char: i, top: rect.top };
             }
           }
-          return bad;
+          return { bad, wraps };
         }),
       );
-      expect(breaks, 'a gauge label breaks inside a syllable').toEqual([[], []]);
+      // A label that fits on one line would pass vacuously: pick a size where it wraps.
+      expect(
+        breaks.map((b) => b.wraps > 0),
+        'a gauge label no longer wraps at this size',
+      ).toEqual([true, true]);
+      expect(
+        breaks.map((b) => b.bad),
+        'a gauge label breaks inside a syllable',
+      ).toEqual([[], []]);
     } finally {
       await context.close();
     }
