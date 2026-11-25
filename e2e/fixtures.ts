@@ -12,11 +12,16 @@ type Guard = { allow: (pattern: RegExp) => void };
  * warning in any page of its contexts (the `page` one and those from `browser.newContext()`);
  * `allow()` exempts messages a test provokes on purpose. Service-worker exceptions are not seen.
  */
-export const test = base.extend<{ guard: Guard; allow: Guard['allow'] }, { gpuCheck: undefined }>({
-  // `E2E_GPU=1` promises the real GPU: fail the worker's tests when the renderer is software.
+export const test = base.extend<
+  { guard: Guard; allow: Guard['allow'] },
+  { gpuCheck: undefined; gpuExpected: boolean }
+>({
+  // Set by the project whose launch args ask for the real GPU (`playwright.config.ts`).
+  gpuExpected: [false, { option: true, scope: 'worker' }],
+  // Fail the worker's tests when that project got a software renderer.
   gpuCheck: [
-    async ({ browser }, use) => {
-      if (process.env['E2E_GPU'] === '1') {
+    async ({ browser, gpuExpected }, use) => {
+      if (gpuExpected) {
         const page = await browser.newPage();
         const renderer = await page.evaluate(() => {
           const gl = document.createElement('canvas').getContext('webgl2');

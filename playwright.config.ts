@@ -32,7 +32,7 @@ const gpuLaunch = {
   },
 };
 
-export default defineConfig({
+export default defineConfig<{ gpuExpected: boolean }>({
   testDir: 'e2e',
   workers: 1,
   retries: 0,
@@ -54,6 +54,7 @@ export default defineConfig({
         locale: 'en-US',
         serviceWorkers: 'allow',
         headless: !GPU,
+        gpuExpected: GPU,
         launchOptions: GPU
           ? gpuLaunch
           : { args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] },
