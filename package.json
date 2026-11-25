@@ -38,6 +38,7 @@
     "glb:optimise": "node scripts/glb-optimise.mjs",
     "glb:manifest": "node scripts/glb-manifest.mjs",
     "texture": "node scripts/texture.mjs",
+    "assets:fetch": "node scripts/fetch-asset-sources.mjs",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "verify": "pnpm check && pnpm test:e2e",
     "verify:layout": "vitest run --config vitest.verify.config.ts"
