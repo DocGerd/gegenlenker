@@ -27,6 +27,18 @@ test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ pa
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
 });
 
+test('the menu first load fetches no three.js chunk', async ({ page }) => {
+  const chunks: string[] = [];
+  page.on('request', (r) => {
+    if (/\/assets\/three-/.test(r.url())) chunks.push(r.url());
+  });
+
+  await page.goto('./');
+  await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  expect(chunks).toEqual([]);
+});
+
 /**
  * A stand-in `navigator.gpu` (the `offline` project's Chromium has none; `e2e/webgpu` runs the real
  * software adapter): `none` offers no adapter, `lost` a device
