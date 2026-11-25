@@ -153,12 +153,24 @@ export function mountRenderStage(
   let last = -1;
   let notice: HTMLElement | null = null;
   let ready = false;
+  const back = { label: 'back', run: onBack } as const;
 
   const loop = (now: number): void => {
     raf = requestAnimationFrame(loop);
     const seconds = last < 0 ? 0 : (now - last) / 1000;
     last = now;
-    hooks?.frame(seconds);
+    try {
+      hooks?.frame(seconds);
+    } catch (error) {
+      // The frame left the screen (a finished run) before it threw: the stage can no longer show it.
+      if (signal.aborted) throw error;
+      // Left to repeat, a throwing frame would freeze the view silently and flood the console.
+      console.error('Frame failed', error);
+      pause();
+      halt(() =>
+        showNotice(stage, 'runFailed', { label: 'reload', run: () => location.reload() }, back),
+      );
+    }
   };
   const resume = (): void => {
     if (raf !== 0 || hooks === null || notice !== null || !ready) return;
@@ -197,7 +209,6 @@ export function mountRenderStage(
       (error: unknown) => {
         if (signal.aborted || pending !== s.ready || superseded(error)) return;
         const reload = { label: 'reload', run: () => location.reload() } as const;
-        const back = { label: 'back', run: onBack } as const;
         if (s.started) {
           halt(() => showNotice(stage, 'contextLost', reload));
           return;
