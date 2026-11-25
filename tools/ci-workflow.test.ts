@@ -21,6 +21,7 @@ type Permissions = Record<string, string> | string;
 
 interface Workflow {
   permissions?: Permissions;
+  concurrency?: Record<string, unknown>;
   jobs: Record<
     string,
     {
@@ -202,6 +203,13 @@ it('main deploys production after a green check and develop deploys UAT after th
   expect(jobs['build-uat']?.if).toBe(DEVELOP_ONLY);
   expect(jobs['deploy-uat']?.needs).toBe('build-uat');
   expect(jobs['deploy-uat']?.if).toBe("${{ !cancelled() && needs.build-uat.result == 'success' }}");
+});
+
+// Cancelling a running `develop` run would let a burst of merges starve its e2e.
+it('only PR runs cancel an earlier run', () => {
+  expect(workflow().concurrency?.['cancel-in-progress']).toBe(
+    "${{ github.event_name == 'pull_request' }}",
+  );
 });
 
 // One group serialises every deploy, and `queue: max` keeps a waiting deploy from being replaced

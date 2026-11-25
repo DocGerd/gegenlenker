@@ -9,11 +9,12 @@ on:
 permissions:
   contents: read
 
-# A newer push to `develop` supersedes an older one; PRs cancel only their own earlier runs, and
-# `main` runs are never cancelled.
+# PRs cancel their own earlier runs. Pushes to `develop` share one group without cancelling, so the
+# running one finishes (e2e included) and only the newest waiting one is kept: merges arriving faster
+# than e2e still get the latest tree tested. `main` runs never wait or cancel.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || (github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'develop') || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/develop') }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   lint:
@@ -107,7 +108,8 @@ jobs:
   # the account's concurrent-job limit, or the last jobs queue.
   # Skipped on push to `main`: its strict ruleset (no bypass) makes the merged tree the tree its PR
   # ran e2e on. The `develop` ruleset is not strict, so a PR's e2e may have run on a base that has
-  # since moved: every push to `develop` runs it, and `check` requires it there.
+  # since moved: pushes to `develop` run it (a superseded waiting run is dropped for the newer one),
+  # and `check` requires it there.
   e2e:
     if: github.event_name != 'push' || github.ref == 'refs/heads/develop'
     name: e2e ${{ matrix.id }} (${{ matrix.runs }})
@@ -418,7 +420,8 @@ jobs:
   # production dist of the live `main` deploy, never rebuilt. The develop checkout only builds; the
   # job that reads deployments and publishes runs `main`'s `tools/uat-pages.ts`, which only a release
   # changes. The job itself is `develop`'s, so PR review of `develop` is the boundary. It needs the
-  # fast jobs, not `check`: UAT does not wait for e2e, so a red e2e leaves UAT deployed.
+  # fast jobs, not `check`: UAT does not wait for its own run's e2e (only for the previous `develop`
+  # run), so a red e2e leaves UAT deployed.
   build-uat:
     needs: [lint, unit, channels]
     if: >-
