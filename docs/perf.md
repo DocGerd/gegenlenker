@@ -46,6 +46,10 @@ Every pane is drawn into one app-owned 8-bit, 4-sample sRGB target (`src/render/
 
 It costs fill rate: SwiftShader frames, which CI e2e draws on, are slower than with a linear target, so the heavy e2e specs (`@heavy`, in `e2e/pinned-shoot.ts`) run in shards of their own (`.github/workflows/ci.yml`). Real-GPU frame time is checked with `pnpm perf:tablet` (see above), and a physical tablet still decides.
 
+## Resolution governor limits
+
+A level whose step down failed three times is parked; one a kept step led into retries after slow time (`PARK_RETRY_MS` in `src/render/governor.ts`), so a chance park expires. Known limitation ([#357](https://github.com/DocGerd/gegenlenker/issues/357)): a lighter load the scale cannot help that replaces a heavier one can still leave a kept level stranded until a visibility restart or scene reset. A re-check that fixed it broke the once-a-minute change guards in `src/render/governor.test.ts`.
+
 ## Other tools
 
 - `pnpm preview:stop [--port <n>]` stops the listener on this checkout's e2e preview port (the one `pnpm test:e2e` prints) or the given port, and nothing else; use it instead of `pkill -f` on an orphaned preview.
