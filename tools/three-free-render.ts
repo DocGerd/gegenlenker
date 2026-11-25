@@ -18,6 +18,7 @@ export const THREE_FREE_RENDER = [
   'interior-dims',
   'lamp-layout',
   'livery',
+  'mirror-fields',
   'palette',
   'perf-overlay',
   'quality',
