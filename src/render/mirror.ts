@@ -78,7 +78,7 @@ export const WIDE_YAW = MathUtils.degToRad(22);
 const CLASS_IV = {
   pitch: MathUtils.degToRad(-20),
   roll: 0,
-  fov: 64,
+  fov: 62,
   aspect: WIDE_ASPECT,
   targetScale: 1,
   cadence: 2,
@@ -111,7 +111,7 @@ export const CLASS_VI: MirrorSpec = {
   yaw: Math.PI,
   pitch: MathUtils.degToRad(-80),
   roll: Math.PI,
-  fov: 48,
+  fov: 47,
   aspect: FRONT_ASPECT,
   targetScale: 1,
   cadence: 1,
