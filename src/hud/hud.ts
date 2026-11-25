@@ -13,6 +13,7 @@ import { isDrivingInput, type GoalCue } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isFormField } from '../input/keyboard';
+import { CHROME_SELECTOR } from './chrome-selector';
 import { goalCueTexts } from './goal-cue';
 import { hasTopDown, messageColumn, readSafeInsets } from '../render/viewports';
 import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
@@ -263,7 +264,7 @@ const MARKUP = (
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
-        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${chase ? `<button type="button" class="hud-toggle hud-icon" data-hud="freeCamera" aria-pressed="false">${FREE_CAMERA_ICON}</button>` : ''}${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
+        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
       <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
         <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
@@ -288,6 +289,7 @@ const MARKUP = (
     <div class="hud-split-handle" data-hud="splitHandle" role="separator" tabindex="0" ></div>
     <button type="button" class="hud-toggle hud-icon hud-split-reset" data-hud="splitReset" aria-keyshortcuts="L" disabled>${SPLIT_ICON}</button>
   </div>
+  ${chase && !mirrorsOnly ? `<div class="hud-pane-tools" data-hud="paneTools"><button type="button" class="hud-toggle hud-icon" data-hud="freeCamera" data-chrome aria-pressed="false" hidden>${FREE_CAMERA_ICON}</button></div>` : ''}
   <div class="hud-arrow" data-hud="targetArrow" role="img" aria-label="${t('targetDirection')}" hidden><svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="M-9 -8L10 0L-9 8L-4 0Z" /></svg></div>
   <button type="button" class="hud-action" data-chrome data-hud="action" data-i18n="pause"></button>
 </div>`;
@@ -392,8 +394,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let view = opts.topDown;
   const aids = { ...opts.aids };
   const viewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
-  /** Only in the outside view, so the other views keep the toolbar's two rows. */
+  /** A button over the pane's bottom edge, only in the outside view: the toolbar keeps its two rows. */
   const freeCamera = hud.querySelector<HTMLButtonElement>('[data-hud="freeCamera"]');
+  const paneTools = hud.querySelector<HTMLElement>('[data-hud="paneTools"]');
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
   const panelButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
@@ -430,9 +433,39 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       b.toggleAttribute('data-row-end', next === undefined || next.offsetTop !== b.offsetTop);
     });
   };
+  /** Whether the pane has a corner for the free camera button: set by `fitFreeCamera`. */
+  let freeCameraFits = true;
+  const syncFreeCamera = (): void => {
+    if (freeCamera === null) return;
+    setHidden(freeCamera, view !== 'chase' || !freeCameraFits);
+    // An open key list or aid legend of a short screen opens over the corner: the button steps aside but keeps its box, so the framing stays.
+    freeCamera.toggleAttribute('data-covered', shortScreen && (keysOpen || aidOpen));
+  };
+  /**
+   * The button stands over the pane's bottom edge, in the divider's reserve. Where the panels reach that
+   * edge (a window too small for the divider) it has no corner, so it stays away; K still toggles.
+   */
+  const fitFreeCamera = (): void => {
+    if (freeCamera === null) return;
+    setHidden(freeCamera, view !== 'chase');
+    if (freeCamera.hidden) return;
+    const box = freeCamera.getBoundingClientRect();
+    freeCameraFits = ![...root.querySelectorAll(CHROME_SELECTOR)].some((el) => {
+      if (el === freeCamera) return false;
+      const r = el.getBoundingClientRect();
+      return (
+        r.width > 0 &&
+        r.left < box.right &&
+        box.left < r.right &&
+        r.top < box.bottom &&
+        box.top < r.bottom
+      );
+    });
+    syncFreeCamera();
+  };
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
-    if (freeCamera !== null) setHidden(freeCamera, view !== 'chase');
+    syncFreeCamera();
     for (const b of aidButtons) {
       const aid = b.dataset['aid'] as keyof AidFlags;
       b.setAttribute('aria-pressed', String(aids[aid]));
@@ -819,7 +852,6 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (
         freeCamera !== null &&
         viewAction === 'freeCamera' &&
-        !mirrorsOnly &&
         !e.defaultPrevented &&
         !e.repeat &&
         !isFormField(e.target) &&
@@ -1020,6 +1052,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (hasTopDown(views)) {
         syncSegmentRows();
         placeAidOverlay(views.topDown);
+      }
+      if (paneTools !== null && hasTopDown(views)) {
+        const td = views.topDown;
+        paneTools.style.left = `${td.x}px`;
+        paneTools.style.top = `${td.y}px`;
+        paneTools.style.width = `${td.width}px`;
+        paneTools.style.height = `${td.height}px`;
+        fitFreeCamera();
       }
       if (c) {
         const td = views.topDown;

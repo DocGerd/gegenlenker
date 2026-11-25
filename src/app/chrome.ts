@@ -1,13 +1,11 @@
 import type { Rect } from '../contracts/render';
-
-/** HUD panels carry `data-chrome`; the control columns are the parts of controls.css that reach over the top-down view. */
-const CHROME = '[data-chrome], .ctl-steer, .ctl-gears, .ctl-pedals';
+import { CHROME_SELECTOR } from '../hud/chrome-selector';
 
 /** Rects, relative to `stage`, of everything drawn over the scene that the vehicle must stay clear of. */
 export function measureChrome(stage: HTMLElement): Rect[] {
   const origin = stage.getBoundingClientRect();
   const rects: Rect[] = [];
-  for (const el of stage.querySelectorAll(CHROME)) {
+  for (const el of stage.querySelectorAll(CHROME_SELECTOR)) {
     const r = el.getBoundingClientRect();
     if (r.width > 0 && r.height > 0) {
       rects.push({

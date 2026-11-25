@@ -790,7 +790,7 @@ async function overlayTrouble(page: Page, sel: string): Promise<string[]> {
       [
         '.hud-mirror:not([hidden]), .ctl-stop, .ctl-lever, .hud-action',
         '.hud-split:not([hidden]) .hud-split-handle, .hud-split:not([hidden]) .hud-split-reset',
-        '.hud-toolbar .hud-toggle',
+        '.hud-toolbar .hud-toggle, [data-hud="freeCamera"]:visible',
       ].join(', '),
     ),
   );
@@ -921,6 +921,11 @@ for (const { locale, messages } of locales) {
         try {
           const page = await context.newPage();
           await startStraightReverse(page, messages.exerciseStraightReverse);
+          // The outside view's free camera button stands where the overlays open from: it steps aside for them.
+          const tool = page.locator('[data-hud="freeCamera"]');
+          await page.locator('[data-view="chase"]').click();
+          await settled(page);
+          const toolShown = await tool.isVisible();
           // The brief open, then folded by the first drive input.
           for (const folded of [false, true]) {
             if (folded) {
@@ -935,6 +940,7 @@ for (const { locale, messages } of locales) {
               await toggle.click();
               await expect(page.locator(sel)).toBeVisible();
               await settled(page);
+              await expect(tool).toBeHidden();
               await expect
                 .poll(() => overlayTrouble(page, sel), {
                   message: `${sel}, brief ${folded ? 'folded' : 'open'}`,
@@ -942,6 +948,7 @@ for (const { locale, messages } of locales) {
                 .toEqual([]);
               await toggle.click();
               await expect(page.locator(sel)).toBeHidden();
+              if (toolShown) await expect(tool).toBeVisible();
             }
           }
         } finally {
@@ -1138,7 +1145,7 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
     );
     const panels = await boxes(
       page.locator(
-        '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle',
+        '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle, [data-hud="freeCamera"]:visible',
       ),
     );
     const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
@@ -1242,7 +1249,7 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
   const controls = await boxes(
     page.locator(
       [
-        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend, .hud-gear, .hud-speed, .hud-action',
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend, .hud-gear, .hud-speed, .hud-action, [data-hud="freeCamera"]:visible',
         ...(mirrorsOnly ? ['.hud-goal:not([hidden]), .hud-counters'] : []),
       ].join(', '),
     ),
@@ -1276,6 +1283,48 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
     for (const o of [...controls, cone, ...mirrors]) {
       expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
     }
+  }
+}
+
+/**
+ * In the outside view the free camera button stands in the pane, at least a pointer target high, clear of
+ * every panel, the controls, the mirrors, the divider and the target arrow: the vehicle is framed clear of
+ * it as chrome, so the arrow never lands under it either. It is in the divider's reserve, so wherever the
+ * divider is shown the button is too; where the panels leave the divider no room it may be absent (K still
+ * works).
+ */
+async function expectPaneToolClear(page: Page): Promise<void> {
+  await page.keyboard.press('o');
+  const tool = page.locator('[data-hud="freeCamera"]');
+  await settled(page);
+  if ((await splitBar(page).getAttribute('hidden')) !== null) {
+    if (!(await tool.isVisible())) return;
+  } else {
+    await expect(tool, 'shown wherever the divider is').toBeVisible();
+  }
+  const [box] = await boxes(tool);
+  const [pane] = await boxes(page.locator('.hud-topdown'));
+  if (box === undefined || pane === undefined) throw new Error('no button or no pane');
+  expect(box.right - box.left, 'the button is a pointer target wide').toBeGreaterThanOrEqual(24);
+  expect(box.bottom - box.top, 'the button is a pointer target high').toBeGreaterThanOrEqual(24);
+  expect(box.left, 'inside the pane').toBeGreaterThanOrEqual(pane.left);
+  expect(box.right, 'inside the pane').toBeLessThanOrEqual(pane.right);
+  expect(box.top, 'inside the pane').toBeGreaterThanOrEqual(pane.top);
+  expect(box.bottom, 'inside the pane').toBeLessThanOrEqual(pane.bottom);
+  const others = await boxes(
+    page.locator(
+      [
+        '.hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-action, .hud-toolbar .hud-toggle',
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever',
+        '.hud-mirror:not([hidden])',
+        '.hud-split:not([hidden]) .hud-split-handle, .hud-split:not([hidden]) .hud-split-reset',
+        '[data-hud="targetArrow"]:not([hidden]) svg',
+      ].join(', '),
+    ),
+  );
+  expect(others.length).toBeGreaterThan(0);
+  for (const o of others) {
+    expect(overlaps(box, o), `the free camera button overlaps ${o.name}`).toBe(false);
   }
 }
 
@@ -1319,6 +1368,10 @@ for (const { locale, messages } of locales) {
           expectToolbarClear(page));
         await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
           expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
+        await test.step("the outside view's free camera button clears the panels, the divider, the mirrors, the target arrow and the messages", async () => {
+          await expectPaneToolClear(page);
+          await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
+        });
         // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
           expectDividerClears(page, size));
