@@ -227,12 +227,13 @@ export function startApp(root: HTMLElement): void {
   };
 
   // Errors outside the frame loop (input, timers, promises) otherwise leave a stuck screen without a word.
+  // Not over a drive or replay: the stage would run on blind under the cover, and its frame boundary has its own notice.
   let failed: HTMLElement | null = null;
   const runFailed = (): void => {
-    if (failed !== null) return;
+    if (failed?.isConnected === true || screen.querySelector('.drive, .replay') !== null) return;
     failed = showNotice(
       screen,
-      'runFailed',
+      'appFailed',
       { label: 'reload', run: () => location.reload() },
       {
         label: 'dismiss',

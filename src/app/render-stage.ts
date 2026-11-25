@@ -162,6 +162,8 @@ export function mountRenderStage(
     try {
       hooks?.frame(seconds);
     } catch (error) {
+      // The frame left the screen (a finished run) before it threw: the stage can no longer show it.
+      if (signal.aborted) throw error;
       // Left to repeat, a throwing frame would freeze the view silently and flood the console.
       console.error('Frame failed', error);
       pause();

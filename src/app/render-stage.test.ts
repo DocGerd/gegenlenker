@@ -266,4 +266,17 @@ describe('render stage recovery', () => {
     doc.show();
     expect(scheduled).toHaveLength(2);
   });
+
+  it('rethrows a frame that left the screen before it threw, for the screen-level notice', async () => {
+    const { stage, hooks } = await mount();
+    const boom = new Error('boom');
+    hooks.frame.mockImplementation(() => {
+      stage.dispose();
+      throw boom;
+    });
+    await startLatest();
+    expect(() => scheduled[0]?.(16)).toThrow(boom);
+    expect(notices()).toEqual([]);
+    expect(hooks.halted).not.toHaveBeenCalled();
+  });
 });
