@@ -56,7 +56,16 @@ import {
   type Insets,
   type PanelStack,
 } from './viewports';
-import { GEOM, HUD_THRESHOLDS, metricsAt, type Metrics } from './viewports-css';
+import {
+  declared,
+  GEOM,
+  HUD_THRESHOLDS,
+  metricsAt,
+  parts,
+  px,
+  SOURCE,
+  type Metrics,
+} from './viewports-css';
 
 /* ------------------------------------------------------------------------------------------------
  * Bounds: every integer CSS width x height in each box. Phones are out of scope (no target).
@@ -122,6 +131,15 @@ function selection(): { readonly boxes: readonly Box[]; readonly custom: boolean
  * ---------------------------------------------------------------------------------------------- */
 
 const SPACE_4 = GEOM.space4;
+/** How far below a mirror's rect its view frame (`--hud-frame`, outset box shadows) reaches: y offset, blur and spread. */
+const HUD_FRAME = Math.max(
+  ...declared(SOURCE.hud, '.hud', '--hud-frame')
+    .split(/,(?![^(]*\))/)
+    .map((shadow) => {
+      const [, y = '0', blur = '0', spread = '0'] = parts(shadow.trim());
+      return px(y) + px(blur) + px(spread);
+    }),
+);
 const TARGET = GEOM.target;
 const GEARS_W = GEOM.gearsW;
 const LEGEND_W = GEOM.legendW;
@@ -270,7 +288,7 @@ const PROPERTIES = [
   'mirrors-inside-safe-area',
   'mirrors-below-cockpit-label',
   'mirror-only-clear-of-pause-button-and-lever',
-  'mirrors-above-controls-band (height above minimum)',
+  'mirrors-above-controls-band (frame clear of the controls)',
   'mirrors-above-controls-band (height at MIN_SQUEEZED_HEIGHT)',
   'mirrors-clear-of-control-boxes',
   'mirrors-above-hud-band',
@@ -792,15 +810,19 @@ function evaluate(v: Variant, w: number, h: number): void {
       }
     }
     const room = h - controls - bottom(rect);
-    const atMinimum = rect.height === MIN_SQUEEZED_HEIGHT;
+    // the floor is the escape only for a window with no room left: not 1 px for the mirror with its frame clear
+    const atMinimum = rect.height === MIN_SQUEEZED_HEIGHT && h - controls - rect.y - HUD_FRAME < 1;
     const bandProperty = atMinimum
       ? 'mirrors-above-controls-band (height at MIN_SQUEEZED_HEIGHT)'
-      : 'mirrors-above-controls-band (height above minimum)';
-    if (!chk(bandProperty, room >= -1e-9)) {
+      : 'mirrors-above-controls-band (frame clear of the controls)';
+    // elsewhere the view frame stays clear of the controls too
+    const need = atMinimum ? 0 : HUD_FRAME;
+    if (!chk(bandProperty, room >= need - 1e-9)) {
       fail(
         bandProperty,
-        () => `${name} ${fmt(rect)} reaches ${-room} px into the controls (top ${h - controls})`,
-        -room,
+        () =>
+          `${name} ${fmt(rect)} leaves ${room} px above the controls (top ${h - controls}), needs ${need}`,
+        need - room,
       );
     }
     for (const control of controlBoxes) {

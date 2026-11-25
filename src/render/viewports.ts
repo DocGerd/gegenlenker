@@ -32,8 +32,12 @@ export const HUD_BAND_SHARE = 0.18;
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
 /** Smallest mirror height; where the room above the controls and `MIRROR_GAP` is smaller, class II shrinks to that room. */
 export const MIN_MIRROR_HEIGHT = 48;
-/** The least class II shrinks to; where the room is smaller, it keeps this height and reaches into `MIRROR_GAP`, then the controls. */
-export const MIN_SQUEEZED_HEIGHT = 40;
+/**
+ * The least class II shrinks to, for a window with no room left: the least height whose width still
+ * rounds to a whole px (`wanted` is at most twice `fullWidth`). Only there does the mirror reach into
+ * `MIRROR_GAP` and the controls.
+ */
+export const MIN_SQUEEZED_HEIGHT = 1;
 /**
  * Narrowest and widest the front mirror gets, in CSS px. The narrowest is wide enough that a 0.3 m
  * cone base spans 6 px anywhere in the class VI field (`front-mirror.test.ts` derives it from the
@@ -268,11 +272,13 @@ export function computeViewports(
   }
   const insets = safeInsets ?? readSafeInsets();
   const mirrorsOnly = mode === 'mirrors';
-  const { share } = mirrorsOnly
-    ? { share: 0 }
+  const { share, min } = mirrorsOnly
+    ? { share: 0, min: 0 }
     : topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
   let topDown: Rect;
   let cockpit: Rect;
+  /** Portrait, how many px the cockpit's top can still rise as the share shrinks to its minimum. */
+  let rise = 0;
   if (mirrorsOnly) {
     topDown = { x: cssWidth, y: 0, width: 0, height: cssHeight };
     cockpit = { x: 0, y: 0, width: cssWidth, height: cssHeight };
@@ -281,9 +287,11 @@ export function computeViewports(
     topDown = { x: cssWidth - w, y: 0, width: w, height: cssHeight };
     cockpit = { x: 0, y: 0, width: cssWidth - w, height: cssHeight };
   } else {
-    const h = cssHeight - Math.round((1 - share) * cssHeight);
+    const paneHeight = (s: number): number => cssHeight - Math.round((1 - s) * cssHeight);
+    const h = paneHeight(share);
     topDown = { x: 0, y: 0, width: cssWidth, height: h };
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
+    rise = h - paneHeight(min);
   }
   const fullWidth = clamp(
     Math.round(MIRROR_SCALE * 0.15 * cockpit.width),
@@ -384,10 +392,24 @@ export function computeViewports(
     minTop: number,
   ): Column | null => {
     const ceiling = cssHeight - clear - MIRROR_GAP;
-    const least = {
-      width: Math.max(MIN_WIDE_WIDTH, Math.ceil(MIN_CLASS_II_SHARE * reference.width)),
-      height: Math.max(MIN_MIRROR_HEIGHT, Math.ceil(MIN_CLASS_II_SHARE * reference.height)),
-    };
+    const leastOf = (ref: { readonly width: number; readonly height: number }) => ({
+      width: Math.max(MIN_WIDE_WIDTH, Math.ceil(MIN_CLASS_II_SHARE * ref.width)),
+      height: Math.max(MIN_MIRROR_HEIGHT, Math.ceil(MIN_CLASS_II_SHARE * ref.height)),
+    });
+    const least = leastOf(reference);
+    // A smaller share raises a portrait cockpit's top, so the reference and the room grow alike, and
+    // the rounded minimum fits at one reference and not at the next. Class IV stays only where its
+    // smallest stack also fits at every larger reference the share can still reach: as the share
+    // grows it then drops once, where it first stops fitting.
+    const room = ceiling - Math.min(preferred, minTop);
+    for (let more = 1; more <= rise && reference.height + more - 1 < wanted; more++) {
+      const taller = Math.min(wanted, reference.height + more);
+      const atLeast = leastOf({ width: Math.round((fullWidth * taller) / wanted), height: taller });
+      let height = atLeast.height;
+      while (Math.round((fullWidth * height) / wanted) < atLeast.width) height++;
+      const width = Math.round((fullWidth * height) / wanted);
+      if (height + WIDE_GAP_PX + wideHeight(width) > room + more) return null;
+    }
     const start = plainFit(clear, maxWidth).height;
     for (let height = start; height >= least.height; height--) {
       const width = Math.round((fullWidth * height) / wanted);

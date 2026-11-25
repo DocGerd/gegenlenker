@@ -38,7 +38,7 @@ Exit 0 at the baseline means every counterexample is in `KNOWN_FINDINGS` (in the
 - `BELOW BASELINE`: a listed pair fails less often or milder than its baseline in some box. It fails the run, so the baseline works as a ratchet and the slack cannot hide a later regression: lower the entry to the printed current numbers in the same commit as the improvement (and drop a box that no longer fails).
 - `FAILED`: a counterexample outside the listed pairs. A property that never failed now fails, or a listed property fails in a new variant: your change broke a promise, or a new variant exposes an old finding (add the pair with its issue only after filing one). Reproduce the first counterexample with a custom box, fix the code, never the bound or the property.
 - `STALE`: a listed pair has no counterexample in its bounds, so the issue is fixed (or the variant changed). Remove that variant from `KNOWN_FINDINGS` (and the property key when it is empty) in the same commit as the fix; close the issue. It is judged only in the named bounds, so run both default and full before removing an entry listed for both.
-- `NEVER APPLIED` (named bounds only): the spec no longer reaches the property, a verification error: restore the coverage. Custom boxes print `not applied` and are never judged on it. Two properties count the hits of a split-off case, so zero hits is fine and prints `not applied` (`mirrors-above-controls-band (height at MIN_SQUEEZED_HEIGHT)` and `cockpit-keeps-room-for-controls (deficit over 0.5 px)`); for them only `FAILED` matters. On a clean default run both print it, on a clean full run only the `deficit over 0.5 px` one.
+- `NEVER APPLIED` (named bounds only): the spec no longer reaches the property, a verification error: restore the coverage. Custom boxes print `not applied` and are never judged on it. Two properties count the hits of a split-off case, so zero hits is fine and prints `not applied` (`mirrors-above-controls-band (height at MIN_SQUEEZED_HEIGHT)` and `cockpit-keeps-room-for-controls (deficit over 0.5 px)`); for them only `FAILED` matters. On a clean run both print it.
 - The tests of `viewports-css.test.ts` (they run with `pnpm test`, not with the sweep) failing means constants or fallbacks in `viewports.ts` or `hud.ts` differ from the stylesheets: every property result is then about the wrong geometry. Fix that first.
 
 To compare with the baseline, run it with the same bounds and environment as the changed run (`git stash` is shared, so use a second worktree or a scratch mutation reverted with `git restore <file>`; the guard hook denies `git checkout -- <file>`). Custom boxes classify against the full table and skip the STALE check and the baselines.
@@ -57,7 +57,7 @@ Check the first counterexample in a browser (`pnpm exec playwright screenshot` o
 
 ## Change properties or variants
 
-When a change intentionally alters a promise, edit the property in the spec in the same commit and say why in the commit message; do not add an exemption. A property at an escape the code documents (`MIN_SQUEEZED_HEIGHT` at `viewports.ts`) stays a separate named property whose failure is still a failure. To add a config input, add a `base(...)` entry to `VARIANTS`. To change what a property means, check it still fails on a mutation of `viewports.ts` (drop the offset, swap a min and max, remove a clamp), then revert it with `git restore src/render/viewports.ts`. A mutation that worsens a listed pair must print `WORSE`.
+When a change intentionally alters a promise, edit the property in the spec in the same commit and say why in the commit message; do not add an exemption. A property at an escape the code documents (`MIN_SQUEEZED_HEIGHT` at `viewports.ts`, the floor of a window with no room left) stays a separate named property whose failure is still a failure; every other mirror also keeps its `--hud-frame` ring clear of the controls. To add a config input, add a `base(...)` entry to `VARIANTS`. To change what a property means, check it still fails on a mutation of `viewports.ts` (drop the offset, swap a min and max, remove a clamp), then revert it with `git restore src/render/viewports.ts`. A mutation that worsens a listed pair must print `WORSE`.
 
 ## Scope
 
@@ -69,10 +69,10 @@ When a change intentionally alters a promise, edit the property in the spec in t
 
 ## Coverage record
 
-Sync commit: `543347b`, the last commit that touched the covered files when this verification was last synced. A skill cannot hold its own SHA, so staleness is measured against the covered files:
+Sync commit: `db84f85`, the last commit that touched the covered files when this verification was last synced. A skill cannot hold its own SHA, so staleness is measured against the covered files:
 
 ```
-git log --oneline 543347b..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
+git log --oneline db84f85..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
 ```
 
 With the code at the sync commit and the spec synced to it, the check exits 0: every counterexample is a known finding, filed as an issue and listed in `KNOWN_FINDINGS`.

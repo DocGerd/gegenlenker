@@ -651,7 +651,7 @@ test('below 700 px the brief collapses on the first drive input and the key lege
       .poll(async () => (await boxes(page.locator('.hud-topdown')))[0])
       .toMatchObject({ right: other.width, bottom: other.height });
     await settled(page);
-    await expect.poll(() => keyListTrouble(page)).toEqual([]);
+    await expect.poll(() => overlayTrouble(page, KEY_LIST, false)).toEqual([]);
   }
   await keysToggle.click();
   await expect(list).toBeHidden();
@@ -698,6 +698,7 @@ for (const [height, short] of [
     await startStraightReverse(page, en.exerciseStraightReverse);
     await expect(page.locator('[data-hud="briefToggle"]')).toBeVisible({ visible: short });
     await expect(page.locator('.hud-legend[data-overlay]')).toHaveCount(short ? 1 : 0);
+    await expect(page.locator('.hud-topdown[data-short]')).toHaveCount(short ? 1 : 0);
     await page.keyboard.press('4');
     await expect(page.locator('.hud-goal-brief')).toBeVisible({ visible: !short });
   });
@@ -727,26 +728,81 @@ const splitSizes = [...sizes, shortLandscape];
 /** Laptops whose lever column stands well below the toolbar: the toolbar keeps its full width there. */
 const unreservedToolbar = new Set(['1280x800', '1366x768']);
 
-/** Two animation frames: the legend's resize observer re-lays out after the first one. */
-/** What the open key list leaves or covers: it stands in the top-down pane, clear of the mirrors, the lever and the buttons. */
-async function keyListTrouble(page: Page): Promise<string[]> {
-  const [list] = await boxes(page.locator('.hud-legend dl'));
+const KEY_LIST = '.hud-legend dl';
+const AID_LIST = '[data-hud="aidLegend"]';
+
+/**
+ * What an open overlay of a short screen leaves or covers: it stands in the top-down pane, clear of the
+ * mirrors and the controls, and where `strict` also of the divider and the toolbar. The key list is not
+ * held to those two: on develop it covers the divider (#433) and, at 1172x426, the toolbar. Taller than
+ * its room, it scrolls: its first item shows whole and every item can be scrolled into view.
+ */
+async function overlayTrouble(page: Page, sel: string, strict = true): Promise<string[]> {
+  const list = page.locator(sel);
+  const [box] = await boxes(list);
   const [pane] = await boxes(page.locator('.hud-topdown'));
-  if (list === undefined || pane === undefined) return ['no list or no pane'];
+  if (box === undefined || pane === undefined) return ['no list or no pane'];
   const inside =
-    list.left >= pane.left &&
-    list.right <= pane.right &&
-    list.top >= pane.top &&
-    list.bottom <= pane.bottom;
+    box.left >= pane.left &&
+    box.right <= pane.right &&
+    box.top >= pane.top &&
+    box.bottom <= pane.bottom;
+  const scroll = await list.evaluate((el) => {
+    const style = getComputedStyle(el);
+    const scrollable = /auto|scroll/.test(style.overflowY) && style.pointerEvents !== 'none';
+    const from = el.scrollTop;
+    // Whole within the padding box, at the current scroll.
+    const whole = (item: Element): boolean => {
+      const top = el.getBoundingClientRect().top + el.clientTop;
+      const r = item.getBoundingClientRect();
+      return r.top >= top - 0.5 && r.bottom <= top + el.clientHeight + 0.5;
+    };
+    el.scrollTop = 0;
+    const items = [...el.children].filter((item) => item.getClientRects().length > 0);
+    const first = items[0] !== undefined && whole(items[0]);
+    // Scrolled down to its bottom, an item shows whole, or from there up if it is taller than the view.
+    const unreachable = items.flatMap((item, i) => {
+      const view = el.getBoundingClientRect().top + el.clientTop + el.clientHeight;
+      el.scrollTop += Math.max(0, item.getBoundingClientRect().bottom - view);
+      const r = item.getBoundingClientRect();
+      const reached =
+        whole(item) || (r.height > el.clientHeight && Math.abs(r.bottom - view) <= 0.5);
+      return reached ? [] : [`item ${String(i + 1)} out of reach`];
+    });
+    el.scrollTop = from;
+    return {
+      clipped: el.scrollHeight > el.clientHeight,
+      scrollable,
+      first,
+      unreachable: [
+        ...unreachable,
+        ...(el.scrollWidth > el.clientWidth ? ['cut at the side'] : []),
+      ],
+    };
+  });
   const others = await boxes(
-    page.locator('.hud-mirror:not([hidden]), .ctl-stop, .ctl-lever, .hud-action'),
+    page.locator(
+      [
+        '.hud-mirror:not([hidden]), .ctl-stop, .ctl-lever, .hud-action',
+        ...(strict
+          ? [
+              '.hud-split:not([hidden]) .hud-split-handle, .hud-split:not([hidden]) .hud-split-reset',
+              '.hud-toolbar .hud-toggle',
+            ]
+          : []),
+      ].join(', '),
+    ),
   );
   return [
     ...(inside ? [] : ['outside the top-down pane']),
-    ...others.filter((o) => overlaps(list, o)).map((o) => o.name),
+    ...(scroll.clipped && !scroll.scrollable ? ['clipped and not scrollable'] : []),
+    ...(scroll.first ? [] : ['first item cut']),
+    ...scroll.unreachable,
+    ...others.filter((o) => overlaps(box, o)).map((o) => o.name),
   ];
 }
 
+/** Two animation frames: the legend's resize observer re-lays out after the first one. */
 const settled = (page: Page) =>
   page.evaluate(
     () =>
@@ -772,6 +828,262 @@ async function startStraightReverse(page: Page, label: string): Promise<void> {
   await page.goto('./');
   await page.getByRole('button', { name: label }).click();
   await hudReady(page);
+}
+
+const aidToggle = (page: Page) => page.locator('[data-hud="aidLegendToggle"]');
+const keysToggle = (page: Page) => page.locator('[data-hud="keysToggle"]');
+
+test('below 700 px the aid legend opens over the top view, one overlay at a time, and closes on the next control input', async ({
+  page,
+}) => {
+  const size = { width: 1280, height: 585 };
+  await page.setViewportSize(size);
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const list = page.locator(AID_LIST);
+  const keys = page.locator(KEY_LIST);
+  const frame = async () => ({
+    info: await boxes(page.locator('.hud-info')),
+    toggles: await boxes(page.locator('.hud-toolbar .hud-toggle')),
+    min: await handle(page).getAttribute('aria-valuemin'),
+    max: await handle(page).getAttribute('aria-valuemax'),
+  });
+
+  await expect(list).toBeHidden();
+  await expect(aidToggle(page)).toHaveAttribute('aria-expanded', 'false');
+  await expect(handle(page)).toBeVisible();
+  await settled(page);
+  const closed = await frame();
+
+  // Open or closed, the legend stands out of the flow: the panels and the divider do not move for it.
+  await aidToggle(page).click();
+  await expect(list).toBeVisible();
+  await expect(aidToggle(page)).toHaveAttribute('aria-expanded', 'true');
+  await settled(page);
+  expect(await frame()).toEqual(closed);
+  await expect.poll(() => overlayTrouble(page, AID_LIST)).toEqual([]);
+  // It paints over the info row, not under it.
+  // The HUD takes no pointer events, so let the list, or `elementFromPoint` skips it.
+  const covered = await list.evaluate((el) => {
+    if (!(el instanceof HTMLElement)) throw new Error('no legend');
+    el.style.pointerEvents = 'auto';
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+    el.style.pointerEvents = '';
+    return top !== null && el.contains(top);
+  });
+  expect(covered, 'the legend is painted under another element').toBe(true);
+  await page.waitForTimeout(1000);
+  await expect(list).toBeVisible();
+
+  // One overlay at a time.
+  await keysToggle(page).click();
+  await expect(keys).toBeVisible();
+  await expect(list).toBeHidden();
+  await expect(aidToggle(page)).toHaveAttribute('aria-expanded', 'false');
+  await aidToggle(page).click();
+  await expect(list).toBeVisible();
+  await expect(keys).toBeHidden();
+  await expect(keysToggle(page)).toHaveAttribute('aria-expanded', 'false');
+
+  // The next control input closes it.
+  await page.keyboard.down('a');
+  await expect(list).toBeHidden();
+  await page.keyboard.up('a');
+  await expect(aidToggle(page)).toHaveAttribute('aria-expanded', 'false');
+  await settled(page);
+  expect(await frame()).toEqual(closed);
+});
+
+/** Wide, narrow, short and tall panes: the sizes where the overlay's limits bind. */
+const overlaySizes = [
+  { width: 1280, height: 585 },
+  { width: 1024, height: 690 },
+  { width: 800, height: 600 },
+  { width: 1300, height: 540 },
+  { width: 1172, height: 426 },
+];
+
+for (const { locale, messages } of locales) {
+  for (const touch of [false, true]) {
+    for (const size of overlaySizes) {
+      const at = `${locale} ${size.width}x${size.height} with ${touch ? 'touch' : 'a mouse'}`;
+
+      test(`the open overlays stay whole and clear of the controls at ${at}`, async ({
+        browser,
+      }) => {
+        test.slow();
+        const context = await browser.newContext({
+          locale,
+          viewport: size,
+          ...(touch ? { hasTouch: true, isMobile: true } : {}),
+        });
+        try {
+          const page = await context.newPage();
+          await startStraightReverse(page, messages.exerciseStraightReverse);
+          // The brief open, then folded by the first drive input.
+          for (const folded of [false, true]) {
+            if (folded) {
+              await page.keyboard.press('4');
+              await expect(page.locator('.hud-goal-brief')).toBeHidden();
+            }
+            // A touch screen has no key legend until a key is typed.
+            for (const [toggle, sel] of [
+              [aidToggle(page), AID_LIST],
+              ...(touch ? [] : [[keysToggle(page), KEY_LIST] as const]),
+            ] as const) {
+              await toggle.click();
+              await expect(page.locator(sel)).toBeVisible();
+              await settled(page);
+              await expect
+                .poll(() => overlayTrouble(page, sel, sel === AID_LIST), {
+                  message: `${sel}, brief ${folded ? 'folded' : 'open'}`,
+                })
+                .toEqual([]);
+              await toggle.click();
+              await expect(page.locator(sel)).toBeHidden();
+            }
+          }
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+}
+
+for (const { locale, messages } of locales) {
+  test(`the open aid legend of the free yard stays whole and clear at ${locale} 1024x600`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale, viewport: { width: 1024, height: 600 } });
+    try {
+      const page = await context.newPage();
+      await startFreeYard(page, messages.layoutDepot);
+      await aidToggle(page).click();
+      await expect(page.locator(AID_LIST)).toBeVisible();
+      await settled(page);
+      await expect.poll(() => overlayTrouble(page, AID_LIST)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('a swipe on the open aid legend scrolls it, and neither steers, drives nor moves the top view', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    locale: 'en-US',
+    viewport: { width: 800, height: 600 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  try {
+    const page = await context.newPage();
+    await startStraightReverse(page, en.exerciseStraightReverse);
+    const list = page.locator(AID_LIST);
+    await aidToggle(page).tap();
+    await expect(list).toBeVisible();
+    await settled(page);
+    const scrollTop = () => list.evaluate((el) => el.scrollTop);
+    expect(
+      await list.evaluate((el) => el.scrollHeight > el.clientHeight),
+      'no room to scroll',
+    ).toBe(true);
+    const controls = () =>
+      Promise.all([
+        page.locator('[data-ctl="lever"]').evaluate((el) => el.style.getPropertyValue('--lever')),
+        page.locator('[data-ctl="wheel-art"]').evaluate((el) => el.style.transform),
+      ]);
+    const before = await controls();
+    const [box] = await boxes(list);
+    if (box === undefined) throw new Error('no legend');
+    const x = (box.left + box.right) / 2;
+    const cdp = await context.newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', y?: number) =>
+      cdp.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints: y === undefined ? [] : [{ x, y, id: 1 }],
+      });
+    await touch('touchStart', box.bottom - 8);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', box.bottom - 8 - i * 10);
+    await touch('touchEnd');
+    await expect.poll(scrollTop).toBeGreaterThan(0);
+    // A tap during the fling only stops it.
+    await expect
+      .poll(async () => {
+        const from = await scrollTop();
+        await settled(page);
+        await page.waitForTimeout(100);
+        return (await scrollTop()) === from;
+      })
+      .toBe(true);
+    await expect(list).toBeVisible();
+    expect(await controls()).toEqual(before);
+    await expect(page.locator('[data-hud="resetView"]')).toBeDisabled();
+    // Opened again, it starts at the top.
+    await aidToggle(page).tap();
+    await expect(list).toBeHidden();
+    await aidToggle(page).tap();
+    await expect(list).toBeVisible();
+    expect(await scrollTop()).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('the messages stay clear of the controls with the aid legend open on a short portrait screen', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 640, height: 690 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  await aidToggle(page).click();
+  await expect(page.locator(AID_LIST)).toBeVisible();
+  await settled(page);
+  await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+  // The message column stands in the top view here.
+  const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
+  const [pane] = await boxes(page.locator('.hud-topdown'));
+  expect(wrap?.top).toBeGreaterThanOrEqual(pane?.top ?? Infinity);
+  expect(wrap?.bottom).toBeLessThanOrEqual(pane?.bottom ?? -Infinity);
+});
+
+/** Below 700 px the counters stand beside the angle gauges instead of under them. */
+const counterSizes = [
+  { width: 1280, height: 585 },
+  { width: 1280, height: 649 },
+  { width: 1300, height: 540 },
+  { width: 1350, height: 600 },
+];
+
+for (const { locale, messages } of locales) {
+  for (const touch of [false, true]) {
+    for (const size of counterSizes) {
+      test(`the counters stand beside the angle gauges at ${locale} ${size.width}x${size.height} with ${touch ? 'touch' : 'a mouse'}`, async ({
+        browser,
+      }) => {
+        const context = await browser.newContext({
+          locale,
+          viewport: size,
+          ...(touch ? { hasTouch: true, isMobile: true } : {}),
+        });
+        try {
+          const page = await context.newPage();
+          await startStraightReverse(page, messages.exerciseStraightReverse);
+          await settled(page);
+          const [gauges] = await boxes(page.locator('.hud-gauges'));
+          const [counters] = await boxes(page.locator('.hud-counters'));
+          expect(counters?.top).toBeCloseTo(gauges?.top ?? NaN, 0);
+          const overflow = await page
+            .locator('.hud-gauge .hud-label')
+            .evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
+          expect(overflow, 'a gauge label sticks out').toEqual([0, 0]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
 }
 
 /** At the smallest and largest share the divider clears the cockpit and the panels, or is hidden. */
@@ -1201,8 +1513,8 @@ async function expectDividerClearOrHidden(page: Page, size: Size): Promise<void>
 }
 
 test('opening the aid legend re-measures the divider against the panels', async ({ page }) => {
-  // The tallest landscape screen here where the opened legend no longer leaves room for the divider.
-  const size = { width: 1280, height: 600 };
+  // The tallest landscape screen here where the in-flow legend leaves the divider no room (below 700 px it is an overlay).
+  const size = { width: 1280, height: 700 };
   await page.setViewportSize(size);
   await startStraightReverse(page, en.exerciseStraightReverse);
   await expect(handle(page)).toBeVisible();
@@ -1213,7 +1525,6 @@ test('opening the aid legend re-measures the divider against the panels', async 
   const toggle = page.locator('[data-hud="aidLegendToggle"]');
   await toggle.click();
   await expect(page.locator('[data-hud="aidLegend"]')).toBeVisible();
-  // The opened legend leaves the divider no room here.
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
   await expect(handle(page)).toBeHidden();
 
