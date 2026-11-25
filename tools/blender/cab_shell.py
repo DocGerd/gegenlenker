@@ -252,14 +252,22 @@ def tow_coupling(p, shape, hues):
     )
 
 
-def mirror_head(shape, hues, glass_x, y, z, size):
+def solid(shape, solids, x, y, z, colour):
+    """A box of a mirror head, recorded in `solids` for check_mirrors."""
+    shape.box(x, y, z, colour)
+    solids.append((x, y, z))
+
+
+def mirror_head(shape, solids, hues, glass_x, y, z, size):
     """A black housing ahead of an upright glass whose rear face is at glass_x; returns its front x."""
     width, height = size
     hw, hh = width / 2, height / 2
     lateral = (y - hw, y + hw)
-    shape.box((glass_x, glass_x + GLASS_THICKNESS), lateral, (z - hh, z + hh), hues["silver"])
+    solid(shape, solids, (glass_x, glass_x + GLASS_THICKNESS), lateral, (z - hh, z + hh), hues["silver"])
     front = glass_x + GLASS_THICKNESS + HEAD_DEPTH
-    shape.box(
+    solid(
+        shape,
+        solids,
         (glass_x + GLASS_THICKNESS, front),
         (lateral[0] - HEAD_RIM, lateral[1] + HEAD_RIM),
         (z - hh - HEAD_RIM, z + hh + HEAD_RIM),
@@ -272,21 +280,21 @@ def mirrors(p, hues):
     """Black mirror heads round the mirror cameras (`mirrors`, src/render/mirror-fields.ts): the class II
     over the class IV head on each side, on arms from the A-pillar, and the class VI head on a boom
     over the passenger corner of the windscreen. Every head stands ahead of (above) its camera, which
-    looks back (down), so no camera sees its own head."""
-    m, shape = p["mirrors"], Shape()
+    looks back (down), so no camera sees its own head. Returns the shape and the heads' boxes."""
+    m, shape, solids = p["mirrors"], Shape(), []
     hw, front = p["width"] / 2, p["frontX"]
     radius = ARM_RADIUS[p["style"]]
     pillar = front - ARM_PILLAR
     for side, main, wide in ((1, m["mirrorLeft"], m["wideLeft"]), (-1, m["mirrorRight"], m["wideRight"])):
-        main_front = mirror_head(shape, hues, main["x"] + GLASS_GAP, main["y"], main["z"], GLASS["main"])
+        main_front = mirror_head(shape, solids, hues, main["x"] + GLASS_GAP, main["y"], main["z"], GLASS["main"])
         wide_front = mirror_head(
-            shape, hues, wide["x"] + GLASS_GAP + WIDE_AHEAD, wide["y"], wide["z"], GLASS["wide"]
+            shape, solids, hues, wide["x"] + GLASS_GAP + WIDE_AHEAD, wide["y"], wide["z"], GLASS["wide"]
         )
         # the arms leave the heads' front faces near their inboard edge
         inboard = main["y"] - side * (GLASS["main"][0] / 2 - HEAD_RIM)
         top = main["z"] + GLASS["main"][1] / 2 - HEAD_RIM
-        shape.tube((main_front - 0.02, inboard, top), (pillar, side * (hw - radius), top), radius, hues["black"])
-        shape.tube((wide_front - 0.02, inboard, wide["z"]), (pillar, side * (hw - radius), wide["z"]), radius, hues["black"])
+        for head_front, z in ((main_front, top), (wide_front, wide["z"])):
+            shape.tube((head_front - 0.02, inboard, z), (pillar, side * (hw - radius), z), radius, hues["black"])
         if p["style"] == "crew":
             # the tubular frame's upright, through both heads
             x = main_front + 0.02
@@ -296,9 +304,11 @@ def mirrors(p, hues):
     glass_z = f["z"] + GLASS_GAP
     x = (f["x"] - length / 2, f["x"] + length / 2)
     y = (f["y"] - width / 2, f["y"] + width / 2)
-    shape.box(x, y, (glass_z, glass_z + GLASS_THICKNESS), hues["silver"])
+    solid(shape, solids, x, y, (glass_z, glass_z + GLASS_THICKNESS), hues["silver"])
     top = glass_z + GLASS_THICKNESS + HEAD_DEPTH * 0.7
-    shape.box(
+    solid(
+        shape,
+        solids,
         (x[0] - HEAD_RIM, x[1] + HEAD_RIM),
         (y[0] - HEAD_RIM, y[1] + HEAD_RIM),
         (glass_z + GLASS_THICKNESS, top),
@@ -306,14 +316,15 @@ def mirrors(p, hues):
     )
     boom_z = (glass_z + top) / 2
     shape.tube((front - ROOF, f["y"], boom_z), (x[0] - HEAD_RIM + 0.02, f["y"], boom_z), radius, hues["black"])
-    return shape
+    return shape, solids
 
 
-def check_mirrors(p, heads):
-    """No mirror camera lies in or on a face of the heads; the boom starts under the roof."""
+def check_mirrors(p, solids):
+    """No mirror camera lies in or within GLASS_GAP / 2 of a head's box (the arms stand ahead of the
+    heads); the class VI head stays under the roof line."""
     for camera in p["mirrors"].values():
         point = (camera["x"], camera["y"], camera["z"])
-        for box in heads.extents():
+        for box in solids:
             if all(lo - GLASS_GAP / 2 < c < hi + GLASS_GAP / 2 for c, (lo, hi) in zip(point, box)):
                 raise ValueError("a mirror head reaches its camera at " + repr(point))
     if p["mirrors"]["front"]["z"] + GLASS_GAP + GLASS_THICKNESS + HEAD_DEPTH * 0.7 > p["cabHeight"]:
@@ -370,8 +381,8 @@ def main():
         tow_coupling(params, shape, hues)
     check_envelope(params, shape, glass)
     # after the envelope check: the class VI head stands ahead of the bumper face on its boom
-    heads = mirrors(params, hues)
-    check_mirrors(params, heads)
+    heads, solids = mirrors(params, hues)
+    check_mirrors(params, solids)
     merge(shape, heads)
     lens = LAMP["lens_shape"](params["lenses"])
     check_lenses(params, shape, lens)

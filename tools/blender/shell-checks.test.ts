@@ -11,6 +11,7 @@ import type {
   cabLampParams,
   trailerLampParams,
 } from '../../src/render/lamp-layout';
+import type { cabMirrorParams } from '../../src/render/mirror-fields';
 import type { trailerShellParams } from '../../src/render/trailer-dims';
 import { assetByKey, ROOT } from './glb-build';
 
@@ -56,7 +57,9 @@ const run = (params: object): string => runScript('trailer_shell.py', params);
 
 type TrailerParams = ReturnType<typeof trailerShellParams> & ReturnType<typeof trailerLampParams>;
 type BodyParams = ReturnType<typeof bodyShellParams> & ReturnType<typeof bodyLampParams>;
-type CabParams = ReturnType<typeof cabShellParams> & ReturnType<typeof cabLampParams>;
+type CabParams = ReturnType<typeof cabShellParams> &
+  ReturnType<typeof cabLampParams> &
+  ReturnType<typeof cabMirrorParams>;
 const trailerParams = (id: string): TrailerParams =>
   assetByKey(`${id}-trailer`).build() as unknown as TrailerParams;
 const bodyParams = (id: string): BodyParams =>
@@ -166,5 +169,14 @@ describe.skipIf(!python)('cab_shell.py geometry checks', () => {
   it('refuse a headlamp below the bumper', () => {
     const low = { ...arocs, lenses: raise(arocs.lenses, 'headlamp-2-right', -0.3) };
     expect(cab(low)).toMatch(/lamp headlamp-2-right has no surface/);
+  });
+
+  it('refuse a mirror camera inside another mirror head', () => {
+    const { mirrors } = arocs;
+    // the class IV camera 5 cm into the class II housing
+    const inside = { ...mirrors.mirrorLeft, x: mirrors.mirrorLeft.x + 0.05 };
+    expect(cab({ ...arocs, mirrors: { ...mirrors, wideLeft: inside } })).toMatch(
+      /a mirror head reaches its camera/,
+    );
   });
 });
