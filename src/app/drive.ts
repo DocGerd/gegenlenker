@@ -283,12 +283,16 @@ export function startDrive(
   cleanups.push(() => hud.dispose());
 
   /** Chrome moves with the layout and with collapsing panels; the vehicle is framed in what it leaves free. */
-  let arrowClear: Rect | null = null;
+  let arrowRects: { clear: Rect; place: Rect } | null = null;
   const remeasure = (): void => {
     if (mirrorsOnly) return;
     const chrome = measureChrome(stage);
-    frame.topDownClear = clearRect(frame.views.topDown, chrome);
-    arrowClear = arrowClearRect(frame.views.topDown, chrome, measureDivider(stage));
+    const clear = clearRect(frame.views.topDown, chrome);
+    frame.topDownClear = clear;
+    arrowRects = {
+      clear,
+      place: arrowClearRect(frame.views.topDown, chrome, measureDivider(stage)),
+    };
     dirty = true;
   };
   const target = layout.target;
@@ -498,7 +502,9 @@ export function startDrive(
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goalCue(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
-      hud.setTargetArrow(at && arrowClear ? targetArrow(at, arrowClear, ARROW_MARGIN) : null);
+      hud.setTargetArrow(
+        at && arrowRects ? targetArrow(at, arrowRects.clear, ARROW_MARGIN, arrowRects.place) : null,
+      );
       if (EXPOSE_FRAMING) exposeVehicleBox();
     },
   });
