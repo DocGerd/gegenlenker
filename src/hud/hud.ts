@@ -160,8 +160,9 @@ const COMPACT_WIDTH_WITH_LEVER = 840;
  */
 const SHORT_HEIGHT = 740;
 /**
- * Screen heights (CSS px) below which the brief collapses on the first drive input and the key
- * legend is an overlay that closes on the next one.
+ * Screen heights (CSS px) below which the brief collapses on the first drive input, the key and
+ * aid legends are overlays (one at a time) that close on the next one, and the counters stand
+ * beside the angle gauges.
  */
 const SHORT_SCREEN = 700;
 
@@ -400,15 +401,6 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const aidLegend = query(hud, 'aidLegend', HTMLElement);
   legendToggle.title = t('aidLegend');
   legendToggle.setAttribute('aria-label', t('aidLegend'));
-  legendToggle.addEventListener(
-    'click',
-    () => {
-      setHidden(aidLegend, !aidLegend.hidden);
-      legendToggle.setAttribute('aria-expanded', String(!aidLegend.hidden));
-      emit({ type: 'aidLegend' });
-    },
-    { signal },
-  );
   // On a short cockpit the chevron flips between the drive keys and the full list; not persisted.
   let shortCockpit = false;
   let allKeys = false;
@@ -419,6 +411,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let briefOpen = true;
   let briefDone = false;
   let keysOpen = false;
+  let aidOpen = false;
   /** A wrapped view control rounds each visual row's ends: its segments carry `data-row-start` / `data-row-end`. */
   const syncSegmentRows = (): void => {
     viewButtons.forEach((b, i) => {
@@ -456,6 +449,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       shortScreen ? !keysOpen : !shortCockpit && collapsed.keys,
     );
     legend.toggleAttribute('data-drive-only', !shortScreen && shortCockpit && !allKeys);
+    topDown.toggleAttribute('data-short', shortScreen);
+    setHidden(aidLegend, !aidOpen);
+    legendToggle.setAttribute('aria-expanded', String(aidOpen));
     setHidden(briefToggle, !foldsBrief());
     briefToggle.setAttribute('aria-expanded', String(briefOpen));
     goal.toggleAttribute('data-collapsed', foldsBrief() && !briefOpen);
@@ -469,6 +465,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     if (now === shortScreen) return;
     shortScreen = now;
     keysOpen = false;
+    aidOpen = false;
     briefOpen = !briefDone;
     syncToggles();
   };
@@ -485,7 +482,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     const gap = parseFloat(getComputedStyle(root).getPropertyValue('--space-3')) || 12;
     const pane = topDown.getBoundingClientRect();
     const leverLeft = pane.right - (root.getBoundingClientRect().right - lever.left) - gap;
-    const reaches = [...toolbar.querySelectorAll('.hud-toggle, .hud-aid-legend')].some((el) => {
+    // A short screen's open aid legend is an overlay: it must not move the reserve or the panels.
+    const reaches = [
+      ...toolbar.querySelectorAll(shortScreen ? '.hud-toggle' : '.hud-toggle, .hud-aid-legend'),
+    ].some((el) => {
       const r = el.getBoundingClientRect();
       return r.width > 0 && r.right > leverLeft && r.bottom > lever.top - gap;
     });
@@ -506,6 +506,16 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     keysList.style.setProperty('--pane-bottom', `${bottom - pane.y - pane.height}px`);
     keysList.style.setProperty('--pane-width', `${pane.width}px`);
     keysList.style.setProperty('--pane-height', `${pane.height}px`);
+  };
+
+  /** The aid legend of a short screen opens over the top view, below the aids chips (hud.css); the offset is from the pane's top. */
+  const placeAidOverlay = (pane: Rect): void => {
+    if (!shortScreen) return;
+    const group = aidsBox.querySelector('.hud-group');
+    if (group === null) return;
+    const gap = parseFloat(getComputedStyle(root).getPropertyValue('--space-2')) || 8;
+    const top = group.getBoundingClientRect().bottom - root.getBoundingClientRect().top - pane.y;
+    aidLegend.style.setProperty('--aid-top', `${top + gap}px`);
   };
 
   const selectView = (mode: TopDownMode): void => {
@@ -538,11 +548,24 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       signal,
     });
   }
+  legendToggle.addEventListener(
+    'click',
+    () => {
+      aidOpen = !aidOpen;
+      if (aidOpen && shortScreen) keysOpen = false;
+      syncToggles();
+      // A hidden list keeps its scroll; it opens at the top.
+      if (aidOpen) aidLegend.scrollTop = 0;
+      emit({ type: 'aidLegend' });
+    },
+    { signal },
+  );
   keysToggle.addEventListener(
     'click',
     () => {
       if (shortScreen) {
         keysOpen = !keysOpen;
+        if (keysOpen) aidOpen = false;
         syncToggles();
       } else if (shortCockpit) {
         allKeys = !allKeys;
@@ -822,7 +845,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   writeSpeed(0);
 
   let lastControl: SimSnapshot['control'] | null = null;
-  /** On a short screen the first drive input collapses the brief, and any later change closes the key legend. */
+  /** On a short screen the first drive input collapses the brief, and any later change closes the open legend. */
   const onControl = (c: SimSnapshot['control']): void => {
     const changed =
       lastControl !== null &&
@@ -831,8 +854,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         c.brake !== lastControl.brake ||
         c.gear !== lastControl.gear);
     lastControl = c;
-    if (shortScreen && keysOpen && changed) {
+    if (shortScreen && (keysOpen || aidOpen) && changed) {
       keysOpen = false;
+      aidOpen = false;
       syncToggles();
     }
     if (briefDone || !isDrivingInput(c)) return;
@@ -951,7 +975,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       hasCockpit = c !== null;
       syncSplitHidden();
       // After the reserves, which narrow the toolbar.
-      if (hasTopDown(views)) syncSegmentRows();
+      if (hasTopDown(views)) {
+        syncSegmentRows();
+        placeAidOverlay(views.topDown);
+      }
       if (c) {
         const td = views.topDown;
         const landscape = root.clientWidth >= root.clientHeight;
