@@ -1101,6 +1101,55 @@ for (const { locale, messages } of locales) {
   }
 }
 
+/** A gauge label that wraps breaks only at a space or a soft hyphen, never mid-word without a hyphen. */
+for (const size of [
+  { width: 1280, height: 585 },
+  { width: 1366, height: 640 },
+]) {
+  test(`the German gauge labels break only at a space or a soft hyphen at ${size.width}x${size.height}`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale: 'de-DE', viewport: size });
+    try {
+      const page = await context.newPage();
+      await startStraightReverse(page, de.exerciseStraightReverse);
+      await settled(page);
+      const labels = page.locator('.hud-gauge .hud-label');
+      await expect(labels).toHaveCount(2);
+      const breaks = await labels.evaluateAll((els) =>
+        els.map((el) => {
+          const bad: string[] = [];
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            const text = node.textContent ?? '';
+            let last: { char: number; top: number } | undefined;
+            for (let i = 0; i < text.length; i++) {
+              const range = document.createRange();
+              range.setStart(node, i);
+              range.setEnd(node, i + 1);
+              // the first character after a soft-hyphen break reports the hyphen glyph first
+              const rect = [...range.getClientRects()].filter((r) => r.width > 0).at(-1);
+              if (!rect || text[i] === ' ') continue;
+              if (last && rect.top - last.top > 2) {
+                const at = text[last.char];
+                const next = text[last.char + 1];
+                if (at !== '\u00AD' && next !== '\u00AD' && next !== ' ') {
+                  bad.push(`${text.slice(0, i)}|${text.slice(i)}`);
+                }
+              }
+              last = { char: i, top: rect.top };
+            }
+          }
+          return bad;
+        }),
+      );
+      expect(breaks, 'a gauge label breaks inside a syllable').toEqual([[], []]);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 /** At the smallest and largest share the divider clears the cockpit and the panels, or is hidden. */
 async function expectDividerClears(page: Page, size: Size): Promise<void> {
   await expect(handle(page)).toHaveCount(1);
