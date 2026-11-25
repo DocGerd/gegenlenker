@@ -131,6 +131,9 @@ export function closeMirrorMount(truck: TruckSpec): Vec3 {
   return { x: eye.x + CLOSE_AHEAD, y: -(width / 2 + CLOSE_OUTBOARD), z: CLOSE_HEIGHT };
 }
 
+/** Every vertex of a mirror head and its arm lies within this of the head's camera (`tools/blender/cab_shell.py`). */
+export const HEAD_REACH = 0.6;
+
 const rounded = (p: Vec3): Vec3 => ({ x: round(p.x), y: round(p.y), z: round(p.z) });
 
 /** Inputs of `tools/blender/cab_shell.py`'s mirror heads: the camera of each mirror that has a head, in the body frame. */

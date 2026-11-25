@@ -33,6 +33,7 @@ import {
 import { TRUCK_LOOKS } from './livery';
 import { tint } from './tint';
 import { createMirror, mirrorMounts } from './mirror';
+import { HEAD_REACH } from './mirror-fields';
 import { KEYS } from './palette';
 import { lookFor } from './look';
 import { QUALITY_FLAGS, type QualityFlags } from './quality';
@@ -67,8 +68,6 @@ const TOLERANCE = 5e-3;
 /** Well below what the shells have, so only a lost part trips it. */
 const MIN_VERTICES = { cab: 600, body: 450 } as const;
 const COLOUR_TOLERANCE = 1 / 255;
-/** Every vertex of a mirror head and its arm lies within this of the head's camera (cab_shell.py mirrors). */
-const HEAD_REACH = 0.6;
 
 /** The cab's vertices (three space) inside the envelope ahead to `front` and out to `side`, as a box, and the mirror heads' outside it. */
 function cabVertices(mesh: Mesh, front: number, side: number) {
