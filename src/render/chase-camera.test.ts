@@ -425,9 +425,18 @@ describe.each(trucks)('chase camera and the cab of $id', (spec) => {
       'cab',
     );
     const face = cabFront(spec);
-    const box = new Box3().setFromObject(mesh);
-    const half = Math.max(-box.min.z, box.max.z);
     const tolerance = RELIEF + 1e-3;
+    // The mirror heads stand out of the face's envelope; the chase framing leaves them out.
+    mesh.updateMatrixWorld(true);
+    const positions = mesh.geometry.getAttribute('position');
+    const box = new Box3();
+    for (let i = 0; i < positions.count; i++) {
+      const p = new Vector3().fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+      if (p.x <= face.x + 0.25 + tolerance && Math.abs(p.z) <= face.halfWidth + tolerance) {
+        box.expandByPoint(p);
+      }
+    }
+    const half = Math.max(-box.min.z, box.max.z);
     // The crew cab's tow coupling reaches 0.25 m past the face; the light bar and roof rack stand up to 0.3 m above the roof.
     expect(box.max.x).toBeGreaterThanOrEqual(face.x - tolerance);
     expect(box.max.x).toBeLessThanOrEqual(face.x + 0.25 + tolerance);

@@ -32,7 +32,7 @@ import {
 } from './glb-shells';
 import { TRUCK_LOOKS } from './livery';
 import { tint } from './tint';
-import { createMirror } from './mirror';
+import { createMirror, mirrorMounts } from './mirror';
 import { KEYS } from './palette';
 import { lookFor } from './look';
 import { QUALITY_FLAGS, type QualityFlags } from './quality';
@@ -67,6 +67,22 @@ const TOLERANCE = 5e-3;
 /** Well below what the shells have, so only a lost part trips it. */
 const MIN_VERTICES = { cab: 600, body: 450 } as const;
 const COLOUR_TOLERANCE = 1 / 255;
+/** Every vertex of a mirror head and its arm lies within this of the head's camera (cab_shell.py mirrors). */
+const HEAD_REACH = 0.6;
+
+/** The cab's vertices (three space) inside the envelope ahead to `front` and out to `side`, as a box, and the mirror heads' outside it. */
+function cabVertices(mesh: Mesh, front: number, side: number) {
+  mesh.updateMatrixWorld(true);
+  const positions = mesh.geometry.getAttribute('position');
+  const box = new Box3();
+  const heads: Vector3[] = [];
+  for (let i = 0; i < positions.count; i++) {
+    const p = new Vector3().fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+    if (p.x > front + TOLERANCE || Math.abs(p.z) > side + TOLERANCE) heads.push(p);
+    else box.expandByPoint(p);
+  }
+  return { box, heads };
+}
 
 describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
   const spec = truckById(id);
@@ -74,18 +90,25 @@ describe.each(TRUCK_IDS)('shell assets of %s', (id) => {
   const anchors = truckAnchors(spec);
   const half = spec.width.value / 2000;
 
-  it('decodes the cab into one coloured mesh that fills the cab envelope', async () => {
+  it('decodes the cab into one coloured mesh that fills the cab envelope, with mirror heads outside it', async () => {
     const { mesh } = await loadShell(id, 'cab');
-    const box = new Box3().setFromObject(mesh);
     expect(mesh.geometry.getAttribute('position').count).toBeGreaterThanOrEqual(MIN_VERTICES.cab);
     // the crew cab's tow coupling reaches 0.2 m past the front face
-    expect(box.max.x).toBeLessThanOrEqual(anchors.frontX + RELIEF + 0.2 + 1e-3);
+    const { box, heads } = cabVertices(mesh, anchors.frontX + RELIEF + 0.2, half + RELIEF);
     expect(box.max.x).toBeGreaterThanOrEqual(anchors.frontX + RELIEF - 1e-3);
     expect(box.min.x).toBeGreaterThanOrEqual(anchors.frontX - look.cab.length - 1e-3);
     expect(box.min.x).toBeCloseTo(anchors.frontX - look.cab.length, 2);
-    expect(Math.max(-box.min.z, box.max.z)).toBeLessThanOrEqual(half + RELIEF + 1e-3);
     expect(Math.max(-box.min.z, box.max.z)).toBeCloseTo(half + RELIEF, 2);
     expect(box.max.y).toBeCloseTo(CAB_HEIGHT + BEACON_TOP, 2);
+    const mounts = mirrorMounts(spec);
+    const cameras = (['mirrorLeft', 'mirrorRight', 'wideLeft', 'wideRight', 'front'] as const).map(
+      (key) => new Vector3(mounts[key].x, mounts[key].z, -mounts[key].y),
+    );
+    expect(heads.filter((p) => cameras.every((c) => c.distanceTo(p) > HEAD_REACH))).toEqual([]);
+    // a head on each side outboard of the class II glass, and the class VI head ahead of its camera
+    expect(Math.min(...heads.map((p) => p.z))).toBeLessThan(-mounts.mirrorLeft.y);
+    expect(Math.max(...heads.map((p) => p.z))).toBeGreaterThan(mounts.mirrorLeft.y);
+    expect(Math.max(...heads.map((p) => p.x))).toBeGreaterThan(mounts.front.x);
   });
 
   it('keeps the windows in a mesh of their own, on the glass hue', async () => {

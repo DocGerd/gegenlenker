@@ -133,5 +133,12 @@
       "facing": "right",
       "hue": "#ffb000"
     }
-  ]
+  ],
+  "mirrors": {
+    "mirrorLeft": { "x": 4.65, "y": 1.6, "z": 2.2 },
+    "mirrorRight": { "x": 4.65, "y": -1.6, "z": 2.2 },
+    "wideLeft": { "x": 4.65, "y": 1.6, "z": 1.8 },
+    "wideRight": { "x": 4.65, "y": -1.6, "z": 1.8 },
+    "front": { "x": 5.85, "y": -1, "z": 2.8 }
+  }
 }

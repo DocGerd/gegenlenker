@@ -1,7 +1,7 @@
 import type { Vec2 } from '../contracts/sim';
 import type { TruckSpec, Vec3 } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
-import { CAB_HEIGHT, cabShellParams } from './cab-dims';
+import { CAB_HEIGHT, cabShellParams, round } from './cab-dims';
 
 // No `three` import: the fields are ground polygons in the truck body frame (x forward, y left).
 
@@ -129,4 +129,20 @@ export function closeMirrorMount(truck: TruckSpec): Vec3 {
   const { width } = cabShellParams(truck);
   const { eye } = truckAnchors(truck);
   return { x: eye.x + CLOSE_AHEAD, y: -(width / 2 + CLOSE_OUTBOARD), z: CLOSE_HEIGHT };
+}
+
+const rounded = (p: Vec3): Vec3 => ({ x: round(p.x), y: round(p.y), z: round(p.z) });
+
+/** Inputs of `tools/blender/cab_shell.py`'s mirror heads: the camera of each mirror that has a head, in the body frame. */
+export function cabMirrorParams(truck: TruckSpec) {
+  const { mirrorLeft, mirrorRight, wideLeft, wideRight } = truckAnchors(truck);
+  return {
+    mirrors: {
+      mirrorLeft: rounded(mirrorLeft),
+      mirrorRight: rounded(mirrorRight),
+      wideLeft: rounded(wideLeft),
+      wideRight: rounded(wideRight),
+      front: rounded(frontMirrorMount(truck)),
+    },
+  };
 }
