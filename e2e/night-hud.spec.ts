@@ -11,7 +11,7 @@ import {
   startPinnedDrive,
   timeoutWithSettles,
 } from './pinned-shoot';
-import { yardEntry } from './menu-flow';
+import { startYard, yardEntry } from './menu-flow';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
 const SHOTS = ['follow', 'yard'] as const;
@@ -63,8 +63,7 @@ test(
       .click();
     await expect(html(system)).toHaveAttribute('data-theme', 'light');
 
-    await system.getByRole('combobox', { name: en.lighting }).selectOption('day');
-    await system.getByRole('button', { name: new RegExp(`^${en.layoutDepot}`) }).click();
+    await startYard(system, en, 'depot', { lighting: 'day' });
     await expect(html(system)).toHaveAttribute('data-render-lighting', 'day');
     await settle(system, 'low');
     await expect(html(system)).toHaveAttribute('data-theme', 'light');

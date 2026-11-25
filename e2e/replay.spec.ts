@@ -1,9 +1,10 @@
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
+import { startExercise, toTitle } from './menu-flow';
 
 test('the replay scrubber seeks both ways and speeds include half speed', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('[data-hud="speed"]')).toHaveText('0.0 km/h');
   await page.waitForTimeout(1000);
   await page.keyboard.press('4');
@@ -63,7 +64,7 @@ test('a night run replays at night after the stored setting switched to day', as
   }, SETTINGS_KEY);
   const html = page.locator('html');
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(html).toHaveAttribute('data-render-lighting', 'night');
   await page.keyboard.press('4');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
@@ -79,6 +80,7 @@ test('a night run replays at night after the stored setting switched to day', as
     localStorage.setItem(key, JSON.stringify({ version: 1, graphics: 'low', lighting: 'day' }));
   }, SETTINGS_KEY);
   await page.reload();
+  await toTitle(page, en);
   await expect(html).not.toHaveAttribute('data-render-lighting');
   await page.getByRole('button', { name: en.replayLastRun }).click();
   await expect(page.getByRole('slider', { name: en.timeline })).toBeVisible();

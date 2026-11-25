@@ -16,7 +16,7 @@ import {
   step,
   timeoutWithSettles,
 } from './pinned-shoot';
-import { exerciseEntry } from './menu-flow';
+import { exerciseEntry, startExercise } from './menu-flow';
 
 const high = { timeout: HIGH_WAIT_MS };
 /** Frames the sim runs under a pressed lever before the speed gauge is read. */
@@ -63,7 +63,7 @@ async function loseAndReplace(page: Page): Promise<void> {
 
 async function startDrive(page: Page): Promise<void> {
   await page.goto('./');
-  await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
+  await startExercise(page, en, 'straight-reverse');
 }
 
 test(

@@ -6,7 +6,18 @@ import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
 import { heavyAt, startPinnedDrive } from './pinned-shoot';
-import { exerciseEntry } from './menu-flow';
+import {
+  chooseSetting,
+  entryName,
+  exerciseEntry,
+  openSetup,
+  settingValue,
+  startEntry,
+  startExercise,
+  startYard,
+  yardEntry,
+  type Messages,
+} from './menu-flow';
 
 type Size = { width: number; height: number };
 
@@ -382,7 +393,7 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
         ),
       )
       .toBe(`${insets.left}px`);
-    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+    await startExercise(page, en, 'straight-reverse');
     await hudReady(page, { insets, mirrorsOnly });
     if (keysOpen) {
       await expect(page.locator('[data-hud="keysToggle"]')).toHaveAttribute(
@@ -474,7 +485,7 @@ test('the longest German toast fits the narrowest pane column, inside the safe a
         ),
       )
       .toBe(`${insets.left}px`);
-    await page.getByRole('button', { name: de.exerciseStraightReverse }).click();
+    await startExercise(page, de, 'straight-reverse');
     await hudReady(page, { insets });
     const [column] = await boxes(page.locator('[data-hud="toastWrap"]'));
     const [pane] = await boxes(page.locator('.hud-topdown'));
@@ -494,15 +505,15 @@ test('the longest German toast fits the narrowest pane column, inside the safe a
 });
 
 const starts = [
-  { name: 'exercise', label: en.exerciseStraightReverse },
-  { name: 'yard', label: en.layoutDepot },
+  { name: 'exercise', entry: exerciseEntry('straight-reverse') },
+  { name: 'yard', entry: yardEntry('depot') },
 ];
 
 for (const start of starts) {
   test(`the ${start.name} top view stays compact at 1366x768`, async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 768 });
     await page.goto('./');
-    await page.getByRole('button', { name: start.label }).click();
+    await startEntry(page, en, start.entry);
 
     // a hidden button measures at the top: count the shown ones, in the outside view with its free camera too
     const buttons = page.locator('.hud-toolbar button:visible');
@@ -528,7 +539,7 @@ test('the two gauges stay equally wide in German', async ({ browser }) => {
   });
   const page = await context.newPage();
   await page.goto('./');
-  await page.getByRole('button', { name: de.exerciseStraightReverse }).click();
+  await startExercise(page, de, 'straight-reverse');
 
   await hudReady(page);
   const widths = (await boxes(page.locator('.hud-gauge'))).map((b) => b.right - b.left);
@@ -539,7 +550,7 @@ test('the two gauges stay equally wide in German', async ({ browser }) => {
 
 test('the goal cue keeps its distance out of the live region', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   // The distance changes every 0.1 m; only the state span may be announced.
   const parts = page.locator(
     '[data-hud="toastWrap"][aria-live="polite"] [data-hud="goalCue"] > span',
@@ -590,7 +601,7 @@ for (const { locale, messages } of locales) {
 
 test('the key legend folds away and stays folded in the next run', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   const toggle = page.locator('[data-hud="keysToggle"]');
   await expect(page.locator('.hud-legend dl')).toBeVisible();
   await toggle.click();
@@ -598,7 +609,7 @@ test('the key legend folds away and stays folded in the next run', async ({ page
   await expect(page.locator('.hud-legend dl')).toBeHidden();
 
   await page.reload();
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('.hud-legend dl')).toBeHidden();
   await expect(toggle).toBeVisible();
 });
@@ -607,7 +618,7 @@ test('a short cockpit opens the key legend to the drive keys, and the chevron sh
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const toggle = page.locator('[data-hud="keysToggle"]');
   const rows = page.locator('.hud-legend dt');
   const view = page.locator('.hud-legend dt.hud-legend-view');
@@ -631,7 +642,7 @@ test('below 700 px the brief collapses on the first drive input and the key lege
 }) => {
   const size = { width: 1280, height: 585 };
   await page.setViewportSize(size);
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const brief = page.locator('.hud-goal-brief');
   const briefToggle = page.locator('[data-hud="briefToggle"]');
   const keysToggle = page.locator('[data-hud="keysToggle"]');
@@ -702,7 +713,7 @@ for (const [height, short] of [
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height });
-    await startStraightReverse(page, en.exerciseStraightReverse);
+    await startStraightReverse(page, en);
     await expect(page.locator('[data-hud="briefToggle"]')).toBeVisible({ visible: short });
     await expect(page.locator('.hud-legend[data-overlay]')).toHaveCount(short ? 1 : 0);
     await expect(page.locator('.hud-topdown[data-short]')).toHaveCount(short ? 1 : 0);
@@ -719,7 +730,7 @@ for (const [height, openFull] of [
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height });
-    await startStraightReverse(page, en.exerciseStraightReverse);
+    await startStraightReverse(page, en);
     await expect(page.locator('.hud-legend dt.hud-legend-view').first()).toBeVisible({
       visible: openFull,
     });
@@ -813,9 +824,9 @@ const settled = (page: Page) =>
       }),
   );
 
-async function startFreeYard(page: Page, label: string): Promise<void> {
+async function startFreeYard(page: Page, messages: Messages): Promise<void> {
   await page.goto('./');
-  await page.getByRole('button', { name: label }).click();
+  await startYard(page, messages, 'depot');
   // No exercise, so no counters or brief: the toolbar and the controls are what stands.
   await expect(page.locator('.hud-gauge')).toHaveCount(2);
   await expect(page.locator('.hud-toolbar .hud-toggle').first()).toBeVisible();
@@ -826,9 +837,9 @@ async function startFreeYard(page: Page, label: string): Promise<void> {
   await settled(page);
 }
 
-async function startStraightReverse(page: Page, label: string): Promise<void> {
+async function startStraightReverse(page: Page, messages: Messages): Promise<void> {
   await page.goto('./');
-  await page.getByRole('button', { name: label }).click();
+  await startExercise(page, messages, 'straight-reverse');
   await hudReady(page);
 }
 
@@ -840,7 +851,7 @@ test('below 700 px the aid legend opens over the top view, one overlay at a time
 }) => {
   const size = { width: 1280, height: 585 };
   await page.setViewportSize(size);
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const list = page.locator(AID_LIST);
   const keys = page.locator(KEY_LIST);
   const frame = async () => ({
@@ -921,7 +932,7 @@ for (const { locale, messages } of locales) {
         });
         try {
           const page = await context.newPage();
-          await startStraightReverse(page, messages.exerciseStraightReverse);
+          await startStraightReverse(page, messages);
           // The outside view's free camera button stands where the overlays open from: it steps aside for them.
           const tool = page.locator('[data-hud="freeCamera"]');
           await page.locator('[data-view="chase"]').click();
@@ -967,7 +978,7 @@ for (const { locale, messages } of locales) {
     const context = await browser.newContext({ locale, viewport: { width: 1024, height: 600 } });
     try {
       const page = await context.newPage();
-      await startFreeYard(page, messages.layoutDepot);
+      await startFreeYard(page, messages);
       await aidToggle(page).click();
       await expect(page.locator(AID_LIST)).toBeVisible();
       await settled(page);
@@ -989,7 +1000,7 @@ test('a swipe on the open aid legend scrolls it, and neither steers, drives nor 
   });
   try {
     const page = await context.newPage();
-    await startStraightReverse(page, en.exerciseStraightReverse);
+    await startStraightReverse(page, en);
     const list = page.locator(AID_LIST);
     await aidToggle(page).tap();
     await expect(list).toBeVisible();
@@ -1043,7 +1054,7 @@ test('a swipe on the open aid legend scrolls it, and neither steers, drives nor 
 
 test('the key list of a short screen opens at its top again', async ({ page }) => {
   await page.setViewportSize({ width: 1172, height: 426 });
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const list = page.locator(KEY_LIST);
   await keysToggle(page).click();
   await expect(list).toBeVisible();
@@ -1065,7 +1076,7 @@ test('the messages stay clear of the controls with the aid legend open on a shor
   page,
 }) => {
   await page.setViewportSize({ width: 640, height: 690 });
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   await aidToggle(page).click();
   await expect(page.locator(AID_LIST)).toBeVisible();
   await settled(page);
@@ -1098,7 +1109,7 @@ for (const { locale, messages } of locales) {
         });
         try {
           const page = await context.newPage();
-          await startStraightReverse(page, messages.exerciseStraightReverse);
+          await startStraightReverse(page, messages);
           await settled(page);
           const [gauges] = await boxes(page.locator('.hud-gauges'));
           const [counters] = await boxes(page.locator('.hud-counters'));
@@ -1126,7 +1137,7 @@ for (const size of [
     const context = await browser.newContext({ locale: 'de-DE', viewport: size });
     try {
       const page = await context.newPage();
-      await startStraightReverse(page, de.exerciseStraightReverse);
+      await startStraightReverse(page, de);
       await settled(page);
       const labels = page.locator('.hud-gauge .hud-label');
       await expect(labels).toHaveCount(2);
@@ -1421,7 +1432,7 @@ for (const { locale, messages } of locales) {
       const context = await browser.newContext({ locale, viewport: size });
       try {
         const page = await context.newPage();
-        await startStraightReverse(page, messages.exerciseStraightReverse);
+        await startStraightReverse(page, messages);
         // The short landscape size has no mirror check, only the messages and the divider.
         if (size !== shortLandscape) {
           await test.step('mirrors clear the controls', () =>
@@ -1458,7 +1469,7 @@ for (const { locale, messages } of locales) {
       const context = await browser.newContext({ locale, viewport: size });
       try {
         const page = await context.newPage();
-        await startFreeYard(page, messages.layoutDepot);
+        await startFreeYard(page, messages);
         await expectToolbarClear(page);
       } finally {
         await context.close();
@@ -1533,7 +1544,7 @@ for (const size of [
           }
         }, SETTINGS_KEY);
         await page.goto('./');
-        await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
+        await startExercise(page, messages, 'straight-reverse');
         await hudReady(page, { mirrorsOnly: true });
         // both messages fit at once here, so the two-message check holds
         await expect(page.locator('[data-hud="toastWrap"]')).not.toHaveAttribute('data-cue-yields');
@@ -1580,7 +1591,7 @@ for (const size of [
       try {
         const page = await context.newPage();
         await page.goto('./');
-        await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
+        await startExercise(page, messages, 'straight-reverse');
         await expect(page.locator('[data-hud="speed"]')).toBeVisible();
         await page.getByRole('button', { name: messages.pause }).click();
         await page
@@ -1588,7 +1599,9 @@ for (const size of [
           .getByRole('button', { name: messages.finish })
           .click();
         await page.getByRole('button', { name: messages.replay }).click();
-        const title = page.getByRole('heading', { name: messages.exerciseStraightReverse });
+        const title = page.getByRole('heading', {
+          name: entryName(messages, exerciseEntry('straight-reverse')),
+        });
         await expect(title).toBeVisible();
         await expect(page.locator('.replay-readout')).toBeVisible();
         const [head] = await boxes(title);
@@ -1640,7 +1653,7 @@ test('the class IV mirrors hang from the class II arms at 1920x1080', async ({ b
   });
   try {
     const page = await context.newPage();
-    await startStraightReverse(page, en.exerciseStraightReverse);
+    await startStraightReverse(page, en);
     await hudReady(page);
     await expectWideArms(page);
   } finally {
@@ -1664,7 +1677,7 @@ for (const { width, height, front } of frontShown) {
     const context = await browser.newContext({ locale: 'de-DE', viewport: { width, height } });
     try {
       const page = await context.newPage();
-      await startStraightReverse(page, de.exerciseStraightReverse);
+      await startStraightReverse(page, de);
       await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(front);
       await expectMessagesClear(page, de.blockedTurntable, de.goalInside);
     } finally {
@@ -1700,7 +1713,7 @@ test('opening the aid legend re-measures the divider against the panels', async 
   // The tallest landscape screen here where the in-flow legend leaves the divider no room (below 700 px it is an overlay).
   const size = { width: 1280, height: 700 };
   await page.setViewportSize(size);
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   await expect(handle(page)).toBeVisible();
   const min = await handle(page).getAttribute('aria-valuemin');
   const max = await handle(page).getAttribute('aria-valuemax');
@@ -1719,7 +1732,7 @@ test('opening the aid legend re-measures the divider against the panels', async 
   await expect(handle(page)).toHaveAttribute('aria-valuemax', max ?? '');
 });
 
-for (const { locale } of locales) {
+for (const { locale, messages } of locales) {
   test(`a wrapped view control rounds the ends of each row at ${locale} 740x649`, async ({
     browser,
   }) => {
@@ -1727,7 +1740,7 @@ for (const { locale } of locales) {
     try {
       const page = await context.newPage();
       await page.goto('./');
-      await page.locator('[data-menu="yards"] .menu-start').first().click();
+      await startYard(page, messages, 'depot');
       await expect(page.locator('.ctl-wheel')).toBeVisible();
       await expect(page.locator('.hud-segment').last()).toBeVisible();
       await settled(page);
@@ -1775,7 +1788,7 @@ test('folding and unfolding a panel re-measures the divider against the panels',
   // Short enough that the unfolded aids panel leaves no room for the divider, the folded one does.
   const size = { width: 1024, height: 560 };
   await page.setViewportSize(size);
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
 
   const aids = page.locator('[data-panel="aids"]');
@@ -1786,7 +1799,7 @@ test('folding and unfolding a panel re-measures the divider against the panels',
   await expectDividerClearOrHidden(page, size);
 
   // The folded state is stored: the next run starts with the aids panel folded and the divider in place.
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   await expect(aids).toHaveAttribute('aria-expanded', 'false');
   await expect(handle(page)).toBeVisible();
   await aids.click();
@@ -1810,7 +1823,7 @@ test('toggling the pivots aid re-measures the divider against the panels', async
   // The pivots aid shows the gauge panel: with it the divider has no room here, without it it does.
   const size = { width: 1024, height: 560 };
   await page.setViewportSize(size);
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const pivots = page.locator('[data-aid="pivots"]');
   await expect(pivots).toHaveAttribute('aria-pressed', 'true');
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
@@ -1828,7 +1841,7 @@ test('toggling the pivots aid re-measures the divider against the panels', async
 
 test('dragging the divider resizes the top view, persists, and resets', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const topLeft = async () => (await boxes(page.locator('.hud-topdown')))[0]?.left ?? 0;
   const defaultLeft = await topLeft();
   expect(defaultLeft).toBe(768);
@@ -1851,7 +1864,7 @@ test('dragging the divider resizes the top view, persists, and resets', async ({
 
   // Stored per orientation, so the next run starts with the same split.
   await page.reload();
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await hudReady(page, { exact: false });
   await expect.poll(topLeft).toBeCloseTo(defaultLeft - 120, -1);
 
@@ -1872,7 +1885,7 @@ test('dragging the divider resizes the top view, persists, and resets', async ({
 
 test('rotating mid-drag cancels it, and the divider works again afterwards', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const topLeft = async () => (await boxes(page.locator('.hud-topdown')))[0]?.left ?? 0;
   const defaultLeft = await topLeft();
   const b = await handle(page).boundingBox();
@@ -1908,7 +1921,7 @@ test('rotating mid-drag cancels it, and the divider works again afterwards', asy
 
 test('the divider is keyboard-operable and exposes its value', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const sep = handle(page);
   await expect(sep).toHaveAttribute('role', 'separator');
   await expect(sep).toHaveAttribute('aria-orientation', 'vertical');
@@ -1930,7 +1943,7 @@ test('the divider is keyboard-operable and exposes its value', async ({ page }) 
 
 test('the divider runs across the screen in portrait', async ({ page }) => {
   await page.setViewportSize({ width: 768, height: 1024 });
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const sep = handle(page);
   await expect(sep).toHaveAttribute('aria-orientation', 'horizontal');
   const bottom = async () => (await boxes(page.locator('.hud-topdown')))[0]?.bottom ?? 0;
@@ -1963,7 +1976,7 @@ for (const { size, folded } of closeScreens) {
       const context = await browser.newContext({ locale: 'en-US', viewport: size });
       try {
         const page = await context.newPage();
-        await startStraightReverse(page, en.exerciseStraightReverse);
+        await startStraightReverse(page, en);
         if (folded) {
           const toggle = page.locator('[data-hud="keysToggle"]');
           await toggle.click();
@@ -1992,7 +2005,7 @@ test('a short portrait cockpit keeps the messages clear of the open key legend',
 }) => {
   const size = { width: 840, height: 841 };
   await page.setViewportSize(size);
-  await startStraightReverse(page, en.exerciseStraightReverse);
+  await startStraightReverse(page, en);
   const toggle = page.locator('[data-hud="keysToggle"]');
   if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -2011,7 +2024,7 @@ for (const size of [
     const context = await browser.newContext({ locale: 'en-US', viewport: size });
     try {
       const page = await context.newPage();
-      await startStraightReverse(page, en.exerciseStraightReverse);
+      await startStraightReverse(page, en);
       await expect(page.locator('[data-hud="close"]')).toBeHidden();
       await expect(page.locator('[data-hud="close"]:not([hidden])')).toHaveCount(0);
     } finally {
@@ -2042,7 +2055,7 @@ for (const { size, locale, messages } of laptops) {
     const context = await browser.newContext({ locale, viewport: size });
     try {
       const page = await context.newPage();
-      await startStraightReverse(page, messages.exerciseStraightReverse);
+      await startStraightReverse(page, messages);
       await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
       await expectMirrorsClearControls(page, size);
       await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
@@ -2068,7 +2081,7 @@ for (const { size, locale, messages } of [
         SETTINGS_KEY,
         JSON.stringify({ version: 1, graphics: 'high' }),
       ] as const);
-      await startStraightReverse(page, messages.exerciseStraightReverse);
+      await startStraightReverse(page, messages);
       await expect(page.locator('.hud-legend')).toContainText(messages.lookAround);
       await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
       await expectMirrorsClearControls(page, size);
@@ -2092,17 +2105,18 @@ test('the wide-angle mirrors setting hides class IV, gives class II its full siz
       const [b] = await boxes(page.locator('[data-hud="mirrorLeft"]'));
       return b === undefined ? undefined : { width: b.right - b.left, height: b.bottom - b.top };
     };
-    const setting = page.locator('[data-menu="wideMirrors"]');
 
-    await startStraightReverse(page, en.exerciseStraightReverse);
+    await startStraightReverse(page, en);
     await expect(wide).toHaveCount(2);
     const withWide = await left();
 
     await page.goto('./');
-    await setting.selectOption('off');
+    await openSetup(page, en, exerciseEntry('straight-reverse'));
+    await chooseSetting(page, en, 'wideMirrors', 'off');
     await page.reload();
-    await expect(setting).toHaveValue('off');
-    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+    await openSetup(page, en, exerciseEntry('straight-reverse'));
+    await expect.poll(() => settingValue(page, en, 'wideMirrors')).toBe('off');
+    await startExercise(page, en, 'straight-reverse');
     await hudReady(page);
     await expect(wide).toHaveCount(0);
     const plain = (await expectedViews(page, NO_INSETS, false)).mirrorLeft;
@@ -2114,8 +2128,9 @@ test('the wide-angle mirrors setting hides class IV, gives class II its full siz
     expect(without.height).toBeGreaterThan(withWide.height);
 
     await page.goto('./');
-    await setting.selectOption('on');
-    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+    await openSetup(page, en, exerciseEntry('straight-reverse'));
+    await chooseSetting(page, en, 'wideMirrors', 'on');
+    await startExercise(page, en, 'straight-reverse');
     await hudReady(page);
     await expect(wide).toHaveCount(2);
   } finally {

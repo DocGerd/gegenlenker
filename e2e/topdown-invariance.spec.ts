@@ -51,9 +51,9 @@ const MIN_TOKEN_SHARE: Readonly<
 
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
 // One exercise per yard, so each yard's restyled props are covered.
-for (const { id, name: exercise } of [
-  { id: 'straight-reverse', name: en.exerciseStraightReverse },
-  { id: 'reverse-bay', name: en.exerciseReverseBay },
+for (const { id, title: exercise } of [
+  { id: 'straight-reverse', title: en.exerciseStraightReverse },
+  { id: 'reverse-bay', title: en.exerciseReverseBay },
 ] as const) {
   test(
     `the top-down view is the same at every graphics preset: ${exercise}`,

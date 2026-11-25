@@ -1,6 +1,7 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
+import { startExercise } from './menu-flow';
 
 test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ page }) => {
   await page.addInitScript(() => {
@@ -19,7 +20,7 @@ test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ pa
   });
 
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.getByText(en.noWebgl)).toBeVisible();
   expect(chunks).toEqual([]);
   await expect(page.getByRole('alertdialog', { name: en.noWebgl })).toBeVisible();
@@ -43,7 +44,7 @@ test('the menu loads no three.js chunk until a drive starts', async ({ page }) =
   expect(chunks).toEqual([]);
 
   // Positive control: a renamed or split chunk would keep the empty check above green.
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect.poll(() => chunks.length).toBeGreaterThan(0);
 });
 
@@ -87,7 +88,7 @@ const gpuSeen = (page: Page) =>
 
 async function drive(page: Page, search: string): Promise<void> {
   await page.goto(`./${search}`);
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(5);
   await expect(page.locator('.app-notice')).toHaveCount(0);
 }

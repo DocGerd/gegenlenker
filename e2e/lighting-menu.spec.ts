@@ -17,14 +17,22 @@ import {
   shoot,
   startPinnedDrive,
 } from './pinned-shoot';
-import { yardEntry } from './menu-flow';
+import {
+  chooseRunOption,
+  exerciseEntry,
+  openSetup,
+  runOptionValue,
+  setupBests,
+  startExercise,
+  startYard,
+  toTitle,
+  yardEntry,
+} from './menu-flow';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const BEST_KEY = 'gegenlenker.best.v2';
 /** A day mirror pane is mostly dome: far above the night share, which stays under `MAX_MIRROR_BRIGHT`. */
 const MIN_DAY_MIRROR_BRIGHT = 0.3;
-
-const lightingSelect = (page: Page) => page.getByRole('combobox', { name: en.lighting });
 
 /** Seeds Low graphics on the first load only, so a saved menu choice survives later loads. */
 async function seedLow(page: Page): Promise<void> {
@@ -45,8 +53,7 @@ async function backToMenu(page: Page): Promise<void> {
 
 /** Drives the exercise on the mode chosen in the menu, settled on the pinned clock; reads a mirror pane. */
 async function driveFromMenu(page: Page, preset: Preset, mode: 'day' | 'night'): Promise<number> {
-  await lightingSelect(page).selectOption(mode);
-  await page.getByRole('button', { name: new RegExp(`^${en.layoutDepot}`) }).click();
+  await startYard(page, en, 'depot', { lighting: mode });
   await expect(page.locator('html')).toHaveAttribute('data-render-lighting', mode);
   await settle(page, preset);
   return brightShare(page, await shoot(page, 'mirrorLeft'), DAY_BRIGHT);
@@ -110,20 +117,23 @@ test('the menu shows the bests of the chosen time of day, and the choice is save
     },
     [SETTINGS_KEY, BEST_KEY, stored] as const,
   );
-  const exerciseButton = page.getByRole('button', { name: en.exerciseStraightReverse });
+  const entry = exerciseEntry('straight-reverse');
+  const exerciseButton = setupBests(page, en, entry);
 
   await page.goto('./');
-  await expect(lightingSelect(page)).toHaveValue('day');
+  await openSetup(page, en, entry);
+  await expect.poll(() => runOptionValue(page, en, 'lighting')).toBe('day');
   await expect(exerciseButton).toContainText(en.noResult);
-  await lightingSelect(page).selectOption('night');
+  await chooseRunOption(page, en, 'lighting', 'night');
   await expect(exerciseButton).toContainText(`${en.best} · ${en.noAids}: ${en.targetReached}`);
   await expect(exerciseButton).not.toContainText(en.noResult);
-  await lightingSelect(page).selectOption('day');
+  await chooseRunOption(page, en, 'lighting', 'day');
   await expect(exerciseButton).toContainText(en.noResult);
 
-  await lightingSelect(page).selectOption('night');
+  await chooseRunOption(page, en, 'lighting', 'night');
   await page.reload();
-  await expect(lightingSelect(page)).toHaveValue('night');
+  await openSetup(page, en, entry);
+  await expect.poll(() => runOptionValue(page, en, 'lighting')).toBe('night');
   await expect(exerciseButton).toContainText(en.targetReached);
 });
 
@@ -133,8 +143,7 @@ test('a night run keeps its Night label and replays at night while the menu show
   await seedLow(page);
   const html = page.locator('html');
   await page.goto('./');
-  await lightingSelect(page).selectOption('night');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse', { lighting: 'night' });
   await expect(html).toHaveAttribute('data-render-lighting', 'night');
   await page.keyboard.press('4');
   for (let i = 0; i < 5; i++) await page.keyboard.press('w');
@@ -145,10 +154,14 @@ test('a night run keeps its Night label and replays at night while the menu show
     .getByRole('button', { name: en.finish })
     .click();
   await page.getByRole('button', { name: en.menu }).click();
+  await toTitle(page, en);
 
   const replay = page.getByRole('button', { name: en.replayLastRun });
   await expect(replay).toContainText(en.lightingNight);
-  await lightingSelect(page).selectOption('day');
+  await openSetup(page, en, exerciseEntry('straight-reverse'));
+  await chooseRunOption(page, en, 'lighting', 'day');
+  await expect.poll(() => runOptionValue(page, en, 'lighting')).toBe('day');
+  await toTitle(page, en);
   await expect(replay).toContainText(en.lightingNight);
   await replay.click();
   await expect(page.getByRole('slider', { name: en.timeline })).toBeVisible();

@@ -131,8 +131,8 @@ const CASING_TO_PX = 2;
 const MAX_BARE_RING = 0.49;
 /** The two yards' exercises: slalom's depot has a gate, the bay's logistics yard has none. */
 const EXERCISES = [
-  { id: 'slalom', name: en.exerciseSlalom, zooms: ['target', 'gate'] },
-  { id: 'reverse-bay', name: en.exerciseReverseBay, zooms: ['target'] },
+  { id: 'slalom', title: en.exerciseSlalom, zooms: ['target', 'gate'] },
+  { id: 'reverse-bay', title: en.exerciseReverseBay, zooms: ['target'] },
 ] as const;
 type Zoom = (typeof EXERCISES)[number]['zooms'][number];
 
@@ -183,7 +183,7 @@ type Run = {
 async function runDrives(
   context: BrowserContext,
   testInfo: TestInfo,
-  { id, name: exercise, zooms: allZooms }: (typeof EXERCISES)[number],
+  { id, title: exercise, zooms: allZooms }: (typeof EXERCISES)[number],
   drives: readonly RenderConfig[],
   lampKeys = false,
 ): Promise<Run> {
@@ -282,7 +282,7 @@ async function runDrives(
 // One exercise per yard, so each yard's restyled props are covered, and the slalom's gate renders.
 // Each test drives Low at night as its baseline, so the High drive, the slowest, runs apart from the rest.
 for (const kind of EXERCISES) {
-  const { name: exercise } = kind;
+  const { title: exercise } = kind;
   test(
     `the top-down view at night is never brighter than by day: ${exercise}`,
     { tag: HEAVY },

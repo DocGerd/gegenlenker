@@ -5,7 +5,7 @@ import { en } from '../src/i18n/en';
 import { MAX_STEPS_PER_FRAME } from '../src/sim/constants';
 import { DEFAULT_GRAPHICS, DEFAULT_LIGHTING } from '../src/contracts/render';
 import { HEAVY, settle, startPinnedDrive, timeoutWithSettles } from './pinned-shoot';
-import { exerciseEntry } from './menu-flow';
+import { exerciseEntry, startExercise } from './menu-flow';
 import { EXERCISE_IDS } from '../src/contracts/exercise';
 
 /** The settings a fresh install draws with, so the framing is checked as a new user sees it. */
@@ -154,7 +154,7 @@ test('collapsed panels stay collapsed in the next run', async ({ page }) => {
   await page.getByRole('button', { name: en.panelAids, exact: true }).click();
   await expect(page.locator('[data-hud="aids"]')).toBeHidden();
   await page.reload();
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('[data-hud="aids"]')).toBeHidden();
   await expect(page.locator('[data-hud="gauges"]')).toBeVisible();
 });
