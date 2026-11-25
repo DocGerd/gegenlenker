@@ -227,7 +227,6 @@ const TOP_DOWN_ROWS: readonly MessageKey[] = [
   'zoom',
   'panView',
   'orbitTilt',
-  'freeCamera',
   'resetViewAndSize',
 ];
 

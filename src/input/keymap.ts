@@ -159,7 +159,6 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     action: 'freeCamera',
     match: { by: 'key', values: ['k'] },
     scope: 'view',
-    legend: { term: 'K', desc: 'freeCamera', viewOnly: true, chaseOnly: true },
   },
   {
     action: 'glanceLeft',
