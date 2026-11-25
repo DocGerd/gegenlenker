@@ -66,9 +66,42 @@ test('the replay slider announces the visible time', async ({ page }) => {
   const scrubber = page.getByRole('slider', { name: en.timeline });
   await expect(scrubber).toBeVisible();
   await page.getByRole('button', { name: en.pause }).click();
-  await scrubber.fill(String(Math.round(Number(await scrubber.getAttribute('max')) / 2)));
   const time = page.locator('.replay-time');
   await expect(time).toHaveText(/ \/ /);
-  const label = (await time.textContent()) ?? '';
-  await expect(scrubber).toHaveAttribute('aria-valuetext', label);
+  const before = await time.textContent();
+  await scrubber.fill(String(Math.round(Number(await scrubber.getAttribute('max')) / 2)));
+  await expect
+    .poll(async () => {
+      const [valuetext, label] = [
+        await scrubber.getAttribute('aria-valuetext'),
+        await time.textContent(),
+      ];
+      return valuetext === label && label !== before;
+    })
+    .toBe(true);
+});
+
+test('a notice ignores an Enter held from before it appeared', async ({ page }) => {
+  await page.addInitScript(() => {
+    const original: unknown = Reflect.get(HTMLCanvasElement.prototype, 'getContext');
+    if (typeof original !== 'function') return;
+    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+      configurable: true,
+      value(this: HTMLCanvasElement, id: string, ...rest: unknown[]): unknown {
+        return id === 'webgl2' ? null : Reflect.apply(original, this, [id, ...rest]);
+      },
+    });
+  });
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).focus();
+  await page.keyboard.down('Enter');
+  const notice = page.getByRole('alertdialog', { name: en.noWebgl });
+  await expect(notice).toBeVisible();
+  await page.keyboard.down('Enter');
+  await expect(notice).toBeVisible();
+  await page.keyboard.up('Enter');
+  await expect(notice).toBeVisible();
+
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
 });

@@ -34,19 +34,20 @@ export function showNotice(
   });
   box.append(text, row);
   parent.append(box);
-  // A run ends while Space (the brake) may still be held; its repeats and release must not click the focused button.
-  let spaceFree = false;
-  const guardSpace = (e: KeyboardEvent): void => {
-    if (e.code !== 'Space' || spaceFree) return;
+  // A run ends while a brake key (Space, Enter) may still be held; its repeats and release must not click the focused
+  // button. A code is free after its next fresh press or release.
+  const held = new Set(['Space', 'Enter', 'NumpadEnter']);
+  const guardHeld = (e: KeyboardEvent): void => {
+    if (!held.has(e.code)) return;
     if (e.type === 'keydown' && !e.repeat) {
-      spaceFree = true;
+      held.delete(e.code);
       return;
     }
-    if (e.type === 'keyup') spaceFree = true;
+    if (e.type === 'keyup') held.delete(e.code);
     e.preventDefault();
   };
-  box.addEventListener('keydown', guardSpace, true);
-  box.addEventListener('keyup', guardSpace, true);
+  box.addEventListener('keydown', guardHeld, true);
+  box.addEventListener('keyup', guardHeld, true);
   // Focus leaves what the cover hides.
   buttons[0]?.focus();
   return box;
