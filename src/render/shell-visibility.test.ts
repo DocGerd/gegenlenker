@@ -92,6 +92,7 @@ function mirrorFrusta(id: TruckId, screen: readonly [number, number]) {
       STRAIGHT,
       anchors[side],
       side === 'mirrorLeft' ? 'left' : 'right',
+      id,
       position,
     );
     mirror.place(position, facing);

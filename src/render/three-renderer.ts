@@ -19,7 +19,7 @@ import {
   type TopDownView,
   type WebgpuFallback,
 } from '../contracts/render';
-import type { TruckAnchors } from '../contracts/vehicle';
+import type { TruckAnchors, TruckId } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import {
   cabFront,
@@ -42,6 +42,7 @@ import { describeAdapter } from './gpu-backend';
 import {
   createMirror,
   mirrorAnchor,
+  mirrorYaw,
   mirrorFacing,
   type MirrorMounts,
   mirrorMounts,
@@ -80,6 +81,7 @@ type Built = {
   readonly environment: Environment;
   readonly aids: AidsLayer;
   readonly interior: CockpitInterior;
+  readonly truckId: TruckId;
   readonly anchors: TruckAnchors;
   readonly mounts: MirrorMounts;
   readonly cabFront: CabFront;
@@ -472,6 +474,7 @@ export function createThreeSceneRenderer(
         environment,
         aids,
         interior,
+        truckId: truck.id,
         anchors: truckAnchors(truck),
         mounts: mirrorMounts(truck),
         cabFront: cabFront(truck),
@@ -551,7 +554,7 @@ export function createThreeSceneRenderer(
         const facing = mirrorFacing(
           snapshot.truck,
           mirrorAnchor(spec, b.mounts),
-          spec.yaw,
+          mirrorYaw(spec, b.truckId),
           mirrorPosition,
         );
         mirror.place(mirrorPosition, facing);

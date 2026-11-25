@@ -6,7 +6,7 @@ const eyeAboveFloor =
 const mirrorHeight =
   'class II glass from mid-window to near the roof line on THW photos (https://commons.wikimedia.org/wiki/File:Dossenheim_-_Mercedes_Benz_Arocs_1835_AK_-_Technisches_Hilfswerk_Mannheim_-_THW_81451_-_2016-05-08_16-03-18.jpg, https://commons.wikimedia.org/wiki/File:MAN_LE_18-280_THW.jpg); no measured source';
 const mirrorArms =
-  'housing clear of the cab side on arms straight out from the A-pillar, as far out as the class II still shows the body side (render model); no source found';
+  'housing 0.3 m clear of the cab side, as on the Arocs, on arms straight out from the A-pillar (render model); no source found';
 const mirrorPillar =
   'arms meet the cab between its front corner and the side window, so the heads stand beside the A-pillar (render model); no source found';
 const typical = 'typical for the vehicle class, no source found';
@@ -32,7 +32,7 @@ export const manLe18280: TruckSpec = {
     leftOfCentre: estimate(600, 'about 0.65 m inboard of the 2.5 m cab side; no source found'),
   },
   mirror: {
-    lateral: estimate(1300, mirrorArms),
+    lateral: estimate(1465, mirrorArms),
     glassOutboard: estimate(200, typical),
     behindBumper: estimate(215, mirrorPillar),
     height: estimate(2550, mirrorHeight),

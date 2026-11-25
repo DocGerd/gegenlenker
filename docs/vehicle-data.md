@@ -26,7 +26,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | eye.height | 2350 mm | cab floor 1.1 m above ground (render model), seated eye 1.25 m above it: seat height plus sitting eye height; no source found |
 | MAN LE 18.280 | eye.behindBumper | 1000 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | eye.leftOfCentre | 600 mm | about 0.65 m inboard of the 2.5 m cab side; no source found |
-| MAN LE 18.280 | mirror.lateral | 1300 mm | housing clear of the cab side on arms straight out from the A-pillar, as far out as the class II still shows the body side (render model); no source found |
+| MAN LE 18.280 | mirror.lateral | 1465 mm | housing 0.3 m clear of the cab side, as on the Arocs, on arms straight out from the A-pillar (render model); no source found |
 | MAN LE 18.280 | mirror.glassOutboard | 200 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | mirror.behindBumper | 215 mm | arms meet the cab between its front corner and the side window, so the heads stand beside the A-pillar (render model); no source found |
 | MAN LE 18.280 | mirror.height | 2550 mm | class II glass from mid-window to near the roof line on THW photos (https://commons.wikimedia.org/wiki/File:Dossenheim_-_Mercedes_Benz_Arocs_1835_AK_-_Technisches_Hilfswerk_Mannheim_-_THW_81451_-_2016-05-08_16-03-18.jpg, https://commons.wikimedia.org/wiki/File:MAN_LE_18-280_THW.jpg); no measured source |
