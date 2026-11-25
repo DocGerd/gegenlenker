@@ -20,15 +20,16 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 
 ## Who does what
 
-- The owner decides to release and approves each `github-pages` deployment: that approval is what publishes the tag and the GitHub Release. A UAT deploy needs it only when the UAT deploy path changed (see UAT).
-- Agents cut `release/*` and `hotfix/*`, run `release:prepare` and `release:backmerge`, and merge reviewed PRs with green CI into `develop`, `release/*`, `main` and back-merges. They never approve a deployment.
-- `/release [X.Y.Z]` and `/release hotfix` (`.claude/skills/release/SKILL.md`) drive the whole procedure and stop for the approval.
+- The owner decides to release and merges into `main`. That merge is the only gate: no deployment needs approval, so production deploys, tags and publishes the release right after it.
+- Agents cut `release/*` and `hotfix/*`, run `release:prepare` and `release:backmerge`, and merge reviewed PRs with green CI into `develop`, `release/*` and back-merges. They stop at a reviewed, gate-checked release or hotfix PR and hand the owner `gh pr merge <n> --merge --match-head-commit <sha>`; they never merge into `main` and never approve a deployment.
+- `/release [X.Y.Z]` and `/release hotfix` (`.claude/skills/release/SKILL.md`) drive the whole procedure and stop for the owner's merge.
+- Agents author as the owner's GitHub account, so no ruleset can tell them apart, and the `main` ruleset has no bypass list and no merger restriction. Only their instructions (CLAUDE.md, `/release`) keep agents out of `main`: no permission rule can tell a merge into `main` from one into `develop`, and GitHub cannot enforce it.
 
 ## CI
 
-- PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, and another run of the same commit also reports `check`. So `/release` merges a reviewed PR into `main` only once its own run passed the guard and `release:check`, and the owner's deployment approval is the last gate.
+- PRs into `main` run the full gate, a guard that the head is a `release/*` or `hotfix/*` branch of this repository, and `release:check` (with the tags fetched). The guard catches mistakes only: a PR can edit it, and another run of the same commit also reports `check`. So `/release` hands the owner the merge into `main` only once its own run passed the guard and `release:check`; the owner's merge is the last gate.
 - Changing a PR's base starts no run, and a re-run repeats the old one: after retargeting a PR, close and reopen it so CI checks it against the new base.
-- Pushes to `develop` and `main` run the gate without e2e, then deploy. `main` waits for the owner's approval of the `github-pages` deployment; `develop` does only when the UAT deploy path changed.
+- Pushes to `develop` and `main` run the gate without e2e, then deploy, without approval.
 - `main` builds and deploys production to the site root, then tags and publishes the release once the deploy succeeded. Its Pages artifact holds production alone, so a release needs nothing from `develop`, and `/uat/` is gone until the next `develop` deploy.
 - `develop` deploys its UAT build to `/gegenlenker/uat/` (see UAT).
 - `workflow_dispatch` of CI on `main` redeploys production; on `develop` it redeploys UAT.
@@ -36,16 +37,12 @@ Why: [ADR 0002](decisions/0002-gitflow-release-flow.md).
 ## UAT
 
 - Each `develop` deploy republishes production beside the UAT build: the production dist of the live `main` deploy, never rebuilt. `tools/uat-pages.ts` finds it from the last successful `deploy` job of a `push` or `workflow_dispatch` run on `main`, and fails closed unless that job's deployment succeeded, no newer production deployment did, the run holds exactly one unexpired `prod-dist-<sha>` uploaded before the job started, and the files match its manifest and commit exactly.
-- `preflight-uat` runs that lookup before any deploy; the deploy job repeats it inside the `pages` group, right before uploading, so a release deployed in between is the one republished.
-- `preflight-uat` also sets `gated` from `tools/uat-gate.ts`. `deploy-uat` (environment `uat-pages`, no reviewer) runs only when it is `false`; `deploy-uat-gated` (environment `github-pages`, owner approval) runs on anything else. The two jobs differ only in `if` and environment.
-- `gated` is `false` only when the UAT deploy path at the run's commit (`GITHUB_SHA`) equals that at the baseline: the newest `github-pages` deployment of `develop` that has a `success` status (a later deploy only marks it `inactive`) and whose run of `ci.yml` at that commit has a successful `deploy-uat-gated` job. So only a deploy the owner approved counts, never a production approval or a deployment made through the API. The path is the parsed `ci.yml` workflow-level keys (`on`, `permissions`, `env`, `concurrency`, `defaults`) and its UAT jobs (`preflight-uat`, `build-uat`, both deploy jobs), the files in `PATH_FILES` (`tools/uat-gate.ts`: toolchain and dependency pins, Vite config and its direct local imports), every root `vite.config.*`, `postcss.config.*`, `.postcssrc*`, `.npmrc` and `.pnpmfile.cjs` present (added, removed or changed), and every file under `.github/workflows/` (other than `ci.yml`) and `.github/actions/`. App source is not in it. Any difference, a missing job or file, no baseline, an API error or a missing `yq` gates.
-- The gate runs from `main`'s copy, like `uat-pages.ts`, and reads both commits through the API. While `main` has no `tools/uat-gate.ts`, every UAT deploy is gated.
-- The preflight and the deploy jobs run the scripts as `main` has them, never `develop`'s copy: `develop` supplies only the `uat-dist-<sha>` artifact of `build-uat`. The jobs themselves come from `develop`'s `ci.yml`, so a change to them takes effect on the next `develop` run. While `main` has no `tools/uat-pages.ts`, every UAT deploy fails at the preflight.
-- The gate catches accidental changes to the UAT deploy path, not a hostile one: a `develop` workflow edit merged through a reviewed PR can bypass it, for example by changing the `if` of a deploy job, or with any job that names `uat-pages` and has `pages: write`. PR review of `develop` is the boundary.
-- All three deploy jobs share the `pages` concurrency group with `queue: max`: they run one at a time, and a newer deploy never replaces a waiting one (beyond the queue limit, it is cancelled). Whether a job waiting for approval holds the group is undocumented: if a release deploy waits behind gated UAT deploys, approve or reject each one queued ahead of it (first in, first out), or cancel their runs. Approving UAT deploys out of order can leave an older `develop` under `/uat/`.
-- An expired `prod-dist-<sha>` fails the UAT deploy: run CI with `workflow_dispatch` on `main` and approve it, then run it on `develop`.
-- On approving a gated UAT deploy, check the branch is `develop` and what changed in the UAT deploy path between the baseline and the run's commit (`git diff <baseline> <run commit> -- .github`, and `PATH_FILES`): the workflow decides what the deploy publishes, the site root included. Afterwards the site root is unchanged (what `main` last deployed) and `/uat/` serves the `develop` commit with its UAT title.
-- Roll back: `workflow_dispatch` of CI on `main` republishes production alone. To stop UAT deploys, reject the gated ones and remove the `develop` deployment branch policy of `github-pages` and `uat-pages`.
+- `deploy-uat` (environment `uat-pages`, no reviewer) runs the lookup inside the `pages` group, right before uploading, so a release deployed while it waited is the one republished.
+- It runs the script as `main` has it, never `develop`'s copy: `develop` supplies only the `uat-dist-<sha>` artifact of `build-uat`. The job itself comes from `develop`'s `ci.yml`, so a change to it takes effect on the next `develop` run, and PR review of `develop` is the boundary. While `main` has no `tools/uat-pages.ts`, every UAT deploy fails.
+- Both deploy jobs share the `pages` concurrency group with `queue: max`: they run one at a time, and a newer deploy never replaces a waiting one (beyond the queue limit, it is cancelled).
+- An expired `prod-dist-<sha>` fails the UAT deploy: run CI with `workflow_dispatch` on `main`, then on `develop`.
+- After a UAT deploy the site root is unchanged (what `main` last deployed) and `/uat/` serves the `develop` commit with its UAT title.
+- Roll back: `workflow_dispatch` of CI on `main` republishes production alone. To stop UAT deploys, remove the `develop` deployment branch policy of `uat-pages`.
 
 ## Commands
 
@@ -72,8 +69,8 @@ Without a version it derives one from `develop`'s pending entries the way `relea
 
 1. `pnpm release:cut`. Freeze: `release/X.Y.Z` takes only fixes, by PR, and a fix goes there only. `develop` stays open for the next version.
 2. On a `feature/*` branch from `origin/release/X.Y.Z`, `pnpm release:prepare X.Y.Z`, and a PR into `release/X.Y.Z` (rerun it when a fix adds a fragment).
-3. Merge or close every PR into `release/X.Y.Z` (merging deletes the branch, and GitHub retargets PRs still based on it to `main`), then PR `release/X.Y.Z` into `main`; CI runs the full gate and `release:check`. Merge it with a merge commit once reviewed and green.
-4. The owner approves the `github-pages` deployment. After the deploy, the release job tags `vX.Y.Z` and publishes the GitHub Release.
+3. Merge or close every PR into `release/X.Y.Z` (merging deletes the branch, and GitHub retargets PRs still based on it to `main`), then PR `release/X.Y.Z` into `main`; CI runs the full gate and `release:check`. Once it is reviewed and green, the owner merges it with a merge commit.
+4. The merge deploys production. After the deploy, the release job tags `vX.Y.Z` and publishes the GitHub Release.
 5. `pnpm release:backmerge`, then merge the PR with a merge commit, then `pnpm release:backmerge --verify`.
 
 ## Hotfix

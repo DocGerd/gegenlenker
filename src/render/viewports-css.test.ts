@@ -108,7 +108,7 @@ describe('the viewports.ts fallbacks match the CSS', () => {
     expect(margin).toBe(2 * GEOM.space4);
     expect(GEOM.toastBox).toBe(41);
     expect(GEOM.cueBox).toBe(34);
-    expect(MIN_MESSAGE_WIDTH).toBe(131 + GEOM.toastBox + margin);
+    expect(MIN_MESSAGE_WIDTH).toBe(99 + GEOM.toastBox + margin);
   });
 
   it('the safe insets default to zero without a display cut-out', () => {

@@ -338,21 +338,41 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
 
-const insetSizes = [
+/**
+ * `slot`: where a mirror-only drive too short for both messages between the mirrors puts them;
+ * `keysOpen`: the key legend's chevron starts open.
+ */
+const insetSizes: {
+  width: number;
+  height: number;
+  slot?: 'cue yields' | 'right of the cone';
+  keysOpen?: boolean;
+}[] = [
   { width: 1280, height: 720 },
   { width: 1024, height: 600 },
   { width: 900, height: 649 },
   { width: 768, height: 1024 },
+  { width: 860, height: 860, keysOpen: true },
+  { width: 950, height: 426, slot: 'cue yields' },
+  // over the brief's side of the cockpit
+  { width: 1030, height: 426, slot: 'right of the cone' },
 ];
 
-for (const size of insetSizes) {
-  test(`the drive screen stays inside the safe area at ${size.width}x${size.height}`, async ({
+for (const { slot, keysOpen = false, ...size } of insetSizes) {
+  const mirrorsOnly = slot !== undefined;
+  const screen = mirrorsOnly ? 'mirror-only drive' : 'drive screen';
+  test(`the ${screen} stays inside the safe area at ${size.width}x${size.height}`, async ({
     browser,
   }) => {
     const context = await browser.newContext({ locale: 'en-US', viewport: size });
     const page = await context.newPage();
     const cdp = await context.newCDPSession(page);
     await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+    if (mirrorsOnly) {
+      await page.addInitScript((key) => {
+        localStorage.setItem(key, JSON.stringify({ version: 1, mirrorsOnly: true }));
+      }, SETTINGS_KEY);
+    }
     await page.goto('./');
     await expect
       .poll(() =>
@@ -362,13 +382,20 @@ for (const size of insetSizes) {
       )
       .toBe(`${insets.left}px`);
     await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
-    await hudReady(page, { insets });
+    await hudReady(page, { insets, mirrorsOnly });
+    if (keysOpen) {
+      await expect(page.locator('[data-hud="keysToggle"]')).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+    }
 
     const placed = await boxes(
       page.locator(
         [
           '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever',
-          '.hud-action, .hud-goal:not([hidden]), .hud-gauge, .hud-counters, .hud-legend',
+          // the mirror-only drive hides the gauges with the top-down pane
+          `.hud-action, .hud-goal:not([hidden]), ${mirrorsOnly ? '' : '.hud-gauge, '}.hud-counters, .hud-legend`,
           '.hud-gear, .hud-speed, .hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])',
         ].join(', '),
       ),
@@ -402,9 +429,68 @@ for (const size of insetSizes) {
         expect(overlaps(m, c), `${c.name} overlaps a mirror`).toBe(false);
       }
     }
+
+    const wrap = page.locator('[data-hud="toastWrap"]');
+    if (slot === 'cue yields') await expect(wrap).toHaveAttribute('data-cue-yields');
+    else await expect(wrap).not.toHaveAttribute('data-cue-yields');
+    if (slot === 'right of the cone') {
+      const [column] = await boxes(wrap);
+      expect(column?.left, 'the messages right of the sight cone').toBeGreaterThan(size.width / 2);
+    }
+    await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+    // the toast stands inside the wrap, which keeps clear of the safe area
+    const messages = await boxes(
+      page.locator(
+        '[data-hud="toastWrap"], [data-hud="toast"]:visible, [data-hud="goalCue"]:visible',
+      ),
+    );
+    for (const b of messages) {
+      const at = `${b.name} in the safe area`;
+      expect(b.left, at).toBeGreaterThanOrEqual(insets.left);
+      expect(b.right, at).toBeLessThanOrEqual(size.width - insets.right);
+      if (landscape && !b.name.includes('toast-wrap')) {
+        expect(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(insets.top);
+      }
+    }
     await context.close();
   });
 }
+
+test('the longest German toast fits the narrowest pane column, inside the safe area, at 800x426', async ({
+  browser,
+}) => {
+  const size = { width: 800, height: 426 };
+  const context = await browser.newContext({ locale: 'de-DE', viewport: size });
+  try {
+    const page = await context.newPage();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+    await page.goto('./');
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue('--safe-left'),
+        ),
+      )
+      .toBe(`${insets.left}px`);
+    await page.getByRole('button', { name: de.exerciseStraightReverse }).click();
+    await hudReady(page, { insets });
+    const [column] = await boxes(page.locator('[data-hud="toastWrap"]'));
+    const [pane] = await boxes(page.locator('.hud-topdown'));
+    expect(column?.left, 'the messages in the top-down pane').toBeGreaterThanOrEqual(
+      pane?.left ?? Infinity,
+    );
+    await expectMessagesClear(page, de.blockedTurntable, de.goalInside);
+    const messages = await boxes(
+      page.locator('[data-hud="toast"]:visible, [data-hud="goalCue"]:visible'),
+    );
+    for (const b of messages) {
+      expect(b.right, `${b.name} in the safe area`).toBeLessThanOrEqual(size.width - insets.right);
+    }
+  } finally {
+    await context.close();
+  }
+});
 
 const starts = [
   { name: 'exercise', label: en.exerciseStraightReverse },
@@ -565,7 +651,7 @@ test('below 700 px the brief collapses on the first drive input and the key lege
       .poll(async () => (await boxes(page.locator('.hud-topdown')))[0])
       .toMatchObject({ right: other.width, bottom: other.height });
     await settled(page);
-    await expect.poll(() => keyListTrouble(page)).toEqual([]);
+    await expect.poll(() => overlayTrouble(page, KEY_LIST)).toEqual([]);
   }
   await keysToggle.click();
   await expect(list).toBeHidden();
@@ -612,6 +698,7 @@ for (const [height, short] of [
     await startStraightReverse(page, en.exerciseStraightReverse);
     await expect(page.locator('[data-hud="briefToggle"]')).toBeVisible({ visible: short });
     await expect(page.locator('.hud-legend[data-overlay]')).toHaveCount(short ? 1 : 0);
+    await expect(page.locator('.hud-topdown[data-short]')).toHaveCount(short ? 1 : 0);
     await page.keyboard.press('4');
     await expect(page.locator('.hud-goal-brief')).toBeVisible({ visible: !short });
   });
@@ -638,27 +725,79 @@ const splitBar = (page: Page) => page.locator('[data-hud="split"]');
 /** A short landscape screen: no panel row fits above the divider. */
 const shortLandscape = { width: 844, height: 390 };
 const splitSizes = [...sizes, shortLandscape];
+/** Laptops whose lever column stands well below the toolbar: the toolbar keeps its full width there. */
+const unreservedToolbar = new Set(['1280x800', '1366x768']);
 
-/** Two animation frames: the legend's resize observer re-lays out after the first one. */
-/** What the open key list leaves or covers: it stands in the top-down pane, clear of the mirrors, the lever and the buttons. */
-async function keyListTrouble(page: Page): Promise<string[]> {
-  const [list] = await boxes(page.locator('.hud-legend dl'));
+const KEY_LIST = '.hud-legend dl';
+const AID_LIST = '[data-hud="aidLegend"]';
+
+/**
+ * What an open overlay of a short screen leaves or covers: it stands in the top-down pane, clear of the
+ * mirrors, the controls, the divider and the toolbar. Taller than its room, it scrolls: its first item
+ * shows whole and every item can be scrolled into view.
+ */
+async function overlayTrouble(page: Page, sel: string): Promise<string[]> {
+  const list = page.locator(sel);
+  const [box] = await boxes(list);
   const [pane] = await boxes(page.locator('.hud-topdown'));
-  if (list === undefined || pane === undefined) return ['no list or no pane'];
+  if (box === undefined || pane === undefined) return ['no list or no pane'];
   const inside =
-    list.left >= pane.left &&
-    list.right <= pane.right &&
-    list.top >= pane.top &&
-    list.bottom <= pane.bottom;
+    box.left >= pane.left &&
+    box.right <= pane.right &&
+    box.top >= pane.top &&
+    box.bottom <= pane.bottom;
+  const scroll = await list.evaluate((el) => {
+    const style = getComputedStyle(el);
+    const scrollable = /auto|scroll/.test(style.overflowY) && style.pointerEvents !== 'none';
+    const from = el.scrollTop;
+    // Whole within the padding box, at the current scroll.
+    const whole = (item: Element): boolean => {
+      const top = el.getBoundingClientRect().top + el.clientTop;
+      const r = item.getBoundingClientRect();
+      return r.top >= top - 0.5 && r.bottom <= top + el.clientHeight + 0.5;
+    };
+    el.scrollTop = 0;
+    const items = [...el.children].filter((item) => item.getClientRects().length > 0);
+    const first = items[0] !== undefined && whole(items[0]);
+    // Scrolled down to its bottom, an item shows whole, or from there up if it is taller than the view.
+    const unreachable = items.flatMap((item, i) => {
+      const view = el.getBoundingClientRect().top + el.clientTop + el.clientHeight;
+      el.scrollTop += Math.max(0, item.getBoundingClientRect().bottom - view);
+      const r = item.getBoundingClientRect();
+      const reached =
+        whole(item) || (r.height > el.clientHeight && Math.abs(r.bottom - view) <= 0.5);
+      return reached ? [] : [`item ${String(i + 1)} out of reach`];
+    });
+    el.scrollTop = from;
+    return {
+      clipped: el.scrollHeight > el.clientHeight,
+      scrollable,
+      first,
+      unreachable: [
+        ...unreachable,
+        ...(el.scrollWidth > el.clientWidth ? ['cut at the side'] : []),
+      ],
+    };
+  });
   const others = await boxes(
-    page.locator('.hud-mirror:not([hidden]), .ctl-stop, .ctl-lever, .hud-action'),
+    page.locator(
+      [
+        '.hud-mirror:not([hidden]), .ctl-stop, .ctl-lever, .hud-action',
+        '.hud-split:not([hidden]) .hud-split-handle, .hud-split:not([hidden]) .hud-split-reset',
+        '.hud-toolbar .hud-toggle',
+      ].join(', '),
+    ),
   );
   return [
     ...(inside ? [] : ['outside the top-down pane']),
-    ...others.filter((o) => overlaps(list, o)).map((o) => o.name),
+    ...(scroll.clipped && !scroll.scrollable ? ['clipped and not scrollable'] : []),
+    ...(scroll.first ? [] : ['first item cut']),
+    ...scroll.unreachable,
+    ...others.filter((o) => overlaps(box, o)).map((o) => o.name),
   ];
 }
 
+/** Two animation frames: the legend's resize observer re-lays out after the first one. */
 const settled = (page: Page) =>
   page.evaluate(
     () =>
@@ -667,10 +806,299 @@ const settled = (page: Page) =>
       }),
   );
 
+async function startFreeYard(page: Page, label: string): Promise<void> {
+  await page.goto('./');
+  await page.getByRole('button', { name: label }).click();
+  // No exercise, so no counters or brief: the toolbar and the controls are what stands.
+  await expect(page.locator('.hud-gauge')).toHaveCount(2);
+  await expect(page.locator('.hud-toolbar .hud-toggle').first()).toBeVisible();
+  await expect(page.locator('.ctl-stop')).toBeVisible();
+  await expect
+    .poll(() => page.locator('.hud-mirror:not([hidden])').count())
+    .toBeGreaterThanOrEqual(2);
+  await settled(page);
+}
+
 async function startStraightReverse(page: Page, label: string): Promise<void> {
   await page.goto('./');
   await page.getByRole('button', { name: label }).click();
   await hudReady(page);
+}
+
+const aidToggle = (page: Page) => page.locator('[data-hud="aidLegendToggle"]');
+const keysToggle = (page: Page) => page.locator('[data-hud="keysToggle"]');
+
+test('below 700 px the aid legend opens over the top view, one overlay at a time, and closes on the next control input', async ({
+  page,
+}) => {
+  const size = { width: 1280, height: 585 };
+  await page.setViewportSize(size);
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const list = page.locator(AID_LIST);
+  const keys = page.locator(KEY_LIST);
+  const frame = async () => ({
+    info: await boxes(page.locator('.hud-info')),
+    toggles: await boxes(page.locator('.hud-toolbar .hud-toggle')),
+    min: await handle(page).getAttribute('aria-valuemin'),
+    max: await handle(page).getAttribute('aria-valuemax'),
+  });
+
+  await expect(list).toBeHidden();
+  await expect(aidToggle(page)).toHaveAttribute('aria-expanded', 'false');
+  await expect(handle(page)).toBeVisible();
+  await settled(page);
+  const closed = await frame();
+
+  // Open or closed, the legend stands out of the flow: the panels and the divider do not move for it.
+  await aidToggle(page).click();
+  await expect(list).toBeVisible();
+  await expect(aidToggle(page)).toHaveAttribute('aria-expanded', 'true');
+  await settled(page);
+  expect(await frame()).toEqual(closed);
+  await expect.poll(() => overlayTrouble(page, AID_LIST)).toEqual([]);
+  // It paints over the info row, not under it.
+  // The HUD takes no pointer events, so let the list, or `elementFromPoint` skips it.
+  const covered = await list.evaluate((el) => {
+    if (!(el instanceof HTMLElement)) throw new Error('no legend');
+    el.style.pointerEvents = 'auto';
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+    el.style.pointerEvents = '';
+    return top !== null && el.contains(top);
+  });
+  expect(covered, 'the legend is painted under another element').toBe(true);
+  await page.waitForTimeout(1000);
+  await expect(list).toBeVisible();
+
+  // One overlay at a time.
+  await keysToggle(page).click();
+  await expect(keys).toBeVisible();
+  await expect(list).toBeHidden();
+  await expect(aidToggle(page)).toHaveAttribute('aria-expanded', 'false');
+  await aidToggle(page).click();
+  await expect(list).toBeVisible();
+  await expect(keys).toBeHidden();
+  await expect(keysToggle(page)).toHaveAttribute('aria-expanded', 'false');
+
+  // The next control input closes it.
+  await page.keyboard.down('a');
+  await expect(list).toBeHidden();
+  await page.keyboard.up('a');
+  await expect(aidToggle(page)).toHaveAttribute('aria-expanded', 'false');
+  await settled(page);
+  expect(await frame()).toEqual(closed);
+});
+
+/** Wide, narrow, short and tall panes: the sizes where the overlay's limits bind. */
+const overlaySizes = [
+  { width: 1280, height: 585 },
+  { width: 1024, height: 690 },
+  { width: 800, height: 600 },
+  { width: 1300, height: 540 },
+  { width: 1172, height: 426 },
+];
+
+for (const { locale, messages } of locales) {
+  for (const touch of [false, true]) {
+    for (const size of overlaySizes) {
+      const at = `${locale} ${size.width}x${size.height} with ${touch ? 'touch' : 'a mouse'}`;
+
+      test(`the open overlays stay whole and clear of the controls at ${at}`, async ({
+        browser,
+      }) => {
+        test.slow();
+        const context = await browser.newContext({
+          locale,
+          viewport: size,
+          ...(touch ? { hasTouch: true, isMobile: true } : {}),
+        });
+        try {
+          const page = await context.newPage();
+          await startStraightReverse(page, messages.exerciseStraightReverse);
+          // The brief open, then folded by the first drive input.
+          for (const folded of [false, true]) {
+            if (folded) {
+              await page.keyboard.press('4');
+              await expect(page.locator('.hud-goal-brief')).toBeHidden();
+            }
+            // A touch screen has no key legend until a key is typed.
+            for (const [toggle, sel] of [
+              [aidToggle(page), AID_LIST],
+              ...(touch ? [] : [[keysToggle(page), KEY_LIST] as const]),
+            ] as const) {
+              await toggle.click();
+              await expect(page.locator(sel)).toBeVisible();
+              await settled(page);
+              await expect
+                .poll(() => overlayTrouble(page, sel), {
+                  message: `${sel}, brief ${folded ? 'folded' : 'open'}`,
+                })
+                .toEqual([]);
+              await toggle.click();
+              await expect(page.locator(sel)).toBeHidden();
+            }
+          }
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
+}
+
+for (const { locale, messages } of locales) {
+  test(`the open aid legend of the free yard stays whole and clear at ${locale} 1024x600`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale, viewport: { width: 1024, height: 600 } });
+    try {
+      const page = await context.newPage();
+      await startFreeYard(page, messages.layoutDepot);
+      await aidToggle(page).click();
+      await expect(page.locator(AID_LIST)).toBeVisible();
+      await settled(page);
+      await expect.poll(() => overlayTrouble(page, AID_LIST)).toEqual([]);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
+test('a swipe on the open aid legend scrolls it, and neither steers, drives nor moves the top view', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    locale: 'en-US',
+    viewport: { width: 800, height: 600 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  try {
+    const page = await context.newPage();
+    await startStraightReverse(page, en.exerciseStraightReverse);
+    const list = page.locator(AID_LIST);
+    await aidToggle(page).tap();
+    await expect(list).toBeVisible();
+    await settled(page);
+    const scrollTop = () => list.evaluate((el) => el.scrollTop);
+    expect(
+      await list.evaluate((el) => el.scrollHeight > el.clientHeight),
+      'no room to scroll',
+    ).toBe(true);
+    const controls = () =>
+      Promise.all([
+        page.locator('[data-ctl="lever"]').evaluate((el) => el.style.getPropertyValue('--lever')),
+        page.locator('[data-ctl="wheel-art"]').evaluate((el) => el.style.transform),
+      ]);
+    const before = await controls();
+    const [box] = await boxes(list);
+    if (box === undefined) throw new Error('no legend');
+    const x = (box.left + box.right) / 2;
+    const cdp = await context.newCDPSession(page);
+    const touch = (type: 'touchStart' | 'touchMove' | 'touchEnd', y?: number) =>
+      cdp.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints: y === undefined ? [] : [{ x, y, id: 1 }],
+      });
+    await touch('touchStart', box.bottom - 8);
+    for (let i = 1; i <= 8; i++) await touch('touchMove', box.bottom - 8 - i * 10);
+    await touch('touchEnd');
+    await expect.poll(scrollTop).toBeGreaterThan(0);
+    // A tap during the fling only stops it.
+    await expect
+      .poll(async () => {
+        const from = await scrollTop();
+        await settled(page);
+        await page.waitForTimeout(100);
+        return (await scrollTop()) === from;
+      })
+      .toBe(true);
+    await expect(list).toBeVisible();
+    expect(await controls()).toEqual(before);
+    await expect(page.locator('[data-hud="resetView"]')).toBeDisabled();
+    // Opened again, it starts at the top.
+    await aidToggle(page).tap();
+    await expect(list).toBeHidden();
+    await aidToggle(page).tap();
+    await expect(list).toBeVisible();
+    expect(await scrollTop()).toBe(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test('the key list of a short screen opens at its top again', async ({ page }) => {
+  await page.setViewportSize({ width: 1172, height: 426 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const list = page.locator(KEY_LIST);
+  await keysToggle(page).click();
+  await expect(list).toBeVisible();
+  await settled(page);
+  expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight), 'no room to scroll').toBe(
+    true,
+  );
+  await list.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await keysToggle(page).click();
+  await expect(list).toBeHidden();
+  await keysToggle(page).click();
+  await expect(list).toBeVisible();
+  expect(await list.evaluate((el) => el.scrollTop)).toBe(0);
+});
+
+test('the messages stay clear of the controls with the aid legend open on a short portrait screen', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 640, height: 690 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  await aidToggle(page).click();
+  await expect(page.locator(AID_LIST)).toBeVisible();
+  await settled(page);
+  await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+  // The message column stands in the top view here.
+  const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
+  const [pane] = await boxes(page.locator('.hud-topdown'));
+  expect(wrap?.top).toBeGreaterThanOrEqual(pane?.top ?? Infinity);
+  expect(wrap?.bottom).toBeLessThanOrEqual(pane?.bottom ?? -Infinity);
+});
+
+/** Below 700 px the counters stand beside the angle gauges instead of under them. */
+const counterSizes = [
+  { width: 1280, height: 585 },
+  { width: 1280, height: 649 },
+  { width: 1300, height: 540 },
+  { width: 1350, height: 600 },
+];
+
+for (const { locale, messages } of locales) {
+  for (const touch of [false, true]) {
+    for (const size of counterSizes) {
+      test(`the counters stand beside the angle gauges at ${locale} ${size.width}x${size.height} with ${touch ? 'touch' : 'a mouse'}`, async ({
+        browser,
+      }) => {
+        const context = await browser.newContext({
+          locale,
+          viewport: size,
+          ...(touch ? { hasTouch: true, isMobile: true } : {}),
+        });
+        try {
+          const page = await context.newPage();
+          await startStraightReverse(page, messages.exerciseStraightReverse);
+          await settled(page);
+          const [gauges] = await boxes(page.locator('.hud-gauges'));
+          const [counters] = await boxes(page.locator('.hud-counters'));
+          expect(counters?.top).toBeCloseTo(gauges?.top ?? NaN, 0);
+          const overflow = await page
+            .locator('.hud-gauge .hud-label')
+            .evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
+          expect(overflow, 'a gauge label sticks out').toEqual([0, 0]);
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
 }
 
 /** At the smallest and largest share the divider clears the cockpit and the panels, or is hidden. */
@@ -735,7 +1163,8 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
 
 /**
  * The longest toast and a goal cue: no word sticks out of its box, and neither touches the controls
- * or the forward sight cone, the cockpit label and every mirror.
+ * or the forward sight cone, the cockpit label and every mirror. Where the column holds one message at
+ * a time (`data-cue-yields`), the cue hides while the toast shows, and each is checked alone.
  */
 async function expectMessagesClear(page: Page, toast: string, goal: string): Promise<void> {
   await page.evaluate(
@@ -752,10 +1181,27 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     },
     [toast, goal] as const,
   );
-  const overflow = await page
-    .locator('[data-hud="toast"], [data-hud="goalCue"]')
-    .evaluateAll((els) => els.map((el) => el.scrollWidth - el.clientWidth));
-  expect(overflow, 'a word sticks out of a message').toEqual([0, 0]);
+  const cue = page.locator('[data-hud="goalCue"]');
+  if ((await page.locator('[data-hud="toastWrap"][data-cue-yields]').count()) === 0) {
+    await expectShownMessagesClear(page, 2);
+    return;
+  }
+  await expect(cue, 'the goal cue yields to the toast').toBeHidden();
+  await expectShownMessagesClear(page, 1);
+  await page.locator('[data-hud="toast"]').evaluate((el) => {
+    if (el instanceof HTMLElement) el.hidden = true;
+  });
+  await expect(cue).toBeVisible();
+  await expectShownMessagesClear(page, 1);
+}
+
+async function expectShownMessagesClear(page: Page, count: number): Promise<void> {
+  const shown = page.locator('[data-hud="toast"]:visible, [data-hud="goalCue"]:visible');
+  await expect(shown).toHaveCount(count);
+  const overflow = await shown.evaluateAll((els) =>
+    els.map((el) => el.scrollWidth - el.clientWidth),
+  );
+  expect(overflow, 'a word sticks out of a message').toEqual(Array<number>(count).fill(0));
   // Standing over the top view's panels, they must paint above them: the wrap takes no pointer events, so
   // let it, or `elementFromPoint` skips it.
   const covered = await page.evaluate(() => {
@@ -764,6 +1210,7 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     wrap.style.pointerEvents = 'auto';
     const hidden: string[] = [];
     for (const el of document.querySelectorAll('[data-hud="toast"], [data-hud="goalCue"]')) {
+      if (!el.checkVisibility()) continue;
       const r = el.getBoundingClientRect();
       const mid = (r.top + r.bottom) / 2;
       const points = [
@@ -782,11 +1229,16 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
     return hidden;
   });
   expect(covered, 'a message is painted under another element').toEqual([]);
-  const messages = await boxes(page.locator('[data-hud="toast"], [data-hud="goalCue"]'));
-  expect(messages).toHaveLength(2);
+  const messages = await boxes(shown);
+  expect(messages).toHaveLength(count);
+  // Without the top-down pane the brief and the counters stand in the cockpit too.
+  const mirrorsOnly = (await page.locator('.hud[data-mirrors]').count()) > 0;
   const controls = await boxes(
     page.locator(
-      '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend, .hud-gear, .hud-speed',
+      [
+        '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever, .hud-legend, .hud-gear, .hud-speed, .hud-action',
+        ...(mirrorsOnly ? ['.hud-goal:not([hidden]), .hud-counters'] : []),
+      ].join(', '),
     ),
   );
   const [cockpit] = await boxes(page.locator('.hud-cockpit'));
@@ -821,6 +1273,23 @@ async function expectMessagesClear(page: Page, toast: string, goal: string): Pro
   }
 }
 
+/** The toolbar's buttons keep clear of the finish button and the controls (the folded brief's reserve included). */
+async function expectToolbarClear(page: Page): Promise<void> {
+  const toolbar = await boxes(page.locator('.hud-toolbar .hud-toggle'));
+  const others = await boxes(
+    page.locator(
+      '.hud-action, .ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever',
+    ),
+  );
+  expect(toolbar.length).toBeGreaterThan(0);
+  for (const b of toolbar) {
+    for (const o of others) {
+      const gap = Math.max(b.left - o.right, o.left - b.right, b.top - o.bottom, o.top - b.bottom);
+      expect(gap, `${b.name} touches ${o.name}`).toBeGreaterThan(0);
+    }
+  }
+}
+
 for (const { locale, messages } of locales) {
   for (const size of splitSizes) {
     const at = `${locale} ${size.width}x${size.height}`;
@@ -836,11 +1305,35 @@ for (const { locale, messages } of locales) {
           await test.step('mirrors clear the controls', () =>
             expectMirrorsClearControls(page, size));
         }
+        if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
+          await test.step('the toolbar takes no reserve against the lever column', () =>
+            expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve'));
+        }
+        await test.step('the toolbar clears the finish button and the controls', () =>
+          expectToolbarClear(page));
         await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
           expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
           expectDividerClears(page, size));
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}
+
+// Without an exercise there is no brief: the view row takes its place beside the finish button, and wraps.
+for (const { locale, messages } of locales) {
+  for (const size of splitSizes.filter((s) => s.width <= 1024)) {
+    test(`the free yard toolbar stays clear at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      try {
+        const page = await context.newPage();
+        await startFreeYard(page, messages.layoutDepot);
+        await expectToolbarClear(page);
       } finally {
         await context.close();
       }
@@ -916,6 +1409,8 @@ for (const size of [
         await page.goto('./');
         await page.getByRole('button', { name: messages.exerciseStraightReverse }).click();
         await hudReady(page, { mirrorsOnly: true });
+        // both messages fit at once here, so the two-message check holds
+        await expect(page.locator('[data-hud="toastWrap"]')).not.toHaveAttribute('data-cue-yields');
         // Portrait has no room for the key legend beside the brief.
         if (size.width < size.height) await expect(page.locator('.hud-legend')).toBeHidden();
         await expectMirrorsClearControls(page, size);
@@ -1033,8 +1528,8 @@ async function expectDividerClearOrHidden(page: Page, size: Size): Promise<void>
 }
 
 test('opening the aid legend re-measures the divider against the panels', async ({ page }) => {
-  // The tallest landscape screen here where the opened legend no longer leaves room for the divider.
-  const size = { width: 1280, height: 600 };
+  // The tallest landscape screen here where the in-flow legend leaves the divider no room (below 700 px it is an overlay).
+  const size = { width: 1280, height: 700 };
   await page.setViewportSize(size);
   await startStraightReverse(page, en.exerciseStraightReverse);
   await expect(handle(page)).toBeVisible();
@@ -1045,7 +1540,6 @@ test('opening the aid legend re-measures the divider against the panels', async 
   const toggle = page.locator('[data-hud="aidLegendToggle"]');
   await toggle.click();
   await expect(page.locator('[data-hud="aidLegend"]')).toBeVisible();
-  // The opened legend leaves the divider no room here.
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
   await expect(handle(page)).toBeHidden();
 
@@ -1055,6 +1549,56 @@ test('opening the aid legend re-measures the divider against the panels', async 
   await expect(handle(page)).toHaveAttribute('aria-valuemin', min ?? '');
   await expect(handle(page)).toHaveAttribute('aria-valuemax', max ?? '');
 });
+
+for (const { locale } of locales) {
+  test(`a wrapped view control rounds the ends of each row at ${locale} 740x649`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale, viewport: { width: 740, height: 649 } });
+    try {
+      const page = await context.newPage();
+      await page.goto('./');
+      await page.locator('[data-menu="yards"] .menu-start').first().click();
+      await expect(page.locator('.ctl-wheel')).toBeVisible();
+      await expect(page.locator('.hud-segment').last()).toBeVisible();
+      await settled(page);
+      const segmentRows = () =>
+        page.locator('.hud-segment').evaluateAll((els) => {
+          const byRow = new Map<number, { left: string[]; right: string[] }[]>();
+          for (const el of els) {
+            const style = getComputedStyle(el);
+            const top = el.getBoundingClientRect().top;
+            const row = byRow.get(top) ?? [];
+            row.push({
+              left: [style.borderTopLeftRadius, style.borderBottomLeftRadius],
+              right: [style.borderTopRightRadius, style.borderBottomRightRadius],
+            });
+            byRow.set(top, row);
+          }
+          return [...byRow.values()];
+        });
+      const expectEndsRounded = (rows: Awaited<ReturnType<typeof segmentRows>>) => {
+        for (const row of rows) {
+          row.forEach((seg, i) => {
+            const round = (corners: string[], rounded: boolean) =>
+              expect(corners.every((c) => parseFloat(c) > 0) === rounded).toBe(true);
+            round(seg.left, i === 0);
+            round(seg.right, i === row.length - 1);
+          });
+        }
+      };
+      const wrapped = await segmentRows();
+      expect(wrapped.length, 'the view control wraps').toBeGreaterThan(1);
+      expectEndsRounded(wrapped);
+      // The rows re-sync on a live resize, not only at the first layout.
+      await page.setViewportSize({ width: 1280, height: 649 });
+      await expect.poll(async () => (await segmentRows()).length).toBe(1);
+      expectEndsRounded(await segmentRows());
+    } finally {
+      await context.close();
+    }
+  });
+}
 
 test('folding and unfolding a panel re-measures the divider against the panels', async ({
   page,
@@ -1066,20 +1610,31 @@ test('folding and unfolding a panel re-measures the divider against the panels',
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
 
   const aids = page.locator('[data-panel="aids"]');
-  await expect(aids).toHaveAttribute('aria-pressed', 'true');
+  await expect(aids).toHaveAttribute('aria-expanded', 'true');
   await aids.click();
-  await expect(aids).toHaveAttribute('aria-pressed', 'false');
+  await expect(aids).toHaveAttribute('aria-expanded', 'false');
   await expect(handle(page)).toBeVisible();
   await expectDividerClearOrHidden(page, size);
 
   // The folded state is stored: the next run starts with the aids panel folded and the divider in place.
   await startStraightReverse(page, en.exerciseStraightReverse);
-  await expect(aids).toHaveAttribute('aria-pressed', 'false');
+  await expect(aids).toHaveAttribute('aria-expanded', 'false');
   await expect(handle(page)).toBeVisible();
   await aids.click();
-  await expect(aids).toHaveAttribute('aria-pressed', 'true');
+  await expect(aids).toHaveAttribute('aria-expanded', 'true');
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
   await expectDividerClearOrHidden(page, size);
+
+  // The angle readouts show only with the angle display aid, so their chip waits for it.
+  const gauges = page.locator('[data-panel="gauges"]');
+  const pivots = page.locator('[data-aid="pivots"]');
+  await expect(gauges).toHaveAttribute('aria-expanded', 'true');
+  await pivots.click();
+  await expect(gauges).toBeDisabled();
+  await expect(gauges).toHaveAttribute('aria-expanded', 'false');
+  await pivots.click();
+  await expect(gauges).toBeEnabled();
+  await expect(gauges).toHaveAttribute('aria-expanded', 'true');
 });
 
 test('toggling the pivots aid re-measures the divider against the panels', async ({ page }) => {
@@ -1262,6 +1817,20 @@ for (const { size, folded } of closeScreens) {
     },
   );
 }
+
+test('a short portrait cockpit keeps the messages clear of the open key legend', async ({
+  page,
+}) => {
+  const size = { width: 840, height: 841 };
+  await page.setViewportSize(size);
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const toggle = page.locator('[data-hud="keysToggle"]');
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.hud-legend dt.hud-legend-view').first()).toBeVisible();
+  await settled(page);
+  await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+});
 
 /** Laptop viewports too small to leave class V room above class II. */
 for (const size of [

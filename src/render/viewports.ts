@@ -30,8 +30,14 @@ const MIRROR_SCALE = 1.22;
 export const HUD_BAND_SHARE = 0.18;
 /** The band's top edge as NDC y of the cockpit view: nothing a trainee must see lies below it. */
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
-/** Smallest mirror height; where even this cannot clear the controls, it wins. */
+/** Smallest mirror height; where the room above the controls and `MIRROR_GAP` is smaller, class II shrinks to that room. */
 export const MIN_MIRROR_HEIGHT = 48;
+/**
+ * The least class II shrinks to, for a window with no room left: the least height whose width still
+ * rounds to a whole px (`wanted` is at most twice `fullWidth`). Only there does the mirror reach into
+ * `MIRROR_GAP` and the controls.
+ */
+export const MIN_SQUEEZED_HEIGHT = 1;
 /**
  * Narrowest and widest the front mirror gets, in CSS px. The narrowest is wide enough that a 0.3 m
  * cone base spans 6 px anywhere in the class VI field (`front-mirror.test.ts` derives it from the
@@ -42,11 +48,12 @@ const MAX_FRONT_WIDTH = 240;
 /** CSS px between the toast column and the mirrors on either side of it. */
 export const MESSAGE_GAP = 8;
 /**
- * Narrowest toast column: the widest unbreakable word of a toast or goal cue ("Drehschemelwinkel",
- * 131 px at 14 px Geist, measured), the toast's padding and borders (41 px, warn border included)
- * and the 32 px its `max-width` leaves. `viewports.test.ts` pins the word, `layout.spec.ts` the fit.
+ * Narrowest toast column: the widest unbreakable word of a toast or goal cue ("Gegenrichtung", 99 px
+ * at 14 px Geist, measured; the longer compounds break at their soft hyphen), the toast's padding and
+ * borders (41 px, warn border included) and the 32 px its `max-width` leaves. `viewports.test.ts` pins
+ * the word, `layout.spec.ts` the fit.
  */
-export const MIN_MESSAGE_WIDTH = 131 + 41 + 32;
+export const MIN_MESSAGE_WIDTH = 99 + 41 + 32;
 /**
  * The toast and goal-cue messages `messagesFit` wraps. `viewports.test.ts` checks the lists against
  * the message tables.
@@ -65,11 +72,13 @@ export const MESSAGE_KEYS = {
   ],
   cue: ['goalInside', 'goalDistance', 'goalAngleOk', 'goalAngleOff', 'goalPositionOk'],
 } as const satisfies Record<string, readonly MessageKey[]>;
+/** Where a word may break, showing a hyphen (`wrapLines`). */
+export const SOFT_HYPHEN = '\u00AD';
 /**
  * A word's width at 14 px Geist, medium: no less than any measured word of these messages has
  * (`MESSAGE_WORD_PX` in `viewports.test.ts` holds the measurements), and its space.
  */
-export const wordPx = (word: string): number => 8 * word.length + 6;
+export const wordPx = (word: string): number => 8 * word.replaceAll(SOFT_HYPHEN, '').length + 6;
 export const SPACE_PX = 4;
 const MESSAGE_LINE = 22;
 const MESSAGE_BOX = 18;
@@ -171,10 +180,16 @@ function dividerExtent(orientation: Orientation, insets: Insets): number {
 export const orientationOf = (cssWidth: number, cssHeight: number): Orientation =>
   cssWidth >= cssHeight ? 'landscape' : 'portrait';
 
+/** What the landscape pane's message column leaves at the screen's right edge, for the stop button and lever. */
+function paneLever(insets: Insets): number {
+  return 1.5 * tokenPx('--size-target', 44) + INSET + insets.right + MESSAGE_GAP;
+}
+
 /**
  * The top-down share in use. It may not take the cockpit below what its controls need: in landscape
  * the wheel, gears and compact legend side by side, in portrait the controls plus the smallest
- * mirror above them; nor the top view below what its panels and the divider need (`panels`).
+ * mirror above them; nor the top view below what its panels and the divider need (`panels`), nor,
+ * in landscape and short of the default and the cockpit's need, below a `MIN_MESSAGE_WIDTH` column.
  * The default always stays allowed. Where it leaves no room for the divider, `min` and `max`
  * both equal the default.
  */
@@ -198,7 +213,8 @@ export function topDownSplit(
       MIN_MIRROR_HEIGHT +
       MIRROR_GAP +
       Math.max(controlsHeight(cssWidth, cssHeight, insets), legend?.height ?? 0);
-  const max = Math.min(limits.max, Math.max(fallback, 1 - cockpitNeeded / extent));
+  // The cockpit is whole px (`computeViewports` rounds the pane), so it keeps the need only when rounded up.
+  const max = Math.min(limits.max, Math.max(fallback, 1 - Math.ceil(cockpitNeeded) / extent));
   const divider = dividerExtent(orientation, insets);
   // Landscape the panels wrap with the pane's width, so a wider pane is what makes room; portrait the
   // width is fixed and the pane's height must hold the panels.
@@ -216,7 +232,10 @@ export function topDownSplit(
       else lo = mid;
     }
   } else if (panels !== null) hi = panels(cssWidth) + divider;
-  const min = Math.min(fallback, Math.max(limits.min, hi / extent));
+  const messages = landscape
+    ? Math.min(Math.ceil(MIN_MESSAGE_WIDTH + paneLever(insets)), extent - Math.ceil(cockpitNeeded))
+    : 0;
+  const min = Math.min(fallback, Math.max(limits.min, hi / extent, messages / extent));
   return { orientation, share: clamp(layout[orientation], min, max), min, max, fallback };
 }
 
@@ -253,11 +272,13 @@ export function computeViewports(
   }
   const insets = safeInsets ?? readSafeInsets();
   const mirrorsOnly = mode === 'mirrors';
-  const { share } = mirrorsOnly
-    ? { share: 0 }
+  const { share, min } = mirrorsOnly
+    ? { share: 0, min: 0 }
     : topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
   let topDown: Rect;
   let cockpit: Rect;
+  /** Portrait, how many px the cockpit's top can still rise as the share shrinks to its minimum. */
+  let rise = 0;
   if (mirrorsOnly) {
     topDown = { x: cssWidth, y: 0, width: 0, height: cssHeight };
     cockpit = { x: 0, y: 0, width: cssWidth, height: cssHeight };
@@ -266,9 +287,11 @@ export function computeViewports(
     topDown = { x: cssWidth - w, y: 0, width: w, height: cssHeight };
     cockpit = { x: 0, y: 0, width: cssWidth - w, height: cssHeight };
   } else {
-    const h = cssHeight - Math.round((1 - share) * cssHeight);
+    const paneHeight = (s: number): number => cssHeight - Math.round((1 - s) * cssHeight);
+    const h = paneHeight(share);
     topDown = { x: 0, y: 0, width: cssWidth, height: h };
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
+    rise = h - paneHeight(min);
   }
   const fullWidth = clamp(
     Math.round(MIRROR_SCALE * 0.15 * cockpit.width),
@@ -300,12 +323,13 @@ export function computeViewports(
   const plainFit = (clear: number, maxWidth: number): Column => {
     const ceiling = cssHeight - clear - MIRROR_GAP;
     const y = Math.min(preferred, Math.max(floor, ceiling - wanted));
-    let height = clamp(ceiling - y, MIN_MIRROR_HEIGHT, wanted);
+    const lowest = Math.max(MIN_SQUEEZED_HEIGHT, Math.min(MIN_MIRROR_HEIGHT, ceiling - y));
+    let height = clamp(ceiling - y, lowest, wanted);
     if ((fullWidth * height) / wanted > maxWidth) {
-      height = Math.max(MIN_MIRROR_HEIGHT, Math.floor((maxWidth * wanted) / fullWidth));
+      height = Math.max(lowest, Math.floor((maxWidth * wanted) / fullWidth));
     }
     // the rounded width must not exceed `maxWidth` either
-    while (height > MIN_MIRROR_HEIGHT && Math.round((fullWidth * height) / wanted) > maxWidth) {
+    while (height > lowest && Math.round((fullWidth * height) / wanted) > maxWidth) {
       height--;
     }
     return { y, width: Math.round((fullWidth * height) / wanted), height };
@@ -339,7 +363,10 @@ export function computeViewports(
   const clearOfCone = (fit: Column): Column => {
     if (!inCone(fit.y, fit.width, fit.height)) return fit;
     const highest = Math.min(fit.y, floor);
-    const least = Math.max(MIN_MIRROR_HEIGHT, Math.ceil(MIN_CLASS_II_SHARE * fit.height));
+    const least = Math.max(
+      Math.min(MIN_MIRROR_HEIGHT, fit.height),
+      Math.ceil(MIN_CLASS_II_SHARE * fit.height),
+    );
     let smallest = fit;
     for (let height = fit.height; height >= least; height--) {
       const width = Math.round((fullWidth * height) / wanted);
@@ -365,10 +392,24 @@ export function computeViewports(
     minTop: number,
   ): Column | null => {
     const ceiling = cssHeight - clear - MIRROR_GAP;
-    const least = {
-      width: Math.max(MIN_WIDE_WIDTH, Math.ceil(MIN_CLASS_II_SHARE * reference.width)),
-      height: Math.max(MIN_MIRROR_HEIGHT, Math.ceil(MIN_CLASS_II_SHARE * reference.height)),
-    };
+    const leastOf = (ref: { readonly width: number; readonly height: number }) => ({
+      width: Math.max(MIN_WIDE_WIDTH, Math.ceil(MIN_CLASS_II_SHARE * ref.width)),
+      height: Math.max(MIN_MIRROR_HEIGHT, Math.ceil(MIN_CLASS_II_SHARE * ref.height)),
+    });
+    const least = leastOf(reference);
+    // A smaller share raises a portrait cockpit's top, so the reference and the room grow alike, and
+    // the rounded minimum fits at one reference and not at the next. Class IV stays only where its
+    // smallest stack also fits at every larger reference the share can still reach: as the share
+    // grows it then drops once, where it first stops fitting.
+    const room = ceiling - Math.min(preferred, minTop);
+    for (let more = 1; more <= rise && reference.height + more - 1 < wanted; more++) {
+      const taller = Math.min(wanted, reference.height + more);
+      const atLeast = leastOf({ width: Math.round((fullWidth * taller) / wanted), height: taller });
+      let height = atLeast.height;
+      while (Math.round((fullWidth * height) / wanted) < atLeast.width) height++;
+      const width = Math.round((fullWidth * height) / wanted);
+      if (height + WIDE_GAP_PX + wideHeight(width) > room + more) return null;
+    }
     const start = plainFit(clear, maxWidth).height;
     for (let height = start; height >= least.height; height--) {
       const width = Math.round((fullWidth * height) / wanted);
@@ -427,7 +468,7 @@ export function computeViewports(
     let front: Rect | null = null;
     if (extra.front) {
       // the toast column left of it starts right of the left mirror
-      const leftLimit = messagesLeft + insets.left + MIN_MESSAGE_WIDTH + MESSAGE_GAP;
+      const leftLimit = messagesLeft + MIN_MESSAGE_WIDTH + MESSAGE_GAP;
       const fits = (rect: Rect): boolean =>
         messagesFit(
           cockpit,
@@ -436,6 +477,7 @@ export function computeViewports(
           cssHeight,
           controls,
           insets,
+          legend,
         );
       front = frontRect(
         cockpit,
@@ -501,17 +543,33 @@ function closeRect(mirrorRight: Rect, ceiling: number): Rect | null {
   };
 }
 
-/** Lines `text` takes in a box `width` px wide, by greedy word wrap over `wordPx`; a word wider than the box takes a line. */
+/**
+ * Lines `text` takes in a box `width` px wide, by greedy wrap over `wordPx` at spaces and soft hyphens
+ * (a break there ends the line with a hyphen); a piece wider than the box takes a line.
+ */
 export function wrapLines(text: string, width: number): number {
   let lines = 1;
   let used = 0;
   for (const word of text.split(/\s+/)) {
-    const px = wordPx(word);
-    if (used === 0) used = px;
-    else if (used + SPACE_PX + px <= width) used += SPACE_PX + px;
-    else {
-      lines++;
-      used = px;
+    let pieces = word.split(SOFT_HYPHEN);
+    while (pieces.length > 0) {
+      const at = used === 0 ? 0 : used + SPACE_PX;
+      const px = (n: number): number =>
+        n === pieces.length ? wordPx(pieces.join('')) : wordPx(`${pieces.slice(0, n).join('')}-`);
+      let n = pieces.length;
+      while (n > 0 && at + px(n) > width) n--;
+      if (n === 0 && used > 0) {
+        lines++;
+        used = 0;
+        continue;
+      }
+      n = Math.max(n, 1);
+      if (n === pieces.length) used = at + px(n);
+      else {
+        lines++;
+        used = 0;
+      }
+      pieces = pieces.slice(n);
     }
   }
   return lines;
@@ -532,7 +590,7 @@ const cueTexts = (): string[] =>
     `${lang.goalDistance} ${lang.goalAngleOff}`,
   ]);
 
-/** Heights of the longest toast and of the goal cue in a column `room` px wide (the left inset already taken off). */
+/** Heights of the longest toast and of the goal cue in a column `room` px wide. */
 function messageHeights(room: number): { toast: number; cue: number } {
   // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
   return {
@@ -543,7 +601,8 @@ function messageHeights(room: number): { toast: number; cue: number } {
 
 /**
  * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top, end above
- * the controls and the forward sight cone they would otherwise reach into.
+ * the controls, the key legend, the HUD band and the forward sight cone they would otherwise reach
+ * into. Where the cue `yields`, only the taller of the two stands there at a time.
  */
 function messagesFit(
   cockpit: Rect,
@@ -552,10 +611,13 @@ function messagesFit(
   cssHeight: number,
   controls: number,
   insets: Insets,
+  legend: LegendBox | null,
+  yields = false,
 ): boolean {
-  const { toast, cue } = messageHeights(column.width - insets.left);
+  const { toast, cue } = messageHeights(column.width);
   const landscape = cssWidth >= cssHeight;
-  const bottom = cockpit.y + INSET + (landscape ? insets.top : 0) + toast + MESSAGE_GAP + cue;
+  const stack = yields ? Math.max(toast, cue) : toast + MESSAGE_GAP + cue;
+  const bottom = cockpit.y + INSET + (landscape ? insets.top : 0) + stack;
   const reaches = (x0: number, x1: number): boolean =>
     column.x < x1 && column.x + column.width > x0;
   const wheel = wheelSize(cssWidth, cssHeight, insets);
@@ -564,10 +626,24 @@ function messagesFit(
     const gearsTop = cssHeight - INSET - insets.bottom - GEARS_HEIGHT;
     if (bottom > Math.min(cssHeight - controls, gearsTop)) return false;
   }
+  if (
+    legend !== null &&
+    reaches(INSET + insets.left, legend.right) &&
+    bottom > cssHeight - legend.height
+  ) {
+    return false;
+  }
+  if (bottom > cockpit.y + (1 - HUD_BAND_SHARE) * cockpit.height) return false;
+  const cone = coneBox(cockpit);
+  return !(reaches(cone.left, cone.right) && bottom > cone.top);
+}
+
+/** The forward sight cone's bounding box in `cockpit`. */
+function coneBox(cockpit: Rect): { left: number; right: number; top: number } {
   const half = (coneEdge(cockpit.width / cockpit.height, COCKPIT_FOV) * cockpit.width) / 2;
   const centre = cockpit.x + cockpit.width / 2;
-  const coneTopY = cockpit.y + ((1 - coneTop(COCKPIT_FOV)) / 2) * cockpit.height;
-  return !(reaches(centre - half, centre + half) && bottom > coneTopY);
+  const top = cockpit.y + ((1 - coneTop(COCKPIT_FOV)) / 2) * cockpit.height;
+  return { left: centre - half, right: centre + half, top };
 }
 
 /**
@@ -615,38 +691,68 @@ function frontRect(
   return null;
 }
 
+/** The toast column; where `cueYields`, the goal cue hides while a toast shows (hud.css). */
+export type MessageColumn = Rect & { readonly cueYields: boolean };
+
 /**
- * Where the toast and the goal cue stand. Beside the front mirror they take the cockpit's top between the
- * left mirror and the front mirror. Without one they take the span between the class II mirrors where the
- * stack fits there (`messagesFit`), else the top-down pane, below the finish button and clear of the lever;
- * with no such pane they keep the span between the mirrors.
+ * Where the toast and the goal cue stand, clear of the safe area. Beside the front mirror they take the
+ * cockpit's top between the left mirror and the front mirror. Without one they take the span between the
+ * class II mirrors where the stack fits there (`messagesFit`), else the top-down pane, below the finish
+ * button and clear of the lever. With no such pane, a span beside the sight cone, else the cue yields.
  */
-export function messageColumn(views: ViewRects, safeInsets?: Insets): Rect {
+export function messageColumn(
+  views: ViewRects,
+  legend: LegendBox | null,
+  safeInsets?: Insets,
+): MessageColumn {
   const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
-  if (cockpit === null || mirrorLeft === null || mirrorRight === null) return cockpit ?? topDown;
-  const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
-  if (front !== null) return { ...cockpit, x, width: front.x - MESSAGE_GAP - x };
   const insets = safeInsets ?? readSafeInsets();
+  if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
+    const whole = cockpit ?? topDown;
+    return {
+      ...whole,
+      x: whole.x + insets.left,
+      width: whole.width - insets.left - insets.right,
+      cueYields: false,
+    };
+  }
+  const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
+  if (front !== null) return { ...cockpit, x, width: front.x - MESSAGE_GAP - x, cueYields: false };
   const between = { x, width: mirrorRight.x - MESSAGE_GAP - x };
   const cssWidth = Math.max(cockpit.x + cockpit.width, topDown.x + topDown.width);
   const cssHeight = Math.max(cockpit.y + cockpit.height, topDown.y + topDown.height);
   const controls = controlsHeight(cssWidth, cssHeight, insets);
-  if (
-    !hasTopDown(views) ||
-    (between.width - insets.left >= MIN_MESSAGE_WIDTH &&
-      messagesFit(cockpit, between, cssWidth, cssHeight, controls, insets))
-  ) {
-    return { ...cockpit, ...between };
+  const fits = (column: { readonly x: number; readonly width: number }, yields: boolean) =>
+    column.width >= MIN_MESSAGE_WIDTH &&
+    messagesFit(cockpit, column, cssWidth, cssHeight, controls, insets, legend, yields);
+  if (fits(between, false)) return { ...cockpit, ...between, cueYields: false };
+  if (!hasTopDown(views)) {
+    const cone = coneBox(cockpit);
+    const beside = [
+      { x: cone.right, width: between.x + between.width - cone.right },
+      { x, width: cone.left - x },
+    ];
+    for (const yields of [false, true]) {
+      for (const column of yields ? [between, ...beside] : beside) {
+        if (fits(column, yields)) return { ...cockpit, ...column, cueYields: yields };
+      }
+    }
+    return { ...cockpit, ...between, cueYields: true };
   }
   // Below the finish button; in landscape also left of the stop button and lever, which stand at the
-  // screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css).
+  // screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). In portrait the pane spans the screen.
   const target = tokenPx('--size-target', 44);
-  const drop = target + MESSAGE_GAP;
-  const lever = cssWidth >= cssHeight ? 1.5 * target + INSET + insets.right + MESSAGE_GAP : 0;
+  const landscape = cssWidth >= cssHeight;
+  const drop = target + MESSAGE_GAP + (landscape ? 0 : insets.top);
+  const lever = landscape ? paneLever(insets) : 0;
+  const left = landscape ? 0 : insets.left;
+  const right = landscape ? lever : insets.right;
   return {
     ...topDown,
+    x: topDown.x + left,
     y: topDown.y + drop,
     height: topDown.height - drop,
-    width: topDown.width - lever,
+    width: topDown.width - left - right,
+    cueYields: false,
   };
 }

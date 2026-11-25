@@ -102,6 +102,7 @@ export const en = {
   aidTopViewOnly: 'Shown in the follow and whole-yard views only',
   panelAids: 'Aids',
   panelGauges: 'Angles',
+  panelGaugesNeedsAid: 'Shown only while the angle display is on',
   targetDirection: 'Direction to the target',
   finish: 'Finish',
   leaveUnscored: 'Leave without scoring',

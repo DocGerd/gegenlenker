@@ -44,6 +44,7 @@ import {
   MIN_FRONT_WIDTH,
   MIN_MESSAGE_WIDTH,
   MIN_MIRROR_HEIGHT,
+  MIN_SQUEEZED_HEIGHT,
   MIN_WIDE_WIDTH,
   NO_INSETS,
   orientationOf,
@@ -55,7 +56,16 @@ import {
   type Insets,
   type PanelStack,
 } from './viewports';
-import { GEOM, HUD_THRESHOLDS, metricsAt, type Metrics } from './viewports-css';
+import {
+  declared,
+  GEOM,
+  HUD_THRESHOLDS,
+  metricsAt,
+  parts,
+  px,
+  SOURCE,
+  type Metrics,
+} from './viewports-css';
 
 /* ------------------------------------------------------------------------------------------------
  * Bounds: every integer CSS width x height in each box. Phones are out of scope (no target).
@@ -121,6 +131,15 @@ function selection(): { readonly boxes: readonly Box[]; readonly custom: boolean
  * ---------------------------------------------------------------------------------------------- */
 
 const SPACE_4 = GEOM.space4;
+/** How far below a mirror's rect its view frame (`--hud-frame`, outset box shadows) reaches: y offset, blur and spread. */
+const HUD_FRAME = Math.max(
+  ...declared(SOURCE.hud, '.hud', '--hud-frame')
+    .split(/,(?![^(]*\))/)
+    .map((shadow) => {
+      const [, y = '0', blur = '0', spread = '0'] = parts(shadow.trim());
+      return px(y) + px(blur) + px(spread);
+    }),
+);
 const TARGET = GEOM.target;
 const GEARS_W = GEOM.gearsW;
 const LEGEND_W = GEOM.legendW;
@@ -269,8 +288,8 @@ const PROPERTIES = [
   'mirrors-inside-safe-area',
   'mirrors-below-cockpit-label',
   'mirror-only-clear-of-pause-button-and-lever',
-  'mirrors-above-controls-band (height above minimum)',
-  'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)',
+  'mirrors-above-controls-band (frame clear of the controls)',
+  'mirrors-above-controls-band (height at MIN_SQUEEZED_HEIGHT)',
   'mirrors-clear-of-control-boxes',
   'mirrors-above-hud-band',
   'mirrors-clear-of-legend',
@@ -282,12 +301,15 @@ const PROPERTIES = [
   'front-mirror-geometry',
   'close-mirror-geometry',
   'message-column-valid',
+  'message-column-inside-safe-area',
   'message-column-placement',
+  'message-cue-yields-only-without-room',
   'message-stack-fits-pane',
   'message-stack-clear-of-sight-cone',
   'message-stack-clear-of-controls-and-hud-band',
   'message-stack-clear-of-legend',
   'message-stack-clear-of-mirrors',
+  'message-stack-clear-of-action-button',
 ] as const;
 type Property = (typeof PROPERTIES)[number];
 
@@ -303,7 +325,6 @@ const unitOf = (p: Property): 'px' | 'deg' =>
 type BoxBaseline = readonly [failures: number, worst: number];
 type Baseline = { readonly issue: string; readonly boxes: Readonly<Record<string, BoxBaseline>> };
 type KnownTable = Readonly<Partial<Record<Property, Readonly<Record<string, Baseline>>>>>;
-const known = (issue: string, boxes: Record<string, BoxBaseline>): Baseline => ({ issue, boxes });
 /** Rounds a magnitude up to the 4 decimals a baseline holds. */
 const ceil4 = (x: number): number => Math.ceil(x * 1e4) / 1e4;
 
@@ -313,105 +334,8 @@ const ceil4 = (x: number): number => Math.ceil(x * 1e4) / 1e4;
  * A listed pair without one in its bounds is STALE and fails too: the issue was fixed, remove the entry.
  */
 const KNOWN_FINDINGS: { readonly default: KnownTable; readonly full: KnownTable } = {
-  default: {
-    'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
-      'drive balanced, share max': known('#389', {
-        laptop: [19738, 0.5],
-        'tablet landscape': [20604, 0.5],
-        'tablet portrait': [9311, 0.5],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#389', {
-        laptop: [19738, 0.5],
-        'tablet landscape': [20604, 0.5],
-        'tablet portrait': [13919, 0.5],
-      }),
-    },
-    'message-column-valid': {
-      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [3049, 16.0] }),
-    },
-  },
-  full: {
-    'cockpit-keeps-room-for-controls (deficit up to 0.5 px, pane rounding)': {
-      'drive balanced, share max': known('#389', {
-        'laptop and desktop': [312245, 0.5],
-        'tablet landscape': [20310, 0.5],
-        'tablet portrait': [108915, 0.5],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#389', {
-        'laptop and desktop': [302952, 0.5],
-        'tablet landscape': [3326, 0.5],
-        'tablet portrait': [113514, 0.5],
-      }),
-    },
-    'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)': {
-      'drive balanced, home indicator': known('#390', {
-        'tablet landscape': [182, 7.0],
-        'tablet portrait': [784, 8.0],
-      }),
-      'drive balanced, notch': known('#390', {
-        'tablet landscape': [182, 7.0],
-        'tablet portrait': [784, 8.0],
-      }),
-      'drive balanced, notch, legend, panels steps, share min': known('#390', {
-        'tablet landscape': [182, 7.0],
-        'tablet portrait': [784, 8.0],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#390', {
-        'tablet landscape': [182, 7.0],
-        'tablet portrait': [784, 8.0],
-      }),
-    },
-    'mirrors-clear-of-control-boxes': {
-      'drive balanced, home indicator': known('#390', {
-        'tablet landscape': [91, 26.9259],
-        'tablet portrait': [392, 27.203],
-      }),
-      'drive balanced, notch': known('#390', {
-        'tablet landscape': [91, 26.9259],
-        'tablet portrait': [392, 27.203],
-      }),
-      'drive balanced, notch, legend, panels steps, share min': known('#390', {
-        'tablet landscape': [91, 26.9259],
-        'tablet portrait': [392, 27.203],
-      }),
-      'drive high, home indicator, legend, panels steps, share max': known('#390', {
-        'tablet landscape': [91, 26.9259],
-        'tablet portrait': [392, 27.203],
-      }),
-    },
-    'message-column-valid': {
-      'drive balanced, notch': known('#394', {
-        'tablet landscape': [21681, 22.0],
-        'tablet portrait': [1485, 22.0],
-      }),
-      'drive balanced, notch, legend, panels steps, share min': known('#394', {
-        'tablet landscape': [21608, 46.0],
-        'tablet portrait': [369, 46.0],
-      }),
-      'mirrors high, notch, legend': known('#393', { 'tablet portrait': [14265, 16.0] }),
-    },
-    'message-stack-clear-of-sight-cone': {
-      'mirrors high, notch, legend': known('#393', {
-        'laptop and desktop': [10759, 176.3933],
-        'tablet landscape': [15302, 267.448],
-      }),
-    },
-    'message-stack-clear-of-controls-and-hud-band': {
-      'mirrors high, notch, legend': known('#393', {
-        'laptop and desktop': [19981, 93.2417],
-        'tablet landscape': [6089, 98.6307],
-      }),
-      'mirrors balanced, home indicator, legend': known('#393', {
-        'tablet landscape': [4, 92.4339],
-      }),
-    },
-    'message-stack-clear-of-legend': {
-      'drive balanced, legend with all keys': known('#391', {
-        'tablet landscape': [1326, 315.7912],
-        'tablet portrait': [1326, 315.7912],
-      }),
-    },
-  },
+  default: {},
+  full: {},
 };
 
 type Failures = {
@@ -499,17 +423,26 @@ const cueTexts: readonly string[] = [en, de].flatMap((lang) =>
 );
 const mostLines = (texts: readonly string[], width: number): number =>
   Math.max(...texts.map((text) => wrapLines(text, width)));
-const stackCache = new Map<number, number>();
-/** Height of the longest toast, the gap and the goal cue in a column `room` px wide (left inset taken off). */
-function stackHeight(room: number): number {
+const stackCache = new Map<number, { toast: number; cue: number }>();
+/** Heights of the longest toast and of the goal cue in a column `room` px wide. */
+function messageHeights(room: number): { toast: number; cue: number } {
   const cached = stackCache.get(room);
   if (cached !== undefined) return cached;
-  const toast =
-    mostLines(toastTexts, room - GEOM.toastMargin - GEOM.toastBox) * MESSAGE_LINE + MESSAGE_BOX;
-  const cue = mostLines(cueTexts, room - GEOM.cueBox) * MESSAGE_LINE + MESSAGE_BOX;
-  const total = toast + GEOM.stackGap + cue;
-  stackCache.set(room, total);
-  return total;
+  const heights = {
+    toast:
+      mostLines(toastTexts, room - GEOM.toastMargin - GEOM.toastBox) * MESSAGE_LINE + MESSAGE_BOX,
+    cue: mostLines(cueTexts, room - GEOM.cueBox) * MESSAGE_LINE + MESSAGE_BOX,
+  };
+  stackCache.set(room, heights);
+  return heights;
+}
+/**
+ * Height of the longest toast, the gap and the goal cue in a column `room` px wide; where the cue
+ * `yields` to a toast, of the taller one alone.
+ */
+function stackHeight(room: number, yields = false): number {
+  const { toast, cue } = messageHeights(room);
+  return yields ? Math.max(toast, cue) : toast + GEOM.stackGap + cue;
 }
 
 type Named = { readonly name: string; readonly rect: Rect };
@@ -602,7 +535,7 @@ function evaluate(v: Variant, w: number, h: number): void {
   add('front', views.front);
   add('close', views.close);
   add('topDown', topDown);
-  const column = messageColumn(views, insets);
+  const column = messageColumn(views, legend?.box ?? null, insets);
   add('messageColumn', column);
 
   for (const { name, rect } of named) {
@@ -877,15 +810,19 @@ function evaluate(v: Variant, w: number, h: number): void {
       }
     }
     const room = h - controls - bottom(rect);
-    const atMinimum = rect.height === MIN_MIRROR_HEIGHT;
+    // the floor is the escape only for a window with no room left: not 1 px for the mirror with its frame clear
+    const atMinimum = rect.height === MIN_SQUEEZED_HEIGHT && h - controls - rect.y - HUD_FRAME < 1;
     const bandProperty = atMinimum
-      ? 'mirrors-above-controls-band (height at MIN_MIRROR_HEIGHT)'
-      : 'mirrors-above-controls-band (height above minimum)';
-    if (!chk(bandProperty, room >= -1e-9)) {
+      ? 'mirrors-above-controls-band (height at MIN_SQUEEZED_HEIGHT)'
+      : 'mirrors-above-controls-band (frame clear of the controls)';
+    // elsewhere the view frame stays clear of the controls too
+    const need = atMinimum ? 0 : HUD_FRAME;
+    if (!chk(bandProperty, room >= need - 1e-9)) {
       fail(
         bandProperty,
-        () => `${name} ${fmt(rect)} reaches ${-room} px into the controls (top ${h - controls})`,
-        -room,
+        () =>
+          `${name} ${fmt(rect)} leaves ${room} px above the controls (top ${h - controls}), needs ${need}`,
+        need - room,
       );
     }
     for (const control of controlBoxes) {
@@ -1016,7 +953,7 @@ function evaluate(v: Variant, w: number, h: number): void {
     column.height === cockpit.height &&
     column.x >= cockpit.x &&
     right(column) <= right(cockpit);
-  const room = inCockpitColumn ? column.width - insets.left : column.width;
+  const room = column.width;
   if (
     !chk(
       'message-column-valid',
@@ -1029,8 +966,46 @@ function evaluate(v: Variant, w: number, h: number): void {
       MIN_MESSAGE_WIDTH - room,
     );
   }
+  const safeOut = Math.max(insets.left - column.x, right(column) - (w - insets.right));
+  if (!chk('message-column-inside-safe-area', safeOut <= 1e-9)) {
+    fail(
+      'message-column-inside-safe-area',
+      () => `column ${fmt(column)} insets ${JSON.stringify(insets)}`,
+      safeOut,
+    );
+  }
+  /** The stack in a cockpit column at `x`, `width` wide, and what it overlaps. */
+  const cockpitStack = (x: number, width: number, yields: boolean): Rect => ({
+    x,
+    y: cockpit.y + GEOM.stackTop + (landscape ? insets.top : 0),
+    width,
+    height: stackHeight(width, yields),
+  });
+  const obstacles: Named[] = [
+    { name: 'sight cone', rect: cone },
+    ...controlBoxes,
+    { name: 'gear and speed readouts', rect: readouts },
+    ...(legendBox === null ? [] : [{ name: 'legend', rect: legendBox }]),
+    ...mirrors,
+    { name: 'action button', rect: pauseBox },
+  ];
+  // The cue yields only in the mirror-only drive, and only where no span beside the mirrors holds both.
+  const limit = (front ?? mirrorRight).x - MESSAGE_GAP;
+  const fullFits = (): boolean =>
+    [
+      { x0: right(mirrorLeft) + MESSAGE_GAP, x1: limit },
+      { x0: right(cone), x1: limit },
+      { x0: right(mirrorLeft) + MESSAGE_GAP, x1: cone.x },
+    ].some(({ x0, x1 }) => {
+      if (x1 - x0 < MIN_MESSAGE_WIDTH) return false;
+      const stack = cockpitStack(x0, x1 - x0, false);
+      return obstacles.every((o) => !overlaps(stack, o.rect));
+    });
+  const yieldOk = !column.cueYields || (mirrorsOnly && inCockpitColumn && !fullFits());
+  if (!chk('message-cue-yields-only-without-room', yieldOk)) {
+    fail('message-cue-yields-only-without-room', () => `column ${fmt(column)} yields`);
+  }
   if (inCockpitColumn) {
-    const limit = (front ?? mirrorRight).x - MESSAGE_GAP;
     const placed = column.x >= right(mirrorLeft) + MESSAGE_GAP && right(column) <= limit + 1e-9;
     if (!chk('message-column-placement', placed)) {
       fail(
@@ -1038,12 +1013,7 @@ function evaluate(v: Variant, w: number, h: number): void {
         () => `column ${fmt(column)} between ${right(mirrorLeft)} and ${limit}`,
       );
     }
-    const stack: Rect = {
-      x: column.x + insets.left,
-      y: cockpit.y + GEOM.stackTop + (landscape ? insets.top : 0),
-      width: column.width - insets.left,
-      height: stackHeight(column.width - insets.left),
-    };
+    const stack = cockpitStack(column.x, column.width, column.cueYields);
     if (!chk('message-stack-clear-of-sight-cone', !overlaps(stack, cone))) {
       fail(
         'message-stack-clear-of-sight-cone',
@@ -1076,6 +1046,13 @@ function evaluate(v: Variant, w: number, h: number): void {
         );
       }
     }
+    if (!chk('message-stack-clear-of-action-button', !overlaps(stack, pauseBox))) {
+      fail(
+        'message-stack-clear-of-action-button',
+        () => `stack ${fmt(stack)} overlaps ${fmt(pauseBox)}`,
+        depth(stack, pauseBox),
+      );
+    }
   } else {
     const placed =
       column.x >= topDown.x &&
@@ -1086,12 +1063,21 @@ function evaluate(v: Variant, w: number, h: number): void {
     if (!chk('message-column-placement', placed)) {
       fail('message-column-placement', () => `column ${fmt(column)} pane ${fmt(topDown)}`);
     }
-    const need = GEOM.stackTop + stackHeight(column.width - insets.left);
+    const top = GEOM.stackTop + (landscape ? insets.top : 0);
+    const need = top + stackHeight(column.width);
     if (!chk('message-stack-fits-pane', need <= column.height + 1e-9)) {
       fail(
         'message-stack-fits-pane',
         () => `stack needs ${need} px, column ${fmt(column)}`,
         need - column.height,
+      );
+    }
+    const stack: Rect = { ...column, y: column.y + top, height: need - top };
+    if (!chk('message-stack-clear-of-action-button', !overlaps(stack, pauseBox))) {
+      fail(
+        'message-stack-clear-of-action-button',
+        () => `stack ${fmt(stack)} overlaps ${fmt(pauseBox)}`,
+        depth(stack, pauseBox),
       );
     }
   }
@@ -1150,7 +1136,7 @@ function report(known: KnownTable | null): { summary: string; details: string; f
     const stale =
       known === null ? [] : Object.keys(listed).filter((name) => !s.byVariant.has(name));
     // two properties count hits of a split-off case: no hit is good; a custom box need not reach every property
-    const hitCounter = p.includes('MIN_MIRROR_HEIGHT') || p.includes('deficit over');
+    const hitCounter = p.includes('MIN_SQUEEZED_HEIGHT') || p.includes('deficit over');
     const unreached = s.applied === 0 && known !== null && !hitCounter;
     const total = rows.reduce((n, r) => n + r.f.n, 0);
     const issues = [...new Set(rows.flatMap((r) => r.base?.issue ?? []))];

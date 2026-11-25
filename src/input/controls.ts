@@ -22,6 +22,8 @@ export type Controls = {
   lamps(): LampSwitches;
   /** `actualSteer` is the snapshot's rate-limited steer; the centred cue waits for it. */
   tick(dt: number, actualSteer: number): void;
+  /** The stop button and the lever column, for the HUD to keep its toolbar clear of. */
+  pedalsBox(): DOMRect;
   dispose(): void;
 };
 
@@ -85,7 +87,7 @@ const markup = (lockToLockTurns: number): string => `
       <button type="button" class="ctl-lamp" data-ctl="hazard" aria-pressed="false">${HAZARD_ICON}</button>
     </div>
   </div>
-  <div class="ctl-pedals">
+  <div class="ctl-pedals" data-ctl="pedals">
     <button type="button" class="ctl-stop" data-ctl="stop" data-i18n="stop"></button>
     <span class="ctl-label" data-i18n="speed"></span>
     <div class="ctl-lever" data-ctl="lever">
@@ -155,6 +157,7 @@ export function createControls(
   container.addEventListener('contextmenu', (e) => e.preventDefault(), { signal });
 
   const stop = query(container, 'stop', HTMLElement);
+  const pedals = query(container, 'pedals', HTMLElement);
   const lever = query(container, 'lever', HTMLElement);
   const rail = lever.querySelector<HTMLElement>('.ctl-rail') as HTMLElement;
   const gears = query(container, 'gears', HTMLElement);
@@ -352,6 +355,9 @@ export function createControls(
       keyboard.tick(dt);
       stepReset(state, opts.steerRate, dt);
       render(actualSteer);
+    },
+    pedalsBox() {
+      return pedals.getBoundingClientRect();
     },
     dispose() {
       abort.abort();

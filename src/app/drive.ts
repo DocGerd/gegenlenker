@@ -264,6 +264,7 @@ export function startDrive(
     look: lookAround,
     collapsed,
     mirrorsOnly,
+    pedalsBox: () => controls.pedalsBox(),
   });
   cleanups.push(() => hud.dispose());
 

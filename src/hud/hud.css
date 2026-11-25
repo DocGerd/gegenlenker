@@ -221,24 +221,35 @@
   display: none;
 }
 
-/* On a short screen the open list is an overlay in the top-down pane (hud.ts sets --pane-*), where no mirror reaches: opening it neither resizes the legend nor moves the mirrors. It stays below the finish button. */
+/* On a short screen the open list is an overlay in the top-down pane (hud.ts sets --pane-* and --keys-top), where no mirror reaches: opening it neither resizes the legend nor moves the mirrors. It opens below the toolbar and the finish button, beside the divider strip; the toasts paint over it. */
 .hud-legend[data-overlay] {
   z-index: 2;
 }
 
 .hud-legend[data-overlay] dl {
+  --keys-left: calc(var(--size-target) + var(--space-2));
   --keys-side: 0px;
+  --keys-bar: 0px;
   position: absolute;
-  left: calc(var(--pane-left) + var(--space-4));
-  bottom: calc(var(--pane-bottom) + var(--space-4) + var(--safe-bottom));
+  left: calc(var(--pane-left) + var(--keys-left));
+  bottom: calc(var(--pane-bottom) + var(--space-4) + var(--safe-bottom) + var(--keys-bar));
   box-sizing: border-box;
   width: max-content;
-  max-width: calc(var(--pane-width) - 2 * var(--space-4) - var(--keys-side));
-  max-height: calc(
-    var(--pane-height) - 2 * var(--space-4) - var(--safe-top) - var(--safe-bottom) -
-      var(--hud-target) - var(--space-2)
+  max-width: calc(var(--pane-width) - var(--keys-left) - var(--space-4) - var(--keys-side));
+  max-height: min(
+    calc(
+      var(--pane-height) - 2 * var(--space-4) - var(--safe-top) - var(--safe-bottom) -
+        var(--hud-target) - var(--space-2) - var(--keys-bar)
+    ),
+    calc(
+      var(--pane-height) - var(--keys-top) - var(--space-4) - var(--safe-bottom) - var(--keys-bar)
+    )
   );
-  overflow: hidden;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  /* Taller than its room it scrolls, taking its own pointer events so a swipe never reaches the top view. */
+  pointer-events: auto;
+  touch-action: pan-y;
   margin: 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
@@ -256,11 +267,12 @@
   }
 }
 
-/* Only in portrait does the top view reach the screen's left edge. */
+/* Only in portrait does the top view reach the screen's left edge; the divider is a bar along the pane's bottom, not a strip at its side. */
 @media not (min-aspect-ratio: 1/1) {
   .hud-legend[data-overlay] dl {
-    --keys-side: var(--safe-left);
-    left: calc(var(--pane-left) + var(--space-4) + var(--safe-left));
+    --keys-left: calc(var(--space-4) + var(--safe-left));
+    --keys-side: 0px;
+    --keys-bar: calc(var(--size-target) + var(--space-2));
   }
 }
 
@@ -298,24 +310,20 @@
   margin-bottom: 0;
 }
 
+/* Level with the short-screen key list, which comes earlier in the DOM, and with the pause sheet and the notices (app.css), which come later: over the one, under the others. */
 .hud-toast-wrap {
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4) 0 0 var(--safe-left);
+  padding: var(--space-4) 0 0;
   box-sizing: border-box;
 }
 
 @media (min-aspect-ratio: 1/1) {
   .hud-toast-wrap {
     padding-top: calc(var(--space-4) + var(--safe-top));
-  }
-}
-
-@media not (min-aspect-ratio: 1/1) {
-  .hud-toast-wrap {
-    padding-right: var(--safe-right);
   }
 }
 
@@ -358,6 +366,11 @@
   border-color: var(--color-accent);
   background: var(--color-accent-tint);
   color: var(--color-accent-strong);
+}
+
+/* Where the column holds only one message at a time (`messageColumn`), the toast hides the goal cue. */
+.hud-toast-wrap[data-cue-yields] .hud-toast:not([hidden]) + .hud-goal-cue {
+  display: none;
 }
 
 .hud-toast-wrap[data-reserve] .hud-toast,
@@ -567,6 +580,19 @@
   border-radius: var(--radius-lg);
 }
 
+/* A wrapped control rounds the ends of each visual row (hud.ts sets the attributes). */
+.hud-segment[data-row-start] {
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+}
+
+.hud-segment[data-row-end] {
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+.hud-segment[data-row-start][data-row-end] {
+  border-radius: var(--radius-lg);
+}
+
 .hud-segment[aria-pressed='true'] {
   z-index: 1;
   border-color: var(--color-accent);
@@ -578,7 +604,7 @@
   z-index: 2;
 }
 
-/* Aids and panels are pill chips: a lighter tint and a ticked ring, never the segment's fill. */
+/* Aids and panels are pill chips: a lighter tint, never the segment's fill; aids carry a ticked ring, panels a chevron. */
 .hud-chip {
   display: inline-flex;
   align-items: center;
@@ -586,12 +612,17 @@
   border-radius: var(--radius-pill);
 }
 
-/* The ring sits in the padding, so a chip grows little: the aid row and the info button still fit a laptop. */
+/* The ring or the chevron sits in the padding, so a chip grows little: the aid row and the info button still fit a laptop. */
 .hud-toggle.hud-chip:has(.hud-check) {
   padding-left: 5px;
 }
 
-.hud-chip[aria-pressed='true'] {
+.hud-toggle.hud-chip:has(.hud-fold) {
+  padding-right: 5px;
+}
+
+.hud-chip[aria-pressed='true'],
+.hud-chip[aria-expanded='true'] {
   border-color: var(--color-accent);
   background: var(--color-accent-tint);
   color: var(--color-accent-strong);
@@ -607,6 +638,10 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
+}
+
+.hud-chip[aria-expanded='false'] .hud-fold {
+  transform: rotate(-90deg);
 }
 
 .hud-check path {
@@ -682,6 +717,19 @@
 .hud-gauges {
   display: flex;
   gap: var(--space-2);
+}
+
+/* Set by hud.ts where the unreserved toolbar would reach the lever column. */
+.hud-topdown[data-toolbar-reserve] .hud-toolbar {
+  max-width: calc(100% - var(--size-target) * 1.5 - var(--space-3));
+}
+
+/* The toolbar's reserve already covers part of the finish button's. */
+.hud-topdown[data-toolbar-reserve] .hud-goal[hidden] + .hud-toolbar [data-hud='views'] {
+  margin-right: max(
+    0px,
+    calc(var(--hud-action-w) + var(--space-4) - var(--size-target) * 1.5 - var(--space-3))
+  );
 }
 
 /* Landscape: the lever column with the Stop button sits at the screen's right edge, under the info row. */
@@ -813,6 +861,57 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-danger) 20%, var(--color-surface));
   transition: none;
+}
+
+/* Below 700 px (hud.ts sets data-short) the aid legend is an overlay on the top view, out of the panel flow: it opens under the aids chips (hud.ts sets --aid-top), clear of the divider strip and the lever column, and under the toasts and the divider (later in the DOM). */
+.hud-topdown[data-short] .hud-aid-legend {
+  --aid-left: calc(var(--size-target) + var(--space-2));
+  --aid-side: calc(var(--size-target) * 1.5 + var(--space-4) + var(--safe-right) + var(--space-2));
+  --aid-bar: 0px;
+  position: absolute;
+  top: var(--aid-top);
+  left: var(--aid-left);
+  max-width: min(26em, calc(100% - var(--aid-left) - var(--space-4) - var(--aid-side)));
+  max-height: calc(100% - var(--aid-top) - var(--space-4) - var(--safe-bottom) - var(--aid-bar));
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  box-shadow: var(--shadow-md);
+  /* Where the list is taller than its room it scrolls: it takes its own pointer events, so a swipe or wheel on it never reaches the top view. */
+  pointer-events: auto;
+  touch-action: pan-y;
+}
+
+/* Portrait: the divider is a bar along the pane's bottom edge, and no lever stands in the pane. */
+@media not (min-aspect-ratio: 1/1) {
+  .hud-topdown[data-short] .hud-aid-legend {
+    --aid-left: calc(var(--space-4) + var(--safe-left));
+    --aid-side: var(--safe-right);
+    --aid-bar: calc(var(--size-target) + var(--space-2));
+  }
+}
+
+/* The counters stand beside the angle gauges: the gauges take only what their dials need, the counters their text. A row too narrow for both still wraps; never `nowrap`, which hud.ts's panel measure cannot see. */
+.hud-topdown[data-short] .hud-gauges {
+  --hud-dial: 84px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  flex: 1 1 calc(2 * (var(--hud-dial) + 2 * var(--space-2) + 2px) + var(--space-2));
+  min-width: 0;
+  max-width: max-content;
+}
+
+.hud-topdown[data-short] .hud-gauge {
+  min-width: 0;
+}
+
+.hud-topdown[data-short] .hud-gauge svg {
+  width: var(--hud-dial);
+}
+
+.hud-topdown[data-short] .hud-counters {
+  padding: var(--space-1) var(--space-2);
+  column-gap: var(--space-2);
 }
 
 /* Without the top-down pane the brief floats over the cockpit above its band, and the counters sit in the band, both left of the lever column. */

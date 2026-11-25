@@ -22,10 +22,12 @@ import {
   MIN_FRONT_WIDTH,
   MIN_MESSAGE_WIDTH,
   SPACE_PX,
+  SOFT_HYPHEN,
   wordPx,
   wrapLines,
   MIN_CLASS_II_SHARE,
   MIN_MIRROR_HEIGHT,
+  MIN_SQUEEZED_HEIGHT,
   MIN_WIDE_HEIGHT,
   MIN_WIDE_WIDTH,
   NO_INSETS,
@@ -37,6 +39,7 @@ import {
   type Insets,
   type PanelStack,
 } from './viewports';
+import { declared, padding, px, SOURCE } from './viewports-css';
 
 describe('computeViewports mirrors', () => {
   it('stay inside the cockpit and above the controls at every size', () => {
@@ -53,9 +56,10 @@ describe('computeViewports mirrors', () => {
           expect(m.y, at).toBeGreaterThanOrEqual(cockpit.y);
           expect(m.y + m.height, at).toBeLessThanOrEqual(cockpit.y + cockpit.height);
           expect(m.width, at).toBeGreaterThan(0);
-          // With no room for the minimum height, the mirror keeps that size instead.
-          if (m.height !== MIN_MIRROR_HEIGHT) {
-            expect(m.y + m.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h));
+          // Only a window with no room at all keeps the squeezed minimum and reaches into the controls;
+          // otherwise the 6 px `--hud-frame` drawn outside the rect clears them too.
+          if (m.height > MIN_SQUEEZED_HEIGHT) {
+            expect(m.y + m.height + 6, at).toBeLessThanOrEqual(h - controlsHeight(w, h));
           }
         }
       }
@@ -74,7 +78,7 @@ describe('computeViewports key legend', () => {
           // The legend starts right of the left mirror, so only the right one can sit over it.
           const { mirrorRight: m } = computeViewports(w, h, 'drive', legend);
           if (m === null) throw new Error('drive mode has mirrors');
-          if (m.x < legend.right && m.height !== MIN_MIRROR_HEIGHT) {
+          if (m.x < legend.right && m.height > MIN_SQUEEZED_HEIGHT) {
             expect(m.y + m.height, `${w}x${h} legend to ${right}`).toBeLessThanOrEqual(
               h - legend.height,
             );
@@ -116,6 +120,18 @@ describe('computeViewports safe-area insets', () => {
       if (cockpit.x + cockpit.width >= w) {
         expect(mirrorRight.x + mirrorRight.width, at).toBeLessThanOrEqual(w - insets.right);
       }
+    }
+  });
+
+  it('shrink class II below the minimum height rather than reach its frame into the inset controls', () => {
+    const [w, h] = [800, 801];
+    const { mirrorLeft, mirrorRight } = computeViewports(w, h, 'drive', null, insets);
+    for (const m of [mirrorLeft, mirrorRight]) {
+      if (m === null) throw new Error('drive mode has mirrors');
+      expect(m.height).toBeLessThan(MIN_MIRROR_HEIGHT);
+      expect(m.height).toBeGreaterThan(MIN_SQUEEZED_HEIGHT);
+      // the 8 px gap holds the 6 px `--hud-frame` drawn outside the rect
+      expect(m.y + m.height + 8).toBeLessThanOrEqual(h - controlsHeight(w, h, insets));
     }
   });
 
@@ -204,7 +220,8 @@ describe('top-down split', () => {
     }
     // Measured per width: the same screen with a roomier stack has a range again.
     const roomy = topDownSplit(844, 390, edges[1], null, NO_INSETS, () => 100);
-    expect(roomy.min).toBeCloseTo(0.25);
+    // the message column beside the stop button and lever sets the floor
+    expect(roomy.min).toBeCloseTo(Math.ceil(MIN_MESSAGE_WIDTH + 1.5 * 44 + 16 + 8) / 844);
     expect(roomy.max).toBeGreaterThan(roomy.min);
   });
 
@@ -215,6 +232,24 @@ describe('top-down split', () => {
     );
     expect(min * 1000).toBeGreaterThanOrEqual(300);
     expect(min * 1000).toBeLessThan(301.5);
+  });
+
+  it('keeps the landscape pane wide enough for the message column at its narrowest', () => {
+    let inPane = 0;
+    for (let w = 900; w <= 1400; w += 10) {
+      for (let h = 426; h <= w; h += 10) {
+        for (const inset of [NO_INSETS, insets]) {
+          const views = computeViewports(w, h, 'drive', null, inset, edges[0]);
+          const column = messageColumn(views, null, inset);
+          if (column.y === views.cockpit?.y) continue;
+          inPane++;
+          expect(column.width, `${w}x${h} left inset ${inset.left}`).toBeGreaterThanOrEqual(
+            MIN_MESSAGE_WIDTH,
+          );
+        }
+      }
+    }
+    expect(inPane).toBeGreaterThan(0);
   });
 
   it('tiles the screen and keeps the mirrors clear of the controls at both ends of the range', () => {
@@ -247,7 +282,7 @@ describe('top-down split', () => {
             expect(m.y, at).toBeGreaterThanOrEqual(cockpit.y);
             // The default layout may itself leave no room; only a range this module widened must clear.
             const { share, fallback } = topDownSplit(w, h, layout, legend, inset, stack(inset));
-            if (share !== fallback && m.height !== MIN_MIRROR_HEIGHT) {
+            if (share !== fallback) {
               expect(m.y + m.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h, inset));
             }
             if (share !== fallback && h >= w) {
@@ -259,13 +294,18 @@ describe('top-down split', () => {
     }
   });
 
-  it('leaves a landscape cockpit wide enough for the wheel, gears and legend', () => {
-    for (const [w, h] of sizes.filter(([a, b]) => a >= b)) {
-      const { share, fallback } = topDownSplit(w, h, edges[1], null, insets, stack(insets));
+  it('leaves the cockpit the room its controls need', () => {
+    for (const [w, h] of sizes) {
+      const { share, fallback } = topDownSplit(w, h, edges[1], legend, insets, stack(insets));
       if (share === fallback) continue;
-      const { cockpit } = computeViewports(w, h, 'drive', null, insets, edges[1], stack(insets));
-      const needed = insets.left + 3 * 16 + 92.4 + 176 + wheelSize(w, h, insets);
-      expect(cockpit?.width, `${w}x${h}`).toBeGreaterThanOrEqual(needed - 1);
+      const { cockpit } = computeViewports(w, h, 'drive', legend, insets, edges[1], stack(insets));
+      const landscape = w >= h;
+      const needed = landscape
+        ? insets.left + 3 * 16 + 92.4 + 176 + wheelSize(w, h, insets)
+        : 32 + MIN_MIRROR_HEIGHT + 8 + Math.max(controlsHeight(w, h, insets), legend.height);
+      expect(landscape ? cockpit?.width : cockpit?.height, `${w}x${h}`).toBeGreaterThanOrEqual(
+        needed,
+      );
     }
   });
 
@@ -279,7 +319,10 @@ describe('top-down split', () => {
   });
 });
 
-/** Word widths in px at 14 px Geist medium, measured in the page (the toast's box, padding excluded). */
+/**
+ * Word widths in px at 14 px Geist medium, measured in the page (the toast's box, padding excluded); a
+ * word with a soft hyphen also its pieces at a break, the first with the hyphen shown (`min-content`).
+ */
 const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   Anhänger: 65,
   '{dist}': 30, // stands for the widest distance of the goal cue, "88,8"
@@ -291,10 +334,12 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   Coupling: 60,
   D: 10,
   Deichsel: 58,
-  Drehschemelwinkel: 131,
+  'Drehschemel\u00ADwinkel': 131,
+  'Drehschemel-': 93,
   Gegenrichtung: 99,
   In: 12,
-  Kupplungswinkel: 116,
+  'Kupplungs\u00ADwinkel': 116,
+  'Kupplungs-': 78,
   Limit: 32,
   Lkw: 27,
   R: 10,
@@ -340,6 +385,7 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   und: 25,
   voraus: 45,
   way: 28,
+  winkel: 44,
   'wählen,': 51,
   zu: 16,
   '–': 8,
@@ -347,17 +393,47 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
 };
 const MEASURED_SPACE_PX = 3;
 
-/** Greedy word wrap with the measured widths: what the browser does, give or take kerning. */
+/** A word's breaks at its soft hyphens: the piece before, hyphen shown, and the rest. */
+const softBreaks = (word: string): [string, string][] => {
+  const pieces = word.split(SOFT_HYPHEN);
+  return pieces
+    .slice(1)
+    .map((_, i) => [`${pieces.slice(0, i + 1).join('')}-`, pieces.slice(i + 1).join(SOFT_HYPHEN)]);
+};
+
+/**
+ * Greedy wrap with the measured widths at spaces and soft hyphens, the last break that fits taken:
+ * what the browser does, give or take kerning.
+ */
 function referenceLines(text: string, width: number): number {
+  const px = (word: string): number => MESSAGE_WORD_PX[word] ?? Infinity;
   let lines = 1;
   let used = 0;
   for (const word of text.split(/\s+/)) {
-    const px = MESSAGE_WORD_PX[word] ?? Infinity;
-    if (used === 0) used = px;
-    else if (used + MEASURED_SPACE_PX + px <= width) used += MEASURED_SPACE_PX + px;
-    else {
-      lines++;
-      used = px;
+    let rest = word;
+    for (;;) {
+      const at = used === 0 ? 0 : used + MEASURED_SPACE_PX;
+      if (at + px(rest) <= width) {
+        used = at + px(rest);
+        break;
+      }
+      const cut = softBreaks(rest).findLast(([head]) => at + px(head) <= width);
+      if (cut !== undefined) {
+        lines++;
+        used = 0;
+        rest = cut[1];
+      } else if (used > 0) {
+        lines++;
+        used = 0;
+      } else {
+        const first = softBreaks(rest)[0];
+        if (first === undefined) {
+          used = px(rest);
+          break;
+        }
+        lines++;
+        rest = first[1];
+      }
     }
   }
   return lines;
@@ -489,12 +565,12 @@ describe('computeViewports front mirror', () => {
           continue;
         }
         shown++;
-        const column = messageColumn(views);
+        const column = messageColumn(views, null);
         const at = `${w}x${h} left inset ${inset.left}`;
         expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
         expect(column.x + column.width, at).toBeLessThanOrEqual(front.x);
-        // the wrap pads its left by the inset
-        expect(column.width - inset.left, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
+        expect(column.x, at).toBeGreaterThanOrEqual(inset.left);
+        expect(column.width, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
       }
     }
     expect(shown).toBeGreaterThan(100);
@@ -517,7 +593,10 @@ describe('computeViewports front mirror', () => {
 
   it('knows every word of the messages, and measured none wider than it assumes', () => {
     const texts = [...MESSAGE_KEYS.toast, ...MESSAGE_KEYS.cue].flatMap((key) => [en[key], de[key]]);
-    for (const word of texts.flatMap((text) => text.split(/\s+/))) {
+    const words = texts
+      .flatMap((text) => text.split(/\s+/))
+      .flatMap((word) => [word, ...softBreaks(word).flat()]);
+    for (const word of words) {
       expect(
         MESSAGE_WORD_PX[word],
         `${word} is unmeasured: add it to MESSAGE_WORD_PX`,
@@ -525,8 +604,20 @@ describe('computeViewports front mirror', () => {
       expect(wordPx(word), word).toBeGreaterThanOrEqual(MESSAGE_WORD_PX[word] ?? Infinity);
     }
     expect(SPACE_PX).toBeGreaterThanOrEqual(MEASURED_SPACE_PX);
-    // MIN_MESSAGE_WIDTH is built on the widest word
-    expect(Math.max(...Object.values(MESSAGE_WORD_PX))).toBe(MESSAGE_WORD_PX['Drehschemelwinkel']);
+    // MIN_MESSAGE_WIDTH is built on the widest word no soft hyphen breaks
+    const unbreakable = words.filter((word) => !word.includes(SOFT_HYPHEN));
+    const widest = Math.max(...unbreakable.map((word) => MESSAGE_WORD_PX[word] ?? Infinity));
+    expect(widest).toBe(MESSAGE_WORD_PX['Gegenrichtung']);
+    expect(MIN_MESSAGE_WIDTH).toBe(widest + 41 + 32);
+  });
+
+  it('gives the messages the whole column: the toast wrap has no side padding', () => {
+    // `messagesFit` and the layout spec take the column's width as the toasts' room
+    const sides = padding(SOURCE.hud, '.hud-toast-wrap');
+    expect([px(sides.left), px(sides.right)]).toEqual([0, 0]);
+    for (const side of ['padding-left', 'padding-right']) {
+      expect(() => declared(SOURCE.hud, '.hud-toast-wrap', side)).toThrow(`no ${side}`);
+    }
   });
 
   it('lists exactly the toast and goal-cue messages', () => {
@@ -549,20 +640,25 @@ describe('computeViewports front mirror', () => {
         if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
           throw new Error('drive mode has mirrors');
         }
-        const column = messageColumn(views, insets);
+        const column = messageColumn(views, null, insets);
         const at = `${w}x${h} left inset ${insets.left}`;
         if (column.y === cockpit.y) {
           count.between++;
           expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
           expect(column.x + column.width, at).toBeLessThanOrEqual(mirrorRight.x);
-          expect(column.width - insets.left, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
+          expect(column.x, at).toBeGreaterThanOrEqual(insets.left);
+          expect(column.width, at).toBeGreaterThanOrEqual(MIN_MESSAGE_WIDTH);
         } else {
           count.pane++;
-          expect(column.x, at).toBe(topDown.x);
-          expect(column.x + column.width, at).toBeLessThanOrEqual(topDown.x + topDown.width);
-          if (w < h) expect(column.width, at).toBe(topDown.width);
-          // below the finish button, which the pane's first row holds
-          expect(column.y, at).toBeGreaterThanOrEqual(topDown.y + 44);
+          const portrait = w < h;
+          // in portrait the pane spans the screen, so the column keeps clear of the safe area
+          expect(column.x, at).toBe(topDown.x + (portrait ? insets.left : 0));
+          expect(column.x + column.width, at).toBeLessThanOrEqual(
+            topDown.x + topDown.width - (portrait ? insets.right : 0),
+          );
+          if (portrait) expect(column.width, at).toBe(topDown.width - insets.left - insets.right);
+          // below the finish button, which the pane's first row holds below the cut-out
+          expect(column.y, at).toBeGreaterThanOrEqual(topDown.y + 44 + (portrait ? insets.top : 0));
           expect(column.y + column.height, at).toBe(topDown.y + topDown.height);
         }
       }
@@ -571,9 +667,27 @@ describe('computeViewports front mirror', () => {
     expect(count.pane).toBeGreaterThan(100);
   });
 
-  it('puts the toast column in the whole top-down pane in replay', () => {
+  it('moves the toast column into the top-down pane where its stack would cover the open key legend', () => {
+    const legend = { right: 755, height: 381 };
+    const open = computeViewports(840, 841, 'drive', legend, NO_INSETS);
+    const closed = computeViewports(840, 841, 'drive', null, NO_INSETS);
+    expect(messageColumn(closed, null, NO_INSETS).y).toBe(closed.cockpit?.y);
+    const column = messageColumn(open, legend, NO_INSETS);
+    expect(column.x).toBe(open.topDown.x);
+    expect(column.y).toBeGreaterThanOrEqual(open.topDown.y + 44);
+    expect(column.y + column.height).toBe(open.topDown.y + open.topDown.height);
+  });
+
+  it('puts the toast column in the whole top-down pane in replay, clear of the safe area', () => {
     const views = computeViewports(800, 600, 'replay');
-    expect(messageColumn(views)).toEqual(views.topDown);
+    expect(messageColumn(views, null)).toEqual({ ...views.topDown, cueYields: false });
+    const insets = { top: 24, right: 48, bottom: 20, left: 48 };
+    expect(messageColumn(views, null, insets)).toEqual({
+      ...views.topDown,
+      x: 48,
+      width: 800 - 96,
+      cueYields: false,
+    });
   });
 });
 
@@ -660,7 +774,7 @@ describe('computeViewports class IV mirrors', () => {
             expect(wide.y + wide.height, at).toBeLessThanOrEqual(h - legend.height);
           }
           if (front !== null) expect(apart(wide, front), at).toBe(true);
-          if (front !== null) expect(apart(wide, messageColumn(v)), at).toBe(true);
+          if (front !== null) expect(apart(wide, messageColumn(v, null)), at).toBe(true);
         }
         expect(mirrorLeft.width, at).toBe(mirrorRight.width);
         expect(mirrorLeft.height, at).toBe(mirrorRight.height);
@@ -790,6 +904,61 @@ describe('computeViewports class IV mirrors', () => {
     expect(coneShrunk).toBeGreaterThan(0);
   });
 
+  it('drops class IV once as the top-down share grows, and never brings it back', () => {
+    const tablets: (readonly [number, number])[] = [
+      [800, 1280],
+      [768, 1024],
+      [810, 1080],
+      [820, 1180],
+      [834, 1194],
+      [1024, 1366],
+      [744, 1133],
+    ];
+    const withClose = { front: true, wide: true, close: true };
+    const wideOnly = { front: false, wide: true, close: false };
+    for (const extra of [WIDE, withClose, wideOnly]) {
+      for (const [w, h] of tablets) {
+        // every whole-px pane height, so each cockpit height the share can reach is visited once
+        let prev: { wide: boolean; width: number; height: number } | null = null;
+        for (let pane = Math.ceil(0.3 * h); pane <= Math.floor(0.6 * h); pane++) {
+          const layout = { landscape: 0.4, portrait: pane / h };
+          const v = computeViewports(w, h, 'drive', null, NO_INSETS, layout, null, extra);
+          if (v.mirrorLeft === null) throw new Error('drive mode has mirrors');
+          const now = { wide: v.wideLeft !== null, ...v.mirrorLeft };
+          const at = `${w}x${h} pane ${pane} ${JSON.stringify(extra)}`;
+          if (prev === null) expect(now.wide, `${at}: class IV at the smallest share`).toBe(true);
+          else {
+            expect(prev.wide || !now.wide, `${at}: class IV returns`).toBe(true);
+            if (prev.wide === now.wide) {
+              expect(now.width, at).toBeLessThanOrEqual(prev.width);
+              // a fractional controls height (768 wide) can move the search's px grid by its fraction
+              expect(now.height, at).toBeLessThan(prev.height + 1);
+            }
+          }
+          prev = now;
+        }
+      }
+    }
+  });
+
+  it('keeps class IV in portrait until it first stops fitting', () => {
+    // 834x1194: at pane 529 the smallest stack is 1 px taller than the room
+    const layout = { ...DEFAULT_TOP_DOWN_LAYOUT, portrait: 528 / 1194 };
+    const v = computeViewports(834, 1194, 'drive', null, NO_INSETS, layout, null, WIDE);
+    expect(v.wideLeft).not.toBeNull();
+  });
+
+  it('keeps class IV where the share does not change the room', () => {
+    // a 1080p laptop at 150%, landscape at the smallest and the default share; mirror-only at 1366x768
+    for (const landscape of [0.25, DEFAULT_TOP_DOWN_LAYOUT.landscape]) {
+      const layout = { ...DEFAULT_TOP_DOWN_LAYOUT, landscape };
+      const v = computeViewports(1280, 585, 'drive', null, NO_INSETS, layout, null, WIDE);
+      expect(v.wideLeft, `share ${String(landscape)}`).not.toBeNull();
+    }
+    const mirrors = computeViewports(1366, 768, 'mirrors', null, NO_INSETS, undefined, null, WIDE);
+    expect(mirrors.wideLeft).not.toBeNull();
+  });
+
   it('moves the stack up out of the sight cone before it shrinks class II', () => {
     const on = views(1168, 1018, WIDE, null);
     const off = views(1168, 1018, PLAIN, null);
@@ -877,7 +1046,7 @@ describe('computeViewports class V mirror', () => {
         expect(mirrorRight.y - (close.y + close.height), `${at} gap`).toBe(WIDE_GAP_PX);
         expect(close.y, at).toBeGreaterThanOrEqual(cockpit.y + 32);
         if (front !== null) expect(apart(close, front), at).toBe(true);
-        expect(apart(close, messageColumn(v)), at).toBe(true);
+        expect(apart(close, messageColumn(v, null)), at).toBe(true);
       }
     }
     expect(shown).toBeGreaterThan(0);
@@ -888,7 +1057,7 @@ describe('computeViewports class V mirror', () => {
       const on = views(w, h, ALL);
       const off = views(w, h, NO_CLOSE);
       expect({ ...on, close: null }, `${w}x${h}`).toEqual(off);
-      expect(messageColumn(on), `${w}x${h}`).toEqual(messageColumn(off));
+      expect(messageColumn(on, null), `${w}x${h}`).toEqual(messageColumn(off, null));
     }
   });
 
@@ -962,9 +1131,18 @@ describe('computeViewports mirror-only drive', () => {
       const views = mirrorsOnly(w, h);
       const { mirrorLeft, mirrorRight, front } = views;
       if (mirrorLeft === null || mirrorRight === null) throw new Error('mirrors');
-      const column = messageColumn(views, NO_INSETS);
+      const column = messageColumn(views, null, NO_INSETS);
       expect(column.x, `${w}x${h}`).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
       expect(column.x + column.width, `${w}x${h}`).toBeLessThanOrEqual((front ?? mirrorRight).x);
+      expect(column.cueYields, `${w}x${h}`).toBe(false);
     }
+  });
+
+  it('lets the goal cue yield to a toast where no span beside the mirrors holds both', () => {
+    const notch = { top: 24, right: 48, bottom: 20, left: 48 };
+    const views = computeViewports(950, 426, 'mirrors', null, notch, undefined, null, ALL);
+    expect(messageColumn(views, null, notch).cueYields).toBe(true);
+    const plain = computeViewports(950, 426, 'mirrors', null, NO_INSETS, undefined, null, ALL);
+    expect(messageColumn(plain, null, NO_INSETS).cueYields).toBe(false);
   });
 });
