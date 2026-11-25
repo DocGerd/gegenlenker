@@ -651,7 +651,7 @@ test('below 700 px the brief collapses on the first drive input and the key lege
       .poll(async () => (await boxes(page.locator('.hud-topdown')))[0])
       .toMatchObject({ right: other.width, bottom: other.height });
     await settled(page);
-    await expect.poll(() => overlayTrouble(page, KEY_LIST, false)).toEqual([]);
+    await expect.poll(() => overlayTrouble(page, KEY_LIST)).toEqual([]);
   }
   await keysToggle.click();
   await expect(list).toBeHidden();
@@ -733,11 +733,10 @@ const AID_LIST = '[data-hud="aidLegend"]';
 
 /**
  * What an open overlay of a short screen leaves or covers: it stands in the top-down pane, clear of the
- * mirrors and the controls, and where `strict` also of the divider and the toolbar. The key list is not
- * held to those two: on develop it covers the divider (#433) and, at 1172x426, the toolbar. Taller than
- * its room, it scrolls: its first item shows whole and every item can be scrolled into view.
+ * mirrors, the controls, the divider and the toolbar. Taller than its room, it scrolls: its first item
+ * shows whole and every item can be scrolled into view.
  */
-async function overlayTrouble(page: Page, sel: string, strict = true): Promise<string[]> {
+async function overlayTrouble(page: Page, sel: string): Promise<string[]> {
   const list = page.locator(sel);
   const [box] = await boxes(list);
   const [pane] = await boxes(page.locator('.hud-topdown'));
@@ -784,12 +783,8 @@ async function overlayTrouble(page: Page, sel: string, strict = true): Promise<s
     page.locator(
       [
         '.hud-mirror:not([hidden]), .ctl-stop, .ctl-lever, .hud-action',
-        ...(strict
-          ? [
-              '.hud-split:not([hidden]) .hud-split-handle, .hud-split:not([hidden]) .hud-split-reset',
-              '.hud-toolbar .hud-toggle',
-            ]
-          : []),
+        '.hud-split:not([hidden]) .hud-split-handle, .hud-split:not([hidden]) .hud-split-reset',
+        '.hud-toolbar .hud-toggle',
       ].join(', '),
     ),
   );
@@ -935,7 +930,7 @@ for (const { locale, messages } of locales) {
               await expect(page.locator(sel)).toBeVisible();
               await settled(page);
               await expect
-                .poll(() => overlayTrouble(page, sel, sel === AID_LIST), {
+                .poll(() => overlayTrouble(page, sel), {
                   message: `${sel}, brief ${folded ? 'folded' : 'open'}`,
                 })
                 .toEqual([]);
@@ -1030,6 +1025,26 @@ test('a swipe on the open aid legend scrolls it, and neither steers, drives nor 
   } finally {
     await context.close();
   }
+});
+
+test('the key list of a short screen opens at its top again', async ({ page }) => {
+  await page.setViewportSize({ width: 1172, height: 426 });
+  await startStraightReverse(page, en.exerciseStraightReverse);
+  const list = page.locator(KEY_LIST);
+  await keysToggle(page).click();
+  await expect(list).toBeVisible();
+  await settled(page);
+  expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight), 'no room to scroll').toBe(
+    true,
+  );
+  await list.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await keysToggle(page).click();
+  await expect(list).toBeHidden();
+  await keysToggle(page).click();
+  await expect(list).toBeVisible();
+  expect(await list.evaluate((el) => el.scrollTop)).toBe(0);
 });
 
 test('the messages stay clear of the controls with the aid legend open on a short portrait screen', async ({
