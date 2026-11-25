@@ -53,6 +53,15 @@ export function clearRect(pane: Rect, chrome: readonly Rect[]): Rect {
   return best ?? pane;
 }
 
+/** Where the target arrow may be drawn: the framing's clear rect, trimmed off the view-size divider. */
+export function arrowClearRect(
+  pane: Rect,
+  chrome: readonly Rect[],
+  divider: readonly Rect[],
+): Rect {
+  return clearRect(clearRect(pane, chrome), divider);
+}
+
 /**
  * Unit vector (or zero) the leading end travels along: signed speed first, then the selected gear.
  * Forward the truck leads; reversing the trailer rear does, along the trailer's heading.
@@ -128,11 +137,15 @@ export function yardFraming(i: YardInput): { centre: Vec2; half: number } {
   };
 }
 
-/** Where the arrow towards a hidden `target` sits and which way it points; null while `target` is inside `clear`. */
+/**
+ * Where the arrow towards a hidden `target` sits and which way it points; null while `target` is
+ * inside `clear`. The arrow is drawn on the edge of `place` (default `clear`), which may be smaller.
+ */
 export function targetArrow(
   target: Vec2,
   clear: Rect,
   margin: number,
+  place: Rect = clear,
 ): { x: number; y: number; angle: number } | null {
   const inside =
     target.x >= clear.x &&
@@ -140,12 +153,12 @@ export function targetArrow(
     target.y >= clear.y &&
     target.y <= clear.y + clear.height;
   if (inside) return null;
-  const cx = clear.x + clear.width / 2;
-  const cy = clear.y + clear.height / 2;
+  const cx = place.x + place.width / 2;
+  const cy = place.y + place.height / 2;
   const dx = target.x - cx;
   const dy = target.y - cy;
-  const reachX = Math.max(1, clear.width / 2 - margin);
-  const reachY = Math.max(1, clear.height / 2 - margin);
+  const reachX = Math.max(1, place.width / 2 - margin);
+  const reachY = Math.max(1, place.height / 2 - margin);
   const t = Math.min(reachX / Math.max(Math.abs(dx), 1e-9), reachY / Math.max(Math.abs(dy), 1e-9));
   return { x: cx + dx * t, y: cy + dy * t, angle: Math.atan2(dy, dx) };
 }

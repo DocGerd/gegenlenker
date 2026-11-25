@@ -22,6 +22,7 @@ import { createReplayCursor, type ReplayCursor } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { chaseViewAvailable } from '../render';
+import { replayContext } from './exercise-text';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
 import './results.css';
@@ -236,9 +237,15 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     }
   };
   timeline.append(markers, scrubber);
+  const title = document.createElement('h1');
+  title.className = 'replay-title';
+  title.textContent = replayContext(log);
   const readout = document.createElement('div');
   readout.className = 'replay-readout mono';
-  map.append(readout);
+  const head = document.createElement('div');
+  head.className = 'replay-head';
+  head.append(title, readout);
+  map.append(head);
   bar.append(
     timeline,
     playButton,

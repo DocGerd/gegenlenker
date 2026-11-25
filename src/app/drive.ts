@@ -6,6 +6,7 @@ import {
   DEFAULT_TOP_DOWN_VIEW,
   TOP_DOWN_SHARE_LIMITS,
   type AidFlags,
+  type Rect,
   type RenderFrame,
   type TopDownMode,
 } from '../contracts/render';
@@ -22,7 +23,7 @@ import {
   interiorAvailable,
   lookAroundAvailable,
 } from '../render';
-import { clearRect, targetArrow } from '../render/follow-framing';
+import { arrowClearRect, clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay, perfRequested } from '../render/perf-overlay';
 import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
@@ -34,7 +35,7 @@ import { NO_PREDICTION, predictCombination, warnAhead, type Ahead } from '../sim
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
-import { measureChrome } from './chrome';
+import { measureChrome, measureDivider } from './chrome';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { showPauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
@@ -282,9 +283,16 @@ export function startDrive(
   cleanups.push(() => hud.dispose());
 
   /** Chrome moves with the layout and with collapsing panels; the vehicle is framed in what it leaves free. */
+  let arrowRects: { clear: Rect; place: Rect } | null = null;
   const remeasure = (): void => {
     if (mirrorsOnly) return;
-    frame.topDownClear = clearRect(frame.views.topDown, measureChrome(stage));
+    const chrome = measureChrome(stage);
+    const clear = clearRect(frame.views.topDown, chrome);
+    frame.topDownClear = clear;
+    arrowRects = {
+      clear,
+      place: arrowClearRect(frame.views.topDown, chrome, measureDivider(stage)),
+    };
     dirty = true;
   };
   const target = layout.target;
@@ -495,7 +503,7 @@ export function startDrive(
       if (tracker !== null) hud.setGoal(tracker.goalCue(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
       hud.setTargetArrow(
-        at && frame.topDownClear ? targetArrow(at, frame.topDownClear, ARROW_MARGIN) : null,
+        at && arrowRects ? targetArrow(at, arrowRects.clear, ARROW_MARGIN, arrowRects.place) : null,
       );
       if (EXPOSE_FRAMING) exposeVehicleBox();
     },

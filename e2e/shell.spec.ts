@@ -97,3 +97,27 @@ test('the update toast is shown at the menu and result, and hidden by CSS over a
   await expect(toast).toHaveCount(1);
   await expect(toast).toBeHidden();
 });
+
+test('the result keeps its actions clear of the update toast at 1280x585', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 585 });
+  await page.goto('./');
+  const toast = page.locator('.update-toast');
+  await expect(toast).toBeVisible();
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await expect(page.locator('[data-hud="speed"]')).toHaveText('0.0 km/h');
+  await finishRun(page);
+  await expect(toast).toBeVisible();
+
+  await page.locator('.result').evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  const toastBox = await toast.boundingBox();
+  if (toastBox === null) throw new Error('no toast box');
+  const actions = page.locator('.result-actions .app-button');
+  expect(await actions.count()).toBeGreaterThan(0);
+  for (const action of await actions.all()) {
+    const box = await action.boundingBox();
+    if (box === null) throw new Error('no action box');
+    expect(box.y + box.height, 'an action ends above the toast').toBeLessThanOrEqual(toastBox.y);
+  }
+});

@@ -92,6 +92,15 @@ test('finish scores, back leaves the result, and the replay names the exercise',
   await expect(replay).toContainText(en.exerciseStraightReverse);
 });
 
+test('the result prints angles as <n>° without a space', async ({ page }) => {
+  await startAndRoll(page);
+  await page.getByRole('button', { name: en.pause }).click();
+  await sheet(page).getByRole('button', { name: en.finish }).click();
+  const values = page.locator('.result-values');
+  await expect(values).toContainText(/\d°/);
+  await expect(values).not.toContainText(/\d\s°/);
+});
+
 test('the sheet covers the messages', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: en.exerciseStraightReverse }).click();

@@ -21,17 +21,13 @@ import { bestKey, exerciseDone } from '../scoring/best';
 import { offlineStatus, onOfflineStatus } from '../pwa/offline-status';
 import { trailers, trucks } from '../vehicles/registry';
 import type { RunConfig } from './drive';
-import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
+import { EXERCISE_BRIEF, EXERCISE_TITLE, LAYOUT_NAME, replayContext } from './exercise-text';
 import { currentSettings, updateSettings, type Settings } from './settings';
 import { bestResults } from './storage';
 import { buildLabel } from './build-info';
 import { CHANNEL } from './channel';
 import { applyTheme } from './theme';
 
-const LAYOUT_NAME: Readonly<Record<LayoutId, MessageKey>> = {
-  depot: 'layoutDepot',
-  logistics: 'layoutLogistics',
-};
 const LAYOUT_BRIEF: Readonly<Record<LayoutId, MessageKey>> = {
   depot: 'briefDepot',
   logistics: 'briefLogistics',
@@ -143,13 +139,6 @@ function bestLine(result: RunResult): HTMLElement {
     stat('directionChanges', formatNumber(result.directionChanges, 0)),
   );
   return line;
-}
-
-/** What the stored run replays: the exercise, or the free yard it was driven in. */
-function replayContext(log: InputLog): string {
-  return log.exerciseId === null
-    ? `${t('freeYard')} · ${t(LAYOUT_NAME[log.layoutId])}`
-    : t(EXERCISE_TITLE[log.exerciseId]);
 }
 
 /** The replay button's detail line; a night run says so, as it replays at night whatever the menu shows. */

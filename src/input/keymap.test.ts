@@ -73,6 +73,13 @@ describe('keymap', () => {
     expect(actionFor('view', { code: 'KeyX', key: 'x' })).toBeUndefined();
   });
 
+  it('names Space like the stop button', () => {
+    const space = legendRows(false).find(
+      (r) => typeof r.term !== 'string' && r.term.key === 'keySpace',
+    );
+    expect(space?.desc).toBe('stop');
+  });
+
   it('has legend text for every row', () => {
     for (const chase of [false, true]) {
       for (const { term, desc } of legendRows(chase, true)) {
