@@ -14,7 +14,6 @@ import {
   type ViewRects,
   type RenderFrame,
   type RenderStats,
-  type SceneRenderer,
   type ScenePalette,
   type TopDownView,
   type WebgpuFallback,
@@ -36,6 +35,7 @@ import {
   type ChaseCollider,
   type CombinationExtent,
 } from './chase-camera';
+import type { SceneRenderer } from './scene-renderer';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
