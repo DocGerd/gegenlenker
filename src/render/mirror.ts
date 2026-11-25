@@ -76,7 +76,7 @@ export const CLASS_II_MIRRORS: readonly MirrorSpec[] = [CLASS_II_LEFT, CLASS_II_
  */
 export const WIDE_YAW = MathUtils.degToRad(25);
 const CLASS_IV = {
-  pitch: MathUtils.degToRad(-18),
+  pitch: MathUtils.degToRad(-21),
   roll: 0,
   fov: 64,
   aspect: WIDE_ASPECT,

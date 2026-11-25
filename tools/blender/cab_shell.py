@@ -56,9 +56,6 @@ GLASS = {"main": (0.2, 0.36), "wide": (0.2, 0.2), "front": (0.26, 0.2)}
 HEAD_RIM, HEAD_DEPTH, GLASS_THICKNESS = 0.02, 0.1, 0.005
 # Each glass stands this far ahead of its camera (above it, for class VI), so no camera sits in a face.
 GLASS_GAP = 0.01
-# The class IV head stands this much further ahead: below 1.75 m the class V camera looks down past the
-# MAN's class IV camera onto its field.
-WIDE_AHEAD = 0.09
 ARM_RADIUS = {"day": 0.03, "crew": 0.018}  # the crew cab's heads hang on a thin tubular frame
 ARM_PILLAR = 0.15  # the arms meet the cab side this far behind the front face, at the A-pillar
 
@@ -287,9 +284,7 @@ def mirrors(p, hues):
     pillar = front - ARM_PILLAR
     for side, main, wide in ((1, m["mirrorLeft"], m["wideLeft"]), (-1, m["mirrorRight"], m["wideRight"])):
         main_front = mirror_head(shape, solids, hues, main["x"] + GLASS_GAP, main["y"], main["z"], GLASS["main"])
-        wide_front = mirror_head(
-            shape, solids, hues, wide["x"] + GLASS_GAP + WIDE_AHEAD, wide["y"], wide["z"], GLASS["wide"]
-        )
+        wide_front = mirror_head(shape, solids, hues, wide["x"] + GLASS_GAP, wide["y"], wide["z"], GLASS["wide"])
         # the arms leave the heads' front faces near their inboard edge
         inboard = main["y"] - side * (GLASS["main"][0] / 2 - HEAD_RIM)
         top = main["z"] + GLASS["main"][1] / 2 - HEAD_RIM

@@ -29,7 +29,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | mirror.lateral | 1250 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | mirror.glassOutboard | 200 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | mirror.behindBumper | 600 mm | typical for the vehicle class, no source found |
-| MAN LE 18.280 | mirror.height | 2000 mm | typical for the vehicle class, no source found |
+| MAN LE 18.280 | mirror.height | 2550 mm | class II glass from mid-window to near the roof line on THW photos (https://commons.wikimedia.org/wiki/File:Dossenheim_-_Mercedes_Benz_Arocs_1835_AK_-_Technisches_Hilfswerk_Mannheim_-_THW_81451_-_2016-05-08_16-03-18.jpg, https://commons.wikimedia.org/wiki/File:MAN_LE_18-280_THW.jpg); no measured source |
 | MAN LE 18.280 | mirror.wideBelow | 400 mm | class IV glass stacked under the class II, no source found |
 | MAN LE 18.280 | steering.lockToLockTurns | 5 turns | typical for the vehicle class, no source found |
 | MAN LE 18.280 | steering.maxRate | 1.5 turns/s | typical for the vehicle class, no source found |
@@ -64,7 +64,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Mercedes-Benz Arocs 1835 AK | mirror.lateral | 1400 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | mirror.glassOutboard | 200 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | mirror.behindBumper | 700 mm | typical for the vehicle class, no source found |
-| Mercedes-Benz Arocs 1835 AK | mirror.height | 2200 mm | typical for the vehicle class, no source found |
+| Mercedes-Benz Arocs 1835 AK | mirror.height | 2550 mm | class II glass from mid-window to near the roof line on THW photos (https://commons.wikimedia.org/wiki/File:Dossenheim_-_Mercedes_Benz_Arocs_1835_AK_-_Technisches_Hilfswerk_Mannheim_-_THW_81451_-_2016-05-08_16-03-18.jpg, https://commons.wikimedia.org/wiki/File:MAN_LE_18-280_THW.jpg); no measured source |
 | Mercedes-Benz Arocs 1835 AK | mirror.wideBelow | 400 mm | class IV glass stacked under the class II, no source found |
 | Mercedes-Benz Arocs 1835 AK | steering.lockToLockTurns | 5 turns | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | steering.maxRate | 1.5 turns/s | typical for the vehicle class, no source found |

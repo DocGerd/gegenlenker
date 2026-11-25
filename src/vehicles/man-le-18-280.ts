@@ -3,6 +3,8 @@ import { SOURCES, estimate, sourced } from './sources';
 
 const eyeAboveFloor =
   'cab floor 1.1 m above ground (render model), seated eye 1.25 m above it: seat height plus sitting eye height; no source found';
+const mirrorHeight =
+  'class II glass from mid-window to near the roof line on THW photos (https://commons.wikimedia.org/wiki/File:Dossenheim_-_Mercedes_Benz_Arocs_1835_AK_-_Technisches_Hilfswerk_Mannheim_-_THW_81451_-_2016-05-08_16-03-18.jpg, https://commons.wikimedia.org/wiki/File:MAN_LE_18-280_THW.jpg); no measured source';
 const typical = 'typical for the vehicle class, no source found';
 const inBumper = "in the bumper, chosen inside UN R48 6.2.4.2's 1,200 mm; no source found";
 const onFloor =
@@ -29,7 +31,7 @@ export const manLe18280: TruckSpec = {
     lateral: estimate(1250, typical),
     glassOutboard: estimate(200, typical),
     behindBumper: estimate(600, typical),
-    height: estimate(2000, typical),
+    height: estimate(2550, mirrorHeight),
     wideBelow: estimate(400, 'class IV glass stacked under the class II, no source found'),
   },
   steering: {
