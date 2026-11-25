@@ -84,8 +84,48 @@ export async function downloadSources(
   }
 }
 
-export const httpFetcher: Fetcher = async (url) => {
-  const response = await fetch(url, { redirect: 'follow' });
+const ATTEMPTS = 4;
+const TIMEOUT_MS = 120_000;
+
+/** A failure worth another attempt: a network error, a timeout, 429 or a 5xx. */
+export class Transient extends Error {}
+
+const once = async (url: string): Promise<Uint8Array> => {
+  let response: Response;
+  try {
+    response = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch (error) {
+    throw new Transient(error instanceof Error ? error.message : String(error));
+  }
+  if (response.status === 429 || response.status >= 500) {
+    throw new Transient(`HTTP ${response.status}`);
+  }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return new Uint8Array(await response.arrayBuffer());
+  try {
+    return new Uint8Array(await response.arrayBuffer());
+  } catch (error) {
+    throw new Transient(error instanceof Error ? error.message : String(error));
+  }
 };
+
+/**
+ * Wraps `attempt` with retries and backoff for transient failures only. Anything else, and a
+ * hash mismatch (checked by the caller), is not retried.
+ */
+export function withRetry(
+  attempt: Fetcher,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((done) => setTimeout(done, ms)),
+): Fetcher {
+  return async (url) => {
+    for (let n = 1; ; n++) {
+      try {
+        return await attempt(url);
+      } catch (error) {
+        if (!(error instanceof Transient) || n >= ATTEMPTS) throw error;
+        await sleep(1000 * 2 ** (n - 1));
+      }
+    }
+  };
+}
+
+export const httpFetcher: Fetcher = withRetry(once);

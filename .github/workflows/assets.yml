@@ -8,7 +8,14 @@ on:
       - tools/assets/**
       - tools/textures/**
       - src/render/assets/**
+      - src/render/hdri-light.ts
+      - src/render/ground-pbr-pixels.ts
+      - src/render/ground-texture-pixels.ts
+      - src/render/asset-registry.ts
       - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - vitest.config.ts
+      - .nvmrc
   schedule:
     - cron: '30 4 * * 1'
   workflow_dispatch:
