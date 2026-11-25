@@ -849,6 +849,53 @@
   transition: none;
 }
 
+/* Below 700 px (hud.ts sets data-short) the aid legend is an overlay on the top view, out of the panel flow: it opens under the aids chips (hud.ts sets --aid-top), clear of the divider strip and the lever column, and under the toasts and the divider (later in the DOM). */
+.hud-topdown[data-short] .hud-aid-legend {
+  --aid-left: calc(var(--size-target) + var(--space-2));
+  --aid-side: calc(var(--size-target) * 1.5 + var(--space-4) + var(--safe-right) + var(--space-2));
+  --aid-bar: 0px;
+  position: absolute;
+  top: var(--aid-top);
+  left: var(--aid-left);
+  max-width: min(26em, calc(100% - var(--aid-left) - var(--space-4) - var(--aid-side)));
+  max-height: calc(100% - var(--aid-top) - var(--space-4) - var(--safe-bottom) - var(--aid-bar));
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+
+/* Portrait: the divider is a bar along the pane's bottom edge, and no lever stands in the pane. */
+@media not (min-aspect-ratio: 1/1) {
+  .hud-topdown[data-short] .hud-aid-legend {
+    --aid-left: calc(var(--space-4) + var(--safe-left));
+    --aid-side: var(--safe-right);
+    --aid-bar: calc(var(--size-target) + var(--space-2));
+  }
+}
+
+/* The counters stand beside the angle gauges: the gauges take only what their dials need, the counters their text. A row too narrow for both still wraps; never `nowrap`, which hud.ts's panel measure cannot see. */
+.hud-topdown[data-short] .hud-gauges {
+  --hud-dial: 84px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  flex: 1 1 calc(2 * (var(--hud-dial) + 2 * var(--space-2) + 2px) + var(--space-2));
+  min-width: 0;
+  max-width: max-content;
+}
+
+.hud-topdown[data-short] .hud-gauge {
+  min-width: 0;
+}
+
+.hud-topdown[data-short] .hud-gauge svg {
+  width: var(--hud-dial);
+}
+
+.hud-topdown[data-short] .hud-counters {
+  padding: var(--space-1) var(--space-2);
+  column-gap: var(--space-2);
+}
+
 /* Without the top-down pane the brief floats over the cockpit above its band, and the counters sit in the band, both left of the lever column. */
 .hud[data-mirrors] {
   --hud-lever-clear: calc(
