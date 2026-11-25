@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
-import { en } from '../src/i18n/en';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import {
   brightShare,
@@ -22,6 +21,7 @@ import {
   timeoutWithSettles,
   tokenShare,
 } from './pinned-shoot';
+import { exerciseEntry } from './menu-flow';
 
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 const PERSPECTIVE: readonly Shot[] = ['cockpit', 'mirrorLeft', 'mirrorRight', 'chase'];
@@ -47,7 +47,11 @@ for (const preset of PRESETS) {
     heavyAt(preset),
     async ({ page }) => {
       test.setTimeout(timeoutWithSettles(preset, 2));
-      await startPinnedDrive(page, { preset, lighting: 'night' }, en.exerciseStraightReverse);
+      await startPinnedDrive(
+        page,
+        { preset, lighting: 'night' },
+        exerciseEntry('straight-reverse'),
+      );
       const parked: Partial<Record<Shot, Buffer>> = {};
       for (const shot of PERSPECTIVE) {
         if (shot === 'chase' && !QUALITY_FLAGS[preset].chaseView) continue;
@@ -110,7 +114,7 @@ type Night = {
 
 /** A night drive of the straight reverse at `preset`, with the lamp switches. */
 async function nightDrive(page: Page, preset: Preset): Promise<Night> {
-  await startPinnedDrive(page, { preset, lighting: 'night' }, en.exerciseStraightReverse);
+  await startPinnedDrive(page, { preset, lighting: 'night' }, exerciseEntry('straight-reverse'));
   const lights = page.locator('[data-ctl="lights"]');
   const hazard = page.locator('[data-ctl="hazard"]');
   await expect(lights).toHaveAttribute('aria-pressed', 'true');

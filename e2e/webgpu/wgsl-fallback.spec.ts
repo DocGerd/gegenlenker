@@ -1,5 +1,4 @@
 import { expect, test } from '../fixtures';
-import { en } from '../../src/i18n/en';
 import { ATTACHMENTS } from '../../src/render/asset-registry';
 import { GROUND_SHADER_MARKER } from '../../src/render/ground-texture-spec';
 import { SKY_SHADER_MARKER } from '../../src/render/sky';
@@ -11,6 +10,7 @@ import {
   startPinnedDrive,
   WEBGPU_SETTLE_DEADLINE_MS,
 } from '../pinned-shoot';
+import { exerciseEntry } from '../menu-flow';
 
 /** Runs in the page before the app: WGSL that holds `marker` no longer parses, whoever creates the module. */
 function corruptModules(marker: string): void {
@@ -58,7 +58,7 @@ for (const { name, shader, attachment, dependent } of CASES) {
     await startPinnedDrive(
       page,
       { preset: 'high', lighting: 'day' },
-      en.exerciseStraightReverse,
+      exerciseEntry('straight-reverse'),
       '?backend=webgpu',
       undefined,
       {

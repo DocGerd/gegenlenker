@@ -6,6 +6,7 @@ import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
 import { heavyAt, startPinnedDrive } from './pinned-shoot';
+import { exerciseEntry } from './menu-flow';
 
 type Size = { width: number; height: number };
 
@@ -1623,7 +1624,7 @@ for (const size of sizes) {
       await startPinnedDrive(
         page,
         { preset: 'balanced', lighting: 'day' },
-        en.exerciseStraightReverse,
+        exerciseEntry('straight-reverse'),
       );
       expect(await blankRows(page, Math.round(size.width * 0.3))).toBe(0);
     } finally {

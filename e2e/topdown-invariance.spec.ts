@@ -13,6 +13,7 @@ import {
   tokenShare,
   type Preset,
 } from './pinned-shoot';
+import { exerciseEntry } from './menu-flow';
 import type { ScenePaletteKey } from '../src/contracts/render';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
@@ -50,7 +51,10 @@ const MIN_TOKEN_SHARE: Readonly<
 
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
 // One exercise per yard, so each yard's restyled props are covered.
-for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
+for (const { id, name: exercise } of [
+  { id: 'straight-reverse', name: en.exerciseStraightReverse },
+  { id: 'reverse-bay', name: en.exerciseReverseBay },
+] as const) {
   test(
     `the top-down view is the same at every graphics preset: ${exercise}`,
     { tag: HEAVY },
@@ -61,7 +65,7 @@ for (const exercise of [en.exerciseStraightReverse, en.exerciseReverseBay]) {
       const shots = { follow: new Map<Preset, Buffer>(), yard: new Map<Preset, Buffer>() };
       for (const preset of PRESETS) {
         const page = await context.newPage();
-        await startPinnedDrive(page, { preset, lighting: 'day' }, exercise);
+        await startPinnedDrive(page, { preset, lighting: 'day' }, exerciseEntry(id));
         scales.push({ label: `${exercise} ${preset} before`, scale: await renderScale(page) });
         for (const shot of ['follow', 'yard'] as const) {
           const png = await shoot(page, shot);

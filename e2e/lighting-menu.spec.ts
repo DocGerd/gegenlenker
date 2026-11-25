@@ -17,6 +17,7 @@ import {
   shoot,
   startPinnedDrive,
 } from './pinned-shoot';
+import { yardEntry } from './menu-flow';
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const BEST_KEY = 'gegenlenker.best.v2';
@@ -57,7 +58,7 @@ for (const preset of ['low', 'high'] as const) {
     heavyAt(preset),
     async ({ page }) => {
       test.setTimeout(timeoutWithSettles(preset, 3));
-      await startPinnedDrive(page, { preset, lighting: 'day' }, en.layoutDepot);
+      await startPinnedDrive(page, { preset, lighting: 'day' }, yardEntry('depot'));
       expect(
         await brightShare(page, await shoot(page, 'mirrorLeft'), DAY_BRIGHT),
         'start',

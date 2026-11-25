@@ -24,6 +24,7 @@ import {
   step,
   timeoutWithSettles,
 } from './pinned-shoot';
+import { exerciseEntry } from './menu-flow';
 
 /** An unlit vertex colour reaches the canvas as its hue, give or take the rounding of the sRGB frame target. */
 const TOLERANCE = 1;
@@ -66,7 +67,7 @@ async function drive(page: Page): Promise<void> {
  * drive takes seconds on software GL), and the preset's attachments are in place before they read.
  */
 async function pinnedDrive(page: Page, preset: Preset, mirrors = DEFAULT_MIRRORS): Promise<void> {
-  await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
+  await startPinnedDrive(page, { preset, lighting: 'day' }, exerciseEntry('straight-reverse'));
   await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(mirrors);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }

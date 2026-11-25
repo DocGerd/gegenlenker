@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { expect, test } from './fixtures';
-import { en } from '../src/i18n/en';
 import {
   heavyAt,
   timeoutWithSettles,
@@ -9,6 +8,7 @@ import {
   shoot,
   startPinnedDrive,
 } from './pinned-shoot';
+import { exerciseEntry } from './menu-flow';
 
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 const hash = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
@@ -23,7 +23,7 @@ for (const preset of PRESETS) {
     async ({ context }) => {
       test.setTimeout(timeoutWithSettles(preset, 2));
       const page = await context.newPage();
-      await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
+      await startPinnedDrive(page, { preset, lighting: 'day' }, exerciseEntry('straight-reverse'));
       if (preset !== 'low') {
         await expect(page.locator('html')).toHaveAttribute('data-vehicle-shells', /^\S+ \S+ \S+$/);
       }

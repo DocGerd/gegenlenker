@@ -52,7 +52,6 @@ const MAX_FLAT_MORE = 0.015;
 const MAX_EDGE_MORE = 0.55;
 /** Most of a cockpit shot the clear colour may fill: the mirrors alone carry a wiped pane past the colour count. */
 const MAX_COCKPIT_BACKDROP = 0.2;
-const EXERCISE = 'Straight reverse';
 // Same GL as the e2e `offline` project, so hashes match what CI renders.
 const ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'];
 
@@ -109,7 +108,7 @@ try {
       await startPinnedDrive(
         page,
         { preset, lighting: values.lighting },
-        EXERCISE,
+        { kind: 'exercise', id: 'straight-reverse' },
         `?backend=${values.backend}`,
       );
       if (values.gear === 'R') await shiftToReverse(page);

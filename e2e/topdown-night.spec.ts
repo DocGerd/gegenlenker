@@ -24,6 +24,7 @@ import {
   type RenderConfig,
   type Shot,
 } from './pinned-shoot';
+import { exerciseEntry } from './menu-flow';
 import type { NightLitKey, ScenePalette } from '../src/contracts/render';
 import { legacyIrradiance } from '../src/render/light-rig';
 import { TOP_DOWN_NIGHT_LIGHT } from '../src/render/look';
@@ -208,7 +209,7 @@ async function runDrives(
   for (const config of drives) {
     const { preset, lighting } = config;
     const page = await context.newPage();
-    await startPinnedDrive(page, config, exercise);
+    await startPinnedDrive(page, config, exerciseEntry(id));
     for (const key of ['accent', 'nightAccent', 'wheel'] as const) {
       tokens[key] = await sceneRgb(page, key);
     }
