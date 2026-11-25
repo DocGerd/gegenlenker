@@ -44,12 +44,13 @@ const readTrailer = async (id: TrailerId) => {
 };
 
 /**
- * Share of the body shell's vertices a mirror frames, per truck: about 0.8 of the measured share on
- * both screens. The Arocs' is lower, as its subframe and tailgate add vertices the mirrors do not frame.
+ * Share of the body shell's vertices a mirror frames, per truck: about 0.8 of the lower measured share
+ * on both screens. The kit on the chassis under the body adds vertices the class II mirrors do not
+ * frame; the Arocs' share is lower still, as its subframe and tailgate add more.
  */
 const BODY_FLOOR: Record<TruckId, number> = {
-  'man-le-18-280': 0.37,
-  'arocs-1835-ak': 0.15,
+  'man-le-18-280': 0.28,
+  'arocs-1835-ak': 0.12,
 };
 
 const STRAIGHT: Pose2 = { x: 0, y: 0, heading: 0 };
