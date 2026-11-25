@@ -86,8 +86,6 @@ export const LOW_LOADER = {
   slopeDrop: 0.2,
   frontLength: 1.6, // raised front section over the dolly
   frontRise: 0.15,
-  // folded ramps' top above ground: "Höhe der Auffahrrampen unbeladen: 3060 mm" (SOURCES.H)
-  rampTop: 3.06,
 } as const;
 
 /** Where the low-loader shell's deck breaks, in the trailer body frame. */
@@ -96,6 +94,9 @@ export function lowLoaderDeck(spec: TrailerSpec) {
   const rearDeck = deck - LOW_LOADER.slopeDrop;
   const lampTop = rearDeck + metres(spec.tailLamp.sill) + metres(spec.tailLamp.height);
   const slopeEnd = a.rearX + LOW_LOADER.carrierDepth + RAMP_THICKNESS; // ramps fold up in between
+  if (spec.rampHeight === undefined) {
+    throw new Error(`lowLoaderDeck: ${spec.id} has no ramp height`);
+  }
   return {
     carrierX: round(a.rearX + LOW_LOADER.carrierDepth),
     slopeEnd: round(slopeEnd),
@@ -105,7 +106,7 @@ export function lowLoaderDeck(spec: TrailerSpec) {
     carrierTop: round(lampTop + 2 * CONTOUR_STRIP),
     frontStart: round(a.frontX - LOW_LOADER.frontLength),
     frontDeck: round(deck + LOW_LOADER.frontRise),
-    rampTop: LOW_LOADER.rampTop,
+    rampTop: metres(spec.rampHeight),
   };
 }
 
