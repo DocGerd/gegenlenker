@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import process from 'node:process';
 import { parseArgs } from 'node:util';
 import { chromium } from '@playwright/test';
+import { exerciseEntry } from '../e2e/menu-flow.ts';
 import {
   diffShot,
   distinctColours,
@@ -108,7 +109,7 @@ try {
       await startPinnedDrive(
         page,
         { preset, lighting: values.lighting },
-        { kind: 'exercise', id: 'straight-reverse' },
+        exerciseEntry('straight-reverse'),
         `?backend=${values.backend}`,
       );
       if (values.gear === 'R') await shiftToReverse(page);

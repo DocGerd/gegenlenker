@@ -200,7 +200,6 @@ test('Escape leaves the result for the menu, and a miss is no best', async ({ pa
   await finishRun(page);
   await page.keyboard.press('Escape');
   await toTitle(page, en);
-  expect(await historyState(page)).toBeNull();
   await expect(page.getByText(en.targetMissed)).toHaveCount(0);
   await expect(page.getByRole('button', { name: en.replayLastRun })).toBeVisible();
 });
@@ -304,7 +303,6 @@ test('leaving without scoring stores no result and no replay', async ({ page }) 
   await page.keyboard.press('Escape');
   await sheet(page).getByRole('button', { name: en.leaveUnscored }).click();
   await toTitle(page, en);
-  expect(await historyState(page)).toBeNull();
   await expect(page.getByText(en.targetMissed)).toHaveCount(0);
   await expect(page.getByRole('button', { name: en.replayLastRun })).toHaveCount(0);
 

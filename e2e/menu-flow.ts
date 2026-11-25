@@ -139,7 +139,10 @@ export async function settingValue(
   return read(page, name);
 }
 
-/** Polls from Node: the pinned clock freezes `requestAnimationFrame`, so an in-page wait never fires. */
+/**
+ * Returns only once the title shows AND `history.state` is null (a screen's entry is gone); keep both in any reimplementation.
+ * Polls from Node: the pinned clock freezes `requestAnimationFrame`, so an in-page wait never fires.
+ */
 export async function toTitle(page: Page, messages: Messages): Promise<void> {
   await page.getByRole('heading', { name: messages.appName }).waitFor();
   const deadline = Date.now() + TITLE_TIMEOUT_MS;
