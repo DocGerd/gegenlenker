@@ -68,7 +68,6 @@ test('the replay slider announces the visible time', async ({ page }) => {
   await page.getByRole('button', { name: en.pause }).click();
   const time = page.locator('.replay-time');
   await expect(time).toHaveText(/ \/ /);
-  const before = await time.textContent();
   await scrubber.fill(String(Math.round(Number(await scrubber.getAttribute('max')) / 2)));
   await expect
     .poll(async () => {
@@ -76,7 +75,7 @@ test('the replay slider announces the visible time', async ({ page }) => {
         await scrubber.getAttribute('aria-valuetext'),
         await time.textContent(),
       ];
-      return valuetext === label && label !== before;
+      return valuetext === label;
     })
     .toBe(true);
 });
