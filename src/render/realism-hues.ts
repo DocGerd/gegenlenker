@@ -3,7 +3,8 @@
 export const REALISM_HUES = {
   signalYellow: 0xf9a800, // RAL 1003 impact guard, underrun bars
   chevronBlack: 0x101214,
-  contourSide: 0xf2c200, // ECE R48/R104 contour marking, sides
+  contourSide: 0xeeeeea, // ECE R48/R104 contour marking, sides: white, as on the THW fleet
+  contourSideYellow: 0xf2c200, // the lafette glb's baked side contour, until that shell is rebuilt white
   contourRear: 0xd0201c, // contour marking, rear
   tailLamp: 0xc8102e,
   sideMarker: 0xffb000,

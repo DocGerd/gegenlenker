@@ -13,6 +13,12 @@ Issues and pull requests are welcome; review capacity is limited. By taking part
 - UI text goes through `t()` and needs both `en` and `de`; German wording follows [docs/glossary.md](docs/glossary.md).
 - CI must pass and review threads must be resolved before merge.
 
+## Governance
+
+- `DocGerd` is the sole maintainer and decides what is merged and released.
+- The roadmap is the open [GitHub issues](https://github.com/DocGerd/gegenlenker/issues).
+- Coding standards are the ESLint configuration (`pnpm lint`) and [CLAUDE.md](CLAUDE.md).
+
 ## Where to look
 
 - [CLAUDE.md](CLAUDE.md): layering rules, units and signs, vehicle data, test conventions.
