@@ -62,6 +62,15 @@ export default defineConfig({
   },
   build: {
     assetsInlineLimit: (file) => (/\.(woff2?|glb|ktx2|wasm)$/.test(file) ? false : undefined),
+    rolldownOptions: {
+      output: {
+        // Without a name, Rolldown calls the shared three chunk after one of its importers
+        // (`predict-*`), so e2e/webgl.spec.ts could not tell it from app code by URL.
+        codeSplitting: {
+          groups: [{ name: 'three', test: /node_modules[\\/]three[\\/]build[\\/]/ }],
+        },
+      },
+    },
   },
   plugins: [
     themeColorMeta,
