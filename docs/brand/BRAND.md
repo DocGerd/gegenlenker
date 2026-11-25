@@ -129,7 +129,7 @@ Vehicle detail, yard props (fence grid, hall cladding and roofs, containers, mas
 | `nightHorizon`    | `#18243f` | night dome at the horizon; buildings and fog fade to it   |
 | `nightZenith`     | `#03050a` | night dome overhead                                       |
 | `thwBlue`         | `#00387b` | THW cab, body and tarpaulin, RAL 5002 sRGB approximation  |
-| `thwBlueDeep`     | `#00214a` | low-loader frame members, a darker THW blue               |
 | `liveryWhite`     | `#f6f6f6` | THW bumper, corners, arches and stripe, RAL 9016          |
 | `beaconBlue`      | `#1f6fe5` | roof light bar lens                                       |
 | `headliner`       | `#6f716a` | cockpit roof header lining                                |
+| `deckWood`        | `#4b3c30` | low-loader plank deck, dark weathered hardwood            |
