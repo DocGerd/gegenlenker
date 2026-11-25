@@ -221,24 +221,35 @@
   display: none;
 }
 
-/* On a short screen the open list is an overlay in the top-down pane (hud.ts sets --pane-*), where no mirror reaches: opening it neither resizes the legend nor moves the mirrors. It stays below the finish button. */
+/* On a short screen the open list is an overlay in the top-down pane (hud.ts sets --pane-* and --keys-top), where no mirror reaches: opening it neither resizes the legend nor moves the mirrors. It opens below the toolbar and the finish button, beside the divider strip; the toasts paint over it. */
 .hud-legend[data-overlay] {
   z-index: 2;
 }
 
 .hud-legend[data-overlay] dl {
+  --keys-left: calc(var(--size-target) + var(--space-2));
   --keys-side: 0px;
+  --keys-bar: 0px;
   position: absolute;
-  left: calc(var(--pane-left) + var(--space-4));
-  bottom: calc(var(--pane-bottom) + var(--space-4) + var(--safe-bottom));
+  left: calc(var(--pane-left) + var(--keys-left));
+  bottom: calc(var(--pane-bottom) + var(--space-4) + var(--safe-bottom) + var(--keys-bar));
   box-sizing: border-box;
   width: max-content;
-  max-width: calc(var(--pane-width) - 2 * var(--space-4) - var(--keys-side));
-  max-height: calc(
-    var(--pane-height) - 2 * var(--space-4) - var(--safe-top) - var(--safe-bottom) -
-      var(--hud-target) - var(--space-2)
+  max-width: calc(var(--pane-width) - var(--keys-left) - var(--space-4) - var(--keys-side));
+  max-height: min(
+    calc(
+      var(--pane-height) - 2 * var(--space-4) - var(--safe-top) - var(--safe-bottom) -
+        var(--hud-target) - var(--space-2) - var(--keys-bar)
+    ),
+    calc(
+      var(--pane-height) - var(--keys-top) - var(--space-4) - var(--safe-bottom) - var(--keys-bar)
+    )
   );
-  overflow: hidden;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  /* Taller than its room it scrolls, taking its own pointer events so a swipe never reaches the top view. */
+  pointer-events: auto;
+  touch-action: pan-y;
   margin: 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
@@ -256,11 +267,12 @@
   }
 }
 
-/* Only in portrait does the top view reach the screen's left edge. */
+/* Only in portrait does the top view reach the screen's left edge; the divider is a bar along the pane's bottom, not a strip at its side. */
 @media not (min-aspect-ratio: 1/1) {
   .hud-legend[data-overlay] dl {
-    --keys-side: var(--safe-left);
-    left: calc(var(--pane-left) + var(--space-4) + var(--safe-left));
+    --keys-left: calc(var(--space-4) + var(--safe-left));
+    --keys-side: 0px;
+    --keys-bar: calc(var(--size-target) + var(--space-2));
   }
 }
 
@@ -298,7 +310,9 @@
   margin-bottom: 0;
 }
 
+/* Level with the short-screen key list, which comes earlier in the DOM, and with the pause sheet and the notices (app.css), which come later: over the one, under the others. */
 .hud-toast-wrap {
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: center;

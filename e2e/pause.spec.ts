@@ -92,6 +92,26 @@ test('finish scores, back leaves the result, and the replay names the exercise',
   await expect(replay).toContainText(en.exerciseStraightReverse);
 });
 
+test('the sheet covers the messages', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  const toast = page.locator('[data-hud="toast"]');
+  await expect(toast).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(sheet(page)).toBeVisible();
+  // The wrap takes no pointer events, so let it, or `elementFromPoint` skips the toast.
+  const covered = await toast.evaluate((el) => {
+    const wrap = el.parentElement;
+    if (wrap === null) throw new Error('no toast wrap');
+    wrap.style.pointerEvents = 'auto';
+    const r = el.getBoundingClientRect();
+    const top = document.elementFromPoint((r.left + r.right) / 2, (r.top + r.bottom) / 2);
+    wrap.style.pointerEvents = '';
+    return top !== null && top.closest('.pause') !== null;
+  });
+  expect(covered, 'a message paints over the pause sheet').toBe(true);
+});
+
 test('the sheet keeps focus: a backdrop click does not hand Space to the run', async ({ page }) => {
   await startAndRoll(page);
   await page.goBack();
