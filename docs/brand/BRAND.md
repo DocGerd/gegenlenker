@@ -102,35 +102,35 @@ The night tokens are the day hues, each no lighter than its day token per channe
 
 Vehicle detail, yard props (fence grid, hall cladding and roofs, containers, masts, gatehouse, kerbs, concrete walls, loading ramps, cones in traffic red with white bands), the skyline buildings (textured facades, `skyline-atlas.ts`), the cockpit interior (`cockpit-interior.ts`: dashboard, pillars, header and visor) and the sky dome (haze, sun halo, the night dome) may use these hues in the perspective views only, the interior in the cockpit view alone (`INTERIOR_LAYER`). They are not scene tokens: yard props draw their detail on `PERSPECTIVE_LAYER` while the top-down view draws a plain token copy of the same footprint, so it keeps strict tokens. None of them may be a `--color-*` or `--scene-*` value, a `ScenePalette` key or a top-down top face. T1-T4 are unchanged. `src/render/realism-hues.ts` holds them as sRGB; `tokens.test.ts` checks that the table and the module agree. RAL values are sRGB approximations. The THW truck shells (`tools/blender`, `thwBlue`, `liveryWhite`, `beaconBlue`) are livery by colour only: no lettering, emblem or maker logo. `thwBlue` is a lighter published RAL 5002 value than the darkest one, so Lambert shading under fog still reads blue; the owner may tune it.
 
-| Key               | Value     | Use                                                       |
-| ----------------- | --------- | --------------------------------------------------------- |
-| `signalYellow`    | `#f9a800` | impact guard and underrun bars, RAL 1003                  |
-| `chevronBlack`    | `#101214` | chevrons on the impact guard, grille, mudflaps            |
-| `contourSide`     | `#eeeeea` | contour marking at the sides, white (ECE R48/R104 style)  |
-| `contourSideYellow` | `#f2c200` | the lafette glb's baked side contour, until rebuilt white |
-| `contourRear`     | `#d0201c` | contour marking at the rear                               |
-| `tailLamp`        | `#c8102e` | tail lamps                                                |
-| `sideMarker`      | `#ffb000` | amber side markers                                        |
-| `plateWhite`      | `#f4f4ee` | EU number plate ground, headlamps                         |
-| `plateInk`        | `#0a0a0a` | plate text, fictional only (`GL-GL 2026`)                 |
-| `plateEuBlue`     | `#003399` | plate EU band                                             |
-| `plateEuStar`     | `#ffcc00` | plate EU stars                                            |
-| `anthracite`      | `#293133` | glass, bumper, hubs; yard and industrial family, RAL 7016 |
-| `whiteAluminium`  | `#a5a5a5` | rims; yard and industrial family, RAL 9006                |
-| `containerBlue`   | `#1e4a8a` | shipping container                                        |
-| `containerRed`    | `#9a2d22` | shipping container                                        |
-| `containerGreen`  | `#2f6b4a` | shipping container                                        |
-| `containerOrange` | `#c9661c` | shipping container                                        |
-| `concrete`        | `#8c8c86` | precast kerbs, walls and loading ramps                    |
-| `coneRed`         | `#cc0605` | traffic cone body (RAL 3020), with white bands            |
-| `skylineDark`     | `#5c6875` | glass and mid cladding of the skyline buildings           |
-| `skyHaze`         | `#dcebf2` | horizon haze of the sky dome; buildings fade to it        |
-| `windowLight`     | `#ffc27a` | warm glow of the lit skyline windows at night             |
-| `sunHalo`         | `#fff1d0` | glow around the sun on the sky dome                       |
-| `nightHorizon`    | `#18243f` | night dome at the horizon; buildings and fog fade to it   |
-| `nightZenith`     | `#03050a` | night dome overhead                                       |
-| `thwBlue`         | `#00387b` | THW cab, body and tarpaulin, RAL 5002 sRGB approximation  |
-| `thwBlueDeep`     | `#00214a` | low-loader frame members, a darker THW blue               |
-| `liveryWhite`     | `#f6f6f6` | THW bumper, corners, arches and stripe, RAL 9016          |
-| `beaconBlue`      | `#1f6fe5` | roof light bar lens                                       |
-| `headliner`       | `#6f716a` | cockpit roof header lining                                |
+| Key                 | Value     | Use                                                                          |
+| ------------------- | --------- | ---------------------------------------------------------------------------- |
+| `signalYellow`      | `#f9a800` | impact guard and underrun bars, RAL 1003                                     |
+| `chevronBlack`      | `#101214` | chevrons on the impact guard, grille, mudflaps                               |
+| `contourSide`       | `#eeeeea` | contour marking at the sides, white (ECE R48/R104 style)                     |
+| `contourSideYellow` | `#f2c200` | the lafette glb's baked side contour, until rebuilt white                    |
+| `contourRear`       | `#d0201c` | contour marking at the rear                                                  |
+| `tailLamp`          | `#c8102e` | tail lamps                                                                   |
+| `sideMarker`        | `#ffb000` | amber side markers                                                           |
+| `plateWhite`        | `#f4f4ee` | EU number plate ground, headlamps                                            |
+| `plateInk`          | `#0a0a0a` | plate text, fictional only (`GL-GL 2026`)                                    |
+| `plateEuBlue`       | `#003399` | plate EU band                                                                |
+| `plateEuStar`       | `#ffcc00` | plate EU stars                                                               |
+| `anthracite`        | `#293133` | glass, bumper, hubs; yard and industrial family, RAL 7016                    |
+| `whiteAluminium`    | `#a5a5a5` | trailer and dolly rims, truck nut ring; yard and industrial family, RAL 9006 |
+| `containerBlue`     | `#1e4a8a` | shipping container                                                           |
+| `containerRed`      | `#9a2d22` | shipping container                                                           |
+| `containerGreen`    | `#2f6b4a` | shipping container                                                           |
+| `containerOrange`   | `#c9661c` | shipping container                                                           |
+| `concrete`          | `#8c8c86` | precast kerbs, walls and loading ramps                                       |
+| `coneRed`           | `#cc0605` | traffic cone body (RAL 3020), with white bands                               |
+| `skylineDark`       | `#5c6875` | glass and mid cladding of the skyline buildings                              |
+| `skyHaze`           | `#dcebf2` | horizon haze of the sky dome; buildings fade to it                           |
+| `windowLight`       | `#ffc27a` | warm glow of the lit skyline windows at night                                |
+| `sunHalo`           | `#fff1d0` | glow around the sun on the sky dome                                          |
+| `nightHorizon`      | `#18243f` | night dome at the horizon; buildings and fog fade to it                      |
+| `nightZenith`       | `#03050a` | night dome overhead                                                          |
+| `thwBlue`           | `#00387b` | THW cab, body and tarpaulin, RAL 5002 sRGB approximation                     |
+| `thwBlueDeep`       | `#00214a` | low-loader frame members, a darker THW blue                                  |
+| `liveryWhite`       | `#f6f6f6` | THW bumper, corners, arches and stripe, RAL 9016                             |
+| `beaconBlue`        | `#1f6fe5` | roof light bar lens                                                          |
+| `headliner`         | `#6f716a` | cockpit roof header lining                                                   |
