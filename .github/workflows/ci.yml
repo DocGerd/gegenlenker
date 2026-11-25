@@ -119,24 +119,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { id: 1, runs: 'slow:6/8 light:2/6' }
-          - { id: 2, runs: 'layout:2/6 light:3/6' }
-          - { id: 3, runs: 'slow:8/8 heavy:5/16' }
-          - { id: 4, runs: 'slow:4/8 heavy:15/16' }
-          - { id: 5, runs: 'heavy:14/16 heavy:3/16' }
-          - { id: 6, runs: 'heavy:12/16 light:4/6' }
-          - { id: 7, runs: 'layout:3/6 layout:4/6' }
-          - { id: 8, runs: 'slow:7/8 heavy:7/16' }
-          - { id: 9, runs: 'heavy:6/16 heavy:16/16' }
-          - { id: 10, runs: 'slow:5/8 heavy:8/16' }
-          - { id: 11, runs: 'slow:3/8 layout:1/6' }
-          - { id: 12, runs: 'heavy:9/16 heavy:2/16' }
-          - { id: 13, runs: 'slow:1/8 slow:2/8' }
-          - { id: 14, runs: 'heavy:4/16 layout:5/6' }
-          - { id: 15, runs: 'light:1/6 heavy:10/16' }
-          - { id: 16, runs: 'heavy:11/16 light:5/6' }
-          - { id: 17, runs: 'heavy:13/16 heavy:1/16' }
-          - { id: 18, runs: 'layout:6/6 light:6/6' }
+          - { id: 1, runs: 'layout:4/12 heavy:5/16 heavy:6/16' }
+          - { id: 2, runs: 'layout:6/12 light:3/6 heavy:1/16' }
+          - { id: 3, runs: 'slow:4/8 heavy:9/16' }
+          - { id: 4, runs: 'heavy:10/16 heavy:4/16' }
+          - { id: 5, runs: 'heavy:13/16 layout:7/12 layout:1/12' }
+          - { id: 6, runs: 'layout:11/12 layout:9/12' }
+          - { id: 7, runs: 'heavy:11/16 layout:10/12' }
+          - { id: 8, runs: 'slow:3/8 heavy:12/16' }
+          - { id: 9, runs: 'slow:6/8 layout:8/12' }
+          - { id: 10, runs: 'layout:3/12 heavy:15/16 light:5/6' }
+          - { id: 11, runs: 'heavy:16/16 heavy:7/16' }
+          - { id: 12, runs: 'layout:5/12 light:1/6 light:6/6' }
+          - { id: 13, runs: 'heavy:8/16 heavy:3/16 light:4/6' }
+          - { id: 14, runs: 'heavy:14/16 slow:8/8' }
+          - { id: 15, runs: 'layout:12/12 light:2/6' }
+          - { id: 16, runs: 'slow:7/8 heavy:2/16' }
+          - { id: 17, runs: 'slow:5/8 slow:1/8' }
+          - { id: 18, runs: 'layout:2/12 slow:2/8' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
