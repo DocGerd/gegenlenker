@@ -408,6 +408,8 @@ type World = {
   /** Legs that set the vehicle up again on the target axis when the planned ones end outside it. */
   readonly recover: ((s: SimSnapshot) => Leg[]) | null;
   readonly policy: SignPolicy;
+  /** How far (s) the search looks ahead on reverse legs. */
+  readonly reverseHorizon: number;
 };
 
 const toWorld = (pose: Pose2, p: Vec2): Vec2 => {
@@ -503,9 +505,11 @@ function scripted(world: World, planned: readonly Leg[]) {
     const pad = 12;
     const lo = { x: Math.min(at.x, s.truck.x) - pad, y: Math.min(at.y, s.truck.y) - pad };
     const hi = { x: Math.max(at.x, s.truck.x) + pad, y: Math.max(at.y, s.truck.y) + pad };
-    return occluders.filter(
-      ({ obb }) => obb.cx >= lo.x && obb.cx <= hi.x && obb.cy >= lo.y && obb.cy <= hi.y,
-    );
+    // by extent, as the driver's own filter does: a long box can reach in from a far centre
+    return occluders.filter(({ obb }) => {
+      const r = Math.hypot(obb.halfLength, obb.halfWidth);
+      return obb.cx + r >= lo.x && obb.cx - r <= hi.x && obb.cy + r >= lo.y && obb.cy - r <= hi.y;
+    });
   };
   /** Where he is seen from: the eye if directly, else the first mirror that frames him. */
   const seenFrom = (s: SimSnapshot, at: Vec2): Vec2 => {
@@ -772,7 +776,8 @@ function scripted(world: World, planned: readonly Leg[]) {
       let cost = 0;
       let j = idx;
       const keep = plan[0]?.sign === sign;
-      rollout(p, m, keep ? plan.slice(1) : plan, 720, at, held, null, (mm, k) => {
+      const horizon = Math.round((l.gear === 'R' ? world.reverseHorizon : SEARCH_HORIZON) / DT);
+      rollout(p, m, keep ? plan.slice(1) : plan, horizon, at, held, null, (mm, k) => {
         if (k % 15 !== 0) return undefined;
         j = nearest(l.path, leadingEnd(mm.s, l.gear), j);
         const q = l.path[j];
@@ -1003,6 +1008,7 @@ export function runGate(
       obstacles: run.layout.obstacles,
       recover: (now) => recovery(run.params, now, exercise.target.pose, RECOVER[exerciseId] ?? 0),
       policy: POLICY[exerciseId] ?? 'search',
+      reverseHorizon: REVERSE_HORIZON[exerciseId] ?? SEARCH_HORIZON,
     },
     legs,
   );
@@ -1127,6 +1133,10 @@ const POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
   'reverse-bay': 'leadSearch',
   slalom: 'leadSearch',
 };
+/** How far (s) the search looks ahead. */
+const SEARCH_HORIZON = 12;
+/** A longer look on the slalom's reverse weave damps its swing with the long trailer (PR #515). */
+const REVERSE_HORIZON: Partial<Record<ExerciseId, number>> = { slalom: 15 };
 
 /** Room to pull forward along the target axis (m) before reversing onto it again. */
 const RECOVER: Partial<Record<ExerciseId, number>> = {
