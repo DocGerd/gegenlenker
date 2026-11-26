@@ -162,7 +162,7 @@ export function sweptBodies(
   if (held === null) return [];
   let { q, delta } = held;
   const swept = bodyFootprints(params, joints(params, q));
-  for (let travelled = 0; travelled < distance - 1e-9; ) {
+  for (let travelled = 0; travelled < distance - 1e-9;) {
     const h = Math.min(PREDICT_STEP, distance - travelled);
     const { eased, through } = ease(delta, held, h);
     const next = rk4(params, q, held.direction, through, h);
