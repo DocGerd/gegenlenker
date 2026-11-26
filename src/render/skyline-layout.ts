@@ -181,6 +181,8 @@ const BELT_GAP = 3;
 /** Keeps a surface that leaves the bounds this clear on each side. */
 const CORRIDOR_MARGIN = 4;
 const POPLAR_PITCH = 12;
+/** The belt's poplars are younger than the skyline's: this share of their height. */
+const BELT_TREE_HEIGHT = 0.65;
 /** Least gap between two slots along a row, and the step past a slot nothing fits. */
 const BELT_STEP = 5;
 /** The neighbouring estate: halls and sheds, the odd office, rows of poplars. */
@@ -313,9 +315,11 @@ export function perimeterBuildings(
     const out = offset + first.depth / 2 + next() * 4;
     const buildings = Array.from({ length: count }, (_, i): Building => {
       const at = along + (trees ? (i + 0.5) * POPLAR_PITCH : length / 2);
+      const size = i === 0 ? first : sizeOf('poplar', false, next);
       return {
         kind: trees ? 'poplar' : kind,
-        ...(i === 0 ? first : sizeOf('poplar', false, next)),
+        ...size,
+        height: trees ? size.height * BELT_TREE_HEIGHT : size.height,
         x: side.x + tx * at + nx * out,
         y: side.y + ty * at + ny * out,
         heading: side.heading + (trees ? 0 : (next() - 0.5) * 0.1),
