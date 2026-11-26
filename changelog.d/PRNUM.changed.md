@@ -1,1 +1,0 @@
-The menu is a title screen with Exercises, Free yard and Settings, and a run's vehicles, time of day and driving view are chosen on a setup screen before Start ([#PRNUM](https://github.com/DocGerd/gegenlenker/pull/PRNUM)).
