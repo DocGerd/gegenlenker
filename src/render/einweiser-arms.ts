@@ -3,6 +3,7 @@ import {
   CapsuleGeometry,
   Color,
   Group,
+  Matrix4,
   Mesh,
   PerspectiveCamera,
   SphereGeometry,
@@ -56,8 +57,11 @@ const VIEW_SHOULDER = { ahead: 0.1, side: 0.2, up: -0.18 } as const;
 /** Sleeve radii (m), estimates. */
 const UPPER_RADIUS = 0.055;
 const FORE_RADIUS = 0.045;
-/** The glove's half extents across and along the forearm (m), estimates. */
-const GLOVE_HALF = { across: 0.045, along: 0.075 } as const;
+/**
+ * The glove's half extents (m), estimates: a gloved hand is about 19 cm long, 9.5 cm wide and 3.5 cm
+ * thick; the flat side lies along the forearm's sideways axis.
+ */
+const GLOVE_HALF = { wide: 0.048, along: 0.095, thick: 0.018 } as const;
 
 /** Hi-vis sleeve (EN ISO 20471 fluorescent yellow, sRGB approximation) and a dark work glove. */
 const SLEEVE = 0xd2e000;
@@ -215,6 +219,19 @@ export type EinweiserArms = {
 };
 
 const ALONG = new Vector3(0, 1, 0);
+const UP = new Vector3(0, 1, 0);
+const WIDE = new Vector3();
+const FLAT = new Vector3();
+const BASIS = new Matrix4();
+
+/** Orients `hand` (flat in x, along y, thin in z) with its length on `fore` and its width across the view's vertical. */
+function layHand(hand: Mesh, fore: Vector3): void {
+  WIDE.crossVectors(UP, fore);
+  if (WIDE.lengthSq() < 1e-6) WIDE.set(1, 0, 0);
+  WIDE.normalize();
+  FLAT.crossVectors(WIDE, fore);
+  hand.quaternion.setFromRotationMatrix(BASIS.makeBasis(WIDE, fore, FLAT));
+}
 
 /** Places `mesh`, built along +y about its centre, from `from` along `dir` by `length`. */
 function lay(mesh: Mesh, from: Vector3, dir: Vector3, length: number): void {
@@ -236,7 +253,7 @@ export function createEinweiserArms(): EinweiserArms {
     sleeve,
   );
   const gloveGeometry = tint(
-    new SphereGeometry(1, 10, 8).scale(GLOVE_HALF.across, GLOVE_HALF.along, GLOVE_HALF.across),
+    new SphereGeometry(1, 10, 8).scale(GLOVE_HALF.wide, GLOVE_HALF.along, GLOVE_HALF.thick),
     glove,
   );
   const part = (geometry: BufferGeometry): Mesh => {
@@ -283,7 +300,7 @@ export function createEinweiserArms(): EinweiserArms {
         lay(upper, p.shoulder, p.upper, UPPER_ARM);
         lay(fore, p.elbow, p.fore, FOREARM - GLOVE_HALF.along);
         hand.position.copy(p.hand);
-        hand.quaternion.setFromUnitVectors(ALONG, p.fore);
+        layHand(hand, p.fore);
       }
     },
     setLook({ mode }) {
