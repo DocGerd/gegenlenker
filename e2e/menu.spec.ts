@@ -56,6 +56,7 @@ for (const { locale, messages } of [
     await page.goto('./');
     await expect(titleEntry(page, messages.continue)).toBeVisible();
     await expect(titleEntry(page, messages.replayLastRun)).toBeVisible();
+    await expect(titleEntry(page, messages.controls)).toBeVisible();
     await expect(titleEntry(page, messages.whatsNew)).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
 
