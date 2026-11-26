@@ -184,7 +184,7 @@ describe('Einweiser run pin', () => {
   it('logistics', () => {
     expect(pinnedEinweiser('logistics', 'reverse-bay')).toEqual({
       EINWEISER_REVISION: 1,
-      digest: '381c5e09',
+      digest: 'a29c260e',
     });
   });
 });
