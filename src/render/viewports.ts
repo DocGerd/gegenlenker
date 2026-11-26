@@ -754,7 +754,7 @@ export type MessageColumn = Rect & { readonly cueYields: boolean };
  * cut-out, which hud.css therefore leaves out. Beside the front mirror they take the cockpit's top
  * between the left mirror and the front mirror. Without one they take the span between the class II
  * mirrors where the stack fits there (`messagesFit`), else the top-down pane, below the finish button
- * and clear of the lever. With no such pane, a span beside the sight cone, else the cue yields.
+ * and clear of the lever. With no such pane, a span left of the sight cone, else the cue yields.
  */
 export function messageColumn(
   views: ViewRects,
@@ -784,13 +784,9 @@ export function messageColumn(
     messagesFit(cockpit, column, cssWidth, cssHeight, controls, insets, legend, yields);
   if (fits(between, false)) return { ...area, ...between, cueYields: false };
   if (!hasTopDown(views)) {
-    const cone = coneBox(cockpit);
-    const beside = [
-      { x: cone.right, width: between.x + between.width - cone.right },
-      { x, width: cone.left - x },
-    ];
+    const beside = { x, width: coneBox(cockpit).left - x };
     for (const yields of [false, true]) {
-      for (const column of yields ? [between, ...beside] : beside) {
+      for (const column of yields ? [between, beside] : [beside]) {
         if (fits(column, yields)) return { ...area, ...column, cueYields: yields };
       }
     }
