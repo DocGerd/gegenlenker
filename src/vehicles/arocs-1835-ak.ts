@@ -2,7 +2,7 @@ import type { TruckSpec } from '../contracts/vehicle';
 import { SOURCES, estimate, sourced } from './sources';
 
 const doorGlassRear =
-  'rear edge 43 mm ahead of the front axle centre, scaled from a side-view drawing of the Actros cab (https://getoutlines.com/blueprints/20263/mercedes-benz-actros-4x2-stream-space-semi-trailer-tractor-heavy-truck-blueprints; 1.36 m behind its bumper), as on an Arocs photo (https://commons.wikimedia.org/wiki/File:Mercedes-Benz_Arocs_Hough_Green_Garage_(2).jpg); front edge at the A-pillar setback, about 0.25 m ahead of the real quarter glass; no manufacturer source found';
+  'rear edge 43 mm ahead of the front axle centre, scaled from a side-view drawing of the Actros cab (https://getoutlines.com/blueprints/20263/mercedes-benz-actros-4x2-stream-space-semi-trailer-tractor-heavy-truck-blueprints; 1.36 m behind its bumper), as on a photo of an 8x4 Arocs (https://commons.wikimedia.org/wiki/File:Mercedes-Benz_Arocs_Hough_Green_Garage_(2).jpg); front edge at the A-pillar setback, about 0.25 m ahead of the real quarter glass; no manufacturer source found';
 const eyeAboveFloor =
   'cab floor 1.1 m above ground (render model), seated eye 1.35 m above it (4x4 tipper seat sits higher than the MAN distribution cab); no source found';
 const mirrorHeight =

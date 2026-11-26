@@ -40,7 +40,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | cab.glassSill | 900 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.glassHeight | 756 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.sideGlassSetback | 176 mm | typical for the vehicle class, no source found |
-| MAN LE 18.280 | cab.sideGlassLength | 924 mm | rear edge 1.10 m behind the cab front, scaled from a side-view drawing of the LE compact cab (https://getoutlines.com/blueprints/car/man/man-le-4x2-8ton.gif) at its 1536 mm length; the THW photo (https://commons.wikimedia.org/wiki/File:THW_MzKW_OV_Schorndorf.jpg) puts the front wheel centre about 0.2 m behind it; front edge at the A-pillar setback; no manufacturer source found |
+| MAN LE 18.280 | cab.sideGlassLength | 924 mm | rear edge 1.10 m behind the cab front, scaled from a side-view drawing of the LE compact cab (https://getoutlines.com/blueprints/car/man/man-le-4x2-8ton.gif) at its 1536 mm length, or 1.22 m measured from the front axle, 0.1 m behind the glass in the drawing; front edge at the A-pillar setback; no manufacturer source found |
 | MAN LE 18.280 | cab.grilleWidth | 1245 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.grilleSill | 144 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.grilleHeight | 540 mm | typical for the vehicle class, no source found |
@@ -78,7 +78,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Mercedes-Benz Arocs 1835 AK | cab.glassSill | 900 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.glassHeight | 756 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.sideGlassSetback | 176 mm | typical for the vehicle class, no source found |
-| Mercedes-Benz Arocs 1835 AK | cab.sideGlassLength | 1231 mm | rear edge 43 mm ahead of the front axle centre, scaled from a side-view drawing of the Actros cab (https://getoutlines.com/blueprints/20263/mercedes-benz-actros-4x2-stream-space-semi-trailer-tractor-heavy-truck-blueprints; 1.36 m behind its bumper), as on an Arocs photo (https://commons.wikimedia.org/wiki/File:Mercedes-Benz_Arocs_Hough_Green_Garage_(2).jpg); front edge at the A-pillar setback, about 0.25 m ahead of the real quarter glass; no manufacturer source found |
+| Mercedes-Benz Arocs 1835 AK | cab.sideGlassLength | 1231 mm | rear edge 43 mm ahead of the front axle centre, scaled from a side-view drawing of the Actros cab (https://getoutlines.com/blueprints/20263/mercedes-benz-actros-4x2-stream-space-semi-trailer-tractor-heavy-truck-blueprints; 1.36 m behind its bumper), as on a photo of an 8x4 Arocs (https://commons.wikimedia.org/wiki/File:Mercedes-Benz_Arocs_Hough_Green_Garage_(2).jpg); front edge at the A-pillar setback, about 0.25 m ahead of the real quarter glass; no manufacturer source found |
 | Mercedes-Benz Arocs 1835 AK | cab.grilleWidth | 1250 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.grilleSill | 144 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.grilleHeight | 540 mm | typical for the vehicle class, no source found |

@@ -2,7 +2,7 @@ import type { TruckSpec } from '../contracts/vehicle';
 import { SOURCES, estimate, sourced } from './sources';
 
 const doorGlassRear =
-  'rear edge 1.10 m behind the cab front, scaled from a side-view drawing of the LE compact cab (https://getoutlines.com/blueprints/car/man/man-le-4x2-8ton.gif) at its 1536 mm length; the THW photo (https://commons.wikimedia.org/wiki/File:THW_MzKW_OV_Schorndorf.jpg) puts the front wheel centre about 0.2 m behind it; front edge at the A-pillar setback; no manufacturer source found';
+  'rear edge 1.10 m behind the cab front, scaled from a side-view drawing of the LE compact cab (https://getoutlines.com/blueprints/car/man/man-le-4x2-8ton.gif) at its 1536 mm length, or 1.22 m measured from the front axle, 0.1 m behind the glass in the drawing; front edge at the A-pillar setback; no manufacturer source found';
 const eyeAboveFloor =
   'cab floor 1.1 m above ground (render model), seated eye 1.25 m above it: seat height plus sitting eye height; no source found';
 const mirrorHeight =
