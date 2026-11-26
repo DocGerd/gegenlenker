@@ -78,7 +78,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - The owner watches Blender's system console: print one progress line per build step from bpy code, and leave the last built model in the scene.
 - `tools/textures/` makes the KTX2 ground texture (`pnpm texture ground`); `tools/textures/ground-build.test.ts` fails when stale; it is runtime-cached at High, not precached.
 - A new glb/ktx2 in `src/render/assets` needs an `ASSET_REGISTRY` entry (`src/render/asset-registry.ts`) naming the `QualityFlags` key that draws it: runtime-cached when that flag is off by default, else precached; `src/pwa/config.test.ts` fails on an unlisted file.
-- `pnpm assets:fetch` downloads every third-party source in `tools/assets/sources.ts` to its git-ignored path and checks its SHA-256: run it before any `pnpm texture …` or yard-kit bake.
+- `pnpm assets:fetch` downloads every third-party source in `tools/assets/sources.ts` to its git-ignored path and checks its SHA-256: run it before a yard-kit bake or `pnpm texture` for sky or a PBR key (`ground` needs no download).
 - `pnpm texture sky` builds the High HDRI `sky.ktx2` from the source `.hdr` (not committed; URL and SHA-256 in `tools/assets/sources.ts`; `docs/asset-credits.md` is generated from it by `pnpm credits`); `tools/textures/sky-build.test.ts` fails when stale.
 
 ## Tests
@@ -129,4 +129,4 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Merge reviewed PRs with green CI without asking into `develop`, `release/*` and back-merges; agents also run the release commands (`pnpm release:cut`, `pnpm hotfix:cut`, `pnpm release:backmerge`). Only the owner merges into `main`: for a release or hotfix PR, run the gate check and hand the owner `gh pr merge <n> --merge --match-head-commit <sha>`.
 - Start a PR's review as soon as it opens, in parallel with CI; green CI gates only the merge.
 - `release:cut` refuses while develop has no changelog fragment: CI, docs and deps work ships only with a user-visible change.
-- OpenSSF Best Practices project 17033 (passing): its current answers are at `https://www.bestpractices.dev/projects/17033.json`; keep `SECURITY.md`'s response process and `CONTRIBUTING.md`'s governance section true.
+- OpenSSF Best Practices project 17033: its current level and answers are at `https://www.bestpractices.dev/projects/17033.json`; keep `SECURITY.md`'s response process and `CONTRIBUTING.md`'s governance section true.
