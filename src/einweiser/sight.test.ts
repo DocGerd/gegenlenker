@@ -9,7 +9,7 @@ import { truckAnchors } from '../vehicles/anchors';
 import { cabGlass } from '../vehicles/cab';
 import { mirrorMounts } from '../vehicles/mirrors';
 import { trailers, trucks } from '../vehicles/registry';
-import { bodyPoints, layoutOccluders, sightGeometry, sightOf } from './sight';
+import { blocks, bodyPoints, layoutOccluders, sightGeometry, sightOf } from './sight';
 
 const pairs = trucks.flatMap((truck) => trailers.map((trailer) => ({ truck, trailer })));
 const ORIGIN: Pose2 = { x: 0, y: 0, heading: 0 };
@@ -31,6 +31,18 @@ const trailerBody = (s: SimSnapshot, truck: TruckSpec, trailer: TrailerSpec) => 
   if (footprint?.body !== 'trailer') throw new Error('no trailer footprint');
   return footprint.obb;
 };
+
+describe('a low box', () => {
+  const box = { obb: { cx: 5, cy: 0, halfLength: 1, halfWidth: 1, heading: 0 }, height: 1.5 };
+
+  it('blocks a line that dips through its top', () => {
+    expect(blocks(box, { x: 0, y: 0, z: 2.35 }, { x: 6.2, y: 0, z: 1.3 })).toBe(true);
+  });
+
+  it('lets a line above it pass', () => {
+    expect(blocks(box, { x: 0, y: 0, z: 2.35 }, { x: 10, y: 0, z: 2 })).toBe(false);
+  });
+});
 
 describe.each(pairs)('sight for $truck.id with $trailer.id', ({ truck, trailer }) => {
   const g = sightGeometry(truck, trailer);
@@ -54,6 +66,12 @@ describe.each(pairs)('sight for $truck.id with $trailer.id', ({ truck, trailer }
     expect(sightOf(g, straight, bodyPoints({ x: sideFront, y: half + 1 }), []).direct).toBe(true);
   });
 
+  it('does not see him directly beside the cab behind the side glass', () => {
+    const { eye } = truckAnchors(truck);
+    const point = { x: eye.x - 2, y: cabGlass(truck).half + 2 };
+    expect(sightOf(g, straight, bodyPoints(point), []).direct).toBe(false);
+  });
+
   it('loses him behind a swap body on the plot', () => {
     const decor = resolveLayout(layouts.depot, null).decor.filter((d) => d.asset === 'swap-body');
     const [swap] = decor;
@@ -75,7 +93,7 @@ describe.each(pairs.filter(({ trailer }) => trailer.body === 'box'))(
   'sight past the $trailer.id body behind $truck.id',
   ({ truck, trailer }) => {
     const g = sightGeometry(truck, trailer);
-    // the truck turned right of the drawbar swings the trailer out to the left
+    // the truck turned left of the drawbar puts the trailer out to its left
     const s = combination(truck, trailer, { couplingAngle: 0.5, turntableAngle: 0.3 });
     const mirror = world(s.truck, mirrorMounts(truck).mirrorLeft);
     const body = trailerBody(s, truck, trailer);

@@ -11,11 +11,17 @@ export type ArmPose = { readonly upper: Segment; readonly fore: Segment };
 export type BodyPose = { readonly left: ArmPose; readonly right: ArmPose };
 /** `static` holds its one key, `loop` cycles its keys, `once` plays them and holds the last. */
 export type SignMotion = 'static' | 'loop' | 'once';
+/**
+ * Where the signing palms face, as the source words it: toward the driver, toward the body (beckoning),
+ * away from it, or toward each other; null where the source names none.
+ */
+export type Palm = 'forward' | 'inward' | 'outward' | 'facing';
 export type SignPose = {
   readonly keys: readonly BodyPose[];
   readonly motion: SignMotion;
   /** The arms that give the sign; the driver must see their hands. */
   readonly arms: readonly ('left' | 'right')[];
+  readonly palm: Palm | null;
 };
 
 /** Body measures, metres (estimates). */
@@ -45,12 +51,18 @@ const close = (out: number): BodyPose => both(arm(seg(20, 0), seg(out, 0)));
  * Estimated angles; render slerps between the keys.
  */
 export const SIGN_POSES: Readonly<Record<SignId, SignPose>> = {
-  achtung: { keys: [{ left: DOWN, right: UP }], motion: 'static', arms: ['right'] },
-  halt: { keys: [both(SIDEWAYS)], motion: 'static', arms: ['left', 'right'] },
+  achtung: {
+    keys: [{ left: DOWN, right: UP }],
+    motion: 'static',
+    arms: ['right'],
+    palm: 'forward',
+  },
+  halt: { keys: [both(SIDEWAYS)], motion: 'static', arms: ['left', 'right'], palm: 'forward' },
   haltGefahr: {
     keys: [both(SIDEWAYS), both(arm(seg(90, 0), seg(0, 0)))],
     motion: 'loop',
     arms: ['left', 'right'],
+    palm: 'forward',
   },
   abfahren: {
     keys: [
@@ -59,16 +71,19 @@ export const SIGN_POSES: Readonly<Record<SignId, SignPose>> = {
     ],
     motion: 'loop',
     arms: ['right'],
+    palm: 'forward',
   },
   herkommen: {
     keys: [beckon(seg(0, 10)), beckon(seg(0, 75))],
     motion: 'loop',
     arms: ['left', 'right'],
+    palm: 'inward',
   },
   entfernen: {
     keys: [beckon(seg(0, 75)), beckon(seg(0, 10))],
     motion: 'loop',
     arms: ['left', 'right'],
+    palm: 'outward',
   },
   links: {
     keys: [
@@ -77,6 +92,7 @@ export const SIGN_POSES: Readonly<Record<SignId, SignPose>> = {
     ],
     motion: 'loop',
     arms: ['left'],
+    palm: null,
   },
   rechts: {
     keys: [
@@ -85,8 +101,14 @@ export const SIGN_POSES: Readonly<Record<SignId, SignPose>> = {
     ],
     motion: 'loop',
     arms: ['right'],
+    palm: null,
   },
-  abstand: { keys: [close(20), close(-10)], motion: 'once', arms: ['left', 'right'] },
+  abstand: {
+    keys: [close(20), close(-10)],
+    motion: 'once',
+    arms: ['left', 'right'],
+    palm: 'facing',
+  },
 };
 
 const direction = (s: Segment, side: 1 | -1): Vec3 => ({
