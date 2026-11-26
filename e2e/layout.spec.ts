@@ -351,13 +351,13 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
 
 /**
- * `slot`: where a mirror-only drive too short for both messages between the mirrors puts them;
- * `keysOpen`: the key legend's chevron starts open.
+ * `slot`: a mirror-only drive, and where it puts the messages (beside the cone, or one at a time, where
+ * it is too short for both between the mirrors); `keysOpen`: the key legend's chevron starts open.
  */
 const insetSizes: {
   width: number;
   height: number;
-  slot?: 'cue yields' | 'right of the cone';
+  slot?: 'between the mirrors' | 'cue yields' | 'right of the cone';
   keysOpen?: boolean;
 }[] = [
   { width: 1280, height: 720 },
@@ -365,6 +365,8 @@ const insetSizes: {
   { width: 900, height: 649 },
   { width: 768, height: 1024 },
   { width: 860, height: 860, keysOpen: true },
+  // in portrait too its cockpit starts at the screen's top edge
+  { width: 820, height: 1180, slot: 'between the mirrors' },
   { width: 950, height: 426, slot: 'cue yields' },
   // over the brief's side of the cockpit
   { width: 1030, height: 426, slot: 'right of the cone' },
@@ -402,12 +404,14 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
       );
     }
 
+    const landscape = size.width >= size.height;
     const placed = await boxes(
       page.locator(
         [
           '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever',
-          // the mirror-only drive hides the gauges with the top-down pane
-          `.hud-action, .hud-goal:not([hidden]), ${mirrorsOnly ? '' : '.hud-gauge, '}.hud-counters, .hud-legend`,
+          // the mirror-only drive hides the gauges with the top-down pane, and in portrait the key legend
+          `.hud-action, .hud-goal:not([hidden]), ${mirrorsOnly ? '' : '.hud-gauge, '}.hud-counters`,
+          ...(mirrorsOnly && !landscape ? [] : ['.hud-legend']),
           '.hud-gear, .hud-speed, .hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])',
         ].join(', '),
       ),
@@ -422,10 +426,9 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
     const topEdge = await boxes(
       page.locator('.hud-action, .hud-goal:not([hidden]), .hud-cockpit > .hud-view-label'),
     );
-    const landscape = size.width >= size.height;
     for (const b of topEdge) {
-      // In portrait the cockpit label sits mid-screen, so only the top view's panels reach the top edge.
-      if (landscape || !b.name.includes('view-label')) {
+      // In portrait the cockpit label sits mid-screen under a top view, whose panels alone reach the top edge.
+      if (landscape || mirrorsOnly || !b.name.includes('view-label')) {
         expect(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(insets.top);
       }
     }
@@ -460,9 +463,7 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
       const at = `${b.name} in the safe area`;
       expect(b.left, at).toBeGreaterThanOrEqual(insets.left);
       expect(b.right, at).toBeLessThanOrEqual(size.width - insets.right);
-      if (landscape && !b.name.includes('toast-wrap')) {
-        expect(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(insets.top);
-      }
+      expect(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(insets.top);
     }
     await context.close();
   });

@@ -292,6 +292,66 @@ export function computeViewports(
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
     rise = h - paneHeight(min);
   }
+  const room = { cssWidth, cssHeight, mirrorsOnly, legend, insets, extra };
+  let placed = placeMirrors({ ...room, cockpit, rise });
+  // A growing portrait pane shortens the cockpit and narrows class II, so the front mirror's room and
+  // the wrap of the messages beside it come and go. It stays only where it also fits at every smaller
+  // share the split can reach: as the share grows it then drops once, where it first stops fitting.
+  for (let y = cockpit.y - rise; placed.front !== null && y < cockpit.y; y++) {
+    const taller = { ...cockpit, y, height: cssHeight - y };
+    if (placeMirrors({ ...room, cockpit: taller, rise: y - (cockpit.y - rise) }).front === null) {
+      placed = placeMirrors({ ...room, cockpit, rise, extra: { ...extra, front: false } });
+    }
+  }
+  const { mirror, mirrorRight, front, floor } = placed;
+  const { y, width: mw, height: mh, wide } = mirror;
+  const under = (rect: Rect): Rect | null =>
+    wide ? { x: rect.x, y: y + mh + WIDE_GAP_PX, width: mw, height: wideHeight(mw) } : null;
+  const mirrorLeft: Rect = { x: placed.left, y, width: mw, height: mh };
+  return {
+    cockpit,
+    mirrorLeft,
+    mirrorRight,
+    wideLeft: under(mirrorLeft),
+    wideRight: under(mirrorRight),
+    front,
+    close: extra.close ? closeRect(mirrorRight, floor) : null,
+    topDown,
+  };
+}
+
+type Column = { readonly y: number; readonly width: number; readonly height: number };
+
+/**
+ * The class II mirrors of `cockpit` (`left` is their left edge on the driver's side), whether class IV
+ * hangs under them, and the front mirror. `rise` is, portrait, how many px the cockpit's top can still
+ * rise as the share shrinks to its minimum; `floor` the least y a mirror may start at.
+ */
+function placeMirrors({
+  cssWidth,
+  cssHeight,
+  mirrorsOnly,
+  legend,
+  insets,
+  extra,
+  cockpit,
+  rise,
+}: {
+  readonly cssWidth: number;
+  readonly cssHeight: number;
+  readonly mirrorsOnly: boolean;
+  readonly legend: LegendBox | null;
+  readonly insets: Insets;
+  readonly extra: ExtraMirrors;
+  readonly cockpit: Rect;
+  readonly rise: number;
+}): {
+  readonly mirror: Column & { readonly wide: boolean };
+  readonly mirrorRight: Rect;
+  readonly front: Rect | null;
+  readonly left: number;
+  readonly floor: number;
+} {
   const fullWidth = clamp(
     Math.round(MIRROR_SCALE * 0.15 * cockpit.width),
     Math.round(MIRROR_SCALE * 72),
@@ -299,7 +359,7 @@ export function computeViewports(
   );
   const wanted = Math.min(2 * fullWidth, Math.round(MIRROR_SCALE * 0.5 * cockpit.height));
   // Only a cockpit that starts at the screen's top edge sits under the display cut-out there.
-  const top = cockpit.y === 0 ? insets.top : 0;
+  const top = belowCutOut(cockpit, insets).y - cockpit.y;
   // Without the top-down pane the pause button stands over the cockpit's top right corner, above the mirrors.
   const floor =
     cockpit.y +
@@ -317,7 +377,6 @@ export function computeViewports(
     leverClear;
   const controls = controlsHeight(cssWidth, cssHeight, insets);
   const preferred = cockpit.y + top + Math.round(0.16 * cockpit.height);
-  type Column = { readonly y: number; readonly width: number; readonly height: number };
   /** The largest class II mirror with its bottom `clear` above the viewport bottom and at most `maxWidth` wide. */
   const plainFit = (clear: number, maxWidth: number): Column => {
     const ceiling = cssHeight - clear - MIRROR_GAP;
@@ -494,32 +553,14 @@ export function computeViewports(
   let solved = placed(choose(extra.wide, floor));
   if (solved.mirror.wide && solved.front === null) {
     // The messages span the cockpit: the stack stays below the toast row, or class IV goes.
-    const toastBottom =
-      cockpit.y +
-      INSET +
-      (cssWidth >= cssHeight ? insets.top : 0) +
-      messageHeights(cockpit.width - insets.left).toast;
+    const toastBottom = cockpit.y + top + INSET + messageHeights(cockpit.width - insets.left).toast;
     const clearOfToast = toastBottom + MESSAGE_GAP;
     if (solved.mirror.y < clearOfToast) {
       const retry = placed(choose(true, clearOfToast));
       solved = retry.mirror.wide ? retry : placed(choose(false, floor));
     }
   }
-  const { mirror, mirrorRight, front } = solved;
-  const { y, width: mw, height: mh, wide } = mirror;
-  const under = (rect: Rect): Rect | null =>
-    wide ? { x: rect.x, y: y + mh + WIDE_GAP_PX, width: mw, height: wideHeight(mw) } : null;
-  const mirrorLeft: Rect = { x: left, y, width: mw, height: mh };
-  return {
-    cockpit,
-    mirrorLeft,
-    mirrorRight,
-    wideLeft: under(mirrorLeft),
-    wideRight: under(mirrorRight),
-    front,
-    close: extra.close ? closeRect(mirrorRight, floor) : null,
-    topDown,
-  };
+  return { ...solved, left, floor };
 }
 
 /**
@@ -589,19 +630,35 @@ const cueTexts = (): string[] =>
     `${lang.goalDistance} ${lang.goalAngleOff}`,
   ]);
 
+const messageHeightsAt = new Map<number, { toast: number; cue: number }>();
+
 /** Heights of the longest toast and of the goal cue in a column `room` px wide. */
 function messageHeights(room: number): { toast: number; cue: number } {
-  // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
-  return {
-    toast: mostLines(textsOf(MESSAGE_KEYS.toast), room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX,
-    cue: mostLines(cueTexts(), room - 34) * MESSAGE_LINE + MESSAGE_BOX,
-  };
+  // `wordPx` is whole px, so the wrap is that of the whole px below `room`
+  const whole = Math.floor(room);
+  let heights = messageHeightsAt.get(whole);
+  if (heights === undefined) {
+    // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
+    heights = {
+      toast: mostLines(textsOf(MESSAGE_KEYS.toast), whole - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX,
+      cue: mostLines(cueTexts(), whole - 34) * MESSAGE_LINE + MESSAGE_BOX,
+    };
+    messageHeightsAt.set(whole, heights);
+  }
+  return heights;
+}
+
+/** `rect` from below the display cut-out, which only a rect at the screen's top edge sits under. */
+function belowCutOut(rect: Rect, insets: Insets): Rect {
+  const top = rect.y === 0 ? insets.top : 0;
+  return { ...rect, y: rect.y + top, height: rect.height - top };
 }
 
 /**
- * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top, end above
- * the controls, the key legend, the HUD band and the forward sight cone they would otherwise reach
- * into. Where the cue `yields`, only the taller of the two stands there at a time.
+ * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top (below the
+ * display cut-out), end above the controls, the key legend, the HUD band and the forward sight cone
+ * they would otherwise reach into. Where the cue `yields`, only the taller of the two stands there at
+ * a time.
  */
 function messagesFit(
   cockpit: Rect,
@@ -614,9 +671,8 @@ function messagesFit(
   yields = false,
 ): boolean {
   const { toast, cue } = messageHeights(column.width);
-  const landscape = cssWidth >= cssHeight;
   const stack = yields ? Math.max(toast, cue) : toast + MESSAGE_GAP + cue;
-  const bottom = cockpit.y + INSET + (landscape ? insets.top : 0) + stack;
+  const bottom = belowCutOut(cockpit, insets).y + INSET + stack;
   const reaches = (x0: number, x1: number): boolean =>
     column.x < x1 && column.x + column.width > x0;
   const wheel = wheelSize(cssWidth, cssHeight, insets);
@@ -694,10 +750,11 @@ function frontRect(
 export type MessageColumn = Rect & { readonly cueYields: boolean };
 
 /**
- * Where the toast and the goal cue stand, clear of the safe area. Beside the front mirror they take the
- * cockpit's top between the left mirror and the front mirror. Without one they take the span between the
- * class II mirrors where the stack fits there (`messagesFit`), else the top-down pane, below the finish
- * button and clear of the lever. With no such pane, a span beside the sight cone, else the cue yields.
+ * Where the toast and the goal cue stand, clear of the safe area: the column starts below the display
+ * cut-out, which hud.css therefore leaves out. Beside the front mirror they take the cockpit's top
+ * between the left mirror and the front mirror. Without one they take the span between the class II
+ * mirrors where the stack fits there (`messagesFit`), else the top-down pane, below the finish button
+ * and clear of the lever. With no such pane, a span beside the sight cone, else the cue yields.
  */
 export function messageColumn(
   views: ViewRects,
@@ -707,7 +764,7 @@ export function messageColumn(
   const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
   const insets = safeInsets ?? readSafeInsets();
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
-    const whole = cockpit ?? topDown;
+    const whole = belowCutOut(cockpit ?? topDown, insets);
     return {
       ...whole,
       x: whole.x + insets.left,
@@ -715,8 +772,9 @@ export function messageColumn(
       cueYields: false,
     };
   }
+  const area = belowCutOut(cockpit, insets);
   const x = mirrorLeft.x + mirrorLeft.width + MESSAGE_GAP;
-  if (front !== null) return { ...cockpit, x, width: front.x - MESSAGE_GAP - x, cueYields: false };
+  if (front !== null) return { ...area, x, width: front.x - MESSAGE_GAP - x, cueYields: false };
   const between = { x, width: mirrorRight.x - MESSAGE_GAP - x };
   const cssWidth = Math.max(cockpit.x + cockpit.width, topDown.x + topDown.width);
   const cssHeight = Math.max(cockpit.y + cockpit.height, topDown.y + topDown.height);
@@ -724,7 +782,7 @@ export function messageColumn(
   const fits = (column: { readonly x: number; readonly width: number }, yields: boolean) =>
     column.width >= MIN_MESSAGE_WIDTH &&
     messagesFit(cockpit, column, cssWidth, cssHeight, controls, insets, legend, yields);
-  if (fits(between, false)) return { ...cockpit, ...between, cueYields: false };
+  if (fits(between, false)) return { ...area, ...between, cueYields: false };
   if (!hasTopDown(views)) {
     const cone = coneBox(cockpit);
     const beside = [
@@ -733,25 +791,25 @@ export function messageColumn(
     ];
     for (const yields of [false, true]) {
       for (const column of yields ? [between, ...beside] : beside) {
-        if (fits(column, yields)) return { ...cockpit, ...column, cueYields: yields };
+        if (fits(column, yields)) return { ...area, ...column, cueYields: yields };
       }
     }
-    return { ...cockpit, ...between, cueYields: true };
+    return { ...area, ...between, cueYields: true };
   }
   // Below the finish button; in landscape also left of the stop button and lever, which stand at the
   // screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). In portrait the pane spans the screen.
-  const target = tokenPx('--size-target', 44);
+  const pane = belowCutOut(topDown, insets);
+  const drop = tokenPx('--size-target', 44) + MESSAGE_GAP;
   const landscape = cssWidth >= cssHeight;
-  const drop = target + MESSAGE_GAP + (landscape ? 0 : insets.top);
   const lever = landscape ? paneLever(insets) : 0;
   const left = landscape ? 0 : insets.left;
   const right = landscape ? lever : insets.right;
   return {
-    ...topDown,
-    x: topDown.x + left,
-    y: topDown.y + drop,
-    height: topDown.height - drop,
-    width: topDown.width - left - right,
+    ...pane,
+    x: pane.x + left,
+    y: pane.y + drop,
+    height: pane.height - drop,
+    width: pane.width - left - right,
     cueYields: false,
   };
 }

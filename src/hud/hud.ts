@@ -1050,10 +1050,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         place(topDown, views.topDown);
         placeKeysList(views.topDown);
       }
-      // The finish/menu button sits at the screen's top-right corner.
+      // The finish/menu button sits at the screen's top-right corner, below the display cut-out.
       toastWrap.toggleAttribute(
         'data-reserve',
-        column.y < 1 && column.x + column.width >= root.clientWidth - insets.right - 1,
+        column.y < insets.top + 1 && column.x + column.width >= root.clientWidth - insets.right - 1,
       );
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
       if (hasTopDown(views)) syncToolbarReserve();
