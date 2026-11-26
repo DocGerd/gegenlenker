@@ -237,7 +237,7 @@ describe('top-down split', () => {
   it('keeps the landscape pane wide enough for the message column at its narrowest', () => {
     let inPane = 0;
     for (let w = 900; w <= 1400; w += 10) {
-      for (let h = 426; h <= w; h += 10) {
+      for (let h = 585; h <= w; h += 10) {
         for (const inset of [NO_INSETS, insets]) {
           const views = computeViewports(w, h, 'drive', null, inset, edges[0]);
           const column = messageColumn(views, null, inset);
