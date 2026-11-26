@@ -111,8 +111,8 @@ export type EinweiserScene = {
 
 /** A replay's Einweiser tracker: fed its snapshots in order, it reads him off the logged track as the live run did. */
 export type EinweiserReplay = {
-  /** Each snapshot after `start`, in order. */
-  update(after: SimSnapshot): void;
+  /** Each snapshot after `start`, in order; returns the facts it scored. */
+  update(after: SimSnapshot): EinweiserFacts;
   readonly tracker: EinweiserTracker;
 };
 
@@ -130,8 +130,10 @@ export function createEinweiserReplay(
       const { held, sign, moved } = cursor.at(before.step);
       const p = perceive(g, before, held, sign, occluders);
       const reading = reader.read(sign, p, before.speed === 0);
-      tracker.update({ before, after, held, moved, sign, inSight: p.inSight, reading });
+      const facts = { before, after, held, moved, sign, inSight: p.inSight, reading };
+      tracker.update(facts);
       before = after;
+      return facts;
     },
     tracker,
   };

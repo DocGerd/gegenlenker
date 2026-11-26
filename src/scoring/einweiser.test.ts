@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveRun } from '../content/run';
-import type { EinweiserResult, SignId } from '../contracts/einweiser';
+import { HOLD_STEPS, type EinweiserResult, type SignId } from '../contracts/einweiser';
 import type { SimSnapshot } from '../contracts/sim';
 import { layoutOccluders, sightGeometry } from '../einweiser/sight';
 import type { Reading } from '../einweiser/signs';
@@ -9,7 +9,7 @@ import { STILL, type Walker, type WalkKeys } from '../einweiser/walk';
 import { createInputRecorder, replaySnapshots, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
-import { createEinweiserReplay, createEinweiserTracker } from './einweiser';
+import { createEinweiserReplay, createEinweiserTracker, type EinweiserFacts } from './einweiser';
 import { createEventScanner } from './replay-events';
 
 const yard: RunIds = {
@@ -22,6 +22,17 @@ const yard: RunIds = {
 const slalom: RunIds = { ...yard, exerciseId: 'slalom' };
 
 type Script = (step: number, s: SimSnapshot, w: Walker) => { keys: WalkKeys; sign: SignId | null };
+
+/** What the tracker reads at a step besides the snapshots, which a replay reproduces by construction. */
+const read = ({ before, held, moved, sign, inSight, reading }: EinweiserFacts) => ({
+  step: before.step,
+  held,
+  // the track does not log his start, so a replay's first hold interval has none (`createTrackCursor`)
+  moved: before.step < HOLD_STEPS && before.speed === 0 ? 0 : moved,
+  sign,
+  inSight,
+  reading,
+});
 
 const scene = (ids: RunIds) => {
   const run = resolveRun(ids);
@@ -37,6 +48,7 @@ function drive(ids: RunIds, script: Script, steps: number) {
   const einweiser = createEinweiserRun({ g, occluders, yard: run.layout.yard, start: s });
   const tracker = createEinweiserTracker(g, run.contacts);
   const recorder = createInputRecorder();
+  const facts: ReturnType<typeof read>[] = [];
   const heading = einweiser.walker().heading;
   while (s.step < steps && !tracker.runOver()) {
     const { keys, sign } = script(s.step, s, einweiser.walker());
@@ -44,7 +56,7 @@ function drive(ids: RunIds, script: Script, steps: number) {
     recorder.record(s.step, d.control);
     const before = s;
     s = sim.step(d.control);
-    tracker.update({
+    const f = {
       before,
       after: s,
       held: d.status.held,
@@ -52,7 +64,9 @@ function drive(ids: RunIds, script: Script, steps: number) {
       sign,
       inSight: d.perception.inSight,
       reading: d.reading,
-    });
+    };
+    tracker.update(f);
+    facts.push(read(f));
   }
   const meta = {
     ...ids,
@@ -60,7 +74,7 @@ function drive(ids: RunIds, script: Script, steps: number) {
     mirrorsOnly: false,
     einweiser: einweiser.track(),
   } as const;
-  return { log: recorder.finish(meta, s.step), result: tracker.result() };
+  return { log: recorder.finish(meta, s.step), result: tracker.result(), facts };
 }
 
 /** How far behind the trailer rear he stands, along its heading. */
@@ -69,12 +83,18 @@ const behind = (s: SimSnapshot, w: Walker): number =>
     (w.x - s.trailerRear.x) * Math.cos(s.trailer.heading) +
     (w.y - s.trailerRear.y) * Math.sin(s.trailer.heading)
   );
+/** How far left of the trailer rear's centre he stands. */
+const left = (s: SimSnapshot, w: Walker): number =>
+  -(w.x - s.trailerRear.x) * Math.sin(s.trailer.heading) +
+  (w.y - s.trailerRear.y) * Math.cos(s.trailer.heading);
 
 const CASES: readonly {
   name: string;
   ids: RunIds;
   script: Script;
   expected: (r: EinweiserResult) => void;
+  /** A reading the run must contain, so the case keeps covering it. */
+  reads?: Reading['kind'];
 }[] = [
   {
     // Herkommen without Achtung, a walk backwards, then a jog into the reversing trailer's track.
@@ -96,6 +116,26 @@ const CASES: readonly {
     },
   },
   {
+    // Achtung, Herkommen, then he steps into the trailer's track far enough back that the driver
+    // stops for him: the in-path readings run up to the step the vehicle comes to rest.
+    name: 'stopped for him in its path',
+    ids: yard,
+    script: (step, s, w) => ({
+      keys:
+        left(s, w) > 1.45
+          ? behind(s, w) < 7
+            ? { ...STILL, back: true }
+            : { ...STILL, right: true }
+          : STILL,
+      sign: step < 60 ? 'achtung' : 'herkommen',
+    }),
+    expected: (r) => {
+      expect(r.runOver).toBe(false);
+      expect(r.faults).toMatchObject({ inPath: 1, noAchtung: 0 });
+    },
+    reads: 'inPath',
+  },
+  {
     // Achtung, then Herkommen while he backs away ahead of the trailer, into the slalom cones.
     name: 'late halt',
     ids: slalom,
@@ -113,9 +153,10 @@ const CASES: readonly {
 describe('Einweiser scoring', () => {
   it.each(CASES)(
     'derives the live faults again from the log: $name',
-    ({ ids, script, expected }) => {
-      const { log, result } = drive(ids, script, 3000);
+    ({ ids, script, expected, reads }) => {
+      const { log, result, facts } = drive(ids, script, 3000);
       expected(result);
+      if (reads !== undefined) expect(facts.map((f) => f.reading.kind)).toContain(reads);
       const { run, g, occluders, contacts } = scene(log);
       const sim = createSimulation(run.params, run.start, run.contacts);
       if (log.einweiser === undefined) throw new Error('an Einweiser log has a track');
@@ -125,8 +166,18 @@ describe('Einweiser scoring', () => {
         sim.snapshot(),
       );
       // through the replay's event scanner, which feeds it
-      const scanner = createEventScanner(run.exercise, replay);
+      const replayed: ReturnType<typeof read>[] = [];
+      const scanner = createEventScanner(run.exercise, {
+        ...replay,
+        update: (s) => {
+          const f = replay.update(s);
+          replayed.push(read(f));
+          return f;
+        },
+      });
       for (const s of replaySnapshots(log, sim)) scanner.update(s);
+      // step by step, so a fact read a step late or off the wrong snapshot shows even when the counts agree
+      expect(replayed).toEqual(facts);
       expect(replay.tracker.result()).toEqual(result);
     },
   );
