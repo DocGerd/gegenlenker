@@ -1,5 +1,6 @@
+import type { ControlSource } from '../contracts/control';
 import type { LampSwitches } from '../contracts/render';
-import type { ControlVector, Gear } from '../contracts/sim';
+import type { Gear, SimSnapshot } from '../contracts/sim';
 import { applyMessages, t } from '../i18n/i18n';
 import { createKeyboard } from './keyboard';
 import './controls.css';
@@ -16,12 +17,9 @@ import {
   turnTicks,
 } from './mapping';
 
-export type Controls = {
-  control(): ControlVector;
-  /** The lamp switches; a new object after each change, so a caller may compare by identity. */
-  lamps(): LampSwitches;
-  /** `actualSteer` is the snapshot's rate-limited steer; the centred cue waits for it. */
-  tick(dt: number, actualSteer: number): void;
+/** The manual source; `tick` draws the snapshot's rate-limited steer, which the centred cue waits for. */
+export type Controls = Omit<ControlSource, 'tick'> & {
+  tick(dt: number, snapshot: Pick<SimSnapshot, 'steer'>): void;
   /** The stop button and the lever column, for the HUD to keep its toolbar clear of. */
   pedalsBox(): DOMRect;
   dispose(): void;
@@ -378,11 +376,11 @@ export function createControls(
       syncLamps();
       return lamps;
     },
-    tick(dt, actualSteer) {
+    tick(dt, snapshot) {
       syncBrake();
       keyboard.tick(dt);
       stepReset(state, opts.steerRate, dt);
-      render(actualSteer);
+      render(snapshot.steer);
     },
     pedalsBox() {
       return pedals.getBoundingClientRect();

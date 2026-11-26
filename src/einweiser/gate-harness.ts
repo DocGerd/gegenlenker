@@ -1151,7 +1151,13 @@ export function runGate(
   const legsFor = LEGS[exerciseId];
   if (!legsFor) throw new Error(`no gate legs for ${exerciseId}`);
   const exercise = exerciseById(exerciseId);
-  const run = resolveRun({ layoutId: exercise.layout, exerciseId, truckId, trailerId });
+  const run = resolveRun({
+    layoutId: exercise.layout,
+    exerciseId,
+    truckId,
+    trailerId,
+    role: 'driver',
+  });
   const g = sightGeometry(truckById(truckId), trailerById(trailerId));
   const occluders = layoutOccluders(run.layout);
   const sim = createSimulation(run.params, run.start, run.contacts);

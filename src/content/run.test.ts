@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { InputLog, RunResult } from '../contracts/exercise';
+import type { RunResult } from '../contracts/exercise';
 import type { ControlVector } from '../contracts/sim';
 import { createRunTracker, runResult } from '../scoring/score';
 import { SIM_REVISION } from '../sim/fingerprint';
-import { createReplayCursor } from '../sim/replay';
+import { createReplayCursor, parseInputLog, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { resolveRun } from './run';
 
@@ -15,6 +15,7 @@ const ctl = (c: Partial<ControlVector>): ControlVector => ({
   ...c,
 });
 
+// Stored as version 3 wrote it, so the pin also proves older logs still load and replay unchanged.
 const FIXED_LOG = {
   version: 3,
   lighting: 'day',
@@ -26,7 +27,7 @@ const FIXED_LOG = {
     { step: 1200, control: ctl({ steer: 0.7, lever: 0.6, gear: 'R' }) },
     { step: 1800, control: ctl({ steer: 0, lever: 0.8, gear: 'D' }) },
   ],
-} as const satisfies Partial<InputLog>;
+} as const;
 
 const fnv = (text: string): string => {
   let hash = 0x811c9dc5;
@@ -38,13 +39,16 @@ const fnv = (text: string): string => {
 };
 
 function pinned(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' | 'reverse-bay') {
-  const log: InputLog = {
-    ...FIXED_LOG,
+  const ids = {
     layoutId,
     exerciseId,
     truckId: 'man-le-18-280',
     trailerId: 'krone-azw-18',
-  };
+  } as const;
+  const fingerprint = (i: RunIds): string => resolveRun(i).fingerprint;
+  const stored = { ...FIXED_LOG, ...ids, fingerprint: fingerprint({ ...ids, role: 'driver' }) };
+  const log = parseInputLog(JSON.stringify(stored), fingerprint);
+  if (log === null) throw new Error('stored log expected to load');
   const { params, exercise, start, contacts } = resolveRun(log);
   if (exercise === null) throw new Error('exercise expected');
   const tracker = createRunTracker(exercise);

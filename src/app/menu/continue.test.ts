@@ -8,7 +8,8 @@ const ex = (id: ExerciseId): EntryRef => ({ role: 'driver', kind: 'exercise', id
 const yard = (id: LayoutId): EntryRef => ({ role: 'driver', kind: 'yard', id });
 
 const log = (layoutId: LayoutId, exerciseId: ExerciseId | null): InputLog => ({
-  version: 3,
+  version: 4,
+  role: 'driver',
   layoutId,
   exerciseId,
   truckId: 'man-le-18-280',

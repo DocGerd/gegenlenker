@@ -9,6 +9,7 @@ const ids = {
   exerciseId: 'reverse-bay',
   truckId: 'man-le-18-280',
   trailerId: 'krone-azw-18',
+  role: 'driver',
 } as const;
 const run = resolveRun(ids);
 const { exercise } = run;

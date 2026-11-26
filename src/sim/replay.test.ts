@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { InputLog } from '../contracts/exercise';
+import type { EinweiserTrack, InputLog } from '../contracts/exercise';
 import type { ContactQuery, ControlVector, SimSnapshot, StartState } from '../contracts/sim';
 import { resolveCombination } from '../vehicles/resolve';
 import { trailerById, truckById } from '../vehicles/registry';
@@ -22,12 +22,13 @@ const contacts: ContactQuery = (bodies) =>
   bodies.some((b) => b.obb.cy > 12)
     ? { body: 'truck', obstacleId: 'fence', point: { x: 0, y: 0 } }
     : null;
-const meta = {
+const ids = {
   layoutId: 'depot',
   exerciseId: 'reverse-bay',
   truckId: 'man-le-18-280',
   trailerId: 'hueffermann-hpa-24-81-l',
 } as const;
+const meta = { ...ids, role: 'driver' } as const;
 const recorded = { ...meta, lighting: 'day', mirrorsOnly: false } as const;
 
 const ctl = (c: Partial<ControlVector>): ControlVector => ({
@@ -117,7 +118,7 @@ describe('replay', () => {
 
   it('rejects malformed logs', () => {
     const valid: InputLog = {
-      version: 3,
+      version: 4,
       ...recorded,
       steps: 10,
       changes: [
@@ -131,7 +132,9 @@ describe('replay', () => {
     expect(parse(null)).toBeNull();
     expect(parse('[]')).toBeNull();
     expect(parse('not json')).toBeNull();
-    expect(parse(json({ ...valid, version: 4 }))).toBeNull();
+    expect(parse(json({ ...valid, version: 5 }))).toBeNull();
+    expect(parse(json({ ...valid, role: undefined }))).toBeNull();
+    expect(parse(json({ ...valid, role: 'pilot' }))).toBeNull();
     expect(parse(json({ ...valid, lighting: 'dusk' }))).toBeNull();
     expect(parse(json({ ...valid, lighting: undefined }))).toBeNull();
     expect(parse(json({ ...valid, mirrorsOnly: undefined }))).toBeNull();
@@ -149,7 +152,7 @@ describe('replay', () => {
   it('round-trips lighting and reads a version 1 log as day', () => {
     const fingerprint = (): string => 'data-a';
     const night: InputLog = {
-      version: 3,
+      version: 4,
       ...meta,
       lighting: 'night',
       mirrorsOnly: false,
@@ -159,7 +162,7 @@ describe('replay', () => {
     expect(parseInputLog(serializeInputLog(night, fingerprint), fingerprint)).toEqual(night);
     const v1 = JSON.stringify({
       version: 1,
-      ...meta,
+      ...ids,
       steps: 10,
       changes: [],
       fingerprint: 'data-a',
@@ -167,7 +170,7 @@ describe('replay', () => {
     expect(parseInputLog(v1, fingerprint)).toEqual({ ...night, lighting: 'day' });
     const v1Night = JSON.stringify({
       version: 1,
-      ...meta,
+      ...ids,
       lighting: 'night',
       steps: 10,
       changes: [],
@@ -179,7 +182,7 @@ describe('replay', () => {
   it('round-trips a mirror-only run and reads an older log as driven with the top view', () => {
     const fingerprint = (): string => 'data-a';
     const mirrors: InputLog = {
-      version: 3,
+      version: 4,
       ...recorded,
       mirrorsOnly: true,
       steps: 10,
@@ -188,7 +191,7 @@ describe('replay', () => {
     expect(parseInputLog(serializeInputLog(mirrors, fingerprint), fingerprint)).toEqual(mirrors);
     const v2 = JSON.stringify({
       version: 2,
-      ...meta,
+      ...ids,
       lighting: 'day',
       mirrorsOnly: true,
       steps: 10,
@@ -198,8 +201,63 @@ describe('replay', () => {
     expect(parseInputLog(v2, fingerprint)).toEqual({ ...mirrors, mirrorsOnly: false });
   });
 
+  it('reads a version 3 log as driven, with its view and lighting', () => {
+    const fingerprint = (): string => 'data-a';
+    const v3 = {
+      version: 3,
+      ...ids,
+      lighting: 'night',
+      mirrorsOnly: true,
+      steps: 10,
+      changes: [{ step: 0, control: ctl({ lever: 1 }) }],
+    } as const;
+    const parsed = parseInputLog(JSON.stringify({ ...v3, fingerprint: 'data-a' }), fingerprint);
+    if (parsed === null) throw new Error('log expected');
+    expect(parsed).toEqual({ ...v3, version: 4, role: 'driver' });
+    expect('einweiser' in parsed).toBe(false);
+    expect(parseInputLog(serializeInputLog(parsed, fingerprint), fingerprint)).toEqual(parsed);
+    const tagged = JSON.stringify({ ...v3, role: 'einweiser', fingerprint: 'data-a' });
+    expect(parseInputLog(tagged, fingerprint)?.role).toBe('driver');
+  });
+
+  it('round-trips an Einweiser log and its track, and checks the track', () => {
+    const fingerprint = (): string => 'data-a';
+    const sample = { step: 0, x: 4, y: -3.5, heading: 1.2, pitch: -0.1 };
+    const track: EinweiserTrack = {
+      samples: [sample, { ...sample, step: 6, x: 4.01, heading: 1.25 }],
+      signs: [
+        { step: 0, sign: 'achtung' },
+        { step: 40, sign: 'herkommen' },
+        { step: 90, sign: null },
+      ],
+    };
+    const log: InputLog = {
+      version: 4,
+      ...recorded,
+      role: 'einweiser',
+      einweiser: track,
+      steps: 100,
+      changes: [{ step: 50, control: ctl({ lever: 0.3, gear: 'R' }) }],
+    };
+    const parse = (o: object) =>
+      parseInputLog(JSON.stringify({ ...o, fingerprint: 'data-a' }), fingerprint);
+    const withTrack = (t: object) => parse({ ...log, einweiser: { ...track, ...t } });
+    expect(parseInputLog(serializeInputLog(log, fingerprint), fingerprint)).toEqual(log);
+    expect(parse({ ...log, einweiser: undefined })).toBeNull();
+    expect(parse({ ...log, role: 'driver' })).toBeNull();
+    expect(withTrack({ signs: [{ step: 0, sign: 'winken' }] })).toBeNull();
+    expect(withTrack({ signs: [...track.signs].reverse() })).toBeNull();
+    expect(withTrack({ samples: [{ ...sample, pitch: Number.NaN }] })).toBeNull();
+    expect(withTrack({ samples: [{ ...sample, step: 0.5 }] })).toBeNull();
+    expect(withTrack({ samples: undefined })).toBeNull();
+    expect(withTrack({ samples: [], signs: [] })).toEqual({
+      ...log,
+      einweiser: { samples: [], signs: [] },
+    });
+  });
+
   it('accepts a log only for the data that produced it', () => {
-    const valid: InputLog = { version: 3, ...recorded, steps: 10, changes: [] };
+    const valid: InputLog = { version: 4, ...recorded, steps: 10, changes: [] };
     const seen: unknown[] = [];
     const fingerprint = (ids: unknown): string => {
       seen.push(ids);
