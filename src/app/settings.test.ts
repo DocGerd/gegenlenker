@@ -17,7 +17,6 @@ const defaults: Settings = {
   wideMirrors: true,
   mirrorsOnly: false,
   lastEntry: null,
-  einweiserPreview: false,
   fov: 90,
   mouseSensitivity: 'medium',
   invertMouse: false,
@@ -38,7 +37,6 @@ const stored: Settings = {
   wideMirrors: false,
   mirrorsOnly: true,
   lastEntry: { role: 'einweiser', kind: 'exercise', id: 'reverse-bay' },
-  einweiserPreview: true,
   fov: 110,
   mouseSensitivity: 'high',
   invertMouse: true,
@@ -116,12 +114,12 @@ describe('loadSettings', () => {
     });
   });
 
-  it('loads an Einweiser last entry only while the role is offered', () => {
+  it('loads an Einweiser last entry, whatever a retired preview flag says', () => {
     const entry = { role: 'einweiser', kind: 'yard', id: LAYOUT_IDS[0] };
     const load = (einweiserPreview: boolean) =>
       loadSettings(JSON.stringify({ version: 1, einweiserPreview, lastEntry: entry }), 'en');
     expect(load(true).lastEntry).toEqual(entry);
-    expect(load(false).lastEntry).toBeNull();
+    expect(load(false).lastEntry).toEqual(entry);
   });
 
   it('drops a last entry with an unknown id, kind or role, keeping the other fields', () => {

@@ -7,7 +7,7 @@ import type { RunConfig } from '../drive';
 import { ignoreHeldBrakeKeys } from '../held-keys';
 import { currentSettings } from '../settings';
 import { bestResults } from '../storage';
-import { runConfigOf, type EntryKind, type EntryRef } from './catalogue';
+import { offeredEntry, runConfigOf, type EntryKind, type EntryRef, type Role } from './catalogue';
 import { CONTENT } from './content';
 import { continueEntry, lastEntryOf } from './continue';
 import { screenOf, type ActionId, type Item, type MenuState } from './graph';
@@ -68,11 +68,12 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
 
   const state = (): MenuState => {
     const best = bestResults();
+    const last = lastEntryOf(currentSettings().lastEntry, deps.replay?.log ?? null);
     return {
       done: EXERCISE_IDS.filter((id) => exerciseDone(best, id)),
       replayable: deps.replay !== null,
       hasNews: false,
-      lastEntry: lastEntryOf(currentSettings().lastEntry, deps.replay?.log ?? null),
+      lastEntry: last === null ? null : offeredEntry(last),
     };
   };
 
@@ -129,11 +130,14 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
     actions[item.target.action](button);
   };
 
-  /** The row a list opens on: the exercise Continue would start, or the last driven yard. */
-  const listFocus = (kind: EntryKind | undefined): EntryRef | null => {
+  /** The row a list opens on: the exercise Continue would start, or the last driven yard, in any role. */
+  const listFocus = (
+    list: { readonly role: Role; readonly kind: EntryKind } | undefined,
+  ): EntryRef | null => {
+    if (list === undefined) return null;
     const { done, lastEntry } = state();
-    const entry = kind === 'exercise' ? continueEntry(lastEntry, done) : lastEntry;
-    return entry?.kind === kind ? entry : null;
+    const entry = list.kind === 'exercise' ? continueEntry(lastEntry, done) : lastEntry;
+    return entry?.kind === list.kind ? { ...entry, role: list.role } : null;
   };
 
   const contentScreen = (level: Level): ScreenView => {
@@ -176,7 +180,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           screen,
           heading: headingOf(level),
           done: state().done,
-          focus: listFocus(screen.list?.kind),
+          focus: listFocus(screen.list),
           back,
           pick: (entry) => go({ type: 'pick', entry }),
         });

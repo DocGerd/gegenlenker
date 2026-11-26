@@ -20,7 +20,7 @@ import {
   type Fov,
   type MouseSensitivity,
 } from '../contracts/einweiser';
-import { EXERCISE_IDS, ROLES, type Role } from '../contracts/exercise';
+import { EXERCISE_IDS, ROLES } from '../contracts/exercise';
 import { LAYOUT_IDS } from '../contracts/layout';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
@@ -44,11 +44,6 @@ export type Settings = {
   readonly mirrorsOnly: boolean;
   /** What the last drive was, so the title can offer to continue it. */
   readonly lastEntry: EntryRef | null;
-  /**
-   * Offers the role row in the setup before Einweiser mode is playable (#500). No menu sets it:
-   * edit the stored settings. Off, every run is a driver run.
-   */
-  readonly einweiserPreview: boolean;
   /** The Einweiser's first-person field of view, horizontal degrees at 16:9. */
   readonly fov: Fov;
   readonly mouseSensitivity: MouseSensitivity;
@@ -78,11 +73,11 @@ const flag = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean'
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Role, kind and id must all be known, and an Einweiser entry offered; anything else is no last entry. */
-const entryRef = (v: unknown, roles: readonly Role[]): EntryRef | null => {
+/** Role, kind and id must all be known; anything else is no last entry. */
+const entryRef = (v: unknown): EntryRef | null => {
   if (!isRecord(v)) return null;
   const { role: stored, kind, id } = v;
-  const role = roles.find((r) => r === stored);
+  const role = ROLES.find((r) => r === stored);
   if (role === undefined) return null;
   if (kind === 'exercise') {
     const known = EXERCISE_IDS.find((e) => e === id);
@@ -107,7 +102,6 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
   const aids = isRecord(s['aids']) ? s['aids'] : {};
   const collapsed = isRecord(s['collapsed']) ? s['collapsed'] : {};
   const layout = isRecord(s['topDownLayout']) ? s['topDownLayout'] : {};
-  const einweiserPreview = flag(s['einweiserPreview'], false);
   return {
     version: 1,
     language: pick(LANGS, s['language'], detected),
@@ -134,8 +128,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
     lighting: pick(LIGHTING_MODES, s['lighting'], DEFAULT_LIGHTING),
     wideMirrors: flag(s['wideMirrors'], true),
     mirrorsOnly: flag(s['mirrorsOnly'], false),
-    lastEntry: entryRef(s['lastEntry'], einweiserPreview ? ROLES : ['driver']),
-    einweiserPreview,
+    lastEntry: entryRef(s['lastEntry']),
     fov: pick(FOV_CHOICES, s['fov'], DEFAULT_FOV),
     mouseSensitivity: pick(MOUSE_SENSITIVITIES, s['mouseSensitivity'], 'medium'),
     invertMouse: flag(s['invertMouse'], false),

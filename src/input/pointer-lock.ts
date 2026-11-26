@@ -61,3 +61,7 @@ export function createPointerLock(el: Element, onChange: (locked: boolean) => vo
     },
   };
 }
+
+/** A fine primary pointer and the Pointer Lock API: the Einweiser's mouse look needs both, so only then is the role offered. */
+export const pointerLookAvailable = (): boolean =>
+  matchMedia('(pointer: fine)').matches && 'requestPointerLock' in Element.prototype;

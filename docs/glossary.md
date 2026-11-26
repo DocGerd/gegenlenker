@@ -62,6 +62,8 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Steering readout and label                      | steer                                       | Lenken                                       |
 | Person guiding the vehicle on foot              | ground guide                                | Einweiser                                    |
 | Role row in the Exercises and Free yard setup   | role (Driver / Ground guide)                | Rolle (Fahrer / Einweiser)                   |
+| Verb of an Einweiser exercise title and brief   | guide                                       | einweisen                                    |
+| Einweiser screen with or without the top view   | view (With top view / Without top view)     | Ansicht (Mit Draufsicht / Ohne Draufsicht)   |
 | One BG sign                                     | hand signal                                 | Handzeichen                                  |
 | Sign 1: right arm up                            | attention                                   | Achtung                                      |
 | Sign 2: arms out; kept apart from stop          | halt                                        | Halt                                         |

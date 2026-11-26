@@ -21,7 +21,7 @@ export type Item = {
 export type OptionGroup = {
   readonly label: MessageKey;
   readonly fields: readonly OptionId[];
-  /** Listed only with `einweiserPreview`, until Einweiser mode is playable (#500). */
+  /** Listed only where the Einweiser role is offered (`offeredRoles`). */
   readonly einweiser?: true;
 };
 

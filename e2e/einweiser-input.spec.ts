@@ -23,7 +23,7 @@ const stored = (page: Page): Promise<Record<string, unknown>> =>
   );
 
 async function startEinweiser(page: Page): Promise<void> {
-  await seedStorage(page, { settings: { graphics: 'low', einweiserPreview: true } });
+  await seedStorage(page, { settings: { graphics: 'low' } });
   await page.goto('./?framing=1');
   await startEntry(page, en, einweiser);
   await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();

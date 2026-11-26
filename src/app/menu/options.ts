@@ -71,6 +71,10 @@ const SENSITIVITY_NAME: Readonly<Record<MouseSensitivity, MessageKey>> = {
   high: 'sensitivityHigh',
 };
 const DRIVE_VIEW_NAME = { standard: 'driveViewStandard', mirrors: 'driveViewMirrors' } as const;
+const EINWEISER_VIEW_NAME = {
+  standard: 'driveViewStandard',
+  mirrors: 'einweiserViewNoTop',
+} as const;
 const SWITCH_NAME = { on: 'settingOn', off: 'settingOff' } as const;
 
 const LANGS: readonly Lang[] = ['de', 'en'];
@@ -165,6 +169,19 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
     applies: 'live',
   },
 };
+
+/** Where the Einweiser names a field his own way: the same setting, so the same values. */
+const EINWEISER_FIELDS: Readonly<Partial<Record<OptionId, OptionField>>> = {
+  driveView: {
+    ...OPTION_FIELDS.driveView,
+    label: 'einweiserView',
+    choices: named(DRIVE_VIEWS, EINWEISER_VIEW_NAME),
+  },
+};
+
+/** The field as the role sees it. */
+export const roleField = (id: OptionId, role: Role): OptionField =>
+  (role === 'einweiser' ? EINWEISER_FIELDS[id] : undefined) ?? OPTION_FIELDS[id];
 
 const PAUSE_FIELDS: Readonly<Record<Role, readonly OptionId[]>> = {
   driver: ['theme', 'wideMirrors', 'graphics'],
