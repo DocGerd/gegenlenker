@@ -22,6 +22,51 @@ export const NO_PREDICTION: Prediction = {
 const BISECTIONS = 6;
 const MIN_PARTIAL = 0.03; // a shorter last piece is dropped, so a blocked start keeps a single point
 
+type Held = {
+  readonly direction: 1 | -1;
+  readonly target: number;
+  /** Road-wheel change per metre: the rate the wheels turn at the current speed. */
+  readonly ramp: number;
+  readonly q: KinematicState;
+  readonly delta: number;
+};
+
+/** The held target steer from `from`; null outside D and R. */
+function hold(params: VehicleParams, from: SimSnapshot): Held | null {
+  const { gear, steer } = from.control;
+  if (gear !== 'D' && gear !== 'R') return null;
+  const target = Math.min(1, Math.max(-1, steer)) * params.maxRoadWheelAngle;
+  const speed = Math.abs(from.speed);
+  return {
+    direction: gear === 'D' ? 1 : -1,
+    target,
+    ramp: speed > 0 ? (params.steerRate * params.maxRoadWheelAngle) / speed : 0,
+    q: {
+      x: from.truck.x,
+      y: from.truck.y,
+      th0: from.truck.heading,
+      th1: from.dolly.heading,
+      th2: from.trailer.heading,
+    },
+    delta: speed > 0 ? from.roadWheelAngle : target,
+  };
+}
+
+/** The wheel angle after `h` metres eased toward the target, and the mean angle over them. */
+function ease(
+  delta: number,
+  { target, ramp }: Held,
+  h: number,
+): { eased: number; through: number } {
+  const gap = target - delta;
+  const reached = Math.abs(gap) <= ramp * h;
+  const eased = reached ? target : delta + Math.sign(gap) * ramp * h;
+  // the mean angle over the step: a ramp that ends mid-step only averages over its own share
+  const through =
+    reached && ramp > 0 ? target - (gap * Math.abs(gap)) / (2 * ramp * h) : (delta + eased) / 2;
+  return { eased, through };
+}
+
 /**
  * The paths of the two corners of the leading end with the target steer held: the trailer's rear
  * when reversing, the truck's front when driving forward. Unit speed makes time steps arc-length
@@ -34,13 +79,10 @@ export function predictCombination(
   contacts: ContactQuery,
   distance = PREDICT_DISTANCE,
 ): Prediction {
-  const { gear, steer } = from.control;
-  if (gear !== 'D' && gear !== 'R') return NO_PREDICTION;
-  const direction = gear === 'D' ? 1 : -1;
-  const target = Math.min(1, Math.max(-1, steer)) * params.maxRoadWheelAngle;
-  const speed = Math.abs(from.speed);
-  const ramp = speed > 0 ? (params.steerRate * params.maxRoadWheelAngle) / speed : 0;
-  const lead = gear === 'D' ? 'truck' : 'trailer';
+  const held = hold(params, from);
+  if (held === null) return NO_PREDICTION;
+  const { direction } = held;
+  const lead = direction === 1 ? 'truck' : 'trailer';
 
   let memo: { q: KinematicState; bodies: readonly BodyFootprint[] } | null = null;
   const footprints = (q: KinematicState): readonly BodyFootprint[] => {
@@ -71,14 +113,7 @@ export function predictCombination(
     }
   };
 
-  let q: KinematicState = {
-    x: from.truck.x,
-    y: from.truck.y,
-    th0: from.truck.heading,
-    th1: from.dolly.heading,
-    th2: from.trailer.heading,
-  };
-  let delta = speed > 0 ? from.roadWheelAngle : target;
+  let { q, delta } = held;
   let travelled = 0;
   let blocked: BlockReason | null = null;
   let blockedAt: number | null = null;
@@ -86,12 +121,7 @@ export function predictCombination(
 
   while (travelled < distance - 1e-9) {
     const h = Math.min(PREDICT_STEP, distance - travelled);
-    const gap = target - delta;
-    const reached = Math.abs(gap) <= ramp * h;
-    const eased = reached ? target : delta + Math.sign(gap) * ramp * h;
-    // the mean angle over the step: a ramp that ends mid-step only averages over its own share
-    const through =
-      reached && ramp > 0 ? target - (gap * Math.abs(gap)) / (2 * ramp * h) : (delta + eased) / 2;
+    const { eased, through } = ease(delta, held, h);
     const next = rk4(params, q, direction, through, h);
     const reason = rejection(next);
     if (reason !== null) {
@@ -117,6 +147,32 @@ export function predictCombination(
 
   if (left.length !== right.length) throw new Error('corridor lines differ in length');
   return { lead, left, right, blocked, blockedAt };
+}
+
+/**
+ * Every body's footprint along the path `predictCombination` integrates, from `from` and then every
+ * `PREDICT_STEP` up to `distance`, ending early at a pivot limit; empty outside D and R.
+ */
+export function sweptBodies(
+  params: VehicleParams,
+  from: SimSnapshot,
+  distance: number,
+): BodyFootprint[] {
+  const held = hold(params, from);
+  if (held === null) return [];
+  let { q, delta } = held;
+  const swept = bodyFootprints(params, joints(params, q));
+  for (let travelled = 0; travelled < distance - 1e-9; ) {
+    const h = Math.min(PREDICT_STEP, distance - travelled);
+    const { eased, through } = ease(delta, held, h);
+    const next = rk4(params, q, held.direction, through, h);
+    if (pivotViolation(params, next) !== null) break;
+    q = next;
+    delta = eased;
+    travelled += h;
+    swept.push(...bodyFootprints(params, joints(params, q)));
+  }
+  return swept;
 }
 
 /** What the held steer runs into within `CONTACT_WARN_DISTANCE`: the first warning stage. */
