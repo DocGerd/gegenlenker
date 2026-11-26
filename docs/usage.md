@@ -5,7 +5,7 @@ Gegenlenker is a trainer for maneuvering a truck with a turntable drawbar traile
 ## Open and install
 
 - Open https://docgerd.github.io/gegenlenker/ in a current desktop or tablet browser. The graphics need WebGL 2; without it a drive does not start and the app shows a notice.
-- The smallest supported window is 585 CSS px tall: what a 1080p laptop at 150 % display scaling leaves the page. Phones are not supported.
+- The smallest supported window is 585 CSS px tall: what a 1080p laptop at 150 % display scaling leaves the page. In landscape it is at least 800 CSS px wide; portrait goes down to 600. Phones are not supported.
 - After the first visit the app caches itself, and the menu footer shows "Ready offline". It then starts without a connection. Assets that only some graphics presets draw are downloaded for the chosen graphics quality while online, so choosing a higher one needs a connection once; until they are cached the footer says so instead.
 - When a new version is available the app offers "Reload" or "Later".
 - Installing it as an app uses the browser's own install action (for example "Install" in the address bar, or "Add to Home screen" on a tablet).

@@ -79,6 +79,7 @@ type Box = {
 
 /** The smallest supported CSS viewport height (`docs/usage.md`): a 1080p laptop at 150 % scaling. */
 const MIN_HEIGHT = 585;
+// The landscape boxes below start at 800 CSS px wide, the smallest supported landscape width (`docs/usage.md`).
 
 /**
  * Default: each box is exhaustive, the boxes are not contiguous. Laptops incl. the short ones in
