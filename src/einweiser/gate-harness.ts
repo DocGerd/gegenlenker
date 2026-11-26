@@ -49,6 +49,7 @@ import {
   recognitionTime,
   station,
   type Station,
+  TOO_CLOSE,
 } from './signs';
 import {
   overlaps,
@@ -1208,7 +1209,7 @@ export function runGate(
     const moving = Math.abs(s.speed) > STOPPED_SPEED;
     flag('runOver', moving && runOver(run.params, s, held, moved));
     flag('inPath', moving && inPath(g, s, held));
-    flag('tooClose', moving && clearance(run.params, s, held) < 0.5);
+    flag('tooClose', moving && clearance(run.params, s, held) < TOO_CLOSE);
     flag('outOfSight', reading.kind === 'lost' && s.speed !== 0);
     flag('signOutOfSight', signOutOfSight(lastSign, act.sign, d.perception.inSight));
     flag('unclear', reading.kind === 'unclear');
@@ -1525,3 +1526,7 @@ export const GATE_PAIRS = trucks.flatMap((t) =>
 );
 /** A case runs for minutes of sim time: well past vitest's default timeout. */
 export const GATE_TIMEOUT = 300_000;
+/** A passing case; the tests compare the whole outcome so a failure prints `phase`, `position` and `angle`. */
+export const GATE_PASS = { reached: true, faults: {}, contacts: 0, jackknifes: 0 } as const;
+export const GATE_HINT =
+  'the gate Einweiser no longer guides this pair: its LEGS and POLICY (gate-harness.ts) are tuned to the vehicle params, the sight geometry, the layouts and the driver, so a change to any of them can need a retune';
