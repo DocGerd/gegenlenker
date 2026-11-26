@@ -929,12 +929,18 @@
 }
 
 .hud[data-mirrors] .hud-band {
+  flex-wrap: wrap;
+  align-content: center;
+  row-gap: 0;
   padding-right: var(--hud-lever-clear);
 }
 
+/* Compact, so a band too narrow for the readouts and the counters in one row wraps them below with both rows inside it. */
 .hud[data-mirrors] .hud-counters {
   grid-template-columns: repeat(4, auto);
   margin: 0 0 0 auto;
+  padding: var(--space-1) var(--space-2);
+  column-gap: var(--space-2);
 }
 
 /* Portrait leaves the band too narrow between gears and lever: the readouts keep one row (a grid, since a wrapping row stacks them past the band) with the compact counters below, and the brief takes the key legend's place, so there is no legend. */
@@ -946,7 +952,6 @@
   .hud[data-mirrors] .hud-band {
     display: grid;
     grid-template-columns: auto 1fr;
-    align-content: center;
     gap: var(--space-1) var(--space-2);
     padding-left: calc(var(--hud-inset) - var(--space-2));
   }
@@ -954,8 +959,6 @@
   .hud[data-mirrors] .hud-counters {
     grid-column: 1 / -1;
     grid-template-columns: auto auto;
-    padding: var(--space-1) var(--space-2);
-    column-gap: var(--space-2);
   }
 }
 

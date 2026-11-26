@@ -24,9 +24,8 @@ type Size = { width: number; height: number };
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 
 const sizes = [
-  { width: 740, height: 649 },
-  { width: 768, height: 700 },
   { width: 768, height: 1024 },
+  { width: 800, height: 585 },
   { width: 800, height: 800 },
   { width: 800, height: 820 },
   { width: 900, height: 649 },
@@ -81,6 +80,29 @@ const overlaps = (
   a: Awaited<ReturnType<typeof boxes>>[number],
   b: Awaited<ReturnType<typeof boxes>>[number],
 ) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+/** The mirror-only band's counters widen with the run time, which stands still before the first input. */
+async function widenTime(page: Page): Promise<void> {
+  const time = page.locator('[data-hud="time"]');
+  await time.evaluate((el) => {
+    el.textContent = el.textContent.replace(/^\d+/, '100');
+  });
+  await expect(time).toHaveText(/^100\D/);
+}
+
+/** The mirror-only band's readouts and counters stay inside it, clear of the brief and the controls beside it. */
+async function expectBandHolds(page: Page, height: number, safeBottom: number): Promise<void> {
+  const [band] = await boxes(page.locator('.hud-band'));
+  const held = await boxes(page.locator('.hud-gear, .hud-speed, .hud-counters'));
+  const around = await boxes(page.locator('.hud-goal:not([hidden]), .ctl-gears, .ctl-lever'));
+  expect(held).toHaveLength(3);
+  expect(around).toHaveLength(3);
+  for (const b of held) {
+    expect(b.top, `${b.name} below the band's top`).toBeGreaterThanOrEqual(band?.top ?? Infinity);
+    expect(b.bottom, `${b.name} above the bottom inset`).toBeLessThanOrEqual(height - safeBottom);
+    for (const o of around) expect(overlaps(b, o), `${b.name} overlaps ${o.name}`).toBe(false);
+  }
+}
 
 /** Rows at the top of a full-viewport screenshot column that show the bare page background. */
 async function blankRows(page: Page, x: number): Promise<number> {
@@ -350,13 +372,14 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
 
 /**
- * `slot`: a mirror-only drive, and where it puts the messages; `keysOpen`: the key legend's chevron
- * starts open.
+ * `slot`: a mirror-only drive, and where it puts the messages; `mirrorsOnly`: one without that
+ * claim; `keysOpen`: the key legend's chevron starts open.
  */
 const insetSizes: {
   width: number;
   height: number;
   slot?: 'between the mirrors';
+  mirrorsOnly?: boolean;
   keysOpen?: boolean;
 }[] = [
   { width: 1280, height: 720 },
@@ -366,10 +389,12 @@ const insetSizes: {
   { width: 860, height: 860, keysOpen: true },
   // in portrait too its cockpit starts at the screen's top edge
   { width: 820, height: 1180, slot: 'between the mirrors' },
+  // the narrowest and shortest supported landscape: the band's readouts and counters share one row only when wide enough
+  { width: 800, height: 585, mirrorsOnly: true },
 ];
 
-for (const { slot, keysOpen = false, ...size } of insetSizes) {
-  const mirrorsOnly = slot !== undefined;
+for (const { slot, mirrorsOnly: bare = false, keysOpen = false, ...size } of insetSizes) {
+  const mirrorsOnly = slot !== undefined || bare;
   const screen = mirrorsOnly ? 'mirror-only drive' : 'drive screen';
   test(`the ${screen} stays inside the safe area at ${size.width}x${size.height}`, async ({
     browser,
@@ -393,6 +418,10 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
       .toBe(`${insets.left}px`);
     await startExercise(page, en, 'straight-reverse');
     await hudReady(page, { insets, mirrorsOnly });
+    if (mirrorsOnly) {
+      await widenTime(page);
+      await expectBandHolds(page, size.height, insets.bottom);
+    }
     if (keysOpen) {
       await expect(page.locator('[data-hud="keysToggle"]')).toHaveAttribute(
         'aria-expanded',
@@ -460,12 +489,12 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
   });
 }
 
-test('the goal cue yields to the toast in a mirror-only drive too narrow for both, at 700x600', async ({
+test('the goal cue yields to the toast in a mirror-only drive too narrow for both, at 620x640', async ({
   browser,
 }) => {
   const context = await browser.newContext({
     locale: 'en-US',
-    viewport: { width: 700, height: 600 },
+    viewport: { width: 620, height: 640 },
   });
   try {
     const page = await context.newPage();
@@ -521,10 +550,11 @@ test('the longest German toast fits the narrowest pane column, inside the safe a
 });
 
 /**
- * The portrait mirror-only band: the notch insets at 768x1024, and a small tablet with a portrait
- * tablet's own insets (a status bar and a home indicator, none at the sides).
+ * The mirror-only band: German at the narrowest and shortest landscape, the notch insets at 768x1024, and a
+ * small tablet with a portrait tablet's own insets (a status bar and a home indicator, none at the sides).
  */
 const bandScreens = [
+  { locale: 'de-DE', messages: de, size: { width: 800, height: 585 }, safe: insets },
   { locale: 'en-US', messages: en, size: { width: 768, height: 1024 }, safe: insets },
   { locale: 'de-DE', messages: de, size: { width: 768, height: 1024 }, safe: insets },
   {
@@ -536,7 +566,7 @@ const bandScreens = [
 ];
 
 for (const { locale, messages, size, safe } of bandScreens) {
-  test(`the portrait mirror-only band holds the readouts and the counters at ${locale} ${size.width}x${size.height}`, async ({
+  test(`the mirror-only band holds the readouts and the counters at ${locale} ${size.width}x${size.height}`, async ({
     browser,
   }) => {
     const context = await browser.newContext({ locale, viewport: size });
@@ -557,26 +587,8 @@ for (const { locale, messages, size, safe } of bandScreens) {
         .toBe(`${safe.bottom}px`);
       await startExercise(page, messages, 'straight-reverse');
       await hudReady(page, { insets: safe, mirrorsOnly: true });
-      // The counters widen with the run time, which stands still before the first input.
-      const time = page.locator('[data-hud="time"]');
-      await time.evaluate((el) => {
-        el.textContent = el.textContent.replace(/^\d+/, '100');
-      });
-      await expect(time).toHaveText(/^100\D/);
-      const [band] = await boxes(page.locator('.hud-band'));
-      const held = await boxes(page.locator('.hud-gear, .hud-speed, .hud-counters'));
-      const around = await boxes(page.locator('.hud-goal:not([hidden]), .ctl-gears, .ctl-lever'));
-      expect(held).toHaveLength(3);
-      expect(around).toHaveLength(3);
-      for (const b of held) {
-        expect(b.top, `${b.name} below the band's top`).toBeGreaterThanOrEqual(
-          band?.top ?? Infinity,
-        );
-        expect(b.bottom, `${b.name} above the bottom inset`).toBeLessThanOrEqual(
-          size.height - safe.bottom,
-        );
-        for (const o of around) expect(overlaps(b, o), `${b.name} overlaps ${o.name}`).toBe(false);
-      }
+      await widenTime(page);
+      await expectBandHolds(page, size.height, safe.bottom);
     } finally {
       await context.close();
     }
@@ -1378,7 +1390,7 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
  * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
-const paneToolAbsent = new Set(['de-DE 740x649']);
+const paneToolAbsent = new Set(['en-US 800x585', 'de-DE 800x585']);
 
 async function expectPaneToolClear(page: Page, at: string): Promise<void> {
   await page.keyboard.press('o');
@@ -1738,10 +1750,10 @@ test('opening the aid legend re-measures the divider against the panels', async 
 });
 
 for (const { locale, messages } of locales) {
-  test(`a wrapped view control rounds the ends of each row at ${locale} 740x649`, async ({
+  test(`a wrapped view control rounds the ends of each row at ${locale} 800x649`, async ({
     browser,
   }) => {
-    const context = await browser.newContext({ locale, viewport: { width: 740, height: 649 } });
+    const context = await browser.newContext({ locale, viewport: { width: 800, height: 649 } });
     try {
       const page = await context.newPage();
       await page.goto('./');
