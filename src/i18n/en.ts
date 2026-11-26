@@ -211,6 +211,16 @@ export const en = {
   signRechts: 'Move right',
   signAbstand: 'Closing distance',
   signNone: 'No signal',
+  signBar: 'Hand signals',
+  sightDirect: 'Sight contact',
+  sightMirrorLeft: 'Sight contact in the left main mirror',
+  sightMirrorRight: 'Sight contact in the right main mirror',
+  sightWideLeft: 'Sight contact in the left wide-angle mirror',
+  sightWideRight: 'Sight contact in the right wide-angle mirror',
+  sightClose: 'Sight contact in the close-proximity mirror',
+  sightFront: 'Sight contact in the front mirror',
+  sightNone: 'No sight contact',
+  sightUnclear: 'Signal unclear',
 } as const;
 
 export type MessageKey = keyof typeof en;

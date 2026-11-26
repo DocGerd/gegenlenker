@@ -49,6 +49,7 @@ import {
   MIN_WIDE_WIDTH,
   NO_INSETS,
   orientationOf,
+  sightCueBox,
   topDownSplit,
   wheelSize,
   wideHeight,
@@ -331,6 +332,7 @@ const PROPERTIES = [
   'message-column-valid',
   'message-column-inside-safe-area',
   'message-column-placement',
+  'sight-cue-placement',
   'message-cue-yields-only-without-room',
   'message-stack-fits-pane',
   'message-stack-clear-of-sight-cone',
@@ -338,6 +340,7 @@ const PROPERTIES = [
   'message-stack-clear-of-legend',
   'message-stack-clear-of-mirrors',
   'message-stack-clear-of-action-button',
+  'message-stack-clear-of-sight-cue',
 ] as const;
 type Property = (typeof PROPERTIES)[number];
 
@@ -464,6 +467,17 @@ function messageHeights(room: number): { toast: number; cue: number } {
   stackCache.set(room, heights);
   return heights;
 }
+/** The Einweiser's sight cue texts (hud.css `.hud-sight`). */
+const sightTexts: readonly string[] = [en, de].flatMap((lang) =>
+  MESSAGE_KEYS.sight.map((key) => lang[key]),
+);
+/** `.hud-action`: the pause button at the screen's top right corner. */
+const actionBox = (w: number, m: Metrics): Rect => ({
+  x: w - m.actionRight - GEOM.actionW,
+  y: m.actionTop,
+  width: GEOM.actionW,
+  height: GEOM.actionH,
+});
 /**
  * Height of the longest toast, the gap and the goal cue in a column `room` px wide; where the cue
  * `yields` to a toast, of the taller one alone.
@@ -738,9 +752,23 @@ function evaluate(v: Variant, w: number, h: number): void {
   };
 
   if (einweiser) {
-    // His messages span his view's top, below the display cut-out (#498 gives them their own place).
+    // The sight cue: top left of his view below the display cut-out, as tall as its longest text wraps.
+    const cue = sightCueBox(cockpit, insets);
+    const cueHeight = mostLines(sightTexts, GEOM.sightW - GEOM.sightChrome) * GEOM.sightLine;
+    const cuePlaced =
+      cue.x === cockpit.x + insets.left + SPACE_4 &&
+      cue.y === cockpit.y + topInset + SPACE_4 &&
+      cue.width === GEOM.sightW &&
+      cue.height >= cueHeight + GEOM.sightBox &&
+      right(cue) <= right(cockpit) - insets.right &&
+      !overlaps(cue, hudBand);
+    if (!chk('sight-cue-placement', cuePlaced)) {
+      fail('sight-cue-placement', () => `cue ${fmt(cue)} view ${fmt(cockpit)}`);
+    }
+    // His messages stand top-centre in his view, below the display cut-out.
     const placed =
-      column.y === cockpit.y + topInset &&
+      column.y >= cockpit.y + topInset &&
+      Math.abs(column.x - cockpit.x - (right(cockpit) - right(column))) <= 1e-9 &&
       column.x >= cockpit.x + insets.left &&
       right(column) <= right(cockpit) - insets.right + 1e-9;
     if (!chk('message-column-placement', placed)) {
@@ -749,14 +777,21 @@ function evaluate(v: Variant, w: number, h: number): void {
     const stack: Rect = {
       ...column,
       y: column.y + GEOM.stackTop,
-      height: stackHeight(column.width),
+      height: stackHeight(column.width, column.cueYields),
     };
-    if (!chk('message-stack-clear-of-controls-and-hud-band', !overlaps(stack, hudBand))) {
-      fail(
-        'message-stack-clear-of-controls-and-hud-band',
-        () => `stack ${fmt(stack)} overlaps the HUD band ${fmt(hudBand)}`,
-        depth(stack, hudBand),
-      );
+    const clear: readonly [Property, string, Rect][] = [
+      ['message-stack-clear-of-sight-cue', 'the sight cue', cue],
+      ['message-stack-clear-of-controls-and-hud-band', 'the HUD band', hudBand],
+      ['message-stack-clear-of-action-button', 'the action button', actionBox(w, m)],
+    ];
+    for (const [property, name, rect] of clear) {
+      if (!chk(property, !overlaps(stack, rect))) {
+        fail(
+          property,
+          () => `stack ${fmt(stack)} overlaps ${name} ${fmt(rect)}`,
+          depth(stack, rect),
+        );
+      }
     }
     return;
   }
@@ -807,13 +842,7 @@ function evaluate(v: Variant, w: number, h: number): void {
     width: PEDAL_W,
     height: pedalsHeight,
   };
-  /** `.hud-action`: the pause button at the screen's top right corner. */
-  const pauseBox: Rect = {
-    x: w - m.actionRight - GEOM.actionW,
-    y: m.actionTop,
-    width: GEOM.actionW,
-    height: GEOM.actionH,
-  };
+  const pauseBox = actionBox(w, m);
   const controlBoxes: Named[] = [
     { name: 'wheel', rect: wheelBox },
     { name: 'gears', rect: gearsBox },

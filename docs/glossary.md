@@ -73,3 +73,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Sign 8: right arm moved sideways                | move right                                  | Rechts fahren                                |
 | Sign 9: palms brought together                  | closing distance                            | Abstandsverringerung                         |
 | No sign key held: arms down                     | no signal                                   | Kein Zeichen                                 |
+| Driver sees the Einweiser                       | sight contact (direct / in mirror / none)   | Sichtkontakt (direkt / im Spiegel / kein)    |
+| Sight cue: class II / IV mirror                 | main / wide-angle mirror                    | Hauptspiegel / Weitwinkelspiegel             |
+| Sight cue: class V / VI mirror                  | close-proximity / front mirror              | Rampenspiegel / Frontspiegel                 |
+| Driver cannot read a sign                       | signal unclear                              | Zeichen unklar                               |

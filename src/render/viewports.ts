@@ -75,7 +75,23 @@ export const MESSAGE_KEYS = {
     'blockedTurntable',
   ],
   cue: ['goalInside', 'goalDistance', 'goalAngleOk', 'goalAngleOff', 'goalPositionOk'],
+  /** The Einweiser's sight cue (`sightCueBox`), not part of the stack. */
+  sight: [
+    'sightDirect',
+    'sightMirrorLeft',
+    'sightMirrorRight',
+    'sightWideLeft',
+    'sightWideRight',
+    'sightClose',
+    'sightFront',
+    'sightNone',
+    'sightUnclear',
+  ],
 } as const satisfies Record<string, readonly MessageKey[]>;
+/** The sight cue's width, `--hud-sight-w` in hud.css. */
+export const SIGHT_CUE_WIDTH = 240;
+/** What the sight cue's text leaves of its width: padding and borders, the eye icon and its gap (`.hud-sight`). */
+const SIGHT_CUE_CHROME = 62;
 /** Where a word may break, showing a hyphen (`wrapLines`). */
 export const SOFT_HYPHEN = '\u00AD';
 /**
@@ -765,12 +781,62 @@ function frontRect(
 /** The toast column; where `cueYields`, the goal cue hides while a toast shows (hud.css). */
 export type MessageColumn = Rect & { readonly cueYields: boolean };
 
+/** The Einweiser's sight cue at the top left of his view, below the display cut-out; tall enough for its longest text. */
+export function sightCueBox(view: Rect, insets: Insets): Rect {
+  const lines = mostLines(textsOf(MESSAGE_KEYS.sight), SIGHT_CUE_WIDTH - SIGHT_CUE_CHROME);
+  return {
+    x: view.x + insets.left + INSET,
+    y: belowCutOut(view, insets).y + INSET,
+    width: SIGHT_CUE_WIDTH,
+    height: lines * MESSAGE_LINE + MESSAGE_BOX,
+  };
+}
+
+/**
+ * His view has no mirrors and no controls: the stack stands top-centre, between the sight cue and an
+ * equal margin on the right where it fits there, else across the view below the cue; the goal cue
+ * yields only where neither holds both messages.
+ */
+function einweiserColumn(view: Rect, legend: LegendBox | null, insets: Insets): MessageColumn {
+  const area = belowCutOut(view, insets);
+  const cue = sightCueBox(view, insets);
+  const margin = INSET + SIGHT_CUE_WIDTH + MESSAGE_GAP + Math.max(insets.left, insets.right);
+  const beside = { ...area, x: view.x + margin, width: view.width - 2 * margin };
+  const below = {
+    x: view.x + insets.left,
+    y: cue.y + cue.height,
+    width: view.width - insets.left - insets.right,
+    height: area.y + area.height - cue.y - cue.height,
+  };
+  const bandTop = view.y + (1 - HUD_BAND_SHARE) * view.height;
+  // his view reaches the screen's bottom, which the legend's height is measured from
+  const stageBottom = view.y + view.height;
+  const fits = (column: Rect, yields: boolean): boolean => {
+    if (column.width < MIN_MESSAGE_WIDTH) return false;
+    const { toast, cue: goal } = messageHeights(column.width);
+    const bottom = column.y + INSET + (yields ? Math.max(toast, goal) : toast + MESSAGE_GAP + goal);
+    const overLegend =
+      legend !== null &&
+      column.x < legend.right &&
+      column.x + column.width > INSET + insets.left &&
+      bottom > stageBottom - legend.height;
+    return bottom <= bandTop && !overLegend;
+  };
+  for (const yields of [false, true]) {
+    for (const column of [beside, below]) {
+      if (fits(column, yields)) return { ...column, cueYields: yields };
+    }
+  }
+  return { ...below, cueYields: true };
+}
+
 /**
  * Where the toast and the goal cue stand, clear of the safe area: the column starts below the display
  * cut-out, which hud.css therefore leaves out. Beside the front mirror they take the cockpit's top
  * between the left mirror and the front mirror. Without one they take the span between the class II
  * mirrors where the stack fits there (`messagesFit`), else the top-down pane, below the finish button
  * and clear of the lever. With no such pane, a span beside the sight cone, else the cue yields.
+ * In the Einweiser's view, see `einweiserColumn`.
  */
 export function messageColumn(
   views: ViewRects,
@@ -779,6 +845,8 @@ export function messageColumn(
 ): MessageColumn {
   const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
   const insets = safeInsets ?? readSafeInsets();
+  // only the Einweiser's view has no class II mirrors
+  if (cockpit !== null && mirrorLeft === null) return einweiserColumn(cockpit, legend, insets);
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
     const whole = belowCutOut(cockpit ?? topDown, insets);
     return {

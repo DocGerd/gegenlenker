@@ -8,6 +8,10 @@ import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { layoutOccluders, sightGeometry } from '../einweiser/sight';
 import { createEinweiserRun, type EinweiserInput } from '../einweiser/track';
 import { STILL } from '../einweiser/walk';
+import type { EinweiserHud } from '../hud/hud';
+
+/** How long the sight cue says a sign was unclear, sim seconds (estimate). */
+const UNCLEAR_CUE_SECONDS = 2;
 
 /** What a drive in the Einweiser role adds to the driver's: the AI driver as its control source, and the Einweiser. */
 export type EinweiserDrive = {
@@ -18,6 +22,8 @@ export type EinweiserDrive = {
   visual(): EinweiserVisual;
   /** For the run's log. */
   track(): EinweiserTrack;
+  /** What his HUD shows; null before the first sim step. */
+  hud(): EinweiserHud | null;
 };
 
 export type EinweiserDriveSetup = {
@@ -50,6 +56,9 @@ export function startEinweiserDrive(
   const lamps: LampSwitches = { lights: lighting === 'night', hazard: false };
   let control: ControlVector = start.control;
   let status: EinweiserStatus | null = null;
+  // sim time, so the cue holds while the pause sheet stops the run
+  let time = start.time;
+  let unclearAt = -Infinity;
   stage.dataset['role'] = 'einweiser';
   return {
     source: {
@@ -57,6 +66,8 @@ export function startEinweiserDrive(
         const step = run.step(snapshot, input());
         control = step.control;
         status = step.status;
+        time = snapshot.time;
+        if (step.reading.kind === 'unclear') unclearAt = time;
       },
       control: () => control,
       lamps: () => lamps,
@@ -71,5 +82,13 @@ export function startEinweiserDrive(
       return { pose: { x, y, heading }, pitch, sign: status.sign, phase: status.phase };
     },
     track: () => run.track(),
+    hud: () =>
+      status === null
+        ? null
+        : {
+            sign: status.sign,
+            sight: status.sight,
+            unclear: time - unclearAt < UNCLEAR_CUE_SECONDS,
+          },
   };
 }
