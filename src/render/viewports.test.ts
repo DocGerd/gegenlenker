@@ -495,6 +495,61 @@ describe('computeViewports front mirror', () => {
     ).toBeNull();
   });
 
+  it('drops once as the portrait top-down share grows, where it first stops fitting, and no extra mirror comes back', () => {
+    const ALL = { front: true, wide: true, close: true };
+    const h = 1133;
+    const at = (w: number, portrait: number, panels: PanelStack | null, extra: typeof ALL) =>
+      computeViewports(
+        w,
+        h,
+        'drive',
+        null,
+        NO_INSETS,
+        { ...DEFAULT_TOP_DOWN_LAYOUT, portrait },
+        panels,
+        extra,
+      );
+    let drops = 0;
+    let compared = 0;
+    // Around 700 px wide the messages beside it wrap shorter as class II narrows, so it would fit again.
+    for (let w = 660; w <= 770; w += 5) {
+      for (const extra of [FRONT, ALL]) {
+        // The smallest share has no smaller one to fit at: panels that end `bottom` px down show
+        // whether it fits at the pane they make the smallest.
+        const fitsAt = new Map<number, boolean>();
+        for (let bottom = 0; bottom <= DEFAULT_TOP_DOWN_LAYOUT.portrait * h; bottom++) {
+          const v = at(w, 0, () => bottom, extra);
+          fitsAt.set(v.topDown.height, v.front !== null);
+        }
+        const dropped = { front: false, wide: false, close: false };
+        let was = { front: false, wide: false, close: false };
+        let fits: boolean | undefined = true;
+        for (let pane = Math.ceil(0.3 * h); pane <= Math.floor(0.6 * h); pane++) {
+          const v = at(w, pane / h, null, extra);
+          const now = {
+            front: v.front !== null,
+            wide: v.wideLeft !== null,
+            close: v.close !== null,
+          };
+          const where = `${w}x${h} pane ${pane} ${JSON.stringify(extra)}`;
+          for (const mirror of ['front', 'wide', 'close'] as const) {
+            if (was[mirror] && !now[mirror]) dropped[mirror] = true;
+            expect(dropped[mirror] && now[mirror], `${where}: ${mirror} returns`).toBe(false);
+          }
+          if (was.front && !now.front) drops++;
+          was = now;
+          // class IV sizes class II by the shares still below, so only without it is the fit that of the pane alone
+          fits = fits === undefined || extra.wide ? undefined : fits && fitsAt.get(pane);
+          if (fits === undefined) continue;
+          expect(now.front, `${where}: front`).toBe(fits);
+          compared++;
+        }
+      }
+    }
+    expect(drops).toBeGreaterThan(0);
+    expect(compared).toBeGreaterThan(0);
+  });
+
   it('lies in the windscreen band, clear of the mirrors, the controls and the legend, at every size', () => {
     let shown = 0;
     for (const [w, h] of sizes) {
