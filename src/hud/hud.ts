@@ -1086,7 +1086,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       setHidden(cockpit, c === null);
       if (c) {
         place(cockpit, c);
-        const compact = c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH);
+        // with no wheel or gears beside it, his legend has the view's width; its one column would reach the sight cue
+        const compact =
+          driver && c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH);
         cockpit.toggleAttribute('data-compact', compact);
         // The compact legend already drops the view rows.
         const short = !compact && c.height < SHORT_HEIGHT;
