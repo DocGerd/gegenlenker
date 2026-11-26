@@ -34,48 +34,88 @@ const night = { lighting: 'night', mirrorsOnly: true } as const;
 const exerciseRef = (id: ExerciseId): object => ({ role: 'driver', kind: 'exercise', id });
 const rowOf = (page: Page, key: string): Locator => page.locator(`[data-entry="driver:${key}"]`);
 
-for (const { locale, messages } of [
-  { locale: 'en-US', messages: en },
-  { locale: 'de-DE', messages: de },
-]) {
-  test(`the title fits 1280x585 in ${locale} with Continue and a run to replay`, async ({
-    browser,
-  }) => {
-    const context = await browser.newContext({ locale, viewport: { width: 1280, height: 585 } });
-    const exerciseId = 'reverse-bay';
-    await seedStorage(context, {
-      settings: {
-        truckId: arocs,
-        trailerId: hueffermann,
-        ...night,
-        lastEntry: exerciseRef(exerciseId),
-      },
-      lastRun: { layoutId: exerciseById(exerciseId).layout, exerciseId, truckId, trailerId },
-    });
-    const page = await context.newPage();
-    await page.goto('./');
-    await expect(titleEntry(page, messages.continue)).toBeVisible();
-    await expect(titleEntry(page, messages.replayLastRun)).toBeVisible();
-    await expect(titleEntry(page, messages.controls)).toBeVisible();
-    await expect(titleEntry(page, messages.whatsNew)).toBeVisible();
-    await expect(titleEntry(page, messages.about)).toBeVisible();
-    await page.evaluate(() => document.fonts.ready);
+test.describe('the longest title footer', () => {
+  // Registration fails without a worker: the footer says so and a toast offers to dismiss it.
+  test.use({ serviceWorkers: 'block' });
 
-    const [over, reserve] = await page.evaluate(() => {
-      const root = document.scrollingElement;
-      const scroll = document.querySelector('[data-screen="title"] .menu-screen-scroll');
-      const app = document.querySelector('#app');
-      if (root === null || scroll === null || app === null) throw new Error('title markup missing');
-      const r = getComputedStyle(app).getPropertyValue('--toast-reserve');
-      return [
-        Math.max(...[root, scroll].map((el) => el.scrollHeight - el.clientHeight)),
-        parseFloat(r) || 0,
-      ];
+  for (const { locale, messages } of [
+    { locale: 'en-US', messages: en },
+    { locale: 'de-DE', messages: de },
+  ]) {
+    test(`the title fits 1280x585 in ${locale} with Continue, a run to replay and every footer item`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({
+        locale,
+        viewport: { width: 1280, height: 585 },
+        serviceWorkers: 'block',
+      });
+      const exerciseId = 'reverse-bay';
+      await seedStorage(context, {
+        settings: {
+          truckId: arocs,
+          trailerId: hueffermann,
+          ...night,
+          lastEntry: exerciseRef(exerciseId),
+        },
+        lastRun: { layoutId: exerciseById(exerciseId).layout, exerciseId, truckId, trailerId },
+      });
+      const page = await context.newPage();
+      await page.goto('./');
+      await expect(titleEntry(page, messages.continue)).toBeVisible();
+      await expect(titleEntry(page, messages.replayLastRun)).toBeVisible();
+      await expect(titleEntry(page, messages.controls)).toBeVisible();
+      await expect(titleEntry(page, messages.whatsNew)).toBeVisible();
+      await expect(titleEntry(page, messages.about)).toBeVisible();
+      const footer = screen(page, 'title').locator('.menu-footer');
+      await expect(footer.locator('[data-menu="offline"]')).toHaveText(messages.offlineSetupFailed);
+      // The offline project builds the production channel and a development label: force the rest.
+      await footer.evaluate(
+        (el, [build, uat]) => {
+          const label = el.querySelector('[data-menu="build"]');
+          if (label === null) throw new Error('footer markup missing');
+          label.textContent = build ?? '';
+          if (el.querySelector('[data-menu="channel"]') === null) {
+            const badge = document.createElement('span');
+            badge.className = 'menu-badge';
+            badge.dataset['menu'] = 'channel';
+            badge.textContent = uat ?? '';
+            label.after(badge);
+          }
+        },
+        [messages.buildDevelopment.replace('{commit}', '0123abc'), messages.channelUat],
+      );
+      await page.evaluate(() => document.fonts.ready);
+
+      const overflow = (): Promise<number> =>
+        page.evaluate(() => {
+          const root = document.scrollingElement;
+          const scroll = document.querySelector('[data-screen="title"] .menu-screen-scroll');
+          if (root === null || scroll === null) throw new Error('title markup missing');
+          return Math.max(...[root, scroll].map((el) => el.scrollHeight - el.clientHeight));
+        });
+      const toast = page.locator('.update-toast');
+      await expect(toast).toBeVisible();
+      const reserve = (): Promise<number> =>
+        page.evaluate(
+          () =>
+            parseFloat(
+              getComputedStyle(document.querySelector('#app') ?? document.body).getPropertyValue(
+                '--toast-reserve',
+              ),
+            ) || 0,
+        );
+      // The reserve follows the toast through a ResizeObserver, so it settles after the toast shows.
+      await expect.poll(reserve).toBeGreaterThan(0);
+      expect(await overflow()).toBeLessThanOrEqual(await reserve());
+
+      await toast.getByRole('button', { name: messages.dismiss }).click();
+      await expect(toast).toBeHidden();
+      await expect.poll(overflow).toBe(0);
+      await context.close();
     });
-    expect(over).toBeLessThanOrEqual(reserve);
-    await context.close();
-  });
-}
+  }
+});
 
 test('Continue names the exercise, truck, trailer, time of day and driving view', async ({
   page,

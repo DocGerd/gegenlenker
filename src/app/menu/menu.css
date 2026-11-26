@@ -48,7 +48,7 @@
 @media (min-aspect-ratio: 1/1) {
   .menu-title-layout {
     grid-template-columns: minmax(0, 34rem) minmax(0, 1fr);
-    grid-template-areas: 'header art' 'nav art' 'footer art';
+    grid-template-areas: 'header art' 'nav art' 'footer footer';
     column-gap: var(--space-10);
   }
 }

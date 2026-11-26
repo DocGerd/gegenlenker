@@ -4,7 +4,7 @@ import {
   type GraphicsPreset,
   type LightingMode,
 } from '../../contracts/render';
-import { setLanguage, type Lang } from '../../i18n/i18n';
+import { setLanguage, t, type Lang } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/en';
 import { trailers, trucks } from '../../vehicles/registry';
 import { updateSettings, type Settings } from '../settings';
@@ -35,6 +35,10 @@ export type OptionField = {
   readonly choices: readonly Choice[];
   readonly applies: Applies;
 };
+
+/** A choice's name as shown: a key is translated, vehicle names are data. */
+export const labelOf = ({ label }: Choice): string =>
+  typeof label === 'string' ? t(label) : label.text;
 
 type SettingsPatch = Partial<Omit<Settings, 'version'>>;
 

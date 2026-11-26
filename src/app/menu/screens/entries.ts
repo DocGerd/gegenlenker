@@ -1,6 +1,6 @@
 import type { ExerciseId } from '../../../contracts/exercise';
 import { t } from '../../../i18n/i18n';
-import { entriesOf, entryKey, type EntryRef } from '../catalogue';
+import { entriesOf, entryKey, exerciseNumber, type EntryRef } from '../catalogue';
 import type { Screen } from '../graph';
 import { element, rowItem, screenFrame } from './frame';
 
@@ -27,11 +27,11 @@ export function entriesScreen(ctx: EntriesContext): {
 
   const rows = element(list.kind === 'exercise' ? 'ol' : 'ul', 'menu-rows');
   rows.append(
-    ...entries.map(({ ref, title, brief }, index) => {
+    ...entries.map(({ ref, title, brief }) => {
       const { item, button } = rowItem(() => ctx.pick(ref));
       button.dataset['entry'] = entryKey(ref);
       if (ref.kind === 'exercise') {
-        const number = element('span', 'menu-row-num', `${index + 1}`);
+        const number = element('span', 'menu-row-num', `${exerciseNumber(ref)}`);
         number.setAttribute('aria-hidden', 'true');
         button.append(number);
       }

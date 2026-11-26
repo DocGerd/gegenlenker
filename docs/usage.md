@@ -51,7 +51,7 @@ The key legend in the drive lists the view keys that apply to the current screen
 
 ## Exercises
 
-The menu opens on a title screen with Exercises, Free yard, Settings, Controls and What's new, and "Replay last run" once a drive has finished. Back or Esc returns one level.
+The menu opens on a title screen with Exercises, Free yard, Settings, Controls, What's new and About, plus "Continue" once there is a last exercise or yard and "Replay last run" once a drive has finished. Back or Esc returns one level.
 
 "Exercises" lists the exercises, each with a short brief:
 
