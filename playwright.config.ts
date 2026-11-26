@@ -9,21 +9,27 @@ if (process.env['TEST_WORKER_INDEX'] === undefined)
 const UAT_BUILD = 'DEPLOY_CHANNEL=uat BASE_PATH=/gegenlenker/uat/ pnpm build --outDir dist/uat';
 const url = `http://127.0.0.1:${port}/gegenlenker/`;
 
-// Opt-in `E2E_GPU=1` (WSL2 + NVIDIA): headed Chromium on the real GPU via Mesa d3d12 (headless has no GPU path).
+// Browsers are headless unless `HEADED=1`: a headed window grabs focus on the desktop (WSLg shows it there).
+// Opt-in `E2E_GPU=1` (WSL2 + NVIDIA) asks for the real GPU via Mesa d3d12. Headless Chromium got no GPU
+// without access to the DRM render node, so it needs `HEADED=1` on a machine like that.
 const WSL_LIB = '/usr/lib/wsl/lib';
+const HEADED = process.env['HEADED'] === '1';
 const GPU = process.env['E2E_GPU'] === '1';
 if (GPU && !existsSync(WSL_LIB))
   throw new Error('E2E_GPU=1 needs WSL2 with a GPU (no /usr/lib/wsl/lib)');
+// Playwright's `chromium` channel is Chromium's new headless mode when headless.
+const newHeadless = HEADED ? {} : { channel: 'chromium' as const };
 const GPU_TEXT_METRICS =
   /below 700 px the brief collapses|open overlays stay whole.* 800x600 with a mouse|opening the aid legend re-measures/;
 const gpuLaunch = {
+  ...newHeadless,
   args: [
     '--use-gl=angle',
     '--use-angle=gl',
     '--ignore-gpu-blocklist',
     '--enable-gpu',
     '--hide-scrollbars',
-    '--window-position=-32000,-32000',
+    ...(HEADED ? ['--window-position=-32000,-32000', '--no-startup-window'] : []),
   ],
   env: {
     ...process.env,
@@ -53,7 +59,7 @@ export default defineConfig<{ gpuExpected: boolean }>({
         viewport: { width: 1280, height: 800 },
         locale: 'en-US',
         serviceWorkers: 'allow',
-        headless: !GPU,
+        headless: !(GPU && HEADED),
         gpuExpected: GPU,
         launchOptions: GPU
           ? gpuLaunch
@@ -86,8 +92,10 @@ export default defineConfig<{ gpuExpected: boolean }>({
       timeout: 120_000,
       use: {
         ...devices['Galaxy Tab S9 landscape'],
-        headless: false,
-        launchOptions: { args: ['--ignore-gpu-blocklist'] },
+        headless: !HEADED,
+        launchOptions: existsSync(WSL_LIB)
+          ? gpuLaunch
+          : { ...newHeadless, args: ['--ignore-gpu-blocklist'] },
       },
     },
   ],

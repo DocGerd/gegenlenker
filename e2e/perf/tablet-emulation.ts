@@ -1,7 +1,8 @@
 /**
- * Local tablet-emulation harness (not CI): drives the built app in headed Chromium on the
- * real GPU with a 1280x800 @2x touch viewport and a CPU throttle, reads the `?perf=1`
- * overlay per graphics preset and vehicle pair, and runs function checks. See docs/perf.md.
+ * Local tablet-emulation harness (not CI): drives the built app in Chromium on the real GPU
+ * (new headless mode; HEADED=1 for a window) with a 1280x800 @2x touch viewport and a CPU
+ * throttle, reads the `?perf=1` overlay per graphics preset and vehicle pair, and runs function
+ * checks. See docs/perf.md.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -65,6 +66,7 @@ const USAGE = `Usage: pnpm perf:tablet [options]
   --keep-traces      keep the governor trace of every run, not only one that ends below scale 1.00`;
 
 const wsl = existsSync(WSL_LIB);
+const headed = process.env['HEADED'] === '1';
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 let teardowns: (() => Promise<void> | void)[] = [];
@@ -161,9 +163,11 @@ function launch(backend: Backend | null): Promise<Browser> {
     env['GALLIUM_DRIVER'] = 'd3d12';
     env['LD_LIBRARY_PATH'] = [WSL_LIB, env['LD_LIBRARY_PATH']].filter(Boolean).join(':');
   }
+  // Headless (new mode) unless HEADED=1: a headed window grabs the desktop focus; off-screen softens that.
+  if (headed) args.push('--window-position=-32000,-32000', '--no-startup-window');
   // Our own signal handlers close the browser together with the preview.
   return chromium.launch({
-    headless: false,
+    ...(headed ? { headless: false } : { channel: 'chromium' }),
     args,
     env,
     timeout: 60_000,
@@ -574,7 +578,7 @@ async function main(): Promise<boolean> {
   if (isSoftwareGl(renderer)) {
     if (!opts.allowSoftware) {
       throw new Error(
-        `no hardware GL (${renderer}): results would be invalid; --allow-software overrides`,
+        `no hardware GL (${renderer}): results would be invalid; HEADED=1 may find the GPU, --allow-software overrides`,
       );
     }
     console.warn('warning: software GL, results are not valid');
