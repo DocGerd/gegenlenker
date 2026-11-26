@@ -37,6 +37,11 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Turning the outside view around the vehicle     | orbit / tilt                                | drehen / neigen                              |
 | Flying the outside view's camera anywhere       | free camera                                 | Freie Kamera                                 |
 | Turning the head in the cockpit view            | look around                                 | Umsehen                                      |
+| Menu screen listing the keys and touch controls | controls                                    | Bedienung                                    |
+| Controls group for the drive keys               | keyboard                                    | Tastatur                                     |
+| Controls group for the pointer controls         | touch and mouse                             | Touch und Maus                               |
+| Round control that steers                       | steering wheel                              | Lenkrad                                      |
+| Slider that sets the share of the speed cap     | speed lever                                 | Hebel                                        |
 | Split of the screen into cockpit and top view   | view size                                   | Ansichtsgröße                                |
 | Legend: reset both view and view size           | reset view / size                           | Standardansicht                              |
 | Menu screen listing the app's changes           | what's new                                  | Neuigkeiten                                  |

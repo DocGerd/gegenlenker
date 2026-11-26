@@ -51,6 +51,7 @@ export const GRAPH: readonly Screen[] = [
       { id: 'exercises', label: 'exercises', tier: 'main', target: { screen: 'exercises' } },
       { id: 'freeYard', label: 'freeYard', tier: 'main', target: { screen: 'yards' } },
       { id: 'settings', label: 'settings', tier: 'main', target: { screen: 'settings' } },
+      { id: 'controls', label: 'controls', tier: 'secondary', target: { screen: 'controls' } },
       {
         id: 'whatsNew',
         label: 'whatsNew',
@@ -83,13 +84,14 @@ export const GRAPH: readonly Screen[] = [
     id: 'settings',
     kind: 'options',
     title: 'settings',
-    items: [],
+    items: [{ id: 'controls', label: 'controls', tier: 'main', target: { screen: 'controls' } }],
     lazy: false,
     groups: [
       { label: 'settingsGeneral', fields: ['language', 'theme'] },
       { label: 'settingsGraphics', fields: ['graphics', 'wideMirrors'] },
     ],
   },
+  { id: 'controls', kind: 'content', title: 'controls', items: [], lazy: true },
   { id: 'whatsNew', kind: 'content', title: 'whatsNew', items: [], lazy: true },
 ];
 

@@ -14,6 +14,8 @@ Gegenlenker is a trainer for maneuvering a truck with a turntable drawbar traile
 
 A drive has a steering wheel, a gear selector (P, R, N, D), a speed lever, a Stop button and two lamp buttons (lights, hazard lights). Select R or D to move; R drives backward. The lever sets a share of the speed cap and the gear sets the direction.
 
+The menu's Controls screen, opened from the title or from Settings, lists the drive keys for the saved graphics quality and driving view, and the touch and mouse controls.
+
 ### Keyboard
 
 - A / D or Left / Right: steer left / right. Hold to keep turning.
