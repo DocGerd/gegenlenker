@@ -51,7 +51,7 @@ A real bug: the counterexample's rects, read against the promise in CLAUDE.md or
 - a new config input (a mirror, a setting, a preset flag) that no variant in `VARIANTS` carries;
 - a promise that the spec encodes but the code documents otherwise.
 
-To re-measure the legend: start `pnpm dev`, open the drive at each size in en and de with headless Chromium, read the `.hud-legend` box (the stage-bottom distance of its top, width, height), and click `[data-hud="keysToggle"]` through `page.evaluate` for the open-chevron state; update `LEGEND_BOXES`. The legend's branch order in `legendFor` and `LEGEND_BOXES` are checked by no test: only this re-measurement keeps them true.
+To re-measure the legend: start `pnpm dev`, open the drive at each size in en and de with headless Chromium, read the `.hud-legend` box (the stage-bottom distance of its top, width, height), and click `[data-hud="keysToggle"]` through `page.evaluate` for the open-chevron state; update `LEGEND_BOXES`, and `EINWEISER_LEGEND_BOXES` from an Einweiser drive. The legend's branch order in `legendFor` and `LEGEND_BOXES` are checked by no test: only this re-measurement keeps them true.
 
 Check the first counterexample in a browser (`pnpm exec playwright screenshot` or `e2e/layout.spec.ts` at that size) before changing the spec.
 
