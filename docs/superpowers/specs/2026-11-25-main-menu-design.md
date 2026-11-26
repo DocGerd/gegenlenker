@@ -398,13 +398,19 @@ Every screen has one `h1`. Lists are real lists, choice rows are labelled radio 
 
 ## Data model (types only)
 
-Call: a sketch, not a contract. The builder may extend it (for example `fields` or `groups` on a screen, `applies` on a field) as long as it stays plain, engine-neutral data, and documents the final types here.
+The types as built in `src/app/menu/{catalogue,graph,nav,options}.ts`. They are plain, engine-neutral data; `title`, `focus`, `list` and `groups` extend the first sketch. PR3's additions follow in their own block; PR4 to PR6 add nothing here.
 
 ```ts
+// catalogue.ts
 type Role = 'driver'; // 'einweiser' joins with #443
+type EntryKind = 'exercise' | 'yard';
 
 type EntryRef =
-  { role: Role; kind: 'exercise'; id: ExerciseId } | { role: Role; kind: 'yard'; id: LayoutId };
+  | { role: Role; kind: 'exercise'; id: ExerciseId }
+  | { role: Role; kind: 'yard'; id: LayoutId };
+
+type SetupStepId = 'conditions'; // 'position' joins with #443
+const SETUP_STEPS: Record<SetupStepId, readonly OptionId[]>;
 
 type CatalogueEntry = {
   ref: EntryRef;
@@ -414,18 +420,12 @@ type CatalogueEntry = {
   steps: readonly SetupStepId[];
 };
 
+// graph.ts
 type ScreenId =
   'title' | 'exercises' | 'yards' | 'setup' | 'settings' | 'controls' | 'whatsNew' | 'about';
 type ScreenKind = 'menu' | 'entries' | 'setup' | 'options' | 'content';
-
-type Screen = {
-  id: ScreenId;
-  kind: ScreenKind;
-  title: MessageKey;
-  items: readonly Item[];
-  /** Loaded on demand (What's new, About). */
-  lazy: boolean;
-};
+type ActionId = 'replayLast';
+type ConditionId = 'canReplay' | 'hasNews';
 
 type Item = {
   id: string;
@@ -436,12 +436,30 @@ type Item = {
   badgeWhen?: ConditionId;
 };
 
-type ActionId = 'continue' | 'replayLast' | 'start';
-type ConditionId = 'canContinue' | 'canReplay' | 'hasNews';
+type OptionGroup = { label: MessageKey; fields: readonly OptionId[] };
 
-type SetupStepId = 'conditions'; // 'position' joins with #443
-type SetupStep = { id: SetupStepId; fields: readonly OptionId[] };
+type Screen = {
+  id: ScreenId;
+  kind: ScreenKind;
+  /** Null where the `h1` comes from the content (setup names its entry). */
+  title: MessageKey | null;
+  items: readonly Item[];
+  /** Loaded on demand. */
+  lazy: boolean;
+  /** Item ids to focus on open, first shown wins. */
+  focus?: readonly string[];
+  list?: { role: Role; kind: EntryKind };
+  groups?: readonly OptionGroup[];
+};
 
+/** A snapshot read by conditions, so the graph stays data. */
+type MenuState = {
+  done: readonly ExerciseId[];
+  replayable: boolean;
+  hasNews: boolean;
+};
+
+// options.ts
 type OptionId =
   | 'truck'
   | 'trailer'
@@ -452,36 +470,47 @@ type OptionId =
   | 'graphics'
   | 'wideMirrors';
 
+type Applies = 'live' | 'nextStart' | 'menuOnly' | 'run';
+
+type Choice = {
+  value: string;
+  /** Vehicle names are data, not translated. */
+  label: MessageKey | { text: string };
+};
+
 type OptionField = {
   id: OptionId;
   label: MessageKey;
   group: 'run' | 'general' | 'graphics';
-  /** Vehicle names are data, not translated. */
-  choices: readonly { value: string; label: MessageKey | { text: string } }[];
-  applies: 'live' | 'nextStart' | 'menuOnly' | 'run';
+  choices: readonly Choice[];
+  applies: Applies;
 };
 
+// nav.ts
 type Level = {
   screen: ScreenId;
   /** The entry being set up, and its step. */
   entry?: EntryRef;
   step?: number;
-  /** The item to focus when this level is shown again. */
+  /** The item or row to focus when this level is shown again. */
   focus: string | null;
 };
 type NavState = { stack: readonly Level[] }; // stack[0] is the title
-type NavEvent = { type: 'open'; item: string } | { type: 'back' } | { type: 'home' };
-
-/** Read by conditions and by Continue; a snapshot, so the graph stays data. */
-type MenuState = {
-  lastEntry: EntryRef | null;
-  done: readonly ExerciseId[];
-  replayable: boolean;
-  hasNews: boolean;
-};
-
-// Settings gains: lastEntry: EntryRef | null
+type NavEvent =
+  | { type: 'open'; item: string }
+  | { type: 'pick'; entry: EntryRef }
+  | { type: 'next' }
+  | { type: 'back' }
+  | { type: 'home' };
 ```
+
+### Added in PR3
+
+Task 3.2's interfaces, verbatim from the plan; Settings also gains `lastEntry: EntryRef | null` (Task 3.1).
+
+**Interfaces:**
+- Consumes: `continueEntry`, `lastEntryOf`, `entryOfRun` (Task 3.1); `runConfigOf`, `MenuState`, `holds` (Task 2.2); `MenuDeps.start` and the busy state (Tasks 2.4, 2.5); `seedStorage` (Task 2.4).
+- Produces: `ActionId = 'replayLast' | 'continue'`, `ConditionId = 'canReplay' | 'hasNews' | 'canContinue'`, and `MenuState` gains `readonly lastEntry: EntryRef | null`.
 
 ## i18n
 

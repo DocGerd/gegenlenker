@@ -190,6 +190,8 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   const show = (): void => {
     unmount();
     const level = topOf(nav);
+    const remembered = refocus ?? level.focus;
+    refocus = null;
     const view = render(level);
     root.append(view.root);
     teardown = [
@@ -199,8 +201,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
       ignoreMultiClicks(view.root),
       arrowFocus(view.root, ITEMS),
     ];
-    view.focus(refocus ?? level.focus);
-    refocus = null;
+    view.focus(remembered);
     if (holdsEntry(nav)) deps.hold(onPop);
     else deps.release();
   };

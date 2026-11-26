@@ -48,7 +48,9 @@ The key legend in the drive lists the view keys that apply to the current screen
 
 ## Exercises
 
-The menu lists the exercises, each with a brief, a tolerance (position and angle) and a best result:
+The menu opens on a title screen with Exercises, Free yard, Settings and What's new, and "Replay last run" once a drive has finished. Back or Esc returns one level.
+
+"Exercises" lists the exercises, each with a short brief:
 
 - Straight reverse
 - Reverse into a bay
@@ -56,17 +58,22 @@ The menu lists the exercises, each with a brief, a tolerance (position and angle
 - Dock at a ramp
 - Slalom forward and back
 
+Choosing an exercise opens its setup: the brief, the tolerance (position and angle) and the best result for the chosen time of day and driving view, then Truck, Trailer, Time of day, Driving view and "Start".
+
 Stop inside the marked bay within tolerance to reach the target; a vehicle still moving does not count. The result shows position error, angle error, contacts, limit stops, direction changes and time, and offers Retry, Replay and Next exercise. Bests are kept separately with and without aids.
 
-"Free yard" drives in the Depot or Logistics yard without a target or score. "Replay last run" replays the last drive you finished.
+"Free yard" lists the Depot and the Logistics yard, which open the same setup and drive without a target or score. "Replay last run" replays the last drive you finished.
 
 ## Settings
 
-In the menu:
+On the setup screen of an exercise or yard:
 
 - Truck, Trailer: the vehicle pair. Some dimensions are estimates, see [vehicle data](vehicle-data.md).
 - Time of day: Day or Night. Night turns the lights on at the start.
 - Driving view: "With top view" or "Mirrors only".
+
+Under "Settings" on the title, in the groups General and Graphics:
+
 - Language: Deutsch or English. Until chosen, it follows the browser language.
 - Theme: System, Light or Dark.
 - Graphics quality: Low, Balanced or High.

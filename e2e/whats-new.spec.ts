@@ -70,7 +70,9 @@ test("the back button leaves what's new for the menu", async ({ page }) => {
   await page.getByRole('button', { name: en.whatsNew }).click();
   await page.getByRole('button', { name: en.back }).click();
   await expect(page.getByRole('button', { name: en.whatsNew })).toBeFocused();
-  await expect(page.getByRole('button', { name: en.exerciseStraightReverse })).toBeVisible();
+  await expect(
+    page.locator('[data-screen="title"]').getByRole('button', { name: en.exercises }),
+  ).toBeVisible();
 });
 
 test("Escape leaves what's new for the title and refocuses its entry", async ({ page }) => {

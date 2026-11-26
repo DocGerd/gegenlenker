@@ -559,45 +559,6 @@ test('the goal cue keeps its distance out of the live region', async ({ page }) 
   await expect(parts.nth(1)).not.toHaveAttribute('aria-hidden', /.*/);
 });
 
-const menuViews = [
-  { width: 1280, height: 585 },
-  { width: 390, height: 844 },
-];
-
-for (const { locale, messages } of locales) {
-  for (const size of menuViews) {
-    test(`the menu opens on the exercises at ${locale} ${size.width}x${size.height}`, async ({
-      browser,
-    }) => {
-      const context = await browser.newContext({ locale, viewport: size });
-      try {
-        const page = await context.newPage();
-        await page.goto('./');
-        const cards = page.locator('[data-menu="exercises"] .menu-start');
-        await expect(cards).toHaveCount(5);
-        await expect(page.locator('ol[data-menu="exercises"] > li')).toHaveCount(5);
-        await expect(page.locator('.menu-heading').first()).toHaveText(messages.exercises);
-        const setupFollows = await page
-          .locator('[data-menu="exercises"]')
-          .evaluate((el) =>
-            Boolean(
-              el.compareDocumentPosition(document.querySelector('[data-menu="truck"]') ?? el) &
-              Node.DOCUMENT_POSITION_FOLLOWING,
-            ),
-          );
-        expect(setupFollows).toBe(true);
-        const found = await boxes(cards);
-        if (size.width > size.height) {
-          // The second row starts within view, so more than one row of exercises shows.
-          expect(Math.max(...found.map((b) => b.top))).toBeLessThan(size.height - 100);
-        } else expect(found[0]?.bottom ?? Infinity).toBeLessThanOrEqual(size.height);
-      } finally {
-        await context.close();
-      }
-    });
-  }
-}
-
 test('the key legend folds away and stays folded in the next run', async ({ page }) => {
   await page.goto('./');
   await startExercise(page, en, 'straight-reverse');
