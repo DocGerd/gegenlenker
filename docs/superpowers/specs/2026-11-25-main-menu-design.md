@@ -116,7 +116,7 @@ Wireframes are at laptop size (1280×585) in German. They fix content and order,
 - Decided (owner, 2026-11-25): the illustration is static. Live 3D behind the title is deferred.
 - The What's new badge keeps its meaning.
 - The footer keeps build label, UAT badge and offline status. Call: the copyright line moves to About.
-- The returning state in German is the tightest case of the title's no-scroll rule. If it does not close, the footer joins the secondary row; the content does not change.
+- The returning state in German is the tightest case of the title's no-scroll rule. As built, at laptop size the footer spans both columns under the text column and the art, so German status text stays on one line; the content does not change.
 
 ### Exercise list
 
@@ -225,7 +225,7 @@ The same screen kind as the exercise list: one row per layout (`LAYOUT_IDS`) wit
 │  ‹ Zurück                                                                      │
 │  Bedienung                                                                     │
 │                                                                                │
-│  TASTATUR                                TOUCH UND MAUS                        │
+│  TASTATUR UND MAUS                       TOUCH UND MAUS                        │
 │  A / D · ← / →      Lenken               Lenkrad    um die Mitte ziehen        │
 │  C                  Lenkung zentrieren   Hebel      ziehen oder scrollen       │
 │  W / S · ↑ / ↓      Tempo                Stopp      halten zum Bremsen         │
@@ -235,7 +235,7 @@ The same screen kind as the exercise list: one row per layout (`LAYOUT_IDS`) wit
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- Call: the keyboard group lists the keys for the saved driving view and graphics quality, exactly the rows the drive's legend will show. For that, the legend's row selection and its term renderer (`legendRow` and the top-view filter in `src/hud/hud.ts`) move to `src/input`, beside `legendRows` and the term types, so menu and HUD share them.
+- Call: the keyboard-and-mouse group lists the keys for the saved driving view and graphics quality, exactly the rows the drive's legend will show. For that, the legend's row selection and its term renderer (`legendRow` and the top-view filter in `src/hud/hud.ts`) move to `src/input`, beside `legendRows` and the term types, so menu and HUD share them.
 - Touch and mouse: wheel, lever, Stop, gear and lamp buttons, two thumbs at once; the content of the Controls section in `docs/usage.md`.
 - Read-only; scrolls if needed. Portrait: the groups stack.
 
@@ -284,12 +284,10 @@ The sheet's content swaps inside the same modal dialog; the drive stays paused. 
 | ----------------------------------------- | -------- | ----- | -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | Theme                                     | Settings | yes   | at once                                                  | `applyTheme` is CSS only                                                                                              |
 | Wide-angle mirrors                        | Settings | yes   | at once, after a drive change                            | `arrange()` reads the settings captured at start; it must read the live value and run again. Only the layout changes. |
-| Graphics quality                          | Settings | yes   | from the next start (Restart or next drive), labelled so | `mountRenderStage` sets the preset once per mount; view and mirror availability are fixed when the HUD is built       |
+| Graphics quality                          | Settings | yes   | at once (owner decision 2026-11-26)                      | The renderer re-applies the preset live; view and mirror availability follow it                                       |
 | Language                                  | Settings | no    | at once in the menu                                      | HUD and control texts are built at mount                                                                              |
 | Truck, trailer, time of day, driving view | Setup    | no    | next run                                                 | They identify the run: input log and best key                                                                         |
 | Aids, view mode, panel folds, divider     | Drive    | —     | at once, as today                                        | Unchanged                                                                                                             |
-
-Restart already remounts with the current settings, so "from the next start" needs no new mechanism.
 
 ### Tablet
 
@@ -398,7 +396,7 @@ Every screen has one `h1`. Lists are real lists, choice rows are labelled radio 
 
 ## Data model (types only)
 
-The types as built in `src/app/menu/{catalogue,graph,nav,options}.ts`. They are plain, engine-neutral data; `title`, `focus`, `list` and `groups` extend the first sketch. PR3's additions follow in their own block; PR4 to PR6 add nothing here.
+The types as built in `src/app/menu/{catalogue,graph,nav,options}.ts`. They are plain, engine-neutral data; `title`, `focus`, `list` and `groups` extend the first sketch. PR3's additions follow in their own block; PR4 and PR5 add nothing here, and PR6 adds `PAUSE_FIELDS` (the options the pause sheet offers, in order).
 
 ```ts
 // catalogue.ts
@@ -470,7 +468,7 @@ type OptionId =
   | 'graphics'
   | 'wideMirrors';
 
-type Applies = 'live' | 'nextStart' | 'menuOnly' | 'run';
+type Applies = 'live' | 'menuOnly' | 'run';
 
 type Choice = {
   value: string;
@@ -511,7 +509,7 @@ Task 3.2's interfaces, verbatim from the plan; Settings also gains `lastEntry: E
 `lastEntry` is stored once the drive has mounted; a later renderer-init failure keeps it.
 
 **Interfaces:**
-- Consumes: `continueEntry`, `lastEntryOf`, `entryOfRun` (Task 3.1); `runConfigOf`, `MenuState`, `holds` (Task 2.2); `MenuDeps.start` and the busy state (Tasks 2.4, 2.5); `seedStorage` (Task 2.4).
+- Consumes: `continueEntry`, `lastEntryOf` (Task 3.1); `runConfigOf`, `MenuState`, `holds` (Task 2.2); `MenuDeps.start(run, entry)`, which hands the menu entry (with its role) to the app for `lastEntry`, and the busy state (Tasks 2.4, 2.5); `seedStorage` (Task 2.4).
 - Produces: `ActionId = 'replayLast' | 'continue'`, `ConditionId = 'canReplay' | 'hasNews' | 'canContinue'`, and `MenuState` gains `readonly lastEntry: EntryRef | null`.
 
 ## i18n
@@ -525,15 +523,14 @@ New keys. Call: the wording stands as listed ("Allgemein / General", "Starten", 
 | `about`            | About                       | Über                       | title entry, screen heading                    |
 | `settingsGeneral`  | General                     | Allgemein                  | Settings group                                 |
 | `settingsGraphics` | Graphics                    | Grafik                     | Settings group                                 |
-| `appliesNextStart` | Applies from the next start | Gilt ab dem nächsten Start | hint under graphics quality in the pause sheet |
-| `controlsKeyboard` | Keyboard                    | Tastatur                   | Controls group                                 |
+| `controlsKeyboardMouse` | Keyboard and mouse | Tastatur und Maus | Controls group |
 | `controlsTouch`    | Touch and mouse             | Touch und Maus             | Controls group                                 |
 | `aboutLicense`     | License                     | Lizenz                     | About                                          |
 | `aboutThirdParty`  | Third-party licenses        | Lizenzen Dritter           | About                                          |
 | `aboutAssets`      | Asset credits               | Quellen der Assets         | About                                          |
 | `aboutSource`      | Source code                 | Quellcode                  | About                                          |
 
-Also new: one key per touch-and-mouse row of the Controls screen (the builder writes them from `docs/usage.md`).
+Also new: `aboutIncludes` ("incl. {packages}" / "inkl. {packages}", the note under a third-party licence group) and one key per touch-and-mouse row of the Controls screen: `touchWheel`, `touchWheelUse`, `touchLever`, `touchLeverUse`, `touchStopUse`, `touchButtons`, `touchButtonsUse`, `touchTwoThumbs`.
 
 Reused as they are: `continue` (title), `settings`, `exercises`, `freeYard`, `whatsNew`, `whatsNewBadge`, `back`, `menu` (also the name of the title's navigation landmark), `replayLastRun`, `exerciseDone`, `tolerance`, the best and option keys, `estimateNote`, `keys` and the legend description keys.
 
