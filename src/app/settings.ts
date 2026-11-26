@@ -13,8 +13,11 @@ import {
   type Orientation,
   type TopDownLayout,
 } from '../contracts/render';
+import { EXERCISE_IDS } from '../contracts/exercise';
+import { LAYOUT_IDS } from '../contracts/layout';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
+import type { EntryRef } from './menu/catalogue';
 import { SETTINGS_KEY, writeText } from './storage';
 
 export type Settings = {
@@ -32,6 +35,8 @@ export type Settings = {
   readonly wideMirrors: boolean;
   /** Drives without the top-down view; chosen in the menu like the lighting. */
   readonly mirrorsOnly: boolean;
+  /** What the last drive was, so the title can offer to continue it. */
+  readonly lastEntry: EntryRef | null;
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
@@ -55,6 +60,21 @@ const flag = (v: unknown, fallback: boolean): boolean => (typeof v === 'boolean'
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Role, kind and id must all be known; anything else is no last entry. */
+const entryRef = (v: unknown): EntryRef | null => {
+  if (!isRecord(v) || v['role'] !== 'driver') return null;
+  const { kind, id } = v;
+  if (kind === 'exercise') {
+    const known = EXERCISE_IDS.find((e) => e === id);
+    return known === undefined ? null : { role: 'driver', kind, id: known };
+  }
+  if (kind === 'yard') {
+    const known = LAYOUT_IDS.find((l) => l === id);
+    return known === undefined ? null : { role: 'driver', kind, id: known };
+  }
+  return null;
+};
 
 /** Field by field: one bad value falls back alone instead of resetting every choice. */
 export function loadSettings(raw: string | null, detected: Lang): Settings {
@@ -94,6 +114,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
     lighting: pick(LIGHTING_MODES, s['lighting'], DEFAULT_LIGHTING),
     wideMirrors: flag(s['wideMirrors'], true),
     mirrorsOnly: flag(s['mirrorsOnly'], false),
+    lastEntry: entryRef(s['lastEntry']),
   };
 }
 
