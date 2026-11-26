@@ -23,7 +23,10 @@ export function optionsScreen(ctx: OptionsContext): {
   const settings = currentSettings();
   const body = element('div', 'menu-settings');
 
-  ctx.screen.groups?.forEach((group, index) => {
+  const groups = ctx.screen.groups?.filter(
+    (g) => g.einweiser !== true || settings.einweiserPreview,
+  );
+  groups?.forEach((group, index) => {
     const section = element('section', 'menu-settings-group');
     const heading = element('h2', 'menu-settings-heading', t(group.label));
     heading.id = `settings-group-${index}`;

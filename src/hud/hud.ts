@@ -98,8 +98,9 @@ export type HudOptions = {
   /** The stop button and lever column, which the toolbar stays clear of; absent where there are no controls. */
   pedalsBox?: () => DOMRect;
   /**
-   * The driver's when absent. The Einweiser's band holds the sign bar, and the sight cue takes the
-   * cockpit label's place; he has no gear or speed readout, no gauges and no target arrow.
+   * Whose key legend it lists, the driver's when absent. The Einweiser's band holds the sign bar, and
+   * the sight cue takes the cockpit label's place; he has no gear or speed readout, no gauges and no
+   * target arrow.
    */
   role?: Role;
 };
@@ -237,8 +238,8 @@ const panelButton = (panel: string, key: MessageKey): string =>
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-chip" data-aid="${aid}" aria-describedby="aid-meaning-${aid}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
-const keyRows = (chase: boolean, look: boolean, mirrorsOnly: boolean): string =>
-  driveLegendRows({ chase, look, mirrorsOnly }).map(legendRowMarkup).join('');
+const keyRows = (chase: boolean, look: boolean, mirrorsOnly: boolean, role: Role): string =>
+  driveLegendRows({ chase, look, mirrorsOnly, role }).map(legendRowMarkup).join('');
 
 /** The Einweiser has no gauges to fold. */
 const panelButtons = (driver: boolean): string =>
@@ -262,7 +263,8 @@ const MARKUP = (
   chase: boolean,
   look: boolean | undefined,
   mirrorsOnly: boolean,
-  driver: boolean,
+  role: Role,
+  driver = role === 'driver',
 ): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
@@ -270,7 +272,7 @@ const MARKUP = (
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl data-hud="keys">
-        ${keyRows(chase, look === true, mirrorsOnly)}
+        ${keyRows(chase, look === true, mirrorsOnly, role)}
       </dl>
     </div>
     <div class="hud-band" data-hud="band">
@@ -360,7 +362,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const driver = role === 'driver';
   root.insertAdjacentHTML(
     'beforeend',
-    MARKUP(opts.mode, opts.chase, opts.look, opts.mirrorsOnly === true, driver),
+    MARKUP(opts.mode, opts.chase, opts.look, opts.mirrorsOnly === true, role),
   );
   const hud = query(root, 'root', HTMLElement);
   hud.dataset['role'] = role;
@@ -1211,7 +1213,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       chaseOffered = next.chase;
       syncChaseOffer();
       hud.toggleAttribute('data-interior', next.interior);
-      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly);
+      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly, role);
       applyMessages(keysList);
       if (!chaseOffered && view === 'chase') selectView(lastOther);
       else syncToggles();

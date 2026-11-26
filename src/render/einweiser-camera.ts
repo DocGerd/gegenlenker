@@ -1,5 +1,6 @@
 import { PerspectiveCamera } from 'three';
-import { DEFAULT_EINWEISER_FOV, type EinweiserVisual, type Rect } from '../contracts/render';
+import { DEFAULT_FOV } from '../contracts/einweiser';
+import type { EinweiserVisual, Rect } from '../contracts/render';
 import { HEAD_HEIGHT } from '../einweiser/sight';
 import { CAMERA_FAR, EINWEISER_LAYERS, enableLayers } from './seams';
 
@@ -13,7 +14,7 @@ export function verticalFov(horizontal: number): number {
 }
 
 export function createEinweiserCamera(): PerspectiveCamera {
-  const camera = new PerspectiveCamera(verticalFov(DEFAULT_EINWEISER_FOV), 1, 0.1, CAMERA_FAR);
+  const camera = new PerspectiveCamera(verticalFov(DEFAULT_FOV), 1, 0.1, CAMERA_FAR);
   camera.rotation.order = 'YXZ';
   enableLayers(camera.layers, EINWEISER_LAYERS);
   return camera;
@@ -24,7 +25,7 @@ export function placeEinweiserCamera(
   camera: PerspectiveCamera,
   { pose, pitch }: Pick<EinweiserVisual, 'pose' | 'pitch'>,
   pane: Pick<Rect, 'width' | 'height'>,
-  horizontalFov = DEFAULT_EINWEISER_FOV,
+  horizontalFov: number = DEFAULT_FOV,
 ): void {
   camera.position.set(pose.x, HEAD_HEIGHT, -pose.y);
   camera.rotation.set(pitch, pose.heading - Math.PI / 2, 0);

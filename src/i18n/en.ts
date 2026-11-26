@@ -221,6 +221,23 @@ export const en = {
   sightFront: 'Sight contact in the front mirror',
   sightNone: 'No sight contact',
   sightUnclear: 'Signal unclear',
+  // Einweiser input (#495)
+  walk: 'Walk',
+  jog: 'Jog',
+  mouseLook: 'Look around (click to start)',
+  signKeys: 'Hand signal (hold)',
+  signLeftRight: 'Move left / right',
+  signMouse: 'Come here / Move away',
+  keyShift: 'Shift',
+  keyMouse: 'Mouse',
+  keyMouseButtons: 'Left / right click',
+  fov: 'Field of view',
+  mouseSensitivity: 'Mouse sensitivity',
+  sensitivityLow: 'Low',
+  sensitivityMedium: 'Medium',
+  sensitivityHigh: 'High',
+  invertMouse: 'Invert mouse',
+  settingsEinweiser: 'Ground guide',
 } as const;
 
 export type MessageKey = keyof typeof en;

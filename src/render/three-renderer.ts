@@ -621,7 +621,7 @@ export function createThreeSceneRenderer(
 
       // In the Einweiser role the cockpit rect is his first-person view: his eye stands outside the cab.
       if (cockpit !== null && frame.einweiser !== undefined) {
-        placeEinweiserCamera(einweiserCamera, frame.einweiser, cockpit);
+        placeEinweiserCamera(einweiserCamera, frame.einweiser, cockpit, frame.fov);
         out.place(cockpit, pixelRatio);
         gl.render(b.scene, einweiserCamera);
       } else if (cockpit !== null) {

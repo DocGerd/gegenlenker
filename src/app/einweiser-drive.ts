@@ -1,14 +1,15 @@
 import type { ControlSource } from '../contracts/control';
-import type { EinweiserStatus } from '../contracts/einweiser';
+import { DEG_PER_COUNT, type EinweiserStatus } from '../contracts/einweiser';
 import type { EinweiserTrack } from '../contracts/exercise';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { EinweiserVisual, LampSwitches, LightingMode } from '../contracts/render';
 import type { ControlVector, SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { layoutOccluders, sightGeometry } from '../einweiser/sight';
-import { createEinweiserRun, type EinweiserInput } from '../einweiser/track';
-import { STILL } from '../einweiser/walk';
+import { createEinweiserRun } from '../einweiser/track';
 import type { EinweiserHud } from '../hud/hud';
+import { createWalkInput, type WalkInput } from '../input/walk-input';
+import { currentSettings } from './settings';
 
 /** How long the sight cue says a sign was unclear, sim seconds (estimate). */
 const UNCLEAR_CUE_SECONDS = 2;
@@ -16,6 +17,10 @@ const UNCLEAR_CUE_SECONDS = 2;
 /** What a drive in the Einweiser role adds to the driver's: the AI driver as its control source, and the Einweiser. */
 export type EinweiserDrive = {
   readonly source: ControlSource;
+  /** Binds walk, look and signs to the render surface; see `WalkInput.attach`. Returns the teardown. */
+  readonly attach: WalkInput['attach'];
+  /** As the pause sheet opens: lets go of every key and button, and of the pointer lock. */
+  readonly pause: WalkInput['pause'];
   /** Null before the first sim step. */
   status(): EinweiserStatus | null;
   /** At his start pose before the first sim step, so the first frame already shows his view. */
@@ -46,12 +51,12 @@ export function startEinweiserDrive(
     yard: layout.yard,
     start,
   });
-  // Until the walk and sign input lands (#495), he stands at his start with his arms down.
-  const input = (): EinweiserInput => ({
-    keys: STILL,
+  const input = createWalkInput({
     heading: run.walker().heading,
-    pitch: 0,
-    sign: null,
+    look: () => {
+      const { mouseSensitivity, invertMouse } = currentSettings();
+      return { degPerCount: DEG_PER_COUNT[mouseSensitivity], invert: invertMouse };
+    },
   });
   const lamps: LampSwitches = { lights: lighting === 'night', hazard: false };
   let control: ControlVector = start.control;
@@ -61,9 +66,13 @@ export function startEinweiserDrive(
   let unclearAt = -Infinity;
   stage.dataset['role'] = 'einweiser';
   return {
+    attach: (surface, onLockLost) => input.attach(surface, onLockLost),
+    pause: () => {
+      input.pause();
+    },
     source: {
       tick(_, snapshot) {
-        const step = run.step(snapshot, input());
+        const step = run.step(snapshot, input.sample());
         control = step.control;
         status = step.status;
         time = snapshot.time;
