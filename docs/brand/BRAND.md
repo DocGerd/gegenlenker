@@ -42,6 +42,7 @@ Scene colours are theme-independent neutral greys, except the red obstacle cone 
 - **Exceptions:** street kerb against pavement, white bay lines on yard, the cab against yard, the body against hall cladding (the body sits between cladding and sky in lightness), and the body on verge (unreachable: kerbs bound the yard and street).
 - **Aid strokes:** the accent alone is 2.98:1 on yard and 1.18:1 on street, so every top-down accent stroke (corridor, stop bar, pivot rays, ghost) sits on a dark casing in `--scene-wheel`. The casing is 10.65:1 against yard and 3.03:1 against street, and the accent is 3.58:1 against the casing, so the stroke reads 3:1 or more on both. Pavement and verge are lighter than street, so the casing holds there too. The target outline and the gate ring sit on the same casing by day: the accent on the lit yard is 2.74:1, and the passed gate's marking white 1.79:1.
 - **Contact marker:** the cross at the contact point is a `--scene-marking` core on the `--scene-wheel` casing, shown over whatever is touched, so it is the one stroke that must read on dark objects too. The core is 3:1 or more against every dark surface a contact happens on (cone, wall, ramp, fence, parked trailer, hall, yard kerb, lamp, street, tracks); the casing is 3:1 or more against the light ones (yard, body, cab, kerb). Every surface is covered by one of the two. Red stays reserved for obstacles, so the marker is not red.
+- **Einweiser token:** the trainee's disc and facing wedge in the Einweiser role, hi-vis yellow on the `--scene-wheel` casing, unlit, the same by day and night. The core is 3:1 or more against the casing and the night backdrop; on every ground the casing or the core reads 3:1 or more, by day and at night.
 - **Vehicle parts:** body and tracks keep 1.5:1 or more against the ground they stand on, and the body against marking, except as listed above.
 
 | Token                    | Value     | Role                                         |
@@ -63,6 +64,7 @@ Scene colours are theme-independent neutral greys, except the red obstacle cone 
 | `--scene-body`           | `#969ca4` | yard, street, pavement, marking, cladding    |
 | `--scene-tracks`         | `#3b4046` | yard, street                                 |
 | `--scene-wheel`          | `#14161a` | wheels; aid stroke casing on yard, street    |
+| `--scene-einweiser`      | `#f5d000` | Einweiser token core, on the casing          |
 
 ## Night top-down
 

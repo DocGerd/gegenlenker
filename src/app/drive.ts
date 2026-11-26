@@ -247,6 +247,7 @@ export function startDrive(
       undefined,
       null,
       extraMirrors(graphics, wideMirrors),
+      role,
     ),
     topDown,
     aids,
@@ -393,6 +394,7 @@ export function startDrive(
       topDownLayout,
       panels,
       extra,
+      role,
     );
     hud.layout(views);
     const legend = hud.legendBox();
@@ -406,6 +408,7 @@ export function startDrive(
         topDownLayout,
         panels,
         extra,
+        role,
       );
       hud.layout(views);
     }
@@ -540,8 +543,7 @@ export function startDrive(
       frame.topDown = topDown;
       frame.aids = aids;
       frame.lamps = source.lamps();
-      const visual = einweiser?.visual() ?? null;
-      if (visual !== null) frame.einweiser = visual;
+      if (einweiser !== null) frame.einweiser = einweiser.visual();
       renderer.render(frame);
       drawn++;
       if (enterFree) {

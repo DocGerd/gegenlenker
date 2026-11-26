@@ -146,6 +146,7 @@ export type ScenePaletteKey =
   | 'nightTracks'
   | 'band'
   | 'cladding'
+  | 'einweiser'
   | `night${Capitalize<NightLitKey>}`;
 export type ScenePalette = Readonly<Record<ScenePaletteKey, number>>;
 /** The driver's lamp switches; the lamps' own state follows from them and the controls. */
@@ -191,6 +192,8 @@ export type RenderFrame = {
   /** Set in Einweiser runs only. */
   readonly einweiser?: EinweiserVisual;
 };
+/** The Einweiser view's horizontal field of view in degrees, taken at 16:9 and kept Hor+ (`docs/einweiser-spike.md` §3.2). */
+export const DEFAULT_EINWEISER_FOV = 90;
 /** The Einweiser as drawn: his live pose and look pitch, and the sign with its `phase` (`EinweiserStatus`). */
 export type EinweiserVisual = {
   readonly pose: Pose2;

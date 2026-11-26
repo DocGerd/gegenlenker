@@ -14,7 +14,8 @@ export type EinweiserDrive = {
   readonly source: ControlSource;
   /** Null before the first sim step. */
   status(): EinweiserStatus | null;
-  visual(): EinweiserVisual | null;
+  /** At his start pose before the first sim step, so the first frame already shows his view. */
+  visual(): EinweiserVisual;
   /** For the run's log. */
   track(): EinweiserTrack;
 };
@@ -62,7 +63,10 @@ export function startEinweiserDrive(
     },
     status: () => status,
     visual: () => {
-      if (status === null) return null;
+      if (status === null) {
+        const { x, y, heading } = run.walker();
+        return { pose: { x, y, heading }, pitch: 0, sign: null, phase: 0 };
+      }
       const { x, y, heading, pitch } = status.live;
       return { pose: { x, y, heading }, pitch, sign: status.sign, phase: status.phase };
     },

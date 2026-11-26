@@ -37,6 +37,7 @@ import {
 } from './chase-camera';
 import type { SceneRenderer } from './scene-renderer';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
+import { createEinweiserCamera, placeEinweiserCamera } from './einweiser-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createFrame, type Frame } from './frame-target';
@@ -219,6 +220,7 @@ export function createThreeSceneRenderer(
 ): SceneRenderer & { warmUp: (tag?: string) => void; attached: () => void } {
   const timer = createFrameTimer();
   const cockpitCamera = createCockpitCamera();
+  const einweiserCamera = createEinweiserCamera();
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
   enableLayers(topDownCamera.layers, TOP_DOWN_LAYERS);
   const chaseCamera = createChaseCamera();
@@ -617,7 +619,12 @@ export function createThreeSceneRenderer(
         gl.clear();
       }
 
-      if (cockpit !== null) {
+      // In the Einweiser role the cockpit rect is his first-person view: his eye stands outside the cab.
+      if (cockpit !== null && frame.einweiser !== undefined) {
+        placeEinweiserCamera(einweiserCamera, frame.einweiser, cockpit);
+        out.place(cockpit, pixelRatio);
+        gl.render(b.scene, einweiserCamera);
+      } else if (cockpit !== null) {
         const head = b.interior.looksAround === true ? (frame.head ?? HEAD_REST) : HEAD_REST;
         placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit, head);
         b.interior.place({
