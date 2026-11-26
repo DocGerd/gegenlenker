@@ -3,6 +3,7 @@ import { en } from '../i18n/en';
 import { SIGN_IDS } from '../contracts/einweiser';
 import {
   BINDINGS,
+  EINWEISER_DROPPED_VIEW_ACTIONS,
   SIGN_OF,
   actionFor,
   isAction,
@@ -40,18 +41,6 @@ const LIVE: readonly (readonly Scope[])[] = [
   ['view', 'app'],
 ];
 
-/** The Einweiser's view keys: no glance (mouse look replaces it), outside view or free camera (`docs/einweiser-spike.md` §3.1). */
-const DROPPED_FOR_EINWEISER: readonly Action[] = [
-  'glanceLeft',
-  'glanceRight',
-  'viewChase',
-  'freeCamera',
-  'orbitLeft',
-  'orbitRight',
-  'tiltUp',
-  'tiltDown',
-];
-
 describe('keymap', () => {
   it('lists every key value in a known form', () => {
     for (const { match } of BINDINGS) {
@@ -81,7 +70,7 @@ describe('keymap', () => {
     const live = BINDINGS.filter(
       (b) =>
         ['walk', 'sign', 'view', 'app'].includes(b.scope) &&
-        !DROPPED_FOR_EINWEISER.includes(b.action),
+        !EINWEISER_DROPPED_VIEW_ACTIONS.includes(b.action),
     );
     for (const b of live) {
       for (const code of new Set(codesOf(b))) {

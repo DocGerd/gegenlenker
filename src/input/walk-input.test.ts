@@ -180,6 +180,12 @@ describe('walk input', () => {
     expect(input.sample().sign).toBe('entfernen');
   });
 
+  it('signs with a click that lands after the browser grants the lock but before it reports it', () => {
+    doc.pointerLockElement = surface;
+    press(0);
+    expect(input.sample().sign).toBe('herkommen');
+  });
+
   it('keeps a click from reaching the view input, and suppresses the context menu', () => {
     const after = vi.fn();
     surface.addEventListener('pointerdown', after);

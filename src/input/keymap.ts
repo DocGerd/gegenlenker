@@ -64,6 +64,18 @@ export const SIGN_OF: Readonly<Partial<Record<Action, SignId>>> = {
   signAbstand: 'abstand',
 };
 
+/** View keys the Einweiser's drive does not offer: no glance (mouse look), outside view or free camera (`docs/einweiser-spike.md` §3.1). */
+export const EINWEISER_DROPPED_VIEW_ACTIONS: readonly Action[] = [
+  'glanceLeft',
+  'glanceRight',
+  'viewChase',
+  'freeCamera',
+  'orbitLeft',
+  'orbitRight',
+  'tiltUp',
+  'tiltDown',
+];
+
 /**
  * `code` matches the physical key (`KeyboardEvent.code`), `key` the typed character
  * (lowercased): view letters and zoom signs follow the layout, so Y and +/- stay put on QWERTZ.

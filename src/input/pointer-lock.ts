@@ -13,12 +13,12 @@ export type PointerLock = {
  */
 export function createPointerLock(el: Element, onChange: (locked: boolean) => void): PointerLock {
   const isLocked = (): boolean => document.pointerLockElement === el;
-  let locked = isLocked();
+  let reported = isLocked();
   const sync = (): void => {
     const now = isLocked();
-    if (now === locked) return;
-    locked = now;
-    onChange(locked);
+    if (now === reported) return;
+    reported = now;
+    onChange(now);
   };
   document.addEventListener('pointerlockchange', sync);
 
@@ -44,11 +44,13 @@ export function createPointerLock(el: Element, onChange: (locked: boolean) => vo
   };
 
   return {
+    // Live, not `reported`: the browser sets the lock element a task before `pointerlockchange`, and a
+    // click in between must count.
     get locked() {
-      return locked;
+      return isLocked();
     },
     request() {
-      if (!locked) attempt({ unadjustedMovement: true });
+      if (!isLocked()) attempt({ unadjustedMovement: true });
     },
     exit() {
       if (isLocked()) document.exitPointerLock();
