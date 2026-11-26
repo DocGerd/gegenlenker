@@ -19,8 +19,8 @@ import { ShaderRejectedError, watchShaderErrors } from './shader-check';
 
 /*
  * Runtime-cached KTX2 textures: authored files transcoded on the device to whatever compressed
- * format its GPU takes. Neither they nor the Basis transcoder are precached; the service worker
- * caches them on first use (src/pwa/config.ts).
+ * format its GPU takes. They are not precached; the service worker caches them ahead of use or on
+ * first use (src/pwa/config.ts). The Basis transcoder is precached.
  */
 
 const MAX_ATTEMPTS = 2;
@@ -276,6 +276,18 @@ export function startTextureSet<K extends string>({
       });
   };
 
+  /** A load that failed was most likely offline: reconnecting grants a fresh pair of attempts. */
+  const retryOnReconnect = (): void => {
+    if (loaded !== null || rejected || disposed || loading || attempts === 0) return;
+    const wasExhausted = exhausted;
+    attempts = 0;
+    exhausted = false;
+    if (wasExhausted) publish();
+    start();
+  };
+  const listening = 'addEventListener' in globalThis;
+  if (listening) globalThis.addEventListener('online', retryOnReconnect);
+
   return {
     attach(next) {
       if (renderer === next || disposed) return;
@@ -310,6 +322,7 @@ export function startTextureSet<K extends string>({
     dispose() {
       disposed = true;
       enabled = false;
+      if (listening) globalThis.removeEventListener('online', retryOnReconnect);
       subscribers.clear();
       restoreShaderErrors?.();
       if (loaded !== null) disposeMaps(loaded);

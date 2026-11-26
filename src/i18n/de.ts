@@ -150,6 +150,7 @@ export const de: Record<MessageKey, string> = {
   later: 'Später',
   offlineReady: 'Offline bereit',
   offlineSetupFailed: 'Offline-Nutzung konnte nicht eingerichtet werden.',
+  offlineIncomplete: 'Für diese Grafikqualität noch nicht offline bereit.',
   dismiss: 'Schließen',
   noWebgl: 'Dieses Gerät kann keine WebGL-2-Grafik anzeigen.',
   contextLost: 'Die Grafik ist ausgefallen und startet nicht neu. Zum Weiterfahren neu laden.',
