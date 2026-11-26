@@ -495,45 +495,59 @@ describe('computeViewports front mirror', () => {
     ).toBeNull();
   });
 
-  it('drops once as the portrait top-down share grows, and no extra mirror comes back', () => {
+  it('drops once as the portrait top-down share grows, where it first stops fitting, and no extra mirror comes back', () => {
     const ALL = { front: true, wide: true, close: true };
-    const at = (w: number, h: number, pane: number, extra: typeof ALL) =>
+    const h = 1133;
+    const at = (w: number, portrait: number, panels: PanelStack | null, extra: typeof ALL) =>
       computeViewports(
         w,
         h,
         'drive',
         null,
         NO_INSETS,
-        { ...DEFAULT_TOP_DOWN_LAYOUT, portrait: pane / h },
-        null,
+        { ...DEFAULT_TOP_DOWN_LAYOUT, portrait },
+        panels,
         extra,
       );
-    // Without the rule the front mirror returned at 741x1133 from pane 517 (the messages beside it wrap
-    // shorter as class II narrows) and at 696x1133, with class IV, from pane 496.
-    const cases: (readonly [number, number, typeof ALL])[] = [
-      [741, 1133, FRONT],
-      [696, 1133, ALL],
-    ];
-    for (let w = 660; w <= 770; w += 10) cases.push([w, 1133, ALL]);
-    for (const [w, h, extra] of cases) {
-      const dropped = { front: false, wide: false, close: false };
-      let was = { front: false, wide: false, close: false };
-      for (let pane = Math.ceil(0.3 * h); pane <= Math.floor(0.6 * h); pane++) {
-        const v = at(w, h, pane, extra);
-        const now = { front: v.front !== null, wide: v.wideLeft !== null, close: v.close !== null };
-        for (const mirror of ['front', 'wide', 'close'] as const) {
-          if (was[mirror] && !now[mirror]) dropped[mirror] = true;
-          expect(dropped[mirror] && now[mirror], `${w}x${h} pane ${pane}: ${mirror} returns`).toBe(
-            false,
-          );
+    let drops = 0;
+    let compared = 0;
+    // Around 700 px wide the messages beside it wrap shorter as class II narrows, so it would fit again.
+    for (let w = 660; w <= 770; w += 5) {
+      for (const extra of [FRONT, ALL]) {
+        // The smallest share has no smaller one to fit at: panels that end `bottom` px down show
+        // whether it fits at the pane they make the smallest.
+        const fitsAt = new Map<number, boolean>();
+        for (let bottom = 0; bottom <= DEFAULT_TOP_DOWN_LAYOUT.portrait * h; bottom++) {
+          const v = at(w, 0, () => bottom, extra);
+          fitsAt.set(v.topDown.height, v.front !== null);
         }
-        was = now;
+        const dropped = { front: false, wide: false, close: false };
+        let was = { front: false, wide: false, close: false };
+        let fits: boolean | undefined = true;
+        for (let pane = Math.ceil(0.3 * h); pane <= Math.floor(0.6 * h); pane++) {
+          const v = at(w, pane / h, null, extra);
+          const now = {
+            front: v.front !== null,
+            wide: v.wideLeft !== null,
+            close: v.close !== null,
+          };
+          const where = `${w}x${h} pane ${pane} ${JSON.stringify(extra)}`;
+          for (const mirror of ['front', 'wide', 'close'] as const) {
+            if (was[mirror] && !now[mirror]) dropped[mirror] = true;
+            expect(dropped[mirror] && now[mirror], `${where}: ${mirror} returns`).toBe(false);
+          }
+          if (was.front && !now.front) drops++;
+          was = now;
+          // class IV sizes class II by the shares still below, so only without it is the fit that of the pane alone
+          fits = fits === undefined || extra.wide ? undefined : fits && fitsAt.get(pane);
+          if (fits === undefined) continue;
+          expect(now.front, `${where}: front`).toBe(fits);
+          compared++;
+        }
       }
     }
-    // not before it first stops fitting
-    expect(at(741, 1133, 484, FRONT).front).not.toBeNull();
-    expect(at(741, 1133, 485, FRONT).front).toBeNull();
-    expect(at(696, 1133, 409, ALL).front).not.toBeNull();
+    expect(drops).toBeGreaterThan(0);
+    expect(compared).toBeGreaterThan(0);
   });
 
   it('lies in the windscreen band, clear of the mirrors, the controls and the legend, at every size', () => {
