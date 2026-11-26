@@ -57,6 +57,7 @@
 .about-link {
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   min-height: var(--size-target);
   color: var(--color-accent-strong);
 }
@@ -65,8 +66,20 @@
   display: flex;
   align-items: center;
   min-height: var(--size-target);
+  gap: var(--space-2);
   cursor: pointer;
   font-weight: var(--weight-medium);
+}
+
+/* `display: flex` drops the native marker, so the chevron is explicit. */
+.about-summary::before {
+  content: '›' / '';
+  color: var(--color-text-secondary);
+}
+
+.about-licence[open] > .about-summary::before {
+  display: inline-block;
+  transform: rotate(90deg);
 }
 
 .about-text {

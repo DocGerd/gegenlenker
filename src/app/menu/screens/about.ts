@@ -10,7 +10,6 @@ const SOURCE = 'https://github.com/DocGerd/gegenlenker';
 function externalLink(href: string, text: string): HTMLAnchorElement {
   const link = element('a', 'about-link', text);
   link.href = href;
-  link.target = '_blank';
   link.rel = 'noopener';
   return link;
 }
