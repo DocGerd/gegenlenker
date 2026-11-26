@@ -65,6 +65,23 @@ describe('runtime-cached texture assets', () => {
     }
   });
 
+  it('precaches the Basis transcoder every KTX2 texture needs', () => {
+    const [precache = ''] = workbox?.globPatterns ?? [];
+    for (const extension of ['js', 'wasm']) {
+      const file = `assets/basis_transcoder-AbC12_x.${extension}`;
+      expect(matchesGlob(file, precache), file).toBe(true);
+      expect(
+        ignored.some((glob) => matchesGlob(file, glob)),
+        file,
+      ).toBe(false);
+      const source = resolve(
+        import.meta.dirname,
+        `../../node_modules/three/examples/jsm/libs/basis/basis_transcoder.${extension}`,
+      );
+      expect(statSync(source).size, file).toBeLessThanOrEqual(MAX_PRECACHE_FILE_BYTES);
+    }
+  });
+
   it('still precaches ktx2 files, apart from the ignored ones', () => {
     const [precache] = workbox?.globPatterns ?? [];
     expect(precache).toContain('ktx2');
@@ -74,7 +91,7 @@ describe('runtime-cached texture assets', () => {
     const maxEntries = runtime?.options?.expiration?.maxEntries ?? 0;
     const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
     const textures = Object.values(ASSET_REGISTRY).filter(({ flag }) => !defaults[flag]);
-    const liveFiles = textures.length + (textures.length > 0 ? 2 : 0);
+    const liveFiles = textures.length;
     expect(liveFiles).toBeGreaterThan(0);
     expect(maxEntries).toBeGreaterThanOrEqual(liveFiles * 2);
     expect(maxEntries).toBeGreaterThanOrEqual(RUNTIME_CACHE_MIN_ENTRIES);
@@ -92,13 +109,11 @@ describe('asset registry', () => {
     expect(Object.keys(ASSET_REGISTRY).sort()).toEqual(stems);
   });
 
-  it('runtime-caches the textures the default preset does not draw, with their transcoder', () => {
+  it('runtime-caches the textures the default preset does not draw, not the transcoder', () => {
     expect([...ignored].sort()).toEqual([
       '**/arocs-1835-ak-interior-*.glb',
       '**/asphalt-albedo-*.ktx2',
       '**/asphalt-packed-*.ktx2',
-      '**/basis_transcoder-*.js',
-      '**/basis_transcoder-*.wasm',
       '**/concrete-albedo-*.ktx2',
       '**/concrete-packed-*.ktx2',
       '**/ground-*.ktx2',

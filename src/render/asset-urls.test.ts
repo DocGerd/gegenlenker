@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GRAPHICS_PRESETS } from '../contracts/render';
 import { ASSET_REGISTRY } from './asset-registry';
-import { ASSET_URLS, presetAssetUrls, TRANSCODER_URLS } from './asset-urls';
+import { ASSET_URLS, presetAssetUrls } from './asset-urls';
 import { QUALITY_FLAGS } from './quality';
 
 describe('ASSET_URLS', () => {
@@ -19,13 +19,7 @@ describe('presetAssetUrls', () => {
     const drawn = Object.entries(ASSET_REGISTRY)
       .filter(([, { flag }]) => QUALITY_FLAGS[preset][flag])
       .map(([stem]) => ASSET_URLS[stem]);
-    const urls = presetAssetUrls(preset);
-    expect(urls).toEqual(expect.arrayContaining(drawn));
-    const textured = Object.values(ASSET_REGISTRY).some(
-      ({ kind, flag }) => kind === 'ktx2' && QUALITY_FLAGS[preset][flag],
-    );
-    expect(urls.length).toBe(drawn.length + (textured ? 2 : 0));
-    expect(urls.includes(TRANSCODER_URLS.wasm)).toBe(textured);
+    expect([...presetAssetUrls(preset)].sort()).toEqual([...drawn].sort());
   });
 
   it('gives High more than Low', () => {

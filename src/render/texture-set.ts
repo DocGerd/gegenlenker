@@ -13,13 +13,14 @@ import {
   type Texture,
 } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
-import { TRANSCODER_URLS } from './asset-urls';
+import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
+import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
 import { ShaderRejectedError, watchShaderErrors } from './shader-check';
 
 /*
  * Runtime-cached KTX2 textures: authored files transcoded on the device to whatever compressed
- * format its GPU takes. Neither they nor the Basis transcoder are precached; the service worker
- * caches them on first use (src/pwa/config.ts).
+ * format its GPU takes. They are not precached; the service worker caches them ahead of use or on
+ * first use (src/pwa/config.ts). The Basis transcoder is precached.
  */
 
 const MAX_ATTEMPTS = 2;
@@ -74,8 +75,8 @@ export interface TextureSet<K extends string> {
 
 /** KTX2Loader fetches fixed file names next to `transcoderPath`; they are served as hashed app assets instead. */
 export function transcoderUrls(url: string, expected: string): string {
-  if (url.endsWith('basis_transcoder.js')) return TRANSCODER_URLS.js;
-  if (url.endsWith('basis_transcoder.wasm')) return TRANSCODER_URLS.wasm;
+  if (url.endsWith('basis_transcoder.js')) return transcoderJsUrl;
+  if (url.endsWith('basis_transcoder.wasm')) return transcoderWasmUrl;
   if (url !== expected) console.warn('KTX2 texture: unexpected request through the loader', url);
   return url;
 }

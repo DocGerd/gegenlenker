@@ -1,5 +1,3 @@
-import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
-import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
 import type { GraphicsPreset } from '../contracts/render';
 import arocsBodyUrl from './assets/arocs-1835-ak-body.glb?url';
 import arocsCabUrl from './assets/arocs-1835-ak-cab.glb?url';
@@ -29,9 +27,6 @@ import { QUALITY_FLAGS } from './quality';
  * (src/pwa/preset-cache.ts). Only `?url` strings: no Three.js code is loaded through this file.
  */
 
-/** KTX2Loader fetches these next to `transcoderPath`; they are served as hashed app assets instead. */
-export const TRANSCODER_URLS = { js: transcoderJsUrl, wasm: transcoderWasmUrl } as const;
-
 /** Keyed like `ASSET_REGISTRY`; `asset-urls.test.ts` checks both list the same files. */
 export const ASSET_URLS: Readonly<Record<string, string>> = {
   'arocs-1835-ak-cab': arocsCabUrl,
@@ -56,14 +51,11 @@ export const ASSET_URLS: Readonly<Record<string, string>> = {
   'pavers-packed': paversPackedUrl,
 };
 
-/** Every binary `preset` draws, with the Basis transcoder when one of them is a KTX2 texture. */
+/** Every binary in `ASSET_REGISTRY` that `preset` draws; the Basis transcoder they need is precached. */
 export function presetAssetUrls(preset: GraphicsPreset): readonly string[] {
   const flags = QUALITY_FLAGS[preset];
-  const drawn = Object.entries(ASSET_REGISTRY).filter(([, { flag }]) => flags[flag]);
-  const urls = drawn.flatMap(([stem]) => {
+  return Object.entries(ASSET_REGISTRY).flatMap(([stem, { flag }]) => {
     const url = ASSET_URLS[stem];
-    return url === undefined ? [] : [url];
+    return flags[flag] && url !== undefined ? [url] : [];
   });
-  if (drawn.some(([, { kind }]) => kind === 'ktx2')) urls.push(...Object.values(TRANSCODER_URLS));
-  return urls;
 }

@@ -173,7 +173,7 @@ test('zooms and pans the top-down view without disturbing the controls', async (
 });
 
 test(
-  'High graphics caches the ground, sky, yard kit and cockpit interior assets and transcoder before first use and applies them offline',
+  'High graphics caches the ground, sky, yard kit and cockpit interior assets before first use and applies them offline',
   {
     tag: HEAVY,
   },
@@ -219,11 +219,10 @@ test(
       assets.flatMap(([stem, extensions]) =>
         extensions.map((extension) => new RegExp(`${stem}-[\\w-]+\\.${extension}$`)),
       );
-    // the transcoder has no registry entry: whatever draws a KTX2 needs it
     const drawn = patterns(
       RUNTIME_ASSETS.filter(([stem]) => {
         const entry = ASSET_REGISTRY[stem];
-        return entry === undefined || QUALITY_FLAGS.high[entry.flag];
+        return entry !== undefined && QUALITY_FLAGS.high[entry.flag];
       }),
     );
     expect(drawn.map(String).sort()).toEqual(
@@ -231,8 +230,6 @@ test(
         /arocs-1835-ak-interior-[\w-]+\.glb$/,
         /asphalt-albedo-[\w-]+\.ktx2$/,
         /asphalt-packed-[\w-]+\.ktx2$/,
-        /basis_transcoder-[\w-]+\.js$/,
-        /basis_transcoder-[\w-]+\.wasm$/,
         /concrete-albedo-[\w-]+\.ktx2$/,
         /concrete-packed-[\w-]+\.ktx2$/,
         /ground-[\w-]+\.ktx2$/,
@@ -255,6 +252,11 @@ test(
     // Installing does not download them: only High draws the texture, so the other presets skip the cost.
     const installed = await cached();
     for (const file of files) expect(matching(installed.precache, file), String(file)).toEqual([]);
+    // Every textured preset needs the transcoder, so installing downloads it.
+    for (const extension of ['js', 'wasm']) {
+      const transcoder = new RegExp(`basis_transcoder-[\\w-]+\\.${extension}$`);
+      expect(matching(installed.precache, transcoder), String(transcoder)).toHaveLength(1);
+    }
 
     // Offline-ready was shown for the saved High preset, so its assets are cached before any drive.
     const prefetched = await cached();
