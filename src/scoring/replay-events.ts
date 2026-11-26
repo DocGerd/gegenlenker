@@ -1,5 +1,6 @@
 import type { ExerciseDefinition, InputLog } from '../contracts/exercise';
 import type { SimSnapshot } from '../contracts/sim';
+import type { EinweiserReplay } from './einweiser';
 import { createRunTracker, isDrivingInput, STOPPED_SPEED } from './score';
 
 export type ReplayEventKind = 'contact' | 'jackknife' | 'stop' | 'waypoint' | 'reached';
@@ -19,9 +20,13 @@ export type EventScanner = {
 
 /**
  * Feed every snapshot in order. A stop is the vehicle falling below the stop speed after it
- * moved; the stop that ends a reached run is reported as `reached` only.
+ * moved; the stop that ends a reached run is reported as `reached` only. An Einweiser run's
+ * scanner takes its replay tracker, which it feeds: its stop in the target counts after a Halt only.
  */
-export function createEventScanner(exercise: ExerciseDefinition | null): EventScanner {
+export function createEventScanner(
+  exercise: ExerciseDefinition | null,
+  einweiser: EinweiserReplay | null = null,
+): EventScanner {
   const tracker = exercise === null ? null : createRunTracker(exercise);
   const events: ReplayEvent[] = [];
   let contacts = 0;
@@ -37,7 +42,11 @@ export function createEventScanner(exercise: ExerciseDefinition | null): EventSc
       contacts = s.contacts;
       jackknifes = s.jackknifes;
       const stopped = Math.abs(s.speed) < STOPPED_SPEED;
-      const isReached = tracker?.update(s) === true;
+      einweiser?.update(s);
+      // as live: a run-over ends the run unreached, and only a recognised Halt lets a stop end it
+      const isReached =
+        tracker?.update(s) === true &&
+        (einweiser === null || (einweiser.tracker.halted() && !einweiser.tracker.runOver()));
       if (tracker !== null && !waypointSeen && tracker.waypointVisited()) {
         waypointSeen = true;
         found.push('waypoint');

@@ -657,8 +657,7 @@ function belowCutOut(rect: Rect, insets: Insets): Rect {
 /**
  * Whether the longest toast and the goal cue, stacked in `column` from the cockpit's top (below the
  * display cut-out), end above the controls, the key legend, the HUD band and the forward sight cone
- * they would otherwise reach into. Where the cue `yields`, only the taller of the two stands there at
- * a time.
+ * they would otherwise reach into.
  */
 function messagesFit(
   cockpit: Rect,
@@ -668,10 +667,9 @@ function messagesFit(
   controls: number,
   insets: Insets,
   legend: LegendBox | null,
-  yields = false,
 ): boolean {
   const { toast, cue } = messageHeights(column.width);
-  const stack = yields ? Math.max(toast, cue) : toast + MESSAGE_GAP + cue;
+  const stack = toast + MESSAGE_GAP + cue;
   const bottom = belowCutOut(cockpit, insets).y + INSET + stack;
   const reaches = (x0: number, x1: number): boolean =>
     column.x < x1 && column.x + column.width > x0;
@@ -754,7 +752,7 @@ export type MessageColumn = Rect & { readonly cueYields: boolean };
  * cut-out, which hud.css therefore leaves out. Beside the front mirror they take the cockpit's top
  * between the left mirror and the front mirror. Without one they take the span between the class II
  * mirrors where the stack fits there (`messagesFit`), else the top-down pane, below the finish button
- * and clear of the lever. With no such pane, a span beside the sight cone, else the cue yields.
+ * and clear of the lever. With no such pane the cue yields to the toast between the class II mirrors.
  */
 export function messageColumn(
   views: ViewRects,
@@ -779,23 +777,12 @@ export function messageColumn(
   const cssWidth = Math.max(cockpit.x + cockpit.width, topDown.x + topDown.width);
   const cssHeight = Math.max(cockpit.y + cockpit.height, topDown.y + topDown.height);
   const controls = controlsHeight(cssWidth, cssHeight, insets);
-  const fits = (column: { readonly x: number; readonly width: number }, yields: boolean) =>
-    column.width >= MIN_MESSAGE_WIDTH &&
-    messagesFit(cockpit, column, cssWidth, cssHeight, controls, insets, legend, yields);
-  if (fits(between, false)) return { ...area, ...between, cueYields: false };
-  if (!hasTopDown(views)) {
-    const cone = coneBox(cockpit);
-    const beside = [
-      { x: cone.right, width: between.x + between.width - cone.right },
-      { x, width: cone.left - x },
-    ];
-    for (const yields of [false, true]) {
-      for (const column of yields ? [between, ...beside] : beside) {
-        if (fits(column, yields)) return { ...area, ...column, cueYields: yields };
-      }
-    }
-    return { ...area, ...between, cueYields: true };
-  }
+  const fits =
+    between.width >= MIN_MESSAGE_WIDTH &&
+    messagesFit(cockpit, between, cssWidth, cssHeight, controls, insets, legend);
+  if (fits) return { ...area, ...between, cueYields: false };
+  // Mirror-only: the cue yields to the toast; no span beside the sight cone fits at a supported size.
+  if (!hasTopDown(views)) return { ...area, ...between, cueYields: true };
   // Below the finish button; in landscape also left of the stop button and lever, which stand at the
   // screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). In portrait the pane spans the screen.
   const pane = belowCutOut(topDown, insets);

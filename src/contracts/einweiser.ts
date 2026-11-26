@@ -53,3 +53,12 @@ export type EinweiserStatus = {
   /** The latest reading other than `none`, kept until the next one; `none` before the first. */
   readonly reading: ReadingKind;
 };
+
+/** An Einweiser run's own scoring, beside the driver measures of `RunResult`. */
+export type EinweiserResult = {
+  /** The vehicle hit him: the run ended at once, not reached. */
+  readonly runOver: boolean;
+  readonly faults: Readonly<Record<EinweiserFault, number>>;
+  /** He walked backwards while the vehicle moved: an advisory note, not a fault. */
+  readonly walkedBackwards: boolean;
+};

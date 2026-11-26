@@ -57,6 +57,8 @@ export type RunConfig = {
 export type DriveOutcome = {
   readonly log: InputLog;
   readonly result: RunResult | null;
+  /** An Einweiser run ended because the vehicle hit him. */
+  readonly runOver: boolean;
 };
 
 /** Margin between the target arrow and the edge of the clear rect, in px. */
@@ -100,6 +102,7 @@ export function startDrive(
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
   let reached = false;
+  let runOver = false;
   // Sticky over aid toggles; only sim steps after the first driving input with an aid on count.
   let assisted = false;
   let startTime: number | null = null;
@@ -109,7 +112,7 @@ export function startDrive(
   root.append(stage);
   const einweiser =
     role === 'einweiser'
-      ? startEinweiserDrive(stage, { truck, trailer, layout, start: snapshot, lighting })
+      ? startEinweiserDrive(stage, { truck, trailer, layout, contacts, start: snapshot, lighting })
       : null;
 
   const cleanups: (() => void)[] = [];
@@ -136,9 +139,8 @@ export function startDrive(
       },
       snapshot.step,
     );
-    // Einweiser runs are not scored yet (#499), so they store no driver result.
-    const result =
-      scored && exercise !== null && einweiser === null
+    const driven =
+      scored && exercise !== null
         ? runResult(
             snapshot,
             exercise,
@@ -152,8 +154,10 @@ export function startDrive(
             mirrorsOnly,
           )
         : null;
+    const result =
+      driven === null || einweiser === null ? driven : { ...driven, einweiser: einweiser.result() };
     dispose();
-    onExit({ log, result });
+    onExit({ log, result, runOver });
   };
   const finish = (): void => exit(true);
   const restart = (): void => {
@@ -499,7 +503,7 @@ export function startDrive(
     },
     halted: halt,
     frame(seconds) {
-      if (reached) {
+      if (reached || runOver) {
         finish();
         return;
       }
@@ -513,8 +517,15 @@ export function startDrive(
         if (startTime === null && isDrivingInput(control)) startTime = snapshot.time;
         if (startTime !== null && anyAid(aids)) assisted = true;
         snapshot = sim.step(control);
+        if (einweiser !== null) {
+          einweiser.settle(snapshot);
+          // the hit ends the run, reached or not; the next frame exits
+          runOver = einweiser.runOver();
+          if (runOver) break;
+        }
         if (tracker !== null) {
-          reached = tracker.update(snapshot);
+          // an Einweiser run ends only on a stop in the target after a recognised Halt
+          reached = tracker.update(snapshot) && (einweiser?.halted() ?? true);
           // render this final snapshot first; the next frame exits, so the HUD's last time is the result time
           if (reached) break;
         }

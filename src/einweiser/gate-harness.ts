@@ -2,7 +2,12 @@
  * Test-only: the Einweiser gate (`docs/einweiser-spike.md` §9, PR 2) that the per-exercise
  * `gate-*.test.ts` files share. A scripted, `walkStep`-only Einweiser guides the AI driver.
  */
-import { HOLD_STEPS, type EinweiserFault, type SignId } from '../contracts/einweiser';
+import {
+  HOLD_STEPS,
+  type EinweiserFault,
+  type EinweiserResult,
+  type SignId,
+} from '../contracts/einweiser';
 import type { ExerciseDefinition, ExerciseId, TargetZone } from '../contracts/exercise';
 import type { Obstacle, Rect2 } from '../contracts/layout';
 import type {
@@ -36,7 +41,7 @@ import { createPilot, CURVE_RADIUS, type Pilot } from './driver';
 import { createEinweiserRun } from './track';
 import { rejoin, type Segment, straighten } from './gate-recovery';
 
-import { clearance, runOver, signOutOfSight } from './faults';
+import { clearance } from './faults';
 import {
   bodyPoints,
   layoutOccluders,
@@ -54,7 +59,6 @@ import {
   recognitionTime,
   station,
   type Station,
-  TOO_CLOSE,
 } from './signs';
 import { overlaps, STEP_HEIGHT, WALKER_RADIUS, type WalkKeys, type Walker } from './walk';
 
@@ -1140,11 +1144,27 @@ export type GateScoring = {
   readonly createRunTracker: (exercise: ExerciseDefinition) => {
     update(s: SimSnapshot): boolean;
   };
+  /** `src/scoring/einweiser.ts`, which the live run and its replay score with. */
+  readonly createEinweiserTracker: (
+    g: SightGeometry,
+    contacts: ContactQuery,
+  ) => {
+    update(f: {
+      readonly before: SimSnapshot;
+      readonly after: SimSnapshot;
+      readonly held: Pose2;
+      readonly moved: number;
+      readonly sign: SignId | null;
+      readonly inSight: boolean;
+      readonly reading: Reading;
+    }): void;
+    halted(): boolean;
+    result(): EinweiserResult;
+  };
   readonly targetError: (
     s: SimSnapshot,
     zone: TargetZone,
   ) => { readonly position: number; readonly angle: number };
-  readonly STOPPED_SPEED: number;
 };
 
 /** One gate case: the scripted Einweiser guiding the AI driver through the exercise. */
@@ -1152,7 +1172,7 @@ export function runGate(
   exerciseId: ExerciseId,
   truckId: TruckId,
   trailerId: TrailerId,
-  { createRunTracker, targetError, STOPPED_SPEED }: GateScoring,
+  { createRunTracker, createEinweiserTracker, targetError }: GateScoring,
 ): Outcome {
   const legsFor = LEGS[exerciseId];
   if (!legsFor) throw new Error(`no gate legs for ${exerciseId}`);
@@ -1191,17 +1211,8 @@ export function runGate(
     legs,
   );
   const einweiser = createEinweiserRun({ g, occluders, yard: run.layout.yard, start: s, pilot });
+  const scored = createEinweiserTracker(g, run.contacts);
   let reading: Reading = { kind: 'none' };
-  let lastSign: SignId | null = null;
-  let acted: string | null = null;
-  let achtung = false;
-  const faults: Partial<Record<EinweiserFault | 'runOver', number>> = {};
-  const active = new Set<string>();
-  const flag = (kind: EinweiserFault | 'runOver', on: boolean): void => {
-    if (on && !active.has(kind)) faults[kind] = (faults[kind] ?? 0) + 1;
-    if (on) active.add(kind);
-    else active.delete(kind);
-  };
   let reached = false;
   let lastEvent = 0;
   for (let step = 0; step < 60 * 600 && !reached && step - lastEvent < 60 * 60; step++) {
@@ -1213,28 +1224,27 @@ export function runGate(
       step,
     });
     const d = einweiser.step(s, { keys: act.keys, heading: act.heading, pitch: 0, sign: act.sign });
-    const held = d.status.held;
     reading = d.reading;
-    const moving = Math.abs(s.speed) > STOPPED_SPEED;
-    flag('runOver', moving && runOver(run.params, s, held, d.moved));
-    flag('inPath', moving && inPath(g, s, held));
-    flag('tooClose', moving && clearance(run.params, s, held) < TOO_CLOSE);
-    flag('outOfSight', reading.kind === 'lost' && s.speed !== 0);
-    flag('signOutOfSight', signOutOfSight(lastSign, act.sign, d.perception.inSight));
-    flag('unclear', reading.kind === 'unclear');
-    if (reading.kind === 'recognised') {
-      if (reading.sign === 'achtung') achtung = true;
-      flag('noAchtung', !achtung && reading.sign !== null && MOVEMENT_SIGNS.has(reading.sign));
-    } else flag('noAchtung', false);
     if (reading.kind !== 'none') lastEvent = step;
-    if (reading.kind !== 'none') {
-      acted = reading.kind === 'recognised' ? String(reading.sign) : reading.kind;
-    }
-    lastSign = act.sign;
+    const before = s;
     s = sim.step(d.control);
-    reached = tracker.update(s) && acted === 'halt';
+    scored.update({
+      before,
+      after: s,
+      held: d.status.held,
+      moved: d.moved,
+      sign: act.sign,
+      inSight: d.perception.inSight,
+      reading,
+    });
+    reached = tracker.update(s) && scored.halted();
     if (s.contacts > 0 || s.jackknifes > 0) break;
   }
+  const result = scored.result();
+  const faults: Partial<Record<EinweiserFault | 'runOver', number>> = Object.fromEntries(
+    Object.entries(result.faults).filter(([, n]) => n > 0),
+  );
+  if (result.runOver) faults.runOver = 1;
   const err = targetError(s, exercise.target);
   return {
     reached,
