@@ -186,3 +186,46 @@ test('a double click on a title entry moves one level', async ({ page }) => {
   );
   expect(under).toContain('menu-row');
 });
+
+test.describe('a content chunk that fails to load', () => {
+  // A service worker would answer the chunk request itself, past page.route.
+  test.use({ serviceWorkers: 'block' });
+
+  test("shows the load-failure notice; Back lands on the title and Retry reopens What's new", async ({
+    page,
+    allow,
+  }) => {
+    allow(/net::ERR_FAILED|Failed to fetch dynamically imported module: .*\/assets\/whats-new-/);
+    let offline = true;
+    await page.route(
+      (url) =>
+        /\/assets\/whats-new-/.test(url.pathname) && !url.pathname.includes('whats-new-seen-'),
+      async (route) => {
+        if (offline) await route.abort();
+        else await route.continue();
+      },
+    );
+    const notice = page.getByRole('alertdialog', { name: en.loadFailed });
+    const open = titleEntry(page, en.whatsNew);
+
+    await page.goto('./');
+    await open.click();
+    await expect(notice).toBeVisible();
+    await expect(screen(page, 'whatsNew')).toHaveCount(0);
+    await notice.getByRole('button', { name: en.back }).click();
+    await expect(screen(page, 'title')).toBeVisible();
+    await expect(notice).toHaveCount(0);
+    await expect.poll(() => historyState(page)).toBeNull();
+
+    await open.click();
+    await expect(notice).toBeVisible();
+    offline = false;
+    await notice.getByRole('button', { name: en.retry }).click();
+    await expect(page.getByRole('heading', { level: 1, name: en.whatsNew })).toBeFocused();
+    await expect(screen(page, 'whatsNew').getByRole('listitem').first()).toBeVisible();
+    await expect.poll(() => historyState(page)).not.toBeNull();
+    await page.keyboard.press('Escape');
+    await expect(open).toBeFocused();
+    await expect.poll(() => historyState(page)).toBeNull();
+  });
+});

@@ -98,13 +98,15 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
     const frame = screenFrame(level.screen, headingOf(level), back);
     const load = CONTENT[level.screen];
     let open = true;
-    load?.()
-      .then((m) => {
+    // Only the chunk load reaches `failed`; a fault in `render` is the app's own error.
+    void load?.().then(
+      (m) => {
         if (open) m.render(frame.body);
-      })
-      .catch((error: unknown) => {
+      },
+      (error: unknown) => {
         if (open) deps.failed(error, nav);
-      });
+      },
+    );
     return {
       root: frame.root,
       focus: () => {

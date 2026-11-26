@@ -50,8 +50,9 @@ for (const { locale, messages } of locales) {
 
     const overflow = await page.evaluate(() => {
       const root = document.scrollingElement;
-      const scroll = document.querySelector('.menu-scroll');
-      return [root, scroll].map((el) => (el ? el.scrollWidth - el.clientWidth : 0));
+      const scroll = document.querySelector('[data-screen="whatsNew"] .menu-screen-scroll');
+      if (root === null || scroll === null) throw new Error("what's new markup missing");
+      return [root, scroll].map((el) => el.scrollWidth - el.clientWidth);
     });
     expect(Math.max(...overflow)).toBeLessThanOrEqual(0);
     // The screen's script chunk loads; its content is bundled, so nothing is fetched.
