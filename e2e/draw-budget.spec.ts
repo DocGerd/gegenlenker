@@ -53,9 +53,16 @@ async function drawnCalls(page: Page, { preset, lighting }: Run, what: string): 
 }
 
 async function startAtFullSize(page: Page, { preset, lighting }: Run): Promise<void> {
-  // every mirror draws at this size: budget the worst case
-  await page.setViewportSize({ width: 1920, height: 1080 });
+  // the load and its first settle draw at a smaller size, which costs less on software GL
+  await page.setViewportSize({ width: 1280, height: 720 });
   await startPinnedDrive(page, { preset, lighting }, exerciseEntry('straight-reverse'), '?perf=1');
+  // every mirror draws at this size: budget the worst case
+  const backingWidth = (): Promise<number> =>
+    page.evaluate(() => document.querySelector('canvas')?.width ?? 0);
+  const small = await backingWidth();
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  // the app sees the size through a ResizeObserver, which resizes the canvas and re-arranges the views
+  await expect.poll(backingWidth).toBeGreaterThan(small);
 }
 
 /** One pointer drag from the pane's centre, `dx` px right and `dy` px down, as the free camera reads it. */
