@@ -1,14 +1,15 @@
 import type { ControlSource } from '../contracts/control';
-import { DEG_PER_COUNT, type EinweiserStatus } from '../contracts/einweiser';
+import { DEG_PER_COUNT, type EinweiserResult, type EinweiserStatus } from '../contracts/einweiser';
 import type { EinweiserTrack } from '../contracts/exercise';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { EinweiserVisual, LampSwitches, LightingMode } from '../contracts/render';
-import type { ControlVector, SimSnapshot } from '../contracts/sim';
+import type { ContactQuery, ControlVector, SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { layoutOccluders, sightGeometry } from '../einweiser/sight';
-import { createEinweiserRun } from '../einweiser/track';
+import { createEinweiserRun, type EinweiserStep } from '../einweiser/track';
 import type { EinweiserHud } from '../hud/hud';
 import { createWalkInput, type WalkInput } from '../input/walk-input';
+import { createEinweiserTracker } from '../scoring/einweiser';
 import { currentSettings } from './settings';
 
 /** How long the sight cue says a sign was unclear, sim seconds (estimate). */
@@ -29,12 +30,20 @@ export type EinweiserDrive = {
   track(): EinweiserTrack;
   /** What his HUD shows; null before the first sim step. */
   hud(): EinweiserHud | null;
+  /** After each `sim.step`, with its snapshot: scores the step the source just ticked. */
+  settle(after: SimSnapshot): void;
+  /** The vehicle hit him: the run ends at once. */
+  runOver(): boolean;
+  /** A stop in the target ends the run only after a recognised Halt. */
+  halted(): boolean;
+  result(): EinweiserResult;
 };
 
 export type EinweiserDriveSetup = {
   readonly truck: TruckSpec;
   readonly trailer: TrailerSpec;
   readonly layout: ResolvedLayout;
+  readonly contacts: ContactQuery;
   /** The run's first snapshot. */
   readonly start: SimSnapshot;
   readonly lighting: LightingMode;
@@ -43,14 +52,16 @@ export type EinweiserDriveSetup = {
 /** Marks `stage` with `data-role="einweiser"`, which e2e waits for. */
 export function startEinweiserDrive(
   stage: HTMLElement,
-  { truck, trailer, layout, start, lighting }: EinweiserDriveSetup,
+  { truck, trailer, layout, contacts, start, lighting }: EinweiserDriveSetup,
 ): EinweiserDrive {
+  const g = sightGeometry(truck, trailer);
   const run = createEinweiserRun({
-    g: sightGeometry(truck, trailer),
+    g,
     occluders: layoutOccluders(layout),
     yard: layout.yard,
     start,
   });
+  const tracker = createEinweiserTracker(g, contacts);
   const input = createWalkInput({
     heading: run.walker().heading,
     look: () => {
@@ -61,6 +72,7 @@ export function startEinweiserDrive(
   const lamps: LampSwitches = { lights: lighting === 'night', hazard: false };
   let control: ControlVector = start.control;
   let status: EinweiserStatus | null = null;
+  let ticked: { readonly before: SimSnapshot; readonly step: EinweiserStep } | null = null;
   // sim time, so the cue holds while the pause sheet stops the run
   let time = start.time;
   let unclearAt = -Infinity;
@@ -73,6 +85,7 @@ export function startEinweiserDrive(
     source: {
       tick(_, snapshot) {
         const step = run.step(snapshot, input.sample());
+        ticked = { before: snapshot, step };
         control = step.control;
         status = step.status;
         time = snapshot.time;
@@ -99,5 +112,22 @@ export function startEinweiserDrive(
             sight: status.sight,
             unclear: time - unclearAt < UNCLEAR_CUE_SECONDS,
           },
+    settle(after) {
+      if (ticked === null) return;
+      const { before, step } = ticked;
+      ticked = null;
+      tracker.update({
+        before,
+        after,
+        held: step.status.held,
+        moved: step.moved,
+        sign: step.status.sign,
+        inSight: step.perception.inSight,
+        reading: step.reading,
+      });
+    },
+    runOver: () => tracker.runOver(),
+    halted: () => tracker.halted(),
+    result: () => tracker.result(),
   };
 }

@@ -67,3 +67,12 @@ export const DEG_PER_COUNT: Readonly<Record<MouseSensitivity, number>> = {
   medium: 0.05,
   high: 0.1,
 };
+
+/** An Einweiser run's own scoring, beside the driver measures of `RunResult`. */
+export type EinweiserResult = {
+  /** The vehicle hit him: the run ended at once, not reached. */
+  readonly runOver: boolean;
+  readonly faults: Readonly<Record<EinweiserFault, number>>;
+  /** He walked backwards while the vehicle moved: an advisory note, not a fault. */
+  readonly walkedBackwards: boolean;
+};
