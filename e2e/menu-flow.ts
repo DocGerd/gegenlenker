@@ -84,16 +84,14 @@ export function setupBests(page: Page, messages: Messages, entry: MenuEntry): Lo
 const radioGroup = (scope: Locator, messages: Messages, name: MessageKey): Locator =>
   scope.getByRole('radiogroup', { name: messages[name], exact: true });
 
-async function choose(scope: Locator, messages: Messages, name: MessageKey, value: string) {
-  await radioGroup(scope, messages, name).locator(`input[value="${value}"]`).check();
+/** Clicks the value; a row that redraws itself (language) detaches the radio, which `check()` would then trip over. */
+async function choose(scope: Locator, name: MessageKey, value: string) {
+  await scope.locator(`[data-menu="${name}"] input[value="${value}"]`).click();
 }
 
 async function read(scope: Locator, messages: Messages, name: MessageKey): Promise<string> {
   return radioGroup(scope, messages, name).locator('input:checked').inputValue();
 }
-
-// Settings still render as selects until their screen lands.
-const legacyOption = (page: Page, name: string): Locator => page.locator(`[data-menu="${name}"]`);
 
 export async function chooseRunOption<K extends keyof RunOptions>(
   page: Page,
@@ -101,7 +99,7 @@ export async function chooseRunOption<K extends keyof RunOptions>(
   name: K,
   value: RunOptions[K],
 ): Promise<void> {
-  await choose(screen(page, 'setup'), messages, name, value);
+  await choose(screen(page, 'setup'), name, value);
 }
 
 export async function runOptionValue(
@@ -143,24 +141,44 @@ export const startYard = (
   options?: Partial<RunOptions>,
 ): Promise<void> => startEntry(page, messages, yardEntry(id), options);
 
+/** Opens Settings from the title. */
+async function openSettings(page: Page, messages: Messages): Promise<Locator> {
+  await toTitle(page, messages);
+  await screen(page, 'title').getByRole('button', { name: messages.settings, exact: true }).click();
+  const settings = screen(page, 'settings');
+  await settings.waitFor();
+  return settings;
+}
+
+/** Back out of Settings to the title, in whatever language the page shows now. */
+async function closeSettings(page: Page): Promise<void> {
+  await screen(page, 'settings').locator('[data-menu="back"]').click();
+  await toTitle(page, await pageMessages(page));
+}
+
 /** A language change swaps the catalogue: callers re-fetch `pageMessages` afterwards. */
 export async function chooseSetting<K extends keyof SettingOptions>(
   page: Page,
-  _messages: Messages,
+  messages: Messages,
   name: K,
   value: SettingOptions[K],
 ): Promise<void> {
-  await legacyOption(page, name).selectOption(value);
+  const settings = await openSettings(page, messages);
+  await choose(settings, name, value);
   if (name === 'language' && (await pageMessages(page)) !== catalogue(value))
     throw new Error(`language did not switch to ${value}`);
+  await closeSettings(page);
 }
 
 export async function settingValue(
   page: Page,
-  _messages: Messages,
+  messages: Messages,
   name: keyof SettingOptions,
 ): Promise<string> {
-  return legacyOption(page, name).inputValue();
+  const settings = await openSettings(page, messages);
+  const value = await read(settings, messages, name);
+  await closeSettings(page);
+  return value;
 }
 
 /**

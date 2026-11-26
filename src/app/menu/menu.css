@@ -553,3 +553,26 @@ ol.menu-rows .menu-row {
 .choice-radio:focus-visible {
   outline: none;
 }
+
+/* Settings */
+
+.menu-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: var(--measure);
+}
+
+.menu-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.menu-settings-heading {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: var(--leading-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-secondary);
+}

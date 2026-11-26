@@ -21,6 +21,7 @@ import {
 } from './nav';
 import { entriesScreen } from './screens/entries';
 import { screenFrame } from './screens/frame';
+import { optionsScreen } from './screens/options';
 import { setupScreen } from './screens/setup';
 import { titleScreen } from './screens/title';
 
@@ -58,6 +59,8 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   let closed = false;
   // Set by Start until the drive replaces the menu (or a failure notice does): nothing navigates meanwhile.
   let busy = false;
+  // Where focus goes on the next `show` instead of the level's remembered one.
+  let refocus: string | null = null;
 
   const state = (): MenuState => {
     const best = bestResults();
@@ -164,6 +167,17 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           },
           start: startRun,
         });
+      case 'options':
+        return optionsScreen({
+          screen,
+          heading: headingOf(level),
+          back,
+          activate,
+          redraw: (id) => {
+            refocus = id;
+            show();
+          },
+        });
       default:
         return contentScreen(level);
     }
@@ -185,7 +199,8 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
       ignoreMultiClicks(view.root),
       arrowFocus(view.root, ITEMS),
     ];
-    view.focus(level.focus);
+    view.focus(refocus ?? level.focus);
+    refocus = null;
     if (holdsEntry(nav)) deps.hold(onPop);
     else deps.release();
   };

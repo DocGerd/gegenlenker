@@ -8,8 +8,10 @@ import { en } from '../src/i18n/en';
 import { expect, test } from './fixtures';
 import {
   chooseRunOption,
+  chooseSetting,
   exerciseEntry,
   openSetup,
+  settingValue,
   setupBests,
   startControl,
   yardEntry,
@@ -302,6 +304,105 @@ test('the last row and Start can be reached at 1280x585 in German, with Back and
     await expect(setup.getByRole('button', { name: de.back })).toBeInViewport();
     await expect(setup.getByRole('heading', { level: 1 })).toBeInViewport();
   }
+  await context.close();
+});
+
+const settingsRadio = (page: Page, group: string, value: string): Locator =>
+  screen(page, 'settings')
+    .getByRole('radiogroup', { name: group, exact: true })
+    .locator(`input[value="${value}"]`);
+
+test('a language change re-renders Settings in place, keeps focus on the chosen value, and Back returns to the title in that language', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await titleEntry(page, en.settings).click();
+  await expect(settingsRadio(page, en.language, 'en')).toBeFocused();
+  await settingsRadio(page, en.language, 'de').click();
+
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+  await expect(settingsRadio(page, de.language, 'de')).toBeFocused();
+  await expect(screen(page, 'settings').getByRole('heading', { level: 1 })).toHaveText(de.settings);
+  await expect.poll(() => historyState(page)).not.toBeNull();
+  await screen(page, 'settings').getByRole('button', { name: de.back }).click();
+  await expect(titleEntry(page, de.exercises)).toBeVisible();
+  await expect.poll(() => historyState(page)).toBeNull();
+});
+
+test('a Settings change applies at once and survives a reload', async ({ page }) => {
+  await page.goto('./');
+  await titleEntry(page, en.settings).click();
+  await expect(settingsRadio(page, en.theme, 'system')).toBeChecked();
+  await settingsRadio(page, en.theme, 'dark').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await titleEntry(page, en.settings).click();
+  await expect(settingsRadio(page, en.theme, 'dark')).toBeChecked();
+});
+
+test('Settings stores every change and the helpers read it back', async ({ page }) => {
+  await page.goto('./');
+  await chooseSetting(page, en, 'graphics', 'low');
+  await chooseSetting(page, en, 'wideMirrors', 'off');
+  await page.reload();
+  expect(await settingValue(page, en, 'graphics')).toBe('low');
+  expect(await settingValue(page, en, 'wideMirrors')).toBe('off');
+});
+
+test('no screen overflows sideways at 360 px', async ({ browser }) => {
+  const context = await browser.newContext({ viewport: { width: 360, height: 640 } });
+  const page = await context.newPage();
+  const fits = async (id: string): Promise<void> => {
+    await expect(screen(page, id)).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const over = await page.evaluate((screenId) => {
+      const scroll = document.querySelector(`[data-screen="${screenId}"] .menu-screen-scroll`);
+      if (scroll === null || document.scrollingElement === null) throw new Error('no screen');
+      return [document.scrollingElement, scroll].map((el) => el.scrollWidth - el.clientWidth);
+    }, id);
+    for (const extra of over) expect(extra, id).toBeLessThanOrEqual(0);
+  };
+  await page.goto('./');
+  await fits('title');
+  await titleEntry(page, en.exercises).click();
+  await fits('exercises');
+  await openSetup(page, en, exerciseEntry('slalom'));
+  await fits('setup');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await titleEntry(page, en.freeYard).click();
+  await fits('yards');
+  await openSetup(page, en, yardEntry('depot'));
+  await fits('setup');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await titleEntry(page, en.settings).click();
+  await fits('settings');
+  await page.keyboard.press('Escape');
+  await titleEntry(page, en.whatsNew).click();
+  await expect(screen(page, 'whatsNew').getByRole('listitem').first()).toBeVisible();
+  await fits('whatsNew');
+  await context.close();
+});
+
+test('the last Settings row can be reached at 1280x585 in German, with Back and the heading in view', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    locale: 'de-DE',
+    viewport: { width: 1280, height: 585 },
+  });
+  const page = await context.newPage();
+  await page.goto('./');
+  await titleEntry(page, de.settings).click();
+  const settings = screen(page, 'settings');
+  const last = settings.getByRole('radiogroup', { name: de.wideMirrors, exact: true });
+  await last.scrollIntoViewIfNeeded();
+  await expect(last).toBeInViewport();
+  await expect(settings.getByRole('button', { name: de.back })).toBeInViewport();
+  await expect(settings.getByRole('heading', { level: 1 })).toBeInViewport();
   await context.close();
 });
 
