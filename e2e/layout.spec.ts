@@ -364,6 +364,7 @@ const insetSizes: {
   { width: 1024, height: 600 },
   { width: 900, height: 649 },
   { width: 768, height: 1024 },
+  { width: 768, height: 1024, slot: 'between the mirrors' },
   { width: 860, height: 860, keysOpen: true },
   // in portrait too its cockpit starts at the screen's top edge
   { width: 820, height: 1180, slot: 'between the mirrors' },
@@ -504,6 +505,49 @@ test('the longest German toast fits the narrowest pane column, inside the safe a
     await context.close();
   }
 });
+
+for (const { locale, messages } of locales) {
+  test(`the portrait mirror-only band holds the readouts and the counters at ${locale} 768x1024 with insets`, async ({
+    browser,
+  }) => {
+    const size = { width: 768, height: 1024 };
+    const context = await browser.newContext({ locale, viewport: size });
+    try {
+      const page = await context.newPage();
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+      await page.addInitScript((key) => {
+        localStorage.setItem(key, JSON.stringify({ version: 1, mirrorsOnly: true }));
+      }, SETTINGS_KEY);
+      await page.goto('./');
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            getComputedStyle(document.documentElement).getPropertyValue('--safe-left'),
+          ),
+        )
+        .toBe(`${insets.left}px`);
+      await startExercise(page, messages, 'straight-reverse');
+      await hudReady(page, { insets, mirrorsOnly: true });
+      const [band] = await boxes(page.locator('.hud-band'));
+      const held = await boxes(page.locator('.hud-gear, .hud-speed, .hud-counters'));
+      const around = await boxes(page.locator('.hud-goal:not([hidden]), .ctl-gears, .ctl-lever'));
+      expect(held).toHaveLength(3);
+      expect(around).toHaveLength(3);
+      for (const b of held) {
+        expect(b.top, `${b.name} below the band's top`).toBeGreaterThanOrEqual(
+          band?.top ?? Infinity,
+        );
+        expect(b.bottom, `${b.name} above the bottom inset`).toBeLessThanOrEqual(
+          size.height - insets.bottom,
+        );
+        for (const o of around) expect(overlaps(b, o), `${b.name} overlaps ${o.name}`).toBe(false);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+}
 
 const starts = [
   { name: 'exercise', entry: exerciseEntry('straight-reverse') },
