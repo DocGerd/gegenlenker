@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { exerciseById } from '../content/registry';
 import { resolveRun } from '../content/run';
 import { HOLD_STEPS, type EinweiserResult, type SignId } from '../contracts/einweiser';
 import type { SimSnapshot } from '../contracts/sim';
@@ -9,7 +10,12 @@ import { STILL, type Walker, type WalkKeys } from '../einweiser/walk';
 import { createInputRecorder, replaySnapshots, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
-import { createEinweiserReplay, createEinweiserTracker, type EinweiserFacts } from './einweiser';
+import {
+  createEinweiserReplay,
+  createEinweiserTracker,
+  type EinweiserFacts,
+  type EinweiserTracker,
+} from './einweiser';
 import { createEventScanner } from './replay-events';
 
 const yard: RunIds = {
@@ -221,5 +227,27 @@ describe('Einweiser scoring', () => {
     expect(before.faults.noAchtung).toBe(1);
     const after = feed([recognised('achtung'), recognised('herkommen')]).result();
     expect(after.faults.noAchtung).toBe(0);
+  });
+});
+
+describe("an Einweiser replay's reached marker", () => {
+  const exercise = exerciseById('straight-reverse');
+  const { run } = scene({ ...yard, layoutId: exercise.layout, exerciseId: exercise.id });
+  const start = createSimulation(run.params, run.start, run.contacts).snapshot();
+  const inTarget: SimSnapshot = {
+    ...start,
+    trailerRear: { x: exercise.target.pose.x, y: exercise.target.pose.y },
+    trailer: { ...start.trailer, heading: exercise.target.pose.heading },
+  };
+  const reachedAfterHalt = (runOver: boolean): boolean => {
+    const tracker = { halted: () => true, runOver: () => runOver } as EinweiserTracker;
+    const scanner = createEventScanner(exercise, { update: () => undefined as never, tracker });
+    scanner.update(inTarget);
+    return scanner.events().some((e) => e.kind === 'reached');
+  };
+
+  it('is not set on the step he is run over: the live run ends there unreached', () => {
+    expect(reachedAfterHalt(false)).toBe(true);
+    expect(reachedAfterHalt(true)).toBe(false);
   });
 });

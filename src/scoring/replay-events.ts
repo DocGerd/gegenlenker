@@ -43,7 +43,10 @@ export function createEventScanner(
       jackknifes = s.jackknifes;
       const stopped = Math.abs(s.speed) < STOPPED_SPEED;
       einweiser?.update(s);
-      const isReached = tracker?.update(s) === true && (einweiser?.tracker.halted() ?? true);
+      // as live: a run-over ends the run unreached, and only a recognised Halt lets a stop end it
+      const isReached =
+        tracker?.update(s) === true &&
+        (einweiser === null || (einweiser.tracker.halted() && !einweiser.tracker.runOver()));
       if (tracker !== null && !waypointSeen && tracker.waypointVisited()) {
         waypointSeen = true;
         found.push('waypoint');
