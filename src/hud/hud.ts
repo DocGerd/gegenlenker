@@ -54,6 +54,8 @@ export type Hud = {
   setViewChanged(changed: boolean): void;
   /** Shows the free camera button as pressed while it flies. */
   setFree(on: boolean): void;
+  /** What a new graphics preset offers; losing the outside view while shown selects the last other view. */
+  setOffers(offers: HudOffers): void;
   /** The divider between the views: its value, range and orientation. */
   setSplit(split: TopDownSplit): void;
   /**
@@ -88,6 +90,12 @@ export type HudOptions = {
   mirrorsOnly?: boolean;
   /** The stop button and lever column, which the toolbar stays clear of; absent where there are no controls. */
   pedalsBox?: () => DOMRect;
+};
+
+export type HudOffers = {
+  readonly chase: boolean;
+  readonly interior: boolean;
+  readonly look: boolean;
 };
 
 const CONTACT_KEY: Record<BodyId, MessageKey> = {
@@ -199,11 +207,7 @@ const CHECK_ICON =
 const segmentButton = (view: string, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-segment" data-view="${view}" data-i18n="${key}"></button>`;
 
-/** The chase segment exists only where the preset offers that view, so the last one drawn closes the control. */
-const viewSegments = (chase: boolean): string =>
-  VIEWS.filter(([v]) => chase || v !== 'chase')
-    .map(([v, k]) => segmentButton(v, k))
-    .join('');
+const viewSegments = (): string => VIEWS.map(([v, k]) => segmentButton(v, k)).join('');
 
 /** A folding panel's chip is a disclosure: the chevron points down while the panel shows. */
 const panelButton = (panel: string, key: MessageKey): string =>
@@ -212,6 +216,9 @@ const panelButton = (panel: string, key: MessageKey): string =>
 /** The meaning in the legend list is the toggle's description; the ring fills with a tick while the aid is on. */
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-chip" data-aid="${aid}" aria-describedby="aid-meaning-${aid}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
+
+const keyRows = (chase: boolean, look: boolean, mirrorsOnly: boolean): string =>
+  driveLegendRows({ chase, look, mirrorsOnly }).map(legendRowMarkup).join('');
 
 const MARKUP = (
   mode: HudOptions['mode'],
@@ -225,9 +232,7 @@ const MARKUP = (
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl data-hud="keys">
-        ${driveLegendRows({ chase, look: look === true, mirrorsOnly })
-          .map(legendRowMarkup)
-          .join('')}
+        ${keyRows(chase, look === true, mirrorsOnly)}
       </dl>
     </div>
     <div class="hud-band" data-hud="band">
@@ -245,7 +250,7 @@ const MARKUP = (
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
-        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments(chase)}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
+        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
       <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
         <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
@@ -270,7 +275,7 @@ const MARKUP = (
     <div class="hud-split-handle" data-hud="splitHandle" role="separator" tabindex="0" ></div>
     <button type="button" class="hud-toggle hud-icon hud-split-reset" data-hud="splitReset" aria-keyshortcuts="L" disabled>${SPLIT_ICON}</button>
   </div>
-  ${chase && !mirrorsOnly ? `<div class="hud-pane-tools" data-hud="paneTools"><button type="button" class="hud-toggle hud-icon" data-hud="freeCamera" data-chrome aria-pressed="false" hidden>${FREE_CAMERA_ICON}</button></div>` : ''}
+  ${!mirrorsOnly ? `<div class="hud-pane-tools" data-hud="paneTools"><button type="button" class="hud-toggle hud-icon" data-hud="freeCamera" data-chrome aria-pressed="false" hidden>${FREE_CAMERA_ICON}</button></div>` : ''}
   <div class="hud-arrow" data-hud="targetArrow" role="img" aria-label="${t('targetDirection')}" hidden><svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="M-9 -8L10 0L-9 8L-4 0Z" /></svg></div>
   <button type="button" class="hud-action" data-chrome data-hud="action" data-i18n="pause"></button>
 </div>`;
@@ -373,11 +378,35 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const timeEl = counter('time');
 
   let view = opts.topDown;
+  /** The view a preset without the outside view falls back to. */
+  let lastOther: TopDownMode = view === 'chase' ? 'follow' : view;
   const aids = { ...opts.aids };
-  const viewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
+  const allViewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
+  const chaseSegment = query(hud, 'views', HTMLElement).querySelector<HTMLElement>(
+    '[data-view="chase"]',
+  );
+  const segmentGroup = chaseSegment?.parentElement ?? null;
   /** A button over the pane's bottom edge, only in the outside view: the toolbar keeps its two rows. */
-  const freeCamera = hud.querySelector<HTMLButtonElement>('[data-hud="freeCamera"]');
-  const paneTools = hud.querySelector<HTMLElement>('[data-hud="paneTools"]');
+  const freeCameraButton = hud.querySelector<HTMLButtonElement>('[data-hud="freeCamera"]');
+  const paneToolsBox = hud.querySelector<HTMLElement>('[data-hud="paneTools"]');
+  // Without the outside view its segment and the pane tools leave the DOM: the segments' CSS keys on `:last-child`.
+  let chaseOffered = opts.chase;
+  let viewButtons = allViewButtons;
+  let freeCamera = freeCameraButton;
+  let paneTools = paneToolsBox;
+  const syncChaseOffer = (): void => {
+    viewButtons = chaseOffered ? allViewButtons : allViewButtons.filter((b) => b !== chaseSegment);
+    freeCamera = chaseOffered ? freeCameraButton : null;
+    paneTools = chaseOffered ? paneToolsBox : null;
+    if (!chaseOffered) {
+      chaseSegment?.remove();
+      paneToolsBox?.remove();
+      return;
+    }
+    if (chaseSegment !== null && !chaseSegment.isConnected) segmentGroup?.append(chaseSegment);
+    if (paneToolsBox !== null && !paneToolsBox.isConnected) arrow.before(paneToolsBox);
+  };
+  syncChaseOffer();
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
   const panelButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
@@ -549,10 +578,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   const selectView = (mode: TopDownMode): void => {
     view = mode;
+    if (mode !== 'chase') lastOther = mode;
     syncToggles();
     emit({ type: 'topDown', mode });
   };
-  for (const b of viewButtons) {
+  for (const b of allViewButtons) {
     b.addEventListener('click', () => selectView(b.dataset['view'] as TopDownMode), { signal });
   }
   for (const b of aidButtons) {
@@ -623,11 +653,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     if (view !== 'chase') selectView('chase');
     emit({ type: 'freeCamera' });
   };
-  if (freeCamera !== null) {
+  if (freeCameraButton !== null) {
     const label = `${t('freeCamera')} (K)`;
-    freeCamera.title = label;
-    freeCamera.setAttribute('aria-label', label);
-    freeCamera.addEventListener('click', toggleFree, { signal });
+    freeCameraButton.title = label;
+    freeCameraButton.setAttribute('aria-label', label);
+    freeCameraButton.addEventListener('click', toggleFree, { signal });
   }
   query(hud, 'action', HTMLElement).addEventListener('click', () => emit({ type: 'pause' }), {
     signal,
@@ -846,7 +876,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (
         mode !== undefined &&
         !mirrorsOnly &&
-        (mode !== 'chase' || opts.chase) &&
+        (mode !== 'chase' || chaseOffered) &&
         !e.defaultPrevented &&
         !e.repeat &&
         !isFormField(e.target) &&
@@ -1103,6 +1133,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     setFree(on) {
       freeCamera?.setAttribute('aria-pressed', String(on));
+    },
+    setOffers(next) {
+      chaseOffered = next.chase;
+      syncChaseOffer();
+      hud.toggleAttribute('data-interior', next.interior);
+      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly);
+      applyMessages(keysList);
+      if (!chaseOffered && view === 'chase') selectView(lastOther);
+      else syncToggles();
     },
     setTargetArrow(next) {
       setHidden(arrow, next === null);

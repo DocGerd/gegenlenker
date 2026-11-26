@@ -6,6 +6,7 @@ import {
   DEFAULT_TOP_DOWN_VIEW,
   TOP_DOWN_SHARE_LIMITS,
   type AidFlags,
+  type GraphicsPreset,
   type Rect,
   type RenderFrame,
   type TopDownMode,
@@ -173,6 +174,7 @@ export function startDrive(
       finish,
       leave: exercise === null ? null : leaveUnscored,
       settingChanged: (id) => {
+        if (id === 'graphics') switchGraphics(currentSettings().graphics);
         if (id !== 'wideMirrors') return;
         wideMirrors = currentSettings().wideMirrors;
         arrange();
@@ -198,8 +200,9 @@ export function startDrive(
   };
   window.addEventListener('keydown', onEscape);
   live.push(() => window.removeEventListener('keydown', onEscape));
-  const { renderer, graphics } = view;
-  const lookAround = lookAroundAvailable(graphics);
+  const { renderer } = view;
+  // The pause sheet can change it during the drive.
+  let graphics = view.graphics;
   renderer.setScene(layout, truck, trailer);
 
   const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
@@ -262,7 +265,7 @@ export function startDrive(
     },
     look: {
       getRect: () => frame.views.cockpit,
-      enabled: lookAround,
+      enabled: lookAroundAvailable(graphics),
       onChange(head) {
         frame.head = head;
         dirty = true;
@@ -282,7 +285,7 @@ export function startDrive(
     topDown,
     chase: chaseViewAvailable(graphics),
     interior: interiorAvailable(graphics),
-    look: lookAround,
+    look: lookAroundAvailable(graphics),
     collapsed,
     mirrorsOnly,
     pedalsBox: () => controls.pedalsBox(),
@@ -395,6 +398,22 @@ export function startDrive(
     dirty = true;
   };
   hud.onLegendResize(arrange);
+
+  /** Rebuilds the scene under `next`, as a new drive would mount it; the sim, run and views carry on. */
+  const switchGraphics = (next: GraphicsPreset): void => {
+    if (next === graphics) return;
+    graphics = next;
+    view.setGraphics(next);
+    renderer.setScene(layout, truck, trailer);
+    viewInput.setLook(lookAroundAvailable(next));
+    hud.setOffers({
+      chase: chaseViewAvailable(next),
+      interior: interiorAvailable(next),
+      look: lookAroundAvailable(next),
+    });
+    dirty = true;
+    arrange();
+  };
 
   hud.onAction((action) => {
     if (action.type === 'topDown') {

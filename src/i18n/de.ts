@@ -61,7 +61,6 @@ export const de: Record<MessageKey, string> = {
   wideMirrors: 'Weitwinkelspiegel',
   settingOn: 'An',
   settingOff: 'Aus',
-  appliesNextStart: 'Gilt ab dem nächsten Start',
   speed: 'Tempo',
   stop: 'Stopp',
   gear: 'Fahrstufe',

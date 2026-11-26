@@ -484,26 +484,62 @@ test('the theme changes at once from the pause sheet', heavyAt('low'), async ({ 
 });
 
 test(
-  'graphics quality from the pause sheet applies from the next start',
+  'graphics quality from the pause sheet applies at once and the run carries on',
   heavyAt('balanced'),
   async ({ page }) => {
-    await pauseWith(page, { graphics: 'balanced' });
+    await seedStorage(page, { settings: { graphics: 'low' } });
+    await page.goto('./?framing=1');
+    await startExercise(page, en, 'straight-reverse');
+    await expect(speed(page)).toHaveText('0.0 km/h');
+    await page.keyboard.press('4');
+    for (let i = 0; i < 5; i++) await page.keyboard.press('w');
+    await expect(speed(page)).not.toHaveText('0.0 km/h');
+    const html = page.locator('html');
     const chase = page.locator('[data-view="chase"]');
-    await expect(chase).toHaveCount(1);
+    const interior = page.locator('[data-hud="root"][data-interior]');
+    const step = async (): Promise<number> => {
+      const box = await page.locator('.drive').getAttribute('data-vehicle-box');
+      return (JSON.parse(box ?? '{}') as { step: number }).step;
+    };
+    await expect(chase).toHaveCount(0);
+    await expect(interior).toHaveCount(0);
+
+    await page.keyboard.press('Escape');
+    await expect(sheet(page)).toBeVisible();
+    const pausedAt = await clock(page).textContent();
+    const pausedStep = await step();
     await openSettings(page);
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
-    await expect(choice(page, en.graphics, en.graphicsBalanced)).toBeFocused();
-    await expect(sheet(page).getByText(en.appliesNextStart)).toBeVisible();
-    await page.keyboard.press('ArrowLeft');
-    await expect(choice(page, en.graphics, en.graphicsLow)).toBeChecked();
+    await expect(choice(page, en.graphics, en.graphicsLow)).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(choice(page, en.graphics, en.graphicsBalanced)).toBeChecked();
     await expect(chase).toHaveCount(1);
+    await expect(interior).toHaveCount(1);
+    await expect(clock(page)).toHaveText(pausedAt ?? '');
+    expect(await step()).toBe(pausedStep);
 
     await page.keyboard.press('Escape');
-    await sheet(page).getByRole('button', { name: en.restart }).click();
+    await page.keyboard.press('Escape');
     await expect(sheet(page)).toBeHidden();
-    await expect(speed(page)).toHaveText('0.0 km/h');
+    await expect(html).toHaveAttribute('data-vehicle-shells', /^\S+ \S+ \S+$/);
+    await expect(clock(page)).not.toHaveText(pausedAt ?? '');
+    await expect.poll(step).toBeGreaterThan(pausedStep);
+    await expect(speed(page)).not.toHaveText('0.0 km/h');
+
+    // Back to Low from the outside view, which Low does not offer.
+    await chase.click();
+    await expect(chase).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.press('Escape');
+    await openSettings(page);
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('ArrowLeft');
+    await expect(choice(page, en.graphics, en.graphicsLow)).toBeChecked();
     await expect(chase).toHaveCount(0);
+    await expect(interior).toHaveCount(0);
+    await expect(page.locator('[data-view="follow"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(html).not.toHaveAttribute('data-vehicle-shells');
   },
 );
 

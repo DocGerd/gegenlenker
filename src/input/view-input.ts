@@ -57,6 +57,8 @@ export type ViewInput = {
    * while it flies the drag, wheel, pinch and held view keys move it instead of the orbit.
    */
   setFree(pose: FreePose | null): void;
+  /** Turns looking around on or off, as `look.enabled` does; off puts the head back to rest. */
+  setLook(enabled: boolean): void;
   /** Re-clamps the view after the pane changed size. */
   relayout(): void;
   /** Advances the head's easing by a frame of `seconds`, paused or not. */
@@ -172,7 +174,7 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
     view = next;
     opts.onChange(view);
   };
-  const look = opts.look?.enabled === true ? opts.look : undefined;
+  let look = opts.look?.enabled === true ? opts.look : undefined;
   const rectOf = (pane: Pane): Rect | null =>
     pane === 'topDown' ? opts.getRect() : (look?.getRect() ?? null);
   /** Position of an event in `rect`'s own px, wherever it happened. */
@@ -394,6 +396,14 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
       releaseHeld();
       free = clampFreePose(pose, flying.bounds, pose);
       flying.onChange(free);
+    },
+    setLook(enabled) {
+      look = enabled ? opts.look : undefined;
+      if (look !== undefined) return;
+      glance.left = glance.right = false;
+      if (sameHead(head, HEAD_REST)) return;
+      head = HEAD_REST;
+      opts.look?.onChange(head);
     },
     relayout() {
       const ctx = context();

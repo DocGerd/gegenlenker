@@ -44,16 +44,14 @@ describe('menu options', () => {
       driveView: 'run',
       language: 'menuOnly',
       theme: 'live',
-      graphics: 'nextStart',
+      graphics: 'live',
       wideMirrors: 'live',
     });
   });
 
   it('the pause sheet offers exactly the options a running drive applies', () => {
     expect(PAUSE_FIELDS).toEqual(['theme', 'wideMirrors', 'graphics']);
-    const applied = OPTION_IDS.filter((id) =>
-      ['live', 'nextStart'].includes(OPTION_FIELDS[id].applies),
-    );
+    const applied = OPTION_IDS.filter((id) => OPTION_FIELDS[id].applies === 'live');
     expect(new Set(PAUSE_FIELDS)).toEqual(new Set(applied));
   });
 });
