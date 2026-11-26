@@ -56,6 +56,7 @@ test(
     await start.click();
     await expect(start).toBeDisabled();
     await expect(start).toHaveAttribute('aria-busy', 'true');
+    await expect(setup.getByRole('radio', { name: en.lightingNight })).toBeDisabled();
     await page.keyboard.press('Escape');
     await expect(setup).toBeVisible();
     await page.goBack();

@@ -94,6 +94,9 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
     busy = true;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
+    // The drive reads the stored settings when it mounts, so the screen's options freeze with Start.
+    for (const row of button.closest('[data-screen]')?.querySelectorAll('fieldset') ?? [])
+      row.disabled = true;
     deps.start(run);
   };
 
