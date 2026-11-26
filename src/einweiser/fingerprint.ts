@@ -1,6 +1,7 @@
 import type { ResolvedLayout } from '../contracts/layout';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { CONTACT_WARN_DISTANCE, PREDICT_STEP } from '../sim/constants';
+import type { JsonData } from '../sim/fingerprint';
 import { CHEST_HEIGHT, HEAD_HEIGHT, layoutOccluders, sightGeometry } from './sight';
 import { FOREARM, SHOULDER_HALF_SPAN, SHOULDER_HEIGHT, SIGN_POSES, UPPER_ARM } from './sign-poses';
 import { EINWEISER_THRESHOLDS } from './signs';
@@ -22,7 +23,7 @@ export function einweiserScoring(
   truck: TruckSpec,
   trailer: TrailerSpec,
   layout: Pick<ResolvedLayout, 'obstacles' | 'decor'>,
-): Readonly<Record<string, unknown>> {
+): { readonly [key: string]: JsonData } {
   const { eye, glass, mirrors, heights } = sightGeometry(truck, trailer);
   return {
     ...EINWEISER_THRESHOLDS,
