@@ -1,12 +1,16 @@
 import { registerSW } from 'virtual:pwa-register';
 import { t } from '../i18n/i18n';
-import { failOnRedundantInstall, offlineStatus, setOfflineStatus } from './offline-status';
+import type { GraphicsPreset } from '../contracts/render';
+import { presetAssetUrls } from '../render/asset-urls';
+import { failOnRedundantInstall, precached, setOfflineStatus } from './offline-status';
+import { browserHost, createPresetCache } from './preset-cache';
 import './update-prompt.css';
 
 const OFFLINE_READY_MS = 4000;
 const UPDATE_CHECK_MS = 60 * 60 * 1000;
 
-export function startUpdatePrompt(root: HTMLElement): void {
+/** `preset` is the saved graphics preset; call the returned function after it changes. */
+export function startUpdatePrompt(root: HTMLElement, preset: () => GraphicsPreset): () => void {
   const toast = document.createElement('div');
   toast.className = 'update-toast';
   toast.hidden = true;
@@ -41,9 +45,33 @@ export function startUpdatePrompt(root: HTMLElement): void {
     return el;
   };
 
+  // Offline-ready needs the precache and the saved preset's own assets, which are cached on first use.
+  let shellCached = false;
+  let announce = false;
+  const presets = createPresetCache(
+    browserHost(() => presetAssetUrls(preset())),
+    (ready) => {
+      setOfflineStatus(ready ? 'ready' : 'incomplete');
+      if (ready && announce) {
+        announce = false;
+        show(t('offlineReady'));
+        hideTimer = window.setTimeout(hide, OFFLINE_READY_MS);
+      }
+    },
+  );
+  const refreshPreset = () => {
+    if (shellCached) void presets.refresh();
+  };
+  const markShellCached = () => {
+    shellCached = true;
+    refreshPreset();
+  };
+
   // onOfflineReady fires only on first install; a controlled page was served by a completed precache.
-  if ('serviceWorker' in navigator && navigator.serviceWorker.controller !== null) {
-    setOfflineStatus('ready');
+  if ('serviceWorker' in navigator) {
+    if (navigator.serviceWorker.controller !== null) markShellCached();
+    navigator.serviceWorker.addEventListener('controllerchange', refreshPreset);
+    window.addEventListener('online', refreshPreset);
   }
 
   const updateSW = registerSW({
@@ -65,13 +93,17 @@ export function startUpdatePrompt(root: HTMLElement): void {
     },
     onRegisterError(error) {
       console.error('SW registration failed', error);
-      if (offlineStatus() !== 'ready') setOfflineStatus('failed');
+      if (!shellCached && !precached()) setOfflineStatus('failed');
       show(t('offlineSetupFailed'), button(t('dismiss'), hide));
     },
     onOfflineReady() {
-      setOfflineStatus('ready');
-      show(t('offlineReady'));
-      hideTimer = window.setTimeout(hide, OFFLINE_READY_MS);
+      announce = true;
+      markShellCached();
     },
   });
+  return () => {
+    // Not ready for the new preset until its assets are found.
+    if (shellCached) setOfflineStatus('unknown');
+    refreshPreset();
+  };
 }

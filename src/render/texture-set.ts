@@ -13,8 +13,7 @@ import {
   type Texture,
 } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
-import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
-import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
+import { TRANSCODER_URLS } from './asset-urls';
 import { ShaderRejectedError, watchShaderErrors } from './shader-check';
 
 /*
@@ -75,8 +74,8 @@ export interface TextureSet<K extends string> {
 
 /** KTX2Loader fetches fixed file names next to `transcoderPath`; they are served as hashed app assets instead. */
 export function transcoderUrls(url: string, expected: string): string {
-  if (url.endsWith('basis_transcoder.js')) return transcoderJsUrl;
-  if (url.endsWith('basis_transcoder.wasm')) return transcoderWasmUrl;
+  if (url.endsWith('basis_transcoder.js')) return TRANSCODER_URLS.js;
+  if (url.endsWith('basis_transcoder.wasm')) return TRANSCODER_URLS.wasm;
   if (url !== expected) console.warn('KTX2 texture: unexpected request through the loader', url);
   return url;
 }
@@ -276,6 +275,18 @@ export function startTextureSet<K extends string>({
       });
   };
 
+  /** A load that failed was most likely offline: reconnecting grants a fresh pair of attempts. */
+  const retryOnReconnect = (): void => {
+    if (loaded !== null || rejected || disposed || loading || attempts === 0) return;
+    const wasExhausted = exhausted;
+    attempts = 0;
+    exhausted = false;
+    if (wasExhausted) publish();
+    start();
+  };
+  const listening = 'addEventListener' in globalThis;
+  if (listening) globalThis.addEventListener('online', retryOnReconnect);
+
   return {
     attach(next) {
       if (renderer === next || disposed) return;
@@ -310,6 +321,7 @@ export function startTextureSet<K extends string>({
     dispose() {
       disposed = true;
       enabled = false;
+      if (listening) globalThis.removeEventListener('online', retryOnReconnect);
       subscribers.clear();
       restoreShaderErrors?.();
       if (loaded !== null) disposeMaps(loaded);

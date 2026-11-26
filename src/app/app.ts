@@ -10,7 +10,13 @@ import { showMenu } from './menu/index';
 import type { NavState } from './menu/nav';
 import { showNotice } from './notice';
 import { showResult, type ResultContext } from './result-view';
-import { currentSettings, initSettings, loadSettings, updateSettings } from './settings';
+import {
+  currentSettings,
+  initSettings,
+  loadSettings,
+  onGraphicsChange,
+  updateSettings,
+} from './settings';
 import {
   isReplayable,
   lastRun,
@@ -271,6 +277,6 @@ export function startApp(root: HTMLElement): void {
   window.addEventListener('unhandledrejection', runFailed);
 
   menu();
-  startUpdatePrompt(root);
+  onGraphicsChange(startUpdatePrompt(root, () => currentSettings().graphics));
   void requestPersistentStorage();
 }

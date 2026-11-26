@@ -7,8 +7,9 @@ import { THREE_FREE_RENDER } from './three-free-render.ts';
 
 const ROOT = join(import.meta.dirname, '..');
 const THREE = /^three(\/|$)/;
-// The renderer entries the app shell loads (`render-stage`, `drive`, `main`): they use Three.js.
-const RENDERER_ENTRIES = ['src/render/index.ts', 'src/render/probe.ts'];
+// The render modules the app shell loads (`render-stage`, `drive`, `main`, the update prompt): the renderer uses Three.js;
+// `asset-urls` only names its files with `?url` imports and loads none of its code.
+const RENDERER_ENTRIES = ['src/render/index.ts', 'src/render/probe.ts', 'src/render/asset-urls.ts'];
 
 /** First chain of runtime imports from `entry` that reaches Three.js, if any. */
 const threeChain = (entry: string): string[] | undefined =>

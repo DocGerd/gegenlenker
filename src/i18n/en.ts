@@ -144,6 +144,7 @@ export const en = {
   later: 'Later',
   offlineReady: 'Ready offline',
   offlineSetupFailed: 'Offline use could not be set up.',
+  offlineIncomplete: 'Not yet offline-ready for this graphics quality.',
   dismiss: 'Dismiss',
   noWebgl: 'This device cannot show WebGL 2 graphics.',
   contextLost: 'The graphics stopped and could not restart. Reload to continue.',

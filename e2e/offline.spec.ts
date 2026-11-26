@@ -102,6 +102,42 @@ test('About opens offline after the first visit', async ({ page, context }) => {
   await expect(page.locator('[data-about="thirdParty"]')).not.toHaveCount(0);
 });
 
+test('choosing High caches its assets before offline-ready shows again', async ({
+  page,
+  context,
+}) => {
+  const status = page.locator('[data-menu="offline"]');
+  await page.goto('./');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  await expect(status).toHaveText(en.offlineReady);
+
+  // High draws assets the default preset does not: they are not cached yet.
+  await chooseSetting(page, en, 'graphics', 'high');
+  await expect(status).toHaveText(en.offlineReady, { timeout: HIGH_WAIT_MS });
+  const urls = await page.evaluate(async () => {
+    const found: string[] = [];
+    for (const name of await caches.keys()) {
+      for (const request of await (await caches.open(name)).keys()) found.push(request.url);
+    }
+    return found;
+  });
+  const missing = Object.entries(ASSET_REGISTRY)
+    .filter(([, { flag }]) => QUALITY_FLAGS.high[flag] && !QUALITY_FLAGS[DEFAULT_GRAPHICS][flag])
+    .filter(
+      ([stem, { kind }]) => !urls.some((url) => new RegExp(`${stem}-[\\w-]+\\.${kind}$`).test(url)),
+    )
+    .map(([stem]) => stem);
+  expect(missing).toEqual([]);
+
+  await context.setOffline(true);
+  await page.reload();
+  await expect(status).toHaveText(en.offlineReady);
+});
+
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {
   await page.goto('./');
   await startExercise(page, en, 'straight-reverse');
@@ -137,7 +173,7 @@ test('zooms and pans the top-down view without disturbing the controls', async (
 });
 
 test(
-  'High graphics caches the ground, sky, yard kit and cockpit interior assets and transcoder on first use and applies them offline',
+  'High graphics caches the ground, sky, yard kit and cockpit interior assets and transcoder before first use and applies them offline',
   {
     tag: HEAVY,
   },
@@ -219,6 +255,12 @@ test(
     // Installing does not download them: only High draws the texture, so the other presets skip the cost.
     const installed = await cached();
     for (const file of files) expect(matching(installed.precache, file), String(file)).toEqual([]);
+
+    // Offline-ready was shown for the saved High preset, so its assets are cached before any drive.
+    const prefetched = await cached();
+    expect(drawn.map((file) => matching(prefetched.runtime, file).length)).toEqual(
+      drawn.map(() => 1),
+    );
 
     await startExercise(page, en, 'straight-reverse');
     const marker = page.locator('html');

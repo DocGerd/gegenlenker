@@ -297,6 +297,68 @@ describe('ground textures', () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  describe('on reconnecting', () => {
+    const connection = (): EventTarget => {
+      const target = new EventTarget();
+      vi.stubGlobal('addEventListener', target.addEventListener.bind(target));
+      vi.stubGlobal('removeEventListener', target.removeEventListener.bind(target));
+      return target;
+    };
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('resumes a set whose attempts are spent, and clears the failed report', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const target = connection();
+      const states: (string | null)[] = [];
+      const loaded = texture();
+      const load = vi
+        .fn<() => Promise<Texture>>()
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValue(loaded);
+      const textures = startGroundTextures(load, (state) => states.push(state));
+      const apply = vi.fn();
+      textures.onLoaded(apply);
+      textures.attach(renderer());
+      textures.setEnabled(true);
+      await settle();
+      textures.setEnabled(true);
+      await settle();
+      expect(states.at(-1)).toBe(TEXTURE_FAILED);
+
+      target.dispatchEvent(new Event('online'));
+      await settle();
+      expect(load).toHaveBeenCalledTimes(3);
+      expect(states.at(-1)).toBeNull();
+      expect(apply).toHaveBeenCalledWith({ detail: loaded });
+    });
+
+    it('does nothing for a set that loaded, and stops listening once disposed', async () => {
+      const target = connection();
+      const load = vi.fn(() => Promise.resolve(texture()));
+      const textures = startGroundTextures(load);
+      textures.attach(renderer());
+      textures.setEnabled(true);
+      await settle();
+      target.dispatchEvent(new Event('online'));
+      await settle();
+      expect(load).toHaveBeenCalledTimes(1);
+
+      const failing = vi.fn(() => Promise.reject(new Error('offline')));
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const other = startGroundTextures(failing);
+      other.attach(renderer());
+      other.setEnabled(true);
+      await settle();
+      other.dispose();
+      target.dispatchEvent(new Event('online'));
+      await settle();
+      expect(failing).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('reports failed once the last attempt is spent, while enabled, and not before', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const states: (string | null)[] = [];
