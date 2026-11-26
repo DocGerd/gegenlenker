@@ -300,7 +300,7 @@ export function computeViewports(
   );
   const wanted = Math.min(2 * fullWidth, Math.round(MIRROR_SCALE * 0.5 * cockpit.height));
   // Only a cockpit that starts at the screen's top edge sits under the display cut-out there.
-  const top = cockpit.y === 0 ? insets.top : 0;
+  const top = belowCutOut(cockpit, insets).y - cockpit.y;
   // Without the top-down pane the pause button stands over the cockpit's top right corner, above the mirrors.
   const floor =
     cockpit.y +
