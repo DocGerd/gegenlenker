@@ -383,6 +383,22 @@ test(
   },
 );
 
+test('an Enter held on Back does not reopen Settings', heavyAt('low'), async ({ page }) => {
+  await pauseWith(page, { graphics: 'low' });
+  await openSettings(page);
+  await page.keyboard.press('Shift+Tab');
+  const back = sheet(page).getByRole('button', { name: en.back });
+  await expect(back).toBeFocused();
+  await page.keyboard.down('Enter');
+  const settings = sheet(page).getByRole('button', { name: en.settings });
+  await expect(settings).toBeFocused();
+  // The repeat lands on the Settings button of the actions.
+  await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  await expect(settings).toBeFocused();
+  await expect(sheet(page).getByRole('heading', { name: en.settings })).toHaveCount(0);
+});
+
 test('the theme changes at once from the pause sheet', heavyAt('low'), async ({ page }) => {
   await pauseWith(page, { graphics: 'low', theme: 'light' });
   await expect(page.locator('html[data-theme="light"]')).toHaveCount(1);

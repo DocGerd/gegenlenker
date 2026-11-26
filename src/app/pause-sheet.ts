@@ -8,6 +8,7 @@ import {
   PAUSE_FIELDS,
   type OptionId,
 } from './menu/options';
+import { ignoreHeldBrakeKeys } from './held-keys';
 import { currentSettings } from './settings';
 
 export type PauseActions = {
@@ -129,9 +130,13 @@ export function showPauseSheet(
 
   let level: HTMLElement = main;
   // Focus moves into the new level before the old one leaves, so the focusout guard never sees it drop.
+  // A brake key held through a swap must not click the control that took the focus.
+  let releaseHeld: (() => void) | null = null;
   const swap = (next: HTMLElement, focus: HTMLElement | null): void => {
     const previous = level;
     level = next;
+    releaseHeld?.();
+    releaseHeld = ignoreHeldBrakeKeys(next);
     sheet.append(next);
     (focus ?? tabStops(next)[0])?.focus();
     previous.remove();
@@ -180,6 +185,7 @@ export function showPauseSheet(
   // Dropped first: removing the focused button would otherwise refocus it while detached.
   return {
     close: () => {
+      releaseHeld?.();
       abort.abort();
       box.remove();
     },

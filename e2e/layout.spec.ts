@@ -2183,17 +2183,17 @@ test(
           await page.evaluate(() => document.head.lastElementChild?.remove());
         }
       };
-      const before = await bare();
-
       await page.getByRole('button', { name: en.pause }).click();
       const sheet = page.getByRole('dialog', { name: en.paused });
       await sheet.getByRole('button', { name: en.settings }).click();
+      // The baseline is taken under the open sheet, where nothing redraws unless the layout marks it.
+      const before = await bare();
+      expect(await bare()).toBe(before);
       await sheet
         .getByRole('radiogroup', { name: en.wideMirrors })
         .getByRole('radio', { name: en.settingOff })
         .check();
       await expect(wide).toHaveCount(0);
-      // The sim stands still behind the sheet: only the dirty flag makes the canvas redraw.
       await expect.poll(bare).not.toBe(before);
     } finally {
       await context.close();

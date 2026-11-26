@@ -176,8 +176,6 @@ export function startDrive(
         if (id !== 'wideMirrors') return;
         wideMirrors = currentSettings().wideMirrors;
         arrange();
-        // remeasure marks it too, except in a mirror-only drive
-        dirty = true;
       },
     });
   };
@@ -393,6 +391,8 @@ export function startDrive(
     frame.views = views;
     viewInput.relayout();
     remeasure();
+    // remeasure marks it only with a top-down pane
+    dirty = true;
   };
   hud.onLegendResize(arrange);
 
