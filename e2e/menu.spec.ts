@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from '../src/app/entry-keys';
 import { exerciseById } from '../src/content/registry';
-import { EXERCISE_IDS, type ExerciseId, type RunResult } from '../src/contracts/exercise';
+import { EXERCISE_IDS, type ExerciseId } from '../src/contracts/exercise';
 import { TRAILER_IDS, TRUCK_IDS } from '../src/contracts/vehicle';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
@@ -17,7 +17,7 @@ import {
   startControl,
   yardEntry,
 } from './menu-flow';
-import { seedStorage } from './menu-seed';
+import { reachedResult, seedStorage } from './menu-seed';
 
 const screen = (page: Page, id: string): Locator => page.locator(`[data-screen="${id}"]`);
 const titleEntry = (page: Page, name: string): Locator =>
@@ -27,23 +27,6 @@ const historyState = (page: Page): Promise<unknown> =>
 
 const [truckId] = TRUCK_IDS;
 const [trailerId] = TRAILER_IDS;
-
-const reached = (exerciseId: ExerciseId): RunResult => ({
-  exerciseId,
-  truckId,
-  trailerId,
-  reached: true,
-  assisted: false,
-  lighting: 'day',
-  mirrorsOnly: false,
-  waypointMissed: false,
-  positionError: 0.1,
-  angleError: 0.01,
-  contacts: 0,
-  jackknifes: 0,
-  directionChanges: 1,
-  time: 42.5,
-});
 
 const [, arocs] = TRUCK_IDS;
 const [, hueffermann] = TRAILER_IDS;
@@ -128,13 +111,13 @@ test('Continue moves past a done exercise, wraps, and keeps the last one when al
   }[] = [
     { last: 'reverse-bay', done: ['reverse-bay'], shows: 'reverse-corner' },
     { last: 'slalom', done: ['slalom', 'straight-reverse'], shows: 'reverse-bay' },
-    { last: 'reverse-corner', done: EXERCISE_IDS, shows: 'reverse-corner' },
+    { last: 'reverse-bay', done: EXERCISE_IDS, shows: 'reverse-bay' },
   ];
   for (const { last, done, shows } of cases) {
     const context = await browser.newContext();
     await seedStorage(context, {
       settings: { lastEntry: exerciseRef(last) },
-      best: done.map(reached),
+      best: done.map(reachedResult),
     });
     const page = await context.newPage();
     await page.goto('./');
@@ -157,7 +140,7 @@ test("the exercise list focuses Continue's exercise, and the yard list the last 
   // Done, so Continue moves on to the slalom: the list follows Continue, not the last entry.
   await seedStorage(exercise, {
     settings: { lastEntry: exerciseRef('dock-ramp') },
-    best: [reached('dock-ramp')],
+    best: [reachedResult('dock-ramp')],
   });
   const exercisePage = await exercise.newPage();
   await exercisePage.goto('./');
@@ -180,7 +163,7 @@ test('the exercise list holds one row per exercise in curriculum order, with bri
   page,
 }) => {
   const done: ExerciseId = 'straight-reverse';
-  await seedStorage(page, { best: [reached(done)] });
+  await seedStorage(page, { best: [reachedResult(done)] });
   await page.goto('./');
   await titleEntry(page, en.exercises).click();
 

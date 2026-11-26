@@ -1,4 +1,5 @@
 import type { BrowserContext, Page } from '@playwright/test';
+import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { exerciseById } from '../src/content/registry';
 import type { ExerciseId, RunResult } from '../src/contracts/exercise';
@@ -40,7 +41,7 @@ const fingerprintBundle = (): Promise<string> =>
     build: {
       write: false,
       lib: {
-        entry: new URL('./fingerprint-entry.ts', import.meta.url).pathname,
+        entry: fileURLToPath(new URL('./fingerprint-entry.ts', import.meta.url)),
         formats: ['iife'],
         name: 'fp',
       },
@@ -61,6 +62,11 @@ async function browserFingerprints(
   target: Page | BrowserContext,
   ids: readonly RunIds[],
 ): Promise<(ids: RunIds) => string> {
+  if (ids.length === 0) {
+    return () => {
+      throw new Error('no fingerprints were taken');
+    };
+  }
   const page = await ('newPage' in target ? target : target.context()).newPage();
   try {
     await page.addScriptTag({ content: await fingerprintBundle() });
