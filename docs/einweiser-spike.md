@@ -67,6 +67,14 @@ With a turntable drawbar trailer in reverse, the trailer rear first goes the way
 - `predict.ts` becomes a gameplay input: the derived faults read it (`contactAhead` for `lateHalt`, `sweptBodies` for `inPath`), hence `EINWEISER_REVISION` (§5). The driver's own use needs nothing, since its controls are logged. The PR that adds `sweptBodies` updates CLAUDE.md, which calls `predict.ts` display-only.
 - Fallback if the gate test (§9) shows the planner cannot hold a reverse: a cascade controller (goal trailer heading → turntable angle → coupling angle → steer).
 
+Accepted by the owner (2026-11-26) after the gate (PR 2), which departs from the planner above in three ways:
+
+- Reverse steering is LQR state feedback on the linearised articulation, not the nine-candidate planner. In the scripted Einweiser the dock-ramp reverse legs also choose their sign by LQR cost-to-go; the driver itself is unchanged by that.
+- "Straight" after a curve: the driver holds one reference heading per gear. Rechts/Links turn it; Herkommen, Entfernen and Abstand hold it, so the vehicle finishes the indicated turn.
+- The curve radius depends on the gear (`CURVE_RADIUS = { D: 8, R: 15 }`): the slalom weave needs a truck curvature above 1/15 m⁻¹.
+
+The gate runs with `pnpm test:gate` (`src/einweiser/gate-*.test.ts` except the `gate-recovery.test.ts` unit test, over `gate-harness.ts`; `vitest.gate.config.ts`). It is not part of `pnpm test` or `pnpm check`; the advisory `einweiser-gate` CI job runs it and does not gate a merge.
+
 ### Speeds and timing (calls)
 
 | Item                                                       | Value                                                                                                                                                                                           |
