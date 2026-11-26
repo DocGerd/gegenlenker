@@ -11,6 +11,15 @@ const locales = [
 
 const screen = (page: Page, id: string): Locator => page.locator(`[data-screen="${id}"]`);
 
+/** How far the page or the screen's scroll box is wider than it shows. */
+const overflow = (page: Page): Promise<number> =>
+  page.evaluate(() => {
+    const root = document.scrollingElement;
+    const scroll = document.querySelector('[data-screen="about"] .menu-screen-scroll');
+    if (root === null || scroll === null) throw new Error('about markup missing');
+    return Math.max(...[root, scroll].map((el) => el.scrollWidth - el.clientWidth));
+  });
+
 for (const { locale, messages } of locales) {
   test(`About opens from the title with its heading focused, fetches nothing, and Esc returns to its entry in ${locale}`, async ({
     browser,
@@ -32,6 +41,13 @@ for (const { locale, messages } of locales) {
     ).toBeFocused();
     await expect(screen(page, 'about').getByRole('heading', { level: 2 })).toHaveCount(3);
     expect(requests).toEqual([]);
+
+    for (const summary of await screen(page, 'about').locator('summary').all())
+      await summary.click();
+    await expect(screen(page, 'about').locator('details[open]')).toHaveCount(
+      1 + ABOUT_CREDITS.thirdParty.length,
+    );
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
 
     await page.keyboard.press('Escape');
     await expect(open).toBeFocused();
@@ -74,13 +90,7 @@ test('About lists the app licence, every bundled licence and every asset source'
 
   await about.locator('summary').first().click();
   await expect(about.locator('pre').first()).toBeVisible();
-  const overflow = await page.evaluate(() => {
-    const root = document.scrollingElement;
-    const scroll = document.querySelector('[data-screen="about"] .menu-screen-scroll');
-    if (root === null || scroll === null) throw new Error('about markup missing');
-    return [root, scroll].map((el) => el.scrollWidth - el.clientWidth);
-  });
-  expect(Math.max(...overflow)).toBeLessThanOrEqual(0);
+  expect(await overflow(page)).toBeLessThanOrEqual(0);
 });
 
 test('the copyright line is on About, not on the title', async ({ page }) => {

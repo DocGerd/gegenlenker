@@ -101,7 +101,7 @@ test('arrow keys, Home and End move within the title and the list and stop at th
   page,
 }) => {
   await page.goto('./');
-  const entries = [en.exercises, en.freeYard, en.settings, en.whatsNew].map((name) =>
+  const entries = [en.exercises, en.freeYard, en.settings, en.whatsNew, en.about].map((name) =>
     titleEntry(page, name),
   );
   const [first] = entries;
