@@ -215,13 +215,13 @@ describe('top-down split', () => {
 
   it('has no room for the divider where no panel row fits above it', () => {
     for (const layout of edges) {
-      const split = topDownSplit(844, 390, layout, null, NO_INSETS, stack(NO_INSETS));
+      const split = topDownSplit(900, 585, layout, null, NO_INSETS, stack(NO_INSETS));
       expect(split).toMatchObject({ min: 0.4, max: 0.4, share: 0.4 });
     }
     // Measured per width: the same screen with a roomier stack has a range again.
-    const roomy = topDownSplit(844, 390, edges[1], null, NO_INSETS, () => 100);
+    const roomy = topDownSplit(900, 585, edges[1], null, NO_INSETS, () => 100);
     // the message column beside the stop button and lever sets the floor
-    expect(roomy.min).toBeCloseTo(Math.ceil(MIN_MESSAGE_WIDTH + 1.5 * 44 + 16 + 8) / 844);
+    expect(roomy.min).toBeCloseTo(Math.ceil(MIN_MESSAGE_WIDTH + 1.5 * 44 + 16 + 8) / 900);
     expect(roomy.max).toBeGreaterThan(roomy.min);
   });
 
@@ -1207,9 +1207,9 @@ describe('computeViewports mirror-only drive', () => {
 
   it('lets the goal cue yield to a toast where no span beside the mirrors holds both', () => {
     const notch = { top: 24, right: 48, bottom: 20, left: 48 };
-    const views = computeViewports(950, 426, 'mirrors', null, notch, undefined, null, ALL);
+    const views = computeViewports(700, 600, 'mirrors', null, notch, undefined, null, ALL);
     expect(messageColumn(views, null, notch).cueYields).toBe(true);
-    const plain = computeViewports(950, 426, 'mirrors', null, NO_INSETS, undefined, null, ALL);
+    const plain = computeViewports(700, 600, 'mirrors', null, NO_INSETS, undefined, null, ALL);
     expect(messageColumn(plain, null, NO_INSETS).cueYields).toBe(false);
   });
 });

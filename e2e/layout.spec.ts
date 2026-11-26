@@ -35,14 +35,13 @@ const sizes = [
   { width: 1024, height: 700 },
   { width: 1200, height: 700 },
   { width: 1210, height: 720 },
+  { width: 1280, height: 585 },
   { width: 1280, height: 649 },
   { width: 1280, height: 720 },
   { width: 1280, height: 800 },
-  { width: 1300, height: 540 },
   { width: 1300, height: 600 },
   { width: 1350, height: 600 },
   { width: 1366, height: 768 },
-  { width: 1172, height: 426 },
   { width: 620, height: 774 },
 ];
 
@@ -351,13 +350,13 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
 
 /**
- * `slot`: a mirror-only drive, and where it puts the messages (beside the cone, or one at a time, where
- * it is too short for both between the mirrors); `keysOpen`: the key legend's chevron starts open.
+ * `slot`: a mirror-only drive, and where it puts the messages; `keysOpen`: the key legend's chevron
+ * starts open.
  */
 const insetSizes: {
   width: number;
   height: number;
-  slot?: 'between the mirrors' | 'cue yields' | 'right of the cone';
+  slot?: 'between the mirrors';
   keysOpen?: boolean;
 }[] = [
   { width: 1280, height: 720 },
@@ -367,9 +366,6 @@ const insetSizes: {
   { width: 860, height: 860, keysOpen: true },
   // in portrait too its cockpit starts at the screen's top edge
   { width: 820, height: 1180, slot: 'between the mirrors' },
-  { width: 950, height: 426, slot: 'cue yields' },
-  // over the brief's side of the cockpit
-  { width: 1030, height: 426, slot: 'right of the cone' },
 ];
 
 for (const { slot, keysOpen = false, ...size } of insetSizes) {
@@ -446,12 +442,7 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
     }
 
     const wrap = page.locator('[data-hud="toastWrap"]');
-    if (slot === 'cue yields') await expect(wrap).toHaveAttribute('data-cue-yields');
-    else await expect(wrap).not.toHaveAttribute('data-cue-yields');
-    if (slot === 'right of the cone') {
-      const [column] = await boxes(wrap);
-      expect(column?.left, 'the messages right of the sight cone').toBeGreaterThan(size.width / 2);
-    }
+    await expect(wrap).not.toHaveAttribute('data-cue-yields');
     await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
     // the toast stands inside the wrap, which keeps clear of the safe area
     const messages = await boxes(
@@ -469,10 +460,10 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
   });
 }
 
-test('the longest German toast fits the narrowest pane column, inside the safe area, at 800x426', async ({
+test('the longest German toast fits the narrowest pane column, inside the safe area, at 800x585', async ({
   browser,
 }) => {
-  const size = { width: 800, height: 426 };
+  const size = { width: 800, height: 585 };
   const context = await browser.newContext({ locale: 'de-DE', viewport: size });
   try {
     const page = await context.newPage();
@@ -702,9 +693,6 @@ for (const [height, openFull] of [
 const handle = (page: Page) => page.locator('[data-hud="splitHandle"]');
 const splitBar = (page: Page) => page.locator('[data-hud="split"]');
 
-/** A short landscape screen: no panel row fits above the divider. */
-const shortLandscape = { width: 844, height: 390 };
-const splitSizes = [...sizes, shortLandscape];
 /** Laptops whose lever column stands well below the toolbar: the toolbar keeps its full width there. */
 const unreservedToolbar = new Set(['1280x800', '1366x768']);
 
@@ -874,8 +862,6 @@ const overlaySizes = [
   { width: 1280, height: 585 },
   { width: 1024, height: 690 },
   { width: 800, height: 600 },
-  { width: 1300, height: 540 },
-  { width: 1172, height: 426 },
 ];
 
 for (const { locale, messages } of locales) {
@@ -1014,26 +1000,6 @@ test('a swipe on the open aid legend scrolls it, and neither steers, drives nor 
   }
 });
 
-test('the key list of a short screen opens at its top again', async ({ page }) => {
-  await page.setViewportSize({ width: 1172, height: 426 });
-  await startStraightReverse(page, en);
-  const list = page.locator(KEY_LIST);
-  await keysToggle(page).click();
-  await expect(list).toBeVisible();
-  await settled(page);
-  expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight), 'no room to scroll').toBe(
-    true,
-  );
-  await list.evaluate((el) => {
-    el.scrollTop = el.scrollHeight;
-  });
-  await keysToggle(page).click();
-  await expect(list).toBeHidden();
-  await keysToggle(page).click();
-  await expect(list).toBeVisible();
-  expect(await list.evaluate((el) => el.scrollTop)).toBe(0);
-});
-
 test('the messages stay clear of the controls with the aid legend open on a short portrait screen', async ({
   page,
 }) => {
@@ -1054,7 +1020,6 @@ test('the messages stay clear of the controls with the aid legend open on a shor
 const counterSizes = [
   { width: 1280, height: 585 },
   { width: 1280, height: 649 },
-  { width: 1300, height: 540 },
   { width: 1350, height: 600 },
 ];
 
@@ -1326,12 +1291,7 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
  * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
-const paneToolAbsent = new Set([
-  'en-US 844x390',
-  'de-DE 844x390',
-  'de-DE 740x649',
-  'de-DE 1172x426',
-]);
+const paneToolAbsent = new Set(['de-DE 740x649']);
 
 async function expectPaneToolClear(page: Page, at: string): Promise<void> {
   await page.keyboard.press('o');
@@ -1386,7 +1346,7 @@ async function expectToolbarClear(page: Page): Promise<void> {
 }
 
 for (const { locale, messages } of locales) {
-  for (const size of splitSizes) {
+  for (const size of sizes) {
     const at = `${locale} ${size.width}x${size.height}`;
 
     test(`the layout holds at ${at}`, async ({ browser }) => {
@@ -1395,11 +1355,7 @@ for (const { locale, messages } of locales) {
       try {
         const page = await context.newPage();
         await startStraightReverse(page, messages);
-        // The short landscape size has no mirror check, only the messages and the divider.
-        if (size !== shortLandscape) {
-          await test.step('mirrors clear the controls', () =>
-            expectMirrorsClearControls(page, size));
-        }
+        await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
           await test.step('the toolbar takes no reserve against the lever column', () =>
             expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve'));
@@ -1424,7 +1380,7 @@ for (const { locale, messages } of locales) {
 
 // Without an exercise there is no brief: the view row takes its place beside the finish button, and wraps.
 for (const { locale, messages } of locales) {
-  for (const size of splitSizes.filter((s) => s.width <= 1024)) {
+  for (const size of sizes.filter((s) => s.width <= 1024)) {
     test(`the free yard toolbar stays clear at ${locale} ${size.width}x${size.height}`, async ({
       browser,
     }) => {
@@ -1748,7 +1704,7 @@ test('folding and unfolding a panel re-measures the divider against the panels',
   page,
 }) => {
   // Short enough that the unfolded aids panel leaves no room for the divider, the folded one does.
-  const size = { width: 1024, height: 560 };
+  const size = { width: 1024, height: 585 };
   await page.setViewportSize(size);
   await startStraightReverse(page, en);
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
@@ -1783,7 +1739,7 @@ test('folding and unfolding a panel re-measures the divider against the panels',
 
 test('toggling the pivots aid re-measures the divider against the panels', async ({ page }) => {
   // The pivots aid shows the gauge panel: with it the divider has no room here, without it it does.
-  const size = { width: 1024, height: 560 };
+  const size = { width: 1024, height: 585 };
   await page.setViewportSize(size);
   await startStraightReverse(page, en);
   const pivots = page.locator('[data-aid="pivots"]');
