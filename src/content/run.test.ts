@@ -7,6 +7,7 @@ import { layoutOccluders, sightGeometry } from '../einweiser/sight';
 import { createReader, perceive } from '../einweiser/signs';
 import { createTrackCursor } from '../einweiser/track';
 import { startWalker } from '../einweiser/walk';
+import { createEinweiserReplay } from '../scoring/einweiser';
 import { createRunTracker, runResult } from '../scoring/score';
 import { SIM_REVISION } from '../sim/fingerprint';
 import { createReplayCursor, parseInputLog, replaySnapshots, type RunIds } from '../sim/replay';
@@ -155,7 +156,8 @@ function pinnedEinweiser(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' |
   const g = sightGeometry(truckById(log.truckId), trailerById(log.trailerId));
   const occluders = layoutOccluders(run.layout);
   const sim = createSimulation(run.params, run.start, run.contacts);
-  const before = [sim.snapshot(), ...replaySnapshots(log, sim)].slice(0, log.steps);
+  const snapshots = [sim.snapshot(), ...replaySnapshots(log, sim)];
+  const before = snapshots.slice(0, log.steps);
   const cursor = createTrackCursor(log.einweiser);
   const reader = createReader();
   const events: unknown[] = [];
@@ -169,7 +171,20 @@ function pinnedEinweiser(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' |
     if (reading.kind !== 'none') events.push([s.step, reading]);
     sight = seen;
   }
-  return { EINWEISER_REVISION, digest: fnv(JSON.stringify(events)) };
+  // the faults as the replay derives them (`src/scoring/einweiser.ts`)
+  const [start, ...after] = snapshots;
+  if (start === undefined) throw new Error('a replay starts with a snapshot');
+  const replay = createEinweiserReplay(
+    { g, occluders, contacts: run.contacts },
+    log.einweiser,
+    start,
+  );
+  for (const s of after) replay.update(s);
+  return {
+    EINWEISER_REVISION,
+    digest: fnv(JSON.stringify(events)),
+    result: replay.tracker.result(),
+  };
 }
 
 describe('Einweiser run pin', () => {
@@ -178,6 +193,19 @@ describe('Einweiser run pin', () => {
     expect(pinnedEinweiser('depot', 'slalom')).toEqual({
       EINWEISER_REVISION: 1,
       digest: '4d55ab0a',
+      result: {
+        runOver: false,
+        faults: {
+          inPath: 0,
+          tooClose: 0,
+          outOfSight: 0,
+          signOutOfSight: 1,
+          unclear: 2,
+          lateHalt: 0,
+          noAchtung: 0,
+        },
+        walkedBackwards: true,
+      },
     });
   });
 
@@ -185,6 +213,19 @@ describe('Einweiser run pin', () => {
     expect(pinnedEinweiser('logistics', 'reverse-bay')).toEqual({
       EINWEISER_REVISION: 1,
       digest: '381c5e09',
+      result: {
+        runOver: false,
+        faults: {
+          inPath: 0,
+          tooClose: 0,
+          outOfSight: 0,
+          signOutOfSight: 0,
+          unclear: 3,
+          lateHalt: 0,
+          noAchtung: 0,
+        },
+        walkedBackwards: true,
+      },
     });
   });
 });

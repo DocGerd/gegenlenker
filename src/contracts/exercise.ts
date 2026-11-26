@@ -1,4 +1,4 @@
-import type { SignId } from './einweiser';
+import type { EinweiserResult, SignId } from './einweiser';
 import type { LayoutId, Marking, Obstacle } from './layout';
 import type { LightingMode } from './render';
 import type { InputChange, Pose2, Vec2 } from './sim';
@@ -58,6 +58,8 @@ export type RunResult = {
   readonly jackknifes: number;
   readonly directionChanges: number;
   readonly time: number;
+  /** Present exactly for an Einweiser run. */
+  readonly einweiser?: EinweiserResult;
 };
 export type BestResults = Readonly<Record<string, RunResult>>;
 export const ROLES = ['driver', 'einweiser'] as const;

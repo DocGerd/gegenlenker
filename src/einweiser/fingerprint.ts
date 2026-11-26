@@ -1,6 +1,7 @@
 import type { ResolvedLayout } from '../contracts/layout';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { CONTACT_WARN_DISTANCE, PREDICT_STEP } from '../sim/constants';
+import { WALK_BACK_SPEED } from './faults';
 import { CHEST_HEIGHT, HEAD_HEIGHT, layoutOccluders, sightGeometry } from './sight';
 import { FOREARM, SHOULDER_HALF_SPAN, SHOULDER_HEIGHT, SIGN_POSES, UPPER_ARM } from './sign-poses';
 import { EINWEISER_THRESHOLDS } from './signs';
@@ -42,6 +43,7 @@ export function einweiserScoring(
     SIGN_POSES,
     // a replay tells a hold step he stood through (`moved` 0) from one he moved at
     HOLD_STEPS,
+    WALK_BACK_SPEED,
     // outside SIM_CONSTANTS, yet `contactAhead` (lateHalt) and `sweptBodies` (inPath) read them
     PREDICT_STEP,
     CONTACT_WARN_DISTANCE,

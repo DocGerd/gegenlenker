@@ -1,9 +1,17 @@
 import { exerciseById } from '../content/registry';
+import type { EinweiserFault, EinweiserResult } from '../contracts/einweiser';
 import type { RunResult } from '../contracts/exercise';
 import { formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { isAction } from '../input/keymap';
-import { criteria, deltasToBest, endedMoving, type Deltas } from '../scoring/debrief';
+import {
+  criteria,
+  deltasToBest,
+  endedMoving,
+  faultLines,
+  type Deltas,
+  type FaultBasis,
+} from '../scoring/debrief';
 import { EXERCISE_TITLE } from './exercise-text';
 import { ignoreHeldBrakeKeys } from './held-keys';
 import './results.css';
@@ -31,6 +39,8 @@ function element<K extends keyof HTMLElementTagNameMap>(
 type RowNote = {
   /** The tolerance the value is judged against, already formatted. */
   readonly limit?: string;
+  /** The rule a fault is judged by. */
+  readonly basis?: MessageKey;
   readonly passed?: boolean | undefined;
   /** Run minus best; negative is better. */
   readonly delta?:
@@ -50,6 +60,7 @@ function row(label: MessageKey, value: string, note: RowNote = {}): HTMLDivEleme
   if (note.limit !== undefined) {
     name.append(element('span', 'result-limit', `${t('tolerance')} ≤ ${note.limit}`));
   }
+  if (note.basis !== undefined) name.append(element('span', 'result-limit', t(note.basis)));
   const figure = element(
     'dd',
     note.bad === true ? 'result-value mono result-bad' : 'result-value mono',
@@ -110,6 +121,41 @@ function action(label: MessageKey, onClick: () => void, primary: boolean): HTMLB
   return button;
 }
 
+const FAULT_LABEL: Readonly<Record<EinweiserFault, MessageKey>> = {
+  inPath: 'faultInPath',
+  tooClose: 'faultTooClose',
+  outOfSight: 'faultOutOfSight',
+  signOutOfSight: 'faultSignOutOfSight',
+  unclear: 'faultUnclear',
+  lateHalt: 'faultLateHalt',
+  noAchtung: 'faultNoAchtung',
+};
+const BASIS_LABEL: Readonly<Record<FaultBasis, MessageKey>> = {
+  dguv70: 'basisDguv70',
+  asr: 'basisAsr',
+  trainer: 'basisTrainer',
+};
+
+/** The Einweiser's faults, one row per kind with the rule it is judged by, and the walking note. */
+function einweiserSection(e: EinweiserResult): HTMLElement {
+  const section = element('section', 'result-einweiser');
+  section.setAttribute('aria-labelledby', 'result-einweiser-title');
+  const heading = element('h2', 'result-eyebrow', t('roleEinweiser'));
+  heading.id = 'result-einweiser-title';
+  const values = element('dl', 'result-values');
+  values.append(
+    ...faultLines(e).map(({ fault, count, basis }) =>
+      row(FAULT_LABEL[fault], formatNumber(count, 0), {
+        basis: BASIS_LABEL[basis],
+        bad: count > 0,
+      }),
+    ),
+  );
+  section.append(heading, values);
+  if (e.walkedBackwards) section.append(element('p', 'result-reason', t('walkedBackwards')));
+  return section;
+}
+
 export type ResultContext = {
   readonly isNewBest: boolean;
   /** The best this run competed with, same aid class; null when it was the first. */
@@ -137,9 +183,19 @@ export function showResult(
     title,
     element('p', 'result-reason', t(result.assisted ? 'runWithAids' : 'runNoAids')),
   );
-  if (result.waypointMissed) header.append(element('p', 'result-reason', t('waypointMissed')));
-  else if (endedMoving(result, exercise.tolerances)) {
-    header.append(element('p', 'result-reason', t('endedMoving')));
+  if (result.einweiser?.runOver === true) {
+    header.append(element('p', 'result-reason', t('runOver')));
+  } else if (result.waypointMissed) {
+    header.append(element('p', 'result-reason', t('waypointMissed')));
+  } else if (endedMoving(result, exercise.tolerances)) {
+    // an Einweiser run can stand in the target and still not end: it waits for a recognised Halt
+    header.append(
+      element(
+        'p',
+        'result-reason',
+        t(result.einweiser === undefined ? 'endedMoving' : 'endedWithoutHalt'),
+      ),
+    );
   }
   if (isNewBest && result.reached) header.append(element('p', 'result-badge', t('newBest')));
 
@@ -192,7 +248,9 @@ export function showResult(
   if (actions.replay !== null) buttons.append(action('replay', actions.replay, false));
   buttons.append(action('menu', actions.menu, false));
 
-  card.append(header, values, buttons);
+  card.append(header, values);
+  if (result.einweiser !== undefined) card.append(einweiserSection(result.einweiser));
+  card.append(buttons);
   container.append(card);
   root.append(container);
   (next ?? retry).focus();

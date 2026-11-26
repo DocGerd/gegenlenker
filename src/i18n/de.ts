@@ -134,6 +134,21 @@ export const de: Record<MessageKey, string> = {
   runNoAids: 'Ohne Hilfen gefahren',
   endedMoving:
     'Position und Winkel lagen in der Toleranz, aber das Fahrzeug rollte noch. Im Ziel anhalten.',
+  runOver: 'Einweiser überfahren: Die Fahrt ist beendet.',
+  endedWithoutHalt:
+    'Position und Winkel lagen in der Toleranz, aber die Fahrt endet erst mit dem Anhalten auf ein erkanntes Halt.',
+  walkedBackwards:
+    'Bei Fahrt rückwärts gegangen. Vorwärts gehen und das Fahrzeug nachrücken lassen.',
+  faultInPath: 'Im Fahrweg',
+  faultTooClose: 'Zu nah am Fahrzeug',
+  faultOutOfSight: 'Außer Sicht bei Fahrt',
+  faultSignOutOfSight: 'Zeichen außer Sicht gegeben',
+  faultUnclear: 'Zeichen unklar',
+  faultLateHalt: 'Halt zu spät',
+  faultNoAchtung: 'Ohne Achtung begonnen',
+  basisDguv70: 'DGUV V 70 §46(2)',
+  basisAsr: 'ASR A1.3 Nr. 5.7',
+  basisTrainer: 'Trainerregel',
   eventContact: 'Berührung',
   eventJackknife: 'Anschlag',
   unitSeconds: 's',
