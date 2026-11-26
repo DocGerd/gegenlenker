@@ -170,6 +170,20 @@ test('a reload on a list shows the title and the next goBack leaves', async ({ p
   await expect(page).toHaveURL('about:blank');
 });
 
+test('Forward onto the popped list entry is undone and one Back still leaves', async ({ page }) => {
+  await page.goto('./');
+  await titleEntry(page, en.exercises).click();
+  await expect(screen(page, 'exercises')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(screen(page, 'title')).toBeVisible();
+  await expect.poll(() => historyState(page)).toBeNull();
+  await page.goForward();
+  await expect(screen(page, 'title')).toBeVisible();
+  await expect.poll(() => historyState(page)).toBeNull();
+  await page.goBack();
+  await expect(page).toHaveURL('about:blank');
+});
+
 test('a held Enter opens one screen only', async ({ page }) => {
   await page.goto('./');
   await expect(titleEntry(page, en.exercises)).toBeFocused();

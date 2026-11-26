@@ -45,6 +45,11 @@ export function startApp(root: HTMLElement): void {
     const exit = onBack;
     onBack = null;
     exit?.();
+    // Forward onto a dead entry would leave the title on an app entry; undo it.
+    if (exit === null && (history.state as { screen?: boolean } | null)?.screen === true) {
+      ownBack = true;
+      history.back();
+    }
   });
   // A reload during a drive or replay lands on that screen's entry; drop it so back from the menu leaves.
   if ((history.state as { screen?: boolean } | null)?.screen === true) {

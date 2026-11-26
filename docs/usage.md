@@ -58,7 +58,7 @@ The menu opens on a title screen with Exercises, Free yard, Settings and What's 
 - Dock at a ramp
 - Slalom forward and back
 
-Choosing an exercise opens its setup: the brief, the tolerance (position and angle) and the best result for the chosen time of day and driving view, then Truck, Trailer, Time of day, Driving view and "Start".
+Choosing an exercise opens its setup: the brief, the tolerance (position and angle) and the best result for the chosen vehicles, time of day and driving view, then Truck, Trailer, Time of day, Driving view and "Start".
 
 Stop inside the marked bay within tolerance to reach the target; a vehicle still moving does not count. The result shows position error, angle error, contacts, limit stops, direction changes and time, and offers Retry, Replay and Next exercise. Bests are kept separately with and without aids.
 
