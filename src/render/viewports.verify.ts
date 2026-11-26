@@ -230,6 +230,7 @@ const VARIANTS: readonly Variant[] = [
     legend: 'measured',
   }),
   base('replay', { mode: 'replay', extra: NO_EXTRA_MIRRORS }),
+  base('replay, notch', { mode: 'replay', extra: NO_EXTRA_MIRRORS, insets: NOTCH }),
 ];
 
 /**
@@ -553,6 +554,20 @@ function evaluate(v: Variant, w: number, h: number): void {
         Math.max(-rect.x, -rect.y, right(rect) - w, bottom(rect) - h),
       );
     }
+  }
+
+  // The column's box ends at its view's bottom edge: the stack's own bottom is the other message properties'.
+  const safeOut = Math.max(
+    insets.left - column.x,
+    right(column) - (w - insets.right),
+    insets.top - column.y,
+  );
+  if (!chk('message-column-inside-safe-area', safeOut <= 1e-9)) {
+    fail(
+      'message-column-inside-safe-area',
+      () => `column ${fmt(column)} insets ${JSON.stringify(insets)}`,
+      safeOut,
+    );
   }
 
   if (v.mode === 'replay') {
@@ -949,8 +964,8 @@ function evaluate(v: Variant, w: number, h: number): void {
 
   /* messages */
   const inCockpitColumn =
-    column.y === cockpit.y &&
-    column.height === cockpit.height &&
+    column.y === cockpit.y + topInset &&
+    bottom(column) === bottom(cockpit) &&
     column.x >= cockpit.x &&
     right(column) <= right(cockpit);
   const room = column.width;
@@ -966,18 +981,10 @@ function evaluate(v: Variant, w: number, h: number): void {
       MIN_MESSAGE_WIDTH - room,
     );
   }
-  const safeOut = Math.max(insets.left - column.x, right(column) - (w - insets.right));
-  if (!chk('message-column-inside-safe-area', safeOut <= 1e-9)) {
-    fail(
-      'message-column-inside-safe-area',
-      () => `column ${fmt(column)} insets ${JSON.stringify(insets)}`,
-      safeOut,
-    );
-  }
   /** The stack in a cockpit column at `x`, `width` wide, and what it overlaps. */
   const cockpitStack = (x: number, width: number, yields: boolean): Rect => ({
     x,
-    y: cockpit.y + GEOM.stackTop + (landscape ? insets.top : 0),
+    y: cockpit.y + topInset + GEOM.stackTop,
     width,
     height: stackHeight(width, yields),
   });
@@ -1057,13 +1064,13 @@ function evaluate(v: Variant, w: number, h: number): void {
     const placed =
       column.x >= topDown.x &&
       right(column) <= right(topDown) + 1e-9 &&
-      column.y >= topDown.y + TARGET &&
+      column.y >= topDown.y + insets.top + TARGET &&
       bottom(column) <= bottom(topDown) + 1e-9 &&
       (!landscape || right(column) <= w - SPACE_4 - insets.right - PEDAL_W);
     if (!chk('message-column-placement', placed)) {
       fail('message-column-placement', () => `column ${fmt(column)} pane ${fmt(topDown)}`);
     }
-    const top = GEOM.stackTop + (landscape ? insets.top : 0);
+    const top = GEOM.stackTop;
     const need = top + stackHeight(column.width);
     if (!chk('message-stack-fits-pane', need <= column.height + 1e-9)) {
       fail(
