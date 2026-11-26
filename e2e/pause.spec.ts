@@ -1,7 +1,16 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
-import { exerciseEntry, startControl, startExercise, startYard, toTitle } from './menu-flow';
+import {
+  exerciseEntry,
+  openSetup,
+  startControl,
+  startExercise,
+  startYard,
+  toTitle,
+} from './menu-flow';
+import { seedStorage } from './menu-seed';
+import { heavyAt } from './pinned-shoot';
 
 const speed = (page: Page) => page.locator('[data-hud="speed"]');
 const clock = (page: Page) => page.locator('[data-hud="time"]');
@@ -311,11 +320,17 @@ test('leaving without scoring stores no result and no replay', async ({ page }) 
   await expect(page.getByRole('button', { name: en.replayLastRun })).toHaveCount(0);
 });
 
-test('a double click on an exercise card leaves no text selected on the drive screen', async ({
-  page,
-}) => {
-  await page.goto('./');
-  await startControl(page, en, exerciseEntry('straight-reverse')).dblclick();
-  await expect(speed(page)).toHaveText('0.0 km/h');
-  expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
-});
+test(
+  'a double click on Start leaves no text selected and starts one drive',
+  heavyAt('low'),
+  async ({ page }) => {
+    await seedStorage(page, { settings: { graphics: 'low' } });
+    const entry = exerciseEntry('straight-reverse');
+    await page.goto('./');
+    await openSetup(page, en, entry);
+    await startControl(page, en, entry).dblclick();
+    await expect(speed(page)).toHaveText('0.0 km/h');
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('');
+    await expect(page.locator('.drive')).toHaveCount(1);
+  },
+);

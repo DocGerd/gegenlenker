@@ -1,7 +1,7 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
-import { exerciseEntry, startControl, startExercise } from './menu-flow';
+import { exerciseEntry, openSetup, startControl, startExercise } from './menu-flow';
 
 const stop = (page: Page) => page.locator('[data-ctl="stop"]');
 const gear = (page: Page, g: string) => page.locator(`.ctl-gear[data-gear="${g}"]`);
@@ -93,6 +93,7 @@ test('a notice ignores an Enter held from before it appeared', async ({ page }) 
     });
   });
   await page.goto('./');
+  await openSetup(page, en, exerciseEntry('straight-reverse'));
   await startControl(page, en, exerciseEntry('straight-reverse')).focus();
   await page.keyboard.down('Enter');
   const notice = page.getByRole('alertdialog', { name: en.noWebgl });
