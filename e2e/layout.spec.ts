@@ -460,6 +460,30 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
   });
 }
 
+test('the goal cue yields to the toast in a mirror-only drive too narrow for both, at 700x600', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    locale: 'en-US',
+    viewport: { width: 700, height: 600 },
+  });
+  try {
+    const page = await context.newPage();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+    await page.addInitScript((key) => {
+      localStorage.setItem(key, JSON.stringify({ version: 1, mirrorsOnly: true }));
+    }, SETTINGS_KEY);
+    await page.goto('./');
+    await startExercise(page, en, 'straight-reverse');
+    await hudReady(page, { insets, mirrorsOnly: true });
+    await expect(page.locator('[data-hud="toastWrap"]')).toHaveAttribute('data-cue-yields');
+    await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+  } finally {
+    await context.close();
+  }
+});
+
 test('the longest German toast fits the narrowest pane column, inside the safe area, at 800x585', async ({
   browser,
 }) => {
