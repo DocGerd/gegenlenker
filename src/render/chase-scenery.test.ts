@@ -105,6 +105,8 @@ const MAX_BEYOND = 0.3;
 /** From this pitch the frame may show only the driveable ground around the vehicle. */
 const STEEP = 45;
 const deg = (d: number): number => (d * Math.PI) / 180;
+/** A sweep casts some hundred thousand rays: a loaded host outlasts the default timeout. */
+const SWEEP_TIMEOUT_MS = 30_000;
 
 type Shot = { scenery: number; bare: number; drawn: number; beyond: number };
 
@@ -189,5 +191,6 @@ describe('chase view scenery at the farthest orbit', () => {
         }
       }
     },
+    SWEEP_TIMEOUT_MS,
   );
 });

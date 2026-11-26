@@ -341,7 +341,12 @@ export function perimeterBuildings(
         k += 1;
         // where the pattern's pick does not fit, a smaller shed or a row of trees may
         let used = 0;
-        for (const tried of [kind, 'warehouse', 'trees'] as const) {
+        // the first row stands right behind the kit's own trees: trees only where no shed fits
+        const tries: readonly (BuildingKind | 'trees')[] =
+          row === 0
+            ? [kind === 'trees' ? 'hall' : kind, 'warehouse', 'trees']
+            : [kind, 'warehouse', 'trees'];
+        for (const tried of tries) {
           const { buildings, length } = slot(tried, side, along, offset);
           const fitting = buildings.filter(fits);
           if (fitting.length * 2 > buildings.length) {

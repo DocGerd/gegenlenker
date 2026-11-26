@@ -1,7 +1,7 @@
 import { Camera, Color, Vector3, type BufferGeometry } from 'three';
 import { UniformNode, type MeshLambertNodeMaterial, type Node } from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { layouts } from '../content/registry';
+import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { BOUNDS } from '../content/street';
 import { AIDS_LAYER, CAMERA_FAR, PERSPECTIVE_LAYER } from './seams';
@@ -138,6 +138,13 @@ describe('skyline', () => {
       const belt = perimeterBuildings(resolved, rings);
       expect(perimeterBuildings(resolved, rings)).toEqual(belt);
       expect(sceneryBuildings(resolved)).toEqual([...rings, ...belt]);
+      // the same whatever exercise is set up in the layout
+      for (const exercise of exercises.filter((e) => e.layout === layout.id)) {
+        expect(sceneryBuildings(resolveLayout(layout, exercise)), exercise.id).toEqual([
+          ...rings,
+          ...belt,
+        ]);
+      }
       const { bounds } = resolved;
       const cx = (bounds.minX + bounds.maxX) / 2;
       const cy = (bounds.minY + bounds.maxY) / 2;

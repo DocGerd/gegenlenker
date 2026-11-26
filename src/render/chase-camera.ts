@@ -16,7 +16,7 @@ import { resolveCombination } from '../vehicles/resolve';
 import { CAB_HEIGHT, FRAME_TOP } from './cab-dims';
 import { FREE_FOV, poseFromGaze } from './free-look';
 import { CAMERA_FAR, CHASE_LAYERS, enableLayers } from './seams';
-import { sceneryBuildings } from './skyline-layout';
+import { sceneryBuildings, type BuildingKind } from './skyline-layout';
 
 const CHASE_FOV = FREE_FOV;
 /** Distance beyond the one that just fits the combination. */
@@ -47,6 +47,9 @@ const SOLID_DECOR: ReadonlySet<KitPiece> = new Set([
   'office-entrance',
   'office-roof',
 ]);
+
+/** Skyline kinds the eye must not enter: walled buildings, not trees, masts or cranes. */
+const WALLED: ReadonlySet<BuildingKind> = new Set(['hall', 'warehouse', 'office']);
 
 /** The cab's front face in the truck body frame (x forward, y left, z up), metres. */
 export type CabFront = {
@@ -169,7 +172,7 @@ export type ChaseRig = {
 
 export type ChaseCollider = Pick<Obstacle, 'obb' | 'height'>;
 
-/** The layout's obstacles, its solid decor and the skyline around it: nothing drives into them, but the eye could reach them. */
+/** The layout's obstacles, its solid decor and the skyline's buildings: nothing drives into them, but the eye could reach them. */
 export function chaseColliders(
   layout: Pick<ResolvedLayout, 'obstacles' | 'decor' | 'bounds' | 'surfaces'>,
 ): readonly ChaseCollider[] {
@@ -178,10 +181,18 @@ export function chaseColliders(
       ? [{ obb: d.footprint, height: KIT_FOOTPRINTS[d.piece].height }]
       : [],
   );
-  const scenery = sceneryBuildings(layout).map((b) => ({
-    obb: { cx: b.x, cy: b.y, halfLength: b.length / 2, halfWidth: b.depth / 2, heading: b.heading },
-    height: b.height,
-  }));
+  const scenery = sceneryBuildings(layout)
+    .filter((b) => WALLED.has(b.kind))
+    .map((b) => ({
+      obb: {
+        cx: b.x,
+        cy: b.y,
+        halfLength: b.length / 2,
+        halfWidth: b.depth / 2,
+        heading: b.heading,
+      },
+      height: b.height,
+    }));
   return [...layout.obstacles, ...solids, ...scenery];
 }
 
