@@ -2,7 +2,7 @@
 
 The trainee stands outside the combination as Einweiser and gives the BG hand signs; an AI driver executes them. This document answers the nine questions of #443. No code.
 
-"Decided (owner)" = stated by the owner. "Call" = proposed here, open to correction; the open ones are listed at the end. "Estimate" = a number not measured or sourced. Code references name the module and symbol.
+"Decided (owner)" = stated by the owner. "Call" = proposed here, open to correction. "Estimate" = a number not measured or sourced. Code references name the module and symbol.
 
 ## Source
 
@@ -52,7 +52,7 @@ Per step the driver reads the held Einweiser pose, the active sign and the sight
 
 - Decided (owner): forward and back are set by the cab's transverse axis at the driver's position ("back and forth is based on the querachse of the führerhaus, at level of driver"), i.e. the line through `truckAnchors(spec).eye` across the truck heading. Ahead of it, Herkommen is D and Entfernen R; behind it, Herkommen is R and Entfernen D. Abeam is a narrow band on that line (±0.5 m, estimate), where the sign is unclear and the driver waits.
 - The side is read continuously, so walking cannot flip the gear without passing through the band. Decided (owner): when the band reaches him while the sign is held (the cab draws level, or he walks level with it), the driver stops as on Halt, with no `unclear` fault; only a sign given from inside the band is unclear.
-- Call (open question 1): from standstill, Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the axis; while moving they keep the current gear.
+- Decided (owner): from standstill, Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the axis; while moving they keep the current gear.
 - A gear change stops first (lever 0, brake), shifts at standstill, then moves; the sim counts it in `directionChanges`.
 - Rechts/Links: the indicated world direction is the Einweiser's heading −90° (right) or +90° (left) (sim plane: counter-clockwise positive), from the held pose at recognition. Its side relative to the leading end's direction of motion is the steer goal.
 - Worked cases (straight combination): behind a reversing combination, facing it, the Einweiser faces the truck's heading, so his right is the driver's right. In front of a truck driving forward, facing it, his right is the driver's left: the driver mirrors.
@@ -354,10 +354,6 @@ Estimate: nine PRs, of which PR 2 carries the risk. PR 3 starts once the gate pa
 - The unknown is whether a sign-driven controller can hold a drawbar trailer in reverse and reach the tightest tolerance, guided by a walk-limited Einweiser with zero faults, so every exercise must leave a standing point in sight and outside the path. PR 2 answers that headless, before any render work. If neither the planner nor the cascade fallback passes there, stop and re-plan before PR 3.
 
 **No-go for now on the later phase.** Decide after the MVP is in use, with the desktop perf check in §7.
-
-## Open questions for the owner
-
-1. From standstill (§2): Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the cab axis. A proposal the owner has not accepted.
 
 ## Proposed glossary rows
 
