@@ -44,16 +44,19 @@ const VIEWMODEL_FAR = 3;
 
 /** One loop of a looping sign (s): the driver reads it after half of one (`LOOP_RECOGNITION`). */
 export const SIGN_CYCLE = 2 * LOOP_RECOGNITION;
+/** How long a press or release blends from the arms as drawn into the new sign (s; spike §1); estimate. */
+export const SIGN_BLEND = 0.15;
 
 /**
- * The view rig's shoulders from the eye (m; x ahead, y to that side, z up): a view-model cheat
- * ahead of the true shoulder, so the forearms and hands reach the frame from below its edges.
+ * The view rig's shoulders from the eye (m; x ahead, y to that side, z up), estimates: a view-model
+ * cheat ahead of the true shoulder, so the forearms and hands reach the frame from below its edges.
  */
 const VIEW_SHOULDER = { ahead: 0.1, side: 0.2, up: -0.18 } as const;
 
+/** Sleeve radii (m), estimates. */
 const UPPER_RADIUS = 0.055;
 const FORE_RADIUS = 0.045;
-/** The glove's half extents across and along the forearm (m). */
+/** The glove's half extents across and along the forearm (m), estimates. */
 const GLOVE_HALF = { across: 0.045, along: 0.075 } as const;
 
 /** Hi-vis sleeve (EN ISO 20471 fluorescent yellow, sRGB approximation) and a dark work glove. */
@@ -61,8 +64,6 @@ const SLEEVE = 0xd2e000;
 const GLOVE = 0x34342f;
 /** The sleeve and glove at night: the night ambient, lifted a little by the yard's lamps; estimate. */
 const NIGHT_LIFT = 3;
-/** Names the arms' shade in the built fragment shader, so a fallback material is caught. */
-export const ARMS_SHADER_MARKER = 'einweiserArmsShade';
 
 const DEG = Math.PI / 180;
 const seg = (out: number, up: number): Segment => ({ out: out * DEG, up: up * DEG });
@@ -143,8 +144,16 @@ export type ArmPoints = {
   readonly hand: Vector3;
 };
 
-/** The joints of `side`'s arm at `phase` s into `sign` (null: arms down), slerped between its keys. */
-export function armPoints(sign: SignId | null, phase: number, side: 'left' | 'right'): ArmPoints {
+/**
+ * The joints of `side`'s arm at `phase` s into `sign` (null: arms down), slerped between its keys;
+ * with `blendFrom`, the arm as drawn when the sign cut in, blended from it over `SIGN_BLEND`.
+ */
+export function armPoints(
+  sign: SignId | null,
+  phase: number,
+  side: 'left' | 'right',
+  blendFrom?: Pick<ArmPoints, 'upper' | 'fore'>,
+): ArmPoints {
   const keys = firstPersonKeys(sign);
   const { from, to, t } = keyAt(sign, phase);
   const s = side === 'right' ? 1 : -1;
@@ -159,6 +168,11 @@ export function armPoints(sign: SignId | null, phase: number, side: 'left' | 'ri
     k,
   );
   const fore = slerp(direction(a.fore, s, new Vector3()), direction(b.fore, s, new Vector3()), k);
+  if (blendFrom !== undefined && phase < SIGN_BLEND) {
+    const j = smooth(Math.max(phase, 0) / SIGN_BLEND);
+    upper.copy(slerp(blendFrom.upper.clone(), upper, j));
+    fore.copy(slerp(blendFrom.fore.clone(), fore, j));
+  }
   const shoulder = new Vector3(s * VIEW_SHOULDER.side, VIEW_SHOULDER.up, -VIEW_SHOULDER.ahead);
   const elbow = shoulder.clone().addScaledVector(upper, UPPER_ARM);
   const hand = elbow.clone().addScaledVector(fore, FOREARM);
@@ -194,8 +208,8 @@ export type EinweiserArms = {
   /** Both arms, in the view-model camera's frame; hidden without a visual. */
   readonly object: Group;
   readonly camera: PerspectiveCamera;
-  /** Poses the arms for `visual`; false (and hidden) without one: a driver run or a replay. */
-  update(visual: EinweiserVisual | undefined): boolean;
+  /** Poses the arms for `visual`; hidden without one: a driver run or a replay. */
+  update(visual: EinweiserVisual | undefined): void;
   setLook(look: Look): void;
   dispose(): void;
 };
@@ -210,9 +224,7 @@ function lay(mesh: Mesh, from: Vector3, dir: Vector3, length: number): void {
 
 export function createEinweiserArms(): EinweiserArms {
   const look = uniform(new Color(1, 1, 1));
-  const shade = clamp(normalView.y.mul(0.2).add(normalView.z.mul(0.2)).add(0.7), 0, 1).toVar(
-    ARMS_SHADER_MARKER,
-  );
+  const shade = clamp(normalView.y.mul(0.2).add(normalView.z.mul(0.2)).add(0.7), 0, 1);
   const material = new MeshBasicNodeMaterial({ fog: false, toneMapped: false });
   material.colorNode = vertexColor().mul(shade).mul(look);
 
@@ -247,21 +259,32 @@ export function createEinweiserArms(): EinweiserArms {
   });
   group.layers.set(VIEWMODEL_LAYER);
   const camera = createViewModelCamera();
+  let shown: Pick<EinweiserVisual, 'sign' | 'phase'> | null = null;
+  const drawn = new Map<'left' | 'right', ArmPoints>();
+  const cutFrom = new Map<'left' | 'right', ArmPoints>();
 
   return {
     object: group,
     camera,
     update(visual) {
       group.visible = visual !== undefined;
-      if (visual === undefined) return false;
+      if (visual === undefined) {
+        shown = null;
+        return;
+      }
+      if (shown === null) cutFrom.clear();
+      else if (visual.sign !== shown.sign || visual.phase < shown.phase) {
+        for (const [side, p] of drawn) cutFrom.set(side, p);
+      }
+      shown = { sign: visual.sign, phase: visual.phase };
       for (const { side, upper, fore, hand } of sides) {
-        const p = armPoints(visual.sign, visual.phase, side);
+        const p = armPoints(visual.sign, visual.phase, side, cutFrom.get(side));
+        drawn.set(side, p);
         lay(upper, p.shoulder, p.upper, UPPER_ARM);
         lay(fore, p.elbow, p.fore, FOREARM - GLOVE_HALF.along);
         hand.position.copy(p.hand);
         hand.quaternion.setFromUnitVectors(ALONG, p.fore);
       }
-      return true;
     },
     setLook({ mode }) {
       const lift = mode === 'night' ? NIGHT_AMBIENT * NIGHT_LIFT : 1;

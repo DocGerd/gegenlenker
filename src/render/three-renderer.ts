@@ -136,7 +136,7 @@ function renderLitBy(
  * of the panes drawn before intact.
  */
 function drawViewModel(gl: WebGPURenderer, scene: Scene, arms: EinweiserArms): void {
-  const { autoClear, autoClearColor, autoClearStencil } = gl;
+  const { autoClear, autoClearColor, autoClearDepth, autoClearStencil } = gl;
   gl.autoClear = true;
   gl.autoClearColor = false;
   gl.autoClearDepth = true;
@@ -146,6 +146,7 @@ function drawViewModel(gl: WebGPURenderer, scene: Scene, arms: EinweiserArms): v
   } finally {
     gl.autoClear = autoClear;
     gl.autoClearColor = autoClearColor;
+    gl.autoClearDepth = autoClearDepth;
     gl.autoClearStencil = autoClearStencil;
   }
 }
@@ -632,7 +633,7 @@ export function createThreeSceneRenderer(
         radius: b.radius,
       });
       b.aids.update(frame);
-      const armsShown = b.arms.update(views.cockpit === null ? undefined : frame.einweiser);
+      b.arms.update(views.cockpit === null ? undefined : frame.einweiser);
       b.scene.updateMatrixWorld();
 
       gl.info.reset();
@@ -680,10 +681,8 @@ export function createThreeSceneRenderer(
         placeEinweiserCamera(einweiserCamera, frame.einweiser, cockpit);
         out.place(cockpit, pixelRatio);
         gl.render(b.scene, einweiserCamera);
-        if (armsShown) {
-          placeViewModelCamera(b.arms.camera, cockpit);
-          drawViewModel(gl, b.scene, b.arms);
-        }
+        placeViewModelCamera(b.arms.camera, cockpit);
+        drawViewModel(gl, b.scene, b.arms);
       } else if (cockpit !== null) {
         const head = b.interior.looksAround === true ? (frame.head ?? HEAD_REST) : HEAD_REST;
         placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit, head);

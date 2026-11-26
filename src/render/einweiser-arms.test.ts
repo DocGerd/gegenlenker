@@ -3,29 +3,26 @@ import { describe, expect, it } from 'vitest';
 import { SIGN_IDS, type SignId } from '../contracts/einweiser';
 import { LOOP_RECOGNITION } from '../einweiser/signs';
 import { SIGN_POSES } from '../einweiser/sign-poses';
-import { createEinweiserCamera, placeEinweiserCamera } from './einweiser-camera';
 import {
   armPoints,
   createEinweiserArms,
   firstPersonKeys,
   placeViewModelCamera,
+  SIGN_BLEND,
   SIGN_CYCLE,
 } from './einweiser-arms';
 import {
   CHASE_LAYERS,
   COCKPIT_LAYERS,
-  DEFAULT_LAYER,
   EINWEISER_LAYERS,
   MIRROR_LAYERS,
   SHADOW_CASTER_LAYERS,
   TOP_DOWN_LAYERS,
   VIEWMODEL_LAYER,
-  YARD_CASTER_LAYER,
 } from './seams';
 import { bandTopNdc, computeViewports } from './viewports';
 
 const SIGNS: readonly (SignId | null)[] = [null, ...SIGN_IDS];
-const FOVS = [70, 80, 90, 100, 110];
 /** Phases sampled per sign: every key and the blends between them, over one cycle. */
 const PHASES = Array.from({ length: 9 }, (_, i) => (i / 8) * SIGN_CYCLE);
 /** NDC kept clear of the frame's and the band's edges: the glove's half width at arm's length. */
@@ -70,34 +67,40 @@ describe('Einweiser arms', () => {
     }
   });
 
-  it('keep the signing forearms and every hand in frame and above the HUD band for every sign, pane and field of view', () => {
+  it('keep the signing forearms and every hand in frame and above the HUD band for every sign, cut-over and pane', () => {
     const arms = createEinweiserArms();
-    const own = createEinweiserCamera();
     const band = bandTopNdc();
     const misses: string[] = [];
     const sweep = panes();
     expect(Math.min(...sweep.map((p) => p.width / p.height))).toBeLessThan(0.6);
     expect(Math.max(...sweep.map((p) => p.width / p.height))).toBeGreaterThan(3);
     for (const pane of sweep) {
-      for (const fov of FOVS) {
-        placeEinweiserCamera(own, { pose: { x: 0, y: 0, heading: 0 }, pitch: 0 }, pane, fov);
-        placeViewModelCamera(arms.camera, pane);
-        for (const sign of SIGNS) {
+      placeViewModelCamera(arms.camera, pane);
+      const check = (label: string, point: Vector3): void => {
+        const p = point.clone().project(arms.camera);
+        if (Math.abs(p.x) > 1 - MARGIN || p.y > 1 - MARGIN || p.y < band + MARGIN) {
+          misses.push(`${pane.label} ${label} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`);
+        }
+      };
+      for (const sign of SIGNS) {
+        for (const side of ['left', 'right'] as const) {
+          // a lowered arm only shows its hand: its forearm rises into the frame from below
+          const signing = sign !== null && SIGN_POSES[sign].arms.includes(side);
           for (const phase of PHASES) {
-            for (const side of ['left', 'right'] as const) {
-              const { elbow, hand } = armPoints(sign, phase, side);
-              // a lowered arm only shows its hand: its forearm rises into the frame from below
-              const signing = sign !== null && SIGN_POSES[sign].arms.includes(side);
-              const points: [string, Vector3][] = [['hand', hand]];
-              if (signing) points.push(['wrist', elbow.clone().lerp(hand, 0.75)]);
-              for (const [name, point] of points) {
-                const p = point.clone().project(arms.camera);
-                if (Math.abs(p.x) > 1 - MARGIN || p.y > 1 - MARGIN || p.y < band + MARGIN) {
-                  misses.push(
-                    `${pane.label} ${String(fov)}° ${String(sign)} t=${phase.toFixed(2)} ${side} ${name} (${p.x.toFixed(2)}, ${p.y.toFixed(2)})`,
-                  );
-                }
-              }
+            const { elbow, hand } = armPoints(sign, phase, side);
+            const label = `${String(sign)} t=${phase.toFixed(2)} ${side}`;
+            check(`${label} hand`, hand);
+            if (signing) check(`${label} wrist`, elbow.clone().lerp(hand, 0.75));
+          }
+          for (const from of SIGNS) {
+            for (const fromPhase of [0, SIGN_CYCLE / 4]) {
+              const { hand } = armPoints(
+                sign,
+                SIGN_BLEND / 2,
+                side,
+                armPoints(from, fromPhase, side),
+              );
+              check(`${String(from)} to ${String(sign)} ${side} hand mid-blend`, hand);
             }
           }
         }
@@ -141,12 +144,46 @@ describe('Einweiser arms', () => {
       expect(mesh.castShadow).toBe(false);
     }
     expect(arms.camera.layers.mask).toBe(only.mask);
-    expect(arms.update(undefined)).toBe(false);
+    arms.update(undefined);
     expect(arms.object.visible).toBe(false);
-    expect(arms.update({ pose: { x: 0, y: 0, heading: 0 }, pitch: 0, sign: null, phase: 0 })).toBe(
-      true,
-    );
+    arms.update({ pose: { x: 0, y: 0, heading: 0 }, pitch: 0, sign: null, phase: 0 });
     expect(arms.object.visible).toBe(true);
+  });
+
+  it('blend a press or release from the arms as drawn into the new sign, and start a shown sign unblended', () => {
+    const arms = createEinweiserArms();
+    const show = (sign: SignId | null, phase: number): void => {
+      arms.update({ pose: { x: 0, y: 0, heading: 0 }, pitch: 0, sign, phase });
+    };
+    // per side: upper arm, forearm, glove
+    const glove = (): Vector3 => {
+      const mesh = arms.object.children[2];
+      if (mesh === undefined) throw new Error('no glove');
+      return mesh.position.clone();
+    };
+    const near = (a: Vector3, b: Vector3): void => {
+      expect(a.distanceTo(b)).toBeCloseTo(0, 9);
+    };
+    show('herkommen', 0.3);
+    const drawn = glove();
+    show('halt', 0);
+    near(glove(), drawn);
+    show('halt', SIGN_BLEND / 2);
+    expect(glove().distanceTo(drawn)).toBeGreaterThan(0.02);
+    expect(glove().distanceTo(armPoints('halt', SIGN_BLEND / 2, 'left').hand)).toBeGreaterThan(
+      0.02,
+    );
+    show('halt', SIGN_BLEND);
+    near(glove(), armPoints('halt', SIGN_BLEND, 'left').hand);
+    // the same sign pressed again starts over from where it is drawn
+    show('herkommen', 0.3);
+    show('herkommen', 0.8);
+    const again = glove();
+    show('herkommen', 0);
+    near(glove(), again);
+    arms.update(undefined);
+    show('herkommen', 0);
+    near(glove(), armPoints('herkommen', 0, 'left').hand);
   });
 
   it('is in no other camera or shadow layer list', () => {
@@ -157,7 +194,6 @@ describe('Einweiser arms', () => {
       CHASE_LAYERS,
       EINWEISER_LAYERS,
       TOP_DOWN_LAYERS,
-      [DEFAULT_LAYER, YARD_CASTER_LAYER],
     ]) {
       expect(list).not.toContain(VIEWMODEL_LAYER);
     }

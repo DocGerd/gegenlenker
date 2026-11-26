@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import {
@@ -17,6 +18,33 @@ import { exerciseEntry } from './menu-flow';
 import type { ScenePaletteKey } from '../src/contracts/render';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
+/** Least share of his own view his arms fill; lowered, they fill several times this. */
+const MIN_SLEEVE_SHARE = 0.02;
+
+/**
+ * Share of a PNG's pixels in the arms' hi-vis sleeve: unlit vertex colour with no blue and more green
+ * than red, which nothing else in his view has.
+ */
+function sleeveShare(page: Page, png: Buffer): Promise<number> {
+  return page.evaluate(async (data) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${data}`;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) throw new Error('no 2d context');
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, img.width, img.height).data;
+    let sleeve = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      const [r, g, b] = [px[i] ?? 0, px[i + 1] ?? 0, px[i + 2] ?? 0];
+      if (b <= 6 && g > r && r >= 60) sleeve++;
+    }
+    return sleeve / (img.width * img.height);
+  }, png.toString('base64'));
+}
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 
 /**
@@ -148,6 +176,9 @@ for (const lighting of ['day', 'night'] as const) {
           MIN_EINWEISER_SHARE,
         );
         expect(await tokenShare(page, own, 'einweiser', 0), `${preset} own view`).toBe(0);
+        expect(await sleeveShare(page, own), `${preset} own arms`).toBeGreaterThan(
+          MIN_SLEEVE_SHARE,
+        );
         hashes.push(`${preset} ${sha(top)}`);
         await page.close();
       }
