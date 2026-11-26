@@ -129,16 +129,15 @@ const isStep = (v: unknown): v is number => Number.isInteger(v) && (v as number)
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
+const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
 function parseControl(v: unknown): ControlVector | null {
   if (!isRecord(v)) return null;
   const { steer, lever, brake, gear } = v;
-  if (typeof steer !== 'number' || !Number.isFinite(steer)) return null;
-  if (typeof lever !== 'number' || !Number.isFinite(lever)) return null;
+  if (!isFiniteNumber(steer) || !isFiniteNumber(lever)) return null;
   if (typeof brake !== 'boolean' || !isMember(GEARS, gear)) return null;
   return { steer, lever, brake, gear };
 }
-
-const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 /** Null unless `items` is an array of entries with strictly increasing steps, each accepted by `parse`. */
 function parseSteps<T extends { readonly step: number }>(

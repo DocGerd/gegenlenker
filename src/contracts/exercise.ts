@@ -70,7 +70,7 @@ export type EinweiserSample = {
   readonly heading: number;
   readonly pitch: number;
 };
-/** Change-only, for display; the logged controls stay authoritative. */
+/** Change-only. Replays derive the Einweiser's view and faults from it; the logged controls alone drive the vehicle. */
 export type EinweiserTrack = {
   readonly samples: readonly EinweiserSample[];
   readonly signs: readonly { readonly step: number; readonly sign: SignId | null }[];

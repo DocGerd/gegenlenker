@@ -1,5 +1,5 @@
 import { exerciseById } from '../../content/registry';
-import { EXERCISE_IDS, type ExerciseId } from '../../contracts/exercise';
+import { EXERCISE_IDS, type ExerciseId, type Role as RunRole } from '../../contracts/exercise';
 import { LAYOUT_IDS, type LayoutId } from '../../contracts/layout';
 import type { MessageKey } from '../../i18n/en';
 import { t } from '../../i18n/i18n';
@@ -9,7 +9,7 @@ import type { Settings } from '../settings';
 import type { OptionId } from './options';
 
 /** On the catalogue entry, not the exercise, so a later role can reuse an exercise definition. */
-export type Role = 'driver';
+export type Role = Extract<RunRole, 'driver'>;
 export type EntryKind = 'exercise' | 'yard';
 
 export type EntryRef =
