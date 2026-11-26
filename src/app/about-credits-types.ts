@@ -8,6 +8,8 @@ export type LicenceText = {
 export type ThirdParty = LicenceText & {
   /** Runtime dependencies this licence covers; empty when the code is not an npm package. */
   readonly covers: readonly string[];
+  /** Transitive packages in the bundle that ship under the same licence text. */
+  readonly bundled: readonly string[];
   /** The file in `public/licenses/`. */
   readonly file: string;
 };

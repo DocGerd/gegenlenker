@@ -3,10 +3,9 @@ import type { AboutCredits, ThirdParty } from '../src/app/about-credits-types';
 import { lfText } from './assets/provenance';
 import { ASSET_SOURCES } from './assets/sources';
 
-export type LicenceEntry = Omit<ThirdParty, 'text'> & {
+export type LicenceEntry = Omit<ThirdParty, 'text' | 'bundled'> & {
   /** The package file the licence is copied from, relative to the repository root. */
   readonly upstream?: string;
-  /** Transitive packages in the bundle that ship under the same licence text. */
   readonly bundled?: readonly string[];
 };
 
@@ -44,11 +43,12 @@ export const THIRD_PARTY: readonly LicenceEntry[] = [
 export function aboutCredits(root: string): AboutCredits {
   return {
     app: { name: 'Gegenlenker', spdx: 'Apache-2.0', text: lfText(root, 'LICENSE') },
-    thirdParty: THIRD_PARTY.map(({ name, spdx, file, covers }) => ({
+    thirdParty: THIRD_PARTY.map(({ name, spdx, file, covers, bundled = [] }) => ({
       name,
       spdx,
       file,
       covers,
+      bundled,
       text: lfText(root, join('public/licenses', file)),
     })),
     assets: Object.values(ASSET_SOURCES).map(({ title, licence, authors, page }) => ({
