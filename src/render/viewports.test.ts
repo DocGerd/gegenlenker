@@ -241,7 +241,7 @@ describe('top-down split', () => {
         for (const inset of [NO_INSETS, insets]) {
           const views = computeViewports(w, h, 'drive', null, inset, edges[0]);
           const column = messageColumn(views, null, inset);
-          if (column.y === views.cockpit?.y) continue;
+          if (column.x < views.topDown.x) continue;
           inPane++;
           expect(column.width, `${w}x${h} left inset ${inset.left}`).toBeGreaterThanOrEqual(
             MIN_MESSAGE_WIDTH,
@@ -642,7 +642,8 @@ describe('computeViewports front mirror', () => {
         }
         const column = messageColumn(views, null, insets);
         const at = `${w}x${h} left inset ${insets.left}`;
-        if (column.y === cockpit.y) {
+        // only a cockpit at the screen's top edge sits under the display cut-out
+        if (column.y === cockpit.y + (cockpit.y === 0 ? insets.top : 0)) {
           count.between++;
           expect(column.x, at).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
           expect(column.x + column.width, at).toBeLessThanOrEqual(mirrorRight.x);
@@ -658,7 +659,7 @@ describe('computeViewports front mirror', () => {
           );
           if (portrait) expect(column.width, at).toBe(topDown.width - insets.left - insets.right);
           // below the finish button, which the pane's first row holds below the cut-out
-          expect(column.y, at).toBeGreaterThanOrEqual(topDown.y + 44 + (portrait ? insets.top : 0));
+          expect(column.y, at).toBeGreaterThanOrEqual(topDown.y + 44 + insets.top);
           expect(column.y + column.height, at).toBe(topDown.y + topDown.height);
         }
       }
@@ -683,11 +684,14 @@ describe('computeViewports front mirror', () => {
     expect(messageColumn(views, null)).toEqual({ ...views.topDown, cueYields: false });
     const insets = { top: 24, right: 48, bottom: 20, left: 48 };
     expect(messageColumn(views, null, insets)).toEqual({
-      ...views.topDown,
       x: 48,
+      y: 24,
       width: 800 - 96,
+      height: 600 - 24,
       cueYields: false,
     });
+    const portrait = computeViewports(600, 800, 'replay');
+    expect(messageColumn(portrait, null, insets).y).toBe(24);
   });
 });
 
@@ -1135,6 +1139,14 @@ describe('computeViewports mirror-only drive', () => {
       expect(column.x, `${w}x${h}`).toBeGreaterThanOrEqual(mirrorLeft.x + mirrorLeft.width);
       expect(column.x + column.width, `${w}x${h}`).toBeLessThanOrEqual((front ?? mirrorRight).x);
       expect(column.cueYields, `${w}x${h}`).toBe(false);
+    }
+  });
+
+  it('starts the toast column below the display cut-out, in portrait too', () => {
+    const notch = { top: 24, right: 48, bottom: 20, left: 48 };
+    for (const [w, h] of [...landscape, [768, 1024] as const, [820, 1180] as const]) {
+      const views = computeViewports(w, h, 'mirrors', null, notch, undefined, null, ALL);
+      expect(messageColumn(views, null, notch).y, `${w}x${h}`).toBe(notch.top);
     }
   });
 
