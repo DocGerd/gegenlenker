@@ -129,18 +129,19 @@ describe.each(pairs)('signs for $truck.id with $trailer.id', ({ truck, trailer }
 
   /** Distance the truck travels from the step `cue` first shows to standstill. */
   const stopping = (cue: (s: SimSnapshot) => { sign: SignId | null; pose: Pose2 }): number => {
-    let at: number | null = null;
+    const mark: { at: number | null } = { at: null };
     let since = 0;
     const { trace } = signal(
       truck,
       trailer,
       (now, step) => {
         since = creeping(now) ? since + 1 : 0;
-        if (at === null && since > 60) at = step;
-        return at === null ? { sign: 'herkommen', pose: behind(now) } : cue(now);
+        if (mark.at === null && since > 60) mark.at = step;
+        return mark.at === null ? { sign: 'herkommen', pose: behind(now) } : cue(now);
       },
-      (now) => at !== null && now.speed === 0,
+      (now) => mark.at !== null && now.speed === 0,
     );
+    const at = mark.at;
     if (at === null) throw new Error('never crept');
     let travelled = 0;
     for (let k = at; k + 1 < trace.length; k++) {
