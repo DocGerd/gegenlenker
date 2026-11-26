@@ -3,6 +3,7 @@ import type { EinweiserSample, EinweiserTrack } from '../contracts/exercise';
 import type { Rect2 } from '../contracts/layout';
 import type { ControlVector, SimSnapshot } from '../contracts/sim';
 import { DT } from '../sim/constants';
+import { MAX_REPLAY_STEPS } from '../sim/replay';
 import { createDriver, createPilot, type Pilot } from './driver';
 import { bodyOccluders, type Occluder, type SightGeometry } from './sight';
 import type { Perception, Reading } from './signs';
@@ -85,16 +86,19 @@ export function createEinweiserRun({
     step(s, input) {
       const colliders = [...occluders, ...bodyOccluders(g, s)];
       walker = walkStep({ ...walker, heading: input.heading }, input.keys, DT, colliders, yard);
+      // the log keeps no steps past its cap
+      const logged = s.step < MAX_REPLAY_STEPS;
       if (s.step % HOLD_STEPS === 0) {
         const next = quantise(walker, input.pitch);
         moved = Math.hypot(next.x - held.x, next.y - held.y);
         held = next;
         const last = samples[samples.length - 1];
-        if (last === undefined || !samePose(last, held)) samples.push({ step: s.step, ...held });
+        if (logged && (last === undefined || !samePose(last, held)))
+          samples.push({ step: s.step, ...held });
       }
       if (input.sign !== shown) {
         [shown, shownSince] = [input.sign, s.step];
-        signs.push({ step: s.step, sign: shown });
+        if (logged) signs.push({ step: s.step, sign: shown });
       }
       const d = driver.step(s, input.sign, held);
       if (d.reading.kind !== 'none') latest = d.reading.kind;
@@ -119,22 +123,34 @@ export function createEinweiserRun({
   };
 }
 
+/** What a replay reads of him at one step, as the live run did (`EinweiserStep`). */
+export type TrackAt = {
+  readonly held: EinweiserPose;
+  readonly sign: SignId | null;
+  readonly moved: number;
+};
+
 /**
- * The held pose and the shown sign at each step of a logged track, so a replay reads him as the live
- * run did. `at` takes steps in increasing order; before the first sample it gives the first.
+ * Reads a logged track step by step. `at` takes steps in increasing order. Before the first sample it
+ * gives the first, and `moved` is 0 at step 0, where the live run measures from his unlogged start.
  */
-export function createTrackCursor(track: EinweiserTrack): {
-  at(step: number): { readonly held: EinweiserPose; readonly sign: SignId | null };
-} {
-  const first = track.samples[0];
+export function createTrackCursor(track: EinweiserTrack): { at(step: number): TrackAt } {
+  const { samples, signs } = track;
+  const first = samples[0];
   if (first === undefined) throw new Error('an Einweiser track has at least one sample');
   let [sample, sign] = [0, -1];
   return {
     at(step) {
-      while ((track.samples[sample + 1]?.step ?? Infinity) <= step) sample++;
-      while ((track.signs[sign + 1]?.step ?? Infinity) <= step) sign++;
-      const { x, y, heading, pitch } = track.samples[sample] ?? first;
-      return { held: { x, y, heading, pitch }, sign: track.signs[sign]?.sign ?? null };
+      while ((samples[sample + 1]?.step ?? Infinity) <= step) sample++;
+      while ((signs[sign + 1]?.step ?? Infinity) <= step) sign++;
+      const at = samples[sample] ?? first;
+      const before = samples[sample - 1];
+      // a hold step without a sample held him where he was
+      const sampledHere = at.step === step - (step % HOLD_STEPS);
+      const moved =
+        before !== undefined && sampledHere ? Math.hypot(at.x - before.x, at.y - before.y) : 0;
+      const { x, y, heading, pitch } = at;
+      return { held: { x, y, heading, pitch }, sign: signs[sign]?.sign ?? null, moved };
     },
   };
 }

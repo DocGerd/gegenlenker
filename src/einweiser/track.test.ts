@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import type { EinweiserPose } from '../contracts/einweiser';
 import type { InputLog } from '../contracts/exercise';
 import { resolveRun } from '../content/run';
 import { parseInputLog, serializeInputLog, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { layoutOccluders, sightGeometry } from './sight';
-import { createEinweiserRun, createTrackCursor, HOLD_STEPS, type EinweiserInput } from './track';
+import {
+  createEinweiserRun,
+  createTrackCursor,
+  HOLD_STEPS,
+  type EinweiserInput,
+  type TrackAt,
+} from './track';
 import { STILL } from './walk';
 
 const ids: RunIds = {
@@ -30,7 +35,7 @@ function drive(steps: number) {
     start: s,
   });
   const heading = einweiser.walker().heading;
-  const held: EinweiserPose[] = [];
+  const live: TrackAt[] = [];
   for (let i = 0; i < steps; i++) {
     const walking = i >= 30 && i < 90;
     const input: EinweiserInput = {
@@ -40,10 +45,10 @@ function drive(steps: number) {
       sign: i >= 30 ? 'achtung' : null,
     };
     const step = einweiser.step(s, input);
-    held.push(einweiser.held());
+    live.push({ held: einweiser.held(), sign: input.sign, moved: step.moved });
     s = sim.step(step.control);
   }
-  return { track: einweiser.track(), held };
+  return { track: einweiser.track(), live };
 }
 
 describe('Einweiser track', () => {
@@ -58,9 +63,9 @@ describe('Einweiser track', () => {
     expect(track.signs).toEqual([{ step: 30, sign: 'achtung' }]);
   });
 
-  it('replays the held pose the live run read at every step, through the stored log', () => {
+  it('replays what the live run read of him at every step, through the stored log', () => {
     const steps = 180;
-    const { track, held } = drive(steps);
+    const { track, live } = drive(steps);
     const log: InputLog = {
       ...ids,
       version: 4,
@@ -74,6 +79,7 @@ describe('Einweiser track', () => {
     const stored = parseInputLog(serializeInputLog(log, fingerprint), fingerprint);
     if (stored?.einweiser === undefined) throw new Error('stored track expected');
     const cursor = createTrackCursor(stored.einweiser);
-    expect(held.map((_, step) => cursor.at(step).held)).toEqual(held);
+    expect(live.some((at) => at.moved > 0)).toBe(true);
+    expect(live.map((_, step) => cursor.at(step))).toEqual(live);
   });
 });

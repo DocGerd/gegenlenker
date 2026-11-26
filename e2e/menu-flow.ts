@@ -119,7 +119,7 @@ export async function startEntry(
   options: Partial<RunOptions> = {},
 ): Promise<void> {
   await openSetup(page, messages, entry);
-  if (entry.role !== undefined) await choose(screen(page, 'setup'), 'role', entry.role);
+  if (entry.role === 'einweiser') await choose(screen(page, 'setup'), 'role', entry.role);
   if (options.truck !== undefined) await chooseRunOption(page, messages, 'truck', options.truck);
   if (options.trailer !== undefined)
     await chooseRunOption(page, messages, 'trailer', options.trailer);
