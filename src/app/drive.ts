@@ -176,6 +176,8 @@ export function startDrive(
         if (id !== 'wideMirrors') return;
         wideMirrors = currentSettings().wideMirrors;
         arrange();
+        // remeasure marks it too, except in a mirror-only drive
+        dirty = true;
       },
     });
   };

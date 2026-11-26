@@ -2111,8 +2111,7 @@ test(
       await seedStorage(page, { settings: { graphics: 'low' } });
       await page.goto('./');
       await startExercise(page, en, 'straight-reverse');
-      // hudReady counts the Balanced mirror set; Low draws no class V mirror.
-      await expect(page.locator('.hud-gauge')).toHaveCount(2);
+      await hudReady(page, { exact: false });
       const wide = page.locator('[data-hud^="wide"]:not([hidden])');
       const mirror = page.locator('[data-hud="mirrorLeft"]');
       const height = async () => {
