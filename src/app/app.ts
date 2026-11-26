@@ -5,7 +5,7 @@ import { requestPersistentStorage } from '../pwa/persist';
 import { startUpdatePrompt } from '../pwa/update-prompt';
 import './app.css';
 import type { DriveOutcome, RunConfig } from './drive';
-import { entryOfRun } from './menu/continue';
+import type { EntryRef } from './menu/catalogue';
 import { showMenu } from './menu/index';
 import type { NavState } from './menu/nav';
 import { showNotice } from './notice';
@@ -105,15 +105,15 @@ export function startApp(root: HTMLElement): void {
 
   // Loaded on demand so the menu paints without parsing three.js.
   // `mounted` runs once the drive has taken over the screen and its history entry.
-  const drive = (run: RunConfig, mounted?: () => void): void => {
+  const drive = (run: RunConfig, entry: EntryRef, mounted?: () => void): void => {
     probeGraphics()
       .then((backend) => {
         if (backend === null) noWebgl();
-        else loadDrive(run, mounted);
+        else loadDrive(run, entry, mounted);
       })
-      .catch((error: unknown) => loadFailed(error, () => drive(run, mounted)));
+      .catch((error: unknown) => loadFailed(error, () => drive(run, entry, mounted)));
   };
-  const loadDrive = (run: RunConfig, mounted?: () => void): void => {
+  const loadDrive = (run: RunConfig, entry: EntryRef, mounted?: () => void): void => {
     import('./drive')
       .then((m) => {
         let back: (() => void) | null = null;
@@ -124,18 +124,18 @@ export function startApp(root: HTMLElement): void {
         };
         enter(onPop);
         back = m.startDrive(screen, run, currentSettings(), {
-          onExit: (outcome) => finished(run, outcome),
-          onRestart: () => drive(run),
+          onExit: (outcome) => finished(run, entry, outcome),
+          onRestart: () => drive(run, entry),
           onLeave: () => {
             leave();
             menu();
           },
         });
         // The one write for every start: Start, Continue, Next exercise, Retry and Restart all come through here.
-        updateSettings({ lastEntry: entryOfRun(run) });
+        updateSettings({ lastEntry: entry });
         mounted?.();
       })
-      .catch((error: unknown) => loadFailed(error, () => drive(run, mounted)));
+      .catch((error: unknown) => loadFailed(error, () => drive(run, entry, mounted)));
   };
   const replay = (log: InputLog, onExit: () => void): void => {
     probeGraphics()
@@ -154,15 +154,21 @@ export function startApp(root: HTMLElement): void {
       })
       .catch((error: unknown) => loadFailed(error, () => replay(log, onExit)));
   };
-  const finished = (run: RunConfig, outcome: DriveOutcome): void => {
+  const finished = (run: RunConfig, entry: EntryRef, outcome: DriveOutcome): void => {
     const stored = outcome.result === null ? null : storeResult(outcome.result);
     storeLastRun(outcome.log);
     if (outcome.result === null || stored === null) {
       leave();
       menu();
-    } else result(run, outcome.result, stored, outcome.log);
+    } else result(run, entry, outcome.result, stored, outcome.log);
   };
-  const result = (run: RunConfig, r: RunResult, context: ResultContext, log: InputLog): void => {
+  const result = (
+    run: RunConfig,
+    entry: EntryRef,
+    r: RunResult,
+    context: ResultContext,
+    log: InputLog,
+  ): void => {
     const following =
       r.reached && run.exercise !== null
         ? exercises[exercises.indexOf(run.exercise) + 1]
@@ -173,16 +179,23 @@ export function startApp(root: HTMLElement): void {
           ? null
           : () => {
               close();
-              drive({ ...run, layoutId: following.layout, exercise: following });
+              drive(
+                { ...run, layoutId: following.layout, exercise: following },
+                {
+                  role: entry.role,
+                  kind: 'exercise',
+                  id: following.id,
+                },
+              );
             },
       retry: () => {
         close();
-        drive(run);
+        drive(run, entry);
       },
       replay: isReplayable(log)
         ? () => {
             close();
-            replay(log, () => result(run, r, context, log));
+            replay(log, () => result(run, entry, r, context, log));
           }
         : null,
       menu: () => {
@@ -202,8 +215,8 @@ export function startApp(root: HTMLElement): void {
     const handle = showMenu(
       screen,
       {
-        start: (run) => {
-          drive(run, () => closeMenu?.());
+        start: (run, entry) => {
+          drive(run, entry, () => closeMenu?.());
         },
         replay:
           log === null

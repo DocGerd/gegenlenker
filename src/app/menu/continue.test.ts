@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { exerciseById } from '../../content/registry';
 import { EXERCISE_IDS, type ExerciseId, type InputLog } from '../../contracts/exercise';
 import type { LayoutId } from '../../contracts/layout';
-import type { RunConfig } from '../drive';
 import type { EntryRef } from './catalogue';
-import { continueEntry, entryOfRun, lastEntryOf } from './continue';
+import { continueEntry, lastEntryOf } from './continue';
 
 const ex = (id: ExerciseId): EntryRef => ({ role: 'driver', kind: 'exercise', id });
 const yard = (id: LayoutId): EntryRef => ({ role: 'driver', kind: 'yard', id });
@@ -77,17 +75,5 @@ describe('lastEntryOf', () => {
   it('a stored last entry wins over the last run', () => {
     expect(lastEntryOf(ex('slalom'), log('depot', 'reverse-bay'))).toEqual(ex('slalom'));
     expect(lastEntryOf(yard('depot'), null)).toEqual(yard('depot'));
-  });
-});
-
-describe('entryOfRun', () => {
-  it('maps an exercise run and a yard run', () => {
-    const base = { truckId: 'man-le-18-280', trailerId: 'krone-azw-18' } as const;
-    const exercise = exerciseById('reverse-bay');
-    const run: RunConfig = { ...base, layoutId: exercise.layout, exercise };
-    expect(entryOfRun(run)).toEqual(ex('reverse-bay'));
-    expect(entryOfRun({ ...base, layoutId: 'logistics', exercise: null })).toEqual(
-      yard('logistics'),
-    );
   });
 });

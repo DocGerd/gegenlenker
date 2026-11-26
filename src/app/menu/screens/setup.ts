@@ -7,7 +7,7 @@ import type { RunConfig } from '../../drive';
 import { currentSettings } from '../../settings';
 import { bestResults } from '../../storage';
 import {
-  entriesOf,
+  entryHeading,
   entryKey,
   entryOf,
   runConfigOf,
@@ -26,15 +26,6 @@ export type SetupContext = {
   /** Starts the run once; the button shows the busy state until the drive takes over. */
   readonly start: (button: HTMLButtonElement, run: RunConfig) => void;
 };
-
-function headingOf(ref: EntryRef): string {
-  const { title } = entryOf(ref);
-  if (ref.kind === 'yard') return `${t('freeYard')} · ${t(title)}`;
-  const number = entriesOf(ref.role, 'exercise').findIndex(
-    (e) => entryKey(e.ref) === entryKey(ref),
-  );
-  return `${number + 1} ${t(title)}`;
-}
 
 function stat(label: MessageKey, value: string): HTMLSpanElement {
   const el = element('span', 'menu-stat', `${t(label)} `);
@@ -83,7 +74,7 @@ export function setupScreen(ctx: SetupContext): {
   readonly focus: (remembered: string | null) => void;
 } {
   const entry = entryOf(ctx.entry);
-  const frame = screenFrame('setup', headingOf(ctx.entry), ctx.back);
+  const frame = screenFrame('setup', entryHeading(ctx.entry), ctx.back);
   const layout = element('div', 'menu-setup');
 
   const info = element('div', 'menu-setup-info');

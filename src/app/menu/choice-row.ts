@@ -1,8 +1,6 @@
 import { t } from '../../i18n/i18n';
-import type { Choice, OptionField } from './options';
+import { labelOf, type OptionField } from './options';
 import { element } from './screens/frame';
-
-const labelOf = ({ label }: Choice): string => (typeof label === 'string' ? t(label) : label.text);
 
 /**
  * A labelled radio group with every value visible; arrow keys change the value natively. `onChange` gets the

@@ -29,7 +29,8 @@ import { setupScreen } from './screens/setup';
 import { titleScreen } from './screens/title';
 
 export type MenuDeps = {
-  readonly start: (run: RunConfig) => void;
+  /** `entry` is what the run was started from, stored as the last entry. */
+  readonly start: (run: RunConfig, entry: EntryRef) => void;
   readonly replay: { readonly log: InputLog; readonly start: () => void } | null;
   /** Re-read whenever the title renders. */
   readonly hasNews: () => Promise<boolean>;
@@ -96,7 +97,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
     show();
   };
 
-  const startRun = (button: HTMLButtonElement, run: RunConfig): void => {
+  const startRun = (button: HTMLButtonElement, run: RunConfig, entry: EntryRef): void => {
     if (busy) return;
     busy = true;
     button.disabled = true;
@@ -107,7 +108,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
     // Nothing else on the screen may start or open anything meanwhile.
     for (const item of screen?.querySelectorAll<HTMLButtonElement>('.menu-item') ?? [])
       item.disabled = true;
-    deps.start(run);
+    deps.start(run, entry);
   };
 
   const actions: Readonly<Record<ActionId, (button?: HTMLButtonElement) => void>> = {
@@ -116,7 +117,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
       if (button === undefined) throw new Error('Continue needs the control that was activated');
       const { done, lastEntry } = state();
       const entry = continueEntry(lastEntry, done);
-      if (entry !== null) startRun(button, runConfigOf(entry, currentSettings()));
+      if (entry !== null) startRun(button, runConfigOf(entry, currentSettings()), entry);
     },
   };
   const activate = (item: Item, button?: HTMLButtonElement): void => {
@@ -138,9 +139,10 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   const contentScreen = (level: Level): ScreenView => {
     const frame = screenFrame(level.screen, headingOf(level), back);
     const load = CONTENT[level.screen];
+    if (load === undefined) throw new Error(`Content screen ${level.screen} has no loader`);
     let open = true;
     // Only the chunk load reaches `failed`; a fault in `render` is the app's own error.
-    void load?.().then(
+    void load().then(
       (m) => {
         if (open) m.render(frame.body);
       },
@@ -178,17 +180,21 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           back,
           pick: (entry) => go({ type: 'pick', entry }),
         });
-      case 'setup':
-        if (level.entry === undefined) throw new Error('Setup opened without an entry');
+      case 'setup': {
+        const { entry } = level;
+        if (entry === undefined) throw new Error('Setup opened without an entry');
         return setupScreen({
-          entry: level.entry,
+          entry,
           step: level.step ?? 0,
           back,
           next: () => {
             go({ type: 'next' });
           },
-          start: startRun,
+          start: (button, run) => {
+            startRun(button, run, entry);
+          },
         });
+      }
       case 'options':
         return optionsScreen({
           screen,

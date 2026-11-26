@@ -3,6 +3,7 @@ import { EXERCISE_IDS } from '../../contracts/exercise';
 import { LAYOUT_IDS } from '../../contracts/layout';
 import { loadSettings } from '../settings';
 import { entriesOf, SETUP_STEPS } from './catalogue';
+import { CONTENT } from './content';
 import { GRAPH, screenOf, shownItems, type MenuState, type ScreenId } from './graph';
 import { OPTION_FIELDS, optionPatch, optionValue, PAUSE_FIELDS, type OptionId } from './options';
 
@@ -80,6 +81,16 @@ describe('menu graph', () => {
     };
     visit('title');
     expect([...reached].sort()).toEqual([...ids].sort());
+  });
+
+  it('the lazy screens are exactly the ones with a content loader', () => {
+    const lazy = GRAPH.filter((s) => s.lazy).map((s) => s.id);
+    expect(lazy.sort()).toEqual(Object.keys(CONTENT).sort());
+    expect(
+      GRAPH.filter((s) => s.kind === 'content')
+        .map((s) => s.id)
+        .sort(),
+    ).toEqual(lazy);
   });
 
   it('the graph survives a JSON round trip', () => {

@@ -2,6 +2,7 @@ import { exerciseById } from '../../content/registry';
 import { EXERCISE_IDS, type ExerciseId } from '../../contracts/exercise';
 import { LAYOUT_IDS, type LayoutId } from '../../contracts/layout';
 import type { MessageKey } from '../../i18n/en';
+import { t } from '../../i18n/i18n';
 import type { RunConfig } from '../drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE, LAYOUT_BRIEF, LAYOUT_NAME } from '../entry-keys';
 import type { Settings } from '../settings';
@@ -61,6 +62,22 @@ export function entryOf(ref: EntryRef): CatalogueEntry {
   const entry = CATALOGUE.find((e) => entryKey(e.ref) === key);
   if (entry === undefined) throw new Error(`Unknown catalogue entry ${key}`);
   return entry;
+}
+
+/** An exercise's 1-based place in its role's curriculum. */
+export function exerciseNumber(ref: EntryRef): number {
+  const key = entryKey(ref);
+  const index = entriesOf(ref.role, 'exercise').findIndex((e) => entryKey(e.ref) === key);
+  if (index < 0) throw new Error(`${key} is not an exercise of its role`);
+  return index + 1;
+}
+
+/** The entry's name as a heading or a line: an exercise numbered, a yard under Free yard. */
+export function entryHeading(ref: EntryRef): string {
+  const { title } = entryOf(ref);
+  return ref.kind === 'yard'
+    ? `${t('freeYard')} · ${t(title)}`
+    : `${exerciseNumber(ref)} ${t(title)}`;
 }
 
 export function runConfigOf(ref: EntryRef, settings: Settings): RunConfig {

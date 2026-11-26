@@ -1,6 +1,5 @@
 import { EXERCISE_IDS, type ExerciseId, type InputLog } from '../../contracts/exercise';
 import type { LayoutId } from '../../contracts/layout';
-import type { RunConfig } from '../drive';
 import type { EntryRef } from './catalogue';
 
 const entryFrom = (layoutId: LayoutId, exerciseId: ExerciseId | null): EntryRef =>
@@ -32,6 +31,3 @@ export function lastEntryOf(stored: EntryRef | null, log: InputLog | null): Entr
   if (stored !== null || log === null) return stored;
   return entryFrom(log.layoutId, log.exerciseId);
 }
-
-export const entryOfRun = (run: RunConfig): EntryRef =>
-  entryFrom(run.layoutId, run.exercise?.id ?? null);

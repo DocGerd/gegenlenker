@@ -1,12 +1,12 @@
-import { EXERCISE_IDS, type InputLog } from '../../../contracts/exercise';
+import type { InputLog } from '../../../contracts/exercise';
 import type { MessageKey } from '../../../i18n/en';
 import { t } from '../../../i18n/i18n';
 import { offlineStatus, onOfflineStatus } from '../../../pwa/offline-status';
 import { buildLabel } from '../../build-info';
 import { CHANNEL } from '../../channel';
-import { EXERCISE_TITLE, LAYOUT_NAME, replayContext } from '../../exercise-text';
+import { replayContext } from '../../exercise-text';
 import { currentSettings } from '../../settings';
-import type { EntryRef } from '../catalogue';
+import { entryHeading } from '../catalogue';
 import { continueEntry } from '../continue';
 import {
   holds,
@@ -17,7 +17,7 @@ import {
   type Item,
   type MenuState,
 } from '../graph';
-import { OPTION_FIELDS, optionValue, type OptionId } from '../options';
+import { labelOf, OPTION_FIELDS, optionValue, type OptionId } from '../options';
 import { titleArt } from '../title-art';
 import { element } from './frame';
 
@@ -42,16 +42,11 @@ function replayLabel(log: InputLog): string {
   return [replayContext(log), ...notes].join(' · ');
 }
 
-const entryLabel = (entry: EntryRef): string =>
-  entry.kind === 'exercise'
-    ? `${EXERCISE_IDS.indexOf(entry.id) + 1} ${t(EXERCISE_TITLE[entry.id])}`
-    : `${t('freeYard')} · ${t(LAYOUT_NAME[entry.id])}`;
-
 /** The chosen value's name as the setup screen shows it, without the field name. */
 function valueLabel(id: OptionId): string {
   const value = optionValue(currentSettings(), id);
-  const label = OPTION_FIELDS[id].choices.find((c) => c.value === value)?.label;
-  return label === undefined ? '' : typeof label === 'string' ? t(label) : label.text;
+  const choice = OPTION_FIELDS[id].choices.find((c) => c.value === value);
+  return choice === undefined ? '' : labelOf(choice);
 }
 
 /** What Continue starts and the setup it starts with: all four values, defaults included. */
@@ -60,7 +55,7 @@ function continueLines({ state }: TitleContext): readonly string[] {
   return entry === null
     ? []
     : [
-        entryLabel(entry),
+        entryHeading(entry),
         `${valueLabel('truck')} · ${valueLabel('trailer')}`,
         `${valueLabel('lighting')} · ${valueLabel('driveView')}`,
       ];
