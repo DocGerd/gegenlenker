@@ -84,14 +84,8 @@
       {
         "id": "481.added",
         "category": "added",
-        "prs": [481],
-        "en": "The pause sheet has a Settings level where Theme, Wide-angle mirrors and Graphics quality can be changed."
-      },
-      {
-        "id": "484.fixed",
-        "category": "fixed",
-        "prs": [484],
-        "en": "Graphics quality changed in the pause menu now applies at once, without restarting the run."
+        "prs": [481, 484],
+        "en": "The pause sheet has a Settings level where Theme, Wide-angle mirrors and Graphics quality can be changed; changes apply at once."
       }
     ]
   },
