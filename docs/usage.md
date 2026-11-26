@@ -22,7 +22,7 @@ A drive has a steering wheel, a gear selector (P, R, N, D), a speed lever, a Sto
 - Space: brake (zeroes the lever; hold to keep braking).
 - 1 / 2 / 3 / 4: gear P / R / N / D.
 - H / X: lights / hazard lights.
-- Esc: pause, and close the pause sheet again. The sheet offers Continue and Restart; in an exercise also "Finish" and "Leave without scoring", in the free yard "Menu". The Pause button in the drive opens it too.
+- Esc: pause, and close the pause sheet again. The sheet offers Continue and Restart; in an exercise also "Finish" and "Leave without scoring", in the free yard "Menu", and Settings, which Esc or back leaves for the sheet again. The Pause button in the drive opens it too.
 
 Keys typed into a form field or the pause sheet do not drive, and combinations with Ctrl, Alt or Meta are ignored.
 
@@ -80,6 +80,8 @@ Under "Settings" on the title, in the groups General and Graphics:
 - Wide-angle mirrors: On or Off.
 
 Aids, the Follow / Whole yard choice, panel collapse state and the divider position are changed in the drive and kept as settings too. Lighting and driving view are part of the best-result key, so each combination has its own best.
+
+During a drive, Settings in the pause sheet offers Theme, Wide-angle mirrors and Graphics quality. Theme applies at once; Graphics quality applies from the next start (Restart or the next drive).
 
 ## URL parameters
 

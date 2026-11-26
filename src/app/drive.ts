@@ -37,7 +37,7 @@ import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { measureChrome, measureDivider } from './chrome';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
-import { showPauseSheet } from './pause-sheet';
+import { showPauseSheet, type PauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
 import { updateSettings, type Settings } from './settings';
@@ -72,7 +72,7 @@ export type DriveHandlers = {
   readonly onLeave: () => void;
 };
 
-/** Returns the back action: opens the pause sheet, or closes it when open. */
+/** Returns the back action: opens the pause sheet, steps back from its Settings, or closes it. */
 export function startDrive(
   root: HTMLElement,
   run: RunConfig,
@@ -156,18 +156,18 @@ export function startDrive(
   };
 
   // The sim stands still while the sheet is open; rendering carries on for resizes.
-  let closeSheet: (() => void) | null = null;
+  let sheet: PauseSheet | null = null;
   const resume = (): void => {
-    closeSheet?.();
-    closeSheet = null;
+    sheet?.close();
+    sheet = null;
   };
   cleanups.push(resume);
   const togglePause = (): void => {
-    if (closeSheet !== null) {
-      resume();
+    if (sheet !== null) {
+      if (!sheet.back()) resume();
       return;
     }
-    closeSheet = showPauseSheet(stage, exercise === null ? 'menu' : 'finish', {
+    sheet = showPauseSheet(stage, exercise === null ? 'menu' : 'finish', {
       continue: resume,
       restart,
       finish,
@@ -432,7 +432,7 @@ export function startDrive(
       pathStale = true;
       updateSettings({ aids });
       arrange();
-    } else if (closeSheet === null) {
+    } else if (sheet === null) {
       togglePause();
     }
   });
@@ -454,8 +454,7 @@ export function startDrive(
         return;
       }
       viewInput.step(seconds);
-      const clock =
-        closeSheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
+      const clock = sheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
       for (let i = 0; i < clock.steps; i++) {
         controls.tick(DT, snapshot.steer);
