@@ -130,8 +130,20 @@ export function currentSettings(): Settings {
   return current;
 }
 
+const graphicsListeners = new Set<(graphics: GraphicsPreset) => void>();
+
+/** Called after the saved graphics preset changes; returns the unsubscribe. */
+export function onGraphicsChange(listener: (graphics: GraphicsPreset) => void): () => void {
+  graphicsListeners.add(listener);
+  return () => graphicsListeners.delete(listener);
+}
+
 export function updateSettings(patch: Partial<Omit<Settings, 'version'>>): Settings {
+  const before = currentSettings().graphics;
   current = { ...currentSettings(), ...patch };
   writeText(SETTINGS_KEY, JSON.stringify(current));
+  if (current.graphics !== before) {
+    for (const listener of graphicsListeners) listener(current.graphics);
+  }
   return current;
 }

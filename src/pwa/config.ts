@@ -27,19 +27,12 @@ const icons = [
 /** Workbox skips larger files when precaching; the default, pinned so the cab glb test can import it. */
 export const MAX_PRECACHE_FILE_BYTES = 2 * 1024 * 1024;
 
-/** Assets the default preset does not draw, as `[stem, extensions]` of the hashed `stem-<hash>.ext`; the Basis transcoder is runtime-cached only while no KTX2 is precached. */
+/** Assets the default preset does not draw, as `[stem, extensions]` of the hashed `stem-<hash>.ext`; the Basis transcoder every KTX2 texture needs is precached, so it is not listed. */
 export const RUNTIME_ASSETS: readonly (readonly [string, readonly string[]])[] = (() => {
   const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
-  const offByDefault = Object.entries(ASSET_REGISTRY).filter(([, { flag }]) => !defaults[flag]);
-  const assets: [string, readonly string[]][] = offByDefault.map(([stem, { kind }]) => [
-    stem,
-    [kind],
-  ]);
-  const ktx2 = Object.values(ASSET_REGISTRY).filter(({ kind }) => kind === 'ktx2');
-  if (ktx2.length > 0 && ktx2.every(({ flag }) => !defaults[flag])) {
-    assets.push(['basis_transcoder', ['js', 'wasm']]);
-  }
-  return assets;
+  return Object.entries(ASSET_REGISTRY)
+    .filter(([, { flag }]) => !defaults[flag])
+    .map(([stem, { kind }]) => [stem, [kind]]);
 })();
 
 /** Both are built from `RUNTIME_ASSETS`: precache skips these files, the service worker caches them on first use. */
@@ -60,7 +53,7 @@ export const RUNTIME_CACHE_MIN_ENTRIES = 12;
 const RUNTIME_CACHE_ENTRIES = Math.max(RUNTIME_CACHE_MIN_ENTRIES, RUNTIME_ASSET_GLOBS.length * 2);
 
 export const PRECACHE_GLOBS = [
-  '**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr}',
+  '**/*.{html,js,css,svg,png,jpg,webp,woff2,webmanifest,glb,gltf,ktx2,hdr,wasm}',
 ];
 
 export function pwaOptions(

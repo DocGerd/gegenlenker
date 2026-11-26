@@ -161,7 +161,13 @@ export function titleScreen(ctx: TitleContext): {
   const paintOffline = (): void => {
     const status = offlineStatus();
     offline.textContent =
-      status === 'ready' ? t('offlineReady') : status === 'failed' ? t('offlineSetupFailed') : '';
+      status === 'ready'
+        ? t('offlineReady')
+        : status === 'incomplete'
+          ? t('offlineIncomplete')
+          : status === 'failed'
+            ? t('offlineSetupFailed')
+            : '';
   };
   paintOffline();
   const stopOffline = onOfflineStatus(paintOffline);

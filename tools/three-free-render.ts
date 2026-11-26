@@ -3,6 +3,7 @@
 // `eslint.config.js`, closed over transitively by `three-free-render.test.ts`.
 export const THREE_FREE_RENDER = [
   'asset-registry',
+  'asset-urls',
   'body-dims',
   'cab-dims',
   'cab-sight',
