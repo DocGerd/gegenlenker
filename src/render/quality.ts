@@ -13,7 +13,7 @@ export type QualityFlags = {
   readonly yardDetail: boolean;
   /** The yard kit's meshes and atlases in the perspective views; a download, off until a preset draws it. */
   readonly yardKit: boolean;
-  /** Plain boxes for the kit's surroundings wherever the kit is not drawn; needs `yardDetail`. */
+  /** Plain shapes for the kit's surroundings wherever the kit is not drawn; needs `yardDetail`. */
   readonly kitStandIns: boolean;
   readonly cabGlb: boolean;
   readonly vehicleGlb: boolean;

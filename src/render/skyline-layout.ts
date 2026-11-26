@@ -170,13 +170,13 @@ export function skylineBuildings(bounds: Rect2, seed = 1): readonly Building[] {
   return out;
 }
 
-/** Rows of the belt, outwards from the bounds: the first `CLEARANCE` out, then this far apart. */
+/** Rows of the belt, outwards from the bounds: the first just past `CLEARANCE`, then this far apart. */
 const BELT_ROW_PITCH = 24;
 /** Deepest belt building: long, shallow sheds fit between the bounds and the near ring. */
 const BELT_DEPTH = 18;
 const BELT_ROWS = 5;
 const BELT_HAZE = 0.12;
-/** Least gap between two buildings' footprint circles, belt or ring. */
+/** Least gap between a belt building and any other building. */
 const BELT_GAP = 3;
 /** Keeps a surface that leaves the bounds this clear on each side. */
 const CORRIDOR_MARGIN = 4;
