@@ -550,10 +550,11 @@ test('the longest German toast fits the narrowest pane column, inside the safe a
 });
 
 /**
- * The portrait mirror-only band: the notch insets at 768x1024, and a small tablet with a portrait
- * tablet's own insets (a status bar and a home indicator, none at the sides).
+ * The mirror-only band: German at the narrowest and shortest landscape, the notch insets at 768x1024, and a
+ * small tablet with a portrait tablet's own insets (a status bar and a home indicator, none at the sides).
  */
 const bandScreens = [
+  { locale: 'de-DE', messages: de, size: { width: 800, height: 585 }, safe: insets },
   { locale: 'en-US', messages: en, size: { width: 768, height: 1024 }, safe: insets },
   { locale: 'de-DE', messages: de, size: { width: 768, height: 1024 }, safe: insets },
   {
@@ -565,7 +566,7 @@ const bandScreens = [
 ];
 
 for (const { locale, messages, size, safe } of bandScreens) {
-  test(`the portrait mirror-only band holds the readouts and the counters at ${locale} ${size.width}x${size.height}`, async ({
+  test(`the mirror-only band holds the readouts and the counters at ${locale} ${size.width}x${size.height}`, async ({
     browser,
   }) => {
     const context = await browser.newContext({ locale, viewport: size });
