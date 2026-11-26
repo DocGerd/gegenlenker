@@ -952,7 +952,6 @@
   .hud[data-mirrors] .hud-band {
     display: grid;
     grid-template-columns: auto 1fr;
-    align-content: center;
     gap: var(--space-1) var(--space-2);
     padding-left: calc(var(--hud-inset) - var(--space-2));
   }
@@ -960,8 +959,6 @@
   .hud[data-mirrors] .hud-counters {
     grid-column: 1 / -1;
     grid-template-columns: auto auto;
-    padding: var(--space-1) var(--space-2);
-    column-gap: var(--space-2);
   }
 }
 
