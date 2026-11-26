@@ -32,12 +32,12 @@ import {
   type KinematicState,
 } from '../sim/kinematics';
 
-import { createDriver, createPilot, CURVE_RADIUS, type Pilot } from './driver';
+import { createPilot, CURVE_RADIUS, type Pilot } from './driver';
+import { createEinweiserRun, HOLD_STEPS } from './track';
 import { rejoin, type Segment, straighten } from './gate-recovery';
 
 import { clearance, runOver, signOutOfSight } from './faults';
 import {
-  bodyOccluders,
   bodyPoints,
   layoutOccluders,
   type Occluder,
@@ -56,17 +56,8 @@ import {
   type Station,
   TOO_CLOSE,
 } from './signs';
-import {
-  overlaps,
-  STEP_HEIGHT,
-  startWalker,
-  WALKER_RADIUS,
-  type WalkKeys,
-  type Walker,
-  walkStep,
-} from './walk';
+import { overlaps, STEP_HEIGHT, WALKER_RADIUS, type WalkKeys, type Walker } from './walk';
 
-const HOLD_STEPS = 6;
 const DS = 0.05;
 
 const approach = (current: number, target: number, maxDelta: number): number => {
@@ -1116,12 +1107,6 @@ type Outcome = {
   phase: string;
 };
 
-const quantise = (w: Walker): Pose2 => ({
-  x: Math.round(w.x * 100) / 100,
-  y: Math.round(w.y * 100) / 100,
-  heading: Math.round(w.heading * 1000) / 1000,
-});
-
 type Setup = {
   readonly params: VehicleParams;
   readonly start: SimSnapshot;
@@ -1163,7 +1148,6 @@ export function runGate(
   const sim = createSimulation(run.params, run.start, run.contacts);
   const tracker = createRunTracker(exercise);
   const pilot = createPilot(run.params);
-  const driver = createDriver(g, occluders, pilot);
   let s = sim.snapshot();
   const legs = legsFor({
     params: run.params,
@@ -1185,9 +1169,7 @@ export function runGate(
     },
     legs,
   );
-  let walker = startWalker(run.params, s);
-  let held = quantise(walker);
-  let moved = 0;
+  const einweiser = createEinweiserRun({ g, occluders, yard: run.layout.yard, start: s, pilot });
   let reading: Reading = { kind: 'none' };
   let lastSign: SignId | null = null;
   let acted: string | null = null;
@@ -1202,24 +1184,18 @@ export function runGate(
   let reached = false;
   let lastEvent = 0;
   for (let step = 0; step < 60 * 600 && !reached && step - lastEvent < 60 * 60; step++) {
-    const act = policy.step({ s, walker, held, reading, step });
-    const colliders = [...occluders, ...bodyOccluders(g, s)];
-    walker = walkStep(
-      { ...walker, heading: act.heading },
-      act.keys,
-      DT,
-      colliders,
-      run.layout.yard,
-    );
-    if (step % HOLD_STEPS === 0) {
-      const next = quantise(walker);
-      moved = Math.hypot(next.x - held.x, next.y - held.y);
-      held = next;
-    }
-    const d = driver.step(s, act.sign, held);
+    const act = policy.step({
+      s,
+      walker: einweiser.walker(),
+      held: einweiser.held(),
+      reading,
+      step,
+    });
+    const d = einweiser.step(s, { keys: act.keys, heading: act.heading, pitch: 0, sign: act.sign });
+    const held = d.status.held;
     reading = d.reading;
     const moving = Math.abs(s.speed) > STOPPED_SPEED;
-    flag('runOver', moving && runOver(run.params, s, held, moved));
+    flag('runOver', moving && runOver(run.params, s, held, d.moved));
     flag('inPath', moving && inPath(g, s, held));
     flag('tooClose', moving && clearance(run.params, s, held) < TOO_CLOSE);
     flag('outOfSight', reading.kind === 'lost' && s.speed !== 0);

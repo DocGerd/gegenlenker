@@ -3,7 +3,14 @@ import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import type { MirrorId, Vec3 } from '../contracts/vehicle';
 import { BRAKE_DECEL, DT } from '../sim/constants';
 import { sweptBodies } from '../sim/predict';
-import { bodyPoints, type Occluder, pointSight, type SightGeometry, sightOf } from './sight';
+import {
+  bodyPoints,
+  type Occluder,
+  pointSight,
+  type Sight,
+  type SightGeometry,
+  sightOf,
+} from './sight';
 import { SIGN_POSES, signHandPoints } from './sign-poses';
 import { overlaps } from './walk';
 
@@ -107,6 +114,8 @@ function near(g: SightGeometry, s: SimSnapshot, at: Vec2, occluders: readonly Oc
 
 /** What the driver takes in of him each step. */
 export type Perception = {
+  readonly sight: Sight;
+  /** Seen directly or in any mirror. */
   readonly inSight: boolean;
   readonly station: Station;
   /** He is in sight inside the swept path (`inPath`). */
@@ -127,6 +136,7 @@ export function perceive(
   const sight = sightOf(g, s, bodyPoints(pose), local);
   const inSight = sight.direct || sight.mirrors.length > 0;
   return {
+    sight,
     inSight,
     station: station(g, s.truck, pose),
     inPath: inSight && inPath(g, s, pose),

@@ -190,8 +190,8 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           next: () => {
             go({ type: 'next' });
           },
-          start: (button, run) => {
-            startRun(button, run, entry);
+          start: (button, run, started) => {
+            startRun(button, run, started);
           },
         });
       }

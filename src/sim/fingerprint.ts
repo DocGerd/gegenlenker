@@ -13,8 +13,8 @@ export type RunData = {
   readonly obstacles: readonly Obstacle[];
   readonly start: Pose2;
   readonly exercise: ExerciseDefinition | null;
-  /** Scoring thresholds, passed in so the sim layer does not depend on scoring. */
-  readonly scoring: Readonly<Record<string, number>>;
+  /** Scoring thresholds and what else scoring reads, as JSON data, passed in so the sim layer does not depend on scoring. */
+  readonly scoring: Readonly<Record<string, unknown>>;
 };
 
 /**

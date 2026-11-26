@@ -1,5 +1,5 @@
 import { t } from '../../i18n/i18n';
-import { labelOf, type OptionField } from './options';
+import { labelOf, type ChoiceField } from './options';
 import { element } from './screens/frame';
 
 /**
@@ -7,7 +7,7 @@ import { element } from './screens/frame';
  * newly checked value.
  */
 export function choiceRow(
-  field: OptionField,
+  field: ChoiceField,
   value: string,
   onChange: (value: string) => void,
 ): HTMLFieldSetElement {

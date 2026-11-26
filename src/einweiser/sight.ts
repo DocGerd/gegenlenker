@@ -1,3 +1,4 @@
+import type { Sight } from '../contracts/einweiser';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { BodyId, Obb, Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import type { MirrorId, TrailerSpec, TruckSpec, Vec3, VehicleParams } from '../contracts/vehicle';
@@ -9,8 +10,7 @@ import { resolveCombination } from '../vehicles/resolve';
 
 /** A 2.5D box from the ground up to `height`, world frame. */
 export type Occluder = { readonly obb: Obb; readonly height: number };
-/** How the driver sees a point: directly through the cab glass, and in which mirrors. */
-export type Sight = { readonly direct: boolean; readonly mirrors: readonly MirrorId[] };
+export type { Sight };
 
 /** The Einweiser's head and chest above the ground (estimates): seen if either is. */
 export const HEAD_HEIGHT = 1.6;

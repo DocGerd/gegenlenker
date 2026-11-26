@@ -15,9 +15,11 @@ import {
   settingValue,
   setupBests,
   startControl,
+  startEntry,
   yardEntry,
 } from './menu-flow';
 import { reachedResult, seedStorage } from './menu-seed';
+import { SETTINGS_KEY } from './pinned-shoot';
 
 const screen = (page: Page, id: string): Locator => page.locator(`[data-screen="${id}"]`);
 const titleEntry = (page: Page, name: string): Locator =>
@@ -400,12 +402,32 @@ test('setup shows the stored run options checked and stores a change', async ({ 
   await expect(radio(en.trailer, hueffermann)).toBeChecked();
   await expect(radio(en.lighting, 'night')).toBeChecked();
   await expect(radio(en.driveView, 'mirrors')).toBeChecked();
+  // the role row waits for Einweiser mode (#500) behind `einweiserPreview`
+  await expect(screen(page, 'setup').locator('[data-menu="role"]')).toHaveCount(0);
 
   await chooseRunOption(page, en, 'lighting', 'day');
   await page.reload();
   await openSetup(page, en, entry);
   await expect(radio(en.lighting, 'day')).toBeChecked();
   await expect(radio(en.truck, arocs)).toBeChecked();
+});
+
+test('with the Einweiser preview, the role row starts an Einweiser drive and records its entry', async ({
+  page,
+}) => {
+  await seedStorage(page, { settings: { graphics: 'low', einweiserPreview: true } });
+  await page.goto('./');
+  const entry = { ...yardEntry('depot'), role: 'einweiser' } as const;
+  await openSetup(page, en, entry);
+  const row = screen(page, 'setup').getByRole('radiogroup', { name: en.role, exact: true });
+  await expect(row.locator('input:checked')).toHaveValue('driver');
+  await startEntry(page, en, entry);
+  await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
+  const lastEntry = await page.evaluate(
+    (key) => (JSON.parse(localStorage.getItem(key) ?? '{}') as { lastEntry?: unknown }).lastEntry,
+    SETTINGS_KEY,
+  );
+  expect(lastEntry).toEqual({ role: 'einweiser', kind: 'yard', id: 'depot' });
 });
 
 test("a yard's setup shows no tolerance and no bests", async ({ page }) => {

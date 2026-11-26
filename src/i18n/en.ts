@@ -48,6 +48,9 @@ export const en = {
   driveView: 'Driving view',
   driveViewStandard: 'With top view',
   driveViewMirrors: 'Mirrors only',
+  role: 'Role',
+  roleDriver: 'Driver',
+  roleEinweiser: 'Ground guide',
   graphics: 'Graphics quality',
   graphicsLow: 'Low',
   graphicsBalanced: 'Balanced',
@@ -198,6 +201,16 @@ export const en = {
   changeRemoved: 'Removed',
   changeFixed: 'Fixed',
   changeSecurity: 'Security',
+  signAchtung: 'Attention',
+  signHalt: 'Halt',
+  signHaltGefahr: 'Halt – danger',
+  signAbfahren: 'Move off',
+  signHerkommen: 'Come here',
+  signEntfernen: 'Move away',
+  signLinks: 'Move left',
+  signRechts: 'Move right',
+  signAbstand: 'Closing distance',
+  signNone: 'No signal',
 } as const;
 
 export type MessageKey = keyof typeof en;

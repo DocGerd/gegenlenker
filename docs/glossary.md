@@ -60,3 +60,16 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Speed readout and label                         | speed                                       | Tempo                                        |
 | Gear readout and label                          | gear                                        | Fahrstufe                                    |
 | Steering readout and label                      | steer                                       | Lenken                                       |
+| Person guiding the vehicle on foot              | ground guide                                | Einweiser                                    |
+| Role row in the Exercises and Free yard setup   | role (Driver / Ground guide)                | Rolle (Fahrer / Einweiser)                   |
+| One BG sign                                     | hand signal                                 | Handzeichen                                  |
+| Sign 1: right arm up                            | attention                                   | Achtung                                      |
+| Sign 2: arms out; kept apart from stop          | halt                                        | Halt                                         |
+| Sign 3: as Halt, arms bent and stretched        | halt – danger                               | Halt – Gefahr                                |
+| Sign 4: raised arm moved to and fro             | move off                                    | Abfahren                                     |
+| Sign 5: forearms beckon                         | come here                                   | Herkommen                                    |
+| Sign 6: forearms wave away                      | move away                                   | Entfernen                                    |
+| Sign 7: left arm moved sideways                 | move left                                   | Links fahren                                 |
+| Sign 8: right arm moved sideways                | move right                                  | Rechts fahren                                |
+| Sign 9: palms brought together                  | closing distance                            | Abstandsverringerung                         |
+| No sign key held: arms down                     | no signal                                   | Kein Zeichen                                 |

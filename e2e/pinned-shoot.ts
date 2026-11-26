@@ -238,13 +238,24 @@ export async function startPinnedDrive(
   await page.addInitScript(pinResolvePath);
   await page.addInitScript(([key, value]) => localStorage.setItem(key, value), [
     SETTINGS_KEY,
-    JSON.stringify({ version: 1, graphics: preset, lighting, topDown: 'follow', theme }),
+    JSON.stringify({
+      version: 1,
+      graphics: preset,
+      lighting,
+      topDown: 'follow',
+      theme,
+      ...(entry.role === 'einweiser' ? { einweiserPreview: true } : {}),
+    }),
   ] as const);
   await page.clock.install({ time: 0 });
   await page.clock.pauseAt(1000);
   await page.goto(`./${withFramingFlag(search)}`);
   await startEntry(page, await pageMessages(page), entry);
-  await page.locator('.hud-mirror:not([hidden])').nth(1).waitFor();
+  await (
+    entry.role === 'einweiser'
+      ? page.locator('.drive[data-role="einweiser"]')
+      : page.locator('.hud-mirror:not([hidden])').nth(1)
+  ).waitFor();
   await settle(page, preset, deadlineMs, overrides);
   const [backend, pinned] = await page.evaluate(() => {
     const html = document.documentElement;
