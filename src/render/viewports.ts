@@ -14,7 +14,10 @@ import {
 import { de } from '../i18n/de';
 import { en, type MessageKey } from '../i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop, frontBand } from './cockpit-band';
+import { FRONT_ASPECT, WIDE_ASPECT } from '../vehicles/mirrors';
 import { CLOSE_ASPECT, MIN_CLOSE_WIDTH } from './close-mirror';
+
+export { FRONT_ASPECT, WIDE_ASPECT } from '../vehicles/mirrors';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
@@ -84,10 +87,6 @@ const MESSAGE_LINE = 22;
 const MESSAGE_BOX = 18;
 /** Height of the gear column with its lamp row, as `layout.spec.ts` measures it. */
 const GEARS_HEIGHT = 274.5;
-/** The front mirror's width over its height. */
-export const FRONT_ASPECT = 2;
-/** The class IV mirror's width over its height. */
-export const WIDE_ASPECT = 5 / 3;
 /** CSS px between a class II mirror and the class IV mirror under it: both HUD frames (6 px each) and a margin. */
 export const WIDE_GAP_PX = 16;
 /**

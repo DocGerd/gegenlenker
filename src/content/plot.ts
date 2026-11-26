@@ -1,5 +1,5 @@
 import type { Decor, DecorAsset, KitPiece, Rect2 } from '../contracts/layout';
-import { kitFootprint } from './kit';
+import { KIT_FOOTPRINTS, kitFootprint } from './kit';
 import { STREET } from './street';
 
 /** Neighbouring plot behind the yard's north edge: unreachable, so its goods need no collision. */
@@ -14,6 +14,13 @@ const SWAP = { halfLength: 3.725, halfWidth: 1.275, row: 3 };
 const SKIP = { halfLength: 1.7, halfWidth: 0.85, row: 2.5, rowPitch: 4, tilt: 0.06 };
 const PALLETS = { halfLength: 2.7, halfWidth: 1.5, row: 4 };
 const MESH_BOXES = { halfLength: 3.42, halfWidth: 0.97, row: 4 };
+/** Top of each drawing (`yard-props.test.ts` pins them to the render). */
+const GOODS_HEIGHT: Readonly<Record<Exclude<DecorAsset, 'kit'>, number>> = {
+  'swap-body': 3.655,
+  skip: 1.2055,
+  pallets: 1.544,
+  'mesh-boxes': 1.94,
+};
 
 type Placer = (piece: KitPiece, x: number, y: number, heading: number, depth?: number) => void;
 
@@ -113,6 +120,7 @@ export function plotDecor(yard: Rect2): Decor[] {
       asset,
       footprint: { cx, cy, halfLength, halfWidth, heading },
       variant,
+      height: GOODS_HEIGHT[asset],
     });
   };
   const kit: Placer = (piece, x, y, heading, depth) => {
@@ -124,6 +132,7 @@ export function plotDecor(yard: Rect2): Decor[] {
       piece,
       footprint: kitFootprint(piece, x, y, heading, depth),
       variant: 0,
+      height: KIT_FOOTPRINTS[piece].height,
     });
   };
   SWAP_X.forEach((x, i) => {

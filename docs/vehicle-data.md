@@ -23,6 +23,8 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | frontTrack | 1950 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | rearTrack | 1800 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | couplingOffset | 1250 mm | frame end plus coupling crossmember, no source found |
+| MAN LE 18.280 | frameTop | 1100 mm | chassis top and cab floor of the render model; no source found |
+| MAN LE 18.280 | bodyTop | 2750 mm | tarpaulin top of the body shell (render model); no source found |
 | MAN LE 18.280 | eye.height | 2350 mm | cab floor 1.1 m above ground (render model), seated eye 1.25 m above it: seat height plus sitting eye height; no source found |
 | MAN LE 18.280 | eye.behindBumper | 1000 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | eye.leftOfCentre | 600 mm | about 0.65 m inboard of the 2.5 m cab side; no source found |
@@ -33,6 +35,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | mirror.wideBelow | 400 mm | class IV glass stacked under the class II, no source found |
 | MAN LE 18.280 | steering.lockToLockTurns | 5 turns | typical for the vehicle class, no source found |
 | MAN LE 18.280 | steering.maxRate | 1.5 turns/s | typical for the vehicle class, no source found |
+| MAN LE 18.280 | cab.height | 2900 mm | cab roof of the render model; no source found |
 | MAN LE 18.280 | cab.windscreenInset | 149 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.glassSill | 900 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.glassHeight | 756 mm | typical for the vehicle class, no source found |
@@ -58,6 +61,8 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Mercedes-Benz Arocs 1835 AK | frontTrack | 2050 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | rearTrack | 1850 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | couplingOffset | 1500 mm | frame end plus coupling crossmember, no source found |
+| Mercedes-Benz Arocs 1835 AK | frameTop | 1100 mm | chassis top and cab floor of the render model; no source found |
+| Mercedes-Benz Arocs 1835 AK | bodyTop | 2500 mm | tipper wall top of the procedural body (render model); no source found |
 | Mercedes-Benz Arocs 1835 AK | eye.height | 2450 mm | cab floor 1.1 m above ground (render model), seated eye 1.35 m above it (4x4 tipper seat sits higher than the MAN distribution cab); no source found |
 | Mercedes-Benz Arocs 1835 AK | eye.behindBumper | 1300 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | eye.leftOfCentre | 600 mm | about 0.65 m inboard of the 2.5 m cab side; no source found |
@@ -68,6 +73,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Mercedes-Benz Arocs 1835 AK | mirror.wideBelow | 400 mm | class IV glass stacked under the class II, no source found |
 | Mercedes-Benz Arocs 1835 AK | steering.lockToLockTurns | 5 turns | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | steering.maxRate | 1.5 turns/s | typical for the vehicle class, no source found |
+| Mercedes-Benz Arocs 1835 AK | cab.height | 2900 mm | cab roof of the render model; no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.windscreenInset | 150 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.glassSill | 900 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.glassHeight | 756 mm | typical for the vehicle class, no source found |
@@ -93,6 +99,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Krone AZW 18 | width | 2550 mm | typical for the vehicle class, no source found |
 | Krone AZW 18 | track | 2040 mm | typical for the vehicle class, no source found |
 | Krone AZW 18 | deckHeight | 1280 mm | midpoint of 1,190–1,370 frame height |
+| Krone AZW 18 | swapBodyHeight | 2700 mm | typical for a 7.45 m swap body, no source found |
 | Krone AZW 18 | couplingLimit | 80 ° | mechanical stop near 90°: drawbar meets frame or truck rear corner |
 | Krone AZW 18 | turntableLimit | 85 ° | mechanical stop near 90°: drawbar meets frame or truck rear corner |
 | Krone AZW 18 | underrunGuard.depth | 50 mm | typical for the vehicle class, no source found |

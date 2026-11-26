@@ -27,6 +27,8 @@ export const arocs1835Ak: TruckSpec = {
   rearTrack: estimate(1850, typical),
   couplingOffset: estimate(1500, 'frame end plus coupling crossmember, no source found'),
   turningRadius: sourced(8150, SOURCES.A),
+  frameTop: estimate(1100, 'chassis top and cab floor of the render model; no source found'),
+  bodyTop: estimate(2500, 'tipper wall top of the procedural body (render model); no source found'),
   eye: {
     height: estimate(2450, eyeAboveFloor),
     behindBumper: estimate(1300, typical),
@@ -44,6 +46,7 @@ export const arocs1835Ak: TruckSpec = {
     maxRate: estimate(1.5, typical),
   },
   cab: {
+    height: estimate(2900, 'cab roof of the render model; no source found'),
     windscreenInset: estimate(150, typical),
     glassSill: estimate(900, typical),
     glassHeight: estimate(756, typical),

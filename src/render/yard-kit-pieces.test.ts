@@ -27,6 +27,7 @@ const decor = (
   piece,
   footprint: kitFootprint(piece, x, y, heading, depth),
   variant: 0,
+  height: KIT_FOOTPRINTS[piece].height,
 });
 
 /** Extent of the merged geometry in the footprint's frame, and its height. */

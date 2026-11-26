@@ -36,6 +36,8 @@ export type TruckSpec = {
   readonly rearTrack: Param;
   readonly couplingOffset: Param; // rear axle → coupling pin, rearward
   readonly turningRadius: Param; // outer front wheel, full lock
+  readonly frameTop: Param; // chassis top and floor of cab and body, above the road
+  readonly bodyTop: Param; // load body top above the road
   readonly eye: {
     readonly height: Param;
     readonly behindBumper: Param;
@@ -50,6 +52,7 @@ export type TruckSpec = {
   };
   readonly steering: { readonly lockToLockTurns: Param; readonly maxRate: Param };
   readonly cab: {
+    readonly height: Param; // roof above the road
     readonly windscreenInset: Param; // glass edge to cab side
     readonly glassSill: Param; // above the frame top
     readonly glassHeight: Param;
@@ -82,6 +85,7 @@ export type TrailerSpec = {
   readonly track: Param;
   readonly deckHeight: Param;
   readonly rampHeight?: Param; // folded loading ramps' top above the road; low-loaders only
+  readonly swapBodyHeight?: Param; // above the deck; box bodies only
   readonly couplingLimit: Param;
   readonly turntableLimit: Param;
   readonly underrunGuard: {
@@ -113,6 +117,8 @@ export type VehicleParams = {
   readonly couplingLimit: number;
   readonly turntableLimit: number;
 };
+/** A mirror on the truck, named by the mount its camera sits at. */
+export type MirrorId = 'mirrorLeft' | 'mirrorRight' | 'wideLeft' | 'wideRight' | 'front' | 'close';
 export type Vec3 = { readonly x: number; readonly y: number; readonly z: number };
 /** Truck body frame, metres. */
 export type TruckAnchors = {
