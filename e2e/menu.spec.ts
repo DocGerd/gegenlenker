@@ -1,10 +1,11 @@
 import type { Locator, Page } from '@playwright/test';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from '../src/app/entry-keys';
 import { exerciseById } from '../src/content/registry';
-import { EXERCISE_IDS, type ExerciseId, type RunResult } from '../src/contracts/exercise';
+import { EXERCISE_IDS, type ExerciseId } from '../src/contracts/exercise';
 import { TRAILER_IDS, TRUCK_IDS } from '../src/contracts/vehicle';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
+import { trailers, trucks } from '../src/vehicles/registry';
 import { expect, test } from './fixtures';
 import {
   chooseRunOption,
@@ -16,7 +17,7 @@ import {
   startControl,
   yardEntry,
 } from './menu-flow';
-import { seedStorage } from './menu-seed';
+import { reachedResult, seedStorage } from './menu-seed';
 
 const screen = (page: Page, id: string): Locator => page.locator(`[data-screen="${id}"]`);
 const titleEntry = (page: Page, name: string): Locator =>
@@ -27,35 +28,33 @@ const historyState = (page: Page): Promise<unknown> =>
 const [truckId] = TRUCK_IDS;
 const [trailerId] = TRAILER_IDS;
 
-const reached = (exerciseId: ExerciseId): RunResult => ({
-  exerciseId,
-  truckId,
-  trailerId,
-  reached: true,
-  assisted: false,
-  lighting: 'day',
-  mirrorsOnly: false,
-  waypointMissed: false,
-  positionError: 0.1,
-  angleError: 0.01,
-  contacts: 0,
-  jackknifes: 0,
-  directionChanges: 1,
-  time: 42.5,
-});
+const [, arocs] = TRUCK_IDS;
+const [, hueffermann] = TRAILER_IDS;
+const night = { lighting: 'night', mirrorsOnly: true } as const;
+const exerciseRef = (id: ExerciseId): object => ({ role: 'driver', kind: 'exercise', id });
+const rowOf = (page: Page, key: string): Locator => page.locator(`[data-entry="driver:${key}"]`);
 
 for (const { locale, messages } of [
   { locale: 'en-US', messages: en },
   { locale: 'de-DE', messages: de },
 ]) {
-  test(`the title fits 1280x585 in ${locale} with a run to replay`, async ({ browser }) => {
+  test(`the title fits 1280x585 in ${locale} with Continue and a run to replay`, async ({
+    browser,
+  }) => {
     const context = await browser.newContext({ locale, viewport: { width: 1280, height: 585 } });
     const exerciseId = 'reverse-bay';
     await seedStorage(context, {
+      settings: {
+        truckId: arocs,
+        trailerId: hueffermann,
+        ...night,
+        lastEntry: exerciseRef(exerciseId),
+      },
       lastRun: { layoutId: exerciseById(exerciseId).layout, exerciseId, truckId, trailerId },
     });
     const page = await context.newPage();
     await page.goto('./');
+    await expect(titleEntry(page, messages.continue)).toBeVisible();
     await expect(titleEntry(page, messages.replayLastRun)).toBeVisible();
     await expect(titleEntry(page, messages.whatsNew)).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
@@ -76,11 +75,95 @@ for (const { locale, messages } of [
   });
 }
 
+test('Continue names the exercise, truck, trailer, time of day and driving view', async ({
+  page,
+}) => {
+  await seedStorage(page, {
+    settings: {
+      truckId: arocs,
+      trailerId: hueffermann,
+      ...night,
+      lastEntry: exerciseRef('reverse-corner'),
+    },
+  });
+  await page.goto('./');
+  const button = titleEntry(page, en.continue);
+  for (const part of [
+    en.exerciseReverseCorner,
+    trucks.find((s) => s.id === arocs)?.name ?? '',
+    trailers.find((s) => s.id === hueffermann)?.name ?? '',
+    en.lightingNight,
+    en.driveViewMirrors,
+  ]) {
+    expect(part).not.toBe('');
+    await expect(button).toContainText(part);
+  }
+  await expect(button).toBeFocused();
+});
+
+test('Continue moves past a done exercise, wraps, and keeps the last one when all are done', async ({
+  browser,
+}) => {
+  const cases: readonly {
+    last: ExerciseId;
+    done: readonly ExerciseId[];
+    shows: ExerciseId;
+  }[] = [
+    { last: 'reverse-bay', done: ['reverse-bay'], shows: 'reverse-corner' },
+    { last: 'slalom', done: ['slalom', 'straight-reverse'], shows: 'reverse-bay' },
+    { last: 'reverse-bay', done: EXERCISE_IDS, shows: 'reverse-bay' },
+  ];
+  for (const { last, done, shows } of cases) {
+    const context = await browser.newContext();
+    await seedStorage(context, {
+      settings: { lastEntry: exerciseRef(last) },
+      best: done.map(reachedResult),
+    });
+    const page = await context.newPage();
+    await page.goto('./');
+    await expect(titleEntry(page, en.continue)).toContainText(en[EXERCISE_TITLE[shows]]);
+    await context.close();
+  }
+});
+
+test('a first visit shows no Continue and focuses Exercises', async ({ page }) => {
+  await page.goto('./');
+  await expect(titleEntry(page, en.exercises)).toBeFocused();
+  await expect(titleEntry(page, en.continue)).toHaveCount(0);
+  await expect(titleEntry(page, en.replayLastRun)).toHaveCount(0);
+});
+
+test("the exercise list focuses Continue's exercise, and the yard list the last driven yard", async ({
+  browser,
+}) => {
+  const exercise = await browser.newContext();
+  // Done, so Continue moves on to the slalom: the list follows Continue, not the last entry.
+  await seedStorage(exercise, {
+    settings: { lastEntry: exerciseRef('dock-ramp') },
+    best: [reachedResult('dock-ramp')],
+  });
+  const exercisePage = await exercise.newPage();
+  await exercisePage.goto('./');
+  await titleEntry(exercisePage, en.exercises).click();
+  await expect(rowOf(exercisePage, 'exercise:slalom')).toBeFocused();
+  await exercise.close();
+
+  const yard = await browser.newContext();
+  await seedStorage(yard, {
+    settings: { lastEntry: { role: 'driver', kind: 'yard', id: 'logistics' } },
+  });
+  const yardPage = await yard.newPage();
+  await yardPage.goto('./');
+  await screen(yardPage, 'title').getByRole('button', { name: en.freeYard, exact: true }).click();
+  await expect(rowOf(yardPage, 'yard:logistics')).toBeFocused();
+  await yard.close();
+});
+
 test('the exercise list holds one row per exercise in curriculum order, with brief and done marker', async ({
   page,
 }) => {
   const done: ExerciseId = 'straight-reverse';
-  await seedStorage(page, { best: [reached(done)] });
+  await seedStorage(page, { best: [reachedResult(done)] });
   await page.goto('./');
   await titleEntry(page, en.exercises).click();
 
@@ -261,8 +344,6 @@ test('Esc and goBack step one level each from setup to the title', async ({ page
 });
 
 test('setup shows the stored run options checked and stores a change', async ({ page }) => {
-  const [, arocs] = TRUCK_IDS;
-  const [, hueffermann] = TRAILER_IDS;
   await seedStorage(page, {
     settings: { truckId: arocs, trailerId: hueffermann, lighting: 'night', mirrorsOnly: true },
   });

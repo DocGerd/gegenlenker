@@ -5,11 +5,12 @@ import { requestPersistentStorage } from '../pwa/persist';
 import { startUpdatePrompt } from '../pwa/update-prompt';
 import './app.css';
 import type { DriveOutcome, RunConfig } from './drive';
+import { entryOfRun } from './menu/continue';
 import { showMenu } from './menu/index';
 import type { NavState } from './menu/nav';
 import { showNotice } from './notice';
 import { showResult, type ResultContext } from './result-view';
-import { currentSettings, initSettings, loadSettings } from './settings';
+import { currentSettings, initSettings, loadSettings, updateSettings } from './settings';
 import {
   isReplayable,
   lastRun,
@@ -130,6 +131,8 @@ export function startApp(root: HTMLElement): void {
             menu();
           },
         });
+        // The one write for every start: Start, Continue, Next exercise, Retry and Restart all come through here.
+        updateSettings({ lastEntry: entryOfRun(run) });
         mounted?.();
       })
       .catch((error: unknown) => loadFailed(error, () => drive(run, mounted)));

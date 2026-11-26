@@ -1,5 +1,7 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { exerciseById } from '../src/content/registry';
+import { TRAILER_IDS, TRUCK_IDS } from '../src/contracts/vehicle';
 import { en } from '../src/i18n/en';
 import { exerciseEntry, openSetup, startControl, startExercise } from './menu-flow';
 import { seedStorage } from './menu-seed';
@@ -69,6 +71,54 @@ test(
     await expect(page.locator('[data-hud="speed"]')).toHaveText('0.0 km/h');
     await expect(setup).toHaveCount(0);
     await expect(page.locator('.drive')).toHaveCount(1);
+  },
+);
+
+test(
+  'while Continue is busy nothing else on the title starts, and the drive then mounts alone',
+  heavyAt('low'),
+  async ({ page }) => {
+    const exerciseId = 'straight-reverse';
+    await seedStorage(page, {
+      settings: {
+        graphics: 'low',
+        lastEntry: { role: 'driver', kind: 'exercise', id: exerciseId },
+      },
+      lastRun: {
+        layoutId: exerciseById(exerciseId).layout,
+        exerciseId,
+        truckId: TRUCK_IDS[0],
+        trailerId: TRAILER_IDS[0],
+      },
+    });
+    let open = (): void => undefined;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    await page.route(DRIVE_CHUNK, async (route) => {
+      await gate;
+      await route.continue();
+    });
+    const title = page.locator('[data-screen="title"]');
+    const resume = title.getByRole('button', { name: en.continue });
+    const replay = title.getByRole('button', { name: en.replayLastRun });
+
+    await page.goto('./');
+    await resume.click();
+    await expect(resume).toBeDisabled();
+    await expect(resume).toHaveAttribute('aria-busy', 'true');
+    await expect(replay).toBeDisabled();
+    await replay.click({ force: true });
+    await replay.dispatchEvent('click');
+    await replay.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.replay')).toHaveCount(0);
+    await expect(resume).toBeDisabled();
+
+    open();
+    await expect(page.locator('[data-hud="speed"]')).toHaveText('0.0 km/h');
+    await expect(page.locator('.drive')).toHaveCount(1);
+    await expect(page.locator('.replay')).toHaveCount(0);
   },
 );
 

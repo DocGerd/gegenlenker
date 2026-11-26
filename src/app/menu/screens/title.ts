@@ -1,10 +1,13 @@
-import type { InputLog } from '../../../contracts/exercise';
+import { EXERCISE_IDS, type InputLog } from '../../../contracts/exercise';
 import type { MessageKey } from '../../../i18n/en';
 import { t } from '../../../i18n/i18n';
 import { offlineStatus, onOfflineStatus } from '../../../pwa/offline-status';
 import { buildLabel } from '../../build-info';
 import { CHANNEL } from '../../channel';
-import { replayContext } from '../../exercise-text';
+import { EXERCISE_TITLE, LAYOUT_NAME, replayContext } from '../../exercise-text';
+import { currentSettings } from '../../settings';
+import type { EntryRef } from '../catalogue';
+import { continueEntry } from '../continue';
 import {
   holds,
   screenOf,
@@ -14,6 +17,7 @@ import {
   type Item,
   type MenuState,
 } from '../graph';
+import { OPTION_FIELDS, optionValue, type OptionId } from '../options';
 import { titleArt } from '../title-art';
 import { element } from './frame';
 
@@ -23,7 +27,8 @@ export type TitleContext = {
   readonly replay: InputLog | null;
   /** Settles true when What's new has entries the trainee has not seen; a rejection shows no badge. */
   readonly hasNews: () => Promise<boolean>;
-  readonly activate: (item: Item) => void;
+  /** `button` is the control that was activated, for actions that go busy. */
+  readonly activate: (item: Item, button: HTMLButtonElement) => void;
 };
 
 const BADGE: Readonly<Partial<Record<ConditionId, MessageKey>>> = { hasNews: 'whatsNewBadge' };
@@ -37,9 +42,34 @@ function replayLabel(log: InputLog): string {
   return [replayContext(log), ...notes].join(' · ');
 }
 
-/** The detail line under an action's label. */
-const DETAIL: Readonly<Record<ActionId, (ctx: TitleContext) => string | null>> = {
-  replayLast: ({ replay }) => (replay === null ? null : replayLabel(replay)),
+const entryLabel = (entry: EntryRef): string =>
+  entry.kind === 'exercise'
+    ? `${EXERCISE_IDS.indexOf(entry.id) + 1} ${t(EXERCISE_TITLE[entry.id])}`
+    : `${t('freeYard')} · ${t(LAYOUT_NAME[entry.id])}`;
+
+/** The chosen value's name as the setup screen shows it, without the field name. */
+function valueLabel(id: OptionId): string {
+  const value = optionValue(currentSettings(), id);
+  const label = OPTION_FIELDS[id].choices.find((c) => c.value === value)?.label;
+  return label === undefined ? '' : typeof label === 'string' ? t(label) : label.text;
+}
+
+/** What Continue starts and the setup it starts with: all four values, defaults included. */
+function continueLines({ state }: TitleContext): readonly string[] {
+  const entry = continueEntry(state.lastEntry, state.done);
+  return entry === null
+    ? []
+    : [
+        entryLabel(entry),
+        `${valueLabel('truck')} · ${valueLabel('trailer')}`,
+        `${valueLabel('lighting')} · ${valueLabel('driveView')}`,
+      ];
+}
+
+/** The detail lines under an action's label. */
+const DETAIL: Readonly<Record<ActionId, (ctx: TitleContext) => readonly string[]>> = {
+  replayLast: ({ replay }) => (replay === null ? [] : [replayLabel(replay)]),
+  continue: continueLines,
 };
 
 export function titleScreen(ctx: TitleContext): {
@@ -70,14 +100,16 @@ export function titleScreen(ctx: TitleContext): {
         badges.push({ when: item.badgeWhen, el: badge });
       }
     }
-    const line = 'action' in item.target ? DETAIL[item.target.action](ctx) : null;
-    if (line !== null) button.append(element('span', 'menu-item-detail', line));
+    const lines = 'action' in item.target ? DETAIL[item.target.action](ctx) : [];
+    for (const line of lines) button.append(element('span', 'menu-item-detail', line));
     if (item.tier === 'main') {
       const chevron = element('span', 'menu-item-chevron', '›');
       chevron.setAttribute('aria-hidden', 'true');
       button.append(chevron);
     }
-    button.addEventListener('click', () => ctx.activate(item));
+    button.addEventListener('click', () => {
+      ctx.activate(item, button);
+    });
     const li = element('li', 'menu-items-entry');
     li.append(button);
     return li;
