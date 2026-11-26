@@ -1,1 +1,0 @@
-A Controls screen, opened from the title or from Settings, lists the drive keys for your graphics quality and driving view and the touch and mouse controls ([#PRNUM](https://github.com/DocGerd/gegenlenker/pull/PRNUM)).
