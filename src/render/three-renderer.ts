@@ -18,7 +18,7 @@ import {
   type TopDownView,
   type WebgpuFallback,
 } from '../contracts/render';
-import type { TruckAnchors, TruckId } from '../contracts/vehicle';
+import type { TrailerSpec, TruckAnchors, TruckId, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import {
   cabFront,
@@ -77,6 +77,9 @@ const YARD_MARGIN = 5;
 const SKY_HEIGHT = 200;
 
 type Built = {
+  readonly layout: ResolvedLayout;
+  readonly truckSpec: TruckSpec;
+  readonly trailerSpec: TrailerSpec;
   readonly scene: Scene;
   readonly truck: VehicleVisual;
   readonly trailer: VehicleVisual;
@@ -213,7 +216,7 @@ function describeGl(gpu: WebGPURenderer): string {
 /** `warmUp` holds the resolution governor off while something heavy (a shell, the ground texture) attaches. */
 export function createThreeSceneRenderer(
   parts: RendererParts,
-): SceneRenderer & { warmUp: (tag?: string) => void } {
+): SceneRenderer & { warmUp: (tag?: string) => void; attached: () => void } {
   const timer = createFrameTimer();
   const cockpitCamera = createCockpitCamera();
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
@@ -258,6 +261,7 @@ export function createThreeSceneRenderer(
   /** Bumped by every `init` and by `dispose`, so a superseded start drops its renderer. */
   let generation = 0;
   const lostListeners = new Set<() => void>();
+  const attachListeners = new Set<() => void>();
 
   const onLost = (): void => {
     if (contextLost) return;
@@ -296,15 +300,60 @@ export function createThreeSceneRenderer(
     for (const { mirror } of mirrors) mirror.invalidate();
   }
 
-  function disposeBuilt(): void {
+  /** `keep` is the aids part, whose track history a rebuild carries over. */
+  function disposeBuilt(keep?: AidsLayer): void {
     if (built === null) return;
     built.truck.dispose();
     built.trailer.dispose();
     built.environment.dispose();
-    built.aids.dispose();
+    if (built.aids !== keep) built.aids.dispose();
     built.interior.dispose();
     built.scene.clear();
     built = null;
+  }
+
+  function build(
+    nextLayout: ResolvedLayout,
+    truck: TruckSpec,
+    trailer: TrailerSpec,
+    palette: ScenePalette,
+    kept?: AidsLayer,
+  ): void {
+    const scene = new Scene();
+    scene.matrixWorldAutoUpdate = false;
+    scene.onBeforeRender = (_renderer, _scene, camera) => {
+      if (isShadowCamera(camera)) shadowPasses++;
+    };
+    const truckVisual = parts.truck(truck, palette);
+    const trailerVisual = parts.trailer(trailer, palette);
+    const environment = parts.environment(nextLayout, palette);
+    const aids = kept ?? parts.aids(truck, trailer, nextLayout, palette);
+    const interior = parts.interior(truck, palette);
+    const extent = combinationExtent(truck, trailer);
+    setAidsLayer(aids.object);
+    scene.add(environment.object, truckVisual.object, trailerVisual.object, aids.object);
+    (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
+    built = {
+      layout: nextLayout,
+      truckSpec: truck,
+      trailerSpec: trailer,
+      scene,
+      truck: truckVisual,
+      trailer: trailerVisual,
+      environment,
+      aids,
+      interior,
+      truckId: truck.id,
+      anchors: truckAnchors(truck),
+      mounts: mirrorMounts(truck),
+      cabFront: cabFront(truck),
+      palette,
+      yardBounds: fitBounds(nextLayout),
+      colliders: chaseColliders(nextLayout),
+      extent,
+      radius: boundingRadius(extent),
+    };
+    applyLookTo(built);
   }
 
   function placeTopDown(frame: RenderFrame, rect: Rect, b: Built): void {
@@ -455,39 +504,26 @@ export function createThreeSceneRenderer(
       resetTiming('scene');
       leadAt = -1;
       chaseArm.cut();
-      const palette = readScenePalette();
-      const scene = new Scene();
-      scene.matrixWorldAutoUpdate = false;
-      scene.onBeforeRender = (_renderer, _scene, camera) => {
-        if (isShadowCamera(camera)) shadowPasses++;
+      build(nextLayout, truck, trailer, readScenePalette());
+    },
+
+    rebuildScene() {
+      if (built === null) return;
+      const { layout: nextLayout, truckSpec, trailerSpec, palette, aids } = built;
+      disposeBuilt(aids);
+      resetTiming('rebuild');
+      build(nextLayout, truckSpec, trailerSpec, palette, aids);
+    },
+
+    onAttached(listener) {
+      attachListeners.add(listener);
+      return () => {
+        attachListeners.delete(listener);
       };
-      const truckVisual = parts.truck(truck, palette);
-      const trailerVisual = parts.trailer(trailer, palette);
-      const environment = parts.environment(nextLayout, palette);
-      const aids = parts.aids(truck, trailer, nextLayout, palette);
-      const interior = parts.interior(truck, palette);
-      const extent = combinationExtent(truck, trailer);
-      setAidsLayer(aids.object);
-      scene.add(environment.object, truckVisual.object, trailerVisual.object, aids.object);
-      (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
-      built = {
-        scene,
-        truck: truckVisual,
-        trailer: trailerVisual,
-        environment,
-        aids,
-        interior,
-        truckId: truck.id,
-        anchors: truckAnchors(truck),
-        mounts: mirrorMounts(truck),
-        cabFront: cabFront(truck),
-        palette,
-        yardBounds: fitBounds(nextLayout),
-        colliders: chaseColliders(nextLayout),
-        extent,
-        radius: boundingRadius(extent),
-      };
-      applyLookTo(built);
+    },
+
+    attached() {
+      for (const listener of [...attachListeners]) listener();
     },
 
     setQuality(preset: GraphicsPreset) {
@@ -706,6 +742,7 @@ export function createThreeSceneRenderer(
       generation++;
       releaseGpu();
       lostListeners.clear();
+      attachListeners.clear();
       document.removeEventListener('visibilitychange', onVisibility);
     },
   };

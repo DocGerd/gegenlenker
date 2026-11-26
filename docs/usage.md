@@ -87,7 +87,7 @@ The Settings screen also has a Controls row, and the title has a Controls entry:
 
 Aids, the Follow / Whole yard choice, panel collapse state and the divider position are changed in the drive and kept as settings too. Lighting and driving view are part of the best-result key, so each combination has its own best.
 
-During a drive, Settings in the pause sheet offers Theme, Wide-angle mirrors and Graphics quality, which all apply at once; a new Graphics quality rebuilds the 3D view and the run carries on.
+During a drive, Settings in the pause sheet offers Theme, Wide-angle mirrors and Graphics quality, which all apply at once, without restarting the run.
 
 ## URL parameters
 
