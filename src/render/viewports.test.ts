@@ -1207,9 +1207,9 @@ describe('computeViewports mirror-only drive', () => {
 
   it('lets the goal cue yield to a toast where no span beside the mirrors holds both', () => {
     const notch = { top: 24, right: 48, bottom: 20, left: 48 };
-    const views = computeViewports(700, 600, 'mirrors', null, notch, undefined, null, ALL);
+    const views = computeViewports(620, 640, 'mirrors', null, notch, undefined, null, ALL);
     expect(messageColumn(views, null, notch).cueYields).toBe(true);
-    const plain = computeViewports(700, 600, 'mirrors', null, NO_INSETS, undefined, null, ALL);
+    const plain = computeViewports(620, 640, 'mirrors', null, NO_INSETS, undefined, null, ALL);
     expect(messageColumn(plain, null, NO_INSETS).cueYields).toBe(false);
   });
 });

@@ -19,6 +19,7 @@
     "format:check": "node scripts/format.mjs --check",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
     "test": "vitest run",
+    "test:gate": "vitest run --config vitest.gate.config.ts",
     "test:e2e": "playwright test --project offline",
     "test:e2e:channels": "E2E_CHANNELS=1 playwright test --project channels",
     "test:e2e:webgpu": "playwright test --project webgpu",

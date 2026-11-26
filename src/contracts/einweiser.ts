@@ -11,3 +11,15 @@ export const SIGN_IDS = [
   'abstand',
 ] as const;
 export type SignId = (typeof SIGN_IDS)[number];
+
+/** The Einweiser faults, each counted once per incident (`docs/einweiser-spike.md` §4). */
+export const EINWEISER_FAULTS = [
+  'inPath',
+  'tooClose',
+  'outOfSight',
+  'signOutOfSight',
+  'unclear',
+  'lateHalt',
+  'noAchtung',
+] as const;
+export type EinweiserFault = (typeof EINWEISER_FAULTS)[number];
