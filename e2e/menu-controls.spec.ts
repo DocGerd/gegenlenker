@@ -70,6 +70,11 @@ test.describe('the Controls screen', () => {
     await expect(term(high, 'Q / E')).toHaveCount(1);
     await expect(keys(high)).not.toContainText(en.viewSwitch);
     await high.context().close();
+
+    const top = await open({ graphics: 'high', mirrorsOnly: false });
+    await expect(term(top, 'F / Y / O')).toHaveCount(1);
+    await expect(keys(top)).toContainText(en.viewSwitch);
+    await top.context().close();
   });
 
   test('the touch group names wheel, lever, Stop and the buttons', async ({ page }) => {
