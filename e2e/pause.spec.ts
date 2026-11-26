@@ -172,6 +172,69 @@ test('the result menu button leaves without a stale entry', async ({ page }) => 
   expect(await historyState(page)).toBeNull();
 });
 
+const SETTINGS_KEY = 'gegenlenker.settings.v1';
+const storedLastEntry = (page: Page): Promise<unknown> =>
+  page.evaluate((key) => {
+    const raw = localStorage.getItem(key);
+    return raw === null ? null : (JSON.parse(raw) as { lastEntry?: unknown }).lastEntry;
+  }, SETTINGS_KEY);
+const reverseCorner = { role: 'driver', kind: 'exercise', id: 'reverse-corner' };
+const continueButton = (page: Page) => page.getByRole('button', { name: en.continue });
+
+test('a held Space from a run does not start Continue', heavyAt('low'), async ({ page }) => {
+  await seedStorage(page, { settings: { graphics: 'low' } });
+  await page.goto('./');
+  await startExercise(page, en, 'straight-reverse');
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  await page.keyboard.down('Space');
+  await page.getByRole('button', { name: en.pause }).click();
+  await sheet(page).getByRole('button', { name: en.leaveUnscored }).click();
+  await toTitle(page, en);
+  await expect(continueButton(page)).toBeFocused();
+  await page.keyboard.down('Space'); // auto-repeat
+  await page.keyboard.up('Space');
+  await expect(page.locator('.drive')).toHaveCount(0);
+  await expect(continueButton(page)).toBeFocused();
+});
+
+test('Continue starts the stored entry', heavyAt('low'), async ({ page }) => {
+  await seedStorage(page, { settings: { graphics: 'low', lastEntry: reverseCorner } });
+  await page.goto('./');
+  await continueButton(page).click();
+  await expect(page.locator('[data-hud="goalTitle"]')).toHaveText(en.exerciseReverseCorner);
+  await expect.poll(() => storedLastEntry(page)).toEqual(reverseCorner);
+});
+
+test('a double click on Continue starts one drive', heavyAt('low'), async ({ page }) => {
+  await seedStorage(page, { settings: { graphics: 'low', lastEntry: reverseCorner } });
+  await page.goto('./');
+  await continueButton(page).dblclick();
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  await expect(page.locator('.drive')).toHaveCount(1);
+});
+
+test(
+  'Start and Retry store the last entry once the drive has mounted',
+  heavyAt('low'),
+  async ({ page }) => {
+    await seedStorage(page, { settings: { graphics: 'low' } });
+    await page.goto('./');
+    await startExercise(page, en, 'reverse-bay');
+    await expect(speed(page)).toHaveText('0.0 km/h');
+    const reverseBay = { role: 'driver', kind: 'exercise', id: 'reverse-bay' };
+    await expect.poll(() => storedLastEntry(page)).toEqual(reverseBay);
+
+    await finishRun(page);
+    await page.evaluate((key) => {
+      const stored = JSON.parse(localStorage.getItem(key) ?? '{}') as object;
+      localStorage.setItem(key, JSON.stringify({ ...stored, lastEntry: null }));
+    }, SETTINGS_KEY);
+    await page.getByRole('button', { name: en.retry }).click();
+    await expect(speed(page)).toHaveText('0.0 km/h');
+    await expect.poll(() => storedLastEntry(page)).toEqual(reverseBay);
+  },
+);
+
 test('back from a replay returns to the result, and back again to the menu', async ({ page }) => {
   await startAndRoll(page);
   await finishRun(page);

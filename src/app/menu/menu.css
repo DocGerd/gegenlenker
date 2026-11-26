@@ -223,6 +223,20 @@
   background: var(--color-accent-strong);
 }
 
+/* Replay sits under Continue as the quieter half of the last-session block. */
+.menu-session .menu-items-entry + .menu-items-entry .menu-item-primary,
+.menu-session .menu-items-entry + .menu-items-entry .menu-item-primary:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+}
+
+.menu-session .menu-items-entry + .menu-items-entry .menu-item-primary:hover {
+  border-color: var(--color-accent);
+}
+
 .menu-item-detail {
   flex-basis: 100%;
   font-size: var(--text-sm);

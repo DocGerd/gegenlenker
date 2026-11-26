@@ -59,6 +59,12 @@ describe('continueEntry', () => {
       ex('dock-ramp'),
     );
   });
+
+  it('keeps the last entry when a given order does not hold it', () => {
+    expect(continueEntry(ex('reverse-bay'), [], ['slalom', 'dock-ramp'])).toEqual(
+      ex('reverse-bay'),
+    );
+  });
 });
 
 describe('lastEntryOf', () => {

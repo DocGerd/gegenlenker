@@ -5,8 +5,11 @@ import { exerciseDone } from '../../scoring/best';
 import { ignoreMultiClicks } from '../click-guard';
 import type { RunConfig } from '../drive';
 import { ignoreHeldBrakeKeys } from '../held-keys';
+import { currentSettings } from '../settings';
 import { bestResults } from '../storage';
+import { runConfigOf, type EntryKind, type EntryRef } from './catalogue';
 import { CONTENT } from './content';
+import { continueEntry, lastEntryOf } from './continue';
 import { screenOf, type ActionId, type Item, type MenuState } from './graph';
 import { arrowFocus } from './keys';
 import './menu.css';
@@ -57,7 +60,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   let nav = initial;
   let teardown: (() => void)[] = [];
   let closed = false;
-  // Set by Start until the drive replaces the menu (or a failure notice does): nothing navigates meanwhile.
+  // Set by Start and Continue until the drive replaces the menu (or a failure notice does): nothing navigates meanwhile.
   let busy = false;
   // Where focus goes on the next `show` instead of the level's remembered one.
   let refocus: string | null = null;
@@ -68,6 +71,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
       done: EXERCISE_IDS.filter((id) => exerciseDone(best, id)),
       replayable: deps.replay !== null,
       hasNews: false,
+      lastEntry: lastEntryOf(currentSettings().lastEntry, deps.replay?.log ?? null),
     };
   };
 
@@ -103,15 +107,28 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
     deps.start(run);
   };
 
-  const actions: Readonly<Record<ActionId, () => void>> = {
+  const actions: Readonly<Record<ActionId, (button?: HTMLButtonElement) => void>> = {
     replayLast: () => deps.replay?.start(),
+    continue: (button) => {
+      const { done, lastEntry } = state();
+      const entry = continueEntry(lastEntry, done);
+      if (button !== undefined && entry !== null)
+        startRun(button, runConfigOf(entry, currentSettings()));
+    },
   };
-  const activate = (item: Item): void => {
+  const activate = (item: Item, button?: HTMLButtonElement): void => {
     if ('screen' in item.target) {
       go({ type: 'open', item: item.id });
       return;
     }
-    actions[item.target.action]();
+    actions[item.target.action](button);
+  };
+
+  /** The row a list opens on: the exercise Continue would start, or the last driven yard. */
+  const listFocus = (kind: EntryKind | undefined): EntryRef | null => {
+    const { done, lastEntry } = state();
+    const entry = kind === 'exercise' ? continueEntry(lastEntry, done) : lastEntry;
+    return entry?.kind === kind ? entry : null;
   };
 
   const contentScreen = (level: Level): ScreenView => {
@@ -153,6 +170,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           screen,
           heading: headingOf(level),
           done: state().done,
+          focus: listFocus(screen.list?.kind),
           back,
           pick: (entry) => go({ type: 'pick', entry }),
         });
