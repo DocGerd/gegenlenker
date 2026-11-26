@@ -58,7 +58,17 @@ const THREE_PATTERN = { group: THREE, message: THREE_MESSAGE };
 const restrictImports = (...patterns) => ['error', { patterns }];
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', '.remember', '.claude', '.superpowers'] },
+  {
+    ignores: [
+      'dist',
+      'node_modules',
+      '.remember',
+      '.claude',
+      '.superpowers',
+      'test-results',
+      'playwright-report',
+    ],
+  },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   { linterOptions: { noInlineConfig: true } },
