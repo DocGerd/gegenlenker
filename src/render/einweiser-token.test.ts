@@ -1,4 +1,4 @@
-import { Layers, type Mesh, type MeshBasicMaterial, Vector3 } from 'three';
+import { Layers, Mesh, type MeshBasicMaterial, type Object3D, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { EinweiserVisual, ScenePalette } from '../contracts/render';
 import { createEinweiserToken, TOKEN_RADIUS, TOKEN_TIP } from './einweiser-token';
@@ -17,6 +17,9 @@ const visual = (x: number, y: number, heading: number): EinweiserVisual => ({
   phase: 0,
 });
 
+const meshesOf = (object: Object3D): Mesh[] =>
+  object.children.filter((o): o is Mesh => o instanceof Mesh);
+
 describe('Einweiser token', () => {
   it('is hidden without an Einweiser', () => {
     const token = createEinweiserToken(palette);
@@ -31,7 +34,7 @@ describe('Einweiser token', () => {
     const token = createEinweiserToken(palette);
     const topDown = new Layers();
     enableLayers(topDown, TOP_DOWN_LAYERS);
-    const meshes = token.object.children as Mesh[];
+    const meshes = meshesOf(token.object);
     token.object.traverse((o) => expect(o.layers.mask).toBe(1 << AIDS_LAYER));
     expect(meshes.every((m) => topDown.test(m.layers))).toBe(true);
     const [casing, core] = meshes;
@@ -47,7 +50,7 @@ describe('Einweiser token', () => {
       const token = createEinweiserToken(palette);
       token.update(visual(5, -2, h));
       token.object.updateMatrixWorld();
-      const [casing, core] = token.object.children as Mesh[];
+      const [casing, core] = meshesOf(token.object);
       if (casing === undefined || core === undefined) throw new Error('two meshes');
       /** Each vertex as (metres ahead of his centre along his heading, metres to his left). */
       const local = (mesh: Mesh): [number, number][] => {
