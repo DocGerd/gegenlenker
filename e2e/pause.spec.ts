@@ -484,26 +484,112 @@ test('the theme changes at once from the pause sheet', heavyAt('low'), async ({ 
 });
 
 test(
-  'graphics quality from the pause sheet applies from the next start',
+  'graphics quality from the pause sheet applies at once and the run carries on',
   heavyAt('balanced'),
   async ({ page }) => {
-    await pauseWith(page, { graphics: 'balanced' });
+    await seedStorage(page, { settings: { graphics: 'low' } });
+    await page.goto('./?framing=1');
+    await startExercise(page, en, 'straight-reverse');
+    await expect(speed(page)).toHaveText('0.0 km/h');
+    await page.keyboard.press('4');
+    for (let i = 0; i < 5; i++) await page.keyboard.press('w');
+    await expect(speed(page)).not.toHaveText('0.0 km/h');
+    const html = page.locator('html');
     const chase = page.locator('[data-view="chase"]');
-    await expect(chase).toHaveCount(1);
+    const interior = page.locator('[data-hud="root"][data-interior]');
+    const step = async (): Promise<number> => {
+      const box = await page.locator('.drive').getAttribute('data-vehicle-box');
+      return (JSON.parse(box ?? '{}') as { step: number }).step;
+    };
+    await expect(chase).toHaveCount(0);
+    await expect(interior).toHaveCount(0);
+
+    await page.keyboard.press('Escape');
+    await expect(sheet(page)).toBeVisible();
+    const pausedAt = await clock(page).textContent();
+    const pausedStep = await step();
+    // The frames drawn when the last shell attached, which the paused view must still draw.
+    await page.evaluate(() => {
+      const html = document.documentElement;
+      const observer = new MutationObserver(() => {
+        if ((html.getAttribute('data-vehicle-shells') ?? '').split(' ').length !== 3) return;
+        html.dataset['drawnAtAttach'] =
+          document.querySelector<HTMLElement>('.drive')?.dataset['drawn'];
+        observer.disconnect();
+      });
+      observer.observe(html, { attributeFilter: ['data-vehicle-shells'] });
+    });
     await openSettings(page);
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
-    await expect(choice(page, en.graphics, en.graphicsBalanced)).toBeFocused();
-    await expect(sheet(page).getByText(en.appliesNextStart)).toBeVisible();
-    await page.keyboard.press('ArrowLeft');
-    await expect(choice(page, en.graphics, en.graphicsLow)).toBeChecked();
+    await expect(choice(page, en.graphics, en.graphicsLow)).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(choice(page, en.graphics, en.graphicsBalanced)).toBeChecked();
     await expect(chase).toHaveCount(1);
+    await expect(interior).toHaveCount(1);
+    await expect(html).toHaveAttribute('data-drawn-at-attach', /^\d+$/);
+    const drawnAtAttach = Number(await html.getAttribute('data-drawn-at-attach'));
+    await expect
+      .poll(async () => Number(await page.locator('.drive').getAttribute('data-drawn')))
+      .toBeGreaterThan(drawnAtAttach);
+    await expect(clock(page)).toHaveText(pausedAt ?? '');
+    expect(await step()).toBe(pausedStep);
 
     await page.keyboard.press('Escape');
-    await sheet(page).getByRole('button', { name: en.restart }).click();
+    await page.keyboard.press('Escape');
     await expect(sheet(page)).toBeHidden();
+    await expect(clock(page)).not.toHaveText(pausedAt ?? '');
+    await expect.poll(step).toBeGreaterThan(pausedStep);
+    await expect(speed(page)).not.toHaveText('0.0 km/h');
+  },
+);
+
+test(
+  'a preset without the outside view or looking around falls back from them',
+  heavyAt('high'),
+  async ({ page }) => {
+    await seedStorage(page, { settings: { graphics: 'high', topDown: 'yard' } });
+    await page.goto('./?framing=1');
+    await startExercise(page, en, 'straight-reverse');
     await expect(speed(page)).toHaveText('0.0 km/h');
+    const yard = page.locator('[data-view="yard"]');
+    const chase = page.locator('[data-view="chase"]');
+    const free = page.locator('[data-hud="freeCamera"]');
+    const yaw = async (): Promise<number> => {
+      const head = await page.locator('.drive').getAttribute('data-head');
+      return (JSON.parse(head ?? '{"yaw":0}') as { yaw: number }).yaw;
+    };
+    await expect(yard).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.down('KeyQ');
+    await expect.poll(yaw).not.toBe(0);
+    await chase.click();
+    await page.keyboard.press('k');
+    await expect(free).toHaveAttribute('aria-pressed', 'true');
+
+    await page.keyboard.press('Escape');
+    await openSettings(page);
+    await sheet(page).getByText(en.graphicsLow, { exact: true }).click();
+    await expect(choice(page, en.graphics, en.graphicsLow)).toBeChecked();
     await expect(chase).toHaveCount(0);
+    await expect(free).toHaveCount(0);
+    await expect(page.locator('[data-hud="root"][data-interior]')).toHaveCount(0);
+    await expect(page.locator('html')).not.toHaveAttribute('data-vehicle-shells');
+    await expect(yard).toHaveAttribute('aria-pressed', 'true');
+    expect(await yaw()).toBe(0);
+
+    // Q is still held, but the glance it started ended with looking around.
+    await sheet(page).getByText(en.graphicsHigh, { exact: true }).click();
+    await expect(chase).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(sheet(page)).toBeHidden();
+    await page.evaluate(async () => {
+      for (let i = 0; i < 5; i++) await new Promise((r) => requestAnimationFrame(r));
+    });
+    expect(await yaw()).toBe(0);
+    await page.keyboard.up('KeyQ');
+    await chase.click();
+    await expect(free).toHaveAttribute('aria-pressed', 'false');
   },
 );
 

@@ -6,6 +6,7 @@ import {
   DEFAULT_TOP_DOWN_VIEW,
   TOP_DOWN_SHARE_LIMITS,
   type AidFlags,
+  type GraphicsPreset,
   type Rect,
   type RenderFrame,
   type TopDownMode,
@@ -173,6 +174,7 @@ export function startDrive(
       finish,
       leave: exercise === null ? null : leaveUnscored,
       settingChanged: (id) => {
+        if (id === 'graphics') switchGraphics(currentSettings().graphics);
         if (id !== 'wideMirrors') return;
         wideMirrors = currentSettings().wideMirrors;
         arrange();
@@ -198,9 +200,18 @@ export function startDrive(
   };
   window.addEventListener('keydown', onEscape);
   live.push(() => window.removeEventListener('keydown', onEscape));
-  const { renderer, graphics } = view;
-  const lookAround = lookAroundAvailable(graphics);
+  const { renderer } = view;
+  // The pause sheet can change it during the drive.
+  let graphics = view.graphics;
   renderer.setScene(layout, truck, trailer);
+  // Set by anything visual besides a sim step; a frame with neither is not redrawn.
+  let dirty = true;
+  // An asset that lands while the run is paused must still show.
+  cleanups.push(
+    renderer.onAttached(() => {
+      dirty = true;
+    }),
+  );
 
   const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
   let aids: AidFlags = mirrorsOnly ? NO_AIDS : settings.aids;
@@ -210,8 +221,6 @@ export function startDrive(
   let topDown: TopDownMode = settings.topDown;
   // The pause sheet can change it during the drive.
   let wideMirrors = settings.wideMirrors;
-  // Set by anything visual besides a sim step; a frame with neither is not redrawn.
-  let dirty = true;
   let pathStale = true;
   let warning: Ahead = null;
   const frame: Frame = {
@@ -262,9 +271,10 @@ export function startDrive(
     },
     look: {
       getRect: () => frame.views.cockpit,
-      enabled: lookAround,
+      enabled: lookAroundAvailable(graphics),
       onChange(head) {
         frame.head = head;
+        if (EXPOSE_FRAMING) stage.dataset['head'] = JSON.stringify(head);
         dirty = true;
       },
     },
@@ -282,7 +292,7 @@ export function startDrive(
     topDown,
     chase: chaseViewAvailable(graphics),
     interior: interiorAvailable(graphics),
-    look: lookAround,
+    look: lookAroundAvailable(graphics),
     collapsed,
     mirrorsOnly,
     pedalsBox: () => controls.pedalsBox(),
@@ -310,7 +320,7 @@ export function startDrive(
           x: target.pose.x + (Math.cos(target.pose.heading) * target.length) / 2,
           y: target.pose.y + (Math.sin(target.pose.heading) * target.length) / 2,
         };
-  /** Test observable (`?framing=1`): the screen box of the drawn vehicle and the sim step it shows. */
+  /** Test observable (`?framing=1`), beside `drawn` (frames drawn) and `head`: the screen box of the drawn vehicle and the sim step it shows. */
   const exposeVehicleBox = (): void => {
     const xs: number[] = [];
     const ys: number[] = [];
@@ -396,6 +406,22 @@ export function startDrive(
   };
   hud.onLegendResize(arrange);
 
+  /** Rebuilds the scene under `next`; the sim, run, views and wheel tracks carry on. */
+  const switchGraphics = (next: GraphicsPreset): void => {
+    if (next === graphics) return;
+    graphics = next;
+    view.setGraphics(next);
+    renderer.rebuildScene();
+    viewInput.setLook(lookAroundAvailable(next));
+    hud.setOffers({
+      chase: chaseViewAvailable(next),
+      interior: interiorAvailable(next),
+      look: lookAroundAvailable(next),
+    });
+    dirty = true;
+    arrange();
+  };
+
   hud.onAction((action) => {
     if (action.type === 'topDown') {
       topDown = action.mode;
@@ -447,6 +473,7 @@ export function startDrive(
   });
 
   let accumulator = 0;
+  let drawn = 0;
   let enterFree = false;
   view.start({
     resized(width, height) {
@@ -500,6 +527,7 @@ export function startDrive(
       frame.aids = aids;
       frame.lamps = controls.lamps();
       renderer.render(frame);
+      drawn++;
       if (enterFree) {
         enterFree = false;
         const pose = renderer.chasePose();
@@ -513,7 +541,10 @@ export function startDrive(
       hud.setTargetArrow(
         at && arrowRects ? targetArrow(at, arrowRects.clear, ARROW_MARGIN, arrowRects.place) : null,
       );
-      if (EXPOSE_FRAMING) exposeVehicleBox();
+      if (EXPOSE_FRAMING) {
+        exposeVehicleBox();
+        stage.dataset['drawn'] = String(drawn);
+      }
     },
   });
 

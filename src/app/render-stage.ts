@@ -112,8 +112,10 @@ export type StageHooks = {
 
 export type RenderStage = {
   readonly renderer: SceneRenderer;
-  /** The preset the renderer was set to: read it for anything that must follow the renderer's quality. */
+  /** The preset the renderer is set to: read it for anything that must follow the renderer's quality. */
   readonly graphics: GraphicsPreset;
+  /** Switches the renderer's preset; the caller rebuilds the scene with `setScene`. */
+  setGraphics(preset: GraphicsPreset): void;
   /** The lighting the stage drew with, which the stored setting does not decide: a replay keeps its run's. */
   readonly lighting: LightingMode;
   /** Fills the host and holds the canvas, which a loss replaces: bind input here. */
@@ -134,7 +136,7 @@ export function mountRenderStage(
 ): RenderStage {
   const s = acquireRenderer();
   const { surface, renderer } = s;
-  const { graphics } = currentSettings();
+  let { graphics } = currentSettings();
   renderer.setQuality(graphics);
   renderer.setLighting(lighting);
   // Read by the e2e; stays after dispose like the renderer's own state, until the next stage sets it.
@@ -236,7 +238,13 @@ export function mountRenderStage(
 
   return {
     renderer,
-    graphics,
+    get graphics() {
+      return graphics;
+    },
+    setGraphics(preset) {
+      graphics = preset;
+      renderer.setQuality(preset);
+    },
     lighting,
     surface,
     start(next) {
