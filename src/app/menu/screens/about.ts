@@ -44,6 +44,7 @@ function thirdPartyItem(entry: ThirdParty): HTMLLIElement {
 function assetItem({ title, licence, authors, page }: AssetCredit): HTMLLIElement {
   const item = element('li', 'about-entry');
   item.dataset['about'] = 'asset';
+  item.lang = 'en';
   const heading = element('p', 'about-asset-title');
   heading.append(externalLink(page, title.replaceAll('`', '')));
   item.append(heading, element('p', 'about-meta', `${licence} · ${authors}`));

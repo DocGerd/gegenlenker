@@ -41,6 +41,9 @@ for (const { locale, messages } of locales) {
     ).toBeFocused();
     await expect(screen(page, 'about').getByRole('heading', { level: 2 })).toHaveCount(3);
     expect(requests).toEqual([]);
+    await expect(screen(page, 'about').locator('[data-about="asset"][lang="en"]')).toHaveCount(
+      ABOUT_CREDITS.assets.length,
+    );
 
     for (const summary of await screen(page, 'about').locator('summary').all())
       await summary.click();

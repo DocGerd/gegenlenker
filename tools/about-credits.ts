@@ -7,6 +7,8 @@ export type LicenceEntry = Omit<ThirdParty, 'text' | 'bundled'> & {
   /** The package file the licence is copied from, relative to the repository root. */
   readonly upstream?: string;
   readonly bundled?: readonly string[];
+  /** Files or directories under `node_modules/three/examples/jsm/libs/` that this licence covers. */
+  readonly libs?: readonly string[];
 };
 
 /** Every licence file in `public/licenses/`, with the runtime dependencies it covers. */
@@ -36,6 +38,36 @@ export const THIRD_PARTY: readonly LicenceEntry[] = [
     name: 'Basis Universal',
     spdx: 'Apache-2.0',
     file: 'basis-universal-Apache-2.0.txt',
+    covers: [],
+    libs: ['basis'],
+  },
+  {
+    name: 'meshoptimizer',
+    spdx: 'MIT',
+    file: 'meshoptimizer-MIT.txt',
+    covers: [],
+    libs: ['meshopt_decoder.module.js'],
+    upstream: 'node_modules/meshoptimizer/LICENSE.md',
+  },
+  {
+    name: 'ktx-parse',
+    spdx: 'MIT',
+    file: 'ktx-parse-MIT.txt',
+    covers: [],
+    libs: ['ktx-parse.module.js'],
+    upstream: 'node_modules/ktx-parse/LICENSE',
+  },
+  {
+    name: 'zstddec',
+    spdx: 'MIT',
+    file: 'zstddec-MIT.txt',
+    covers: [],
+    libs: ['zstddec.module.js'],
+  },
+  {
+    name: 'Zstandard (in zstddec)',
+    spdx: 'BSD-3-Clause',
+    file: 'zstd-BSD-3-Clause.txt',
     covers: [],
   },
 ];

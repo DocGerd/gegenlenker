@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { join, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ABOUT_CREDITS } from '../src/app/about-credits';
 import { aboutCredits, THIRD_PARTY, type LicenceEntry } from './about-credits';
@@ -53,4 +53,72 @@ describe('About credits', () => {
       }
     },
   );
+
+  describe('libraries vendored inside three', () => {
+    const JSM = join(ROOT, 'node_modules/three/examples/jsm');
+    const LIBS = join(JSM, 'libs');
+
+    const sourceFiles = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return sourceFiles(path);
+        return /\.ts$/.test(entry.name) && !/\.test\.ts$/.test(entry.name) ? [path] : [];
+      });
+
+    /** The `three/addons` and `three/examples/jsm` modules the app imports, as files under `jsm`. */
+    const appEntries = (): string[] =>
+      sourceFiles(join(ROOT, 'src')).flatMap((file) =>
+        [
+          ...readFileSync(file, 'utf8').matchAll(
+            /['"]three\/(?:addons|examples\/jsm)\/([^'"?]+)(?:\?[^'"]*)?['"]/g,
+          ),
+        ].flatMap((match) => (match[1] === undefined ? [] : [join(JSM, match[1])])),
+      );
+
+    /** Names under `libs/` that the app's three modules reach, following their relative imports. */
+    const bundledLibs = (): string[] => {
+      const found = new Set<string>();
+      const seen = new Set<string>();
+      const queue = appEntries();
+      for (let file = queue.pop(); file !== undefined; file = queue.pop()) {
+        if (seen.has(file)) continue;
+        seen.add(file);
+        const rel = relative(LIBS, file);
+        if (!rel.startsWith('..')) {
+          found.add(rel.split(sep)[0] ?? rel);
+          continue;
+        }
+        if (!file.endsWith('.js') || !existsSync(file)) continue;
+        const specifiers = readFileSync(file, 'utf8').matchAll(
+          /(?:from\s*|import\s*\(\s*|new URL\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g,
+        );
+        for (const [, specifier] of specifiers) {
+          if (specifier !== undefined) queue.push(resolve(file, '..', specifier));
+        }
+      }
+      return [...found].sort();
+    };
+
+    it('are found by the scan', () => {
+      expect(bundledLibs()).toEqual(
+        expect.arrayContaining([
+          'basis',
+          'ktx-parse.module.js',
+          'meshopt_decoder.module.js',
+          'zstddec.module.js',
+        ]),
+      );
+    });
+
+    it('each have a licence entry', () => {
+      const listed = new Set(THIRD_PARTY.flatMap((entry) => entry.libs ?? []));
+      expect(bundledLibs().filter((lib) => !listed.has(lib))).toEqual([]);
+    });
+
+    it('are listed only while they exist', () => {
+      for (const lib of THIRD_PARTY.flatMap((entry) => entry.libs ?? [])) {
+        expect(existsSync(join(LIBS, lib))).toBe(true);
+      }
+    });
+  });
 });
