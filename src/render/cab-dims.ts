@@ -1,5 +1,6 @@
-import type { Param, TruckSpec } from '../contracts/vehicle';
+import type { TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
+import { metres, round } from '../vehicles/cab';
 import { REALISM_HUES } from './realism-hues';
 import { type TruckLook, TRUCK_LOOKS } from './livery';
 
@@ -15,8 +16,7 @@ export const PLATE_RELIEF = 0.06; // plate stands this far ahead of the bumper f
 /** The cab's white side stripe above the frame top (cab_shell.py STRIPE); the tipper's stripe lines up with it. */
 export const CAB_STRIPE = [0.62, 0.76] as const;
 
-export const round = (value: number): number => Math.round(value * 1e6) / 1e6;
-export const metres = (param: Param): number => round(param.value / 1000);
+export { metres, round } from '../vehicles/cab';
 export const hex = (rgb: number): string => `#${rgb.toString(16).padStart(6, '0')}`;
 
 /** Inputs of `tools/blender/cab_shell.py`, in the sim body frame: metres, +X forward, +Y left, +Z up. */

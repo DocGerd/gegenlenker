@@ -85,6 +85,8 @@ type DecorBase = {
   readonly footprint: Obb;
   /** Palette index, wrapped by the renderer; assets with one look ignore it. */
   readonly variant: number;
+  /** Top of the drawing above the ground (metres): the box hides an Einweiser behind it. */
+  readonly height: number;
 };
 /** A piece of the yard kit, drawn from the glb where the footprint says (`kitFootprint`). */
 export type KitDecor = DecorBase & KitPlacement & { readonly asset: 'kit' };

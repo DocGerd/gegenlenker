@@ -100,6 +100,14 @@ describe.each(cases)('$name yard props', ({ resolved }) => {
     expect(decorPieces(kit)).toEqual([]);
   });
 
+  it('draw decor up to its height', () => {
+    for (const d of resolved.decor.filter((d) => !isKitDecor(d))) {
+      const [piece] = decorPieces([d]);
+      const b = new Box3().setFromObject(new Mesh(piece?.geometry));
+      expect(b.max.y, d.id).toBeCloseTo(d.height, 3);
+    }
+  });
+
   it('draw decor within its footprint, apart from thin relief', () => {
     for (const d of resolved.decor.filter((d) => !isKitDecor(d))) {
       const [piece] = decorPieces([d]);

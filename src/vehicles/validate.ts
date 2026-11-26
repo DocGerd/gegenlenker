@@ -56,6 +56,9 @@ export function validateTrailer(t: TrailerSpec): string[] {
   if ((t.rampHeight !== undefined) !== (t.body === 'low-loader')) {
     problems.push(`${t.id}: ramp height must be set exactly for low-loaders`);
   }
+  if ((t.swapBodyHeight !== undefined) !== (t.body === 'box')) {
+    problems.push(`${t.id}: swap body height must be set exactly for box bodies`);
+  }
   if (
     t.lengthToEye !== undefined &&
     t.drawbar.value + t.wheelbase.value + t.rearOverhang.value !== t.lengthToEye.value

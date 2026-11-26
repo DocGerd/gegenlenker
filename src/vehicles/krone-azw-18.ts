@@ -17,6 +17,7 @@ export const kroneAzw18: TrailerSpec = {
   width: estimate(2550, typical),
   track: estimate(2040, typical),
   deckHeight: estimate(1280, 'midpoint of 1,190–1,370 frame height'),
+  swapBodyHeight: estimate(2700, 'typical for a 7.45 m swap body, no source found'),
   couplingLimit: estimate(80, limitBasis),
   turntableLimit: estimate(85, limitBasis),
   underrunGuard: {

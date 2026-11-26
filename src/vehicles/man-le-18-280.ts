@@ -26,6 +26,8 @@ export const manLe18280: TruckSpec = {
   rearTrack: estimate(1800, typical),
   couplingOffset: estimate(1250, 'frame end plus coupling crossmember, no source found'),
   turningRadius: sourced(7800, SOURCES.D),
+  frameTop: estimate(1100, 'chassis top and cab floor of the render model; no source found'),
+  bodyTop: estimate(2750, 'tarpaulin top of the body shell (render model); no source found'),
   eye: {
     height: estimate(2350, eyeAboveFloor),
     behindBumper: estimate(1000, typical),
@@ -43,6 +45,7 @@ export const manLe18280: TruckSpec = {
     maxRate: estimate(1.5, typical),
   },
   cab: {
+    height: estimate(2900, 'cab roof of the render model; no source found'),
     windscreenInset: estimate(149, typical),
     glassSill: estimate(900, typical),
     glassHeight: estimate(756, typical),

@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import { THREE_FREE_RENDER } from './tools/three-free-render.ts';
 
-const CORE = ['src/{contracts,vehicles,sim,scoring,content}/**'];
+const CORE = ['src/{contracts,vehicles,sim,scoring,content,einweiser}/**'];
 const THREE = ['three', 'three/*'];
 const DOM_GLOBALS = [
   'window',
@@ -169,7 +169,17 @@ export default tseslint.config(
     rules: {
       'no-restricted-imports': restrictImports(
         ...CORE_PATTERNS,
-        layers(['scoring'], 'The sim does not import scoring'),
+        layers(['scoring', 'einweiser'], 'The sim does not import scoring or einweiser'),
+      ),
+    },
+  },
+  {
+    files: ['src/einweiser/**'],
+    ignores: ['**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': restrictImports(
+        ...CORE_PATTERNS,
+        layers(['scoring'], 'einweiser does not import scoring'),
       ),
     },
   },
