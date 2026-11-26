@@ -24,7 +24,8 @@ const result: RunResult = {
 };
 
 const log: InputLog = {
-  version: 3,
+  version: 4,
+  role: 'driver',
   layoutId: 'logistics',
   ...ids,
   lighting: 'day',

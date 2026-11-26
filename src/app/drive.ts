@@ -1,5 +1,6 @@
 import { resolveRun } from '../content/run';
-import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
+import type { ControlSource } from '../contracts/control';
+import type { ExerciseDefinition, InputLog, Role, RunResult } from '../contracts/exercise';
 import type { LayoutId } from '../contracts/layout';
 import {
   DEFAULT_TOP_DOWN_LAYOUT,
@@ -80,11 +81,13 @@ export function startDrive(
   settings: Settings,
   { onExit, onRestart, onLeave }: DriveHandlers,
 ): () => void {
+  const role: Role = 'driver';
   const { params, layout, exercise, start, contacts } = resolveRun({
     layoutId: run.layoutId,
     exerciseId: run.exercise?.id ?? null,
     truckId: run.truckId,
     trailerId: run.trailerId,
+    role,
   });
   const truck = truckById(run.truckId);
   const trailer = trailerById(run.trailerId);
@@ -119,6 +122,7 @@ export function startDrive(
         exerciseId: exercise?.id ?? null,
         truckId: run.truckId,
         trailerId: run.trailerId,
+        role,
         lighting,
         mirrorsOnly,
       },
@@ -246,6 +250,7 @@ export function startDrive(
     lights: lighting === 'night',
   });
   live.push(() => controls.dispose());
+  const source: ControlSource = controls;
   // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
   const viewInput = createViewInput(view.surface, {
     mode: topDown,
@@ -493,8 +498,8 @@ export function startDrive(
       const clock = sheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
       for (let i = 0; i < clock.steps; i++) {
-        controls.tick(DT, snapshot.steer);
-        const control = controls.control();
+        source.tick(DT, snapshot);
+        const control = source.control();
         recorder.record(snapshot.step, control);
         if (startTime === null && isDrivingInput(control)) startTime = snapshot.time;
         if (startTime !== null && anyAid(aids)) assisted = true;
@@ -525,7 +530,7 @@ export function startDrive(
       frame.waypointVisited = tracker?.waypointVisited() ?? false;
       frame.topDown = topDown;
       frame.aids = aids;
-      frame.lamps = controls.lamps();
+      frame.lamps = source.lamps();
       renderer.render(frame);
       drawn++;
       if (enterFree) {
