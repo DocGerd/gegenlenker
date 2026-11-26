@@ -364,7 +364,6 @@ const insetSizes: {
   { width: 1024, height: 600 },
   { width: 900, height: 649 },
   { width: 768, height: 1024 },
-  { width: 768, height: 1024, slot: 'between the mirrors' },
   { width: 860, height: 860, keysOpen: true },
   // in portrait too its cockpit starts at the screen's top edge
   { width: 820, height: 1180, slot: 'between the mirrors' },
@@ -506,16 +505,30 @@ test('the longest German toast fits the narrowest pane column, inside the safe a
   }
 });
 
-for (const { locale, messages } of locales) {
-  test(`the portrait mirror-only band holds the readouts and the counters at ${locale} 768x1024 with insets`, async ({
+/**
+ * The portrait mirror-only band: the notch insets at 768x1024, and a small tablet with a portrait
+ * tablet's own insets (a status bar and a home indicator, none at the sides).
+ */
+const bandScreens = [
+  { locale: 'en-US', messages: en, size: { width: 768, height: 1024 }, safe: insets },
+  { locale: 'de-DE', messages: de, size: { width: 768, height: 1024 }, safe: insets },
+  {
+    locale: 'de-DE',
+    messages: de,
+    size: { width: 600, height: 960 },
+    safe: { top: 24, left: 0, bottom: 20, right: 0 },
+  },
+];
+
+for (const { locale, messages, size, safe } of bandScreens) {
+  test(`the portrait mirror-only band holds the readouts and the counters at ${locale} ${size.width}x${size.height}`, async ({
     browser,
   }) => {
-    const size = { width: 768, height: 1024 };
     const context = await browser.newContext({ locale, viewport: size });
     try {
       const page = await context.newPage();
       const cdp = await context.newCDPSession(page);
-      await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+      await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: safe });
       await page.addInitScript((key) => {
         localStorage.setItem(key, JSON.stringify({ version: 1, mirrorsOnly: true }));
       }, SETTINGS_KEY);
@@ -523,12 +536,18 @@ for (const { locale, messages } of locales) {
       await expect
         .poll(() =>
           page.evaluate(() =>
-            getComputedStyle(document.documentElement).getPropertyValue('--safe-left'),
+            getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom'),
           ),
         )
-        .toBe(`${insets.left}px`);
+        .toBe(`${safe.bottom}px`);
       await startExercise(page, messages, 'straight-reverse');
-      await hudReady(page, { insets, mirrorsOnly: true });
+      await hudReady(page, { insets: safe, mirrorsOnly: true });
+      // The counters widen with the run time, which stands still before the first input.
+      const time = page.locator('[data-hud="time"]');
+      await time.evaluate((el) => {
+        el.textContent = (el.textContent ?? '').replace(/^\d+/, '100');
+      });
+      await expect(time).toHaveText(/^100\D/);
       const [band] = await boxes(page.locator('.hud-band'));
       const held = await boxes(page.locator('.hud-gear, .hud-speed, .hud-counters'));
       const around = await boxes(page.locator('.hud-goal:not([hidden]), .ctl-gears, .ctl-lever'));
@@ -539,7 +558,7 @@ for (const { locale, messages } of locales) {
           band?.top ?? Infinity,
         );
         expect(b.bottom, `${b.name} above the bottom inset`).toBeLessThanOrEqual(
-          size.height - insets.bottom,
+          size.height - safe.bottom,
         );
         for (const o of around) expect(overlaps(b, o), `${b.name} overlaps ${o.name}`).toBe(false);
       }

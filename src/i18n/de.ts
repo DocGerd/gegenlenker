@@ -75,7 +75,7 @@ export const de: Record<MessageKey, string> = {
   turntableAngle: 'Dreh\u00ADsche\u00ADmel\u00ADwin\u00ADkel',
   contacts: 'Berührungen',
   jackknifes: 'Anschläge',
-  directionChanges: 'Richtungswechsel',
+  directionChanges: 'Richtungs\u00ADwechsel',
   time: 'Zeit',
   contactAhead: 'Berührung voraus – ausweichen oder anhalten',
   limitAhead: 'Anschlag voraus – gegenlenken oder anhalten',
