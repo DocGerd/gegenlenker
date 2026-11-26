@@ -544,7 +544,8 @@ export function startDrive(
       frame.topDown = topDown;
       frame.aids = aids;
       frame.lamps = source.lamps();
-      if (einweiser !== null) frame.einweiser = einweiser.visual();
+      const visual = einweiser?.visual() ?? null;
+      if (visual !== null) frame.einweiser = visual;
       renderer.render(frame);
       drawn++;
       if (enterFree) {
