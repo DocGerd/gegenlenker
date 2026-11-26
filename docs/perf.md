@@ -2,7 +2,7 @@
 
 ## Emulated tablet (local)
 
-`pnpm perf:tablet` drives the built app in headed Chromium on the real GPU, emulating the reference Android tablet: 1280x800 at device scale 2, touch, a mobile user agent and a CDP CPU throttle. For each graphics preset and vehicle pair it reads the `?perf=1` overlay (fps, p95 frame time, resolution scale, draw calls) after the resolution governor settles. It builds the app into a temporary directory and previews it on a free port. A pass is necessary, not sufficient: the physical tablet check in `CLAUDE.md` still applies. Source: `e2e/perf/tablet-emulation.ts`. It is not part of CI or `pnpm verify`.
+`pnpm perf:tablet` drives the built app in Chromium on the real GPU, emulating the reference Android tablet: 1280x800 at device scale 2, touch, a mobile user agent and a CDP CPU throttle. For each graphics preset and vehicle pair it reads the `?perf=1` overlay (fps, p95 frame time, resolution scale, draw calls) after the resolution governor settles. It builds the app into a temporary directory and previews it on a free port. A pass is necessary, not sufficient: the physical tablet check in `CLAUDE.md` still applies. Source: `e2e/perf/tablet-emulation.ts`. It is not part of CI or `pnpm verify`.
 
 ```
 pnpm perf:tablet [--throttle <n>] [--preset low|balanced|high|all] [--runs <n>]
@@ -18,7 +18,7 @@ pnpm perf:tablet [--throttle <n>] [--preset low|balanced|high|all] [--runs <n>]
 - It aborts on a software renderer (SwiftShader, llvmpipe), where fps is meaningless; `--allow-software` overrides that for debugging the harness.
 - `--backend` sets the app's `?backend=` (see below) and fails a cell drawn on another backend; `auto` fails one not drawn on WebGPU, since it runs the WebGPU gate. The table names each cell's backend. For WebGPU it adds `--enable-unsafe-webgpu`, and on WSL `--use-webgpu-adapter=opengles`: WSL has no hardware Vulkan driver, so Dawn's OpenGL ES backend is its only hardware adapter, and that one runs in compatibility mode (no canvas MSAA).
 
-Needs a display (headed Chromium). On WSL it sets the GPU environment (`GALLIUM_DRIVER=d3d12`, `LD_LIBRARY_PATH=/usr/lib/wsl/lib`, ANGLE on desktop GL) when `/usr/lib/wsl/lib` exists; elsewhere Chromium picks its default GPU path.
+Runs in Chromium's new headless mode, so no window opens or takes focus. Headless Chromium on WSL2 has no GPU (see "Headless and the GPU"), so there it aborts on SwiftShader until you run it with `HEADED=1` (a window opens, off-screen). On WSL it sets the GPU environment (`GALLIUM_DRIVER=d3d12`, `LD_LIBRARY_PATH=/usr/lib/wsl/lib`, ANGLE on desktop GL) when `/usr/lib/wsl/lib` exists; elsewhere Chromium picks its default GPU path.
 
 ## Graphics backend
 
@@ -32,7 +32,7 @@ A WebGPU start that fails, or a lost WebGPU device, goes on with WebGL 2 for the
 
 WebGPU becomes the default (`DEFAULT_BACKEND_REQUEST` in `src/render/gpu-backend.ts` to `auto`) once it passes this gate on a core hardware adapter:
 
-- Desktop: headed real-GPU Chromium passes every High cell (`pnpm perf:tablet --throttle 1 --preset high --backend auto`).
+- Desktop: real-GPU Chromium (`HEADED=1` on WSL) passes every High cell (`pnpm perf:tablet --throttle 1 --preset high --backend auto`).
 - Tablet: `pnpm perf:tablet --throttle 6` still passes on WebGL 2, and the physical tablet check passes on both backends.
 - Look: `scripts/shoot-views.mjs` top-down shots on WebGPU differ from WebGL 2 at edges only.
 
@@ -46,9 +46,15 @@ Every pane is drawn into one app-owned 8-bit, 4-sample sRGB target (`src/render/
 
 It costs fill rate: SwiftShader frames, which CI e2e draws on, are slower than with a linear target, so the heavy e2e specs (`@heavy`, in `e2e/pinned-shoot.ts`) run in shards of their own (`.github/workflows/ci.yml`). Real-GPU frame time is checked with `pnpm perf:tablet` (see above), and a physical tablet still decides.
 
+## Headless and the GPU
+
+Every browser run is headless unless `HEADED=1`: a headed window grabs focus on the desktop, and under WSLg that is the Windows desktop. The default `offline` and `channels` projects, `pnpm shoot` and the `webgpu` project never needed a window. `pnpm test:perf`, `pnpm perf:tablet` and `E2E_GPU=1` use Playwright's `chromium` channel (the new headless mode) on the real GPU path when headless.
+
+On WSL2 the new headless mode does not get the GPU here: with Mesa d3d12 it logs `No suitable EGL configs found` and falls back to SwiftShader, probably because the user cannot read the DRM render node `/dev/dri/renderD128` (not in the `render` group; untested). Headed Chromium reaches the GPU through X11, so those runs need `HEADED=1`, which adds `--window-position=-32000,-32000` and `--no-startup-window` to keep the window off-screen. That softens the focus grab but may not remove it. Check which path a run took by reading `WEBGL_debug_renderer_info` (`pnpm perf:tablet` prints `GL renderer:`).
+
 ## Other tools
 
 - `pnpm preview:stop [--port <n>]` stops the listener on this checkout's e2e preview port (the one `pnpm test:e2e` prints) or the given port, and nothing else; use it instead of `pkill -f` on an orphaned preview.
-- `E2E_GPU=1 pnpm test:e2e` (WSL2 with WSLg and a GPU): the `offline` project in headed, off-screen Chromium on the real GPU (Mesa d3d12), much faster than SwiftShader; it fails fast on a software renderer. It drops the layout checks in `GPU_TEXT_METRICS` (`playwright.config.ts`) and can flake pixel-hash specs (the cockpit drag test), so CI's SwiftShader run stays the gate.
-- `pnpm test:perf` runs `e2e/perf/four-views.perf.ts` against the `?probe` page (see `src/render/probe.ts`) and owns the automated thresholds for the four-view layout.
+- `E2E_GPU=1 pnpm test:e2e` (WSL2 with WSLg and a GPU): the `offline` project on the real GPU (Mesa d3d12), much faster than SwiftShader; it fails fast on a software renderer, which is what headless Chromium gets on WSL2 (see "Headless and the GPU"), so it needs `HEADED=1` there (an off-screen window). It drops the layout checks in `GPU_TEXT_METRICS` (`playwright.config.ts`) and can flake pixel-hash specs (the cockpit drag test), so CI's SwiftShader run stays the gate.
+- `pnpm test:perf` (headless; `HEADED=1` for a window, needed for the GPU on WSL2) runs `e2e/perf/four-views.perf.ts` against the `?probe` page (see `src/render/probe.ts`) and owns the automated thresholds for the four-view layout.
 - The manual check on a physical tablet is in `CLAUDE.md` ("Tablet perf check").
