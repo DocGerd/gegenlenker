@@ -40,7 +40,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | cab.glassSill | 900 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.glassHeight | 756 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.sideGlassSetback | 176 mm | typical for the vehicle class, no source found |
-| MAN LE 18.280 | cab.sideGlassLength | 814 mm | typical for the vehicle class, no source found |
+| MAN LE 18.280 | cab.sideGlassLength | 1374 mm | door glass reaches the interior B-pillar 0.55 m behind the eye (render model), so the driver sees abeam; no source found |
 | MAN LE 18.280 | cab.grilleWidth | 1245 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.grilleSill | 144 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.grilleHeight | 540 mm | typical for the vehicle class, no source found |
@@ -78,7 +78,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Mercedes-Benz Arocs 1835 AK | cab.glassSill | 900 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.glassHeight | 756 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.sideGlassSetback | 176 mm | typical for the vehicle class, no source found |
-| Mercedes-Benz Arocs 1835 AK | cab.sideGlassLength | 814 mm | typical for the vehicle class, no source found |
+| Mercedes-Benz Arocs 1835 AK | cab.sideGlassLength | 1674 mm | door glass reaches the interior B-pillar 0.55 m behind the eye (render model), so the driver sees abeam; no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.grilleWidth | 1250 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.grilleSill | 144 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | cab.grilleHeight | 540 mm | typical for the vehicle class, no source found |

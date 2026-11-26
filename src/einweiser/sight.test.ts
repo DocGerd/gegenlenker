@@ -66,9 +66,15 @@ describe.each(pairs)('sight for $truck.id with $trailer.id', ({ truck, trailer }
     expect(sightOf(g, straight, bodyPoints({ x: sideFront, y: half + 1 }), []).direct).toBe(true);
   });
 
+  it('sees him directly level with the driver', () => {
+    const { eye } = truckAnchors(truck);
+    const point = { x: eye.x, y: cabGlass(truck).half + 1 };
+    expect(sightOf(g, straight, bodyPoints(point), []).direct).toBe(true);
+  });
+
   it('does not see him directly beside the cab behind the side glass', () => {
     const { eye } = truckAnchors(truck);
-    const point = { x: eye.x - 2, y: cabGlass(truck).half + 2 };
+    const point = { x: eye.x - 3, y: cabGlass(truck).half + 2 };
     expect(sightOf(g, straight, bodyPoints(point), []).direct).toBe(false);
   });
 

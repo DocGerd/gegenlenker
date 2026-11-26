@@ -77,12 +77,15 @@ type Box = {
   readonly h: readonly [number, number];
 };
 
+/** The smallest supported CSS viewport height (`docs/usage.md`): a 1080p laptop at 150 % scaling. */
+const MIN_HEIGHT = 585;
+
 /**
  * Default: each box is exhaustive, the boxes are not contiguous. Laptops incl. the short ones in
  * CLAUDE.md, 1080p and 1440p desktops, tablets in landscape and portrait.
  */
 const DEFAULT_BOXES: readonly Box[] = [
-  { name: 'laptop', w: [1280, 1600], h: [585, 800] },
+  { name: 'laptop', w: [1280, 1600], h: [MIN_HEIGHT, 800] },
   { name: 'desktop 1080p', w: [1900, 1940], h: [1060, 1100] },
   { name: 'desktop 1080p window', w: [1900, 1940], h: [900, 1000] },
   { name: 'desktop 1440p', w: [2400, 2560], h: [1300, 1440] },
@@ -93,8 +96,8 @@ const DEFAULT_BOXES: readonly Box[] = [
 
 /** `VERIFY_LAYOUT=full`: one contiguous box over the laptops and desktops, and one each for tablets in landscape and portrait. */
 const FULL_BOXES: readonly Box[] = [
-  { name: 'laptop and desktop', w: [1024, 2560], h: [426, 1440] },
-  { name: 'tablet landscape', w: [800, 1023], h: [426, 1000] },
+  { name: 'laptop and desktop', w: [1024, 2560], h: [MIN_HEIGHT, 1440] },
+  { name: 'tablet landscape', w: [800, 1023], h: [MIN_HEIGHT, 1000] },
   { name: 'tablet portrait', w: [600, 1280], h: [800, 1600] },
 ];
 
