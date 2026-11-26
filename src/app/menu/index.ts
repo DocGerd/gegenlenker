@@ -6,7 +6,6 @@ import { ignoreMultiClicks } from '../click-guard';
 import type { RunConfig } from '../drive';
 import { ignoreHeldBrakeKeys } from '../held-keys';
 import { bestResults } from '../storage';
-import { entryOf } from './catalogue';
 import { CONTENT } from './content';
 import { screenOf, type ActionId, type Item, type MenuState } from './graph';
 import { arrowFocus } from './keys';
@@ -22,6 +21,7 @@ import {
 } from './nav';
 import { entriesScreen } from './screens/entries';
 import { screenFrame } from './screens/frame';
+import { setupScreen } from './screens/setup';
 import { titleScreen } from './screens/title';
 
 export type MenuDeps = {
@@ -48,8 +48,7 @@ const ITEMS = '.menu-item';
 
 function headingOf(level: Level): string {
   const { title } = screenOf(level.screen);
-  if (title !== null) return t(title);
-  return level.entry === undefined ? '' : t(entryOf(level.entry).title);
+  return title === null ? '' : t(title);
 }
 
 /** Closing leaves the history entry alone: whatever replaces the menu takes it over. */
@@ -57,6 +56,8 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   let nav = initial;
   let teardown: (() => void)[] = [];
   let closed = false;
+  // Set by Start until the drive replaces the menu (or a failure notice does): nothing navigates meanwhile.
+  let busy = false;
 
   const state = (): MenuState => {
     const best = bestResults();
@@ -68,6 +69,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   };
 
   const go = (event: NavEvent): boolean => {
+    if (busy) return false;
     const next = navigate(nav, event);
     if (next === nav) return false;
     nav = next;
@@ -79,8 +81,20 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   };
   // The popped entry is gone, so the new level holds a fresh one unless it is the title.
   const onPop = (): void => {
+    if (busy) {
+      deps.hold(onPop);
+      return;
+    }
     nav = navigate(nav, { type: 'back' });
     show();
+  };
+
+  const startRun = (button: HTMLButtonElement, run: RunConfig): void => {
+    if (busy) return;
+    busy = true;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    deps.start(run);
   };
 
   const actions: Readonly<Record<ActionId, () => void>> = {
@@ -135,6 +149,17 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           done: state().done,
           back,
           pick: (entry) => go({ type: 'pick', entry }),
+        });
+      case 'setup':
+        if (level.entry === undefined) throw new Error('Setup opened without an entry');
+        return setupScreen({
+          entry: level.entry,
+          step: level.step ?? 0,
+          back,
+          next: () => {
+            go({ type: 'next' });
+          },
+          start: startRun,
         });
       default:
         return contentScreen(level);

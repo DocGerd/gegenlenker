@@ -22,6 +22,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Bar across the corridor's ends at a block       | stop bar                                    | Querbalken                                   |
 | Goal of an exercise                             | target                                      | Ziel                                         |
 | One attempt at an exercise                      | run                                         | Fahrt                                        |
+| Run setup action that starts the drive          | start                                       | Starten                                      |
 | Point to drive through before the target        | turn point                                  | Wendepunkt                                   |
 | Day or night of a drive                         | time of day (Day / Night)                   | Tageszeit (Tag / Nacht)                      |
 | Render quality setting (Low / Balanced / High)  | graphics quality                            | Grafikqualität (Niedrig / Ausgewogen / Hoch) |

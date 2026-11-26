@@ -44,48 +44,72 @@ export async function pageMessages(page: Page): Promise<Messages> {
   return catalogue(await page.locator('html').getAttribute('lang'));
 }
 
-const menu = (page: Page): Locator => page.locator('main.menu');
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** Today's page is its own setup: it is open once `main.menu` shows the entry's control. */
+const screen = (page: Page, id: string): Locator => page.locator(`[data-screen="${id}"]`);
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** Walks from wherever the menu is, through the title and the entry's list, to its setup. */
 export async function openSetup(page: Page, messages: Messages, entry: MenuEntry): Promise<void> {
-  await menu(page).waitFor();
+  await toTitle(page, messages);
+  const [item, list] =
+    entry.kind === 'exercise'
+      ? (['exercises', 'exercises'] as const)
+      : (['freeYard', 'yards'] as const);
+  await screen(page, 'title').getByRole('button', { name: messages[item], exact: true }).click();
+  const name = new RegExp(`^${escapeRegExp(entryName(messages, entry))}`);
+  await screen(page, list).getByRole('button', { name }).click();
   await startControl(page, messages, entry).waitFor();
 }
 
+/** The setup screen, only while it shows `entry`: its heading ends with the entry's name. */
+const setupOf = (page: Page, messages: Messages, entry: MenuEntry): Locator =>
+  screen(page, 'setup').filter({
+    has: page.getByRole('heading', {
+      level: 1,
+      name: new RegExp(`${escapeRegExp(entryName(messages, entry))}$`),
+    }),
+  });
+
 export function startControl(page: Page, messages: Messages, entry: MenuEntry): Locator {
-  const name = entryName(messages, entry).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return menu(page).getByRole('button', { name: new RegExp(`^${name}`) });
+  return setupOf(page, messages, entry).getByRole('button', { name: messages.start, exact: true });
 }
 
 export function setupBests(page: Page, messages: Messages, entry: MenuEntry): Locator {
-  return startControl(page, messages, entry);
+  return setupOf(page, messages, entry).locator('[data-menu="bests"]');
 }
 
-const option = (page: Page, name: string): Locator => page.locator(`[data-menu="${name}"]`);
+const radioGroup = (scope: Locator, messages: Messages, name: MessageKey): Locator =>
+  scope.getByRole('radiogroup', { name: messages[name], exact: true });
 
-async function choose(page: Page, name: string, value: string): Promise<void> {
-  await option(page, name).selectOption(value);
+async function choose(scope: Locator, messages: Messages, name: MessageKey, value: string) {
+  await radioGroup(scope, messages, name).locator(`input[value="${value}"]`).check();
 }
 
-async function read(page: Page, name: string): Promise<string> {
-  return option(page, name).inputValue();
+async function read(scope: Locator, messages: Messages, name: MessageKey): Promise<string> {
+  return radioGroup(scope, messages, name).locator('input:checked').inputValue();
 }
+
+// Settings still render as selects until their screen lands.
+const legacyOption = (page: Page, name: string): Locator => page.locator(`[data-menu="${name}"]`);
 
 export async function chooseRunOption<K extends keyof RunOptions>(
   page: Page,
-  _messages: Messages,
+  messages: Messages,
   name: K,
   value: RunOptions[K],
 ): Promise<void> {
-  await choose(page, name, value);
+  await choose(screen(page, 'setup'), messages, name, value);
 }
 
 export async function runOptionValue(
   page: Page,
-  _messages: Messages,
+  messages: Messages,
   name: keyof RunOptions,
 ): Promise<string> {
-  return read(page, name);
+  return read(screen(page, 'setup'), messages, name);
 }
 
 export async function startEntry(
@@ -126,7 +150,7 @@ export async function chooseSetting<K extends keyof SettingOptions>(
   name: K,
   value: SettingOptions[K],
 ): Promise<void> {
-  await choose(page, name, value);
+  await legacyOption(page, name).selectOption(value);
   if (name === 'language' && (await pageMessages(page)) !== catalogue(value))
     throw new Error(`language did not switch to ${value}`);
 }
@@ -136,7 +160,7 @@ export async function settingValue(
   _messages: Messages,
   name: keyof SettingOptions,
 ): Promise<string> {
-  return read(page, name);
+  return legacyOption(page, name).inputValue();
 }
 
 /**
@@ -144,10 +168,17 @@ export async function settingValue(
  * Polls from Node: the pinned clock freezes `requestAnimationFrame`, so an in-page wait never fires.
  */
 export async function toTitle(page: Page, messages: Messages): Promise<void> {
-  await page.getByRole('heading', { name: messages.appName }).waitFor();
   const deadline = Date.now() + TITLE_TIMEOUT_MS;
+  const title = screen(page, 'title').getByRole('heading', { level: 1, name: messages.appName });
+  // Escape goes up one level on a menu screen only: a drive, pause sheet or result takes it for itself.
+  const away = page.locator('[data-screen]:not([data-screen="title"])');
+  while (!(await title.isVisible())) {
+    if (Date.now() > deadline) throw new Error('the title did not show');
+    if (await away.isVisible()) await page.keyboard.press('Escape');
+    else await sleep(TITLE_POLL_MS);
+  }
   while (await page.evaluate(() => history.state !== null)) {
     if (Date.now() > deadline) throw new Error('history entry of a screen outlived the title');
-    await new Promise<void>((resolve) => setTimeout(resolve, TITLE_POLL_MS));
+    await sleep(TITLE_POLL_MS);
   }
 }

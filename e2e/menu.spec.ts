@@ -6,6 +6,14 @@ import { TRAILER_IDS, TRUCK_IDS } from '../src/contracts/vehicle';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
 import { expect, test } from './fixtures';
+import {
+  chooseRunOption,
+  exerciseEntry,
+  openSetup,
+  setupBests,
+  startControl,
+  yardEntry,
+} from './menu-flow';
 import { seedStorage } from './menu-seed';
 
 const screen = (page: Page, id: string): Locator => page.locator(`[data-screen="${id}"]`);
@@ -185,6 +193,116 @@ test('a double click on a title entry moves one level', async ({ page }) => {
     point,
   );
   expect(under).toContain('menu-row');
+});
+
+test('Enter alone walks from the title to a focused Start', async ({ page }) => {
+  await page.goto('./');
+  await expect(titleEntry(page, en.exercises)).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(screen(page, 'exercises')).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(startControl(page, en, exerciseEntry('straight-reverse'))).toBeFocused();
+  await expect(screen(page, 'setup').getByRole('heading', { level: 1 })).toHaveText(
+    `1 ${en.exerciseStraightReverse}`,
+  );
+});
+
+test('focus returns to the row that opened setup, then to the opener on the title', async ({
+  page,
+}) => {
+  await page.goto('./');
+  const open = titleEntry(page, en.exercises);
+  await open.click();
+  const row = screen(page, 'exercises').getByRole('button', {
+    name: new RegExp(`^${en.exerciseReverseCorner}`),
+  });
+  await row.click();
+  await expect(screen(page, 'setup')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(row).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(open).toBeFocused();
+});
+
+test('Esc and goBack step one level each from setup to the title', async ({ page }) => {
+  const entry = exerciseEntry('reverse-bay');
+  await page.goto('./');
+  await openSetup(page, en, entry);
+  await page.keyboard.press('Escape');
+  await expect(screen(page, 'exercises')).toBeVisible();
+  await expect.poll(() => historyState(page)).not.toBeNull();
+  await page.keyboard.press('Escape');
+  await expect(screen(page, 'title')).toBeVisible();
+  await expect.poll(() => historyState(page)).toBeNull();
+
+  await openSetup(page, en, entry);
+  await page.goBack();
+  await expect(screen(page, 'exercises')).toBeVisible();
+  await expect.poll(() => historyState(page)).not.toBeNull();
+  await page.goBack();
+  await expect(screen(page, 'title')).toBeVisible();
+  await expect.poll(() => historyState(page)).toBeNull();
+});
+
+test('setup shows the stored run options checked and stores a change', async ({ page }) => {
+  const [, arocs] = TRUCK_IDS;
+  const [, hueffermann] = TRAILER_IDS;
+  await seedStorage(page, {
+    settings: { truckId: arocs, trailerId: hueffermann, lighting: 'night', mirrorsOnly: true },
+  });
+  const entry = exerciseEntry('straight-reverse');
+  const radio = (group: string, value: string): Locator =>
+    screen(page, 'setup')
+      .getByRole('radiogroup', { name: group, exact: true })
+      .locator(`input[value="${value}"]`);
+  await page.goto('./');
+  await openSetup(page, en, entry);
+  await expect(radio(en.truck, arocs)).toBeChecked();
+  await expect(radio(en.trailer, hueffermann)).toBeChecked();
+  await expect(radio(en.lighting, 'night')).toBeChecked();
+  await expect(radio(en.driveView, 'mirrors')).toBeChecked();
+
+  await chooseRunOption(page, en, 'lighting', 'day');
+  await page.reload();
+  await openSetup(page, en, entry);
+  await expect(radio(en.lighting, 'day')).toBeChecked();
+  await expect(radio(en.truck, arocs)).toBeChecked();
+});
+
+test("a yard's setup shows no tolerance and no bests", async ({ page }) => {
+  await page.goto('./');
+  await openSetup(page, en, yardEntry('depot'));
+  const setup = screen(page, 'setup');
+  await expect(setup.getByRole('heading', { level: 1 })).toHaveText(
+    `${en.freeYard} · ${en.layoutDepot}`,
+  );
+  await expect(setup).toContainText(en.briefDepot);
+  await expect(setup).not.toContainText(en.tolerance);
+  await expect(setupBests(page, en, yardEntry('depot'))).toHaveCount(0);
+  await expect(setup).not.toContainText(en.noResult);
+});
+
+test('the last row and Start can be reached at 1280x585 in German, with Back and the heading in view', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    locale: 'de-DE',
+    viewport: { width: 1280, height: 585 },
+  });
+  const page = await context.newPage();
+  const entry = exerciseEntry('slalom');
+  await page.goto('./');
+  await openSetup(page, de, entry);
+  const setup = screen(page, 'setup');
+  const last = setup.getByRole('radiogroup', { name: de.driveView, exact: true });
+  const start = startControl(page, de, entry);
+  for (const target of [last, start]) {
+    await target.scrollIntoViewIfNeeded();
+    await expect(target).toBeInViewport();
+    await expect(setup.getByRole('button', { name: de.back })).toBeInViewport();
+    await expect(setup.getByRole('heading', { level: 1 })).toBeInViewport();
+  }
+  await context.close();
 });
 
 test.describe('a content chunk that fails to load', () => {
