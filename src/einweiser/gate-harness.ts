@@ -2,7 +2,12 @@
  * Test-only: the Einweiser gate (`docs/einweiser-spike.md` §9, PR 2) that the per-exercise
  * `gate-*.test.ts` files share. A scripted, `walkStep`-only Einweiser guides the AI driver.
  */
-import type { EinweiserFault, EinweiserResult, SignId } from '../contracts/einweiser';
+import {
+  HOLD_STEPS,
+  type EinweiserFault,
+  type EinweiserResult,
+  type SignId,
+} from '../contracts/einweiser';
 import type { ExerciseDefinition, ExerciseId, TargetZone } from '../contracts/exercise';
 import type { Obstacle, Rect2 } from '../contracts/layout';
 import type {
@@ -33,7 +38,7 @@ import {
 } from '../sim/kinematics';
 
 import { createPilot, CURVE_RADIUS, type Pilot } from './driver';
-import { createEinweiserRun, HOLD_STEPS } from './track';
+import { createEinweiserRun } from './track';
 import { rejoin, type Segment, straighten } from './gate-recovery';
 
 import { clearance } from './faults';

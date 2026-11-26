@@ -27,6 +27,9 @@ export const EINWEISER_FAULTS = [
 ] as const;
 export type EinweiserFault = (typeof EINWEISER_FAULTS)[number];
 
+/** His pose is sampled every this many steps (10 Hz, estimate) and held in between (`docs/einweiser-spike.md` §5). */
+export const HOLD_STEPS = 6;
+
 /** How the driver sees him: directly through the cab glass, and in which mirrors. */
 export type Sight = { readonly direct: boolean; readonly mirrors: readonly MirrorId[] };
 

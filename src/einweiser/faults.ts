@@ -1,10 +1,9 @@
-import type { SignId } from '../contracts/einweiser';
+import { HOLD_STEPS, type SignId } from '../contracts/einweiser';
 import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
 import { DT } from '../sim/constants';
 import { bodyFootprints } from '../sim/geometry';
 import { MOVEMENT_SIGNS, REACTION_TIME } from './signs';
-import { HOLD_STEPS } from './track';
 import { overlaps, WALKER_RADIUS } from './walk';
 
 type Bodies = Pick<SimSnapshot, 'truck' | 'coupling' | 'dolly' | 'trailer'>;
