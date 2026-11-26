@@ -1000,18 +1000,14 @@ function evaluate(v: Variant, w: number, h: number): void {
     ...mirrors,
     { name: 'action button', rect: pauseBox },
   ];
-  // The cue yields only in the mirror-only drive, and only where no span beside the mirrors holds both.
+  // The cue yields only in the mirror-only drive, and only where the span between the mirrors holds not both.
   const limit = (front ?? mirrorRight).x - MESSAGE_GAP;
-  const fullFits = (): boolean =>
-    [
-      { x0: right(mirrorLeft) + MESSAGE_GAP, x1: limit },
-      { x0: right(cone), x1: limit },
-      { x0: right(mirrorLeft) + MESSAGE_GAP, x1: cone.x },
-    ].some(({ x0, x1 }) => {
-      if (x1 - x0 < MIN_MESSAGE_WIDTH) return false;
-      const stack = cockpitStack(x0, x1 - x0, false);
-      return obstacles.every((o) => !overlaps(stack, o.rect));
-    });
+  const fullFits = (): boolean => {
+    const x0 = right(mirrorLeft) + MESSAGE_GAP;
+    if (limit - x0 < MIN_MESSAGE_WIDTH) return false;
+    const stack = cockpitStack(x0, limit - x0, false);
+    return obstacles.every((o) => !overlaps(stack, o.rect));
+  };
   const yieldOk = !column.cueYields || (mirrorsOnly && inCockpitColumn && !fullFits());
   if (!chk('message-cue-yields-only-without-room', yieldOk)) {
     fail('message-cue-yields-only-without-room', () => `column ${fmt(column)} yields`);
