@@ -2145,3 +2145,58 @@ test(
     }
   },
 );
+
+test(
+  'a paused mirror-only drive redraws the mirrors when the pause sheet changes the wide-angle option',
+  heavyAt('low'),
+  async ({ browser }) => {
+    test.slow();
+    const context = await browser.newContext({
+      locale: 'en-US',
+      // A mirror-only drive shows class IV, and drops it, only at some sizes.
+      viewport: { width: 1600, height: 900 },
+    });
+    try {
+      const page = await context.newPage();
+      await seedStorage(page, { settings: { graphics: 'low' } });
+      await page.goto('./');
+      await startExercise(page, en, 'straight-reverse', { driveView: 'mirrors' });
+      await hudReady(page, { exact: false, mirrorsOnly: true });
+      const wide = page.locator('[data-hud^="wide"]:not([hidden])');
+      await expect(wide).toHaveCount(2);
+      const [old] = await boxes(page.locator('[data-hud="wideLeft"]'));
+      if (old === undefined) throw new Error('wideLeft');
+      const clip = {
+        x: old.left,
+        y: old.top,
+        width: old.right - old.left,
+        height: old.bottom - old.top,
+      };
+      // The bare canvas under the class IV mirror, with the chrome and the sheet hidden.
+      const bare = async () => {
+        await page.addStyleTag({
+          content: '.hud, .ctl, [class^="ctl-"], .pause { visibility: hidden !important }',
+        });
+        try {
+          return (await page.screenshot({ clip })).toString('base64');
+        } finally {
+          await page.evaluate(() => document.head.lastElementChild?.remove());
+        }
+      };
+      const before = await bare();
+
+      await page.getByRole('button', { name: en.pause }).click();
+      const sheet = page.getByRole('dialog', { name: en.paused });
+      await sheet.getByRole('button', { name: en.settings }).click();
+      await sheet
+        .getByRole('radiogroup', { name: en.wideMirrors })
+        .getByRole('radio', { name: en.settingOff })
+        .check();
+      await expect(wide).toHaveCount(0);
+      // The sim stands still behind the sheet: only the dirty flag makes the canvas redraw.
+      await expect.poll(bare).not.toBe(before);
+    } finally {
+      await context.close();
+    }
+  },
+);
