@@ -10,7 +10,7 @@ The issue cites ASR A1.3 Anhang 1; the hand signs are **ASR A1.3 Anhang 2 "Handz
 
 - Decided (owner): exactly the nine vehicle signs of DGUV V70 Anhang 4. No Heben, Senken or Langsam (ASR's "Handzeichen für Bewegungen — vertikal", not in V70), no invented end sign.
 - Decided (owner): signs are read in the Einweiser's frame. Herkommen = the vehicle moves toward the Einweiser, forward or in reverse depending on where he stands; Entfernen = away from him; Rechts/Links fahren = toward his own right/left ("vom Einweiser aus gesehen", ASR wording).
-- Rules the trainer enforces: the Einweiser stays in the driver's field of view and never between the moving vehicle and obstacles in its path; the driver stops at once when he loses sight of the Einweiser (DGUV V70 §46(2) and its DA; BG Verkehr G2 "sofort anhalten!").
+- Source rules: the Einweiser stays in the driver's field of view and never between the moving vehicle and obstacles in its path; the driver stops at once when he loses sight of the Einweiser (DGUV V70 §46(2) and its DA; BG Verkehr G2 "sofort anhalten!"). The trainer enforces them through the lost-sight grace timer (§2) and the `inPath` and `outOfSight` faults (§4).
 - Walking backwards: G2 "sollte nicht rückwärtsgehen", DLRG "niemals", UKH "möglich, wenn es der Verkehr und die Straße erlauben". Decided (owner): an advisory debrief note, not a fault.
 - Distances: ASR A1.3 and DGUV V70 give none. BG E5 (refuse collection) draws the Einweiser about 3 m behind the vehicle rear, outside its track. DLRG teaches its own sign set with vehicle-frame meanings, so it is weak authority for BG-sign rules.
 
@@ -51,8 +51,8 @@ Per step the driver reads the held Einweiser pose, the active sign and the sight
 ### Einweiser frame
 
 - Decided (owner): forward and back are set by the cab's transverse axis at the driver's position ("back and forth is based on the querachse of the führerhaus, at level of driver"), i.e. the line through `truckAnchors(spec).eye` across the truck heading. Ahead of it, Herkommen is D and Entfernen R; behind it, Herkommen is R and Entfernen D. Abeam is a narrow band on that line (±0.5 m, estimate), where the sign is unclear and the driver waits.
-- The side is read continuously, so walking cannot flip the gear without passing through the band. Call: when the band reaches him while the sign is held (the cab draws level, or he walks level with it), the driver stops as on Halt, with no `unclear` fault; only a sign given from inside the band is unclear.
-- Call: from standstill, Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the axis; while moving they keep the current gear.
+- The side is read continuously, so walking cannot flip the gear without passing through the band. Call (open question 1): when the band reaches him while the sign is held (the cab draws level, or he walks level with it), the driver stops as on Halt, with no `unclear` fault; only a sign given from inside the band is unclear.
+- Call (open question 2): from standstill, Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the axis; while moving they keep the current gear.
 - A gear change stops first (lever 0, brake), shifts at standstill, then moves; the sim counts it in `directionChanges`.
 - Rechts/Links: the indicated world direction is the Einweiser's heading −90° (right) or +90° (left) (sim plane: counter-clockwise positive), from the held pose at recognition. Its side relative to the leading end's direction of motion is the steer goal.
 - Worked cases (straight combination): behind a reversing combination, facing it, the Einweiser faces the truck's heading, so his right is the driver's right. In front of a truck driving forward, facing it, his right is the driver's left: the driver mirrors.
@@ -82,18 +82,25 @@ A sign shown for less than its recognition time is never acted on.
 
 ### Unclear signs (deterministic)
 
-Nothing is misread. A sign the driver cannot read is unclear: it waits, or stops if moving, and the tracker scores `unclear`. Pure functions of pose, facing, range and timing; no `Math.random` (banned in core lint), no seed.
+Nothing is misread. A sign the driver cannot read is unclear: it waits, or stops if moving, so an unclear Halt still stops the vehicle. Pure functions of pose, facing, range and timing; no `Math.random` (banned in core lint), no seed.
 
-- Station: Herkommen/Entfernen given from inside the abeam band (above).
-- Facing, measured between the Einweiser's heading and the line from him to where he is seen (the eye, or the mirror mount). Decided (owner): beyond a tolerance (60°, estimate) the direction signs (Herkommen, Entfernen, Rechts/Links fahren) are unclear, never swapped. Achtung, Halt and Halt – Gefahr are always read.
+- Station (decided (owner)): Herkommen/Entfernen given from inside the abeam band (above).
+- Facing is measured between the Einweiser's heading and the line from him to where he is seen (the eye, or the mirror mount), with a tolerance of 60° (estimate).
+- Readability (decided (owner), §3.5): every sign needs its hand points seen on its path and him within the reading range.
+
+| Signs                                     | Facing tolerance               | Readability                                                     | `unclear` fault                                               |
+| ----------------------------------------- | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------- |
+| Herkommen, Entfernen, Rechts/Links fahren | applies, never swapped (owner) | applies (owner)                                                 | station and facing: yes (owner); readability: open question 5 |
+| Achtung, Halt, Halt – Gefahr              | does not apply (owner)         | applies (owner): a Halt seen without its hand points is unclear | open question 5                                               |
+| Abfahren, Abstandsverringerung            | open question 4                | applies (owner)                                                 | open question 5                                               |
+
 - Decided (owner): facing is checked at recognition only, so he may turn away afterwards, e.g. to walk forward (UKH: "Im Zweifel ausschließlich vorwärts laufen und Fahrzeug nachrücken lassen").
-- A sign seen without its hand points, or beyond the reading range (§3.5).
 - Out of sight or too short: ignored (scored, §4).
 - Later option: a seeded "noisy driver" with the seed in the log; not in the MVP.
 
 ### Lost sight
 
-- Sources say stop at once. Decided (owner): a bounded grace timer. A loss shorter than `T_r` is forgiven, and a cumulative timer caps the forgiven losses (estimate; Call: summed since the vehicle last stood); a loss that lasts `T_r`, or one that takes the sum over the cap, starts the stop, which brakes (`BRAKE_DECEL`). So a pillar or a mirror edge that hides him briefly does not stop the vehicle, but repeated losses do. PR 2 pins the stop from creep inside the ~3 m spacing E5 shows.
+- Sources say stop at once. Decided (owner): a bounded grace timer. A loss shorter than `T_r` is forgiven, and a cumulative timer caps the forgiven losses (estimate; Call, open question 3: summed since the vehicle last stood); a loss that lasts `T_r`, or one that takes the sum over the cap, starts the stop, which brakes (`BRAKE_DECEL`). So a pillar or a mirror edge that hides him briefly does not stop the vehicle, but repeated losses do. PR 2 pins the stop from creep inside the ~3 m spacing E5 shows.
 - Decided (owner): after a lost-sight stop a held sign restarts the driver once it is re-recognised after sight returns (full recognition time); a key held only out of sight counts for nothing. This matches UKH: stop first, the Einweiser repositions, restores sight, then signals again.
 
 ## 3. Einweiser view and body
@@ -185,11 +192,11 @@ A HUD cue beside the sign name: an eye icon and text, never colour alone.
 | Result / fault            | Rule                                                                                                                                                                                                                                                                                                                        |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | run over (fail, run ends) | decided (owner): the walker circle at the held pose, inflated by his displacement since the previous held sample (zero while he stands), overlaps a body (`bodyFootprints(…)`) while the vehicle moves faster than `STOPPED_SPEED`; so live and replay agree, and a fail can come up to one hold interval early, never late |
-| `inPath`                  | while moving, the person lies inside the swept footprints within stopping distance + 1 m (decided (owner), the only in-path fault; the cap is a trainer convention, since §46(2) sets none)                                                                                                                                 |
+| `inPath`                  | while moving, the person lies inside the swept footprints within stopping distance at the snapshot's speed + 1 m (`T_r` and the margin hashed, §5) (decided (owner), the only in-path fault; the cap is a trainer convention, since §46(2) sets none)                                                                       |
 | `tooClose`                | while moving, clearance to any body < 0.5 m (estimate)                                                                                                                                                                                                                                                                      |
 | `outOfSight`              | sight lost while moving: every loss the driver stops for (§2); repositioning while the vehicle stands is allowed (UKH)                                                                                                                                                                                                      |
 | `signOutOfSight`          | a sign given while not in sight                                                                                                                                                                                                                                                                                             |
-| `unclear`                 | a direction sign the driver could not read (station, facing, reading range; §2)                                                                                                                                                                                                                                             |
+| `unclear`                 | a sign the driver could not read, per the table in §2 (station, facing, readability)                                                                                                                                                                                                                                        |
 | `lateHalt`                | an obstacle contact while a movement sign showed and `contactAhead` (real contact query) had been true for longer than `T_r`                                                                                                                                                                                                |
 | `noAchtung`               | a movement sign before the first Achtung (counted once; the driver still follows; decided (owner))                                                                                                                                                                                                                          |
 
@@ -248,7 +255,7 @@ Decided (owner): the AI driver's `ControlVector`s are logged and authoritative (
   - The sim is untouched. The person is not in the sim's `ContactQuery`: the hit ends the run, so the sim need not block for it, and a controls-only replay cannot diverge. So `SIM_REVISION` does not move.
   - `dataFingerprint` is unchanged. Einweiser runs pass `scoring: { ...SCORING_THRESHOLDS, ...EINWEISER_THRESHOLDS, EINWEISER_REVISION }` and `RunIds` gains `role`, so driver runs keep their fingerprints and `run.test.ts` digests (evidence the seam refactor is behaviour-neutral).
   - `dataFingerprint` leaves out data the derived faults read: obstacle heights (visual-only today), decor, the `TruckSpec` eye, mirror and cab Params, the moved optics, the cab and body heights, the sign hand points, and `PREDICT_STEP`/`CONTACT_WARN_DISTANCE` (outside `SIM_CONSTANTS`, yet `contactAhead` reads them). `resolveRun` adds them to that `scoring` for Einweiser runs, so a change to any of them retires stored Einweiser logs instead of replaying them with other faults.
-  - Shared reading rules feed both the driver and the derived faults: sight geometry, the cab-axis band, the facing tolerance, the reading range, `T_r` and the grace timer (`lateHalt`, `outOfSight`); the Achtung rule feeds only the faults. They live in `src/einweiser/signs.ts` and `sight.ts`, are hashed with `EINWEISER_THRESHOLDS`, and a change to them, to Einweiser scoring or to `predict.ts` bumps `EINWEISER_REVISION`. Driver-only tuning (planner candidates, horizon, cost and hysteresis, lever values, recognition time, the braking look-ahead) needs nothing. One pinned Einweiser digest per layout (a fixed v4 log) joins `run.test.ts`.
+  - Shared reading rules feed both the driver and the derived faults: sight geometry, the cab-axis band, the facing tolerance, the reading range, the recognition times (facing and `unclear` are judged at recognition), `T_r` and the grace timer (`lateHalt`, `outOfSight`); the Achtung rule feeds only the faults. They live in `src/einweiser/signs.ts` and `sight.ts`, are hashed with `EINWEISER_THRESHOLDS`, and a change to them, to Einweiser scoring or to `predict.ts` bumps `EINWEISER_REVISION`. `inPath` takes its stopping distance from the snapshot's speed with the hashed `T_r` and its own hashed 1 m margin, so driver-only tuning (planner candidates, horizon, cost and hysteresis, lever values, the braking look-ahead) needs nothing. One pinned Einweiser digest per layout (a fixed v4 log) joins `run.test.ts`.
 - Layering:
   - New core dir `src/einweiser/` (`signs.ts`, `sign-poses.ts`, `sight.ts`, `walk.ts`, `driver.ts`, `track.ts`) and types in `src/contracts/einweiser.ts`. Add the dir to `CORE` in `eslint.config.js` and to `tsconfig.core.json` `include`, with rules: sim imports neither `einweiser` nor `scoring`, and `einweiser` does not import `scoring`.
   - Not in `src/sim`: the sim stays the vehicle model whose revision guards driver runs, and the driver is outside the replay contract.
@@ -351,7 +358,16 @@ Estimate: nine PRs, of which PR 2 carries the risk. PR 3 starts once the gate pa
 
 ## Open questions for the owner
 
-None.
+Proposals the owner has not confirmed:
+
+1. Cab level (§2): when the abeam band reaches him while Herkommen/Entfernen is held, the driver stops as on Halt, with no `unclear` fault.
+2. From standstill (§2): Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the cab axis.
+3. Grace cap (§2): the cumulative lost-sight timer sums forgiven losses since the vehicle last stood.
+
+New, from reconciling the unclear-sign rules (§2):
+
+4. Facing for Abfahren and Abstandsverringerung: do they need the facing tolerance like the direction signs, or are they read whatever his facing, like Achtung and Halt?
+5. `unclear` fault for an unreadable sign (hand points not seen, or out of range): scored for every sign, or only for direction signs? The driver waits or stops either way.
 
 ## Proposed glossary rows
 
