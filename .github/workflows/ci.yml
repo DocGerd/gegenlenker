@@ -124,7 +124,7 @@ jobs:
           - { id: 3, runs: 'heavy:1/16 heavy:7/16 light:1/6' }
           - { id: 4, runs: 'layout:4/12 layout:10/12 slow:5/12' }
           - { id: 5, runs: 'heavy:5/16 light:3/6 slow:10/12' }
-          - { id: 6, runs: 'heavy:6/16 heavy:10/16 heavy:13/16' }
+          - { id: 6, runs: 'heavy:6/16 heavy:13/16 slow:2/12' }
           - { id: 7, runs: 'layout:6/12 light:2/6 slow:4/12' }
           - { id: 8, runs: 'heavy:14/16 slow:7/12' }
           - { id: 9, runs: 'layout:3/12 layout:7/12 light:4/6' }
@@ -135,7 +135,7 @@ jobs:
           - { id: 14, runs: 'layout:11/12 slow:12/12' }
           - { id: 15, runs: 'heavy:8/16 slow:6/12' }
           - { id: 16, runs: 'layout:5/12 slow:11/12' }
-          - { id: 17, runs: 'slow:2/12 slow:9/12' }
+          - { id: 17, runs: 'heavy:10/16 slow:9/12' }
           - { id: 18, runs: 'heavy:3/16 heavy:11/16' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
