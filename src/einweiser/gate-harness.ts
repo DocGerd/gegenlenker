@@ -262,6 +262,8 @@ const TRACK_KEEP = 0.03;
 /** A reverse whose best sign plan still hits something within this (s) is stopped and rescued. */
 const DOOM_WITHIN = 4;
 const MAX_RESCUES = 2;
+/** A forward leg that is doomed this close (m) to its end stops there and counts as done. */
+const CUT_SHORT = 8;
 /** The rescue pulls forward until both joints are within this (rad), at least `RESCUE_MIN` and at most `RESCUE_MAX` metres. */
 const RESCUE_STRAIGHT = 0.02;
 const RESCUE_MIN = 4;
@@ -1074,6 +1076,14 @@ function scripted(world: World, planned: readonly Leg[]) {
       }
       if (S0 !== null && !pending && inSight && step % 15 === 0) {
         const next = choose(s, l, at, held, S0);
+        // forward, a path whose end the combination cannot follow is cut short rather than hit
+        if (doomed && l.gear === 'D' && togo < CUT_SHORT && canShow(s, held, 'halt')) {
+          note = `short@${(step / 60).toFixed(1)}`;
+          show('halt', step);
+          phase = 'stopping';
+          finishing = true;
+          return { keys: NO_KEYS, heading, sign };
+        }
         if (doomed && l.gear === 'R' && rescues < MAX_RESCUES && canShow(s, held, 'halt')) {
           note = `doomed@${(step / 60).toFixed(1)}`;
           replan = true;
@@ -1302,7 +1312,7 @@ const REVERSE_HORIZON: Partial<Record<ExerciseId, number>> = { slalom: 15 };
 const RECOVER: Partial<Record<ExerciseId, number>> = {
   'straight-reverse': 10,
   'reverse-bay': 10,
-  'dock-ramp': 10,
+  'dock-ramp': 20,
   slalom: 6,
 };
 
@@ -1494,11 +1504,7 @@ const LEGS: Partial<Record<ExerciseId, (setup: Setup) => Leg[]>> = {
       {
         gear: 'D',
         path: forward,
-        anchors: (i) => [
-          beside(forward, i, 8, 0),
-          beside(forward, i, 10, 0),
-          beside(forward, i, 6, 0),
-        ],
+        anchors: (i) => forwardAnchors(forward, i),
       },
       {
         gear: 'R',
