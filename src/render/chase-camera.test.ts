@@ -44,7 +44,7 @@ import { parseShell } from './glb-shells';
 import { KEYS } from './palette';
 import { AIDS_LAYER, CAB_LAYER, CAMERA_FAR, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
 import { skylineGeometry } from './skyline-geometry';
-import { skylineBuildings } from './skyline-layout';
+import { sceneryBuildings } from './skyline-layout';
 import { proceduralTruck } from './vehicle-visual';
 
 // Landscape-screen pane, one with the HUD's free rect cut down to a corner, a square one and a wide strip.
@@ -371,7 +371,9 @@ describe('chase camera', () => {
   });
 
   it('keeps the skyline inside the far plane from the farthest eye over the layout bounds', () => {
-    const vertices = skylineGeometry(skylineBuildings(BOUNDS)).getAttribute('position');
+    const vertices = skylineGeometry(
+      sceneryBuildings(resolveLayout(layouts.depot, null)),
+    ).getAttribute('position');
     const vertex = new Vector3();
     let reach = 0;
     for (let i = 0; i < vertices.count; i++) {
@@ -410,7 +412,9 @@ describe('free camera', () => {
   const frame = FRAMES[1] as ChaseFrame;
 
   it('keeps the skyline inside the far plane from the highest eye over any corner of the layout bounds', () => {
-    const vertices = skylineGeometry(skylineBuildings(BOUNDS)).getAttribute('position');
+    const vertices = skylineGeometry(
+      sceneryBuildings(resolveLayout(layouts.depot, null)),
+    ).getAttribute('position');
     const vertex = new Vector3();
     const eye = new Vector3();
     let reach = 0;

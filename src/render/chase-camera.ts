@@ -16,6 +16,7 @@ import { resolveCombination } from '../vehicles/resolve';
 import { CAB_HEIGHT, FRAME_TOP } from './cab-dims';
 import { FREE_FOV, poseFromGaze } from './free-look';
 import { CAMERA_FAR, CHASE_LAYERS, enableLayers } from './seams';
+import { sceneryBuildings } from './skyline-layout';
 
 const CHASE_FOV = FREE_FOV;
 /** Distance beyond the one that just fits the combination. */
@@ -168,16 +169,20 @@ export type ChaseRig = {
 
 export type ChaseCollider = Pick<Obstacle, 'obb' | 'height'>;
 
-/** The layout's obstacles and its solid decor, which nothing drives into but the eye could reach. */
+/** The layout's obstacles, its solid decor and the skyline around it: nothing drives into them, but the eye could reach them. */
 export function chaseColliders(
-  layout: Pick<ResolvedLayout, 'obstacles' | 'decor'>,
+  layout: Pick<ResolvedLayout, 'obstacles' | 'decor' | 'bounds' | 'surfaces'>,
 ): readonly ChaseCollider[] {
   const solids = layout.decor.flatMap((d) =>
     isKitDecor(d) && SOLID_DECOR.has(d.piece)
       ? [{ obb: d.footprint, height: KIT_FOOTPRINTS[d.piece].height }]
       : [],
   );
-  return [...layout.obstacles, ...solids];
+  const scenery = sceneryBuildings(layout).map((b) => ({
+    obb: { cx: b.x, cy: b.y, halfLength: b.length / 2, halfWidth: b.depth / 2, heading: b.heading },
+    height: b.height,
+  }));
+  return [...layout.obstacles, ...solids, ...scenery];
 }
 
 /**
