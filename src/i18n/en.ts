@@ -161,7 +161,7 @@ export const en = {
   keyLever: 'Lever: drag/scroll',
   keyOrbitTilt: ', / . · PgUp / PgDn',
   controls: 'Controls',
-  controlsKeyboard: 'Keyboard',
+  controlsKeyboardMouse: 'Keyboard and mouse',
   controlsTouch: 'Touch and mouse',
   touchWheel: 'Steering wheel',
   touchWheelUse: 'Drag around its center; the mouse wheel steers in steps',

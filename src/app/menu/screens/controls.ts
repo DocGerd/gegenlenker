@@ -41,7 +41,7 @@ export function render(body: HTMLElement): void {
 
   const layout = element('div', 'menu-controls');
   layout.append(
-    group('controlsKeyboard', 'controls-keyboard', keys),
+    group('controlsKeyboardMouse', 'controls-keyboard', keys),
     group('controlsTouch', 'controls-touch', touch, element('p', 'menu-note', t('touchTwoThumbs'))),
   );
   body.append(layout);

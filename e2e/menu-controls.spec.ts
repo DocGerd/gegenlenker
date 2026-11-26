@@ -8,7 +8,7 @@ const screen = (page: Page, id: string): Locator => page.locator(`[data-screen="
 const controls = (page: Page): Locator => screen(page, 'controls');
 const heading = (page: Page): Locator => controls(page).getByRole('heading', { level: 1 });
 const keys = (page: Page): Locator =>
-  controls(page).getByRole('region', { name: en.controlsKeyboard });
+  controls(page).getByRole('region', { name: en.controlsKeyboardMouse });
 const touch = (page: Page): Locator =>
   controls(page).getByRole('region', { name: en.controlsTouch });
 const historyState = (page: Page): Promise<unknown> =>

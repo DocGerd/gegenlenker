@@ -50,7 +50,7 @@ The key legend in the drive lists the view keys that apply to the current screen
 
 ## Exercises
 
-The menu opens on a title screen with Exercises, Free yard, Settings and What's new, and "Replay last run" once a drive has finished. Back or Esc returns one level.
+The menu opens on a title screen with Exercises, Free yard, Settings, Controls and What's new, and "Replay last run" once a drive has finished. Back or Esc returns one level.
 
 "Exercises" lists the exercises, each with a short brief:
 
@@ -80,6 +80,8 @@ Under "Settings" on the title, in the groups General and Graphics:
 - Theme: System, Light or Dark.
 - Graphics quality: Low, Balanced or High.
 - Wide-angle mirrors: On or Off.
+
+The Settings screen also has a Controls row, and the title has a Controls entry: both open the Controls screen.
 
 Aids, the Follow / Whole yard choice, panel collapse state and the divider position are changed in the drive and kept as settings too. Lighting and driving view are part of the best-result key, so each combination has its own best.
 
