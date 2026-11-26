@@ -73,7 +73,7 @@ Accepted by the owner (2026-11-26) after the gate (PR 2), which departs from the
 - "Straight" after a curve: the driver holds one reference heading per gear. Rechts/Links turn it; Herkommen, Entfernen and Abstand hold it, so the vehicle finishes the indicated turn.
 - The curve radius depends on the gear (`CURVE_RADIUS = { D: 8, R: 15 }`): the slalom weave needs a truck curvature above 1/15 m⁻¹.
 
-The gate runs with `pnpm test:gate` (`src/einweiser/gate-*.test.ts` over `gate-harness.ts`, `vitest.gate.config.ts`). It is not part of `pnpm test` or `pnpm check`; the advisory `einweiser-gate` CI job runs it and does not gate a merge.
+The gate runs with `pnpm test:gate` (`src/einweiser/gate-*.test.ts` except the `gate-recovery.test.ts` unit test, over `gate-harness.ts`; `vitest.gate.config.ts`). It is not part of `pnpm test` or `pnpm check`; the advisory `einweiser-gate` CI job runs it and does not gate a merge.
 
 ### Speeds and timing (calls)
 
