@@ -794,10 +794,16 @@ export function sightCueBox(view: Rect, insets: Insets): Rect {
 
 /**
  * His view has no mirrors and no controls: the stack stands top-centre, between the sight cue and an
- * equal margin on the right where it fits there, else across the view below the cue; the goal cue
- * yields only where neither holds both messages.
+ * equal margin on the right where it fits there, else across the view below the cue. Where the key
+ * legend leaves neither room, the top view takes it as it does the driver's; without one, the goal cue
+ * yields.
  */
-function einweiserColumn(view: Rect, legend: LegendBox | null, insets: Insets): MessageColumn {
+function einweiserColumn(
+  views: ViewRects & { readonly cockpit: Rect },
+  legend: LegendBox | null,
+  insets: Insets,
+): MessageColumn {
+  const view = views.cockpit;
   const area = belowCutOut(view, insets);
   const cue = sightCueBox(view, insets);
   const margin = INSET + SIGHT_CUE_WIDTH + MESSAGE_GAP + Math.max(insets.left, insets.right);
@@ -822,10 +828,18 @@ function einweiserColumn(view: Rect, legend: LegendBox | null, insets: Insets): 
       bottom > stageBottom - legend.height;
     return bottom <= bandTop && !overLegend;
   };
-  for (const yields of [false, true]) {
-    for (const column of [beside, below]) {
-      if (fits(column, yields)) return { ...column, cueYields: yields };
-    }
+  for (const column of [beside, below]) {
+    if (fits(column, false)) return { ...column, cueYields: false };
+  }
+  // as the driver's: a key legend reaching that high sends them to the top view
+  if (hasTopDown(views)) {
+    const { topDown } = views;
+    const cssWidth = Math.max(view.x + view.width, topDown.x + topDown.width);
+    const cssHeight = Math.max(view.y + view.height, topDown.y + topDown.height);
+    return paneColumn(topDown, insets, cssWidth >= cssHeight);
+  }
+  for (const column of [beside, below]) {
+    if (fits(column, true)) return { ...column, cueYields: true };
   }
   return { ...below, cueYields: true };
 }
@@ -846,7 +860,8 @@ export function messageColumn(
   const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
   const insets = safeInsets ?? readSafeInsets();
   // only the Einweiser's view has no class II mirrors
-  if (cockpit !== null && mirrorLeft === null) return einweiserColumn(cockpit, legend, insets);
+  if (cockpit !== null && mirrorLeft === null)
+    return einweiserColumn({ ...views, cockpit }, legend, insets);
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
     const whole = belowCutOut(cockpit ?? topDown, insets);
     return {
@@ -880,14 +895,18 @@ export function messageColumn(
     }
     return { ...area, ...between, cueYields: true };
   }
-  // Below the finish button; in landscape also left of the stop button and lever, which stand at the
-  // screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). In portrait the pane spans the screen.
+  return paneColumn(topDown, insets, cssWidth >= cssHeight);
+}
+
+/**
+ * The top-down pane below the finish button; in landscape also left of the stop button and lever, which
+ * stand at the screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). In portrait the pane spans the screen.
+ */
+function paneColumn(topDown: Rect, insets: Insets, landscape: boolean): MessageColumn {
   const pane = belowCutOut(topDown, insets);
   const drop = tokenPx('--size-target', 44) + MESSAGE_GAP;
-  const landscape = cssWidth >= cssHeight;
-  const lever = landscape ? paneLever(insets) : 0;
   const left = landscape ? 0 : insets.left;
-  const right = landscape ? lever : insets.right;
+  const right = landscape ? paneLever(insets) : insets.right;
   return {
     ...pane,
     x: pane.x + left,

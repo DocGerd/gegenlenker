@@ -128,6 +128,38 @@ describe('computeViewports in the Einweiser role', () => {
     expect(count.beside).toBeGreaterThan(0);
     expect(count.below).toBeGreaterThan(0);
   });
+
+  it('sends the messages to the top view where the key legend leaves them no room in his view', () => {
+    const tall: LegendBox = { right: 600, height: 700 };
+    const views = computeViewports(
+      620,
+      774,
+      'drive',
+      null,
+      NO_INSETS,
+      undefined,
+      null,
+      every,
+      'einweiser',
+    );
+    const { topDown } = views;
+    const column = messageColumn(views, tall, NO_INSETS);
+    expect(column.y + column.height).toBe(topDown.y + topDown.height);
+    expect(column.cueYields).toBe(false);
+    // without the top view, the goal cue yields
+    const bare = computeViewports(
+      620,
+      774,
+      'mirrors',
+      null,
+      NO_INSETS,
+      undefined,
+      null,
+      every,
+      'einweiser',
+    );
+    expect(messageColumn(bare, tall, NO_INSETS).cueYields).toBe(true);
+  });
 });
 
 describe('computeViewports key legend', () => {

@@ -2355,13 +2355,25 @@ async function expectEinweiserHudClear(page: Page, size: Size, messages: Message
     [messages.blockedTurntable, messages.goalInside] as const,
   );
   const yields = (await page.locator('[data-hud="toastWrap"][data-cue-yields]').count()) > 0;
+  // A key legend reaching up to them sends them to the top view, over its panels, as the driver's.
+  const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
+  if (wrap === undefined) throw new Error('no toast column');
+  const inView = wrap.top >= cockpit.top && wrap.left >= cockpit.left - 0.5;
+  const legend = await boxes(page.locator('.hud-legend:visible'));
+  for (const l of legend)
+    expect(overlaps(cue, l), 'the sight cue overlaps the key legend').toBe(false);
   const others = [
-    { ...cue, name: 'sight cue' },
-    { ...band, name: 'band' },
-    ...(await boxes(
-      page.locator('.hud-legend:visible, .hud-action, .hud-goal:visible, .hud-counters'),
-    )),
+    ...(await boxes(page.locator('.hud-action'))),
+    ...(inView
+      ? [
+          { ...cue, name: 'sight cue' },
+          { ...band, name: 'band' },
+          ...legend,
+          ...(await boxes(page.locator('.hud-goal:visible, .hud-counters'))),
+        ]
+      : []),
   ];
+  const area = inView ? cockpit : { left: 0, top: 0, right: size.width, bottom: size.height };
   const check = async (count: number): Promise<void> => {
     const shown = page.locator('[data-hud="toast"]:visible, [data-hud="goalCue"]:visible');
     await expect(shown).toHaveCount(count);
@@ -2370,9 +2382,12 @@ async function expectEinweiserHudClear(page: Page, size: Size, messages: Message
     );
     expect(overflow, 'a word sticks out of a message').toEqual(Array<number>(count).fill(0));
     for (const m of await boxes(shown)) {
-      expect(m.left >= cockpit.left && m.right <= cockpit.right, `${m.name} inside the view`).toBe(
-        true,
-      );
+      const inside =
+        m.left >= area.left &&
+        m.right <= area.right &&
+        m.top >= area.top &&
+        m.bottom <= area.bottom;
+      expect(inside, `${m.name} inside ${inView ? 'his view' : 'the screen'}`).toBe(true);
       for (const o of others) expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
     }
   };

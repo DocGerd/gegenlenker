@@ -1110,6 +1110,8 @@
 .hud[data-role='einweiser'] .hud-band {
   display: grid;
   grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
   align-items: stretch;
   gap: 0 var(--space-3);
   padding: var(--space-1) calc(var(--space-4) + var(--safe-right))
@@ -1125,9 +1127,10 @@
 }
 
 .hud-sign-bar {
-  container: signs / inline-size;
+  container: signs / size;
   display: grid;
   grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
   gap: var(--space-1);
   min-height: 0;
   margin: 0;
@@ -1179,7 +1182,7 @@
   opacity: 0.35;
 }
 
-/* Names under the figures only where the slots are wide enough for them. */
+/* Names under the figures only where the slots are wide and tall enough to keep the figures legible. */
 .hud-sign-label {
   display: none;
   max-width: 100%;
@@ -1188,7 +1191,7 @@
   text-align: center;
 }
 
-@container signs (min-width: 720px) {
+@container signs (min-width: 720px) and (min-height: 96px) {
   .hud-sign-label {
     display: block;
   }
