@@ -191,7 +191,10 @@ export function startDrive(
       settingChanged: (id) => {
         if (id === 'graphics') switchGraphics(currentSettings().graphics);
         // the field of view is the first-person camera's: redraw while the run stands still
-        if (id === 'fov') dirty = true;
+        if (id === 'fov') {
+          frame.fov = currentSettings().fov;
+          dirty = true;
+        }
         if (id !== 'wideMirrors') return;
         wideMirrors = currentSettings().wideMirrors;
         arrange();
@@ -269,6 +272,7 @@ export function startDrive(
     topDown,
     aids,
     predicted: NO_PREDICTION,
+    fov: settings.fov,
   };
 
   // The Einweiser has no wheel, lever or driver keys.

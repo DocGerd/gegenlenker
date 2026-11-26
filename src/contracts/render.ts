@@ -1,4 +1,4 @@
-import type { SignId } from './einweiser';
+import type { Fov, SignId } from './einweiser';
 import type { Pose2, Prediction, SimSnapshot } from './sim';
 export type Rect = {
   readonly x: number;
@@ -191,9 +191,9 @@ export type RenderFrame = {
   readonly waypointVisited?: boolean;
   /** Set in Einweiser runs only. */
   readonly einweiser?: EinweiserVisual;
+  /** The Einweiser view's horizontal field of view; absent means `DEFAULT_FOV`. */
+  readonly fov?: Fov;
 };
-/** The Einweiser view's horizontal field of view in degrees, taken at 16:9 and kept Hor+ (`docs/einweiser-spike.md` §3.2). */
-export const DEFAULT_EINWEISER_FOV = 90;
 /** The Einweiser as drawn: his live pose and look pitch, and the sign with its `phase` (`EinweiserStatus`). */
 export type EinweiserVisual = {
   readonly pose: Pose2;
