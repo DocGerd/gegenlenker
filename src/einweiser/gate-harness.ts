@@ -1,13 +1,15 @@
-import { describe, expect, it } from 'vitest';
+/**
+ * Test-only: the Einweiser gate (`docs/einweiser-spike.md` §9, PR 2) that the per-exercise
+ * `gate-*.test.ts` files share. A scripted, `walkStep`-only Einweiser guides the AI driver.
+ */
 import type { EinweiserFault, SignId } from '../contracts/einweiser';
-import type { ExerciseId } from '../contracts/exercise';
+import type { ExerciseDefinition, ExerciseId, TargetZone } from '../contracts/exercise';
 import type { Obstacle, Rect2 } from '../contracts/layout';
 import type { ContactQuery, Pose2, SimSnapshot, StartState, Vec2 } from '../contracts/sim';
 import type { TrailerId, TruckId, VehicleParams } from '../contracts/vehicle';
 import { BARRIER_X, LANE } from '../content/exercises/slalom';
 import { exerciseById } from '../content/registry';
 import { resolveRun } from '../content/run';
-import { createRunTracker, STOPPED_SPEED, targetError } from '../scoring/score';
 import { wrapAngle } from '../sim/angle';
 import { DT } from '../sim/constants';
 import { createContactQuery } from '../sim/collision';
@@ -25,7 +27,7 @@ import {
   type KinematicState,
 } from '../sim/kinematics';
 
-import { createDriver, createPilot, type Pilot } from './driver';
+import { createDriver, createPilot, CURVE_RADIUS, type Pilot } from './driver';
 
 import { clearance, runOver, signOutOfSight } from './faults';
 import {
@@ -81,9 +83,9 @@ function nextSpeed(v: number, c: ControlVector): number {
 }
 
 /** A contact-free copy of the sim step, from any snapshot. */
-export type Model = { s: SimSnapshot; q: KinematicState; pilot: Pilot; failed: boolean };
+type Model = { s: SimSnapshot; q: KinematicState; pilot: Pilot; failed: boolean };
 
-export function modelFrom(s: SimSnapshot, pilot: Pilot): Model {
+function modelFrom(s: SimSnapshot, pilot: Pilot): Model {
   return {
     s,
     q: {
@@ -98,7 +100,7 @@ export function modelFrom(s: SimSnapshot, pilot: Pilot): Model {
   };
 }
 
-export function stepModel(p: VehicleParams, m: Model, reading: Reading, pose: Pose2): void {
+function stepModel(p: VehicleParams, m: Model, reading: Reading, pose: Pose2): void {
   const c = m.pilot.step(m.s, reading, pose);
   const control = {
     steer: Math.max(-1, Math.min(1, c.steer)),
@@ -128,13 +130,13 @@ export function stepModel(p: VehicleParams, m: Model, reading: Reading, pose: Po
 }
 
 /** A plan of shown signs: each from its step offset on. */
-export type Plan = readonly { readonly at: number; readonly sign: SignId | null }[];
+type Plan = readonly { readonly at: number; readonly sign: SignId | null }[];
 
 /**
  * Roll the model through `steps`, feeding the readings the reader would give for `plan` with him
  * always readable at `station`: `pending` is the shown sign's age when it is not yet acted on.
  */
-export function rollout(
+function rollout(
   p: VehicleParams,
   m: Model,
   plan: Plan,
@@ -227,6 +229,104 @@ function nearest(path: readonly Pt[], at: Vec2, from: number, window = 200): num
   return best;
 }
 
+/** The path's curvature about index `i` (left turn of the motion positive), over a metre either side. */
+function curvatureAt(path: readonly Pt[], i: number): number {
+  const [from, to] = [Math.max(0, i - 20), Math.min(path.length - 1, i + 20)];
+  const [a, b] = [path[from], path[to]];
+  return a && b && to > from ? wrapAngle(b.h - a.h) / ((to - from) * DS) : 0;
+}
+
+/** The trailer rear's own direction of motion in reverse: on a curve its overhang swings it off the body heading. */
+function rearMotion(p: VehicleParams, s: SimSnapshot): number {
+  return s.trailer.heading + Math.PI + Math.atan(p.trailerRearOverhang * trailerYaw(p, s));
+}
+/** The trailer's heading change per metre reversed (left turn of the motion positive). */
+const trailerYaw = (p: VehicleParams, s: SimSnapshot): number =>
+  -Math.sin(s.turntableAngle) / p.trailerWheelbase;
+
+/** Length scale (m) of the reverse tracking LQR: how far the rear takes to close on the path. */
+const TRACK_LENGTH = 6;
+/** Each sign is judged this long (s) after it would act. */
+const TRACK_HORIZON = 2;
+/** A turn sign replaces the shown one only when nearer the wanted curvature by this share of a turn's. */
+const TRACK_HYSTERESIS = 0.3;
+/** The shown sign keeps on unless another's cost is lower by this share. */
+const TRACK_KEEP = 0.03;
+
+/** The curvature the reversing rear should run at to close on `path` at index `j`. */
+function wantedCurvature(p: VehicleParams, s: SimSnapshot, path: readonly Pt[], j: number): number {
+  const q = path[j];
+  if (!q) return 0;
+  const { e, he } = pathError(q, s.trailerRear, rearMotion(p, s));
+  // the double integrator's LQR (e'' = curvature error, cost ∫ e² + L⁴·u² ds) is K = [1/L², √2/L]
+  return curvatureAt(path, j) - e / TRACK_LENGTH ** 2 - (Math.SQRT2 * he) / TRACK_LENGTH;
+}
+
+/**
+ * Cost-to-go of the path-relative LQR on [cross-track, heading, curvature error] per metre
+ * (e' = heading error, heading error' = curvature error, curvature' = u), cost ∫ e² + L⁶·u² ds.
+ */
+function trackCostToGo(L: number): number[][] {
+  const h = 0.05;
+  // the transpose of A = [[1, h, 0], [0, 1, h], [0, 0, 1]]
+  const At = [
+    [1, 0, 0],
+    [h, 1, 0],
+    [0, h, 1],
+  ];
+  const r = L ** 6 * h;
+  let P = [
+    [h, 0, 0],
+    [0, 0, 0],
+    [0, 0, 0],
+  ];
+  for (let n = 0; n < 20_000; n++) {
+    const AP = At.map((row) =>
+      [0, 1, 2].map((j) => row.reduce((sum, a, k) => sum + a * (P[k]?.[j] ?? 0), 0)),
+    );
+    const APA = AP.map((row) =>
+      [0, 1, 2].map((j) => row.reduce((sum, a, k) => sum + a * (At[j]?.[k] ?? 0), 0)),
+    );
+    // B = [0, 0, h]: A'PB is column 2 of A'P times h, B'PB is P[2][2]·h²
+    const APB = AP.map((row) => (row[2] ?? 0) * h);
+    const BPB = (P[2]?.[2] ?? 0) * h * h;
+    P = APA.map((row, i) =>
+      row.map(
+        (x, j) => (i === 0 && j === 0 ? h : 0) + x - ((APB[i] ?? 0) * (APB[j] ?? 0)) / (r + BPB),
+      ),
+    );
+  }
+  return P;
+}
+const TRACK_COST = trackCostToGo(TRACK_LENGTH);
+
+/** `TRACK_COST` of the reversing rear's state about `path` at index `j`. */
+function trackCost(p: VehicleParams, s: SimSnapshot, path: readonly Pt[], j: number): number {
+  const q = path[j];
+  if (!q) return 0;
+  const { e, he } = pathError(q, s.trailerRear, rearMotion(p, s));
+  const z = [e, he, trailerYaw(p, s) - curvatureAt(path, j)];
+  return z.reduce(
+    (sum, za, a) => sum + za * z.reduce((acc, zb, b) => acc + (TRACK_COST[a]?.[b] ?? 0) * zb, 0),
+    0,
+  );
+}
+
+/** Of `options` (a sign and the curvature it asks for), the one nearest `want`, keeping `current` within the hysteresis. */
+function nearestSign(
+  want: number,
+  options: readonly { readonly sign: SignId; readonly kappa: number }[],
+  current: SignId | null,
+): SignId | null {
+  let best: { sign: SignId; gap: number } | null = null;
+  for (const o of options) {
+    const keep = o.sign === current ? TRACK_HYSTERESIS / CURVE_RADIUS.R : 0;
+    const gap = Math.abs(want - o.kappa) - keep;
+    if (best === null || gap < best.gap) best = { sign: o.sign, gap };
+  }
+  return best?.sign ?? null;
+}
+
 const pathError = (p: Pt, at: Vec2, motion: number) => ({
   e: -(at.x - p.x) * Math.sin(p.h) + (at.y - p.y) * Math.cos(p.h),
   he: wrapAngle(motion - p.h),
@@ -302,6 +402,8 @@ type World = {
   readonly obstacles: readonly Obstacle[];
   /** Legs that set the vehicle up again on the target axis when the planned ones end outside it. */
   readonly recover: ((s: SimSnapshot) => Leg[]) | null;
+  /** Reverse by the tracking law instead of the rollout search. */
+  readonly track: boolean;
 };
 
 const toWorld = (pose: Pose2, p: Vec2): Vec2 => {
@@ -493,13 +595,27 @@ function scripted(world: World, planned: readonly Leg[]) {
         const here = l.path[j];
         if (q && here) {
           const mu = motionOf(m.s, l.gear);
-          const { e } = pathError(here, leadingEnd(m.s, l.gear), mu);
-          const err = wrapAngle(mu - q.h) + 0.3 * e;
-          const want = err > 0.04 ? -1 : err < -0.04 ? 1 : 0;
           const cos = Math.cos(pose.heading - mu);
           const left: SignId = cos > 0 ? 'links' : 'rechts';
           const right: SignId = cos > 0 ? 'rechts' : 'links';
-          const next = want === 0 ? S0 : want > 0 ? left : right;
+          let next: SignId | null;
+          if (world.track && l.gear === 'R') {
+            const turn = 1 / CURVE_RADIUS.R;
+            next = nearestSign(
+              wantedCurvature(p, m.s, l.path, j),
+              [
+                { sign: S0, kappa: 0 },
+                { sign: left, kappa: turn },
+                { sign: right, kappa: -turn },
+              ],
+              read,
+            );
+          } else {
+            const { e } = pathError(here, leadingEnd(m.s, l.gear), mu);
+            const err = wrapAngle(mu - q.h) + 0.3 * e;
+            const want = err > 0.04 ? -1 : err < -0.04 ? 1 : 0;
+            next = want === 0 ? S0 : want > 0 ? left : right;
+          }
           if (next !== read) reading = { kind: 'recognised', sign: next, station: at };
           read = next;
         }
@@ -614,6 +730,29 @@ function scripted(world: World, planned: readonly Leg[]) {
     };
     const turns = (Math.abs(cos) > 0.35 ? [left, right] : []).filter(showable);
     if (!showable(S0)) return null;
+    if (world.track && l.gear === 'R') {
+      // the LQR's cost-to-go once each sign has acted, on the exact model, plus clearance to obstacles
+      let best: SignId | null = null;
+      let bestCost = Infinity;
+      for (const x of [S0, ...turns]) {
+        const m = modelFrom(s, pilot);
+        let cost = 0;
+        let j = idx;
+        const steps = Math.round((recognitionTime(x) + TRACK_HORIZON) / DT);
+        rollout(p, m, x === sign ? [] : [{ at: 0, sign: x }], steps, at, held, null, (mm, k) => {
+          if (k % 15 !== 0) return undefined;
+          j = nearest(l.path, leadingEnd(mm.s, l.gear), j);
+          if (contacts(bodyFootprints(p, mm.s)) !== null) cost += 1e5;
+          else if (contacts(grown(mm.s, 0.25)) !== null) cost += 50;
+          return j >= goal;
+        });
+        if (m.failed) cost += 1e6;
+        cost += trackCost(p, m.s, l.path, nearest(l.path, m.s.trailerRear, j));
+        if (x === sign) cost *= 1 - TRACK_KEEP;
+        if (cost < bestCost) [best, bestCost] = [x, cost];
+      }
+      return best;
+    }
     const candidates: Plan[] = [[{ at: 0, sign: S0 }]];
     for (const x of turns) {
       for (const tau of [1.2, 2, 3, 5, Infinity]) {
@@ -812,12 +951,27 @@ type Setup = {
   readonly startState: StartState;
 };
 
-function runGate(
+/** What the gate needs from scoring, which einweiser must not import: the tests pass it in. */
+export type GateScoring = {
+  readonly createRunTracker: (exercise: ExerciseDefinition) => {
+    update(s: SimSnapshot): boolean;
+  };
+  readonly targetError: (
+    s: SimSnapshot,
+    zone: TargetZone,
+  ) => { readonly position: number; readonly angle: number };
+  readonly STOPPED_SPEED: number;
+};
+
+/** One gate case: the scripted Einweiser guiding the AI driver through the exercise. */
+export function runGate(
   exerciseId: ExerciseId,
   truckId: TruckId,
   trailerId: TrailerId,
-  legsFor: (setup: Setup) => Leg[],
+  { createRunTracker, targetError, STOPPED_SPEED }: GateScoring,
 ): Outcome {
+  const legsFor = LEGS[exerciseId];
+  if (!legsFor) throw new Error(`no gate legs for ${exerciseId}`);
   const exercise = exerciseById(exerciseId);
   const run = resolveRun({ layoutId: exercise.layout, exerciseId, truckId, trailerId });
   const g = sightGeometry(truckById(truckId), trailerById(trailerId));
@@ -842,6 +996,7 @@ function runGate(
       contacts: run.contacts,
       obstacles: run.layout.obstacles,
       recover: (now) => recovery(run.params, now, exercise.target.pose, RECOVER[exerciseId] ?? 0),
+      track: TRACKED.has(exerciseId),
     },
     legs,
   );
@@ -949,6 +1104,12 @@ const SLALOM_VIA = Array.from({ length: 24 }, (_, i) => {
   const x = 20 + 3 * i;
   return { x, y: laneCentre + 3 * Math.cos((Math.PI * (x - BARRIER_X[0])) / barrierSpacing) };
 });
+
+/**
+ * Exercises whose Einweiser reverses by the tracking LQR; the others keep the rollout search, which
+ * did better on the obstacle-lined reverses of reverse-bay and slalom (PR #515).
+ */
+const TRACKED: ReadonlySet<ExerciseId> = new Set<ExerciseId>(['dock-ramp']);
 
 /** Room to pull forward along the target axis (m) before reversing onto it again. */
 const RECOVER: Partial<Record<ExerciseId, number>> = {
@@ -1165,13 +1326,9 @@ const LEGS: Partial<Record<ExerciseId, (setup: Setup) => Leg[]>> = {
   },
 };
 
-const pairs = trucks.flatMap((t) => trailers.map((r) => ({ truck: t.id, trailer: r.id })));
-
-describe.each(Object.keys(LEGS) as ExerciseId[])('%s', (exerciseId) => {
-  it.each(pairs)('$truck with $trailer', ({ truck, trailer }) => {
-    const legs = LEGS[exerciseId];
-    if (!legs) throw new Error('no legs');
-    const outcome = runGate(exerciseId, truck, trailer, legs);
-    expect(outcome).toMatchObject({ reached: true, faults: {}, contacts: 0, jackknifes: 0 });
-  });
-});
+/** Every truck with every trailer. */
+export const GATE_PAIRS = trucks.flatMap((t) =>
+  trailers.map((r) => ({ truck: t.id, trailer: r.id })),
+);
+/** A case runs for minutes of sim time: well past vitest's default timeout. */
+export const GATE_TIMEOUT = 300_000;
