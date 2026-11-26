@@ -240,6 +240,11 @@ function curvatureAt(path: readonly Pt[], i: number): number {
 function rearMotion(p: VehicleParams, s: SimSnapshot): number {
   return s.trailer.heading + Math.PI + Math.atan(p.trailerRearOverhang * trailerYaw(p, s));
 }
+/** The leading end's own direction of motion: forward, the truck's front swings off its heading by its reach ahead of the rear axle. */
+function leadMotion(p: VehicleParams, s: SimSnapshot, gear: 'D' | 'R'): number {
+  if (gear === 'R') return rearMotion(p, s);
+  return s.truck.heading + Math.atan((p.truckFront * Math.tan(s.roadWheelAngle)) / p.wheelbase);
+}
 /** The trailer's heading change per metre reversed (left turn of the motion positive). */
 const trailerYaw = (p: VehicleParams, s: SimSnapshot): number =>
   -Math.sin(s.turntableAngle) / p.trailerWheelbase;
@@ -402,8 +407,7 @@ type World = {
   readonly obstacles: readonly Obstacle[];
   /** Legs that set the vehicle up again on the target axis when the planned ones end outside it. */
   readonly recover: ((s: SimSnapshot) => Leg[]) | null;
-  /** Reverse by the tracking law instead of the rollout search. */
-  readonly track: boolean;
+  readonly policy: SignPolicy;
 };
 
 const toWorld = (pose: Pose2, p: Vec2): Vec2 => {
@@ -599,7 +603,7 @@ function scripted(world: World, planned: readonly Leg[]) {
           const left: SignId = cos > 0 ? 'links' : 'rechts';
           const right: SignId = cos > 0 ? 'rechts' : 'links';
           let next: SignId | null;
-          if (world.track && l.gear === 'R') {
+          if (world.policy === 'lqr' && l.gear === 'R') {
             const turn = 1 / CURVE_RADIUS.R;
             next = nearestSign(
               wantedCurvature(p, m.s, l.path, j),
@@ -730,7 +734,7 @@ function scripted(world: World, planned: readonly Leg[]) {
     };
     const turns = (Math.abs(cos) > 0.35 ? [left, right] : []).filter(showable);
     if (!showable(S0)) return null;
-    if (world.track && l.gear === 'R') {
+    if (world.policy === 'lqr' && l.gear === 'R') {
       // the LQR's cost-to-go once each sign has acted, on the exact model, plus clearance to obstacles
       let best: SignId | null = null;
       let bestCost = Infinity;
@@ -773,7 +777,9 @@ function scripted(world: World, planned: readonly Leg[]) {
         j = nearest(l.path, leadingEnd(mm.s, l.gear), j);
         const q = l.path[j];
         if (!q) return true;
-        const { e, he } = pathError(q, leadingEnd(mm.s, l.gear), motionOf(mm.s, l.gear));
+        const motion =
+          world.policy === 'leadSearch' ? leadMotion(p, mm.s, l.gear) : motionOf(mm.s, l.gear);
+        const { e, he } = pathError(q, leadingEnd(mm.s, l.gear), motion);
         cost += e * e + (3 * he) ** 2;
         const hit = contacts(bodyFootprints(p, mm.s));
         if (hit !== null) cost += 1e5;
@@ -996,7 +1002,7 @@ export function runGate(
       contacts: run.contacts,
       obstacles: run.layout.obstacles,
       recover: (now) => recovery(run.params, now, exercise.target.pose, RECOVER[exerciseId] ?? 0),
-      track: TRACKED.has(exerciseId),
+      policy: POLICY[exerciseId] ?? 'search',
     },
     legs,
   );
@@ -1062,7 +1068,11 @@ export function runGate(
     position: Math.round(err.position * 100) / 100,
     angle: Math.round(err.angle * 100) / 100,
     time: Math.round(s.time),
-    phase: policy.phase(),
+    phase:
+      policy.phase() +
+      (s.contact
+        ? ` hit ${s.contact.body}@${s.contact.point.x.toFixed(1)},${s.contact.point.y.toFixed(1)}`
+        : ''),
   };
 }
 
@@ -1106,10 +1116,17 @@ const SLALOM_VIA = Array.from({ length: 24 }, (_, i) => {
 });
 
 /**
- * Exercises whose Einweiser reverses by the tracking LQR; the others keep the rollout search, which
- * did better on the obstacle-lined reverses of reverse-bay and slalom (PR #515).
+ * How the Einweiser picks signs, per exercise (PR #515): the rollout search scored on the body
+ * heading, the search scored on the leading end's own direction of motion, or (reverse legs) the
+ * tracking LQR. The rear's motion heading cost reverse-corner a case; the LQR did worse on reverse-bay
+ * and slalom.
  */
-const TRACKED: ReadonlySet<ExerciseId> = new Set<ExerciseId>(['dock-ramp']);
+type SignPolicy = 'search' | 'leadSearch' | 'lqr';
+const POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
+  'dock-ramp': 'lqr',
+  'reverse-bay': 'leadSearch',
+  slalom: 'leadSearch',
+};
 
 /** Room to pull forward along the target axis (m) before reversing onto it again. */
 const RECOVER: Partial<Record<ExerciseId, number>> = {
