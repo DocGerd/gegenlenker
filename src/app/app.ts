@@ -8,7 +8,7 @@ import type { DriveOutcome, RunConfig } from './drive';
 import type { EntryRef } from './menu/catalogue';
 import { showMenu } from './menu/index';
 import type { NavState } from './menu/nav';
-import { showNotice } from './notice';
+import { showNotice, showToast } from './notice';
 import { showResult, type ResultContext } from './result-view';
 import {
   currentSettings,
@@ -161,12 +161,23 @@ export function startApp(root: HTMLElement): void {
       .catch((error: unknown) => loadFailed(error, () => replay(log, onExit)));
   };
   const finished = (run: RunConfig, entry: EntryRef, outcome: DriveOutcome): void => {
-    const stored = outcome.result === null ? null : storeResult(outcome.result);
+    const r = outcome.result;
+    // Einweiser runs keep no bests (owner). The best is written first: its quota fallback drops the last run.
+    const context =
+      r === null
+        ? null
+        : r.einweiser === undefined
+          ? storeResult(r)
+          : { isNewBest: false, previous: null };
     storeLastRun(outcome.log);
-    if (outcome.result === null || stored === null) {
+    if (r === null || context === null) {
       leave();
       menu();
-    } else result(run, entry, outcome.result, stored, outcome.log);
+      // free yard: the run-over is all an Einweiser drive reports there (owner)
+      if (outcome.runOver) showToast(root, 'runOver');
+      return;
+    }
+    result(run, entry, r, context, outcome.log);
   };
   const result = (
     run: RunConfig,

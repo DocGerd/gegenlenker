@@ -430,6 +430,27 @@ test('with the Einweiser preview, the role row starts an Einweiser drive and rec
   expect(lastEntry).toEqual({ role: 'einweiser', kind: 'yard', id: 'depot' });
 });
 
+test('a finished Einweiser exercise lists his faults by rule and stores no best', async ({
+  page,
+}) => {
+  await seedStorage(page, { settings: { graphics: 'low', einweiserPreview: true } });
+  await page.goto('./');
+  await startEntry(page, en, { ...exerciseEntry('straight-reverse'), role: 'einweiser' });
+  await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
+  await page.getByRole('button', { name: en.pause }).click();
+  await page
+    .getByRole('dialog', { name: en.paused })
+    .getByRole('button', { name: en.finish })
+    .click();
+  await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
+  const faults = page.getByRole('region', { name: en.roleEinweiser });
+  await expect(faults.locator('.result-row')).toHaveCount(7);
+  await expect(faults).toContainText(en.faultUnclear);
+  await expect(faults).toContainText(en.basisTrainer);
+  const best = await page.evaluate(() => localStorage.getItem('gegenlenker.best.v2'));
+  expect(best).toBeNull();
+});
+
 test("a yard's setup shows no tolerance and no bests", async ({ page }) => {
   await page.goto('./');
   await openSetup(page, en, yardEntry('depot'));
