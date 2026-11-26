@@ -1132,7 +1132,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (resetView.disabled === changed) resetView.disabled = !changed;
     },
     setFree(on) {
-      freeCamera?.setAttribute('aria-pressed', String(on));
+      freeCameraButton?.setAttribute('aria-pressed', String(on));
     },
     setOffers(next) {
       chaseOffered = next.chase;
