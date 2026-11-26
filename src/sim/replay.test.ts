@@ -250,10 +250,8 @@ describe('replay', () => {
     expect(withTrack({ samples: [{ ...sample, pitch: Number.NaN }] })).toBeNull();
     expect(withTrack({ samples: [{ ...sample, step: 0.5 }] })).toBeNull();
     expect(withTrack({ samples: undefined })).toBeNull();
-    expect(withTrack({ samples: [], signs: [] })).toEqual({
-      ...log,
-      einweiser: { samples: [], signs: [] },
-    });
+    expect(withTrack({ samples: [] })).toBeNull();
+    expect(withTrack({ signs: [] })).toEqual({ ...log, einweiser: { ...track, signs: [] } });
   });
 
   it('accepts a log only for the data that produced it', () => {

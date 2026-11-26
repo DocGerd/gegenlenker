@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { HOLD_STEPS } from '../contracts/einweiser';
 import type { InputLog } from '../contracts/exercise';
 import { resolveRun } from '../content/run';
 import { parseInputLog, serializeInputLog, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { layoutOccluders, sightGeometry } from './sight';
-import {
-  createEinweiserRun,
-  createTrackCursor,
-  HOLD_STEPS,
-  type EinweiserInput,
-  type TrackAt,
-} from './track';
+import { createEinweiserRun, createTrackCursor, type EinweiserInput, type TrackAt } from './track';
 import { STILL } from './walk';
 
 const ids: RunIds = {
