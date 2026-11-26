@@ -298,11 +298,13 @@ describe('ground textures', () => {
   });
 
   describe('on reconnecting', () => {
-    const connection = (): EventTarget => {
+    const connection = () => {
       const target = new EventTarget();
-      vi.stubGlobal('addEventListener', target.addEventListener.bind(target));
-      vi.stubGlobal('removeEventListener', target.removeEventListener.bind(target));
-      return target;
+      const add = vi.fn(target.addEventListener.bind(target));
+      const remove = vi.fn(target.removeEventListener.bind(target));
+      vi.stubGlobal('addEventListener', add);
+      vi.stubGlobal('removeEventListener', remove);
+      return Object.assign(target, { add, remove });
     };
     afterEach(() => {
       vi.unstubAllGlobals();
@@ -335,7 +337,7 @@ describe('ground textures', () => {
       expect(apply).toHaveBeenCalledWith({ detail: loaded });
     });
 
-    it('does nothing for a set that loaded, and stops listening once disposed', async () => {
+    it('does nothing for a set that loaded, and removes its listener once disposed', async () => {
       const target = connection();
       const load = vi.fn(() => Promise.resolve(texture()));
       const textures = startGroundTextures(load);
@@ -352,7 +354,10 @@ describe('ground textures', () => {
       other.attach(renderer());
       other.setEnabled(true);
       await settle();
+      const added = target.add.mock.calls.at(-1);
+      expect(added?.[0]).toBe('online');
       other.dispose();
+      expect(target.remove).toHaveBeenCalledWith('online', added?.[1]);
       target.dispatchEvent(new Event('online'));
       await settle();
       expect(failing).toHaveBeenCalledTimes(1);

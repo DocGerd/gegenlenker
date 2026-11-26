@@ -91,4 +91,35 @@ describe('createPresetCache', () => {
     await Promise.all([first, cache.refresh()]);
     expect(reports).toEqual([true]);
   });
+
+  it('drops the report of a refresh that was superseded while it downloaded', async () => {
+    let preset = ['/a.glb'];
+    let online = true;
+    let finish: () => void = () => undefined;
+    let downloading = false;
+    const { h, store } = host({
+      urls: () => preset,
+      online: () => online,
+      download: (url) =>
+        new Promise((resolve) => {
+          downloading = true;
+          finish = () => {
+            store.add(url);
+            resolve();
+          };
+        }),
+    });
+    const reports: boolean[] = [];
+    const cache = createPresetCache(h, (ready) => reports.push(ready));
+    const first = cache.refresh();
+    await vi.waitFor(() => {
+      expect(downloading).toBe(true);
+    });
+    preset = ['/other.glb'];
+    online = false;
+    await cache.refresh();
+    finish();
+    await first;
+    expect(reports).toEqual([false, false, false]);
+  });
 });

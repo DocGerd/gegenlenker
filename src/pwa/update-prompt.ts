@@ -45,7 +45,7 @@ export function startUpdatePrompt(root: HTMLElement, preset: () => GraphicsPrese
     return el;
   };
 
-  // Offline-ready needs the precache and the saved preset's own assets, which are cached on first use.
+  // Offline-ready needs the precache and the saved preset's own assets, which are fetched while online.
   let shellCached = false;
   let announce = false;
   const presets = createPresetCache(
