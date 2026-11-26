@@ -265,7 +265,7 @@ const CUT_SHORT = 8;
 const RESCUE_STRAIGHT = 0.02;
 const RESCUE_MIN = 4;
 const RESCUE_MAX = 25;
-/** Clearance (m) the pull-forward keeps from obstacles. */
+/** Clearance (m) the pull-forward keeps from obstacles, unless the rig already stands nearer. */
 const RESCUE_CLEARANCE = 0.3;
 /** The fresh reverse joins the leg no later than this far (m) from its end on its final straight, on arcs of this radius (m). */
 const RESCUE_FINAL = 16;
@@ -1304,7 +1304,7 @@ const SLALOM_VIA = Array.from({ length: 24 }, (_, i) => {
 /**
  * How the Einweiser picks signs, per exercise (why each: PR #515, reverse-bay's since the side glass
  * of PR #529): the rollout search scored on the body heading, the search scored on the leading end's
- * own direction of motion, or (reverse legs) the tracking LQR.
+ * own direction of motion, or the tracking LQR on reverse legs with the body-heading search forward.
  */
 type SignPolicy = 'search' | 'leadSearch' | 'lqr';
 const POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
