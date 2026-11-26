@@ -1,4 +1,10 @@
-import type { EinweiserPose, EinweiserStatus, ReadingKind, SignId } from '../contracts/einweiser';
+import {
+  HOLD_STEPS,
+  type EinweiserPose,
+  type EinweiserStatus,
+  type ReadingKind,
+  type SignId,
+} from '../contracts/einweiser';
 import type { EinweiserSample, EinweiserTrack } from '../contracts/exercise';
 import type { Rect2 } from '../contracts/layout';
 import type { ControlVector, SimSnapshot } from '../contracts/sim';
@@ -8,9 +14,6 @@ import { createDriver, createPilot, type Pilot } from './driver';
 import { bodyOccluders, type Occluder, type SightGeometry } from './sight';
 import type { Perception, Reading } from './signs';
 import { startWalker, walkStep, type WalkKeys, type Walker } from './walk';
-
-/** His pose is sampled every this many steps (10 Hz, estimate) and held in between (`docs/einweiser-spike.md` §5). */
-export const HOLD_STEPS = 6;
 
 /** What the trainee does in one step: walk keys, look and the sign key held. */
 export type EinweiserInput = {

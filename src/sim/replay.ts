@@ -172,7 +172,8 @@ function parseTrack(v: unknown): EinweiserTrack | null {
   const signs = parseSteps(v.signs, ({ sign }, step) =>
     sign === null || isMember(SIGN_IDS, sign) ? { step, sign } : null,
   );
-  return samples === null || signs === null ? null : { samples, signs };
+  // the replay reads his pose from the first sample on (`createTrackCursor`)
+  return samples === null || samples.length === 0 || signs === null ? null : { samples, signs };
 }
 
 export function serializeInputLog(log: InputLog, fingerprint: (ids: RunIds) => string): string {
