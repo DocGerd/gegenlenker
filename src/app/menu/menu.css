@@ -446,7 +446,7 @@ ol.menu-rows .menu-row {
   color: var(--color-text-muted);
 }
 
-.menu-start {
+.menu-setup-start {
   box-sizing: border-box;
   width: 100%;
   min-height: var(--size-target);
@@ -460,12 +460,20 @@ ol.menu-rows .menu-row {
   font-weight: var(--weight-semibold);
 }
 
-.menu-start:hover:not(:disabled) {
+.menu-setup-start:hover:not(:disabled) {
   background: var(--color-accent-strong);
 }
 
-.menu-start:disabled {
+.menu-setup-start:disabled {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
   cursor: progress;
+}
+
+/* Language-neutral and kept out of the accessible name (empty alt text); `aria-busy` tells assistive tech. */
+.menu-setup-start[aria-busy='true']::after {
+  content: ' …' / '';
 }
 
 /* Choice rows: the values share one line while they fit, else each takes its own (Holy Albatross). */
@@ -518,8 +526,12 @@ ol.menu-rows .menu-row {
   }
 }
 
-.choice:hover {
+.choice-row:not(:disabled) .choice:hover {
   border-color: var(--color-accent);
+}
+
+.choice-row:disabled .choice {
+  cursor: default;
 }
 
 .choice:has(.choice-radio:checked) {

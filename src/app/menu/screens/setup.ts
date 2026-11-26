@@ -111,7 +111,7 @@ export function setupScreen(ctx: SetupContext): {
 
   const last = ctx.step + 1 >= entry.steps.length;
   // Only the last step starts; a `next` label joins the catalogue with a second step.
-  const start = element('button', 'menu-start', t('start'));
+  const start = element('button', 'menu-setup-start', t('start'));
   start.type = 'button';
   start.dataset['menu'] = 'start';
   start.addEventListener('click', () => {
