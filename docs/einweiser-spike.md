@@ -10,7 +10,7 @@ The issue cites ASR A1.3 Anhang 1; the hand signs are **ASR A1.3 Anhang 2 "Handz
 
 - Decided (owner): exactly the nine vehicle signs of DGUV V70 Anhang 4. No Langsam, Heben or Senken (crane signs, not in V70), no invented end sign.
 - Decided (owner): signs are read in the Einweiser's frame. Herkommen = the vehicle moves toward the Einweiser, forward or in reverse depending on where he stands; Entfernen = away from him; Rechts/Links fahren = toward his own right/left ("vom Einweiser aus gesehen", ASR wording).
-- Rules the trainer enforces: the Einweiser stays in the driver's field of view and never between the moving vehicle and obstacles in its path; the driver stops at once when he loses sight of the Einweiser (DGUV V70 §46(2) and its DA; BG Verkehr G2 "sofort anhalten!"). Einweiser should not walk backwards (BG G2, DLRG). No source gives a numeric safety distance.
+- Rules the trainer enforces: the Einweiser stays in the driver's field of view and never between the moving vehicle and obstacles in its path; the driver stops at once when he loses sight of the Einweiser (DGUV V70 §46(2) and its DA; BG Verkehr G2 "sofort anhalten!"). Einweiser should not walk backwards (BG G2, DLRG). ASR A1.3 and DGUV V70 give no numeric safety distance; the BG E5 diagram shows about 3 m, and DLRG names "mind. 50 cm" (its reference ambiguous).
 
 ## 1. Signal vocabulary
 
@@ -39,10 +39,10 @@ An AI `ControlSource` emits one `ControlVector` per sim step. It only steps targ
 
 Per step the driver reads the held Einweiser pose, the active sign and the sight result (§3.5), and keeps a FIFO of what it perceived, so it acts on each perception after a fixed delay.
 
-### Unaided vs. on a sign
+### Unaided vs. on a sign (call)
 
 - Unaided: it keeps the articulation stable (rejects any steer that predicts a limit stop), holds speed to the sign's lever, stops on Halt, no sign or lost sight, and brakes as for Halt – Gefahr when the Einweiser is visible inside its predicted swept path within stopping distance plus 1 m (estimate).
-- Never: it does not know the target, does not avoid static obstacles and never picks a direction itself. So contacts, target error and direction changes come from the trainee's signs.
+- Never: it does not know the target, does not avoid static obstacles and never picks a direction itself. So contacts, target error and direction changes come from the trainee's signs. It does brake for a visible Einweiser in its path, as a driver would for a person; a run-over stays possible when he steps in within stopping distance or stands in the path unseen.
 
 ### Einweiser frame
 
@@ -111,6 +111,7 @@ Only objectively ambiguous signs are misread, as pure functions of pose, facing 
   - The first `mousemove` after lock is dropped, single deltas above 300 px (estimate) are clamped, deltas are summed per frame and ignored while unlocked.
   - Yaw/pitch at 0.15°/px (estimate), pitch clamped to ±85°, no roll, no smoothing, no head bob, no FOV kick.
 - Settings (call): choice rows "Mausempfindlichkeit" (Niedrig/Mittel/Hoch = 0.08/0.15/0.3°/px, estimates) and "Maus invertieren" (Aus default/An). FOV and head bob are not offered in the MVP.
+- Rebinding: not offered (a non-goal of the menu spec). Bindings are by `code` with alternates; a later rebind UI refuses Ctrl/Alt/Meta combos, since `Keyboard.lock` is limited and the browser keeps Ctrl+W/T/N.
 - Conflicts: WASD, arrows, digits, Space and Q/E are drive or view keys today. Einweiser mode mounts no driver keyboard, wheel or lever (`createControls`). `'sign'` and `'walk'` take precedence over `'view'`: on Dvorak `KeyS` types "o" (`viewChase`), and `0` is the view's `resetView` by `key`. Ctrl/Alt/Meta stay unbound (`createKeyboard` already ignores them).
 
 ### 3.2 Camera
@@ -118,16 +119,16 @@ Only objectively ambiguous signs are misread, as pure functions of pose, facing 
 - First-person camera at the held pose, eye height 1.60 m (estimate; DIN 33402-2 is paywalled).
 - Vertical FOV fixed at 59° (Hor+, 90° horizontal at 16:9); three's `fov` is vertical.
 - Layers `EINWEISER_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER]` (`src/render/seams.ts`): he sees the cab exterior, the sky dome and the skyline, not `INTERIOR_LAYER`. Far plane `CAMERA_FAR`.
-- No preset flag: the view and arms are the mode, not a realism layer. The mode draws no driver mirrors (§7).
+- Call: no preset flag. CLAUDE.md's flag rule is for realism layers; the view and arms are the mode itself, and the mode draws no driver mirrors (§7), so it costs fewer passes than driver mode on every preset, Low included.
 
 ### 3.3 Arms (view model)
 
 - Rig: rigid segments per arm (upper arm, forearm, hand; hi-vis sleeve with a reflective band per ASR 5.7(3)). Procedural geometry in `src/render/einweiser-arms.ts`; no Blender, no skinning.
 - Pose table: joint-angle keyframes per sign in a three-free `src/render/sign-poses.ts`, slerped and looped. The table also drives the pictograms and the later avatar.
-- Framing: Halt's arms point straight sideways and Achtung's straight up, outside any usable FOV. The view model uses first-person versions of the poses (hands at about ±30° azimuth, raised arm forward-up), while the pictogram and avatar keep the source poses (Unreal's split of first-person and world representation).
+- Framing (call): Halt's arms point straight sideways and Achtung's straight up, outside any usable FOV. The view model uses first-person versions of the poses (hands at about ±30° azimuth, raised arm forward-up), while the pictogram and avatar keep the source poses (Unreal's split of first-person and world representation). One-arm signs (Achtung, Abfahren, Rechts/Links fahren) show the idle arm lowered with its hand at the lower frame edge, so both arms stay in frame.
   - A unit test projects every sign's keyframe hand and forearm points through the view-model camera at the narrowest supported aspect and asserts them in frame and above the band, so "both arms in frame for every sign" is pinned like `cockpit-interior.test.ts`.
 - Pass:
-  - Same scene, new `VIEWMODEL_LAYER = 7` (0–6 are taken), its own camera with a fixed 60° vertical FOV (estimate, Bevy's pattern), and a view offset that frames the arms above the band.
+  - Same scene, new `VIEWMODEL_LAYER = 7` (the next free layer), its own camera with a fixed 60° vertical FOV (estimate, Bevy's pattern), and a view offset that frames the arms above the band.
   - It renders right after the first-person pass with a depth-only clear: `autoClearColor = false`, `autoClearDepth = true`, folding the clear into the pass. An explicit `clear()` costs an extra multisample resolve on WebGL 2 (comment in `src/render/three-renderer.ts`). On WebGPU the in-pass clear is a load op that ignores the scissor, which for depth only leaves earlier panes' colour intact.
 - Pitfalls:
   - `scene.background` is unset (the sky is a dome on `PERSPECTIVE_LAYER`), so the second pass draws no backdrop.
@@ -178,17 +179,17 @@ A HUD cue beside the sign name: an eye icon and text, never colour alone.
 
 `src/scoring/einweiser.ts`, a per-step tracker beside `createRunTracker`:
 
-| Result / fault            | Rule                                                                                                                                                                      |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| run over (fail, run ends) | a person box (0.5 × 0.3 m, estimate) at the held pose hits a body (`createContactQuery([person])(bodyFootprints(…))`) while the vehicle moves faster than `STOPPED_SPEED` |
-| `inPath`                  | while moving, the person lies inside the swept footprints of every body over stopping distance + 1 m (§46(2))                                                             |
-| `tooClose`                | while moving, clearance to any body < 0.5 m (DLRG minimum, estimate)                                                                                                      |
-| `outOfSight`              | sight lost while moving; repositioning while the vehicle stands is allowed (UKH)                                                                                          |
-| `signOutOfSight`          | a sign change made while not in sight                                                                                                                                     |
-| `unclear`                 | a direction sign the driver could not read (abeam, side-on)                                                                                                               |
-| `lateHalt`                | an obstacle contact while a movement sign showed and `contactAhead` (real contact query) had been true for longer than `T_r`                                              |
-| `walkedBackwards`         | walking against the facing faster than 0.3 m/s (estimate) while the vehicle moves (BG G2, DLRG)                                                                           |
-| `noAchtung`               | a movement sign before the first Achtung (counted once; the driver ignores it)                                                                                            |
+| Result / fault            | Rule                                                                                                                                                                                                                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| run over (fail, run ends) | a person box (0.5 × 0.3 m, estimate) at the held pose hits a body (`createContactQuery([person])(bodyFootprints(…))`, counting only results with the person's `obstacleId`, since the query also reports truck against trailer) while the vehicle moves faster than `STOPPED_SPEED` |
+| `inPath`                  | while moving, the person lies inside the swept footprints of every body over stopping distance + 1 m (§46(2))                                                                                                                                                                       |
+| `tooClose`                | while moving, clearance to any body < 0.5 m (DLRG minimum, estimate)                                                                                                                                                                                                                |
+| `outOfSight`              | sight lost while moving; repositioning while the vehicle stands is allowed (UKH)                                                                                                                                                                                                    |
+| `signOutOfSight`          | a sign change made while not in sight                                                                                                                                                                                                                                               |
+| `unclear`                 | a direction sign the driver could not read (abeam, side-on)                                                                                                                                                                                                                         |
+| `lateHalt`                | an obstacle contact while a movement sign showed and `contactAhead` (real contact query) had been true for longer than `T_r`                                                                                                                                                        |
+| `walkedBackwards`         | walking against the facing faster than 0.3 m/s (estimate) while the vehicle moves (BG G2, DLRG)                                                                                                                                                                                     |
+| `noAchtung`               | a movement sign before the first Achtung (counted once; the driver ignores it)                                                                                                                                                                                                      |
 
 - Swept footprints: `predict.ts` returns only the leading end's corner pair, and a reversing truck's front swings out. So `inPath` needs a pure `sweptBodies(params, from, distance)` beside `predictCombination` (same integrator).
 - Every fault counts once per incident, the way `contacts` count once per incident key.
@@ -242,7 +243,7 @@ Decided (owner): the AI driver's `ControlVector`s are logged and authoritative (
 - Fingerprint:
   - The sim is untouched. The person is not in the sim's `ContactQuery`: the hit ends the run, so the sim need not block for it, and a controls-only replay cannot diverge. So `SIM_REVISION` does not move.
   - `dataFingerprint` is unchanged. Einweiser runs pass `scoring: { ...SCORING_THRESHOLDS, ...EINWEISER_THRESHOLDS, EINWEISER_REVISION }` and `RunIds` gains `role`, so driver runs keep their fingerprints and `run.test.ts` digests (evidence the seam refactor is behaviour-neutral).
-  - Changes to Einweiser scoring, the sight check or `predict.ts` bump `EINWEISER_REVISION`; AI-only changes need nothing. One pinned Einweiser digest per layout (a fixed v4 log) joins `run.test.ts`.
+  - Shared reading rules feed both the driver and the derived faults: sight geometry, abeam ratio, facing bands, `T_r` (`lateHalt`) and the Achtung rule. They live in `src/einweiser/signs.ts` and `sight.ts`, are hashed with `EINWEISER_THRESHOLDS`, and a change to them, to Einweiser scoring or to `predict.ts` bumps `EINWEISER_REVISION`. Driver-only tuning (planner candidates, horizon, cost and hysteresis, lever values, recognition time, the braking look-ahead) needs nothing. One pinned Einweiser digest per layout (a fixed v4 log) joins `run.test.ts`.
 - Layering:
   - New core dir `src/einweiser/` (`signs.ts`, `sight.ts`, `walk.ts`, `driver.ts`, `track.ts`) and types in `src/contracts/einweiser.ts`. Add the dir to `CORE` in `eslint.config.js` and to `tsconfig.core.json` `include`, with rules: sim imports neither `einweiser` nor `scoring`, and `einweiser` does not import `scoring`.
   - Not in `src/sim`: the sim stays the vehicle model whose revision guards driver runs, and the driver is outside the replay contract.
@@ -250,9 +251,9 @@ Decided (owner): the AI driver's `ControlVector`s are logged and authoritative (
 
 ## 6. Exercise reuse
 
-- All five exercises and both free yards run unchanged: `ExerciseDefinition`, start, target, tolerances, waypoint and obstacles are reused as they are. The run still ends when the tracker reports `reached` (stopped inside tolerance, i.e. after Halt).
+- Every exercise and free yard runs unchanged: `ExerciseDefinition`, start, target, tolerances, waypoint and obstacles are reused as they are. The run still ends when the tracker reports `reached` (stopped inside tolerance, i.e. after Halt).
 - The Einweiser's start pose is a pure function of the exercise start and the combination's dims. Call: rear left (driver's side) by default, 2 m behind and 1.5 m outboard of the trailer rear, estimate. It is set in the menu spec's `'position'` setup step ("Standort": hinten links / hinten rechts / vorn). It is not in `ExerciseDefinition`, so no driver-run fingerprint moves; the track's first sample logs it.
-- Tightest: dock-ramp (0.3 m, 2°). With the crawl lever, Halt stops 0.17 m after the sign. The delay is constant, so a trainee can anticipate it; from creep (0.79 m) the tolerance is out of reach, which is what Abstandsverringerung is for.
+- Tightest: dock-ramp (0.3 m, 2°). The stop lands a fixed distance after Halt, so the trainee calls it early by that distance: 0.79 m from creep, 0.17 m from crawl. Crawl makes the tolerance forgiving of timing (0.1 s late costs 2 cm instead of 7 cm), which is what Abstandsverringerung is for.
 - Slalom (forward, with a turn point) needs Herkommen from in front or Entfernen from behind; both follow from the Einweiser-frame rule.
 - Whether every exercise leaves a standing point in sight and outside the swept path is answered by the gate test (§9).
 - Menu (spec `docs/superpowers/specs/2026-11-25-main-menu-design.md`, "Role-ready"):
@@ -269,15 +270,15 @@ Today, from code reading, not measured:
 - Plus the cockpit pass, the pane pass, 6 composite quads, 1 output pass, and shadow passes (`e2e/draw-budget.spec.ts`).
 - `DRAW_CALL_BUDGET` (`src/render/quality.ts`) is asserted at 1920×1080 with every mirror.
 
-| Item                       | Work                                                                                                                                                                                                                                                                                                                             | Cost (estimates)                                                                                                                                                                                    |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MVP                        | first-person pass (replaces the cockpit), view-model pass, pane 0–1; no driver mirror passes, since the trainee does not see them                                                                                                                                                                                                | arms ≤ 10 draw calls; fewer scene passes than driver mode on every preset                                                                                                                           |
-| Transparent cab glass      | split glass from the baked glass+lens node (`src/render/glb-shells.ts`); rebuild every cab glb through `cab_shell.py` (hashes, `glb:params`, manifest); transparent material sorted after opaque                                                                                                                                 | +1–3 draw calls per pass that sees the cab                                                                                                                                                          |
-| Interior and driver figure | the interior is on `INTERIOR_LAYER`, authored in the cockpit camera's NDC (`src/render/interior-glb.ts`), unusable from outside: a world-space interior (seat, dash, wheel) and a driver figure on a layer the first-person and chase cameras see but the cockpit camera does not; `ATTACHMENTS` entry; `interior_shell.py` work | +5–15 (interior) and +5–10 (figure) draw calls                                                                                                                                                      |
-| Reflecting mirrors         | one planar reflection pass per visible mirror, culled with the pure sight geometry (facing + frustum): typically 1–3, worst 6, each about one of today's mirror passes; convex class II/IV approximated by a widened FOV                                                                                                         | comparable to driver mode's up to 5 mirror passes (worst case one more); reusing the driver-eye mirror targets as glass textures would be free but is right only from the driver's eye, so rejected |
+| Item                       | Work                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Cost (estimates)                                                                                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| MVP                        | first-person pass (replaces the cockpit), view-model pass, pane 0–1; no driver mirror passes, since the trainee does not see them                                                                                                                                                                                                                                                                                                                                               | arms ≤ 10 draw calls; fewer scene passes than driver mode on every preset                                                                                                                           |
+| Transparent cab glass      | `<group>-glass` is already its own mesh in the cab glb, merged with the lenses only at load (`bake`, `src/render/glb-shells.ts`): stop merging it and give it a transparent material sorted after opaque; no glb rebuild unless the glass shape changes                                                                                                                                                                                                                         | +1–3 draw calls per pass that sees the cab                                                                                                                                                          |
+| Interior and driver figure | the Blender interior (`interior_shell.py`) is authored in the truck frame and placed at the eye each frame (`src/render/interior-glb.ts`), on `INTERIOR_LAYER`, cockpit camera only, and drawn only where `cockpitInterior` and `interiorGlb` are on. Reuse it on a layer the first-person and chase cameras see; the flat overlay and the lit lip are NDC-authored and stay cockpit-only. Add a seat and a driver figure (cockpit camera excluded) with an `ATTACHMENTS` entry | +4 (interior meshes) and +5–10 (seat, figure) draw calls                                                                                                                                            |
+| Reflecting mirrors         | one planar reflection pass per visible mirror, culled with the pure sight geometry (facing + frustum): typically 1–3, worst 6, each about one of today's mirror passes; convex class II/IV approximated by a widened FOV                                                                                                                                                                                                                                                        | comparable to driver mode's up to 5 mirror passes (worst case one more); reusing the driver-eye mirror targets as glass textures would be free but is right only from the driver's eye, so rejected |
 
 - Gating: preset flags `cabGlass`, `cabInterior` and `mirrorReflections`, High first and off on Low. An Einweiser case in `e2e/draw-budget.spec.ts`, a probe view in `e2e/perf/four-views.perf.ts`, a real-GPU desktop run (`pnpm perf:tablet --throttle 1 --preset high`) and an owner device check.
-- Effort: 4–6 PRs (estimate), Blender-heavy.
+- Effort: 4–6 PRs (estimate); Blender work for the seat and driver figure.
 
 ## 8. Best practices (sources)
 
@@ -362,6 +363,9 @@ Estimate: nine PRs, of which PR 2 carries the risk. PR 3 can run beside PRs 1–
 8. Default standing point: rear left (driver's side), or rear right as the DRK material teaches? Both are offered in the setup step.
 9. Menu: a separate title entry "Einweisen", or a role row inside Exercises (the menu spec left this to #443)?
 10. No Einweiser bests in the MVP?
+11. Driver responsibility: the AI never avoids static obstacles and does not know the target (contacts are the trainee's), but brakes for a visible Einweiser in its path. Agree?
+12. First-person arms: adapted poses keep both arms in frame (Halt's arms angled forward, Achtung's arm forward-up, idle arm lowered), while the sign bar's pictogram shows the source pose. Is that close enough to "sees his own arms perform each sign"?
+13. No preset flag for the Einweiser view and arms (they are the mode, not a realism layer). Agree?
 
 ## Proposed glossary rows
 
