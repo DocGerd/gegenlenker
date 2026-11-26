@@ -175,7 +175,7 @@ There is no mirror plane in code: a mirror is a camera at a mount with yaw, pitc
 
 ### 3.6 Sight cue (MVP)
 
-A HUD cue beside the sign name: an eye icon and text, never colour alone.
+A HUD cue top left of his view: an eye icon and text, never colour alone.
 
 | State   | Text                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------- |
@@ -188,7 +188,7 @@ A HUD cue beside the sign name: an eye icon and text, never colour alone.
 
 - `computeViewports` (`src/render/viewports.ts`) gets an Einweiser mode: the cockpit rect becomes the first-person view, with no mirror rects or extras, no controls (`controlsHeight` 0) and no sight cone (`CLEAR_CONE_DEG` is the cockpit's).
 - Call: the top view stays optional through the existing no-pane flag. `mirrorsOnly` (log, best key) means "no top-down pane" (`hasTopDown()`), labelled "Mit Draufsicht / Ohne Draufsicht" for this role (glossary row below), also on the title's replay button (`src/app/menu/screens/title.ts`, which shows `driveViewMirrors` today); aids are off without the pane, as today. The pane shows the top view only (§3.4).
-- The band (`.hud-band`) holds the sign bar. The sign name and sight cue sit top-left of the view.
+- The band (`.hud-band`) holds the shown sign's name and the sign bar. The sight cue sits top-left of the view.
 - `messageColumn` gets an Einweiser branch: top-centre of the view, clear of the cue and the band, with or without the pane. `messagesFit` and `expectMessagesClear` cover it at every `e2e/layout.spec.ts` size, and `pnpm verify:layout` runs per the `verify-viewport-layout` skill.
 - The HUD's `pedalsBox` becomes optional (no pedals in this mode).
 
