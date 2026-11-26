@@ -6,6 +6,8 @@ import { ASSET_SOURCES } from './assets/sources';
 export type LicenceEntry = Omit<ThirdParty, 'text'> & {
   /** The package file the licence is copied from, relative to the repository root. */
   readonly upstream?: string;
+  /** Transitive packages in the bundle that ship under the same licence text. */
+  readonly bundled?: readonly string[];
 };
 
 /** Every licence file in `public/licenses/`, with the runtime dependencies it covers. */
@@ -22,6 +24,7 @@ export const THIRD_PARTY: readonly LicenceEntry[] = [
     spdx: 'MIT',
     file: 'workbox-window-MIT.txt',
     covers: ['workbox-window'],
+    bundled: ['workbox-core'],
     upstream: 'node_modules/workbox-window/LICENSE',
   },
   {
