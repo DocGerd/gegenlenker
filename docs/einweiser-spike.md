@@ -51,8 +51,8 @@ Per step the driver reads the held Einweiser pose, the active sign and the sight
 ### Einweiser frame
 
 - Decided (owner): forward and back are set by the cab's transverse axis at the driver's position ("back and forth is based on the querachse of the führerhaus, at level of driver"), i.e. the line through `truckAnchors(spec).eye` across the truck heading. Ahead of it, Herkommen is D and Entfernen R; behind it, Herkommen is R and Entfernen D. Abeam is a narrow band on that line (±0.5 m, estimate), where the sign is unclear and the driver waits.
-- The side is read continuously, so walking cannot flip the gear without passing through the band. Call (open question 1): when the band reaches him while the sign is held (the cab draws level, or he walks level with it), the driver stops as on Halt, with no `unclear` fault; only a sign given from inside the band is unclear.
-- Call (open question 2): from standstill, Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the axis; while moving they keep the current gear.
+- The side is read continuously, so walking cannot flip the gear without passing through the band. Decided (owner): when the band reaches him while the sign is held (the cab draws level, or he walks level with it), the driver stops as on Halt, with no `unclear` fault; only a sign given from inside the band is unclear.
+- Call (open question 1): from standstill, Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the axis; while moving they keep the current gear.
 - A gear change stops first (lever 0, brake), shifts at standstill, then moves; the sim counts it in `directionChanges`.
 - Rechts/Links: the indicated world direction is the Einweiser's heading −90° (right) or +90° (left) (sim plane: counter-clockwise positive), from the held pose at recognition. Its side relative to the leading end's direction of motion is the steer goal.
 - Worked cases (straight combination): behind a reversing combination, facing it, the Einweiser faces the truck's heading, so his right is the driver's right. In front of a truck driving forward, facing it, his right is the driver's left: the driver mirrors.
@@ -82,17 +82,16 @@ A sign shown for less than its recognition time is never acted on.
 
 ### Unclear signs (deterministic)
 
-Nothing is misread. A sign the driver cannot read is unclear: it waits, or stops if moving, so an unclear Halt still stops the vehicle. Pure functions of pose, facing, range and timing; no `Math.random` (banned in core lint), no seed.
+Nothing is misread. A sign the driver cannot read is unclear: it waits, or stops if moving, so an unclear Halt still stops the vehicle. Decided (owner): every unclear sign scores `unclear`, Halt included. Pure functions of pose, facing, range and timing; no `Math.random` (banned in core lint), no seed.
 
 - Station (decided (owner)): Herkommen/Entfernen given from inside the abeam band (above).
 - Facing is measured between the Einweiser's heading and the line from him to where he is seen (the eye, or the mirror mount), with a tolerance of 60° (estimate).
 - Readability (decided (owner), §3.5): every sign needs its hand points seen on its path and him within the reading range.
 
-| Signs                                     | Facing tolerance               | Readability                                                     | `unclear` fault                                               |
-| ----------------------------------------- | ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------- |
-| Herkommen, Entfernen, Rechts/Links fahren | applies, never swapped (owner) | applies (owner)                                                 | station and facing: yes (owner); readability: open question 5 |
-| Achtung, Halt, Halt – Gefahr              | does not apply (owner)         | applies (owner): a Halt seen without its hand points is unclear | open question 5                                               |
-| Abfahren, Abstandsverringerung            | open question 4                | applies (owner)                                                 | open question 5                                               |
+| Signs                                                                     | Facing tolerance               | Readability                                                     |
+| ------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------- |
+| Herkommen, Entfernen, Rechts/Links fahren, Abfahren, Abstandsverringerung | applies, never swapped (owner) | applies (owner)                                                 |
+| Achtung, Halt, Halt – Gefahr                                              | does not apply (owner)         | applies (owner): a Halt seen without its hand points is unclear |
 
 - Decided (owner): facing is checked at recognition only, so he may turn away afterwards, e.g. to walk forward (UKH: "Im Zweifel ausschließlich vorwärts laufen und Fahrzeug nachrücken lassen").
 - Out of sight or too short: ignored (scored, §4).
@@ -100,7 +99,7 @@ Nothing is misread. A sign the driver cannot read is unclear: it waits, or stops
 
 ### Lost sight
 
-- Sources say stop at once. Decided (owner): a bounded grace timer. A loss shorter than `T_r` is forgiven, and a cumulative timer caps the forgiven losses (estimate; Call, open question 3: summed since the vehicle last stood); a loss that lasts `T_r`, or one that takes the sum over the cap, starts the stop, which brakes (`BRAKE_DECEL`). So a pillar or a mirror edge that hides him briefly does not stop the vehicle, but repeated losses do. PR 2 pins the stop from creep inside the ~3 m spacing E5 shows.
+- Sources say stop at once. Decided (owner): a bounded grace timer. A loss shorter than `T_r` is forgiven, and a cumulative timer caps the forgiven losses (estimate; decided (owner): summed since the vehicle last stood); a loss that lasts `T_r`, or one that takes the sum over the cap, starts the stop, which brakes (`BRAKE_DECEL`). So a pillar or a mirror edge that hides him briefly does not stop the vehicle, but repeated losses do. PR 2 pins the stop from creep inside the ~3 m spacing E5 shows.
 - Decided (owner): after a lost-sight stop a held sign restarts the driver once it is re-recognised after sight returns (full recognition time); a key held only out of sight counts for nothing. This matches UKH: stop first, the Einweiser repositions, restores sight, then signals again.
 
 ## 3. Einweiser view and body
@@ -196,7 +195,7 @@ A HUD cue beside the sign name: an eye icon and text, never colour alone.
 | `tooClose`                | while moving, clearance to any body < 0.5 m (estimate)                                                                                                                                                                                                                                                                      |
 | `outOfSight`              | sight lost while moving: every loss the driver stops for (§2); repositioning while the vehicle stands is allowed (UKH)                                                                                                                                                                                                      |
 | `signOutOfSight`          | a sign given while not in sight                                                                                                                                                                                                                                                                                             |
-| `unclear`                 | a sign the driver could not read, per the table in §2 (station, facing, readability)                                                                                                                                                                                                                                        |
+| `unclear`                 | any sign the driver could not read, Halt included (decided (owner)), per the table in §2 (station, facing, readability)                                                                                                                                                                                                     |
 | `lateHalt`                | an obstacle contact while a movement sign showed and `contactAhead` (real contact query) had been true for longer than `T_r`                                                                                                                                                                                                |
 | `noAchtung`               | a movement sign before the first Achtung (counted once; the driver still follows; decided (owner))                                                                                                                                                                                                                          |
 
@@ -358,16 +357,7 @@ Estimate: nine PRs, of which PR 2 carries the risk. PR 3 starts once the gate pa
 
 ## Open questions for the owner
 
-Proposals the owner has not confirmed:
-
-1. Cab level (§2): when the abeam band reaches him while Herkommen/Entfernen is held, the driver stops as on Halt, with no `unclear` fault.
-2. From standstill (§2): Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the cab axis.
-3. Grace cap (§2): the cumulative lost-sight timer sums forgiven losses since the vehicle last stood.
-
-New, from reconciling the unclear-sign rules (§2):
-
-4. Facing for Abfahren and Abstandsverringerung: do they need the facing tolerance like the direction signs, or are they read whatever his facing, like Achtung and Halt?
-5. `unclear` fault for an unreadable sign (hand points not seen, or out of range): scored for every sign, or only for direction signs? The driver waits or stops either way.
+1. From standstill (§2): Rechts/Links fahren and Abstandsverringerung take Herkommen's gear from his side of the cab axis. A proposal the owner has not accepted.
 
 ## Proposed glossary rows
 
