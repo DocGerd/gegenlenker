@@ -495,6 +495,47 @@ describe('computeViewports front mirror', () => {
     ).toBeNull();
   });
 
+  it('drops once as the portrait top-down share grows, and no extra mirror comes back', () => {
+    const ALL = { front: true, wide: true, close: true };
+    const at = (w: number, h: number, pane: number, extra: typeof ALL) =>
+      computeViewports(
+        w,
+        h,
+        'drive',
+        null,
+        NO_INSETS,
+        { ...DEFAULT_TOP_DOWN_LAYOUT, portrait: pane / h },
+        null,
+        extra,
+      );
+    // Without the rule the front mirror returned at 741x1133 from pane 517 (the messages beside it wrap
+    // shorter as class II narrows) and at 696x1133, with class IV, from pane 496.
+    const cases: (readonly [number, number, typeof ALL])[] = [
+      [741, 1133, FRONT],
+      [696, 1133, ALL],
+    ];
+    for (let w = 660; w <= 770; w += 10) cases.push([w, 1133, ALL]);
+    for (const [w, h, extra] of cases) {
+      const dropped = { front: false, wide: false, close: false };
+      let was = { front: false, wide: false, close: false };
+      for (let pane = Math.ceil(0.3 * h); pane <= Math.floor(0.6 * h); pane++) {
+        const v = at(w, h, pane, extra);
+        const now = { front: v.front !== null, wide: v.wideLeft !== null, close: v.close !== null };
+        for (const mirror of ['front', 'wide', 'close'] as const) {
+          if (was[mirror] && !now[mirror]) dropped[mirror] = true;
+          expect(dropped[mirror] && now[mirror], `${w}x${h} pane ${pane}: ${mirror} returns`).toBe(
+            false,
+          );
+        }
+        was = now;
+      }
+    }
+    // not before it first stops fitting
+    expect(at(741, 1133, 484, FRONT).front).not.toBeNull();
+    expect(at(741, 1133, 485, FRONT).front).toBeNull();
+    expect(at(696, 1133, 409, ALL).front).not.toBeNull();
+  });
+
   it('lies in the windscreen band, clear of the mirrors, the controls and the legend, at every size', () => {
     let shown = 0;
     for (const [w, h] of sizes) {

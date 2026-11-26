@@ -293,6 +293,66 @@ export function computeViewports(
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
     rise = h - paneHeight(min);
   }
+  const room = { cssWidth, cssHeight, mirrorsOnly, legend, insets, extra };
+  let placed = placeMirrors({ ...room, cockpit, rise });
+  // A growing portrait pane shortens the cockpit and narrows class II, so the front mirror's room and
+  // the wrap of the messages beside it come and go. It stays only where it also fits at every smaller
+  // share the split can reach: as the share grows it then drops once, where it first stops fitting.
+  for (let y = cockpit.y - rise; placed.front !== null && y < cockpit.y; y++) {
+    const taller = { ...cockpit, y, height: cssHeight - y };
+    if (placeMirrors({ ...room, cockpit: taller, rise: y - (cockpit.y - rise) }).front === null) {
+      placed = placeMirrors({ ...room, cockpit, rise, extra: { ...extra, front: false } });
+    }
+  }
+  const { mirror, mirrorRight, front, floor } = placed;
+  const { y, width: mw, height: mh, wide } = mirror;
+  const under = (rect: Rect): Rect | null =>
+    wide ? { x: rect.x, y: y + mh + WIDE_GAP_PX, width: mw, height: wideHeight(mw) } : null;
+  const mirrorLeft: Rect = { x: placed.left, y, width: mw, height: mh };
+  return {
+    cockpit,
+    mirrorLeft,
+    mirrorRight,
+    wideLeft: under(mirrorLeft),
+    wideRight: under(mirrorRight),
+    front,
+    close: extra.close ? closeRect(mirrorRight, floor) : null,
+    topDown,
+  };
+}
+
+type Column = { readonly y: number; readonly width: number; readonly height: number };
+
+/**
+ * The class II mirrors of `cockpit` (`left` is their left edge on the driver's side), whether class IV
+ * hangs under them, and the front mirror. `rise` is, portrait, how many px the cockpit's top can still
+ * rise as the share shrinks to its minimum; `floor` the least y a mirror may start at.
+ */
+function placeMirrors({
+  cssWidth,
+  cssHeight,
+  mirrorsOnly,
+  legend,
+  insets,
+  extra,
+  cockpit,
+  rise,
+}: {
+  readonly cssWidth: number;
+  readonly cssHeight: number;
+  readonly mirrorsOnly: boolean;
+  readonly legend: LegendBox | null;
+  readonly insets: Insets;
+  readonly extra: ExtraMirrors;
+  readonly cockpit: Rect;
+  readonly rise: number;
+}): {
+  readonly mirror: Column & { readonly wide: boolean };
+  readonly mirrorRight: Rect;
+  readonly front: Rect | null;
+  readonly left: number;
+  readonly floor: number;
+} {
   const fullWidth = clamp(
     Math.round(MIRROR_SCALE * 0.15 * cockpit.width),
     Math.round(MIRROR_SCALE * 72),
@@ -318,7 +378,6 @@ export function computeViewports(
     leverClear;
   const controls = controlsHeight(cssWidth, cssHeight, insets);
   const preferred = cockpit.y + top + Math.round(0.16 * cockpit.height);
-  type Column = { readonly y: number; readonly width: number; readonly height: number };
   /** The largest class II mirror with its bottom `clear` above the viewport bottom and at most `maxWidth` wide. */
   const plainFit = (clear: number, maxWidth: number): Column => {
     const ceiling = cssHeight - clear - MIRROR_GAP;
@@ -506,21 +565,7 @@ export function computeViewports(
       solved = retry.mirror.wide ? retry : placed(choose(false, floor));
     }
   }
-  const { mirror, mirrorRight, front } = solved;
-  const { y, width: mw, height: mh, wide } = mirror;
-  const under = (rect: Rect): Rect | null =>
-    wide ? { x: rect.x, y: y + mh + WIDE_GAP_PX, width: mw, height: wideHeight(mw) } : null;
-  const mirrorLeft: Rect = { x: left, y, width: mw, height: mh };
-  return {
-    cockpit,
-    mirrorLeft,
-    mirrorRight,
-    wideLeft: under(mirrorLeft),
-    wideRight: under(mirrorRight),
-    front,
-    close: extra.close ? closeRect(mirrorRight, floor) : null,
-    topDown,
-  };
+  return { ...solved, left, floor };
 }
 
 /**
@@ -590,13 +635,22 @@ const cueTexts = (): string[] =>
     `${lang.goalDistance} ${lang.goalAngleOff}`,
   ]);
 
+const messageHeightsAt = new Map<number, { toast: number; cue: number }>();
+
 /** Heights of the longest toast and of the goal cue in a column `room` px wide. */
 function messageHeights(room: number): { toast: number; cue: number } {
-  // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
-  return {
-    toast: mostLines(textsOf(MESSAGE_KEYS.toast), room - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX,
-    cue: mostLines(cueTexts(), room - 34) * MESSAGE_LINE + MESSAGE_BOX,
-  };
+  // `wordPx` is whole px, so the wrap is that of the whole px below `room`
+  const whole = Math.floor(room);
+  let heights = messageHeightsAt.get(whole);
+  if (heights === undefined) {
+    // the toast's max-width leaves 32 px, its padding and borders take 41; the cue has no such margin
+    heights = {
+      toast: mostLines(textsOf(MESSAGE_KEYS.toast), whole - 32 - 41) * MESSAGE_LINE + MESSAGE_BOX,
+      cue: mostLines(cueTexts(), whole - 34) * MESSAGE_LINE + MESSAGE_BOX,
+    };
+    messageHeightsAt.set(whole, heights);
+  }
+  return heights;
 }
 
 /**
