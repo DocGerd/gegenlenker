@@ -545,7 +545,7 @@ for (const { locale, messages, size, safe } of bandScreens) {
       // The counters widen with the run time, which stands still before the first input.
       const time = page.locator('[data-hud="time"]');
       await time.evaluate((el) => {
-        el.textContent = (el.textContent ?? '').replace(/^\d+/, '100');
+        el.textContent = el.textContent.replace(/^\d+/, '100');
       });
       await expect(time).toHaveText(/^100\D/);
       const [band] = await boxes(page.locator('.hud-band'));
