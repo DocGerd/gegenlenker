@@ -127,6 +127,9 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
   },
 };
 
+/** What a running drive can take: shown in the pause sheet, in this order. */
+export const PAUSE_FIELDS: readonly OptionId[] = ['theme', 'wideMirrors', 'graphics'];
+
 export function optionValue(settings: Settings, id: OptionId): string {
   switch (id) {
     case 'truck':

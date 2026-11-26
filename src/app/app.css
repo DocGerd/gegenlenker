@@ -135,17 +135,33 @@
 
 .pause-sheet {
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
   width: 100%;
   max-width: 360px;
+  max-height: 100%;
+  overflow-y: auto;
   padding: var(--space-6);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
   color: var(--color-text);
   box-shadow: var(--shadow-sm);
+}
+
+.pause-sheet:has(.pause-settings) {
+  max-width: 480px;
+}
+
+.pause-level {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.pause-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .pause-title {

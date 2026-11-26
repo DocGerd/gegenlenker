@@ -26,6 +26,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Point to drive through before the target        | turn point                                  | Wendepunkt                                   |
 | Day or night of a drive                         | time of day (Day / Night)                   | Tageszeit (Tag / Nacht)                      |
 | Render quality setting (Low / Balanced / High)  | graphics quality                            | Grafikqualität (Niedrig / Ausgewogen / Hoch) |
+| Hint that a setting waits for the next start    | applies from the next start                 | gilt ab dem nächsten Start                   |
 | Class IV mirror setting                         | wide-angle mirrors (On / Off)               | Weitwinkelspiegel (An / Aus)                 |
 | Settings group: language and theme              | general                                     | Allgemein                                    |
 | Settings group: graphics quality and mirrors    | graphics                                    | Grafik                                       |
@@ -37,6 +38,12 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Turning the outside view around the vehicle     | orbit / tilt                                | drehen / neigen                              |
 | Flying the outside view's camera anywhere       | free camera                                 | Freie Kamera                                 |
 | Turning the head in the cockpit view            | look around                                 | Umsehen                                      |
+| Menu screen listing the keys and touch controls | controls                                    | Bedienung                                    |
+| Controls group for the keys and wheel rows      | keyboard and mouse                          | Tastatur und Maus                            |
+| Controls group for the pointer controls         | touch and mouse                             | Touch und Maus                               |
+| Round control that steers                       | steering wheel                              | Lenkrad                                      |
+| Slider that sets the share of the speed cap     | speed lever                                 | Hebel                                        |
+| Gear and lamp controls on the touchscreen       | buttons                                     | Schaltflächen                                |
 | Split of the screen into cockpit and top view   | view size                                   | Ansichtsgröße                                |
 | Legend: reset both view and view size           | reset view / size                           | Standardansicht                              |
 | Menu screen listing the app's changes           | what's new                                  | Neuigkeiten                                  |

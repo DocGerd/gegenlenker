@@ -3,7 +3,7 @@ import { choiceRow } from '../choice-row';
 import type { Item, Screen } from '../graph';
 import { applyOption, OPTION_FIELDS, optionValue, type OptionId } from '../options';
 import { currentSettings } from '../../settings';
-import { element, screenFrame } from './frame';
+import { element, rowItem, screenFrame } from './frame';
 
 export type OptionsContext = {
   readonly screen: Screen;
@@ -43,15 +43,11 @@ export function optionsScreen(ctx: OptionsContext): {
     const rows = element('ul', 'menu-rows');
     rows.append(
       ...ctx.screen.items.map((item) => {
-        const button = element('button', 'menu-item menu-row');
-        button.type = 'button';
-        button.dataset['menu'] = item.id;
-        button.append(element('span', 'menu-row-title', t(item.label)));
-        button.addEventListener('click', () => {
+        const { item: li, button } = rowItem(() => {
           ctx.activate(item);
         });
-        const li = document.createElement('li');
-        li.append(button);
+        button.dataset['menu'] = item.id;
+        button.append(element('span', 'menu-row-title', t(item.label)));
         return li;
       }),
     );

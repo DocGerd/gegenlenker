@@ -5,6 +5,7 @@ import { en } from '../src/i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
+import { seedStorage } from './menu-seed';
 import { heavyAt, startPinnedDrive } from './pinned-shoot';
 import {
   chooseSetting,
@@ -2094,3 +2095,108 @@ test('the wide-angle mirrors setting hides class IV, gives class II its full siz
     await context.close();
   }
 });
+
+test(
+  "the wide-angle mirrors option in the pause sheet changes the running drive's layout",
+  heavyAt('low'),
+  async ({ browser }) => {
+    test.slow();
+    const context = await browser.newContext({
+      locale: 'en-US',
+      // Class II only grows without class IV where the screen is tight: not at 1920x1080.
+      viewport: { width: 1536, height: 729 },
+    });
+    try {
+      const page = await context.newPage();
+      await seedStorage(page, { settings: { graphics: 'low' } });
+      await page.goto('./');
+      await startExercise(page, en, 'straight-reverse');
+      await hudReady(page, { exact: false });
+      const wide = page.locator('[data-hud^="wide"]:not([hidden])');
+      const mirror = page.locator('[data-hud="mirrorLeft"]');
+      const height = async () => {
+        const [b] = await boxes(mirror);
+        if (b === undefined) throw new Error('mirror');
+        return b.bottom - b.top;
+      };
+      await expect(wide).toHaveCount(2);
+      const withWide = await height();
+
+      await page.getByRole('button', { name: en.pause }).click();
+      const sheet = page.getByRole('dialog', { name: en.paused });
+      await sheet.getByRole('button', { name: en.settings }).click();
+      const mirrors = sheet.getByRole('radiogroup', { name: en.wideMirrors });
+      await mirrors.getByRole('radio', { name: en.settingOff }).check();
+      await expect(wide).toHaveCount(0);
+      await expect.poll(height).toBeGreaterThan(withWide);
+
+      await mirrors.getByRole('radio', { name: en.settingOn }).check();
+      await expect(wide).toHaveCount(2);
+      await expect.poll(height).toBe(withWide);
+
+      await mirrors.getByRole('radio', { name: en.settingOff }).check();
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      await expect(sheet).toBeHidden();
+      await expect(wide).toHaveCount(0);
+      await expect.poll(height).toBeGreaterThan(withWide);
+    } finally {
+      await context.close();
+    }
+  },
+);
+
+test(
+  'a paused mirror-only drive redraws the mirrors when the pause sheet changes the wide-angle option',
+  heavyAt('low'),
+  async ({ browser }) => {
+    test.slow();
+    const context = await browser.newContext({
+      locale: 'en-US',
+      // A mirror-only drive shows class IV, and drops it, only at some sizes.
+      viewport: { width: 1600, height: 900 },
+    });
+    try {
+      const page = await context.newPage();
+      await seedStorage(page, { settings: { graphics: 'low' } });
+      await page.goto('./');
+      await startExercise(page, en, 'straight-reverse', { driveView: 'mirrors' });
+      await hudReady(page, { exact: false, mirrorsOnly: true });
+      const wide = page.locator('[data-hud^="wide"]:not([hidden])');
+      await expect(wide).toHaveCount(2);
+      const [old] = await boxes(page.locator('[data-hud="wideLeft"]'));
+      if (old === undefined) throw new Error('wideLeft');
+      const clip = {
+        x: old.left,
+        y: old.top,
+        width: old.right - old.left,
+        height: old.bottom - old.top,
+      };
+      // The bare canvas under the class IV mirror, with the chrome and the sheet hidden.
+      const bare = async () => {
+        await page.addStyleTag({
+          content: '.hud, .ctl, [class^="ctl-"], .pause { visibility: hidden !important }',
+        });
+        try {
+          return (await page.screenshot({ clip })).toString('base64');
+        } finally {
+          await page.evaluate(() => document.head.lastElementChild?.remove());
+        }
+      };
+      await page.getByRole('button', { name: en.pause }).click();
+      const sheet = page.getByRole('dialog', { name: en.paused });
+      await sheet.getByRole('button', { name: en.settings }).click();
+      // The baseline is taken under the open sheet, where nothing redraws unless the layout marks it.
+      const before = await bare();
+      expect(await bare()).toBe(before);
+      await sheet
+        .getByRole('radiogroup', { name: en.wideMirrors })
+        .getByRole('radio', { name: en.settingOff })
+        .check();
+      await expect(wide).toHaveCount(0);
+      await expect.poll(bare).not.toBe(before);
+    } finally {
+      await context.close();
+    }
+  },
+);

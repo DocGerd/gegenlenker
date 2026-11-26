@@ -4,7 +4,7 @@ import { LAYOUT_IDS } from '../../contracts/layout';
 import { loadSettings } from '../settings';
 import { entriesOf, SETUP_STEPS } from './catalogue';
 import { GRAPH, screenOf, shownItems, type MenuState, type ScreenId } from './graph';
-import { OPTION_FIELDS, optionPatch, optionValue, type OptionId } from './options';
+import { OPTION_FIELDS, optionPatch, optionValue, PAUSE_FIELDS, type OptionId } from './options';
 
 const OPTION_IDS = Object.keys(OPTION_FIELDS) as OptionId[];
 
@@ -48,6 +48,14 @@ describe('menu options', () => {
       wideMirrors: 'live',
     });
   });
+
+  it('the pause sheet offers exactly the options a running drive applies', () => {
+    expect(PAUSE_FIELDS).toEqual(['theme', 'wideMirrors', 'graphics']);
+    const applied = OPTION_IDS.filter((id) =>
+      ['live', 'nextStart'].includes(OPTION_FIELDS[id].applies),
+    );
+    expect(new Set(PAUSE_FIELDS)).toEqual(new Set(applied));
+  });
 });
 
 describe('menu graph', () => {
@@ -79,7 +87,7 @@ describe('menu graph', () => {
   });
 
   it('shownItems hides replay without a replayable run', () => {
-    const state: MenuState = { done: [], replayable: false, hasNews: false };
+    const state: MenuState = { done: [], replayable: false, hasNews: false, lastEntry: null };
     const title = screenOf('title');
     expect(shownItems(title, state).map((i) => i.id)).not.toContain('replay');
     expect(shownItems(title, { ...state, replayable: true }).map((i) => i.id)).toContain('replay');
