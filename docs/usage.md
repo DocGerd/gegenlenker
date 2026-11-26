@@ -66,6 +66,8 @@ Stop inside the marked bay within tolerance to reach the target; a vehicle still
 
 "Free yard" lists the Depot and the Logistics yard, which open the same setup and drive without a target or score. "Replay last run" replays the last drive you finished.
 
+"Continue" tops the title once you have started a drive. It starts at once, with the stored truck, trailer, time of day and driving view, all named on the button. It picks the exercise you last drove while it is open, else the next exercise not done after it (wrapping), else the last one again; a free yard continues as that yard. The exercise and yard lists open on the same entry.
+
 ## Settings
 
 On the setup screen of an exercise or yard:
@@ -98,7 +100,7 @@ Unknown values fall back to the defaults.
 
 Choices and results are kept in the browser's `localStorage`. There are no accounts and the app sends no data anywhere. If storage is blocked or full, they last only for the session. The offline cache holds the app's own files only.
 
-- `gegenlenker.settings.v1`: the settings above. A malformed value falls back field by field.
+- `gegenlenker.settings.v1`: the settings above and the entry of the last drive started, which Continue offers. A malformed value falls back field by field.
 - `gegenlenker.best.v2`: best results per exercise, vehicle pair, aid use, lighting and driving view. Entries driven on vehicle or exercise data that has since changed are dropped.
 - `gegenlenker.lastRun.v1`: the input log of the last drive, for replay. Dropped when the data it was driven on changed.
 - `gegenlenker.whatsNewSeen.v1`: which "What's new" entries were opened, for the "New" badge.

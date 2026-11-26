@@ -1,13 +1,13 @@
 import type { ExerciseId } from '../../contracts/exercise';
 import type { MessageKey } from '../../i18n/en';
-import type { EntryKind, Role } from './catalogue';
+import type { EntryKind, EntryRef, Role } from './catalogue';
 import type { OptionId } from './options';
 
 export type ScreenId =
   'title' | 'exercises' | 'yards' | 'setup' | 'settings' | 'controls' | 'whatsNew' | 'about';
 export type ScreenKind = 'menu' | 'entries' | 'setup' | 'options' | 'content';
-export type ActionId = 'replayLast';
-export type ConditionId = 'canReplay' | 'hasNews';
+export type ActionId = 'replayLast' | 'continue';
+export type ConditionId = 'canReplay' | 'hasNews' | 'canContinue';
 
 export type Item = {
   readonly id: string;
@@ -42,6 +42,13 @@ export const GRAPH: readonly Screen[] = [
     title: 'appName',
     items: [
       {
+        id: 'continue',
+        label: 'continue',
+        tier: 'primary',
+        target: { action: 'continue' },
+        showWhen: 'canContinue',
+      },
+      {
         id: 'replay',
         label: 'replayLastRun',
         tier: 'primary',
@@ -61,7 +68,7 @@ export const GRAPH: readonly Screen[] = [
       },
     ],
     lazy: false,
-    focus: ['exercises'],
+    focus: ['continue', 'exercises'],
   },
   {
     id: 'exercises',
@@ -106,6 +113,8 @@ export type MenuState = {
   readonly done: readonly ExerciseId[];
   readonly replayable: boolean;
   readonly hasNews: boolean;
+  /** The stored last entry, else the last run's: Continue starts from it. */
+  readonly lastEntry: EntryRef | null;
 };
 
 export function holds(condition: ConditionId, state: MenuState): boolean {
@@ -114,6 +123,8 @@ export function holds(condition: ConditionId, state: MenuState): boolean {
       return state.replayable;
     case 'hasNews':
       return state.hasNews;
+    case 'canContinue':
+      return state.lastEntry !== null;
   }
 }
 

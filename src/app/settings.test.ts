@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { LAYOUT_IDS } from '../contracts/layout';
 import { loadSettings, type Settings } from './settings';
 
 const defaults: Settings = {
@@ -15,6 +16,7 @@ const defaults: Settings = {
   lighting: 'day',
   wideMirrors: true,
   mirrorsOnly: false,
+  lastEntry: null,
 };
 
 const stored: Settings = {
@@ -31,6 +33,7 @@ const stored: Settings = {
   lighting: 'night',
   wideMirrors: false,
   mirrorsOnly: true,
+  lastEntry: { role: 'driver', kind: 'exercise', id: 'reverse-bay' },
 };
 
 describe('loadSettings', () => {
@@ -85,6 +88,38 @@ describe('loadSettings', () => {
     expect(layout({ landscape: 0.5 })).toEqual({ landscape: 0.5, portrait: 0.45 });
     expect(layout([0.5])).toEqual(defaults.topDownLayout);
     expect(layout({ landscape: Number.NaN })).toEqual(defaults.topDownLayout);
+  });
+
+  it('loads a stored last entry', () => {
+    const lastEntry = (v: unknown) =>
+      loadSettings(JSON.stringify({ version: 1, lastEntry: v }), 'en').lastEntry;
+    expect(lastEntry({ role: 'driver', kind: 'exercise', id: 'slalom' })).toEqual({
+      role: 'driver',
+      kind: 'exercise',
+      id: 'slalom',
+    });
+    expect(lastEntry({ role: 'driver', kind: 'yard', id: LAYOUT_IDS[0] })).toEqual({
+      role: 'driver',
+      kind: 'yard',
+      id: LAYOUT_IDS[0],
+    });
+  });
+
+  it('drops a last entry with an unknown id, kind or role, keeping the other fields', () => {
+    const bad = [
+      { role: 'driver', kind: 'exercise', id: 'gone' },
+      { role: 'driver', kind: 'yard', id: 'slalom' },
+      { role: 'driver', kind: 'exercise', id: LAYOUT_IDS[0] },
+      { role: 'driver', kind: 'lesson', id: 'slalom' },
+      { role: 'dispatcher', kind: 'exercise', id: 'slalom' },
+      'slalom',
+      null,
+    ];
+    for (const lastEntry of bad) {
+      const loaded = loadSettings(JSON.stringify({ version: 1, language: 'de', lastEntry }), 'en');
+      expect(loaded.lastEntry, JSON.stringify(lastEntry)).toBeNull();
+      expect(loaded.language).toBe('de');
+    }
   });
 
   it('uses the detected language only when none is stored', () => {

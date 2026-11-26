@@ -79,7 +79,7 @@ describe('menu graph', () => {
   });
 
   it('shownItems hides replay without a replayable run', () => {
-    const state: MenuState = { done: [], replayable: false, hasNews: false };
+    const state: MenuState = { done: [], replayable: false, hasNews: false, lastEntry: null };
     const title = screenOf('title');
     expect(shownItems(title, state).map((i) => i.id)).not.toContain('replay');
     expect(shownItems(title, { ...state, replayable: true }).map((i) => i.id)).toContain('replay');

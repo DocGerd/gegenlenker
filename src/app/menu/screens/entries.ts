@@ -8,6 +8,8 @@ export type EntriesContext = {
   readonly screen: Screen;
   readonly heading: string;
   readonly done: readonly ExerciseId[];
+  /** The row to open on, before the first one not done. */
+  readonly focus: EntryRef | null;
   readonly back: () => void;
   readonly pick: (entry: EntryRef) => void;
 };
@@ -48,11 +50,13 @@ export function entriesScreen(ctx: EntriesContext): {
   const row = (key: string): HTMLElement | null =>
     rows.querySelector<HTMLElement>(`[data-entry="${key}"]`);
   const fresh = entries.find((e) => !isDone(e.ref)) ?? entries[0];
+  const opening = ctx.focus === null ? null : row(entryKey(ctx.focus));
   return {
     root: frame.root,
     focus: (remembered) => {
       const target =
         (remembered === null ? null : row(remembered)) ??
+        opening ??
         (fresh === undefined ? null : row(entryKey(fresh.ref)));
       target?.focus();
     },
