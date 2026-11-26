@@ -48,9 +48,7 @@ It costs fill rate: SwiftShader frames, which CI e2e draws on, are slower than w
 
 ## Headless and the GPU
 
-Every browser run is headless unless `HEADED=1`: a headed window grabs focus on the desktop, and under WSLg that is the Windows desktop. The default `offline` and `channels` projects, `pnpm shoot` and the `webgpu` project never needed a window. `pnpm test:perf`, `pnpm perf:tablet` and `E2E_GPU=1` use Playwright's `chromium` channel (the new headless mode) on the real GPU path when headless.
-
-On WSL2 the new headless mode does not get the GPU here: with Mesa d3d12 it logs `No suitable EGL configs found` and falls back to SwiftShader, probably because the user cannot read the DRM render node `/dev/dri/renderD128` (not in the `render` group; untested). Headed Chromium reaches the GPU through X11, so those runs need `HEADED=1`, which adds `--window-position=-32000,-32000` and `--no-startup-window` to keep the window off-screen. That softens the focus grab but may not remove it. Check which path a run took by reading `WEBGL_debug_renderer_info` (`pnpm perf:tablet` prints `GL renderer:`).
+`pnpm test:perf`, `pnpm perf:tablet` and `E2E_GPU=1` run in Chromium's new headless mode unless `HEADED=1` (a headed window grabs desktop focus under WSLg); the CI projects are always headless. On WSL2 headless gets SwiftShader, not the GPU, so use `HEADED=1` there (it opens the window off-screen). The `perf` project applies the d3d12 launch options on WSL for the same reason: with only `--ignore-gpu-blocklist` headed Chromium there gets llvmpipe.
 
 ## Other tools
 
