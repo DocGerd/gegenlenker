@@ -28,6 +28,7 @@ import {
 } from '../sim/kinematics';
 
 import { createDriver, createPilot, CURVE_RADIUS, type Pilot } from './driver';
+import { rejoin, type Segment, straighten } from './gate-recovery';
 
 import { clearance, runOver, signOutOfSight } from './faults';
 import {
@@ -258,6 +259,25 @@ const TRACK_HYSTERESIS = 0.3;
 /** The shown sign keeps on unless another's cost is lower by this share. */
 const TRACK_KEEP = 0.03;
 
+/** A reverse whose best sign plan still hits something within this (s) is stopped and rescued. */
+const DOOM_WITHIN = 4;
+const MAX_RESCUES = 2;
+/** The rescue pulls forward until both joints are within this (rad), at least `RESCUE_MIN` and at most `RESCUE_MAX` metres. */
+const RESCUE_STRAIGHT = 0.02;
+const RESCUE_MIN = 4;
+const RESCUE_MAX = 25;
+/** Clearance (m) the pull-forward keeps from obstacles. */
+const RESCUE_CLEARANCE = 0.3;
+/** The fresh reverse joins the leg no later than this far (m) from its end on its final straight, on arcs of this radius (m). */
+const RESCUE_FINAL = 16;
+const RESCUE_RADIUS = 18;
+/** Longer pull-forwards tried in this step (m); the way back may turn no arc past this (rad). */
+const RESCUE_STEP = 3;
+/** The way back may rejoin the leg up to this far (m) before the latest join, tried in this step (m). */
+const RESCUE_REJOIN = 30;
+const RESCUE_REJOIN_STEP = 2;
+const RESCUE_TURN = (100 * Math.PI) / 180;
+
 /** The curvature the reversing rear should run at to close on `path` at index `j`. */
 function wantedCurvature(p: VehicleParams, s: SimSnapshot, path: readonly Pt[], j: number): number {
   const q = path[j];
@@ -471,7 +491,7 @@ function scripted(world: World, planned: readonly Leg[]) {
   let contacts: ContactQuery = world.contacts;
   const p = g.params;
   const blocking = occluders.filter((o) => o.height >= STEP_HEIGHT);
-  const grown = (s: SimSnapshot, by: number) =>
+  const grown = (s: Pick<SimSnapshot, 'truck' | 'coupling' | 'dolly' | 'trailer'>, by: number) =>
     bodyFootprints(p, s).map((b) => ({
       ...b,
       obb: { ...b.obb, halfLength: b.obb.halfLength + by, halfWidth: b.obb.halfWidth + by },
@@ -489,6 +509,10 @@ function scripted(world: World, planned: readonly Leg[]) {
   let way: Vec2[] = [];
   let note = '';
   let cycleFrom = 0;
+  /** The last search found every sign plan running into something soon. */
+  let doomed = false;
+  let replan = false;
+  let rescues = 0;
 
   const show = (next: SignId | null, step: number): void => {
     if (next === sign) return;
@@ -722,6 +746,7 @@ function scripted(world: World, planned: readonly Leg[]) {
   /** The sign to show now: the best of the straight sign and the showable turns, by rollout cost along the path. */
   function choose(s: SimSnapshot, l: Leg, at: Station, held: Pose2, S0: SignId): SignId | null {
     const goal = l.path.length - 1;
+    doomed = false;
     contacts = createContactQuery(
       obstacles.filter((o) => Math.hypot(o.obb.cx - s.truck.x, o.obb.cy - s.truck.y) < 30),
     );
@@ -736,29 +761,42 @@ function scripted(world: World, planned: readonly Leg[]) {
       rollout(p, m, [], Math.round(recognitionTime(x) / DT), at, held, null, () => undefined);
       return canShow(m.s, { ...held, heading: facing(m.s, held) }, x);
     };
-    const turns = (Math.abs(cos) > 0.35 ? [left, right] : []).filter(showable);
+    // from standstill a turn sign takes Herkommen's gear from his side of the cab axis
+    const turnGear = at === 'ahead' ? 'D' : at === 'behind' ? 'R' : null;
+    const turnable = Math.abs(cos) > 0.35 && (s.speed !== 0 || turnGear === l.gear);
+    const turns = (turnable ? [left, right] : []).filter(showable);
     if (!showable(S0)) return null;
     if (world.policy === 'lqr' && l.gear === 'R') {
       // the LQR's cost-to-go once each sign has acted, on the exact model, plus clearance to obstacles
       let best: SignId | null = null;
       let bestCost = Infinity;
+      let bestHit = Infinity;
       for (const x of [S0, ...turns]) {
         const m = modelFrom(s, pilot);
         let cost = 0;
         let j = idx;
+        let hit = Infinity;
+        let last = 0;
         const steps = Math.round((recognitionTime(x) + TRACK_HORIZON) / DT);
         rollout(p, m, x === sign ? [] : [{ at: 0, sign: x }], steps, at, held, null, (mm, k) => {
+          last = k;
           if (k % 15 !== 0) return undefined;
           j = nearest(l.path, leadingEnd(mm.s, l.gear), j);
-          if (contacts(bodyFootprints(p, mm.s)) !== null) cost += 1e5;
-          else if (contacts(grown(mm.s, 0.25)) !== null) cost += 50;
+          if (contacts(bodyFootprints(p, mm.s)) !== null) {
+            cost += 1e5;
+            hit = Math.min(hit, k);
+          } else if (contacts(grown(mm.s, 0.25)) !== null) cost += 50;
           return j >= goal;
         });
-        if (m.failed) cost += 1e6;
+        if (m.failed) {
+          cost += 1e6;
+          hit = Math.min(hit, last);
+        }
         cost += trackCost(p, m.s, l.path, nearest(l.path, m.s.trailerRear, j));
         if (x === sign) cost *= 1 - TRACK_KEEP;
-        if (cost < bestCost) [best, bestCost] = [x, cost];
+        if (cost < bestCost) [best, bestCost, bestHit] = [x, cost, hit];
       }
+      doomed = bestCost >= 1e5 && bestHit <= DOOM_WITHIN / DT;
       return best;
     }
     const candidates: Plan[] = [[{ at: 0, sign: S0 }]];
@@ -771,13 +809,17 @@ function scripted(world: World, planned: readonly Leg[]) {
     }
     let best: Plan | null = null;
     let bestCost = Infinity;
+    let bestHit = Infinity;
     for (const plan of candidates) {
       const m = modelFrom(s, pilot);
       let cost = 0;
       let j = idx;
+      let first = Infinity;
+      let last = 0;
       const keep = plan[0]?.sign === sign;
       const horizon = Math.round((l.gear === 'R' ? world.reverseHorizon : SEARCH_HORIZON) / DT);
       rollout(p, m, keep ? plan.slice(1) : plan, horizon, at, held, null, (mm, k) => {
+        last = k;
         if (k % 15 !== 0) return undefined;
         j = nearest(l.path, leadingEnd(mm.s, l.gear), j);
         const q = l.path[j];
@@ -787,19 +829,112 @@ function scripted(world: World, planned: readonly Leg[]) {
         const { e, he } = pathError(q, leadingEnd(mm.s, l.gear), motion);
         cost += e * e + (3 * he) ** 2;
         const hit = contacts(bodyFootprints(p, mm.s));
-        if (hit !== null) cost += 1e5;
-        else if (contacts(grown(mm.s, 0.25)) !== null) cost += 50;
+        if (hit !== null) {
+          cost += 1e5;
+          first = Math.min(first, k);
+        } else if (contacts(grown(mm.s, 0.25)) !== null) cost += 50;
         if (j >= goal) cost += 20 * (e * e + (3 * he) ** 2);
         return j >= goal;
       });
-      if (m.failed) cost += 1e6;
+      if (m.failed) {
+        cost += 1e6;
+        first = Math.min(first, last);
+      }
       const bonus = keep ? 0.05 * cost + 0.05 : 0;
       if (cost - bonus < bestCost) {
         bestCost = cost;
+        bestHit = first;
         best = plan;
       }
     }
+    doomed = bestCost >= 1e5 && bestHit <= DOOM_WITHIN / DT;
     return best?.[0]?.sign ?? null;
+  }
+
+  /**
+   * Pull straight forward along the truck heading until the combination is straight, then reverse
+   * on a fresh loop-free arc–straight–arc path back onto `l`, as late as it reaches; null without
+   * room for either.
+   */
+  function rescue(s: SimSnapshot, l: Leg): Leg[] | null {
+    const inside = (q: Vec2, margin: number): boolean =>
+      q.x > yard.minX + margin &&
+      q.x < yard.maxX - margin &&
+      q.y > yard.minY + margin &&
+      q.y < yard.maxY - margin;
+    const clear = (q: KinematicState): boolean => {
+      const front = {
+        x: q.x + p.truckFront * Math.cos(q.th0),
+        y: q.y + p.truckFront * Math.sin(q.th0),
+      };
+      return inside(front, 2) && world.contacts(grown(joints(p, q), RESCUE_CLEARANCE)) === null;
+    };
+    const q0 = {
+      x: s.truck.x,
+      y: s.truck.y,
+      th0: s.truck.heading,
+      th1: s.dolly.heading,
+      th2: s.trailer.heading,
+    };
+    const goal = l.path.length - 1;
+    // the latest join is on the final straight, at most `RESCUE_FINAL` from the end
+    let last = goal;
+    while (
+      last > 0 &&
+      (goal - last) * DS < RESCUE_FINAL &&
+      Math.abs(curvatureAt(l.path, last)) < 1e-3
+    )
+      last--;
+    const joins: number[] = [];
+    const earliest = Math.max(0, last - Math.round(RESCUE_REJOIN / DS));
+    for (let j = last; j >= earliest; j -= Math.round(RESCUE_REJOIN_STEP / DS)) joins.push(j);
+    const fits = (from: Pose2, segments: readonly Segment[]): boolean =>
+      arcs(from, segments).every((q) => inside(q, 1));
+    // straight first, then further up to the farthest clear distance; the shortest way back wins
+    let best: {
+      distance: number;
+      from: Pose2;
+      way: NonNullable<ReturnType<typeof rejoin>>;
+    } | null = null;
+    const first = straighten(p, q0, RESCUE_STRAIGHT, RESCUE_MAX, clear).distance;
+    for (let d = Math.max(first, RESCUE_MIN); d <= RESCUE_MAX + 1e-9; d += RESCUE_STEP) {
+      const { distance, state } = straighten(p, q0, -1, d, clear);
+      if (distance < RESCUE_MIN) break;
+      const rear = joints(p, state).trailerRear;
+      const from = { x: rear.x, y: rear.y, heading: state.th2 + Math.PI };
+      const way = rejoin(from, l.path, joins, DS, RESCUE_RADIUS, RESCUE_TURN, fits);
+      if (
+        way !== null &&
+        (best === null || distance + way.length < best.distance + best.way.length)
+      )
+        best = { distance, from, way };
+      if (distance < d - 1e-6) break;
+    }
+    if (best === null) return null;
+    const { distance, from, way } = best;
+    const forward = straight(frontOf(p, s), s.truck.heading, distance);
+    const back = [...arcs(from, way.segments), ...l.path.slice(way.join)];
+    const end = l.path[goal];
+    return [
+      {
+        gear: 'D',
+        path: forward,
+        // ahead of the cab, or behind the trailer for Entfernen when the way ahead is short
+        anchors: (k, now) => [...forwardAnchors(forward, k), ...behindAnchors(now)],
+      },
+      {
+        gear: 'R',
+        path: back,
+        // where the planned leg would have him, then beside the new path
+        anchors: (k, now) => {
+          const q = back[k] ?? back[back.length - 1] ?? end ?? now.trailerRear;
+          return [
+            ...l.anchors(nearest(l.path, q, 0, l.path.length), now),
+            ...reverseAnchors(back, k),
+          ];
+        },
+      },
+    ];
   }
 
   return {
@@ -838,6 +973,14 @@ function scripted(world: World, planned: readonly Leg[]) {
           show('halt', step);
         const done = finishing ? recognised === 'halt' && !pending : !pending;
         if (s.speed === 0 && done) {
+          const extra = replan ? rescue(s, l) : null;
+          replan = false;
+          if (extra !== null) {
+            legs.splice(leg + 1, 0, ...extra);
+            rescues += 1;
+            finishing = true;
+            note = `rescue@${(step / 60).toFixed(1)}`;
+          }
           if (finishing) {
             leg += 1;
             idx = 0;
@@ -931,6 +1074,13 @@ function scripted(world: World, planned: readonly Leg[]) {
       }
       if (S0 !== null && !pending && inSight && step % 15 === 0) {
         const next = choose(s, l, at, held, S0);
+        if (doomed && l.gear === 'R' && rescues < MAX_RESCUES && canShow(s, held, 'halt')) {
+          note = `doomed@${(step / 60).toFixed(1)}`;
+          replan = true;
+          show('halt', step);
+          phase = 'stopping';
+          return { keys: NO_KEYS, heading, sign };
+        }
         if (next !== null && next !== sign) show(next, step);
       }
       return { keys: NO_KEYS, heading, sign };
@@ -1104,6 +1254,16 @@ const forwardAnchors = (path: readonly Pt[], i: number): Vec2[] => [
   beside(path, i, 15, -4),
   beside(path, i, 9, 0),
 ];
+/** Behind the trailer rear, out to either side. */
+const behindAnchors = (s: SimSnapshot): Vec2[] => {
+  const [c, n] = [Math.cos(s.trailer.heading), Math.sin(s.trailer.heading)];
+  return [3, 6].flatMap((back) =>
+    [3.2, -3.2].map((out) => ({
+      x: s.trailerRear.x - back * c - out * n,
+      y: s.trailerRear.y - back * n + out * c,
+    })),
+  );
+};
 /** Ahead of the reversing rear, out to either side. */
 const reverseAnchors = (path: readonly Pt[], i: number): Vec2[] => [
   beside(path, i, 10, 3.2, false),
