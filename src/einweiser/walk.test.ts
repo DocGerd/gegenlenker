@@ -37,6 +37,18 @@ describe('walking', () => {
     expect(kerb.x).toBeGreaterThan(3);
   });
 
+  it.each([0.3, 1.1, 2.4])('slides along a wall at heading %f without passing through', (h) => {
+    const [c, s] = [Math.cos(h), Math.sin(h)];
+    const wall: Occluder = {
+      obb: { cx: 2 * c, cy: 2 * s, halfLength: 0.5, halfWidth: 20, heading: h },
+      height: 2,
+    };
+    const w = walk({ ...still, heading: h + 0.5 }, { forward: true }, 4, [wall]);
+    expect(c * (w.x - wall.obb.cx) + s * (w.y - wall.obb.cy)).toBeLessThanOrEqual(
+      -wall.obb.halfLength - WALKER_RADIUS + 1e-6,
+    );
+  });
+
   it('never pushes him out of a body that moved into him', () => {
     const inside: Walker = { ...still, x: 1.8 };
     const body = box(2, 3);

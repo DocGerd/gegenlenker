@@ -51,6 +51,9 @@ function push(obb: Obb, p: Vec2, radius: number): Vec2 | null {
   return { x: depth * (c * nx - s * ny), y: depth * (s * nx + c * ny) };
 }
 
+/** The overlap (m) rounding can leave after a slide along a rotated box: only a deeper one is a body that moved into him. */
+const SLIDE_ROUNDING = 1e-6;
+
 /** Whether his circle at `p` overlaps the box. */
 export const overlaps = (obb: Obb, p: Vec2, radius = WALKER_RADIUS): boolean =>
   push(obb, p, radius) !== null;
@@ -79,7 +82,7 @@ export function walkStep(
   let vy = w.vy + reach * (target.y - w.vy);
 
   const blocking = colliders.filter(
-    (o) => o.height >= STEP_HEIGHT && !overlaps(o.obb, w, WALKER_RADIUS),
+    (o) => o.height >= STEP_HEIGHT && !overlaps(o.obb, w, WALKER_RADIUS - SLIDE_ROUNDING),
   );
   let p = { x: w.x + vx * dt, y: w.y + vy * dt };
   for (let pass = 0; pass < 3; pass++) {
