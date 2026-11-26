@@ -85,6 +85,23 @@ test('loads from the subpath and drives an exercise offline', async ({
   expect(warnings.filter((w) => w.includes('Shell '))).toEqual([]);
 });
 
+test('About opens offline after the first visit', async ({ page, context }) => {
+  await page.goto('./');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  await expect(page.locator('[data-menu="offline"]')).toHaveText(en.offlineReady);
+
+  await context.setOffline(true);
+  await page.reload();
+  await page.getByRole('button', { name: en.about, exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: en.about, exact: true })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 2, name: en.aboutAssets })).toBeVisible();
+  await expect(page.locator('[data-about="thirdParty"]')).not.toHaveCount(0);
+});
+
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {
   await page.goto('./');
   await startExercise(page, en, 'straight-reverse');

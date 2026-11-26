@@ -9,6 +9,7 @@ Gegenlenker is a trainer for maneuvering a truck with a turntable drawbar traile
 - When a new version is available the app offers "Reload" or "Later".
 - Installing it as an app uses the browser's own install action (for example "Install" in the address bar, or "Add to Home screen" on a tablet).
 - The browser back action (Android back gesture) acts on the current drive, replay or result screen instead of leaving the app; in a drive it opens or closes the pause sheet.
+- "About" on the title shows the version, the app's licence, the licences of the bundled libraries and the sources of the textures and sky, with links to the source code and the asset pages. The texts are part of the app, so it also opens offline; only the links need a connection.
 
 ## Controls
 

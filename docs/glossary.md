@@ -44,6 +44,11 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Group of entries not seen on the last visit     | since your last visit                       | Seit dem letzten Besuch                      |
 | App version, shown for a release build          | version                                     | Version                                      |
 | Shown instead of a version for any other build  | development build                           | Entwicklungsstand                            |
+| Title entry and screen for licences and credits | about                                       | Über                                         |
+| Licences of the bundled libraries               | third-party licenses                        | Lizenzen Dritter                             |
+| Credits for the bundled textures and sky        | asset credits                               | Quellen der Assets                           |
+| Link to the public repository                   | source code                                 | Quellcode                                    |
+| Package listed under the one that bundles it    | incl.                                       | inkl.                                        |
 | Badge of the test build deployed for acceptance | UAT                                         | Abnahmetest                                  |
 | Stop button or Space: lever to zero and brake   | stop                                        | Stopp                                        |
 | Speed readout and label                         | speed                                       | Tempo                                        |

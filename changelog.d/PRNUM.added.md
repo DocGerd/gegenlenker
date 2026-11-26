@@ -1,0 +1,1 @@
+The title screen has an About screen with the licence of the app, the licences of its libraries and the credits for its textures and sky, readable offline ([#PRNUM](https://github.com/DocGerd/gegenlenker/pull/PRNUM)).

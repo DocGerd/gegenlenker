@@ -125,7 +125,7 @@ export function titleScreen(ctx: TitleContext): {
   const offline = element('span', 'menu-offline');
   offline.dataset['menu'] = 'offline';
   offline.setAttribute('role', 'status');
-  footer.append(offline, element('span', 'menu-copyright', '© 2026 Patrick Kuhn'));
+  footer.append(offline);
 
   layout.append(header, art, nav, footer);
   scroll.append(layout);
