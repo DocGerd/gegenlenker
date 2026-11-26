@@ -9,7 +9,7 @@ import {
   startYard,
   toTitle,
 } from './menu-flow';
-import { seedStorage } from './menu-seed';
+import { reachedResult, seedStorage } from './menu-seed';
 import { heavyAt } from './pinned-shoot';
 
 const speed = (page: Page) => page.locator('[data-hud="speed"]');
@@ -191,18 +191,29 @@ test('a held Space from a run does not start Continue', heavyAt('low'), async ({
   await sheet(page).getByRole('button', { name: en.leaveUnscored }).click();
   await toTitle(page, en);
   await expect(continueButton(page)).toBeFocused();
+  await expect(continueButton(page)).toBeEnabled();
+  await expect(continueButton(page)).not.toHaveAttribute('aria-busy', 'true');
   await page.keyboard.down('Space'); // auto-repeat
   await page.keyboard.up('Space');
   await expect(page.locator('.drive')).toHaveCount(0);
   await expect(continueButton(page)).toBeFocused();
 });
 
-test('Continue starts the stored entry', heavyAt('low'), async ({ page }) => {
-  await seedStorage(page, { settings: { graphics: 'low', lastEntry: reverseCorner } });
+test('Continue starts the entry it offers and stores it', heavyAt('low'), async ({ page }) => {
+  // The last entry is done, so Continue offers the next one, not the stored one.
+  await seedStorage(page, {
+    settings: {
+      graphics: 'low',
+      lastEntry: { role: 'driver', kind: 'exercise', id: 'straight-reverse' },
+    },
+    best: [reachedResult('straight-reverse')],
+  });
   await page.goto('./');
   await continueButton(page).click();
-  await expect(page.locator('[data-hud="goalTitle"]')).toHaveText(en.exerciseReverseCorner);
-  await expect.poll(() => storedLastEntry(page)).toEqual(reverseCorner);
+  await expect(page.locator('[data-hud="goalTitle"]')).toHaveText(en.exerciseReverseBay);
+  await expect
+    .poll(() => storedLastEntry(page))
+    .toEqual({ role: 'driver', kind: 'exercise', id: 'reverse-bay' });
 });
 
 test('a double click on Continue starts one drive', heavyAt('low'), async ({ page }) => {

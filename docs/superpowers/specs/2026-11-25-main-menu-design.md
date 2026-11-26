@@ -508,6 +508,8 @@ type NavEvent =
 
 Task 3.2's interfaces, verbatim from the plan; Settings also gains `lastEntry: EntryRef | null` (Task 3.1).
 
+`lastEntry` is stored once the drive has mounted; a later renderer-init failure keeps it.
+
 **Interfaces:**
 - Consumes: `continueEntry`, `lastEntryOf`, `entryOfRun` (Task 3.1); `runConfigOf`, `MenuState`, `holds` (Task 2.2); `MenuDeps.start` and the busy state (Tasks 2.4, 2.5); `seedStorage` (Task 2.4).
 - Produces: `ActionId = 'replayLast' | 'continue'`, `ConditionId = 'canReplay' | 'hasNews' | 'canContinue'`, and `MenuState` gains `readonly lastEntry: EntryRef | null`.

@@ -110,10 +110,10 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   const actions: Readonly<Record<ActionId, (button?: HTMLButtonElement) => void>> = {
     replayLast: () => deps.replay?.start(),
     continue: (button) => {
+      if (button === undefined) throw new Error('Continue needs the control that was activated');
       const { done, lastEntry } = state();
       const entry = continueEntry(lastEntry, done);
-      if (button !== undefined && entry !== null)
-        startRun(button, runConfigOf(entry, currentSettings()));
+      if (entry !== null) startRun(button, runConfigOf(entry, currentSettings()));
     },
   };
   const activate = (item: Item, button?: HTMLButtonElement): void => {

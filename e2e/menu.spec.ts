@@ -118,9 +118,7 @@ test('Continue names the exercise, truck, trailer, time of day and driving view'
   await expect(button).toBeFocused();
 });
 
-// A seeded best for `reverse-corner` is dropped by the app (Node and Chromium round `Math.atan2` differently, so
-// the fingerprint differs), so "all done" is covered by `continue.test.ts` and the last case keeps an open exercise.
-test('Continue moves past a done exercise, wraps, and keeps the last one when nothing else is open', async ({
+test('Continue moves past a done exercise, wraps, and keeps the last one when all are done', async ({
   browser,
 }) => {
   const cases: readonly {
@@ -130,11 +128,7 @@ test('Continue moves past a done exercise, wraps, and keeps the last one when no
   }[] = [
     { last: 'reverse-bay', done: ['reverse-bay'], shows: 'reverse-corner' },
     { last: 'slalom', done: ['slalom', 'straight-reverse'], shows: 'reverse-bay' },
-    {
-      last: 'reverse-corner',
-      done: EXERCISE_IDS.filter((id) => id !== 'reverse-corner'),
-      shows: 'reverse-corner',
-    },
+    { last: 'reverse-corner', done: EXERCISE_IDS, shows: 'reverse-corner' },
   ];
   for (const { last, done, shows } of cases) {
     const context = await browser.newContext();
@@ -160,11 +154,15 @@ test("the exercise list focuses Continue's exercise, and the yard list the last 
   browser,
 }) => {
   const exercise = await browser.newContext();
-  await seedStorage(exercise, { settings: { lastEntry: exerciseRef('dock-ramp') } });
+  // Done, so Continue moves on to the slalom: the list follows Continue, not the last entry.
+  await seedStorage(exercise, {
+    settings: { lastEntry: exerciseRef('dock-ramp') },
+    best: [reached('dock-ramp')],
+  });
   const exercisePage = await exercise.newPage();
   await exercisePage.goto('./');
   await titleEntry(exercisePage, en.exercises).click();
-  await expect(rowOf(exercisePage, 'exercise:dock-ramp')).toBeFocused();
+  await expect(rowOf(exercisePage, 'exercise:slalom')).toBeFocused();
   await exercise.close();
 
   const yard = await browser.newContext();
