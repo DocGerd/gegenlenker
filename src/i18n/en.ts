@@ -131,8 +131,7 @@ export const en = {
   runOver: 'Ground guide run over: the run has ended.',
   endedWithoutHalt:
     'Position and angle were within tolerance, but the run ends only on a stop after a recognized Halt.',
-  walkedBackwards:
-    'You walked backwards while the vehicle moved. Walk forward and let the vehicle follow.',
+  walkedBackwards: 'Signal Halt, reposition while it stands, then guide on.',
   faultInPath: "In the vehicle's path",
   faultTooClose: 'Too close to the vehicle',
   faultOutOfSight: 'Out of sight while moving',

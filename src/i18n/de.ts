@@ -137,8 +137,7 @@ export const de: Record<MessageKey, string> = {
   runOver: 'Einweiser überfahren: Die Fahrt ist beendet.',
   endedWithoutHalt:
     'Position und Winkel lagen in der Toleranz, aber die Fahrt endet erst mit dem Anhalten auf ein erkanntes Halt.',
-  walkedBackwards:
-    'Bei Fahrt rückwärts gegangen. Vorwärts gehen und das Fahrzeug nachrücken lassen.',
+  walkedBackwards: 'Halt geben, bei stehendem Fahrzeug umsetzen, dann weiter einweisen.',
   faultInPath: 'Im Fahrweg',
   faultTooClose: 'Zu nah am Fahrzeug',
   faultOutOfSight: 'Außer Sicht bei Fahrt',
