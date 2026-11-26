@@ -20,7 +20,7 @@ export type OptionId =
   | 'graphics'
   | 'wideMirrors';
 
-export type Applies = 'live' | 'nextStart' | 'menuOnly' | 'run';
+export type Applies = 'live' | 'menuOnly' | 'run';
 
 export type Choice = {
   readonly value: string;
@@ -120,7 +120,7 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
     label: 'graphics',
     group: 'graphics',
     choices: named(GRAPHICS_PRESETS, GRAPHICS_NAME),
-    applies: 'nextStart',
+    applies: 'live',
   },
   wideMirrors: {
     id: 'wideMirrors',

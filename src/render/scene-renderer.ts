@@ -17,6 +17,10 @@ export interface SceneRenderer {
   /** `listener` runs when the GPU renderer is lost for good; returns the unsubscribe. */
   onLost(listener: () => void): () => void;
   setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec): void;
+  /** Builds the current scene again under the current quality, keeping the aids and their tracks; no-op without one. */
+  rebuildScene(): void;
+  /** `listener` runs when an asset attached, detached or failed on its own, so a still frame is stale; returns the unsubscribe. */
+  onAttached(listener: () => void): () => void;
   /** Applies at once, to the current scene and to every later one. */
   setQuality(preset: GraphicsPreset): void;
   /** Applies at once, to the current scene and to every later one. */

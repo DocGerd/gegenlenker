@@ -68,14 +68,6 @@ function settingsLevel(
       if (applyOption(id, value)) settingChanged(id);
     });
     root.append(row);
-    if (OPTION_FIELDS[id].applies === 'nextStart') {
-      const hint = document.createElement('p');
-      hint.className = 'pause-hint';
-      hint.id = `pause-hint-${id}`;
-      hint.textContent = t('appliesNextStart');
-      row.setAttribute('aria-describedby', hint.id);
-      root.append(hint);
-    }
   }
   return { root, first: root.querySelector<HTMLElement>('input:checked') };
 }
