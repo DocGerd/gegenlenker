@@ -25,6 +25,7 @@ const SETTINGS_KEY = 'gegenlenker.settings.v1';
 
 const sizes = [
   { width: 768, height: 1024 },
+  { width: 800, height: 585 },
   { width: 800, height: 800 },
   { width: 800, height: 820 },
   { width: 900, height: 649 },
@@ -1385,12 +1386,19 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * In the outside view the free camera button stands in the pane, at least a pointer target high, clear of
  * every panel, the controls, the mirrors, the divider and the target arrow: the vehicle is framed clear of
  * it as chrome, so the arrow never lands under it either. It is in the divider's reserve, so wherever the
- * divider is shown the button is too: a size losing it fails, tablets and desktops included.
+ * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
+ * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
-async function expectPaneToolClear(page: Page): Promise<void> {
+const paneToolAbsent = new Set(['en-US 800x585', 'de-DE 800x585']);
+
+async function expectPaneToolClear(page: Page, at: string): Promise<void> {
   await page.keyboard.press('o');
   const tool = page.locator('[data-hud="freeCamera"]');
   await settled(page);
+  if (paneToolAbsent.has(at)) {
+    await expect(tool, 'no room for it here').toBeHidden();
+    return;
+  }
   await expect(tool, 'shown wherever the panels leave room').toBeVisible();
   const [box] = await boxes(tool);
   const [pane] = await boxes(page.locator('.hud-topdown'));
@@ -1455,7 +1463,7 @@ for (const { locale, messages } of locales) {
         await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
           expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         await test.step("the outside view's free camera button clears the panels, the divider, the mirrors, the target arrow and the messages", async () => {
-          await expectPaneToolClear(page);
+          await expectPaneToolClear(page, at);
           await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
         });
         // Last: the divider moves the stored split.
