@@ -16,7 +16,8 @@ import { isFormField } from '../input/keyboard';
 import { CHROME_SELECTOR } from './chrome-selector';
 import { goalCueTexts } from './goal-cue';
 import { hasTopDown, messageColumn, readSafeInsets } from '../render/viewports';
-import { actionFor, isAction, legendRows, type Action, type LegendRow } from '../input/keymap';
+import { actionFor, isAction, type Action } from '../input/keymap';
+import { driveLegendRows, legendRowMarkup } from '../input/legend';
 import { aidSwatch } from './aid-swatches';
 import type { Ahead } from '../sim/predict';
 import { createGauge, type Gauge } from './gauges';
@@ -212,25 +213,6 @@ const panelButton = (panel: string, key: MessageKey): string =>
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-chip" data-aid="${aid}" aria-describedby="aid-meaning-${aid}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
-const legendRow = ({ term, desc, viewOnly }: LegendRow): string => {
-  const cls = viewOnly ? 'mono hud-legend-view' : 'mono';
-  const dt =
-    typeof term === 'string'
-      ? `<dt class="${cls}">${term}</dt>`
-      : `<dt class="${cls}" data-i18n="${term.key}"></dt>`;
-  return `${dt}<dd${viewOnly ? ' class="hud-legend-view"' : ''} data-i18n="${desc}"></dd>`;
-};
-
-/** Legend rows for the top-down view, which a mirror-only drive does not have. */
-const TOP_DOWN_ROWS: readonly MessageKey[] = [
-  'viewSwitch',
-  'viewSwitchNoOutside',
-  'zoom',
-  'panView',
-  'orbitTilt',
-  'resetViewAndSize',
-];
-
 const MARKUP = (
   mode: HudOptions['mode'],
   chase: boolean,
@@ -243,9 +225,8 @@ const MARKUP = (
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl data-hud="keys">
-        ${legendRows(chase, look === true)
-          .filter((row) => !(mirrorsOnly && TOP_DOWN_ROWS.includes(row.desc)))
-          .map(legendRow)
+        ${driveLegendRows({ chase, look: look === true, mirrorsOnly })
+          .map(legendRowMarkup)
           .join('')}
       </dl>
     </div>

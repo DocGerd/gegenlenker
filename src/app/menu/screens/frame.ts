@@ -44,3 +44,16 @@ export function screenFrame(
   root.append(head, body);
   return { root, heading: title, body };
 }
+
+/** A full-width menu row inside a list item; the caller fills the button and names it. */
+export function rowItem(onClick: () => void): {
+  readonly item: HTMLLIElement;
+  readonly button: HTMLButtonElement;
+} {
+  const button = element('button', 'menu-item menu-row');
+  button.type = 'button';
+  button.addEventListener('click', onClick);
+  const item = document.createElement('li');
+  item.append(button);
+  return { item, button };
+}

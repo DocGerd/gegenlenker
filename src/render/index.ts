@@ -39,9 +39,7 @@ import { createVehicleEnvironment } from './vehicle-pbr';
 import { KIT_SHADOW_SAMPLES, startYardKit } from './yard-kit';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
-/** Whether the preset offers the outside view. */
-export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
-  QUALITY_FLAGS[preset].chaseView;
+export { chaseViewAvailable, lookAroundAvailable } from './quality';
 
 /** The mirrors beyond class II that the preset draws; `computeViewports` makes room for them. Class IV also needs the setting. */
 export const extraMirrors = (preset: GraphicsPreset, wideMirrors: boolean): ExtraMirrors => ({
@@ -53,10 +51,6 @@ export const extraMirrors = (preset: GraphicsPreset, wideMirrors: boolean): Extr
 /** Whether the preset draws the cab interior and the mirror housings. */
 export const interiorAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].cockpitInterior;
-
-/** Whether the preset draws the interior asset, which the head can turn about. */
-export const lookAroundAvailable = (preset: GraphicsPreset): boolean =>
-  QUALITY_FLAGS[preset].cockpitInterior && QUALITY_FLAGS[preset].interiorGlb;
 
 declare global {
   interface Window {
