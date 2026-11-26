@@ -38,7 +38,7 @@ export function cabOpenings(spec: TruckSpec): CabOpenings {
   const sides: Range[] = [[front - cab.sideGlassLength, front]];
   if (p.style === 'crew') {
     // cab_shell.py CREW_GLASS: the pillar gap and length of the second side window
-    const [gap, length] = [0.2, 0.75];
+    const [gap, length] = [0.74, 0.82];
     const near = front - cab.sideGlassLength - gap;
     sides.unshift([near - length, near]);
   }
