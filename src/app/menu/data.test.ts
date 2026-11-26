@@ -5,7 +5,7 @@ import { loadSettings } from '../settings';
 import { entriesOf, SETUP_STEPS } from './catalogue';
 import { CONTENT } from './content';
 import { GRAPH, screenOf, shownItems, type MenuState, type ScreenId } from './graph';
-import { OPTION_FIELDS, optionPatch, optionValue, PAUSE_FIELDS, type OptionId } from './options';
+import { OPTION_FIELDS, optionPatch, optionValue, pauseFields, type OptionId } from './options';
 
 const OPTION_IDS = Object.keys(OPTION_FIELDS) as OptionId[];
 
@@ -47,13 +47,34 @@ describe('menu options', () => {
       theme: 'live',
       graphics: 'live',
       wideMirrors: 'live',
+      fov: 'live',
+      mouseSensitivity: 'live',
+      invertMouse: 'live',
     });
   });
 
+  it('the Settings screen lists the Einweiser options only in a group behind the preview', () => {
+    const groups = screenOf('settings').groups ?? [];
+    for (const id of OPTION_IDS) {
+      const behind = groups.some((g) => g.einweiser === true && g.fields.includes(id));
+      expect(behind, id).toBe(OPTION_FIELDS[id].group === 'einweiser');
+    }
+  });
+
   it('the pause sheet offers exactly the options a running drive applies', () => {
-    expect(PAUSE_FIELDS).toEqual(['theme', 'wideMirrors', 'graphics']);
-    const applied = OPTION_IDS.filter((id) => OPTION_FIELDS[id].applies === 'live');
-    expect(new Set(PAUSE_FIELDS)).toEqual(new Set(applied));
+    const live = (group: 'einweiser' | 'other'): OptionId[] =>
+      OPTION_IDS.filter(
+        (id) =>
+          OPTION_FIELDS[id].applies === 'live' &&
+          (OPTION_FIELDS[id].group === 'einweiser') === (group === 'einweiser'),
+      );
+    // the driver's list is what it was before the Einweiser's options
+    expect(pauseFields('driver')).toEqual(['theme', 'wideMirrors', 'graphics']);
+    expect(new Set(pauseFields('driver'))).toEqual(new Set(live('other')));
+    // no mirrors to widen, but the look settings
+    expect(new Set(pauseFields('einweiser'))).toEqual(
+      new Set([...live('einweiser'), ...live('other').filter((id) => id !== 'wideMirrors')]),
+    );
   });
 });
 

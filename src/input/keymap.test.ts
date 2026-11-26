@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { en } from '../i18n/en';
-import { BINDINGS, actionFor, isAction, legendRows, type Scope } from './keymap';
+import { SIGN_IDS } from '../contracts/einweiser';
+import {
+  BINDINGS,
+  SIGN_OF,
+  actionFor,
+  isAction,
+  legendRows,
+  type Action,
+  type Scope,
+} from './keymap';
 
 /** Physical codes a typed character can come from on a US layout. */
 const US_CODES: Record<string, readonly string[]> = {
@@ -31,13 +40,27 @@ const LIVE: readonly (readonly Scope[])[] = [
   ['view', 'app'],
 ];
 
+/** The Einweiser's view keys: no glance (mouse look replaces it), outside view or free camera (`docs/einweiser-spike.md` §3.1). */
+const DROPPED_FOR_EINWEISER: readonly Action[] = [
+  'glanceLeft',
+  'glanceRight',
+  'viewChase',
+  'freeCamera',
+  'orbitLeft',
+  'orbitRight',
+  'tiltUp',
+  'tiltDown',
+];
+
 describe('keymap', () => {
   it('lists every key value in a known form', () => {
     for (const { match } of BINDINGS) {
       expect(match.values.length).toBeGreaterThan(0);
       for (const v of match.values) {
         if (match.by === 'code')
-          expect(v).toMatch(/^(Key[A-Z]|Digit\d|Numpad\d|Arrow\w+|Page(Up|Down)|Space|Escape)$/);
+          expect(v).toMatch(
+            /^(Key[A-Z]|Digit\d|Numpad\d|Arrow\w+|Page(Up|Down)|Space|Escape|Shift(Left|Right))$/,
+          );
         else expect(v).toHaveLength(1);
       }
     }
@@ -46,6 +69,21 @@ describe('keymap', () => {
   it.each(LIVE)('binds no physical key twice while %s are live', (...scopes) => {
     const seen = new Map<string, string>();
     for (const b of BINDINGS.filter((x) => scopes.includes(x.scope))) {
+      for (const code of new Set(codesOf(b))) {
+        expect(seen.get(code), `${code} in ${b.action}`).toBeUndefined();
+        seen.set(code, b.action);
+      }
+    }
+  });
+
+  it("binds no physical key twice while the Einweiser's scopes are live", () => {
+    const seen = new Map<string, string>();
+    const live = BINDINGS.filter(
+      (b) =>
+        ['walk', 'sign', 'view', 'app'].includes(b.scope) &&
+        !DROPPED_FOR_EINWEISER.includes(b.action),
+    );
+    for (const b of live) {
       for (const code of new Set(codesOf(b))) {
         expect(seen.get(code), `${code} in ${b.action}`).toBeUndefined();
         seen.set(code, b.action);
@@ -110,5 +148,60 @@ describe('keymap', () => {
     expect(terms(true)).toContain('F / Y / O');
     expect(terms(false)).toContain('F / Y');
     expect(terms(false)).not.toContain('F / Y / O');
+  });
+});
+
+describe('the Einweiser keys', () => {
+  it('walks on WASD or the arrows and jogs on Shift', () => {
+    const walk = (code: string): Action | undefined => actionFor('walk', { code, key: '' });
+    expect(['KeyW', 'KeyS', 'KeyA', 'KeyD'].map(walk)).toEqual([
+      'walkForward',
+      'walkBack',
+      'walkLeft',
+      'walkRight',
+    ]);
+    expect(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].map(walk)).toEqual([
+      'walkForward',
+      'walkBack',
+      'walkLeft',
+      'walkRight',
+    ]);
+    expect([walk('ShiftLeft'), walk('ShiftRight')]).toEqual(['jog', 'jog']);
+  });
+
+  it('signs the nine signs on 1 to 9, with Q, E and Space as alternates', () => {
+    const sign = (code: string): unknown => SIGN_OF[actionFor('sign', { code, key: '' }) ?? 'jog'];
+    expect(SIGN_IDS.map((_, i) => sign(`Digit${i + 1}`))).toEqual([...SIGN_IDS]);
+    expect(SIGN_IDS.map((_, i) => sign(`Numpad${i + 1}`))).toEqual([...SIGN_IDS]);
+    expect([sign('KeyQ'), sign('KeyE'), sign('Space')]).toEqual(['links', 'rechts', 'halt']);
+  });
+
+  it('takes Q and E from the glance keys, by scope', () => {
+    expect(actionFor('view', { code: 'KeyQ', key: 'q' })).toBe('glanceLeft');
+    expect(actionFor('sign', { code: 'KeyQ', key: 'q' })).toBe('signLinks');
+  });
+
+  it('lists in the legend what the driver lists of the shared keys, and none of the driver keys', () => {
+    const terms = legendRows(false, false, 'einweiser').map((r) => r.term);
+    expect(terms).toEqual([
+      'W A S D · ← ↑ ↓ →',
+      { key: 'keyShift' },
+      { key: 'keyMouse' },
+      '1–9',
+      { key: 'keySpace' },
+      'Q / E',
+      { key: 'keyMouseButtons' },
+      { key: 'keyEsc' },
+      'F / Y',
+      '+ / −',
+      '0 / L',
+    ]);
+  });
+
+  it('has legend text for every Einweiser row', () => {
+    for (const { term, desc } of legendRows(false, false, 'einweiser')) {
+      expect(en).toHaveProperty(desc);
+      if (typeof term !== 'string') expect(en).toHaveProperty(term.key);
+    }
   });
 });

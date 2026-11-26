@@ -40,6 +40,7 @@ import { trailerById, truckById } from '../vehicles/registry';
 import { measureChrome, measureDivider } from './chrome';
 import { startEinweiserDrive } from './einweiser-drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
+import { pauseFields } from './menu/options';
 import { showPauseSheet, type PauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
@@ -186,13 +187,17 @@ export function startDrive(
       restart,
       finish,
       leave: exercise === null ? null : leaveUnscored,
+      fields: pauseFields(role),
       settingChanged: (id) => {
         if (id === 'graphics') switchGraphics(currentSettings().graphics);
+        // the field of view is the first-person camera's: redraw while the run stands still
+        if (id === 'fov') dirty = true;
         if (id !== 'wideMirrors') return;
         wideMirrors = currentSettings().wideMirrors;
         arrange();
       },
     });
+    einweiser?.pause();
   };
 
   const view = mountRenderStage(stage, stage, () => exit(false), lighting);
@@ -206,6 +211,14 @@ export function startDrive(
   };
   cleanups.push(halt);
   live.push(resume, holdWakeLock());
+  // Before the view input and the HUD, whose keys and clicks it takes first.
+  if (einweiser !== null) {
+    live.push(
+      einweiser.attach(view.surface, () => {
+        if (sheet === null) togglePause();
+      }),
+    );
+  }
   const onEscape = (e: KeyboardEvent): void => {
     if (!isAction('escape', e) || e.repeat || e.defaultPrevented) return;
     e.preventDefault();
@@ -225,6 +238,10 @@ export function startDrive(
       dirty = true;
     }),
   );
+
+  // His look is the mouse's, and he has no outside view (`docs/einweiser-spike.md` §3.1, §3.4).
+  const chaseOffered = (g: GraphicsPreset): boolean => role === 'driver' && chaseViewAvailable(g);
+  const lookOffered = (g: GraphicsPreset): boolean => role === 'driver' && lookAroundAvailable(g);
 
   const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
   let aids: AidFlags = mirrorsOnly ? NO_AIDS : settings.aids;
@@ -253,13 +270,18 @@ export function startDrive(
     predicted: NO_PREDICTION,
   };
 
-  const controls = createControls(stage, {
-    lockToLockTurns: truck.steering.lockToLockTurns.value,
-    steerRate: params.steerRate,
-    lights: lighting === 'night',
-  });
-  live.push(() => controls.dispose());
-  const source: ControlSource = einweiser?.source ?? controls;
+  // The Einweiser has no wheel, lever or driver keys.
+  const controls =
+    einweiser === null
+      ? createControls(stage, {
+          lockToLockTurns: truck.steering.lockToLockTurns.value,
+          steerRate: params.steerRate,
+          lights: lighting === 'night',
+        })
+      : null;
+  if (controls !== null) live.push(() => controls.dispose());
+  const source: ControlSource | undefined = einweiser?.source ?? controls ?? undefined;
+  if (source === undefined) throw new Error('a drive has a control source');
   // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
   const viewInput = createViewInput(view.surface, {
     mode: topDown,
@@ -285,7 +307,7 @@ export function startDrive(
     },
     look: {
       getRect: () => frame.views.cockpit,
-      enabled: lookAroundAvailable(graphics),
+      enabled: lookOffered(graphics),
       onChange(head) {
         frame.head = head;
         if (EXPOSE_FRAMING) stage.dataset['head'] = JSON.stringify(head);
@@ -304,12 +326,13 @@ export function startDrive(
         : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
     aids,
     topDown,
-    chase: chaseViewAvailable(graphics),
+    chase: chaseOffered(graphics),
     interior: interiorAvailable(graphics),
-    look: lookAroundAvailable(graphics),
+    look: lookOffered(graphics),
     collapsed,
     mirrorsOnly,
-    pedalsBox: () => controls.pedalsBox(),
+    role,
+    ...(controls === null ? {} : { pedalsBox: () => controls.pedalsBox() }),
   });
   cleanups.push(() => hud.dispose());
 
@@ -426,11 +449,11 @@ export function startDrive(
     graphics = next;
     view.setGraphics(next);
     renderer.rebuildScene();
-    viewInput.setLook(lookAroundAvailable(next));
+    viewInput.setLook(lookOffered(next));
     hud.setOffers({
-      chase: chaseViewAvailable(next),
+      chase: chaseOffered(next),
       interior: interiorAvailable(next),
-      look: lookAroundAvailable(next),
+      look: lookOffered(next),
     });
     dirty = true;
     arrange();
@@ -560,6 +583,7 @@ export function startDrive(
       if (EXPOSE_FRAMING) {
         exposeVehicleBox();
         stage.dataset['drawn'] = String(drawn);
+        if (visual !== null) stage.dataset['einweiser'] = JSON.stringify(visual);
       }
     },
   });
