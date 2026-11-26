@@ -13,6 +13,7 @@ import {
 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { truckAnchors } from '../vehicles/anchors';
+import { cabGlass } from '../vehicles/cab';
 import { trucks } from '../vehicles/registry';
 import { CAB_HEIGHT, cabShellParams, FRAME_TOP } from './cab-dims';
 import { COCKPIT_FOV, COCKPIT_PITCH } from './cockpit-camera';
@@ -272,6 +273,10 @@ describe.each(trucks)('cab interior for looking around, $id', (spec) => {
     expect(checked).toBeGreaterThan(0);
     // the side window is open to the look-around, so some rays do leave
     expect(glass).toBeGreaterThan(0);
+  });
+
+  it('has the shell side glass reach the B-pillar the interior opens to', () => {
+    expect(cabGlass(spec).sideRear).toBeCloseTo(bPillarFront, 6);
   });
 
   it('leaves the forward view unchanged: no ray of it meets an added part first', () => {
