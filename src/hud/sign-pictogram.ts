@@ -1,6 +1,5 @@
 import type { SignId } from '../contracts/einweiser';
 import {
-  ARMS_DOWN,
   FOREARM,
   SHOULDER_HALF_SPAN,
   SHOULDER_HEIGHT,
@@ -46,13 +45,10 @@ const points = (line: readonly FigurePoint[]): string =>
 const polyline = (line: readonly FigurePoint[], ghost = false): string =>
   `<polyline points="${points(line)}"${ghost ? ' class="hud-sign-ghost"' : ''} />`;
 
-/**
- * The source pose of `sign` as a stick figure on `currentColor`; a moving sign draws its other keys
- * fainter. Null draws arms down.
- */
-export function signPictogram(sign: SignId | null): string {
+/** The source pose of `sign` as a stick figure on `currentColor`; a moving sign draws its other keys fainter. */
+export function signPictogram(sign: SignId): string {
   // the first key last, so it lies on top
-  const keys = sign === null ? [ARMS_DOWN] : [...SIGN_POSES[sign].keys].reverse();
+  const keys = [...SIGN_POSES[sign].keys].reverse();
   const body = [
     `<circle cx="0" cy="${n(-HEAD_HEIGHT)}" r="${n(HEAD_RADIUS)}" />`,
     polyline([-1, 1].map((s) => ({ x: s * SHOULDER_HALF_SPAN, y: SHOULDER_HEIGHT }))),

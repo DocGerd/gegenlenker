@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { SIGN_POSES } from '../einweiser/sign-poses';
+import { SIGN_IDS } from '../contracts/einweiser';
+import { handPoint, SIGN_POSES } from '../einweiser/sign-poses';
 import { armLines } from './sign-pictogram';
 
 const hand = (sign: 'achtung' | 'rechts', side: 0 | 1) => {
@@ -21,5 +22,20 @@ describe('armLines', () => {
   it('draws the arm of Rechts fahren out to the viewer’s left, the other hanging', () => {
     expect(hand('rechts', 1).x).toBeLessThan(-0.6);
     expect(hand('rechts', 0).y).toBeLessThan(1);
+  });
+
+  it('ends every arm of every key at the hand the driver reads', () => {
+    const facing = { x: 0, y: 0, heading: 0 };
+    for (const sign of SIGN_IDS) {
+      for (const key of SIGN_POSES[sign].keys) {
+        const lines = armLines(key);
+        (['left', 'right'] as const).forEach((side, i) => {
+          const drawn = lines[i]?.[2];
+          const read = handPoint(facing, key, side);
+          expect(drawn?.x, `${sign} ${side}`).toBeCloseTo(read.y, 9);
+          expect(drawn?.y, `${sign} ${side}`).toBeCloseTo(read.z, 9);
+        });
+      }
+    }
   });
 });
