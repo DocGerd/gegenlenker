@@ -1,3 +1,5 @@
+import { FOV_CHOICES, MOUSE_SENSITIVITIES, type MouseSensitivity } from '../../contracts/einweiser';
+import type { Role } from '../../contracts/exercise';
 import {
   GRAPHICS_PRESETS,
   LIGHTING_MODES,
@@ -18,7 +20,10 @@ export type OptionId =
   | 'language'
   | 'theme'
   | 'graphics'
-  | 'wideMirrors';
+  | 'wideMirrors'
+  | 'fov'
+  | 'mouseSensitivity'
+  | 'invertMouse';
 
 export type Applies = 'live' | 'menuOnly' | 'run';
 
@@ -31,7 +36,7 @@ export type Choice = {
 export type OptionField = {
   readonly id: OptionId;
   readonly label: MessageKey;
-  readonly group: 'run' | 'general' | 'graphics';
+  readonly group: 'run' | 'general' | 'graphics' | 'einweiser';
   readonly choices: readonly Choice[];
   readonly applies: Applies;
 };
@@ -60,6 +65,11 @@ const LIGHTING_NAME: Readonly<Record<LightingMode, MessageKey>> = {
   day: 'lightingDay',
   night: 'lightingNight',
 };
+const SENSITIVITY_NAME: Readonly<Record<MouseSensitivity, MessageKey>> = {
+  low: 'sensitivityLow',
+  medium: 'sensitivityMedium',
+  high: 'sensitivityHigh',
+};
 const DRIVE_VIEW_NAME = { standard: 'driveViewStandard', mirrors: 'driveViewMirrors' } as const;
 const SWITCH_NAME = { on: 'settingOn', off: 'settingOff' } as const;
 
@@ -67,6 +77,7 @@ const LANGS: readonly Lang[] = ['de', 'en'];
 const THEMES: readonly Settings['theme'][] = ['system', 'light', 'dark'];
 const DRIVE_VIEWS: readonly (keyof typeof DRIVE_VIEW_NAME)[] = ['standard', 'mirrors'];
 const SWITCH: readonly (keyof typeof SWITCH_NAME)[] = ['on', 'off'];
+const OFF_ON: readonly (keyof typeof SWITCH_NAME)[] = ['off', 'on'];
 const TRUCKS = trucks.map((s) => s.id);
 const TRAILERS = trailers.map((s) => s.id);
 
@@ -132,10 +143,37 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
     choices: named(SWITCH, SWITCH_NAME),
     applies: 'live',
   },
+  fov: {
+    id: 'fov',
+    label: 'fov',
+    group: 'einweiser',
+    choices: FOV_CHOICES.map((fov) => ({ value: String(fov), label: { text: `${fov}°` } })),
+    applies: 'live',
+  },
+  mouseSensitivity: {
+    id: 'mouseSensitivity',
+    label: 'mouseSensitivity',
+    group: 'einweiser',
+    choices: named(MOUSE_SENSITIVITIES, SENSITIVITY_NAME),
+    applies: 'live',
+  },
+  invertMouse: {
+    id: 'invertMouse',
+    label: 'invertMouse',
+    group: 'einweiser',
+    choices: named(OFF_ON, SWITCH_NAME),
+    applies: 'live',
+  },
+};
+
+const PAUSE_FIELDS: Readonly<Record<Role, readonly OptionId[]>> = {
+  driver: ['theme', 'wideMirrors', 'graphics'],
+  // No driver mirrors to widen
+  einweiser: ['fov', 'mouseSensitivity', 'invertMouse', 'theme', 'graphics'],
 };
 
 /** What a running drive can take: shown in the pause sheet, in this order. */
-export const PAUSE_FIELDS: readonly OptionId[] = ['theme', 'wideMirrors', 'graphics'];
+export const pauseFields = (role: Role): readonly OptionId[] => PAUSE_FIELDS[role];
 
 export function optionValue(settings: Settings, id: OptionId): string {
   switch (id) {
@@ -155,15 +193,21 @@ export function optionValue(settings: Settings, id: OptionId): string {
       return settings.graphics;
     case 'wideMirrors':
       return settings.wideMirrors ? 'on' : 'off';
+    case 'fov':
+      return String(settings.fov);
+    case 'mouseSensitivity':
+      return settings.mouseSensitivity;
+    case 'invertMouse':
+      return settings.invertMouse ? 'on' : 'off';
   }
 }
 
-const patchOf = <T extends string>(
+const patchOf = <T extends string | number>(
   values: readonly T[],
   value: string,
   make: (v: T) => SettingsPatch,
 ): SettingsPatch | null => {
-  const v = values.find((x) => x === value);
+  const v = values.find((x) => String(x) === value);
   return v === undefined ? null : make(v);
 };
 
@@ -185,6 +229,12 @@ export function optionPatch(id: OptionId, value: string): SettingsPatch | null {
       return patchOf(GRAPHICS_PRESETS, value, (graphics) => ({ graphics }));
     case 'wideMirrors':
       return patchOf(SWITCH, value, (v) => ({ wideMirrors: v === 'on' }));
+    case 'fov':
+      return patchOf(FOV_CHOICES, value, (fov) => ({ fov }));
+    case 'mouseSensitivity':
+      return patchOf(MOUSE_SENSITIVITIES, value, (mouseSensitivity) => ({ mouseSensitivity }));
+    case 'invertMouse':
+      return patchOf(SWITCH, value, (v) => ({ invertMouse: v === 'on' }));
   }
 }
 

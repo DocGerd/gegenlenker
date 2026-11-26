@@ -18,7 +18,12 @@ export type Item = {
   readonly badgeWhen?: ConditionId;
 };
 
-export type OptionGroup = { readonly label: MessageKey; readonly fields: readonly OptionId[] };
+export type OptionGroup = {
+  readonly label: MessageKey;
+  readonly fields: readonly OptionId[];
+  /** Listed only with `einweiserPreview`, until Einweiser mode is playable (#500). */
+  readonly einweiser?: true;
+};
 
 /** Plain data, so it stays JSON-serialisable: conditions and actions are named, not functions. */
 export type Screen = {
@@ -97,6 +102,11 @@ export const GRAPH: readonly Screen[] = [
     groups: [
       { label: 'settingsGeneral', fields: ['language', 'theme'] },
       { label: 'settingsGraphics', fields: ['graphics', 'wideMirrors'] },
+      {
+        label: 'settingsEinweiser',
+        fields: ['fov', 'mouseSensitivity', 'invertMouse'],
+        einweiser: true,
+      },
     ],
   },
   { id: 'controls', kind: 'content', title: 'controls', items: [], lazy: true },
