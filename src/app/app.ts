@@ -161,18 +161,22 @@ export function startApp(root: HTMLElement): void {
       .catch((error: unknown) => loadFailed(error, () => replay(log, onExit)));
   };
   const finished = (run: RunConfig, entry: EntryRef, outcome: DriveOutcome): void => {
-    storeLastRun(outcome.log);
     const r = outcome.result;
-    if (r === null) {
+    // Einweiser runs keep no bests (owner). The best is written first: its quota fallback drops the last run.
+    const context =
+      r === null
+        ? null
+        : r.einweiser === undefined
+          ? storeResult(r)
+          : { isNewBest: false, previous: null };
+    storeLastRun(outcome.log);
+    if (r === null || context === null) {
       leave();
       menu();
       // free yard: the run-over is all an Einweiser drive reports there (owner)
       if (outcome.runOver) showToast(root, 'runOver');
       return;
     }
-    // Einweiser runs keep no bests (owner).
-    const context =
-      r.einweiser === undefined ? storeResult(r) : { isNewBest: false, previous: null };
     result(run, entry, r, context, outcome.log);
   };
   const result = (
