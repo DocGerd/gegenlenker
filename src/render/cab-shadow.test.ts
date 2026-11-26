@@ -4,7 +4,7 @@ import { type BufferGeometry, type Mesh, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { trucks } from '../vehicles/registry';
 import { type CabOpenings, cabOpenings, cabShadowCaster, CORNER, ROOF } from './cab-shadow';
-import { cabShellParams } from './cab-dims';
+import { cabShellParams, RELIEF } from './cab-dims';
 import { parseMeshes } from './glb-shells';
 import { interiorShellFrom } from './interior-glb';
 import { perspectiveSunDirection } from './light-rig';
@@ -86,7 +86,13 @@ describe.each(trucks)('the cab shadow caster of $id', (spec) => {
     const skin = (await parseMeshes(bytesOf(`${spec.id}-cab`))).find((m) => m.name === 'cab');
     if (skin === undefined) throw new Error('no cab skin');
     skin.updateWorldMatrix(true, false);
-    const caster = [...triangles(cabShadowCaster(spec)), ...triangles(skin.geometry, skin)];
+    // the mirror heads stand outside the side walls and shade the glass as real heads do: left out
+    const inEnvelope = (tri: Triangle): boolean =>
+      tri.every((v) => Math.abs(v.z) <= p.width / 2 + RELIEF + 1e-3);
+    const caster = [
+      ...triangles(cabShadowCaster(spec)),
+      ...triangles(skin.geometry, skin).filter(inEnvelope),
+    ];
     const parts = Object.values(await interiorOf(spec.id));
     const facing = parts.flatMap((mesh) => {
       mesh.updateWorldMatrix(true, false);

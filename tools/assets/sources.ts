@@ -45,7 +45,7 @@ const KIT_ATLAS_A = 'src/render/assets/yard-kit-atlas-a.ktx2';
 const KIT_ATLAS_B = 'src/render/assets/yard-kit-atlas-b.ktx2';
 const KIT_LEAVES = 'src/render/assets/yard-kit-leaves.ktx2';
 const KIT_REBUILD =
-  '`tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.';
+  '`tools/blender/yard_kit.py` (through the blender MCP) bakes the atlases from the files above, downloaded by `pnpm assets:fetch` to the git-ignored paths; it checks their SHA-256. `pnpm texture <key>` encodes the bake in `tools/blender/bake`, which is not committed; `tools/assets/textures.test.ts` fails when the committed ktx2 is stale.';
 
 /** A yard-kit atlas tile cut from a PBR set: the colour map into the albedo atlas, the rest into the packed one. */
 const kitTile = (
@@ -211,7 +211,7 @@ export const ASSET_SOURCES: Readonly<Record<string, AssetSource>> = {
       },
     ],
     rebuild:
-      '`pnpm texture sky` (`tools/textures/sky-pixels.ts`) writes both outputs from the 4k `.hdr`, which is not committed: download it to the git-ignored path above. The build checks its SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` and `tools/textures/sky-build.test.ts` fail when they are stale.',
+      '`pnpm texture sky` (`tools/textures/sky-pixels.ts`) writes both outputs from the 4k `.hdr`, which is not committed: `pnpm assets:fetch` downloads it to the git-ignored path above. The build checks its SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` and `tools/textures/sky-build.test.ts` fail when they are stale.',
   },
   'polyhaven-brushed-concrete': {
     title: 'Yard concrete: `brushed_concrete`',
@@ -257,7 +257,7 @@ export const ASSET_SOURCES: Readonly<Record<string, AssetSource>> = {
       },
     ],
     rebuild:
-      '`pnpm texture concrete-albedo` and `pnpm texture concrete-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: download them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.',
+      '`pnpm texture concrete-albedo` and `pnpm texture concrete-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: `pnpm assets:fetch` downloads them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.',
   },
   'polyhaven-asphalt-02': {
     title: 'Street asphalt: `asphalt_02`',
@@ -303,7 +303,7 @@ export const ASSET_SOURCES: Readonly<Record<string, AssetSource>> = {
       },
     ],
     rebuild:
-      '`pnpm texture asphalt-albedo` and `pnpm texture asphalt-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: download them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.',
+      '`pnpm texture asphalt-albedo` and `pnpm texture asphalt-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: `pnpm assets:fetch` downloads them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.',
   },
   'polyhaven-concrete-pavers-02': {
     title: 'Pavement pavers: `concrete_pavers_02`',
@@ -349,7 +349,7 @@ export const ASSET_SOURCES: Readonly<Record<string, AssetSource>> = {
       },
     ],
     rebuild:
-      '`pnpm texture pavers-albedo` and `pnpm texture pavers-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: download them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.',
+      '`pnpm texture pavers-albedo` and `pnpm texture pavers-packed` (`tools/textures/pbr-build.ts`) read the three 2K PNGs, which are not committed: `pnpm assets:fetch` downloads them to the git-ignored paths above. The build checks their SHA-256 and records its input hashes in both outputs; `tools/assets/textures.test.ts` fails when they are stale.',
   },
 };
 

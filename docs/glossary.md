@@ -22,17 +22,27 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Bar across the corridor's ends at a block       | stop bar                                    | Querbalken                                   |
 | Goal of an exercise                             | target                                      | Ziel                                         |
 | One attempt at an exercise                      | run                                         | Fahrt                                        |
+| Run setup action that starts the drive          | start                                       | Starten                                      |
 | Point to drive through before the target        | turn point                                  | Wendepunkt                                   |
 | Day or night of a drive                         | time of day (Day / Night)                   | Tageszeit (Tag / Nacht)                      |
 | Render quality setting (Low / Balanced / High)  | graphics quality                            | Grafikqualität (Niedrig / Ausgewogen / Hoch) |
 | Class IV mirror setting                         | wide-angle mirrors (On / Off)               | Weitwinkelspiegel (An / Aus)                 |
+| Settings group: language and theme              | general                                     | Allgemein                                    |
+| Settings group: graphics quality and mirrors    | graphics                                    | Grafik                                       |
 | Top-down pane of the drive screen               | top view                                    | Draufsicht                                   |
 | Drive screen with or without the top view       | driving view (With top view / Mirrors only) | Fahransicht (Mit Draufsicht / Nur Spiegel)   |
 | Vehicle lamps switch (key H, touch button)      | lights                                      | Licht                                        |
 | Hazard flashers switch (key X, touch button)    | hazard lights                               | Warnblinker                                  |
 | Orbit view of the truck from outside            | outside view                                | Außenansicht                                 |
 | Turning the outside view around the vehicle     | orbit / tilt                                | drehen / neigen                              |
+| Flying the outside view's camera anywhere       | free camera                                 | Freie Kamera                                 |
 | Turning the head in the cockpit view            | look around                                 | Umsehen                                      |
+| Menu screen listing the keys and touch controls | controls                                    | Bedienung                                    |
+| Controls group for the keys and wheel rows      | keyboard and mouse                          | Tastatur und Maus                            |
+| Controls group for the pointer controls         | touch and mouse                             | Touch und Maus                               |
+| Round control that steers                       | steering wheel                              | Lenkrad                                      |
+| Slider that sets the share of the speed cap     | speed lever                                 | Hebel                                        |
+| Gear and lamp controls on the touchscreen       | buttons                                     | Schaltflächen                                |
 | Split of the screen into cockpit and top view   | view size                                   | Ansichtsgröße                                |
 | Legend: reset both view and view size           | reset view / size                           | Standardansicht                              |
 | Menu screen listing the app's changes           | what's new                                  | Neuigkeiten                                  |
@@ -40,7 +50,13 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Group of entries not seen on the last visit     | since your last visit                       | Seit dem letzten Besuch                      |
 | App version, shown for a release build          | version                                     | Version                                      |
 | Shown instead of a version for any other build  | development build                           | Entwicklungsstand                            |
+| Title entry and screen for licences and credits | about                                       | Über                                         |
+| Licences of the bundled libraries               | third-party licenses                        | Lizenzen Dritter                             |
+| Credits for the bundled textures and sky        | asset credits                               | Quellen der Assets                           |
+| Link to the public repository                   | source code                                 | Quellcode                                    |
+| Package listed under the one that bundles it    | incl.                                       | inkl.                                        |
 | Badge of the test build deployed for acceptance | UAT                                         | Abnahmetest                                  |
+| Stop button or Space: lever to zero and brake   | stop                                        | Stopp                                        |
 | Speed readout and label                         | speed                                       | Tempo                                        |
 | Gear readout and label                          | gear                                        | Fahrstufe                                    |
 | Steering readout and label                      | steer                                       | Lenken                                       |

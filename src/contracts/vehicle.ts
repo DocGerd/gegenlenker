@@ -81,6 +81,7 @@ export type TrailerSpec = {
   readonly width: Param;
   readonly track: Param;
   readonly deckHeight: Param;
+  readonly rampHeight?: Param; // folded loading ramps' top above the road; low-loaders only
   readonly couplingLimit: Param;
   readonly turntableLimit: Param;
   readonly underrunGuard: {

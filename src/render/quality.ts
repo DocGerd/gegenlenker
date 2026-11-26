@@ -127,3 +127,11 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     yardShadow: true,
   },
 };
+
+/** Whether the preset offers the outside view. */
+export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
+  QUALITY_FLAGS[preset].chaseView;
+
+/** Whether the preset draws the interior asset, which the head can turn about. */
+export const lookAroundAvailable = (preset: GraphicsPreset): boolean =>
+  QUALITY_FLAGS[preset].cockpitInterior && QUALITY_FLAGS[preset].interiorGlb;

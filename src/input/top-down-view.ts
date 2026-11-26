@@ -26,7 +26,7 @@ const PINCH_WHEEL_BOOST = 5;
 const LINE_PIXELS = 16;
 const DEFAULT_EPSILON = 1e-6;
 /** Below this finger distance the pinch ratio is noise. */
-const MIN_PINCH_PIXELS = 1;
+export const MIN_PINCH_PIXELS = 1;
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 

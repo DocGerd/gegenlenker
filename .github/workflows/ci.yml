@@ -9,8 +9,11 @@ on:
 permissions:
   contents: read
 
+# PRs cancel their own earlier runs. Pushes to `develop` share one group without cancelling, so the
+# running one finishes (e2e included) and only the newest waiting one is kept: merges arriving faster
+# than e2e still get the latest tree tested. `main` runs never wait or cancel.
 concurrency:
-  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || (github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'develop') || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -103,11 +106,12 @@ jobs:
   # per-test durations. Retune the table when a class's cost shifts; the lint job checks that every
   # `i` of each class appears in exactly one job, so each test runs once. Keep the job count under
   # the account's concurrent-job limit, or the last jobs queue.
-  # Skipped on push to `main` and `develop`: the rulesets' strict required status checks (no bypass)
-  # make the merged tree the tree its PR ran e2e on; revisit this `if` if that changes. `workflow_dispatch`
-  # still runs it.
+  # Skipped on push to `main`: its strict ruleset (no bypass) makes the merged tree the tree its PR
+  # ran e2e on. The `develop` ruleset is not strict, so a PR's e2e may have run on a base that has
+  # since moved: pushes to `develop` run it (a superseded waiting run is dropped for the newer one),
+  # and `check` requires it there.
   e2e:
-    if: github.event_name != 'push'
+    if: github.event_name != 'push' || github.ref == 'refs/heads/develop'
     name: e2e ${{ matrix.id }} (${{ matrix.runs }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -115,24 +119,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { id: 1, runs: 'slow:6/8 light:2/6' }
-          - { id: 2, runs: 'layout:2/6 light:3/6' }
-          - { id: 3, runs: 'slow:8/8 heavy:5/16' }
-          - { id: 4, runs: 'slow:4/8 heavy:15/16' }
-          - { id: 5, runs: 'heavy:14/16 heavy:3/16' }
-          - { id: 6, runs: 'heavy:12/16 light:4/6' }
-          - { id: 7, runs: 'layout:3/6 layout:4/6' }
-          - { id: 8, runs: 'slow:7/8 heavy:7/16' }
-          - { id: 9, runs: 'heavy:6/16 heavy:16/16' }
-          - { id: 10, runs: 'slow:5/8 heavy:8/16' }
-          - { id: 11, runs: 'slow:3/8 layout:1/6' }
-          - { id: 12, runs: 'heavy:9/16 heavy:2/16' }
-          - { id: 13, runs: 'slow:1/8 slow:2/8' }
-          - { id: 14, runs: 'heavy:4/16 layout:5/6' }
-          - { id: 15, runs: 'light:1/6 heavy:10/16' }
-          - { id: 16, runs: 'heavy:11/16 light:5/6' }
-          - { id: 17, runs: 'heavy:13/16 heavy:1/16' }
-          - { id: 18, runs: 'layout:6/6 light:6/6' }
+          - { id: 1, runs: 'heavy:16/16 layout:8/12 slow:3/12' }
+          - { id: 2, runs: 'heavy:4/16 layout:12/12' }
+          - { id: 3, runs: 'heavy:1/16 heavy:7/16 light:1/6' }
+          - { id: 4, runs: 'layout:4/12 layout:10/12 slow:5/12' }
+          - { id: 5, runs: 'heavy:5/16 light:3/6 slow:10/12' }
+          - { id: 6, runs: 'heavy:6/16 heavy:10/16 heavy:13/16' }
+          - { id: 7, runs: 'layout:6/12 light:2/6 slow:4/12' }
+          - { id: 8, runs: 'heavy:14/16 slow:7/12' }
+          - { id: 9, runs: 'layout:3/12 layout:7/12 light:4/6' }
+          - { id: 10, runs: 'heavy:12/16 light:6/6 slow:1/12' }
+          - { id: 11, runs: 'heavy:2/16 layout:2/12 light:5/6' }
+          - { id: 12, runs: 'heavy:9/16 layout:1/12 layout:9/12' }
+          - { id: 13, runs: 'heavy:15/16 slow:8/12' }
+          - { id: 14, runs: 'layout:11/12 slow:12/12' }
+          - { id: 15, runs: 'heavy:8/16 slow:6/12' }
+          - { id: 16, runs: 'layout:5/12 slow:11/12' }
+          - { id: 17, runs: 'slow:2/12 slow:9/12' }
+          - { id: 18, runs: 'heavy:3/16 heavy:11/16' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -208,7 +212,7 @@ jobs:
           path: test-results/
 
   # Advisory: not in `check.needs`. Software WebGPU (SwiftShader, Chromium's new headless mode)
-  # builds every pipeline of each preset, so a WGSL error fails here. Skipped on push, like e2e.
+  # builds every pipeline of each preset, so a WGSL error fails here. Skipped on push.
   webgpu:
     if: github.event_name != 'push'
     needs: [lint, unit]
@@ -263,7 +267,7 @@ jobs:
 
   # The UAT build shares the production origin and scope prefix: the production dist with a UAT build
   # inside `uat/` proves each channel leaves the other's pages, keys and caches alone. Unlike e2e it
-  # also runs on push, because `check` tolerates only a skipped e2e.
+  # also runs on every push, because `check` tolerates a skipped e2e only on `main`.
   channels:
     needs: [lint, unit]
     runs-on: ubuntu-latest
@@ -311,7 +315,7 @@ jobs:
 
   # The required status check. `always()` keeps it running when a dependency
   # fails, so it fails instead of being skipped (a skipped check can pass).
-  # Required: every need succeeds; on push only, e2e may be skipped.
+  # Required: every need succeeds; only on a push to `main` may e2e be skipped.
   check:
     needs: [lint, unit, e2e, channels]
     if: always()
@@ -321,12 +325,13 @@ jobs:
       - env:
           NEEDS: ${{ toJSON(needs) }}
           EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
         run: |
           printf '%s' "$NEEDS" | jq -c 'map_values(.result)'
-          printf '%s' "$NEEDS" | jq -e --arg event "$EVENT" '
+          printf '%s' "$NEEDS" | jq -e --arg event "$EVENT" --arg ref "$REF" '
             length > 0 and all(to_entries[];
               .value.result == "success"
-              or (.key == "e2e" and $event == "push" and .value.result == "skipped"))'
+              or (.key == "e2e" and $event == "push" and $ref == "refs/heads/main" and .value.result == "skipped"))'
 
   build-pages:
     needs: check
@@ -414,11 +419,14 @@ jobs:
   # `develop` deploys the UAT build to `/gegenlenker/uat/`; the Pages artifact also republishes the
   # production dist of the live `main` deploy, never rebuilt. The develop checkout only builds; the
   # job that reads deployments and publishes runs `main`'s `tools/uat-pages.ts`, which only a release
-  # changes. The job itself is `develop`'s, so PR review of `develop` is the boundary.
+  # changes. The job itself is `develop`'s, so PR review of `develop` is the boundary. It needs the
+  # fast jobs, not `check`: UAT does not wait for its own run's e2e (only for the previous `develop`
+  # run), so a red e2e leaves UAT deployed.
   build-uat:
-    needs: check
+    needs: [lint, unit, channels]
     if: >-
-      !cancelled() && needs.check.result == 'success' &&
+      !cancelled() && needs.lint.result == 'success' && needs.unit.result == 'success' &&
+      needs.channels.result == 'success' &&
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest

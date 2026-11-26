@@ -20,8 +20,13 @@ config=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)/.prettier
 [ -f "$config" ] || exit 0
 
 cd "$root" || exit 0
+# Prettier resolves ignore patterns against the ignore file's directory: copy the shared exclude
+# into the checkout root (see scripts/format.mjs), one file per run, git-ignored if left behind.
+exclude=$(git rev-parse --path-format=absolute --git-path info/exclude 2>/dev/null)
+copy=$root/.git-exclude.$$.prettier-tmp
+trap 'rm -f "$copy"' EXIT
+if [ -f "$exclude" ]; then cp "$exclude" "$copy"; else : >"$copy"; fi
 "$prettier" --write --ignore-unknown --config "$config" \
-  --ignore-path .gitignore --ignore-path .prettierignore \
-  --ignore-path "$(git rev-parse --git-path info/exclude)" \
+  --ignore-path .gitignore --ignore-path .prettierignore --ignore-path "$copy" \
   -- "$file" >/dev/null 2>&1
 exit 0

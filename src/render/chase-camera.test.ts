@@ -24,6 +24,8 @@ import { CAB_HEIGHT, RELIEF } from './cab-dims';
 import {
   CHASE_MAX_DISTANCE,
   cabFront,
+  cameraPose,
+  placeFreeCamera,
   chaseColliders,
   createChaseArm,
   chaseDistance,
@@ -35,6 +37,9 @@ import {
   type ChaseFrame,
   type ChaseRig,
 } from './chase-camera';
+import { FREE_MAX_HEIGHT } from './free-look';
+import { mirrorMounts } from './mirror';
+import { HEAD_REACH } from './mirror-fields';
 import { parseShell } from './glb-shells';
 import { KEYS } from './palette';
 import { AIDS_LAYER, CAB_LAYER, CAMERA_FAR, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
@@ -400,6 +405,86 @@ describe('chase camera', () => {
   });
 });
 
+describe('free camera', () => {
+  const { rig } = posed(0, 0, POSES[0] as Pose2, 0, 0);
+  const frame = FRAMES[1] as ChaseFrame;
+
+  it('keeps the skyline inside the far plane from the highest eye over any corner of the layout bounds', () => {
+    const vertices = skylineGeometry(skylineBuildings(BOUNDS)).getAttribute('position');
+    const vertex = new Vector3();
+    const eye = new Vector3();
+    let reach = 0;
+    for (let i = 0; i < vertices.count; i++) {
+      vertex.set(vertices.getX(i), vertices.getY(i), vertices.getZ(i));
+      for (const x of [BOUNDS.minX, BOUNDS.maxX]) {
+        for (const y of [BOUNDS.minY, BOUNDS.maxY]) {
+          reach = Math.max(reach, vertex.distanceTo(eye.set(x, FREE_MAX_HEIGHT, -y)));
+        }
+      }
+    }
+    expect(reach).toBeLessThan(CAMERA_FAR);
+  });
+
+  it('continues from the orbit camera without a jump', () => {
+    for (const view of [
+      DEFAULT_TOP_DOWN_VIEW,
+      { zoom: 1.7, panX: 2.1, panY: CHASE_TILT.max },
+      { zoom: CHASE_ZOOM.min, panX: -1, panY: CHASE_TILT.min },
+    ]) {
+      const orbit = place(free(rig), frame, view);
+      const pose = cameraPose(orbit);
+      const flown = createChaseCamera();
+      placeFreeCamera(flown, pose, free(rig), frame);
+      expect(flown.position.distanceTo(orbit.position)).toBeLessThan(1e-9);
+      expect(flown.quaternion.angleTo(orbit.quaternion)).toBeLessThan(1e-9);
+      expect(flown.projectionMatrix.equals(orbit.projectionMatrix)).toBe(true);
+    }
+  });
+
+  it('continues from an orbit eye outside the layout bounds without a jump', () => {
+    // zoomed out at the yard's far edge, the eye is beyond the bounds
+    const edge = posed(0, 0, { x: 5, y: 65, heading: -Math.PI / 2 }, 0, 0).rig;
+    const orbit = place(free(edge), frame, {
+      zoom: CHASE_ZOOM.min,
+      panX: 2.7,
+      panY: CHASE_TILT.min,
+    });
+    expect(-orbit.position.z).toBeGreaterThan(BOUNDS.maxY);
+    const flown = createChaseCamera();
+    placeFreeCamera(flown, cameraPose(orbit), free(edge), frame);
+    expect(flown.position.distanceTo(orbit.position)).toBeLessThan(1e-9);
+  });
+
+  it('lifts an eye over a building to its roof without changing the pose', () => {
+    const roof = 9;
+    const hall = {
+      obb: { cx: 5, cy: 5, halfLength: 6, halfWidth: 4, heading: 0.3 },
+      height: roof,
+    };
+    const over = { x: 5, y: 5, z: 3, yaw: 0, pitch: -0.2 };
+    const before = { ...over };
+    const camera = createChaseCamera();
+    placeFreeCamera(camera, over, { ...rig, colliders: [hall] }, frame);
+    expect(camera.position.y).toBeGreaterThan(roof);
+    expect(camera.position.x).toBe(5);
+    expect(over).toEqual(before);
+    placeFreeCamera(camera, { ...over, x: 40 }, { ...rig, colliders: [hall] }, frame);
+    expect(camera.position.y).toBe(3);
+  });
+
+  it('leaves the camera alone on a zero-size pane', () => {
+    const camera = createChaseCamera();
+    const before = camera.position.clone();
+    const none = { x: 0, y: 0, width: 0, height: 0 };
+    placeFreeCamera(camera, { x: 1, y: 2, z: 9, yaw: 0, pitch: 0 }, free(rig), {
+      width: 0,
+      height: 0,
+      clear: none,
+    });
+    expect(camera.position).toEqual(before);
+  });
+});
+
 describe.each(trucks)('chase camera and the cab of $id', (spec) => {
   it('shows a cab to the chase camera without a loaded shell', () => {
     const { layers } = createChaseCamera();
@@ -425,9 +510,21 @@ describe.each(trucks)('chase camera and the cab of $id', (spec) => {
       'cab',
     );
     const face = cabFront(spec);
-    const box = new Box3().setFromObject(mesh);
-    const half = Math.max(-box.min.z, box.max.z);
     const tolerance = RELIEF + 1e-3;
+    // The mirror heads stand out of the face's envelope; the chase framing leaves them out.
+    const mounts = mirrorMounts(spec);
+    const cameras = (['mirrorLeft', 'mirrorRight', 'wideLeft', 'wideRight', 'front'] as const).map(
+      (key) => new Vector3(mounts[key].x, mounts[key].z, -mounts[key].y),
+    );
+    mesh.updateMatrixWorld(true);
+    const positions = mesh.geometry.getAttribute('position');
+    const box = new Box3();
+    for (let i = 0; i < positions.count; i++) {
+      const p = new Vector3().fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld);
+      const outside = p.x > face.x + 0.25 + tolerance || Math.abs(p.z) > face.halfWidth + tolerance;
+      if (!outside || cameras.every((c) => c.distanceTo(p) > HEAD_REACH)) box.expandByPoint(p);
+    }
+    const half = Math.max(-box.min.z, box.max.z);
     // The crew cab's tow coupling reaches 0.25 m past the face; the light bar and roof rack stand up to 0.3 m above the roof.
     expect(box.max.x).toBeGreaterThanOrEqual(face.x - tolerance);
     expect(box.max.x).toBeLessThanOrEqual(face.x + 0.25 + tolerance);

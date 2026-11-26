@@ -1,7 +1,7 @@
 import type { Vec2 } from '../contracts/sim';
 import type { TruckSpec, Vec3 } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
-import { CAB_HEIGHT, cabShellParams } from './cab-dims';
+import { CAB_HEIGHT, cabShellParams, round } from './cab-dims';
 
 // No `three` import: the fields are ground polygons in the truck body frame (x forward, y left).
 
@@ -103,7 +103,7 @@ export function insidePolygon(polygon: readonly Vec2[], p: Vec2): boolean {
 }
 
 /** Metres ahead of the cab front (on a short boom), and inboard of its passenger side, that the class VI mirror sits. */
-const FRONT_AHEAD = 0.5;
+const FRONT_AHEAD = 0.2;
 const FRONT_INBOARD = 0.25;
 /** Below the cab's roof: R46 15.2.2.7 keeps class V and VI parts 2 m or more above the ground. */
 const FRONT_BELOW_ROOF = 0.1;
@@ -129,4 +129,23 @@ export function closeMirrorMount(truck: TruckSpec): Vec3 {
   const { width } = cabShellParams(truck);
   const { eye } = truckAnchors(truck);
   return { x: eye.x + CLOSE_AHEAD, y: -(width / 2 + CLOSE_OUTBOARD), z: CLOSE_HEIGHT };
+}
+
+/** Every vertex of a mirror head and its arm lies within this of the head's camera (`tools/blender/cab_shell.py`). */
+export const HEAD_REACH = 0.6;
+
+const rounded = (p: Vec3): Vec3 => ({ x: round(p.x), y: round(p.y), z: round(p.z) });
+
+/** Inputs of `tools/blender/cab_shell.py`'s mirror heads: the camera of each mirror that has a head, in the body frame. */
+export function cabMirrorParams(truck: TruckSpec) {
+  const { mirrorLeft, mirrorRight, wideLeft, wideRight } = truckAnchors(truck);
+  return {
+    mirrors: {
+      mirrorLeft: rounded(mirrorLeft),
+      mirrorRight: rounded(mirrorRight),
+      wideLeft: rounded(wideLeft),
+      wideRight: rounded(wideRight),
+      front: rounded(frontMirrorMount(truck)),
+    },
+  };
 }

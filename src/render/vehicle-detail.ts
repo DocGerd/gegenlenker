@@ -8,7 +8,12 @@ import {
   SRGBColorSpace,
 } from 'three';
 import type { MudflapSpec, Param, TrailerSpec, TruckSpec } from '../contracts/vehicle';
-import { CAB_GAP, CONTOUR_STRIP as STRIP, MARKING_END_MARGIN as END_MARGIN } from './body-dims';
+import {
+  CAB_GAP,
+  CONTOUR_STRIP as STRIP,
+  MARKING_END_MARGIN as END_MARGIN,
+  type RearTyreSet,
+} from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
 import { tint } from './tint';
 import { DARK_SLOT, slotOf, withSlot } from './lamp-lens';
@@ -35,6 +40,7 @@ import { box, merge, wheelGeometry } from './vehicle-geometry';
 
 const WHEEL_RELIEF = [0.01, 0.02, 0.035] as const; // sidewall, rim, hub
 const WHEEL_RATIO = [0.9, 0.62, 0.22] as const; // of the tyre radius
+const NUT_RING = { ratio: 0.32, relief: 0.03 } as const; // truck wheels: silver ring around the hub
 
 const PLATE_WIDTH = 0.52; // EU standard plate
 const PLATE_HEIGHT = 0.11;
@@ -97,30 +103,35 @@ function slopedBox(
     .translate((x0 + x1) / 2, (zc0 + zc1) / 2, -(y0 + y1) / 2);
 }
 
-/** Sidewall, rim and hub as discs standing proud of both tyre faces; centre at body (x, y, z). */
+/**
+ * Sidewall, rim and hub as discs standing proud of both tyre faces; centre at body (x, y, z).
+ * Truck wheels have black rims and a silver nut ring, the trailers' rims are silver.
+ */
 function wheelFaces(
   c: Sink,
   radius: number,
   width: number,
   [x, y, z]: readonly [number, number, number],
+  truck = false,
 ): void {
-  const hues = [HUE.chevronBlack, HUE.whiteAluminium, HUE.chevronBlack] as const;
+  const hues = [
+    HUE.chevronBlack,
+    truck ? HUE.chevronBlack : HUE.whiteAluminium,
+    HUE.chevronBlack,
+  ] as const;
+  const disc = (ratio: number, relief: number, hue: number): void => {
+    c.add(wheelGeometry(radius * ratio, width + 2 * relief).translate(x, z, -y), hue);
+  };
   hues.forEach((hue, i) => {
-    c.add(
-      wheelGeometry(radius * (WHEEL_RATIO[i] ?? 1), width + 2 * (WHEEL_RELIEF[i] ?? 0)).translate(
-        x,
-        z,
-        -y,
-      ),
-      hue,
-    );
+    if (truck && i === 2) disc(NUT_RING.ratio, NUT_RING.relief, HUE.whiteAluminium);
+    disc(WHEEL_RATIO[i] ?? 1, WHEEL_RELIEF[i] ?? 0, hue);
   });
 }
 
 /** Rims for a wheel that steers: centred on the origin so a kingpin pivot can carry it. */
 export function frontWheelDetail(radius: number, width: number): BufferGeometry {
   const c = collector();
-  wheelFaces(c, radius, width, [0, 0, 0]);
+  wheelFaces(c, radius, width, [0, 0, 0], true);
   return c.build();
 }
 
@@ -145,7 +156,7 @@ function mudflap(
   );
 }
 
-/** A yellow contour strip along both sides; its centre follows the run's profile down a sloped deck. */
+/** A white contour strip along both sides; its centre follows the run's profile down a sloped deck. */
 function sideMarking(c: Sink, { span: [x0, x1], zc, profile }: SideRun, halfWidth: number): void {
   profile.reduce((prev, [x]) => {
     if (x <= prev) throw new Error('sideMarking: the profile is not strictly increasing in x');
@@ -187,8 +198,7 @@ export type TruckDetailParams = {
   readonly railBottom: number;
   readonly rearAxleX: number;
   readonly rearTrack: number;
-  readonly twinOffset: number;
-  readonly twinWidth: number;
+  readonly rearTyres: RearTyreSet;
   readonly wheelRadius: number;
 };
 
@@ -236,7 +246,8 @@ export function truckDetail(p: TruckDetailParams): {
   sideMarking(c, truckSideRun(p.spec, p.frontX - p.bodyFront - CAB_GAP), hw);
   lamps(c, layout, ['body'], false);
   for (const side of [-1, 1]) {
-    const half = p.twinOffset + p.twinWidth / 2 + FLAP_MARGIN;
+    const { offsets, width } = p.rearTyres;
+    const half = Math.max(...offsets.map(Math.abs)) + width / 2 + FLAP_MARGIN;
     mudflap(
       c,
       p.spec.mudflap,
@@ -246,12 +257,14 @@ export function truckDetail(p: TruckDetailParams): {
       p.wheelRadius,
       p.rearX + RELIEF,
     );
-    for (const twin of [-1, 1]) {
-      wheelFaces(c, p.wheelRadius, p.twinWidth, [
-        p.rearAxleX,
-        (side * p.rearTrack) / 2 + twin * p.twinOffset,
+    for (const offset of offsets) {
+      wheelFaces(
+        c,
         p.wheelRadius,
-      ]);
+        width,
+        [p.rearAxleX, (side * p.rearTrack) / 2 + offset, p.wheelRadius],
+        true,
+      );
     }
   }
 

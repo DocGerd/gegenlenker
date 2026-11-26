@@ -1,5 +1,6 @@
 import { expect, test } from '../fixtures';
 import { en } from '../../src/i18n/en';
+import { chooseSetting } from '../menu-flow';
 
 // The production dist serves a UAT build inside `uat/`: the production worker's scope contains the
 // UAT one's, so each channel must leave the other's pages, keys and caches alone.
@@ -59,7 +60,7 @@ test('the UAT build writes only gegenlenker-uat keys and shows its badge', async
   await open(page, UAT);
   await expect(page.locator('[data-menu="channel"]')).toHaveText(en.channelUat);
   await expect(page.locator('[data-menu="build"]')).toContainText('Development build');
-  await page.locator('[data-menu="language"]').selectOption('de');
+  await chooseSetting(page, en, 'language', 'de');
   await expect(page.locator('html')).toHaveAttribute('lang', 'de');
 
   const keys = await page.evaluate(() => Object.keys(localStorage));

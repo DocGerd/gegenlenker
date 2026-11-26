@@ -1,13 +1,11 @@
 import type { Rect } from '../contracts/render';
+import { CHROME_SELECTOR, DIVIDER_SELECTOR } from '../hud/chrome-selector';
 
-/** HUD panels carry `data-chrome`; the control columns are the parts of controls.css that reach over the top-down view. */
-const CHROME = '[data-chrome], .ctl-steer, .ctl-gears, .ctl-pedals';
-
-/** Rects, relative to `stage`, of everything drawn over the scene that the vehicle must stay clear of. */
-export function measureChrome(stage: HTMLElement): Rect[] {
+/** Rects, relative to `stage`, of the visible elements matching `selector`. */
+function measure(stage: HTMLElement, selector: string): Rect[] {
   const origin = stage.getBoundingClientRect();
   const rects: Rect[] = [];
-  for (const el of stage.querySelectorAll(CHROME)) {
+  for (const el of stage.querySelectorAll(selector)) {
     const r = el.getBoundingClientRect();
     if (r.width > 0 && r.height > 0) {
       rects.push({
@@ -20,3 +18,9 @@ export function measureChrome(stage: HTMLElement): Rect[] {
   }
   return rects;
 }
+
+/** Rects, relative to `stage`, of everything drawn over the scene that the vehicle must stay clear of. */
+export const measureChrome = (stage: HTMLElement): Rect[] => measure(stage, CHROME_SELECTOR);
+
+/** Rects, relative to `stage`, of the view-size divider's handle and reset button. */
+export const measureDivider = (stage: HTMLElement): Rect[] => measure(stage, DIVIDER_SELECTOR);

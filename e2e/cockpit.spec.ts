@@ -24,6 +24,7 @@ import {
   step,
   timeoutWithSettles,
 } from './pinned-shoot';
+import { chooseSetting, exerciseEntry, startExercise } from './menu-flow';
 
 /** An unlit vertex colour reaches the canvas as its hue, give or take the rounding of the sRGB frame target. */
 const TOLERANCE = 1;
@@ -42,6 +43,12 @@ const near = (pixel: number[] | undefined, want: readonly number[]): boolean =>
 /** The sky gradient at the top of the Low view is blue-dominant; the yard ground is light grey. */
 const isSky = (p: number[] | undefined): boolean =>
   p !== undefined && (p[2] ?? 0) - (p[0] ?? 0) > 40;
+/**
+ * Class IV sees only the hazy band above the horizon, a fainter blue; bright, so the dark blue of the
+ * vehicle on the inner edge does not pass for it.
+ */
+const isHorizonSky = (p: number[] | undefined): boolean =>
+  p !== undefined && (p[2] ?? 0) - (p[0] ?? 0) > 25 && p.reduce((a, b) => a + b, 0) > 300;
 const isGround = (p: number[] | undefined): boolean =>
   p !== undefined && p.reduce((a, b) => a + b, 0) > 400;
 
@@ -49,7 +56,7 @@ const isGround = (p: number[] | undefined): boolean =>
 const DEFAULT_MIRRORS = 5;
 
 async function drive(page: Page): Promise<void> {
-  await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(DEFAULT_MIRRORS);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }
@@ -60,7 +67,7 @@ async function drive(page: Page): Promise<void> {
  * drive takes seconds on software GL), and the preset's attachments are in place before they read.
  */
 async function pinnedDrive(page: Page, preset: Preset, mirrors = DEFAULT_MIRRORS): Promise<void> {
-  await startPinnedDrive(page, { preset, lighting: 'day' }, en.exerciseStraightReverse);
+  await startPinnedDrive(page, { preset, lighting: 'day' }, exerciseEntry('straight-reverse'));
   await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(mirrors);
   await expect(page.locator('.ctl-wheel')).toBeVisible();
 }
@@ -156,7 +163,7 @@ test(
       .getByRole('dialog', { name: en.paused })
       .getByRole('button', { name: en.leaveUnscored })
       .click();
-    await page.locator('[data-menu="graphics"]').selectOption('low');
+    await chooseSetting(page, en, 'graphics', 'low');
     await drive(page);
     await settle(page, 'low');
 
@@ -237,18 +244,21 @@ const MIRROR_PAIRS = [
     name: 'each mirror',
     left: 'mirrorLeft',
     right: 'mirrorRight',
+    sky: isSky,
     presets: ['low', 'balanced', 'high'],
   },
   {
     name: 'each class IV mirror',
     left: 'wideLeft',
     right: 'wideRight',
+    sky: isHorizonSky,
     presets: ['low', 'balanced', 'high'],
   },
 ] as const satisfies readonly {
   name: string;
   left: string;
   right: string;
+  sky: (p: number[] | undefined) => boolean;
   presets: readonly Preset[];
 }[];
 
@@ -314,7 +324,9 @@ for (const pair of MIRROR_PAIRS) {
               side,
               // Sky above and ground below first: only a drawn frame can pass, so absence at the edge means something.
               drawn:
-                centre.slice(0, -1).some(isSky) && !ground.some(isSky) && ground.some(isGround),
+                centre.slice(0, -1).some(pair.sky) &&
+                !ground.some(pair.sky) &&
+                ground.some(isGround),
               outerYard: yardShare(edges[outer]),
               innerYard: yardShare(edges[inner]),
             };
@@ -328,8 +340,10 @@ for (const pair of MIRROR_PAIRS) {
           expect(outerYard, `${side} outer edge`).toBeGreaterThan(0.9);
           // Low's flat vehicle tokens are as bright as the yard, so the class IV edge cannot tell them apart by
           // brightness there; the side flip is pinned in `wide-mirror.test.ts`.
+          // The lower rows show little dark vehicle (a single rear tyre, white contour stripes), but an
+          // unflipped mirror shows yard on this edge, above 0.9 like the outer one.
           if (pair.left !== 'wideLeft' || preset !== 'low') {
-            expect(innerYard, `${side} inner edge`).toBeLessThan(0.5);
+            expect(innerYard, `${side} inner edge`).toBeLessThan(0.8);
           }
         }
       },

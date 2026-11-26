@@ -42,7 +42,10 @@ function mirrorOf(id: TruckId, screen: readonly [number, number], side: 'left' |
   if (rect === null) throw new Error(`no ${side} rectangle`);
   const mirror = createMirror();
   const position = new Vector3();
-  mirror.place(position, mirrorPose(STRAIGHT, truckAnchors(truckById(id))[key], side, position));
+  mirror.place(
+    position,
+    mirrorPose(STRAIGHT, truckAnchors(truckById(id))[key], side, id, position),
+  );
   mirror.camera.aspect = rect.width / rect.height;
   mirror.camera.updateProjectionMatrix();
   mirror.camera.updateMatrixWorld(true);

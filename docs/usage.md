@@ -9,10 +9,13 @@ Gegenlenker is a trainer for maneuvering a truck with a turntable drawbar traile
 - When a new version is available the app offers "Reload" or "Later".
 - Installing it as an app uses the browser's own install action (for example "Install" in the address bar, or "Add to Home screen" on a tablet).
 - The browser back action (Android back gesture) acts on the current drive, replay or result screen instead of leaving the app; in a drive it opens or closes the pause sheet.
+- "About" on the title shows the version, the app's licence, the licences of the bundled libraries and the sources of the textures and sky, with links to the source code and the asset pages. The texts are part of the app, so it also opens offline; only the links need a connection.
 
 ## Controls
 
 A drive has a steering wheel, a gear selector (P, R, N, D), a speed lever, a Stop button and two lamp buttons (lights, hazard lights). Select R or D to move; R drives backward. The lever sets a share of the speed cap and the gear sets the direction.
+
+The menu's Controls screen, opened from the title or from Settings, lists the drive keys for the saved graphics quality and driving view, and the touch and mouse controls.
 
 ### Keyboard
 
@@ -22,7 +25,7 @@ A drive has a steering wheel, a gear selector (P, R, N, D), a speed lever, a Sto
 - Space: brake (zeroes the lever; hold to keep braking).
 - 1 / 2 / 3 / 4: gear P / R / N / D.
 - H / X: lights / hazard lights.
-- Esc: pause, and close the pause sheet again. The sheet offers Continue and Restart; in an exercise also "Finish" and "Leave without scoring", in the free yard "Menu". The Pause button in the drive opens it too.
+- Esc: pause, and close the pause sheet again. The sheet offers Continue and Restart; in an exercise also "Finish" and "Leave without scoring", in the free yard "Menu"; always Settings, which Esc or back leaves for the actions again. The Pause button in the drive opens it too.
 
 Keys typed into a form field or the pause sheet do not drive, and combinations with Ctrl, Alt or Meta are ignored.
 
@@ -41,13 +44,16 @@ The key legend in the drive lists the view keys that apply to the current screen
 - Top view: "Follow" (camera follows the vehicle) and "Whole yard". Switch with F / Y, or with the view buttons. The "Mirrors only" setting removes the top view.
 - Cockpit view with mirrors. At graphics quality High, Q / E hold a glance to the side and dragging in the cockpit pane turns the head.
 - "Outside view" (O): a chase view, offered at graphics quality Balanced and High, not Low. It orbits with `,` / `.` or by dragging and tilts with PgUp / PgDn.
+- "Free camera" (K from any view, or the camera button at the bottom of the outside view, which a very small window leaves out): flies the camera anywhere over the yard, up to 60 m high, while the truck keeps driving; the driving keys stay as they are. Drag to look, Shift-drag to slide, the wheel flies along the view. Hold `,` / `.` to turn, PgUp / PgDn to pitch and + / - to fly. On a touchscreen one finger looks, two fingers slide and, by pinching, fly. K again returns to the orbit as it was; 0 resets the orbit.
 - Zoom: + / - keys, mouse wheel or pinch over the top view. Pan: drag in the top view. 0 or L resets the view and size ("Reset view / size").
 - The divider between top view and cockpit can be dragged; the share is kept per screen orientation.
 - Aids: "Angle display" (with the Angles panel), "Predicted path", "Wheel tracks", "Target ghost"; each toggles in the Aids panel. The last three draw in the top view only, and a mirrors-only drive has no aids. A run with any aid on after the first driving input counts as "with aids".
 
 ## Exercises
 
-The menu lists the exercises, each with a brief, a tolerance (position and angle) and a best result:
+The menu opens on a title screen with Exercises, Free yard, Settings, Controls, What's new and About, plus "Continue" once there is a last exercise or yard and "Replay last run" once a drive has finished. Back or Esc returns one level.
+
+"Exercises" lists the exercises, each with a short brief:
 
 - Straight reverse
 - Reverse into a bay
@@ -55,23 +61,34 @@ The menu lists the exercises, each with a brief, a tolerance (position and angle
 - Dock at a ramp
 - Slalom forward and back
 
+Choosing an exercise opens its setup: the brief, the tolerance (position and angle) and the best result for the chosen vehicles, time of day and driving view, then Truck, Trailer, Time of day, Driving view and "Start".
+
 Stop inside the marked bay within tolerance to reach the target; a vehicle still moving does not count. The result shows position error, angle error, contacts, limit stops, direction changes and time, and offers Retry, Replay and Next exercise. Bests are kept separately with and without aids.
 
-"Free yard" drives in the Depot or Logistics yard without a target or score. "Replay last run" replays the last drive you finished.
+"Free yard" lists the Depot and the Logistics yard, which open the same setup and drive without a target or score. "Replay last run" replays the last drive you finished.
+
+"Continue" tops the title once you have started a drive. It starts at once, with the stored truck, trailer, time of day and driving view, all named on the button. It picks the exercise you last drove while it is open, else the next exercise not done after it (wrapping), else the last one again; a free yard continues as that yard. The exercise and yard lists open on the same entry.
 
 ## Settings
 
-In the menu:
+On the setup screen of an exercise or yard:
 
 - Truck, Trailer: the vehicle pair. Some dimensions are estimates, see [vehicle data](vehicle-data.md).
 - Time of day: Day or Night. Night turns the lights on at the start.
 - Driving view: "With top view" or "Mirrors only".
+
+Under "Settings" on the title, in the groups General and Graphics:
+
 - Language: Deutsch or English. Until chosen, it follows the browser language.
 - Theme: System, Light or Dark.
 - Graphics quality: Low, Balanced or High.
 - Wide-angle mirrors: On or Off.
 
+The Settings screen also has a Controls row, and the title has a Controls entry: both open the Controls screen.
+
 Aids, the Follow / Whole yard choice, panel collapse state and the divider position are changed in the drive and kept as settings too. Lighting and driving view are part of the best-result key, so each combination has its own best.
+
+During a drive, Settings in the pause sheet offers Theme, Wide-angle mirrors and Graphics quality, which all apply at once, without restarting the run.
 
 ## URL parameters
 
@@ -86,7 +103,7 @@ Unknown values fall back to the defaults.
 
 Choices and results are kept in the browser's `localStorage`. There are no accounts and the app sends no data anywhere. If storage is blocked or full, they last only for the session. The offline cache holds the app's own files only.
 
-- `gegenlenker.settings.v1`: the settings above. A malformed value falls back field by field.
+- `gegenlenker.settings.v1`: the settings above and the entry of the last drive started, which Continue offers. A malformed value falls back field by field.
 - `gegenlenker.best.v2`: best results per exercise, vehicle pair, aid use, lighting and driving view. Entries driven on vehicle or exercise data that has since changed are dropped.
 - `gegenlenker.lastRun.v1`: the input log of the last drive, for replay. Dropped when the data it was driven on changed.
 - `gegenlenker.whatsNewSeen.v1`: which "What's new" entries were opened, for the "New" badge.

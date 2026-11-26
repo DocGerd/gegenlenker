@@ -39,7 +39,8 @@ for (const { locale, messages } of locales) {
 
     const title = page.getByRole('heading', { level: 1, name: messages.whatsNew });
     await expect(title).toBeFocused();
-    expect(await page.getByRole('heading', { level: 2 }).count()).toBeGreaterThan(0);
+    // The body fills once its chunk has loaded.
+    await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible();
     await expect(page.getByRole('listitem')).toHaveCount(entryCount);
     await expect(page.locator('li:not([lang="en"])')).toHaveCount(0);
     await expect(page.getByText(messages.whatsNewEnglishNote)).toHaveCount(
@@ -49,8 +50,9 @@ for (const { locale, messages } of locales) {
 
     const overflow = await page.evaluate(() => {
       const root = document.scrollingElement;
-      const scroll = document.querySelector('.menu-scroll');
-      return [root, scroll].map((el) => (el ? el.scrollWidth - el.clientWidth : 0));
+      const scroll = document.querySelector('[data-screen="whatsNew"] .menu-screen-scroll');
+      if (root === null || scroll === null) throw new Error("what's new markup missing");
+      return [root, scroll].map((el) => el.scrollWidth - el.clientWidth);
     });
     expect(Math.max(...overflow)).toBeLessThanOrEqual(0);
     // The screen's script chunk loads; its content is bundled, so nothing is fetched.
@@ -68,7 +70,21 @@ test("the back button leaves what's new for the menu", async ({ page }) => {
   await page.getByRole('button', { name: en.whatsNew }).click();
   await page.getByRole('button', { name: en.back }).click();
   await expect(page.getByRole('button', { name: en.whatsNew })).toBeFocused();
-  await expect(page.getByRole('button', { name: en.exerciseStraightReverse })).toBeVisible();
+  await expect(
+    page.locator('[data-screen="title"]').getByRole('button', { name: en.exercises }),
+  ).toBeVisible();
+});
+
+test("Escape leaves what's new for the title and refocuses its entry", async ({ page }) => {
+  await page.goto('./');
+  const open = page.locator('[data-screen="title"]').getByRole('button', { name: en.whatsNew });
+  await open.click();
+  await expect(page.getByRole('heading', { level: 1, name: en.whatsNew })).toBeFocused();
+  await expect(page.getByRole('listitem')).toHaveCount(entryCount);
+  await page.keyboard.press('Escape');
+  await expect(open).toBeFocused();
+  await expect(page.locator('[data-screen="whatsNew"]')).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() => history.state as unknown)).toBeNull();
 });
 
 for (const { locale, messages } of locales) {
@@ -127,6 +143,7 @@ for (const { locale, messages } of locales) {
     await expect(open.getByText(messages.whatsNewBadge, { exact: true })).toBeHidden();
     await open.click();
     await expect(page.getByRole('heading', { level: 1, name: messages.whatsNew })).toBeVisible();
+    await expect(page.getByRole('listitem')).toHaveCount(entryCount);
     await expect(page.getByRole('heading', { name: messages.whatsNewSince })).toHaveCount(0);
     await context.close();
   });
@@ -143,6 +160,7 @@ for (const { locale, messages } of locales) {
     await expect(open.getByText(messages.whatsNewBadge, { exact: true })).toBeHidden();
     await open.click();
     await expect(page.getByRole('heading', { level: 1, name: messages.whatsNew })).toBeVisible();
+    await expect(page.getByRole('listitem')).toHaveCount(entryCount);
     await expect(page.getByRole('heading', { name: messages.whatsNewSince })).toHaveCount(0);
     await context.close();
   });

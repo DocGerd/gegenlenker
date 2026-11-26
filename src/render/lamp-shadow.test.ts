@@ -308,12 +308,15 @@ describe('a casting lamp light stands clear of what casts', () => {
     const meshes = castersOf(visual);
     expect(meshes.length, label).toBeGreaterThan(0);
     const raycaster = new Raycaster();
-    // the casters are where the rays can find them: from above, the middle of their box is struck
-    const middle = new Box3();
-    for (const mesh of meshes) middle.expandByObject(mesh);
-    const above = middle.getCenter(new Vector3());
-    above.y = middle.max.y + 1;
-    expect(nearest(meshes, raycaster, above, new Vector3(0, -1, 0)), label).not.toBeNull();
+    // the casters are where the rays can find them: from above, the middle of some caster's box is
+    // struck (the middle of all of them can fall in the gap between cab and body)
+    const struck = meshes.some((mesh) => {
+      const box = new Box3().expandByObject(mesh);
+      const above = box.getCenter(new Vector3());
+      above.y = box.max.y + 1;
+      return nearest(meshes, raycaster, above, new Vector3(0, -1, 0)) !== null;
+    });
+    expect(struck, label).toBe(true);
     for (const light of lights) {
       const from = light.getWorldPosition(new Vector3());
       let enclosed = 0;

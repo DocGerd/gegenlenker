@@ -1,6 +1,6 @@
 {
   "name": "gegenlenker",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -15,9 +15,9 @@
     "preview:stop": "node scripts/preview-stop.mjs",
     "shoot": "node scripts/shoot.mjs",
     "lint": "eslint . --max-warnings 0",
-    "format": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path \"$(git rev-parse --git-path info/exclude)\"",
-    "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path \"$(git rev-parse --git-path info/exclude)\"",
-    "typecheck": "tsc --noEmit",
+    "format": "node scripts/format.mjs --write",
+    "format:check": "node scripts/format.mjs --check",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.core.json",
     "test": "vitest run",
     "test:e2e": "playwright test --project offline",
     "test:e2e:channels": "E2E_CHANNELS=1 playwright test --project channels",
@@ -38,6 +38,7 @@
     "glb:optimise": "node scripts/glb-optimise.mjs",
     "glb:manifest": "node scripts/glb-manifest.mjs",
     "texture": "node scripts/texture.mjs",
+    "assets:fetch": "node scripts/fetch-asset-sources.mjs",
     "check": "pnpm lint && pnpm format:check && pnpm typecheck && pnpm test",
     "verify": "pnpm check && pnpm test:e2e",
     "verify:layout": "vitest run --config vitest.verify.config.ts"

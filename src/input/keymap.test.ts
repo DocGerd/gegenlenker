@@ -7,6 +7,7 @@ const US_CODES: Record<string, readonly string[]> = {
   f: ['KeyF'],
   y: ['KeyY'],
   o: ['KeyO'],
+  k: ['KeyK'],
   '+': ['Equal', 'NumpadAdd'],
   '=': ['Equal'],
   '-': ['Minus', 'NumpadSubtract'],
@@ -70,6 +71,13 @@ describe('keymap', () => {
     expect(actionFor('drive', { code: 'KeyX', key: 'x' })).toBe('hazard');
     expect(actionFor('view', { code: 'KeyH', key: 'h' })).toBeUndefined();
     expect(actionFor('view', { code: 'KeyX', key: 'x' })).toBeUndefined();
+  });
+
+  it('names Space like the stop button', () => {
+    const space = legendRows(false).find(
+      (r) => typeof r.term !== 'string' && r.term.key === 'keySpace',
+    );
+    expect(space?.desc).toBe('stop');
   });
 
   it('has legend text for every row', () => {

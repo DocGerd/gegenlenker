@@ -1,18 +1,12 @@
-import type { ExerciseId } from '../contracts/exercise';
-import type { MessageKey } from '../i18n/en';
+import type { InputLog } from '../contracts/exercise';
+import { t } from '../i18n/i18n';
+import { EXERCISE_TITLE, LAYOUT_NAME } from './entry-keys';
 
-export const EXERCISE_TITLE: Readonly<Record<ExerciseId, MessageKey>> = {
-  'straight-reverse': 'exerciseStraightReverse',
-  'reverse-bay': 'exerciseReverseBay',
-  'reverse-corner': 'exerciseReverseCorner',
-  'dock-ramp': 'exerciseDockRamp',
-  slalom: 'exerciseSlalom',
-};
+export { EXERCISE_BRIEF, EXERCISE_TITLE, LAYOUT_NAME } from './entry-keys';
 
-export const EXERCISE_BRIEF: Readonly<Record<ExerciseId, MessageKey>> = {
-  'straight-reverse': 'briefStraightReverse',
-  'reverse-bay': 'briefReverseBay',
-  'reverse-corner': 'briefReverseCorner',
-  'dock-ramp': 'briefDockRamp',
-  slalom: 'briefSlalom',
-};
+/** What a stored run replays: the exercise, or the free yard it was driven in. */
+export function replayContext(log: InputLog): string {
+  return log.exerciseId === null
+    ? `${t('freeYard')} · ${t(LAYOUT_NAME[log.layoutId])}`
+    : t(EXERCISE_TITLE[log.exerciseId]);
+}

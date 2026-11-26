@@ -1,7 +1,13 @@
 import { resolveRun } from '../content/run';
 import type { InputLog } from '../contracts/exercise';
-import type { AidFlags, RenderFrame, TopDownMode } from '../contracts/render';
+import {
+  DEFAULT_TOP_DOWN_VIEW,
+  type AidFlags,
+  type RenderFrame,
+  type TopDownMode,
+} from '../contracts/render';
 import type { Simulation, SimSnapshot } from '../contracts/sim';
+import { isFormField } from '../input/keyboard';
 import { isAction } from '../input/keymap';
 import { createViewInput } from '../input/view-input';
 import { isDefaultView } from '../input/top-down-view';
@@ -15,6 +21,8 @@ import { NO_PREDICTION } from '../sim/predict';
 import { createReplayCursor, type ReplayCursor } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
+import { chaseViewAvailable } from '../render';
+import { replayContext } from './exercise-text';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
 import './results.css';
@@ -29,6 +37,7 @@ const VIEWS: readonly [TopDownMode, MessageKey][] = [
   ['yard', 'viewYard'],
   ['follow', 'viewFollow'],
 ];
+const CHASE_VIEW: readonly [TopDownMode, MessageKey] = ['chase', 'viewChase'];
 const EVENT_LABEL: Readonly<Record<ReplayEventKind, MessageKey>> = {
   contact: 'eventContact',
   jackknife: 'eventJackknife',
@@ -135,6 +144,9 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   let topDown: TopDownMode = 'yard';
   let position = startStep;
   let dirty = true;
+  let enterFree = false;
+  /** The free camera is flying. */
+  let flying = false;
 
   const bar = document.createElement('div');
   bar.className = 'replay-bar';
@@ -152,12 +164,29 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   });
   const resetButton = button('app-button', t('resetView'), () => viewInput.reset());
   resetButton.disabled = true;
+  /** Another view switches to the outside view first; the flight then starts from where it was drawn. */
+  const toggleFree = (): void => {
+    if (flying) {
+      viewInput.setFree(null);
+      return;
+    }
+    if (topDown !== 'chase') {
+      topDown = 'chase';
+      viewInput.setMode('chase');
+    }
+    enterFree = !enterFree;
+    sync();
+  };
+  const freeButton = button('app-button', t('freeCamera'), toggleFree);
+  freeButton.title = `${t('freeCamera')} (K)`;
   const speedGroup = document.createElement('div');
   speedGroup.className = 'replay-group';
   speedGroup.setAttribute('role', 'group');
   speedGroup.setAttribute('aria-label', t('speed'));
   speedGroup.append(...speedButtons.map((s) => s.el));
-  const viewButtons = VIEWS.map(([mode, label]) => {
+  const chase = chaseViewAvailable(view.graphics);
+  const views = chase ? [...VIEWS, CHASE_VIEW] : VIEWS;
+  const viewButtons = views.map(([mode, label]) => {
     const el = button('app-button', t(label), () => {
       topDown = mode;
       viewInput.setMode(mode);
@@ -184,8 +213,12 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   scrubber.step = '1';
   scrubber.value = String(startStep);
   scrubber.setAttribute('aria-label', t('timeline'));
+  // The slider is announced by its time, not the raw step.
+  const timeText = (step: number): string => `${runLabel(step)} / ${total}`;
+  scrubber.setAttribute('aria-valuetext', timeText(startStep));
   scrubber.addEventListener('input', () => {
     position = Number(scrubber.value);
+    scrubber.setAttribute('aria-valuetext', timeText(position));
     dirty = true;
   });
   const addMarkers = (): void => {
@@ -204,15 +237,22 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     }
   };
   timeline.append(markers, scrubber);
+  const title = document.createElement('h1');
+  title.className = 'replay-title';
+  title.textContent = replayContext(log);
   const readout = document.createElement('div');
   readout.className = 'replay-readout mono';
-  map.append(readout);
+  const head = document.createElement('div');
+  head.className = 'replay-head';
+  head.append(title, readout);
+  map.append(head);
   bar.append(
     timeline,
     playButton,
     speedGroup,
     viewGroup,
     resetButton,
+    ...(chase ? [freeButton] : []),
     button('app-button', t('back'), exit),
     timeLabel,
   );
@@ -225,6 +265,14 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   };
   window.addEventListener('keydown', onEscape);
   cleanups.push(() => window.removeEventListener('keydown', onEscape));
+  const onFreeKey = (e: KeyboardEvent): void => {
+    if (!chase || !isAction('freeCamera', e) || e.repeat || e.defaultPrevented) return;
+    if (isFormField(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+    e.preventDefault();
+    toggleFree();
+  };
+  window.addEventListener('keydown', onFreeKey);
+  cleanups.push(() => window.removeEventListener('keydown', onFreeKey));
 
   function sync(): void {
     const label: MessageKey = playing ? 'pause' : 'play';
@@ -233,6 +281,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
       el.setAttribute('aria-pressed', String(value === speed));
     for (const { el, mode } of viewButtons)
       el.setAttribute('aria-pressed', String(mode === topDown));
+    freeButton.setAttribute('aria-pressed', String(flying || enterFree));
     dirty = true;
   }
   sync();
@@ -250,8 +299,19 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     getRect: () => frame.views.topDown,
     onChange(next) {
       frame.topDownView = next;
-      resetButton.disabled = isDefaultView(next);
+      resetButton.disabled = !flying && isDefaultView(next);
       dirty = true;
+    },
+    free: {
+      bounds: layout.bounds,
+      onChange(pose) {
+        flying = pose !== null;
+        if (pose === null) delete frame.freePose;
+        else frame.freePose = pose;
+        resetButton.disabled =
+          pose === null && isDefaultView(frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW);
+        sync();
+      },
     },
   });
   cleanups.push(() => viewInput.dispose());
@@ -267,6 +327,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     },
     frame(seconds) {
       const dt = Math.min(seconds, MAX_FRAME_SECONDS);
+      viewInput.step(dt);
       if (playing) {
         position = Math.min(log.steps, position + (1 / DT) * speed * dt);
         if (position >= log.steps) {
@@ -286,9 +347,16 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
         frame.topDown = topDown;
         frame.waypointVisited = tracker?.waypointVisited() ?? false;
         renderer.render(frame);
+        if (enterFree) {
+          enterFree = false;
+          const pose = renderer.chasePose();
+          if (pose !== null) viewInput.setFree(pose);
+          else sync();
+        }
         // Follows the target, not the cursor, so a catching-up rebuild does not drag the thumb.
         scrubber.value = String(Math.min(log.steps, Math.floor(position)));
-        timeLabel.textContent = `${runLabel(snapshot.step)} / ${total}`;
+        timeLabel.textContent = timeText(snapshot.step);
+        scrubber.setAttribute('aria-valuetext', timeLabel.textContent);
         readout.textContent = readoutText(snapshot);
       }
       if (scan !== null && advance(scan, log.steps, WORK_BUDGET_MS)) {

@@ -5,6 +5,7 @@ import type { MessageKey } from '../i18n/en';
 import { isAction } from '../input/keymap';
 import { criteria, deltasToBest, endedMoving, type Deltas } from '../scoring/debrief';
 import { EXERCISE_TITLE } from './exercise-text';
+import { ignoreHeldBrakeKeys } from './held-keys';
 import './results.css';
 
 export type ResultActions = {
@@ -153,10 +154,10 @@ export function showResult(
       passed: position?.passed,
       delta: delta('positionError', 2, ' m'),
     }),
-    row('angleError', `${formatNumber(result.angleError, 1)} °`, {
-      limit: `${formatNumber(exercise.tolerances.angle, 1)} °`,
+    row('angleError', `${formatNumber(result.angleError, 1)}°`, {
+      limit: `${formatNumber(exercise.tolerances.angle, 1)}°`,
       passed: angle?.passed,
-      delta: delta('angleError', 1, ' °'),
+      delta: delta('angleError', 1, '°'),
     }),
   );
   if (exercise.waypoint !== null) {
@@ -200,24 +201,11 @@ export function showResult(
     e.preventDefault();
     actions.menu();
   };
-  // A run ends while Space (the brake) may still be held; its repeats and release must not click the focused button.
-  let spaceFree = false;
-  const guardSpace = (e: KeyboardEvent): void => {
-    if (e.code !== 'Space' || spaceFree) return;
-    if (e.type === 'keydown' && !e.repeat) {
-      spaceFree = true;
-      return;
-    }
-    if (e.type === 'keyup') spaceFree = true;
-    e.preventDefault();
-  };
+  const releaseHeld = ignoreHeldBrakeKeys(window);
   window.addEventListener('keydown', onEscape);
-  window.addEventListener('keydown', guardSpace, true);
-  window.addEventListener('keyup', guardSpace, true);
   return () => {
     window.removeEventListener('keydown', onEscape);
-    window.removeEventListener('keydown', guardSpace, true);
-    window.removeEventListener('keyup', guardSpace, true);
+    releaseHeld();
     container.remove();
   };
 }

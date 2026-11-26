@@ -1,4 +1,4 @@
-import { Group, RenderTarget } from 'three';
+import { Group, RenderTarget, Scene } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { layouts } from '../content/registry';
@@ -215,6 +215,51 @@ describe('renderer interior', () => {
     expect(interiors[1]?.dispose).not.toHaveBeenCalled();
     renderer.dispose();
     expect(interiors[1]?.dispose).toHaveBeenCalledOnce();
+  });
+});
+
+describe('renderer rebuild', () => {
+  it('builds every part but the aids again under the new quality, and disposes the old ones', () => {
+    const made: { kind: string; object: Group; dispose: ReturnType<typeof vi.fn> }[] = [];
+    const part = (kind: string) => () => {
+      const p = {
+        kind,
+        object: new Group(),
+        update: () => undefined,
+        setLook: () => undefined,
+        dispose: vi.fn(),
+      };
+      made.push(p);
+      return p;
+    };
+    const renderer = createThreeSceneRenderer({
+      truck: part('truck'),
+      trailer: part('trailer'),
+      environment: part('environment'),
+      interior: () => ({ ...part('interior')(), frame: 'eye' as const, place: () => undefined }),
+      aids: part('aids'),
+    });
+    renderer.rebuildScene();
+    expect(made).toEqual([]);
+    renderer.setScene(layout, truckById('man-le-18-280'), trailerById('krone-azw-18'));
+    const first = [...made];
+    renderer.setQuality('high');
+    renderer.rebuildScene();
+    const kinds = (list: typeof made) => list.map((p) => p.kind).sort();
+    expect(kinds(made.slice(first.length))).toEqual([
+      'environment',
+      'interior',
+      'trailer',
+      'truck',
+    ]);
+    const aids = first.find((p) => p.kind === 'aids');
+    expect(aids?.dispose).not.toHaveBeenCalled();
+    const scene = made.findLast((p) => p.kind === 'truck')?.object.parent;
+    expect(scene).toBeInstanceOf(Scene);
+    expect(aids?.object.parent).toBe(scene);
+    for (const p of first) if (p !== aids) expect(p.dispose).toHaveBeenCalledOnce();
+    renderer.dispose();
+    expect(aids?.dispose).toHaveBeenCalledOnce();
   });
 });
 

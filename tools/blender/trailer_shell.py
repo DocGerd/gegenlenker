@@ -11,9 +11,11 @@ Vertex-coloured meshes, one node each (blender_common.py):
   "dolly"         in the dolly frame, origin at the turntable centre, +X forward (towards the drawbar eye)
   "trailer-lens"  the shell's own lamp lenses (`lenses`, src/render/lamp-layout.ts), when it has any
 Livery is colours only: no lettering, emblems or maker logos. Kinds: "low-loader" (a machine
-transporter for a wheel loader: a THW-blue deck with four wheel troughs, a raised front section and a
-grated rear section sloping down to tall aluminium ladder ramps folded upright behind it, on dark-blue
-side members, crossmembers and beams, with lashing points and a rear lamp carrier) and "lafette"
+transporter for a wheel loader: a dark plank deck between THW-blue side bands with four wheel troughs
+under galvanised covers, a raised front section and a grated rear section sloping down to tall
+aluminium ramps folded upright behind it, perforated treads forward and solid backs with ECE R70
+plates; THW-blue side members, crossmembers and beams, lashing points, a rear lamp carrier,
+galvanised boxes ahead of and between the tandem axles and retracted rear support legs) and "lafette"
 (a bare swap-body chassis: black frame, white side guard carrying the side contour and marker lamps,
 silver toolbox, yellow locating stops).
 
@@ -56,9 +58,16 @@ CROSS_REACH = 0.75  # crossmembers stay inboard of the tyres
 BEAM = ((0.38, 0.52), 0.15)  # main beams: lateral range, depth below the underside
 LASHING = (0.08, 0.03, 1.0)  # lashing point length and height, pitch
 LASHING_MARGIN = 0.4  # lashing points keep this much of the main deck's length clear, split between both ends
+PLANK = (0.525, 5, 0.012)  # wooden centre band: half width, plank count, gap between planks
+COVER_BAR = (0.04, 0.03, 0.1, 0.01)  # trough cover bar width, height, pitch, drop below the deck top
+BOXES = (((1.25, 1.85), (-0.3, 0.15)), (0.78, 1.12), 0.3)  # x ranges, lateral range, bottom
+LEG = (-1.95, 0.1, 0.07, 0.98, (0.2, 0.03), 0.36)  # x, sleeve and leg width, lateral centre, foot pad size and height, sleeve bottom
 STRINGER = 0.08  # ramp side rails
-RUNG = (0.04, 0.18)  # ramp rung height and pitch
+RAMP_BACK = 0.012  # solid ramp back
+TREAD = (0.02, 0.003, 0.04, 4, 0.16, 0.1)  # depth, row bars' set-back, bar width, columns, row pitch, start above the rear deck
+TREAD_PAN = 0.04  # dark backing this far behind the tread
 RAMP_CAP = 0.06
+R70 = (0.45, 0.4, 0.5, 0.05, 0.006)  # plate width and height, top below the ramp top, red border, relief
 HINGE = (0.12, 0.04, 0.08)  # hinge block width, reach below and above the rear deck
 # lafette; the lamp bar and side guard come from params["lafette"]
 CROSS_WIDTH = 0.12
@@ -120,7 +129,7 @@ def deck_low_loader(p, shape, hues):
     hw, rear, front = p["width"] / 2, p["rearX"], p["frontX"]
     under, deck = p["underside"], p["deck"]
     d = p["lowLoader"]
-    base, frame, silver, black = hues["base"], hues["frame"], hues["silver"], hues["black"]
+    base, wood, silver, black = hues["base"], hues["wood"], hues["silver"], hues["black"]
     drop = deck - d["rearDeck"]
     width, rise = SIDE_MEMBER
     inner = hw - width
@@ -136,24 +145,42 @@ def deck_low_loader(p, shape, hues):
     # tandem's mudflaps and the dolly's swing they hang deeper
     for side in (-1, 1):
         y = mirror(side, inner, hw)
-        shape.box((d["carrierX"], d["slopeEnd"]), y, (under - drop, d["rearDeck"] + rise), frame)
-        sloped(shape, (d["slopeEnd"], d["slopeStart"]), (under - drop, under), (d["rearDeck"] + rise, deck + rise), y, frame)
-        shape.box((d["slopeStart"], skirt[0]), y, (under, deck + rise), frame)
-        shape.box(skirt, y, (under - SKIRT[0], deck + rise), frame)
-        shape.box((skirt[1], step), y, (under, deck + rise), frame)
-        sloped(shape, (step, d["frontStart"]), (under, under), (deck + rise, d["frontDeck"] + rise), y, frame)
-        shape.box((d["frontStart"], front), y, (under, d["frontDeck"] + rise), frame)
-    shape.box((front - 0.1, front), (-inner, inner), (under, d["frontDeck"]), frame)
+        shape.box((d["carrierX"], d["slopeEnd"]), y, (under - drop, d["rearDeck"] + rise), base)
+        sloped(shape, (d["slopeEnd"], d["slopeStart"]), (under - drop, under), (d["rearDeck"] + rise, deck + rise), y, base)
+        shape.box((d["slopeStart"], skirt[0]), y, (under, deck + rise), base)
+        shape.box(skirt, y, (under - SKIRT[0], deck + rise), base)
+        shape.box((skirt[1], step), y, (under, deck + rise), base)
+        sloped(shape, (step, d["frontStart"]), (under, under), (deck + rise, d["frontDeck"] + rise), y, base)
+        shape.box((d["frontStart"], front), y, (under, d["frontDeck"] + rise), base)
+    shape.box((front - 0.1, front), (-inner, inner), (under, d["frontDeck"]), base)
 
     # lamp carrier across the rear, the ramps' hinges just ahead of it
-    shape.box((rear, d["carrierX"]), (-hw, hw), (under, d["carrierTop"]), frame)
+    shape.box((rear, d["carrierX"]), (-hw, hw), (under, d["carrierTop"]), base)
 
-    # main deck: plating with four wheel troughs, then the step and the raised front section
+    # main deck: wooden planks on a dark pan between steel side bands, whose wheel troughs carry
+    # galvanised grid covers; then the step and the raised front section
     holes = troughs(p, d["slopeStart"], step)
-    plating(shape, (d["slopeStart"], step), (-inner, inner), holes, (deck - PLATE, deck), base)
+    band, planks, gap = PLANK
+    if not all(band <= min(abs(y[0]), abs(y[1])) + EPS for _, y in holes):
+        raise ValueError("a wheel trough reaches into the plank band")
+    main = (d["slopeStart"], step)
+    shape.box(main, (-band, band), (deck - PLATE - PAN, deck - PLATE), black)
+    plank = (2 * band - (planks - 1) * gap) / planks
+    for i in range(planks):
+        y0 = -band + i * (plank + gap)
+        shape.box(main, (y0, y0 + plank), (deck - PLATE, deck), wood)
+    for side in (-1, 1):
+        own = [h for h in holes if h[1][0] * side > 0]
+        plating(shape, main, mirror(side, band, inner), own, (deck - PLATE, deck), base)
     trough_floor = deck - TROUGH[2]
+    bar_w, bar_h, bar_pitch, bar_drop = COVER_BAR
     for x, y in holes:
         shape.box(x, y, (trough_floor - PAN, trough_floor), black)
+        bars = int((x[1] - x[0] - bar_w) / bar_pitch + EPS) + 1
+        lead = (x[1] - x[0] - bar_w - (bars - 1) * bar_pitch) / 2
+        for i in range(bars):
+            bx = x[0] + lead + i * bar_pitch
+            shape.box((bx, bx + bar_w), y, (deck - bar_drop - bar_h, deck - bar_drop), silver)
     sloped(shape, (step, d["frontStart"]), (deck - PLATE, d["frontDeck"] - PLATE), (deck, d["frontDeck"]), (-inner, inner), base)
     shape.box((d["frontStart"], front - 0.1), (-inner, inner), (d["frontDeck"] - PLATE, d["frontDeck"]), base)
 
@@ -183,10 +210,10 @@ def deck_low_loader(p, shape, hues):
     count = max(2, round(span / pitch) + 1)
     for i in range(count):
         x = d["slopeStart"] + span * i / (count - 1)
-        shape.box((x, x + cross_w), (-CROSS_REACH, CROSS_REACH), (under - cross_d, deck - PLATE), frame)
+        shape.box((x, x + cross_w), (-CROSS_REACH, CROSS_REACH), (under - cross_d, deck - PLATE - PAN), base)
     (beam_in, beam_out), beam_d = BEAM
     for side in (-1, 1):
-        shape.box((d["slopeStart"], reach), mirror(side, beam_in, beam_out), (under - beam_d, deck - PLATE), frame)
+        shape.box((d["slopeStart"], reach), mirror(side, beam_in, beam_out), (under - beam_d, deck - PLATE - PAN), base)
     for x in p["rearAxleXs"]:
         shape.box((x - p["axleHalf"], x + p["axleHalf"]), (-p["track"] / 2, p["track"] / 2), p["axleZ"], black)
 
@@ -198,30 +225,79 @@ def deck_low_loader(p, shape, hues):
         for side in (-1, 1):
             shape.box((x, x + length), mirror(side, inner + 0.02, hw - 0.02), (deck + rise, deck + rise + height), black)
 
-    ramps(p, shape, silver, black)
+    boxes(p, shape, silver, black)
+    leg_top = top_at(LEG[0] + LEG[1]) - GRATE_DROP - PAN
+    support_legs(p, shape, silver, leg_top)
+    ramps(p, shape, hues)
 
 
-def ramps(p, shape, silver, black):
-    """Aluminium ladder ramps folded upright between the lamp carrier and the sloped deck."""
-    d, ramp = p["lowLoader"], p["ramp"]
-    xs = (d["carrierX"], d["slopeEnd"])
-    z0, top = d["rearDeck"], d["rampTop"]
-    rung_h, pitch = RUNG
-    hinge_w, below, above = HINGE
+def boxes(p, shape, silver, black):
+    """Galvanised boxes under the deck, ahead of and between the tandem's axles, clear of tyres and flaps."""
+    xs, (y0, y1), bottom = BOXES
+    under = p["underside"]
+    for x0, x1 in xs:
+        for side in (-1, 1):
+            shape.box((x0, x1), mirror(side, y0, y1), (bottom, under), silver)
+            # the lid's seam and latch on the outer face
+            face = mirror(side, y1, y1 + 0.005)
+            shape.box((x0 + 0.02, x1 - 0.02), face, (under - 0.07, under - 0.06), black)
+            mid = (x0 + x1) / 2
+            shape.box((mid - 0.04, mid + 0.04), face, (under - 0.12, under - 0.07), black)
+
+
+def support_legs(p, shape, silver, top):
+    """Galvanised rear support legs, retracted: a sleeve from the sloped deck, the inner leg and its foot pad."""
+    x, outer, leg, yc, (pad, pad_h), sleeve = LEG
+    foot = p["axleZ"][0] + 0.01
+    cx = x + outer / 2
     for side in (-1, 1):
-        outer = mirror(side, ramp["gap"], ramp["gap"] + ramp["width"])
-        for y in (mirror(side, ramp["gap"], ramp["gap"] + STRINGER), mirror(side, ramp["gap"] + ramp["width"] - STRINGER, ramp["gap"] + ramp["width"])):
+        y = side * yc
+        shape.box((x, x + outer), (y - outer / 2, y + outer / 2), (sleeve, top), silver)
+        shape.box((cx - leg / 2, cx + leg / 2), (y - leg / 2, y + leg / 2), (foot + pad_h, sleeve), silver)
+        shape.box((cx - pad / 2, cx + pad / 2), (y - pad / 2, y + pad / 2), (foot, foot + pad_h), silver)
+
+
+def ramps(p, shape, hues):
+    """Aluminium ramps folded upright between the lamp carrier and the sloped deck: a perforated tread
+    faces forward, a solid back with an ECE R70 plate faces rearward."""
+    d, ramp = p["lowLoader"], p["ramp"]
+    silver, black = hues["silver"], hues["black"]
+    back, front = d["carrierX"], d["slopeEnd"]
+    xs = (back, front)
+    z0, top = d["rearDeck"], d["rampTop"]
+    depth, set_back, bar, columns, pitch, start = TREAD
+    hinge_w, below, above = HINGE
+    width, height, below_top, border, relief = R70
+    rows = int((top - RAMP_CAP - z0 - start - bar) / pitch + EPS)
+    if rows < 1:
+        raise ValueError("the folded ramps are too short for a tread row")
+    tread = (z0 + start, z0 + start + rows * pitch + bar)
+    for side in (-1, 1):
+        a, b = ramp["gap"], ramp["gap"] + ramp["width"]
+        for y in (mirror(side, a, a + STRINGER), mirror(side, b - STRINGER, b)):
             shape.box(xs, y, (z0, top), silver)
-        rungs = mirror(side, ramp["gap"] + STRINGER, ramp["gap"] + ramp["width"] - STRINGER)
-        count = int((top - RAMP_CAP - z0 - 0.15) / pitch + EPS)
-        if count < 1:
-            raise ValueError("the folded ramps are too short for a rung")
-        for k in range(count):
-            z = z0 + 0.15 + k * pitch
-            shape.box((xs[0] + 0.02, xs[1] - 0.02), rungs, (z, z + rung_h), silver)
-        shape.box(xs, outer, (top - RAMP_CAP, top), silver)
+        inner = (a + STRINGER, b - STRINGER)
+        shape.box((back, back + RAMP_BACK), mirror(side, *inner), (z0, top - RAMP_CAP), silver)
+        pan = front - depth - TREAD_PAN
+        shape.box((pan, pan + PAN), mirror(side, *inner), tread, black)
+        # the tread: row bars set back behind full-height column bars, the holes between them
+        for k in range(rows + 1):
+            z = tread[0] + k * pitch
+            shape.box((front - depth, front - set_back), mirror(side, *inner), (z, z + bar), silver)
+        hole = (inner[1] - inner[0] - (columns + 1) * bar) / columns
+        for k in range(columns + 1):
+            y = inner[0] + k * (hole + bar)
+            shape.box((front - depth, front), mirror(side, y, y + bar), tread, silver)
+        shape.box(xs, mirror(side, a, b), (top - RAMP_CAP, top), silver)
         for inset in (0.02, ramp["width"] - hinge_w - 0.02):
-            shape.box(xs, mirror(side, ramp["gap"] + inset, ramp["gap"] + inset + hinge_w), (z0 - below, z0 + above), black)
+            # proud of the stringers' and back's faces, which it would otherwise share
+            shape.box((back - 0.005, front + 0.005), mirror(side, a + inset, a + inset + hinge_w), (z0 - below, z0 + above), black)
+        # ECE R70 marking plate on the back: a yellow field in a red border
+        mid, plate_top = (a + b) / 2, top - below_top
+        span, rise = (mid - width / 2, mid + width / 2), (plate_top - height, plate_top)
+        shape.box((back - relief / 2, back), mirror(side, *span), rise, hues["red"])
+        field = ((span[0] + border, span[1] - border), (rise[0] + border, rise[1] - border))
+        shape.box((back - relief, back - relief / 2), mirror(side, *field[0]), field[1], hues["yellow"])
 
 
 def side_marking(p, shape, side, outer, span, hues):

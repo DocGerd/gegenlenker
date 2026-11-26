@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 import { previewPort } from './e2e/preview-port';
 import { WEBGPU_LAUNCH } from './e2e/webgpu-launch';
@@ -8,7 +9,30 @@ if (process.env['TEST_WORKER_INDEX'] === undefined)
 const UAT_BUILD = 'DEPLOY_CHANNEL=uat BASE_PATH=/gegenlenker/uat/ pnpm build --outDir dist/uat';
 const url = `http://127.0.0.1:${port}/gegenlenker/`;
 
-export default defineConfig({
+// Opt-in `E2E_GPU=1` (WSL2 + NVIDIA): headed Chromium on the real GPU via Mesa d3d12 (headless has no GPU path).
+const WSL_LIB = '/usr/lib/wsl/lib';
+const GPU = process.env['E2E_GPU'] === '1';
+if (GPU && !existsSync(WSL_LIB))
+  throw new Error('E2E_GPU=1 needs WSL2 with a GPU (no /usr/lib/wsl/lib)');
+const GPU_TEXT_METRICS =
+  /below 700 px the brief collapses|open overlays stay whole.* 800x600 with a mouse|opening the aid legend re-measures/;
+const gpuLaunch = {
+  args: [
+    '--use-gl=angle',
+    '--use-angle=gl',
+    '--ignore-gpu-blocklist',
+    '--enable-gpu',
+    '--hide-scrollbars',
+    '--window-position=-32000,-32000',
+  ],
+  env: {
+    ...process.env,
+    GALLIUM_DRIVER: 'd3d12',
+    LD_LIBRARY_PATH: [WSL_LIB, process.env['LD_LIBRARY_PATH']].filter(Boolean).join(':'),
+  },
+};
+
+export default defineConfig<{ gpuExpected: boolean }>({
   testDir: 'e2e',
   workers: 1,
   retries: 0,
@@ -19,6 +43,8 @@ export default defineConfig({
       name: 'offline',
       testMatch: /\.spec\.ts$/,
       testIgnore: /\/(webgpu|channels)\//,
+      // Headed Chromium lays HUD text out wider than headless, which breaks these short-viewport layout checks.
+      ...(GPU ? { grepInvert: GPU_TEXT_METRICS } : {}),
       // High first-load markers on software GL outlast the 5 s default; a test fits several waits.
       expect: { timeout: 30_000 },
       timeout: 90_000,
@@ -27,9 +53,11 @@ export default defineConfig({
         viewport: { width: 1280, height: 800 },
         locale: 'en-US',
         serviceWorkers: 'allow',
-        launchOptions: {
-          args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'],
-        },
+        headless: !GPU,
+        gpuExpected: GPU,
+        launchOptions: GPU
+          ? gpuLaunch
+          : { args: ['--use-gl=angle', '--use-angle=swiftshader', '--ignore-gpu-blocklist'] },
       },
     },
     {

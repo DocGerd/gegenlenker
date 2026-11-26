@@ -4,8 +4,9 @@ import {
   type ExtraMirrors,
   type GraphicsPreset,
   type LightingMode,
-  type SceneRenderer,
 } from '../contracts/render';
+import type { SceneRenderer } from './scene-renderer';
+export type { SceneRenderer };
 import type { Texture } from 'three';
 import { proceduralAids } from './aids';
 import { proceduralEnvironment } from './environment';
@@ -38,9 +39,7 @@ import { createVehicleEnvironment } from './vehicle-pbr';
 import { KIT_SHADOW_SAMPLES, startYardKit } from './yard-kit';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 
-/** Whether the preset offers the outside view. */
-export const chaseViewAvailable = (preset: GraphicsPreset): boolean =>
-  QUALITY_FLAGS[preset].chaseView;
+export { chaseViewAvailable, lookAroundAvailable } from './quality';
 
 /** The mirrors beyond class II that the preset draws; `computeViewports` makes room for them. Class IV also needs the setting. */
 export const extraMirrors = (preset: GraphicsPreset, wideMirrors: boolean): ExtraMirrors => ({
@@ -52,10 +51,6 @@ export const extraMirrors = (preset: GraphicsPreset, wideMirrors: boolean): Extr
 /** Whether the preset draws the cab interior and the mirror housings. */
 export const interiorAvailable = (preset: GraphicsPreset): boolean =>
   QUALITY_FLAGS[preset].cockpitInterior;
-
-/** Whether the preset draws the interior asset, which the head can turn about. */
-export const lookAroundAvailable = (preset: GraphicsPreset): boolean =>
-  QUALITY_FLAGS[preset].cockpitInterior && QUALITY_FLAGS[preset].interiorGlb;
 
 declare global {
   interface Window {
@@ -75,6 +70,8 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
     if (warm.target === null) warm.pending = tag;
     else warm.target(tag);
   };
+  // Before the renderer exists nothing has been drawn that could be stale.
+  let staleFrame: (() => void) | null = null;
   // The attachment markers on `<html>` (`ATTACHMENTS`) are read by the e2e: the state while drawn,
   // `failed` once given up on, absent otherwise. A new state other than `failed` warms up.
   const publishState = (key: AttachmentKey): ((state: string | null) => void) => {
@@ -87,6 +84,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
         root.setAttribute(marker, state);
         if (state !== 'failed' && state !== last) warmUp(`attach:${key}`);
       }
+      if (state !== last) staleFrame?.();
       last = state;
     };
   };
@@ -215,8 +213,15 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   renderer.onLost(unmark);
   let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
   let lighting: LightingMode = DEFAULT_LIGHTING;
-  const { warmUp: warmTarget, ...sceneRenderer } = renderer;
+  const { warmUp: warmTarget, attached: attachedTarget, ...sceneRenderer } = renderer;
   warm.target = warmTarget;
+  staleFrame = attachedTarget;
+  // Swaps that change no marker: the reflections re-captured, a shader check's verdict re-dressing a part.
+  const stopRedress = [
+    vehicleEnvironment.onChange(attachedTarget),
+    interiorCheck.onChange(attachedTarget),
+    retroCheck.onChange(attachedTarget),
+  ];
   if (warm.pending !== null) warmTarget(warm.pending);
   return {
     ...sceneRenderer,
@@ -247,6 +252,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       renderer.setLighting(mode);
     },
     dispose() {
+      for (const stop of stopRedress) stop();
       unmark();
       renderer.dispose();
       groundTextures.dispose();

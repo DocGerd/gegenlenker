@@ -1,15 +1,28 @@
+import type { Rect2 } from '../contracts/layout';
 import {
   DEFAULT_TOP_DOWN_VIEW,
   HEAD_REST,
+  type FreePose,
   type HeadPose,
   type Rect,
   type TopDownMode,
   type TopDownView,
 } from '../contracts/render';
+import {
+  clampFreePose,
+  flyStep,
+  lookBy,
+  panBy as freePanBy,
+  pinchFly,
+  sameFreePose,
+  wheelFly,
+  type FreeInput,
+} from '../render/free-look';
 import { DRAG_SLOP_PX, dragHead, easeHead, glanceTarget, sameHead } from '../render/head-look';
 import { isFormField } from './keyboard';
-import { actionFor } from './keymap';
+import { actionFor, type Action } from './keymap';
 import {
+  MIN_PINCH_PIXELS,
   clampView,
   panBy,
   pinch,
@@ -27,10 +40,25 @@ export type LookOptions = {
   readonly onChange: (head: HeadPose) => void;
 };
 
+/** The outside view's free camera: the eye flies inside `bounds`, or in from where the orbit left it. */
+export type FreeOptions = {
+  readonly bounds: Rect2;
+  /** The pose the free camera flies from now, or null once it ended. */
+  readonly onChange: (pose: FreePose | null) => void;
+};
+
 export type ViewInput = {
-  /** Switching mode, even to the current one, resets the view. */
+  /** Switching mode, even to the current one, resets the view and ends the free camera. */
   setMode(mode: TopDownMode): void;
+  /** Resets the orbit to its default framing and ends the free camera. */
   reset(): void;
+  /**
+   * Starts the free camera from `pose` in the outside view, or ends it, leaving the orbit as it was;
+   * while it flies the drag, wheel, pinch and held view keys move it instead of the orbit.
+   */
+  setFree(pose: FreePose | null): void;
+  /** Turns looking around on or off, as `look.enabled` does; off puts the head back to rest. */
+  setLook(enabled: boolean): void;
   /** Re-clamps the view after the pane changed size. */
   relayout(): void;
   /** Advances the head's easing by a frame of `seconds`, paused or not. */
@@ -43,6 +71,8 @@ export type ViewInputOptions = {
   /** The top-down pane in the canvas's CSS px. */
   readonly getRect: () => Rect;
   readonly onChange: (view: TopDownView) => void;
+  /** Absent means the outside view has no free camera. */
+  readonly free?: FreeOptions;
   /** Absent means the cockpit does not look around. */
   readonly look?: LookOptions;
 };
@@ -101,10 +131,26 @@ export function createPointerRouter<Pane extends string>() {
   };
 }
 
+/** A frame longer than this (a stalled tab) flies no further than this. */
+const MAX_FLY_SECONDS = 0.1;
 const KEY_ZOOM = 1.25;
 const KEY_STEP = (5 * Math.PI) / 180;
 
 type Pane = 'topDown' | 'cockpit';
+
+/** The view keys that turn, pitch and fly the free camera while held. */
+type HeldKey = 'turnLeft' | 'turnRight' | 'up' | 'down' | 'ahead' | 'back';
+const FREE_HELD: Readonly<Partial<Record<Action, HeldKey>>> = {
+  orbitLeft: 'turnLeft',
+  orbitRight: 'turnRight',
+  tiltUp: 'up',
+  tiltDown: 'down',
+  zoomIn: 'ahead',
+  zoomOut: 'back',
+};
+
+const heldKeyOf = (action: Action | undefined): HeldKey | undefined =>
+  action === undefined ? undefined : FREE_HELD[action];
 
 /**
  * Pans and zooms the top-down pane of the shared canvas, or in the outside view orbits, tilts and
@@ -128,7 +174,7 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
     view = next;
     opts.onChange(view);
   };
-  const look = opts.look?.enabled === true ? opts.look : undefined;
+  let look = opts.look?.enabled === true ? opts.look : undefined;
   const rectOf = (pane: Pane): Rect | null =>
     pane === 'topDown' ? opts.getRect() : (look?.getRect() ?? null);
   /** Position of an event in `rect`'s own px, wherever it happened. */
@@ -143,6 +189,34 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
 
   let head = HEAD_REST;
   const glance = { left: false, right: false };
+  const flying = opts.free;
+  let free: FreePose | null = null;
+  /** The free camera's held keys. */
+  const held = {
+    turnLeft: false,
+    turnRight: false,
+    up: false,
+    down: false,
+    ahead: false,
+    back: false,
+  };
+  /** The physical key holding each: a modifier can change `key` before the release (`,` with Shift is `<`). */
+  const heldBy = new Map<string, HeldKey>();
+  const releaseHeld = (): void => {
+    held.turnLeft = held.turnRight = held.up = held.down = held.ahead = held.back = false;
+    heldBy.clear();
+  };
+  const fly = (next: FreePose): void => {
+    if (flying === undefined || free === null || sameFreePose(next, free)) return;
+    free = next;
+    flying.onChange(free);
+  };
+  const endFree = (): void => {
+    releaseHeld();
+    if (free === null) return;
+    free = null;
+    flying?.onChange(null);
+  };
   /** A cockpit drag's travel while under the slop; once past it the drag turns the head. */
   let slop = { x: 0, y: 0, past: false };
   const turn = (next: HeadPose): void => {
@@ -195,6 +269,30 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
         return;
       }
       const ctx = context();
+      if (free !== null && flying !== undefined) {
+        const { bounds } = flying;
+        if (gesture.kind === 'pinch') {
+          const [a, b] = gesture.from;
+          const [c, d] = gesture.to;
+          const before = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+          const after = { x: (c.x + d.x) / 2, y: (c.y + d.y) / 2 };
+          const panned = freePanBy(
+            free,
+            after.x - before.x,
+            after.y - before.y,
+            ctx.height,
+            bounds,
+          );
+          const apart = Math.hypot(b.x - a.x, b.y - a.y);
+          const together = Math.hypot(d.x - c.x, d.y - c.y);
+          fly(apart < MIN_PINCH_PIXELS ? panned : pinchFly(panned, together / apart, bounds));
+        } else if (e.pointerType === 'mouse' && e.shiftKey) {
+          fly(freePanBy(free, gesture.dx, gesture.dy, ctx.height, bounds));
+        } else {
+          fly(lookBy(free, gesture.dx, gesture.dy, ctx.height, bounds));
+        }
+        return;
+      }
       commit(
         gesture.kind === 'drag'
           ? panBy(view, gesture.dx, gesture.dy, ctx)
@@ -223,7 +321,9 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
       if (!inPane(p)) return;
       e.preventDefault();
       const ctx = context();
-      commit(zoomAt(view, wheelFactor(e.deltaY, e.deltaMode, e.ctrlKey, ctx.height), p, ctx));
+      const factor = wheelFactor(e.deltaY, e.deltaMode, e.ctrlKey, ctx.height);
+      if (free !== null && flying !== undefined) fly(wheelFly(free, factor, flying.bounds));
+      else commit(zoomAt(view, factor, p, ctx));
     },
     { signal, passive: false },
   );
@@ -235,7 +335,14 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
       const ctx = context();
       const action = actionFor('view', e);
       const chase = mode === 'chase';
-      if (action === 'zoomIn') commit(zoomAt(view, KEY_ZOOM, centre(ctx), ctx));
+      const key = free === null ? undefined : heldKeyOf(action);
+      if (key !== undefined) {
+        held[key] = true;
+        heldBy.set(e.code, key);
+      } else if (action === 'resetView' && free !== null) {
+        endFree();
+        commit(DEFAULT_TOP_DOWN_VIEW);
+      } else if (action === 'zoomIn') commit(zoomAt(view, KEY_ZOOM, centre(ctx), ctx));
       else if (action === 'zoomOut') commit(zoomAt(view, 1 / KEY_ZOOM, centre(ctx), ctx));
       else if (action === 'resetView') commit(DEFAULT_TOP_DOWN_VIEW);
       else if (chase && action === 'orbitLeft')
@@ -258,10 +365,14 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
     const action = actionFor('view', e);
     if (action === 'glanceLeft') glance.left = false;
     else if (action === 'glanceRight') glance.right = false;
+    const key = heldBy.get(e.code) ?? heldKeyOf(action);
+    heldBy.delete(e.code);
+    if (key !== undefined) held[key] = false;
   };
   const letGoAll = (): void => {
     glance.left = false;
     glance.right = false;
+    releaseHeld();
   };
   window.addEventListener('keyup', letGo, { signal });
   window.addEventListener('blur', letGoAll, { signal });
@@ -269,14 +380,44 @@ export function createViewInput(surface: HTMLElement, opts: ViewInputOptions): V
   return {
     setMode(next) {
       mode = next;
+      endFree();
       commit(DEFAULT_TOP_DOWN_VIEW);
     },
-    reset: () => commit(DEFAULT_TOP_DOWN_VIEW),
+    reset() {
+      endFree();
+      commit(DEFAULT_TOP_DOWN_VIEW);
+    },
+    setFree(pose) {
+      if (pose === null) {
+        endFree();
+        return;
+      }
+      if (flying === undefined || mode !== 'chase') return;
+      releaseHeld();
+      free = clampFreePose(pose, flying.bounds, pose);
+      flying.onChange(free);
+    },
+    setLook(enabled) {
+      look = enabled ? opts.look : undefined;
+      if (look !== undefined) return;
+      glance.left = glance.right = false;
+      if (sameHead(head, HEAD_REST)) return;
+      head = HEAD_REST;
+      opts.look?.onChange(head);
+    },
     relayout() {
       const ctx = context();
       if (ctx.width > 0 && ctx.height > 0) commit(clampView(view, ctx));
     },
     step(seconds) {
+      if (free !== null && flying !== undefined) {
+        const input: FreeInput = {
+          turn: Number(held.turnLeft) - Number(held.turnRight),
+          pitch: Number(held.up) - Number(held.down),
+          fly: Number(held.ahead) - Number(held.back),
+        };
+        fly(flyStep(free, input, Math.min(seconds, MAX_FLY_SECONDS), flying.bounds));
+      }
       // a drag holds the head where the pointer put it
       if (look === undefined || slop.past) return;
       turn(easeHead(head, glanceTarget(glance.left, glance.right), seconds));

@@ -59,27 +59,12 @@ const groupSection = (group: WhatsNewGroup): HTMLElement => {
   return section;
 };
 
-/** Shows the changelog; `onBack` runs from the back button. Returns the teardown. */
-export function showWhatsNew(root: HTMLElement, onBack: () => void): () => void {
-  const container = element('div', 'menu-scroll');
-  const main = element('main', 'whats-new');
-
-  const back = element('button', 'app-button whats-new-back', t('back'));
-  back.type = 'button';
-  back.addEventListener('click', onBack);
-  const title = element('h1', 'whats-new-title', t('whatsNew'));
-  title.tabIndex = -1;
-
-  main.append(back, title, element('p', 'whats-new-note mono', buildLabel()));
+/** Appends the notes and the changelog groups, and marks every entry seen. */
+export function render(body: HTMLElement): void {
+  body.append(element('p', 'whats-new-note mono', buildLabel()));
   if (document.documentElement.lang !== 'en') {
-    main.append(element('p', 'whats-new-note', t('whatsNewEnglishNote')));
+    body.append(element('p', 'whats-new-note', t('whatsNewEnglishNote')));
   }
-  main.append(...whatsNewGroups(unseenIds()).map(groupSection));
+  body.append(...whatsNewGroups(unseenIds()).map(groupSection));
   markAllSeen();
-  container.append(main);
-  root.append(container);
-  title.focus();
-  return () => {
-    container.remove();
-  };
 }

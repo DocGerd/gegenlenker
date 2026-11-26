@@ -6,6 +6,7 @@ import { DEFAULT_GRAPHICS } from '../src/contracts/render';
 import { RUNTIME_ASSETS } from '../src/pwa/config';
 import { expectNoFailedAttachment, watchFailedAttachments } from './attachment-markers';
 import { HEAVY, HIGH_WAIT_MS, PRESET_TIMEOUT_MS } from './pinned-shoot';
+import { chooseSetting, startExercise } from './menu-flow';
 
 const high = { timeout: HIGH_WAIT_MS };
 
@@ -67,7 +68,7 @@ test('loads from the subpath and drives an exercise offline', async ({
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
   await expect(status).toHaveText(en.offlineReady);
 
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   const speed = page.locator('[data-hud="speed"]');
   await expect(speed).toHaveText('0.0 km/h');
 
@@ -84,9 +85,26 @@ test('loads from the subpath and drives an exercise offline', async ({
   expect(warnings.filter((w) => w.includes('Shell '))).toEqual([]);
 });
 
+test('About opens offline after the first visit', async ({ page, context }) => {
+  await page.goto('./');
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+  await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+  await expect(page.locator('[data-menu="offline"]')).toHaveText(en.offlineReady);
+
+  await context.setOffline(true);
+  await page.reload();
+  await page.getByRole('button', { name: en.about, exact: true }).click();
+  await expect(page.getByRole('heading', { level: 1, name: en.about, exact: true })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 2, name: en.aboutAssets })).toBeVisible();
+  await expect(page.locator('[data-about="thirdParty"]')).not.toHaveCount(0);
+});
+
 test('zooms and pans the top-down view without disturbing the controls', async ({ page }) => {
   await page.goto('./');
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   const reset = page.getByRole('button', { name: en.resetView, exact: true });
   const lever = page.locator('[data-ctl="lever"]');
   await expect(reset).toBeDisabled();
@@ -202,7 +220,7 @@ test(
     const installed = await cached();
     for (const file of files) expect(matching(installed.precache, file), String(file)).toEqual([]);
 
-    await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+    await startExercise(page, en, 'straight-reverse');
     const marker = page.locator('html');
     await expect(marker).toHaveAttribute('data-ground-texture', /^ktx2:[a-z0-9-]+$/, high);
     const target = await marker.getAttribute('data-ground-texture');
@@ -228,9 +246,8 @@ test(
       .getByRole('button', { name: en.finish })
       .click();
     await page.getByRole('button', { name: en.menu }).click();
-    await page.locator('[data-menu="graphics"]').selectOption('balanced');
-    // the menu now also offers the replay of the run just finished
-    await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
+    await chooseSetting(page, en, 'graphics', 'balanced');
+    await startExercise(page, en, 'straight-reverse');
     await expect(page.locator('[data-view="follow"]')).toBeVisible();
     await expect(marker).not.toHaveAttribute('data-ground-pbr', /.*/);
     await expect(marker).not.toHaveAttribute('data-vehicle-pbr', /.*/);
@@ -241,7 +258,7 @@ test(
 
     await context.setOffline(true);
     await page.reload();
-    await page.getByRole('button', { name: new RegExp(`^${en.exerciseStraightReverse}`) }).click();
+    await startExercise(page, en, 'straight-reverse');
     await expect(marker).toHaveAttribute('data-ground-texture', target ?? '', high);
     await expect(marker).toHaveAttribute('data-ground-pbr', /^ktx2:[a-z0-9-]+$/, high);
     await expect(marker).toHaveAttribute('data-vehicle-pbr', 'on', high);

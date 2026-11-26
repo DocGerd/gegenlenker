@@ -5,10 +5,12 @@ import { requestPersistentStorage } from '../pwa/persist';
 import { startUpdatePrompt } from '../pwa/update-prompt';
 import './app.css';
 import type { DriveOutcome, RunConfig } from './drive';
-import { showMenu } from './menu';
+import type { EntryRef } from './menu/catalogue';
+import { showMenu } from './menu/index';
+import type { NavState } from './menu/nav';
 import { showNotice } from './notice';
 import { showResult, type ResultContext } from './result-view';
-import { currentSettings, initSettings, loadSettings } from './settings';
+import { currentSettings, initSettings, loadSettings, updateSettings } from './settings';
 import {
   isReplayable,
   lastRun,
@@ -44,6 +46,11 @@ export function startApp(root: HTMLElement): void {
     const exit = onBack;
     onBack = null;
     exit?.();
+    // Forward onto a dead entry would leave the title on an app entry; undo it.
+    if (exit === null && (history.state as { screen?: boolean } | null)?.screen === true) {
+      ownBack = true;
+      history.back();
+    }
   });
   // A reload during a drive or replay lands on that screen's entry; drop it so back from the menu leaves.
   if ((history.state as { screen?: boolean } | null)?.screen === true) {
@@ -67,7 +74,9 @@ export function startApp(root: HTMLElement): void {
     ownBack = true;
     history.back();
   };
+  let closeMenu: (() => void) | null = null;
   const loadFailed = (error: unknown, retry: () => void): void => {
+    closeMenu?.();
     console.error(error);
     leave();
     const dismiss = (next: () => void) => () => {
@@ -78,11 +87,12 @@ export function startApp(root: HTMLElement): void {
       screen,
       'loadFailed',
       { label: 'retry', run: dismiss(retry) },
-      { label: 'back', run: dismiss(menu) },
+      { label: 'back', run: dismiss(() => menu()) },
     );
   };
 
   const noWebgl = (): void => {
+    closeMenu?.();
     leave();
     const notice = showNotice(screen, 'noWebgl', {
       label: 'back',
@@ -94,15 +104,16 @@ export function startApp(root: HTMLElement): void {
   };
 
   // Loaded on demand so the menu paints without parsing three.js.
-  const drive = (run: RunConfig): void => {
+  // `mounted` runs once the drive has taken over the screen and its history entry.
+  const drive = (run: RunConfig, entry: EntryRef, mounted?: () => void): void => {
     probeGraphics()
       .then((backend) => {
         if (backend === null) noWebgl();
-        else loadDrive(run);
+        else loadDrive(run, entry, mounted);
       })
-      .catch((error: unknown) => loadFailed(error, () => drive(run)));
+      .catch((error: unknown) => loadFailed(error, () => drive(run, entry, mounted)));
   };
-  const loadDrive = (run: RunConfig): void => {
+  const loadDrive = (run: RunConfig, entry: EntryRef, mounted?: () => void): void => {
     import('./drive')
       .then((m) => {
         let back: (() => void) | null = null;
@@ -113,15 +124,18 @@ export function startApp(root: HTMLElement): void {
         };
         enter(onPop);
         back = m.startDrive(screen, run, currentSettings(), {
-          onExit: (outcome) => finished(run, outcome),
-          onRestart: () => drive(run),
+          onExit: (outcome) => finished(run, entry, outcome),
+          onRestart: () => drive(run, entry),
           onLeave: () => {
             leave();
             menu();
           },
         });
+        // The one write for every start: Start, Continue, Next exercise, Retry and Restart all come through here.
+        updateSettings({ lastEntry: entry });
+        mounted?.();
       })
-      .catch((error: unknown) => loadFailed(error, () => drive(run)));
+      .catch((error: unknown) => loadFailed(error, () => drive(run, entry, mounted)));
   };
   const replay = (log: InputLog, onExit: () => void): void => {
     probeGraphics()
@@ -140,15 +154,21 @@ export function startApp(root: HTMLElement): void {
       })
       .catch((error: unknown) => loadFailed(error, () => replay(log, onExit)));
   };
-  const finished = (run: RunConfig, outcome: DriveOutcome): void => {
+  const finished = (run: RunConfig, entry: EntryRef, outcome: DriveOutcome): void => {
     const stored = outcome.result === null ? null : storeResult(outcome.result);
     storeLastRun(outcome.log);
     if (outcome.result === null || stored === null) {
       leave();
       menu();
-    } else result(run, outcome.result, stored, outcome.log);
+    } else result(run, entry, outcome.result, stored, outcome.log);
   };
-  const result = (run: RunConfig, r: RunResult, context: ResultContext, log: InputLog): void => {
+  const result = (
+    run: RunConfig,
+    entry: EntryRef,
+    r: RunResult,
+    context: ResultContext,
+    log: InputLog,
+  ): void => {
     const following =
       r.reached && run.exercise !== null
         ? exercises[exercises.indexOf(run.exercise) + 1]
@@ -159,16 +179,23 @@ export function startApp(root: HTMLElement): void {
           ? null
           : () => {
               close();
-              drive({ ...run, layoutId: following.layout, exercise: following });
+              drive(
+                { ...run, layoutId: following.layout, exercise: following },
+                {
+                  role: entry.role,
+                  kind: 'exercise',
+                  id: following.id,
+                },
+              );
             },
       retry: () => {
         close();
-        drive(run);
+        drive(run, entry);
       },
       replay: isReplayable(log)
         ? () => {
             close();
-            replay(log, () => result(run, r, context, log));
+            replay(log, () => result(run, entry, r, context, log));
           }
         : null,
       menu: () => {
@@ -182,49 +209,66 @@ export function startApp(root: HTMLElement): void {
       menu();
     });
   };
-  const whatsNew = (): void => {
-    import('./whats-new')
-      .then((m) => {
-        const close = m.showWhatsNew(screen, () => {
-          close();
-          leave();
-          menu('whatsNew');
-        });
-        enter(() => {
-          close();
-          menu('whatsNew');
-        });
-      })
-      .catch((error: unknown) => loadFailed(error, whatsNew));
-  };
-  const menu = (focus: string | null = null): void => {
+  const menu = (initial?: NavState): void => {
+    closeMenu?.();
     const log = lastRun();
-    const close = showMenu(
+    const handle = showMenu(
       screen,
-      (run) => {
-        close();
-        drive(run);
+      {
+        start: (run, entry) => {
+          drive(run, entry, () => closeMenu?.());
+        },
+        replay:
+          log === null
+            ? null
+            : {
+                log,
+                start: () => {
+                  closeMenu?.();
+                  replay(log, () => {
+                    leave();
+                    menu();
+                  });
+                },
+              },
+        hasNews: () => import('./whats-new-seen').then((m) => m.hasUnseen()),
+        hold: enter,
+        release: leave,
+        failed: (error, retry) => {
+          loadFailed(error, () => menu(retry));
+        },
       },
-      log === null
-        ? null
-        : {
-            log,
-            start: () => {
-              close();
-              replay(log, () => {
-                leave();
-                menu();
-              });
-            },
-          },
-      () => {
-        close();
-        whatsNew();
+      initial,
+    );
+    closeMenu = () => {
+      closeMenu = null;
+      handle.close();
+    };
+  };
+
+  // Errors outside the frame loop (input, timers, promises) otherwise leave a stuck screen without a word.
+  // Not over a drive or replay: the stage would run on blind under the cover, and its frame boundary has its own notice.
+  let failed: HTMLElement | null = null;
+  const runFailed = (): void => {
+    if (failed?.isConnected === true || screen.querySelector('.drive, .replay') !== null) return;
+    failed = showNotice(
+      screen,
+      'appFailed',
+      { label: 'reload', run: () => location.reload() },
+      {
+        label: 'dismiss',
+        run: () => {
+          failed?.remove();
+        },
       },
-      import('./whats-new-seen').then((m) => m.hasUnseen()),
-      focus,
     );
   };
+  // Not `preventDefault`ed: the browser still reports it, so the e2e console guard sees it. A null `error` is
+  // a browser-internal report (such as the ResizeObserver loop notice), not a fault of the app.
+  window.addEventListener('error', (event) => {
+    if (event.error != null) runFailed();
+  });
+  window.addEventListener('unhandledrejection', runFailed);
 
   menu();
   startUpdatePrompt(root);

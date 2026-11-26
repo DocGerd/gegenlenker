@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   warmUp: vi.fn(),
+  attached: vi.fn(),
+  redress: new Map<string, () => void>(),
   syncAttach: false,
   ground: null as ((state: string | null) => void) | null,
   pbr: null as ((state: 'on' | 'failed' | null) => void) | null,
@@ -93,6 +95,10 @@ vi.mock('./vehicle-pbr', () => ({
       attach: mocks.pbrAttach,
       setSky: mocks.setSky,
       invalidate: vi.fn(),
+      onChange: (listener: () => void) => {
+        mocks.redress.set('reflections', listener);
+        return vi.fn();
+      },
       dispose: vi.fn(),
     };
   },
@@ -106,6 +112,7 @@ vi.mock('./three-renderer', () => ({
     mocks.onGovernor = options.onGovernor;
     return {
       warmUp: mocks.warmUp,
+      attached: mocks.attached,
       onLost: vi.fn(),
       setQuality: mocks.setQuality,
       setLighting: mocks.setLighting,
@@ -119,6 +126,22 @@ vi.mock('./grade', async (importOriginal) => ({
     mocks.grade = onState;
     return { attach: vi.fn(), setWanted: vi.fn(), dispose: vi.fn() };
   },
+}));
+const check = (name: string) => () => ({
+  attach: vi.fn(),
+  dispose: vi.fn(),
+  onChange: (listener: () => void) => {
+    mocks.redress.set(name, listener);
+    return vi.fn();
+  },
+});
+vi.mock('./interior-material', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./interior-material')>()),
+  createInteriorCheck: check('interior'),
+}));
+vi.mock('./retro', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./retro')>()),
+  createRetroCheck: check('retro'),
 }));
 vi.mock('./aids', () => ({ proceduralAids: vi.fn() }));
 vi.mock('./environment', () => ({ proceduralEnvironment: vi.fn() }));
@@ -135,6 +158,7 @@ describe('scene renderer attach hooks', () => {
   beforeEach(() => {
     for (const mock of [
       mocks.warmUp,
+      mocks.attached,
       mocks.skyAttach,
       mocks.skySetEnabled,
       mocks.skyOnLoaded,
@@ -164,6 +188,19 @@ describe('scene renderer attach hooks', () => {
     mocks.syncAttach = true;
     expect(() => createSceneRenderer()).not.toThrow();
     expect(mocks.warmUp).toHaveBeenCalled();
+  });
+
+  it('marks a still frame stale on a new attachment state and on every re-dress without one', () => {
+    createSceneRenderer();
+    mocks.attached.mockClear();
+    mocks.ground?.('ktx2');
+    mocks.ground?.('ktx2');
+    expect(mocks.attached).toHaveBeenCalledOnce();
+    for (const name of ['reflections', 'interior', 'retro']) {
+      mocks.attached.mockClear();
+      mocks.redress.get(name)?.();
+      expect(mocks.attached, name).toHaveBeenCalledOnce();
+    }
   });
 
   it('does not expose the warm-up hook', () => {

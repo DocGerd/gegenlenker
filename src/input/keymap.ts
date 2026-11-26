@@ -20,6 +20,7 @@ export type Action =
   | 'viewFollow'
   | 'viewYard'
   | 'viewChase'
+  | 'freeCamera'
   | 'zoomIn'
   | 'zoomOut'
   | 'orbitLeft'
@@ -97,7 +98,7 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     action: 'brake',
     match: { by: 'code', values: ['Space'] },
     scope: 'drive',
-    legend: { term: { key: 'keySpace' }, desc: 'brake' },
+    legend: { term: { key: 'keySpace' }, desc: 'stop' },
   },
   {
     action: 'gearP',
@@ -154,6 +155,11 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
   { action: 'orbitRight', match: { by: 'key', values: ['.'] }, scope: 'view' },
   { action: 'tiltUp', match: { by: 'code', values: ['PageUp'] }, scope: 'view' },
   { action: 'tiltDown', match: { by: 'code', values: ['PageDown'] }, scope: 'view' },
+  {
+    action: 'freeCamera',
+    match: { by: 'key', values: ['k'] },
+    scope: 'view',
+  },
   {
     action: 'glanceLeft',
     match: { by: 'code', values: ['KeyQ'] },

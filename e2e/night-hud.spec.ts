@@ -11,6 +11,7 @@ import {
   startPinnedDrive,
   timeoutWithSettles,
 } from './pinned-shoot';
+import { startYard, yardEntry } from './menu-flow';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
 const SHOTS = ['follow', 'yard'] as const;
@@ -36,7 +37,7 @@ test(
 
     const system = await context.newPage();
     await system.emulateMedia({ colorScheme: 'light' });
-    await startPinnedDrive(system, night, en.layoutDepot);
+    await startPinnedDrive(system, night, yardEntry('depot'));
     await expect(html(system)).toHaveAttribute('data-theme', 'dark');
     await expect(system.locator('.hud-view-label').first()).toHaveCSS(
       'background-color',
@@ -50,7 +51,7 @@ test(
 
     const light = await context.newPage();
     await light.emulateMedia({ colorScheme: 'light' });
-    await startPinnedDrive(light, { ...night, theme: 'light' }, en.layoutDepot);
+    await startPinnedDrive(light, { ...night, theme: 'light' }, yardEntry('depot'));
     await expect(html(light)).toHaveAttribute('data-theme', 'light');
     expect(await topDownHashes(light), 'top-down shots follow the HUD theme').toEqual(dark);
     await light.close();
@@ -62,8 +63,7 @@ test(
       .click();
     await expect(html(system)).toHaveAttribute('data-theme', 'light');
 
-    await system.getByRole('combobox', { name: en.lighting }).selectOption('day');
-    await system.getByRole('button', { name: new RegExp(`^${en.layoutDepot}`) }).click();
+    await startYard(system, en, 'depot', { lighting: 'day' });
     await expect(html(system)).toHaveAttribute('data-render-lighting', 'day');
     await settle(system, 'low');
     await expect(html(system)).toHaveAttribute('data-theme', 'light');

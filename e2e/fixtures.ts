@@ -1,4 +1,5 @@
 import { expect, test as base, type BrowserContext } from '@playwright/test';
+import { isSoftwareGl } from './perf/tablet-logic';
 import { DRIVER_PERFORMANCE_HINT, isThreeProblem } from './three-problems';
 
 /** Console messages only: headless Chromium denies the wake lock, and the software GL driver hints at performance. Neither is a fault of the app. */
@@ -11,7 +12,32 @@ type Guard = { allow: (pattern: RegExp) => void };
  * warning in any page of its contexts (the `page` one and those from `browser.newContext()`);
  * `allow()` exempts messages a test provokes on purpose. Service-worker exceptions are not seen.
  */
-export const test = base.extend<{ guard: Guard; allow: Guard['allow'] }>({
+export const test = base.extend<
+  { guard: Guard; allow: Guard['allow'] },
+  { gpuCheck: undefined; gpuExpected: boolean }
+>({
+  // Set by the project whose launch args ask for the real GPU (`playwright.config.ts`).
+  gpuExpected: [false, { option: true, scope: 'worker' }],
+  // Fail the worker's tests when that project got a software renderer.
+  gpuCheck: [
+    async ({ browser, gpuExpected }, use) => {
+      if (gpuExpected) {
+        const page = await browser.newPage();
+        const renderer = await page.evaluate(() => {
+          const gl = document.createElement('canvas').getContext('webgl2');
+          const info = gl?.getExtension('WEBGL_debug_renderer_info');
+          return gl && info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : 'no WebGL2';
+        });
+        await page.close();
+        if (isSoftwareGl(renderer))
+          throw new Error(
+            `E2E_GPU=1 got software GL (${renderer}); needs WSLg (DISPLAY) and Mesa d3d12 (GALLIUM_DRIVER=d3d12, /usr/lib/wsl/lib).`,
+          );
+      }
+      await use(undefined);
+    },
+    { auto: true, scope: 'worker' },
+  ],
   guard: [
     async ({ browser, context, serviceWorkers }, use) => {
       const problems: string[] = [];

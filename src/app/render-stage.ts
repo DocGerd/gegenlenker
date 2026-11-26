@@ -1,10 +1,5 @@
-import {
-  GraphicsStartError,
-  type GraphicsPreset,
-  type LightingMode,
-  type SceneRenderer,
-} from '../contracts/render';
-import { createSceneRenderer } from '../render';
+import { GraphicsStartError, type GraphicsPreset, type LightingMode } from '../contracts/render';
+import { createSceneRenderer, type SceneRenderer } from '../render';
 import { currentSettings } from './settings';
 import { showNotice } from './notice';
 
@@ -117,8 +112,10 @@ export type StageHooks = {
 
 export type RenderStage = {
   readonly renderer: SceneRenderer;
-  /** The preset the renderer was set to: read it for anything that must follow the renderer's quality. */
+  /** The preset the renderer is set to: read it for anything that must follow the renderer's quality. */
   readonly graphics: GraphicsPreset;
+  /** Switches the renderer's preset; the caller rebuilds the scene with `setScene`. */
+  setGraphics(preset: GraphicsPreset): void;
   /** The lighting the stage drew with, which the stored setting does not decide: a replay keeps its run's. */
   readonly lighting: LightingMode;
   /** Fills the host and holds the canvas, which a loss replaces: bind input here. */
@@ -139,7 +136,7 @@ export function mountRenderStage(
 ): RenderStage {
   const s = acquireRenderer();
   const { surface, renderer } = s;
-  const { graphics } = currentSettings();
+  let { graphics } = currentSettings();
   renderer.setQuality(graphics);
   renderer.setLighting(lighting);
   // Read by the e2e; stays after dispose like the renderer's own state, until the next stage sets it.
@@ -153,12 +150,24 @@ export function mountRenderStage(
   let last = -1;
   let notice: HTMLElement | null = null;
   let ready = false;
+  const back = { label: 'back', run: onBack } as const;
 
   const loop = (now: number): void => {
     raf = requestAnimationFrame(loop);
     const seconds = last < 0 ? 0 : (now - last) / 1000;
     last = now;
-    hooks?.frame(seconds);
+    try {
+      hooks?.frame(seconds);
+    } catch (error) {
+      // The frame left the screen (a finished run) before it threw: the stage can no longer show it.
+      if (signal.aborted) throw error;
+      // Left to repeat, a throwing frame would freeze the view silently and flood the console.
+      console.error('Frame failed', error);
+      pause();
+      halt(() =>
+        showNotice(stage, 'runFailed', { label: 'reload', run: () => location.reload() }, back),
+      );
+    }
   };
   const resume = (): void => {
     if (raf !== 0 || hooks === null || notice !== null || !ready) return;
@@ -197,7 +206,6 @@ export function mountRenderStage(
       (error: unknown) => {
         if (signal.aborted || pending !== s.ready || superseded(error)) return;
         const reload = { label: 'reload', run: () => location.reload() } as const;
-        const back = { label: 'back', run: onBack } as const;
         if (s.started) {
           halt(() => showNotice(stage, 'contextLost', reload));
           return;
@@ -230,7 +238,13 @@ export function mountRenderStage(
 
   return {
     renderer,
-    graphics,
+    get graphics() {
+      return graphics;
+    },
+    setGraphics(preset) {
+      graphics = preset;
+      renderer.setQuality(preset);
+    },
     lighting,
     surface,
     start(next) {

@@ -3,8 +3,11 @@ import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exerc
 import type { LayoutId } from '../contracts/layout';
 import {
   DEFAULT_TOP_DOWN_LAYOUT,
+  DEFAULT_TOP_DOWN_VIEW,
   TOP_DOWN_SHARE_LIMITS,
   type AidFlags,
+  type GraphicsPreset,
+  type Rect,
   type RenderFrame,
   type TopDownMode,
 } from '../contracts/render';
@@ -21,7 +24,7 @@ import {
   interiorAvailable,
   lookAroundAvailable,
 } from '../render';
-import { clearRect, targetArrow } from '../render/follow-framing';
+import { arrowClearRect, clearRect, targetArrow } from '../render/follow-framing';
 import { mountPerfOverlay, perfRequested } from '../render/perf-overlay';
 import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
@@ -33,12 +36,12 @@ import { NO_PREDICTION, predictCombination, warnAhead, type Ahead } from '../sim
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
-import { measureChrome } from './chrome';
+import { measureChrome, measureDivider } from './chrome';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
-import { showPauseSheet } from './pause-sheet';
+import { showPauseSheet, type PauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
-import { updateSettings, type Settings } from './settings';
+import { currentSettings, updateSettings, type Settings } from './settings';
 
 export type RunConfig = {
   readonly layoutId: LayoutId;
@@ -70,7 +73,7 @@ export type DriveHandlers = {
   readonly onLeave: () => void;
 };
 
-/** Returns the back action: opens the pause sheet, or closes it when open. */
+/** Returns the back action: opens the pause sheet, steps back from its Settings, or closes it. */
 export function startDrive(
   root: HTMLElement,
   run: RunConfig,
@@ -154,22 +157,28 @@ export function startDrive(
   };
 
   // The sim stands still while the sheet is open; rendering carries on for resizes.
-  let closeSheet: (() => void) | null = null;
+  let sheet: PauseSheet | null = null;
   const resume = (): void => {
-    closeSheet?.();
-    closeSheet = null;
+    sheet?.close();
+    sheet = null;
   };
   cleanups.push(resume);
   const togglePause = (): void => {
-    if (closeSheet !== null) {
-      resume();
+    if (sheet !== null) {
+      if (!sheet.back()) resume();
       return;
     }
-    closeSheet = showPauseSheet(stage, exercise === null ? 'menu' : 'finish', {
+    sheet = showPauseSheet(stage, exercise === null ? 'menu' : 'finish', {
       continue: resume,
       restart,
       finish,
       leave: exercise === null ? null : leaveUnscored,
+      settingChanged: (id) => {
+        if (id === 'graphics') switchGraphics(currentSettings().graphics);
+        if (id !== 'wideMirrors') return;
+        wideMirrors = currentSettings().wideMirrors;
+        arrange();
+      },
     });
   };
 
@@ -191,9 +200,18 @@ export function startDrive(
   };
   window.addEventListener('keydown', onEscape);
   live.push(() => window.removeEventListener('keydown', onEscape));
-  const { renderer, graphics } = view;
-  const lookAround = lookAroundAvailable(graphics);
+  const { renderer } = view;
+  // The pause sheet can change it during the drive.
+  let graphics = view.graphics;
   renderer.setScene(layout, truck, trailer);
+  // Set by anything visual besides a sim step; a frame with neither is not redrawn.
+  let dirty = true;
+  // An asset that lands while the run is paused must still show.
+  cleanups.push(
+    renderer.onAttached(() => {
+      dirty = true;
+    }),
+  );
 
   const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
   let aids: AidFlags = mirrorsOnly ? NO_AIDS : settings.aids;
@@ -201,8 +219,8 @@ export function startDrive(
   let topDownLayout = settings.topDownLayout;
   let savedLayout = topDownLayout;
   let topDown: TopDownMode = settings.topDown;
-  // Set by anything visual besides a sim step; a frame with neither is not redrawn.
-  let dirty = true;
+  // The pause sheet can change it during the drive.
+  let wideMirrors = settings.wideMirrors;
   let pathStale = true;
   let warning: Ahead = null;
   const frame: Frame = {
@@ -215,7 +233,7 @@ export function startDrive(
       undefined,
       undefined,
       null,
-      extraMirrors(graphics, settings.wideMirrors),
+      extraMirrors(graphics, wideMirrors),
     ),
     topDown,
     aids,
@@ -239,11 +257,24 @@ export function startDrive(
       dirty = true;
       hud.setViewChanged(!isDefaultView(next));
     },
+    free: {
+      bounds: layout.bounds,
+      onChange(pose) {
+        if (pose === null) delete frame.freePose;
+        else frame.freePose = pose;
+        dirty = true;
+        hud.setFree(pose !== null);
+        hud.setViewChanged(
+          pose !== null || !isDefaultView(frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW),
+        );
+      },
+    },
     look: {
       getRect: () => frame.views.cockpit,
-      enabled: lookAround,
+      enabled: lookAroundAvailable(graphics),
       onChange(head) {
         frame.head = head;
+        if (EXPOSE_FRAMING) stage.dataset['head'] = JSON.stringify(head);
         dirty = true;
       },
     },
@@ -261,7 +292,7 @@ export function startDrive(
     topDown,
     chase: chaseViewAvailable(graphics),
     interior: interiorAvailable(graphics),
-    look: lookAround,
+    look: lookAroundAvailable(graphics),
     collapsed,
     mirrorsOnly,
     pedalsBox: () => controls.pedalsBox(),
@@ -269,9 +300,16 @@ export function startDrive(
   cleanups.push(() => hud.dispose());
 
   /** Chrome moves with the layout and with collapsing panels; the vehicle is framed in what it leaves free. */
+  let arrowRects: { clear: Rect; place: Rect } | null = null;
   const remeasure = (): void => {
     if (mirrorsOnly) return;
-    frame.topDownClear = clearRect(frame.views.topDown, measureChrome(stage));
+    const chrome = measureChrome(stage);
+    const clear = clearRect(frame.views.topDown, chrome);
+    frame.topDownClear = clear;
+    arrowRects = {
+      clear,
+      place: arrowClearRect(frame.views.topDown, chrome, measureDivider(stage)),
+    };
     dirty = true;
   };
   const target = layout.target;
@@ -282,7 +320,7 @@ export function startDrive(
           x: target.pose.x + (Math.cos(target.pose.heading) * target.length) / 2,
           y: target.pose.y + (Math.sin(target.pose.heading) * target.length) / 2,
         };
-  /** Test observable (`?framing=1`): the screen box of the drawn vehicle and the sim step it shows. */
+  /** Test observable (`?framing=1`), beside `drawn` (frames drawn) and `head`: the screen box of the drawn vehicle and the sim step it shows. */
   const exposeVehicleBox = (): void => {
     const xs: number[] = [];
     const ys: number[] = [];
@@ -331,7 +369,7 @@ export function startDrive(
       measured.set(paneWidth, bottom);
       return bottom;
     };
-    const extra = extraMirrors(graphics, settings.wideMirrors);
+    const extra = extraMirrors(graphics, wideMirrors);
     let views = computeViewports(
       width,
       height,
@@ -363,8 +401,26 @@ export function startDrive(
     frame.views = views;
     viewInput.relayout();
     remeasure();
+    // remeasure marks it only with a top-down pane
+    dirty = true;
   };
   hud.onLegendResize(arrange);
+
+  /** Rebuilds the scene under `next`; the sim, run, views and wheel tracks carry on. */
+  const switchGraphics = (next: GraphicsPreset): void => {
+    if (next === graphics) return;
+    graphics = next;
+    view.setGraphics(next);
+    renderer.rebuildScene();
+    viewInput.setLook(lookAroundAvailable(next));
+    hud.setOffers({
+      chase: chaseViewAvailable(next),
+      interior: interiorAvailable(next),
+      look: lookAroundAvailable(next),
+    });
+    dirty = true;
+    arrange();
+  };
 
   hud.onAction((action) => {
     if (action.type === 'topDown') {
@@ -372,8 +428,19 @@ export function startDrive(
       viewInput.setMode(topDown);
       dirty = true;
       if (topDown !== 'chase') updateSettings({ topDown });
+      // the free camera button comes and goes with the outside view: the chrome the vehicle is framed clear of changes
+      arrange();
     } else if (action.type === 'resetView') {
       viewInput.reset();
+    } else if (action.type === 'freeCamera') {
+      // the flight starts from where the outside view's camera was drawn, once the next frame has
+      if (frame.freePose !== undefined) {
+        viewInput.setFree(null);
+      } else {
+        enterFree = !enterFree;
+        hud.setFree(enterFree);
+      }
+      dirty = true;
     } else if (action.type === 'split' || action.type === 'splitReset') {
       if (size === null) return;
       const reset = action.type === 'splitReset';
@@ -400,12 +467,14 @@ export function startDrive(
       pathStale = true;
       updateSettings({ aids });
       arrange();
-    } else if (closeSheet === null) {
+    } else if (sheet === null) {
       togglePause();
     }
   });
 
   let accumulator = 0;
+  let drawn = 0;
+  let enterFree = false;
   view.start({
     resized(width, height) {
       size = { width, height };
@@ -421,8 +490,7 @@ export function startDrive(
         return;
       }
       viewInput.step(seconds);
-      const clock =
-        closeSheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
+      const clock = sheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
       for (let i = 0; i < clock.steps; i++) {
         controls.tick(DT, snapshot.steer);
@@ -459,14 +527,24 @@ export function startDrive(
       frame.aids = aids;
       frame.lamps = controls.lamps();
       renderer.render(frame);
+      drawn++;
+      if (enterFree) {
+        enterFree = false;
+        const pose = renderer.chasePose();
+        if (pose !== null) viewInput.setFree(pose);
+        else hud.setFree(false);
+      }
       hud.update(snapshot, warning);
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goalCue(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
       hud.setTargetArrow(
-        at && frame.topDownClear ? targetArrow(at, frame.topDownClear, ARROW_MARGIN) : null,
+        at && arrowRects ? targetArrow(at, arrowRects.clear, ARROW_MARGIN, arrowRects.place) : null,
       );
-      if (EXPOSE_FRAMING) exposeVehicleBox();
+      if (EXPOSE_FRAMING) {
+        exposeVehicleBox();
+        stage.dataset['drawn'] = String(drawn);
+      }
     },
   });
 

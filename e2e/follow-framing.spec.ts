@@ -5,6 +5,8 @@ import { en } from '../src/i18n/en';
 import { MAX_STEPS_PER_FRAME } from '../src/sim/constants';
 import { DEFAULT_GRAPHICS, DEFAULT_LIGHTING } from '../src/contracts/render';
 import { HEAVY, settle, startPinnedDrive, timeoutWithSettles } from './pinned-shoot';
+import { exerciseEntry, startExercise } from './menu-flow';
+import { EXERCISE_IDS } from '../src/contracts/exercise';
 
 /** The settings a fresh install draws with, so the framing is checked as a new user sees it. */
 const DEFAULTS = { preset: DEFAULT_GRAPHICS, lighting: DEFAULT_LIGHTING } as const;
@@ -21,7 +23,7 @@ type Box = { left: number; top: number; right: number; bottom: number; step: num
 
 async function start(page: Page, size: (typeof sizes)[number]): Promise<void> {
   await page.setViewportSize(size);
-  await startPinnedDrive(page, DEFAULTS, en.exerciseStraightReverse);
+  await startPinnedDrive(page, DEFAULTS, exerciseEntry('straight-reverse'));
 }
 
 async function vehicleBox(page: Page): Promise<Box> {
@@ -122,25 +124,18 @@ for (const { locale, messages } of locales) {
       `whole-yard framing keeps the start and the target clear of the chrome at ${locale} ${size.width}x${size.height}`,
       { tag: HEAVY },
       async ({ browser }) => {
-        const labels = [
-          messages.exerciseStraightReverse,
-          messages.exerciseReverseBay,
-          messages.exerciseReverseCorner,
-          messages.exerciseDockRamp,
-          messages.exerciseSlalom,
-        ];
-        test.setTimeout(timeoutWithSettles(DEFAULTS.preset, 2 * labels.length));
+        test.setTimeout(timeoutWithSettles(DEFAULTS.preset, 2 * EXERCISE_IDS.length));
         const context = await browser.newContext({ locale, viewport: size });
-        for (const label of labels) {
+        for (const id of EXERCISE_IDS) {
           const page = await context.newPage();
-          await startPinnedDrive(page, DEFAULTS, label);
+          await startPinnedDrive(page, DEFAULTS, exerciseEntry(id));
           await page.getByRole('button', { name: messages.viewYard, exact: true }).click();
           // The box still shows the last follow frame until a frame drawn after the click.
           await afterSteps(page, 1);
           await settle(page, DEFAULTS.preset);
-          expect(await chromeHits(page, await vehicleBox(page)), label).toEqual([]);
+          expect(await chromeHits(page, await vehicleBox(page)), id).toEqual([]);
           // The arrow shows only for a target outside the clear rect.
-          await expect(page.locator('[data-hud="targetArrow"]'), label).toBeHidden();
+          await expect(page.locator('[data-hud="targetArrow"]'), id).toBeHidden();
           await page.close();
         }
         await context.close();
@@ -159,7 +154,7 @@ test('collapsed panels stay collapsed in the next run', async ({ page }) => {
   await page.getByRole('button', { name: en.panelAids, exact: true }).click();
   await expect(page.locator('[data-hud="aids"]')).toBeHidden();
   await page.reload();
-  await page.getByRole('button', { name: en.exerciseStraightReverse }).click();
+  await startExercise(page, en, 'straight-reverse');
   await expect(page.locator('[data-hud="aids"]')).toBeHidden();
   await expect(page.locator('[data-hud="gauges"]')).toBeVisible();
 });

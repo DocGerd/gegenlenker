@@ -14,12 +14,11 @@ import {
   type ViewRects,
   type RenderFrame,
   type RenderStats,
-  type SceneRenderer,
   type ScenePalette,
   type TopDownView,
   type WebgpuFallback,
 } from '../contracts/render';
-import type { TruckAnchors } from '../contracts/vehicle';
+import type { TrailerSpec, TruckAnchors, TruckId, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import {
   cabFront,
@@ -27,13 +26,16 @@ import {
   chaseColliders,
   combinationExtent,
   createChaseArm,
+  cameraPose,
   createChaseCamera,
   placeChaseCamera,
+  placeFreeCamera,
   vehicleCentre,
   type CabFront,
   type ChaseCollider,
   type CombinationExtent,
 } from './chase-camera';
+import type { SceneRenderer } from './scene-renderer';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
@@ -42,6 +44,7 @@ import { describeAdapter } from './gpu-backend';
 import {
   createMirror,
   mirrorAnchor,
+  mirrorYaw,
   mirrorFacing,
   type MirrorMounts,
   mirrorMounts,
@@ -74,12 +77,16 @@ const YARD_MARGIN = 5;
 const SKY_HEIGHT = 200;
 
 type Built = {
+  readonly layout: ResolvedLayout;
+  readonly truckSpec: TruckSpec;
+  readonly trailerSpec: TrailerSpec;
   readonly scene: Scene;
   readonly truck: VehicleVisual;
   readonly trailer: VehicleVisual;
   readonly environment: Environment;
   readonly aids: AidsLayer;
   readonly interior: CockpitInterior;
+  readonly truckId: TruckId;
   readonly anchors: TruckAnchors;
   readonly mounts: MirrorMounts;
   readonly cabFront: CabFront;
@@ -209,7 +216,7 @@ function describeGl(gpu: WebGPURenderer): string {
 /** `warmUp` holds the resolution governor off while something heavy (a shell, the ground texture) attaches. */
 export function createThreeSceneRenderer(
   parts: RendererParts,
-): SceneRenderer & { warmUp: (tag?: string) => void } {
+): SceneRenderer & { warmUp: (tag?: string) => void; attached: () => void } {
   const timer = createFrameTimer();
   const cockpitCamera = createCockpitCamera();
   const topDownCamera = new OrthographicCamera(-1, 1, 1, -1, 1, SKY_HEIGHT * 2);
@@ -248,11 +255,13 @@ export function createThreeSceneRenderer(
   let chaseShown = false;
   const chaseArm = createChaseArm();
   let chaseView = DEFAULT_TOP_DOWN_VIEW;
+  let chaseFlown = false;
   const lead = { x: 0, y: 0 };
   let leadAt = -1;
   /** Bumped by every `init` and by `dispose`, so a superseded start drops its renderer. */
   let generation = 0;
   const lostListeners = new Set<() => void>();
+  const attachListeners = new Set<() => void>();
 
   const onLost = (): void => {
     if (contextLost) return;
@@ -291,15 +300,60 @@ export function createThreeSceneRenderer(
     for (const { mirror } of mirrors) mirror.invalidate();
   }
 
-  function disposeBuilt(): void {
+  /** `keep` is the aids part, whose track history a rebuild carries over. */
+  function disposeBuilt(keep?: AidsLayer): void {
     if (built === null) return;
     built.truck.dispose();
     built.trailer.dispose();
     built.environment.dispose();
-    built.aids.dispose();
+    if (built.aids !== keep) built.aids.dispose();
     built.interior.dispose();
     built.scene.clear();
     built = null;
+  }
+
+  function build(
+    nextLayout: ResolvedLayout,
+    truck: TruckSpec,
+    trailer: TrailerSpec,
+    palette: ScenePalette,
+    kept?: AidsLayer,
+  ): void {
+    const scene = new Scene();
+    scene.matrixWorldAutoUpdate = false;
+    scene.onBeforeRender = (_renderer, _scene, camera) => {
+      if (isShadowCamera(camera)) shadowPasses++;
+    };
+    const truckVisual = parts.truck(truck, palette);
+    const trailerVisual = parts.trailer(trailer, palette);
+    const environment = parts.environment(nextLayout, palette);
+    const aids = kept ?? parts.aids(truck, trailer, nextLayout, palette);
+    const interior = parts.interior(truck, palette);
+    const extent = combinationExtent(truck, trailer);
+    setAidsLayer(aids.object);
+    scene.add(environment.object, truckVisual.object, trailerVisual.object, aids.object);
+    (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
+    built = {
+      layout: nextLayout,
+      truckSpec: truck,
+      trailerSpec: trailer,
+      scene,
+      truck: truckVisual,
+      trailer: trailerVisual,
+      environment,
+      aids,
+      interior,
+      truckId: truck.id,
+      anchors: truckAnchors(truck),
+      mounts: mirrorMounts(truck),
+      cabFront: cabFront(truck),
+      palette,
+      yardBounds: fitBounds(nextLayout),
+      colliders: chaseColliders(nextLayout),
+      extent,
+      radius: boundingRadius(extent),
+    };
+    applyLookTo(built);
   }
 
   function placeTopDown(frame: RenderFrame, rect: Rect, b: Built): void {
@@ -450,38 +504,26 @@ export function createThreeSceneRenderer(
       resetTiming('scene');
       leadAt = -1;
       chaseArm.cut();
-      const palette = readScenePalette();
-      const scene = new Scene();
-      scene.matrixWorldAutoUpdate = false;
-      scene.onBeforeRender = (_renderer, _scene, camera) => {
-        if (isShadowCamera(camera)) shadowPasses++;
+      build(nextLayout, truck, trailer, readScenePalette());
+    },
+
+    rebuildScene() {
+      if (built === null) return;
+      const { layout: nextLayout, truckSpec, trailerSpec, palette, aids } = built;
+      disposeBuilt(aids);
+      resetTiming('rebuild');
+      build(nextLayout, truckSpec, trailerSpec, palette, aids);
+    },
+
+    onAttached(listener) {
+      attachListeners.add(listener);
+      return () => {
+        attachListeners.delete(listener);
       };
-      const truckVisual = parts.truck(truck, palette);
-      const trailerVisual = parts.trailer(trailer, palette);
-      const environment = parts.environment(nextLayout, palette);
-      const aids = parts.aids(truck, trailer, nextLayout, palette);
-      const interior = parts.interior(truck, palette);
-      const extent = combinationExtent(truck, trailer);
-      setAidsLayer(aids.object);
-      scene.add(environment.object, truckVisual.object, trailerVisual.object, aids.object);
-      (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
-      built = {
-        scene,
-        truck: truckVisual,
-        trailer: trailerVisual,
-        environment,
-        aids,
-        interior,
-        anchors: truckAnchors(truck),
-        mounts: mirrorMounts(truck),
-        cabFront: cabFront(truck),
-        palette,
-        yardBounds: fitBounds(nextLayout),
-        colliders: chaseColliders(nextLayout),
-        extent,
-        radius: boundingRadius(extent),
-      };
-      applyLookTo(built);
+    },
+
+    attached() {
+      for (const listener of [...attachListeners]) listener();
     },
 
     setQuality(preset: GraphicsPreset) {
@@ -551,7 +593,7 @@ export function createThreeSceneRenderer(
         const facing = mirrorFacing(
           snapshot.truck,
           mirrorAnchor(spec, b.mounts),
-          spec.yaw,
+          mirrorYaw(spec, b.truckId),
           mirrorPosition,
         );
         mirror.place(mirrorPosition, facing);
@@ -593,31 +635,41 @@ export function createThreeSceneRenderer(
       const hasPane = hasTopDown(views);
       if (hasPane) out.place(topDown, pixelRatio);
       const chaseWasShown = chaseShown;
+      const chaseWasFlown = chaseFlown;
       chaseShown = hasPane && frame.topDown === 'chase';
+      chaseFlown = chaseShown && frame.freePose !== undefined;
       if (!hasPane) {
         topDownRect = null;
       } else if (chaseShown) {
         const view = frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW;
-        // a reset or a switch to the view is a cut: the eye starts where the view puts it
-        if (!chaseWasShown || (isDefault(view) && !isDefault(chaseView))) chaseArm.cut();
+        // a reset, a switch to the view or the end of a flight is a cut: the eye starts where the view puts it
+        if (
+          !chaseWasShown ||
+          chaseWasFlown !== chaseFlown ||
+          (isDefault(view) && !isDefault(chaseView))
+        ) {
+          chaseArm.cut();
+        }
         chaseView = view;
-        placeChaseCamera(
-          chaseCamera,
-          {
-            truck: snapshot.truck,
-            centre: vehicleCentre(snapshot, b.anchors.frontX),
-            extent: b.extent,
-            face: b.cabFront,
-            colliders: b.colliders,
-          },
-          {
-            width: topDown.width,
-            height: topDown.height,
-            clear: relativeTo(topDown, frame.topDownClear ?? topDown),
-          },
-          view,
-          (limit, open) => chaseArm.hold(limit, open, performance.now()),
-        );
+        const rig = {
+          truck: snapshot.truck,
+          centre: vehicleCentre(snapshot, b.anchors.frontX),
+          extent: b.extent,
+          face: b.cabFront,
+          colliders: b.colliders,
+        };
+        const paneFrame = {
+          width: topDown.width,
+          height: topDown.height,
+          clear: relativeTo(topDown, frame.topDownClear ?? topDown),
+        };
+        if (frame.freePose !== undefined) {
+          placeFreeCamera(chaseCamera, frame.freePose, rig, paneFrame);
+        } else {
+          placeChaseCamera(chaseCamera, rig, paneFrame, view, (limit, open) =>
+            chaseArm.hold(limit, open, performance.now()),
+          );
+        }
         gl.render(b.scene, chaseCamera);
       } else {
         placeTopDown(frame, topDown, b);
@@ -645,6 +697,10 @@ export function createThreeSceneRenderer(
       out.present();
       // includes the one output pass that draws the frame target to the canvas
       drawCalls = gl.info.render.drawCalls;
+    },
+
+    chasePose() {
+      return chaseShown && built !== null ? cameraPose(chaseCamera) : null;
     },
 
     project(x, y) {
@@ -686,6 +742,7 @@ export function createThreeSceneRenderer(
       generation++;
       releaseGpu();
       lostListeners.clear();
+      attachListeners.clear();
       document.removeEventListener('visibilitychange', onVisibility);
     },
   };
