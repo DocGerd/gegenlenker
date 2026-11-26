@@ -1,5 +1,101 @@
 [
   {
+    "version": "1.2.0",
+    "date": "2026-11-26",
+    "entries": [
+      {
+        "id": "447.changed",
+        "category": "changed",
+        "prs": [447],
+        "en": "Side contour markings are white instead of yellow, and truck rims are black with a silver nut ring."
+      },
+      {
+        "id": "456.fixed",
+        "category": "fixed",
+        "prs": [456],
+        "en": "A failure during a run no longer freezes the view silently: the run stops and a notice offers a reload or the way back to the menu."
+      },
+      {
+        "id": "459.changed",
+        "category": "changed",
+        "prs": [459],
+        "en": "The trucks look closer to the real THW vehicles in the mirrors and the chase view: a wider light bar, step wells, kit under the chassis, a ladder and black mudguards on the tipper, and a boxy tarpaulin, red and white striped rear posts and single rear tyres on the MAN."
+      },
+      {
+        "id": "460.fixed",
+        "category": "fixed",
+        "prs": [460],
+        "en": "The German coupling and turntable angle labels break with a hyphen on short screens instead of splitting mid-word."
+      },
+      {
+        "id": "461.added",
+        "category": "added",
+        "prs": [461],
+        "en": "The outside view has a free camera (K or the camera button) that flies anywhere over the yard while you keep driving."
+      },
+      {
+        "id": "462.changed",
+        "category": "changed",
+        "prs": [462],
+        "en": "The low-loader looks like the THW original in the mirrors and the outside view: bright blue frame, dark plank deck, galvanised trough covers, boxes and support legs, and taller ramps with perforated treads and red/yellow marker plates; the Lafette's side contour is white like the other vehicles."
+      },
+      {
+        "id": "466.changed",
+        "category": "changed",
+        "prs": [466],
+        "en": "Both trucks carry black mirror heads on arms straight out from the A-pillars and a front mirror just ahead of the windscreen, and the side mirrors now sit at the height of the real THW trucks' mirrors, so the main and wide-angle mirrors look from higher up."
+      },
+      {
+        "id": "469.fixed",
+        "category": "fixed",
+        "prs": [469],
+        "en": "Gear and Stop buttons respond to Enter, error notices are announced and focused, the replay timeline reads its time, and Tab stays inside the pause dialog."
+      },
+      {
+        "id": "472.changed",
+        "category": "changed",
+        "prs": [472],
+        "en": "The result screen stays clear of the update toast, the target arrow keeps off the view-size divider, the key list calls Space \"Stop\" like the button, angles read `n°` on the result, and the replay names its exercise."
+      },
+      {
+        "id": "477.changed",
+        "category": "changed",
+        "prs": [477],
+        "en": "The menu is a title screen with Exercises, Free yard and Settings, and a run's vehicles, time of day and driving view are chosen on a setup screen before Start."
+      },
+      {
+        "id": "478.added",
+        "category": "added",
+        "prs": [478],
+        "en": "The title screen has an About screen with the licence of the app, the licences of its libraries and the credits for its textures and sky, readable offline."
+      },
+      {
+        "id": "479.added",
+        "category": "added",
+        "prs": [479],
+        "en": "A Controls screen, opened from the title or from Settings, lists the drive keys for your graphics quality and driving view and the touch and mouse controls."
+      },
+      {
+        "id": "480.added",
+        "category": "added",
+        "prs": [480],
+        "en": "Continue on the title starts your last exercise or free yard in one step, with the truck, trailer, time of day and driving view it shows."
+      },
+      {
+        "id": "481.added",
+        "category": "added",
+        "prs": [481],
+        "en": "The pause sheet has a Settings level where Theme, Wide-angle mirrors and Graphics quality can be changed."
+      },
+      {
+        "id": "484.fixed",
+        "category": "fixed",
+        "prs": [484],
+        "en": "Graphics quality changed in the pause menu now applies at once, without restarting the run."
+      }
+    ]
+  },
+  {
     "version": "1.1.0",
     "date": "2026-11-25",
     "entries": [
