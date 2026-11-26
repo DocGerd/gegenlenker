@@ -55,6 +55,7 @@ export const en = {
   wideMirrors: 'Wide-angle mirrors',
   settingOn: 'On',
   settingOff: 'Off',
+  appliesNextStart: 'Applies from the next start',
   speed: 'Speed',
   stop: 'Stop',
   gear: 'Gear',

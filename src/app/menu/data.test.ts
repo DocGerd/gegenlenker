@@ -4,7 +4,7 @@ import { LAYOUT_IDS } from '../../contracts/layout';
 import { loadSettings } from '../settings';
 import { entriesOf, SETUP_STEPS } from './catalogue';
 import { GRAPH, screenOf, shownItems, type MenuState, type ScreenId } from './graph';
-import { OPTION_FIELDS, optionPatch, optionValue, type OptionId } from './options';
+import { OPTION_FIELDS, optionPatch, optionValue, PAUSE_FIELDS, type OptionId } from './options';
 
 const OPTION_IDS = Object.keys(OPTION_FIELDS) as OptionId[];
 
@@ -47,6 +47,14 @@ describe('menu options', () => {
       graphics: 'nextStart',
       wideMirrors: 'live',
     });
+  });
+
+  it('the pause sheet offers exactly the options a running drive applies', () => {
+    expect(PAUSE_FIELDS).toEqual(['theme', 'wideMirrors', 'graphics']);
+    const applied = OPTION_IDS.filter((id) =>
+      ['live', 'nextStart'].includes(OPTION_FIELDS[id].applies),
+    );
+    expect(new Set(PAUSE_FIELDS)).toEqual(new Set(applied));
   });
 });
 

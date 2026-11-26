@@ -26,6 +26,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Point to drive through before the target        | turn point                                  | Wendepunkt                                   |
 | Day or night of a drive                         | time of day (Day / Night)                   | Tageszeit (Tag / Nacht)                      |
 | Render quality setting (Low / Balanced / High)  | graphics quality                            | Grafikqualität (Niedrig / Ausgewogen / Hoch) |
+| Hint that a setting waits for the next start    | applies from the next start                 | gilt ab dem nächsten Start                   |
 | Class IV mirror setting                         | wide-angle mirrors (On / Off)               | Weitwinkelspiegel (An / Aus)                 |
 | Settings group: language and theme              | general                                     | Allgemein                                    |
 | Settings group: graphics quality and mirrors    | graphics                                    | Grafik                                       |

@@ -381,6 +381,132 @@ test('the free yard pause sheet has no restart hint', async ({ page }) => {
   await expect(sheet(page).getByText(en.restartHint)).toHaveCount(0);
 });
 
+async function pauseWith(page: Page, settings: object): Promise<void> {
+  await seedStorage(page, { settings });
+  await page.goto('./');
+  await startExercise(page, en, 'straight-reverse');
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  await page.keyboard.press('Escape');
+  await expect(sheet(page)).toBeVisible();
+}
+
+const openSettings = async (page: Page): Promise<void> => {
+  await sheet(page).getByRole('button', { name: en.settings }).click();
+  await expect(sheet(page).getByRole('heading', { name: en.settings })).toBeVisible();
+};
+
+const choice = (page: Page, row: string, value: string) =>
+  sheet(page).getByRole('radiogroup', { name: row }).getByRole('radio', { name: value });
+
+test(
+  'Settings opens inside the pause dialog; Esc and back each return to the actions, and the next Esc resumes',
+  heavyAt('low'),
+  async ({ page }) => {
+    await pauseWith(page, { graphics: 'low' });
+    const settings = sheet(page).getByRole('button', { name: en.settings });
+
+    await openSettings(page);
+    await expect(choice(page, en.theme, en.themeSystem)).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(settings).toBeFocused();
+    await expect(sheet(page).getByRole('button', { name: en.continue })).toBeVisible();
+
+    await openSettings(page);
+    await page.goBack();
+    await expect(settings).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(sheet(page)).toBeHidden();
+  },
+);
+
+test(
+  'Tab stays inside the pause dialog on its Settings level',
+  heavyAt('low'),
+  async ({ page }) => {
+    await pauseWith(page, { graphics: 'low' });
+    await openSettings(page);
+    const back = sheet(page).getByRole('button', { name: en.back });
+    const lastRow = choice(page, en.graphics, en.graphicsLow);
+    await page.keyboard.press('Shift+Tab');
+    await expect(back).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(lastRow).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(back).toBeFocused();
+
+    const inside = () =>
+      page.evaluate(() => document.activeElement?.closest('[role="dialog"]') !== null);
+    for (const key of ['Tab', 'Shift+Tab']) {
+      for (let i = 0; i < 8; i++) {
+        await page.keyboard.press(key);
+        expect(await inside(), `${key} ${String(i + 1)} left the dialog`).toBe(true);
+      }
+    }
+    await page.keyboard.press('w');
+    await page.keyboard.press('2');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(sheet(page)).toBeHidden();
+    // A few frames of the resumed sim would apply any key that reached the run.
+    await page.evaluate(async () => {
+      for (let i = 0; i < 5; i++) await new Promise((r) => requestAnimationFrame(r));
+    });
+    await expect(gear(page)).toHaveText('P');
+    await expect(speed(page)).toHaveText('0.0 km/h');
+  },
+);
+
+test('an Enter held on Back does not reopen Settings', heavyAt('low'), async ({ page }) => {
+  await pauseWith(page, { graphics: 'low' });
+  await openSettings(page);
+  await page.keyboard.press('Shift+Tab');
+  const back = sheet(page).getByRole('button', { name: en.back });
+  await expect(back).toBeFocused();
+  await page.keyboard.down('Enter');
+  const settings = sheet(page).getByRole('button', { name: en.settings });
+  await expect(settings).toBeFocused();
+  // The repeat lands on the Settings button of the actions.
+  await page.keyboard.down('Enter');
+  await page.keyboard.up('Enter');
+  await expect(settings).toBeFocused();
+  await expect(sheet(page).getByRole('heading', { name: en.settings })).toHaveCount(0);
+});
+
+test('the theme changes at once from the pause sheet', heavyAt('low'), async ({ page }) => {
+  await pauseWith(page, { graphics: 'low', theme: 'light' });
+  await expect(page.locator('html[data-theme="light"]')).toHaveCount(1);
+  await openSettings(page);
+  // Pointer users hit the label, not the small radio.
+  await sheet(page).getByText(en.themeDark, { exact: true }).click();
+  await expect(choice(page, en.theme, en.themeDark)).toBeChecked();
+  await expect(page.locator('html[data-theme="dark"]')).toHaveCount(1);
+});
+
+test(
+  'graphics quality from the pause sheet applies from the next start',
+  heavyAt('balanced'),
+  async ({ page }) => {
+    await pauseWith(page, { graphics: 'balanced' });
+    const chase = page.locator('[data-view="chase"]');
+    await expect(chase).toHaveCount(1);
+    await openSettings(page);
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(choice(page, en.graphics, en.graphicsBalanced)).toBeFocused();
+    await expect(sheet(page).getByText(en.appliesNextStart)).toBeVisible();
+    await page.keyboard.press('ArrowLeft');
+    await expect(choice(page, en.graphics, en.graphicsLow)).toBeChecked();
+    await expect(chase).toHaveCount(1);
+
+    await page.keyboard.press('Escape');
+    await sheet(page).getByRole('button', { name: en.restart }).click();
+    await expect(sheet(page)).toBeHidden();
+    await expect(speed(page)).toHaveText('0.0 km/h');
+    await expect(chase).toHaveCount(0);
+  },
+);
+
 test('leaving without scoring stores no result and no replay', async ({ page }) => {
   await startAndRoll(page);
   await page.keyboard.press('Escape');
