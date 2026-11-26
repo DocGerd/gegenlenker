@@ -572,6 +572,8 @@ test(
     await expect(choice(page, en.graphics, en.graphicsLow)).toBeChecked();
     await expect(chase).toHaveCount(0);
     await expect(free).toHaveCount(0);
+    await expect(page.locator('[data-hud="root"][data-interior]')).toHaveCount(0);
+    await expect(page.locator('html')).not.toHaveAttribute('data-vehicle-shells');
     await expect(yard).toHaveAttribute('aria-pressed', 'true');
     expect(await yaw()).toBe(0);
 

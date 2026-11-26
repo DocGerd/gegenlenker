@@ -216,6 +216,12 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
   const { warmUp: warmTarget, attached: attachedTarget, ...sceneRenderer } = renderer;
   warm.target = warmTarget;
   staleFrame = attachedTarget;
+  // Swaps that change no marker: the reflections re-captured, a shader check's verdict re-dressing a part.
+  const stopRedress = [
+    vehicleEnvironment.onChange(attachedTarget),
+    interiorCheck.onChange(attachedTarget),
+    retroCheck.onChange(attachedTarget),
+  ];
   if (warm.pending !== null) warmTarget(warm.pending);
   return {
     ...sceneRenderer,
@@ -246,6 +252,7 @@ export function createSceneRenderer(backend?: BackendRequest): SceneRenderer {
       renderer.setLighting(mode);
     },
     dispose() {
+      for (const stop of stopRedress) stop();
       unmark();
       renderer.dispose();
       groundTextures.dispose();
