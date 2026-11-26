@@ -1,5 +1,10 @@
 import { exerciseById } from '../../../content/registry';
-import type { ExerciseDefinition, RunResult } from '../../../contracts/exercise';
+import {
+  ROLES,
+  type ExerciseDefinition,
+  type Role,
+  type RunResult,
+} from '../../../contracts/exercise';
 import type { MessageKey } from '../../../i18n/en';
 import { formatNumber, formatSeconds, t } from '../../../i18n/i18n';
 import { bestKey } from '../../../scoring/best';
@@ -15,7 +20,7 @@ import {
   type EntryRef,
 } from '../catalogue';
 import { choiceRow } from '../choice-row';
-import { applyOption, OPTION_FIELDS, optionValue } from '../options';
+import { applyOption, OPTION_FIELDS, optionValue, type ChoiceField } from '../options';
 import { element, screenFrame } from './frame';
 
 export type SetupContext = {
@@ -24,7 +29,18 @@ export type SetupContext = {
   readonly back: () => void;
   readonly next: () => void;
   /** Starts the run once; the button shows the busy state until the drive takes over. */
-  readonly start: (button: HTMLButtonElement, run: RunConfig) => void;
+  readonly start: (button: HTMLButtonElement, run: RunConfig, entry: EntryRef) => void;
+};
+
+const ROLE_NAME: Readonly<Record<Role, MessageKey>> = {
+  driver: 'roleDriver',
+  einweiser: 'roleEinweiser',
+};
+/** Kept to the setup, not stored: the role belongs to the entry that starts. */
+const ROLE_ROW: ChoiceField = {
+  id: 'role',
+  label: 'role',
+  choices: ROLES.map((value) => ({ value, label: ROLE_NAME[value] })),
 };
 
 function stat(label: MessageKey, value: string): HTMLSpanElement {
@@ -91,6 +107,14 @@ export function setupScreen(ctx: SetupContext): {
   if (stepId === undefined) throw new Error(`${entryKey(ctx.entry)} has no setup step ${ctx.step}`);
   const settings = currentSettings();
   const options = element('div', 'menu-setup-options');
+  let role = ctx.entry.role;
+  if (settings.einweiserPreview) {
+    options.append(
+      choiceRow(ROLE_ROW, role, (value) => {
+        role = ROLES.find((r) => r === value) ?? role;
+      }),
+    );
+  }
   options.append(
     ...SETUP_STEPS[stepId].map((id) =>
       choiceRow(OPTION_FIELDS[id], optionValue(settings, id), (value) => {
@@ -106,8 +130,12 @@ export function setupScreen(ctx: SetupContext): {
   start.type = 'button';
   start.dataset['menu'] = 'start';
   start.addEventListener('click', () => {
-    if (last) ctx.start(start, runConfigOf(ctx.entry, currentSettings()));
-    else ctx.next();
+    if (!last) {
+      ctx.next();
+      return;
+    }
+    const entry: EntryRef = { ...ctx.entry, role };
+    ctx.start(start, runConfigOf(entry, currentSettings()), entry);
   });
   options.append(start);
 

@@ -36,6 +36,9 @@ export type OptionField = {
   readonly applies: Applies;
 };
 
+/** What a choice row draws: an option field, or a row the setup keeps to itself. */
+export type ChoiceField = Pick<OptionField, 'label' | 'choices'> & { readonly id: string };
+
 /** A choice's name as shown: a key is translated, vehicle names are data. */
 export const labelOf = ({ label }: Choice): string =>
   typeof label === 'string' ? t(label) : label.text;

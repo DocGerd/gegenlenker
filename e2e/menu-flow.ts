@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import type { ExerciseId } from '../src/contracts/exercise.ts';
+import type { ExerciseId, Role } from '../src/contracts/exercise.ts';
 import type { LayoutId } from '../src/contracts/layout.ts';
 import type { GraphicsPreset, LightingMode } from '../src/contracts/render.ts';
 import type { TrailerId, TruckId } from '../src/contracts/vehicle.ts';
@@ -12,9 +12,11 @@ import type { Lang } from '../src/i18n/i18n.ts';
 // modules without runtime imports, and use no `expect` or enum.
 
 export type Messages = Readonly<Record<MessageKey, string>>;
-export type MenuEntry =
+/** `role` absent: the driver; `einweiser` needs `einweiserPreview` in the stored settings. */
+export type MenuEntry = { readonly role?: Role } & (
   | { readonly kind: 'exercise'; readonly id: ExerciseId }
-  | { readonly kind: 'yard'; readonly id: LayoutId };
+  | { readonly kind: 'yard'; readonly id: LayoutId }
+);
 export type RunOptions = {
   readonly truck: TruckId;
   readonly trailer: TrailerId;
@@ -117,6 +119,7 @@ export async function startEntry(
   options: Partial<RunOptions> = {},
 ): Promise<void> {
   await openSetup(page, messages, entry);
+  if (entry.role === 'einweiser') await choose(screen(page, 'setup'), 'role', entry.role);
   if (options.truck !== undefined) await chooseRunOption(page, messages, 'truck', options.truck);
   if (options.trailer !== undefined)
     await chooseRunOption(page, messages, 'trailer', options.trailer);

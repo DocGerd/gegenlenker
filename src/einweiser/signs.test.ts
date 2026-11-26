@@ -14,12 +14,13 @@ import {
 
 const steps = (seconds: number): number => Math.round(seconds / DT);
 const seen = (station: Station = 'behind', judged: Partial<Judgement> = {}): Perception => ({
+  sight: { direct: true, mirrors: [] },
   inSight: true,
   station,
   inPath: false,
   judge: () => ({ readable: true, facing: true, ...judged }),
 });
-const UNSEEN: Perception = { ...seen(), inSight: false };
+const UNSEEN: Perception = { ...seen(), sight: { direct: false, mirrors: [] }, inSight: false };
 
 type Frame = { sign: SignId | null; p: Perception; steps: number; standing?: boolean };
 

@@ -38,6 +38,7 @@ import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { measureChrome, measureDivider } from './chrome';
+import { startEinweiserDrive } from './einweiser-drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { showPauseSheet, type PauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
@@ -49,6 +50,8 @@ export type RunConfig = {
   readonly exercise: ExerciseDefinition | null;
   readonly truckId: TruckId;
   readonly trailerId: TrailerId;
+  /** Absent: a driver run. */
+  readonly role?: Role;
 };
 
 export type DriveOutcome = {
@@ -81,7 +84,7 @@ export function startDrive(
   settings: Settings,
   { onExit, onRestart, onLeave }: DriveHandlers,
 ): () => void {
-  const role: Role = 'driver';
+  const role: Role = run.role ?? 'driver';
   const { params, layout, exercise, start, contacts } = resolveRun({
     layoutId: run.layoutId,
     exerciseId: run.exercise?.id ?? null,
@@ -104,6 +107,10 @@ export function startDrive(
   const stage = document.createElement('div');
   stage.className = 'drive';
   root.append(stage);
+  const einweiser =
+    role === 'einweiser'
+      ? startEinweiserDrive(stage, { truck, trailer, layout, start: snapshot, lighting })
+      : null;
 
   const cleanups: (() => void)[] = [];
   let disposed = false;
@@ -125,11 +132,13 @@ export function startDrive(
         role,
         lighting,
         mirrorsOnly,
+        ...(einweiser === null ? {} : { einweiser: einweiser.track() }),
       },
       snapshot.step,
     );
+    // Einweiser runs are not scored yet (#499), so they store no driver result.
     const result =
-      scored && exercise !== null
+      scored && exercise !== null && einweiser === null
         ? runResult(
             snapshot,
             exercise,
@@ -250,7 +259,7 @@ export function startDrive(
     lights: lighting === 'night',
   });
   live.push(() => controls.dispose());
-  const source: ControlSource = controls;
+  const source: ControlSource = einweiser?.source ?? controls;
   // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
   const viewInput = createViewInput(view.surface, {
     mode: topDown,
@@ -531,6 +540,8 @@ export function startDrive(
       frame.topDown = topDown;
       frame.aids = aids;
       frame.lamps = source.lamps();
+      const visual = einweiser?.visual() ?? null;
+      if (visual !== null) frame.einweiser = visual;
       renderer.render(frame);
       drawn++;
       if (enterFree) {

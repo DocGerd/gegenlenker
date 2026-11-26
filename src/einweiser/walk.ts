@@ -25,6 +25,13 @@ export type WalkKeys = {
   readonly right: boolean;
   readonly jog: boolean;
 };
+export const STILL: WalkKeys = {
+  forward: false,
+  back: false,
+  left: false,
+  right: false,
+  jog: false,
+};
 
 /** Where his circle at `p` overlaps the box, the push that clears it; null when clear. */
 function push(obb: Obb, p: Vec2, radius: number): Vec2 | null {
