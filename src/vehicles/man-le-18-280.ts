@@ -1,6 +1,8 @@
 import type { TruckSpec } from '../contracts/vehicle';
 import { SOURCES, estimate, sourced } from './sources';
 
+const doorGlassToBPillar =
+  'door glass reaches the interior B-pillar 0.55 m behind the eye (render model), so the driver sees abeam; no source found';
 const eyeAboveFloor =
   'cab floor 1.1 m above ground (render model), seated eye 1.25 m above it: seat height plus sitting eye height; no source found';
 const mirrorHeight =
@@ -50,7 +52,7 @@ export const manLe18280: TruckSpec = {
     glassSill: estimate(900, typical),
     glassHeight: estimate(756, typical),
     sideGlassSetback: estimate(176, typical),
-    sideGlassLength: estimate(814, typical),
+    sideGlassLength: estimate(1374, doorGlassToBPillar),
     grilleWidth: estimate(1245, typical),
     grilleSill: estimate(144, typical),
     grilleHeight: estimate(540, typical),
