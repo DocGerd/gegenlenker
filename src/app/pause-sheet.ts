@@ -1,7 +1,13 @@
 import { t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { choiceRow } from './menu/choice-row';
-import { applyOption, OPTION_FIELDS, optionValue, PAUSE_FIELDS } from './menu/options';
+import {
+  applyOption,
+  OPTION_FIELDS,
+  optionValue,
+  PAUSE_FIELDS,
+  type OptionId,
+} from './menu/options';
 import { currentSettings } from './settings';
 
 export type PauseActions = {
@@ -10,6 +16,8 @@ export type PauseActions = {
   finish: () => void;
   /** Drops the run without a result or replay; null where finishing already does that. */
   leave: (() => void) | null;
+  /** Called after a Settings change was stored. */
+  settingChanged: (id: OptionId) => void;
 };
 
 export type PauseSheet = {
@@ -33,7 +41,10 @@ const tabStops = (level: HTMLElement): HTMLElement[] => [
 ];
 
 /** The level with Back and the options a running drive can take; a change is stored at once. */
-function settingsLevel(back: () => void): {
+function settingsLevel(
+  back: () => void,
+  settingChanged: (id: OptionId) => void,
+): {
   readonly root: HTMLElement;
   readonly first: HTMLElement | null;
 } {
@@ -41,6 +52,10 @@ function settingsLevel(back: () => void): {
   root.className = 'pause-level pause-settings';
   const backButton = action('back', back, false);
   backButton.classList.add('pause-back');
+  const mark = document.createElement('span');
+  mark.setAttribute('aria-hidden', 'true');
+  mark.textContent = '‹';
+  backButton.prepend(mark);
   const heading = document.createElement('h2');
   heading.className = 'pause-title';
   heading.textContent = t('settings');
@@ -49,7 +64,7 @@ function settingsLevel(back: () => void): {
   const settings = currentSettings();
   for (const id of PAUSE_FIELDS) {
     const row = choiceRow(OPTION_FIELDS[id], optionValue(settings, id), (value) => {
-      applyOption(id, value);
+      if (applyOption(id, value)) settingChanged(id);
     });
     root.append(row);
     if (OPTION_FIELDS[id].applies === 'nextStart') {
@@ -96,7 +111,7 @@ export function showPauseSheet(
   const openSettings = action(
     'settings',
     () => {
-      const next = settingsLevel(back);
+      const next = settingsLevel(back, actions.settingChanged);
       swap(next.root, next.first);
     },
     false,

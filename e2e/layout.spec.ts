@@ -5,6 +5,7 @@ import { en } from '../src/i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
+import { seedStorage } from './menu-seed';
 import { heavyAt, startPinnedDrive } from './pinned-shoot';
 import {
   chooseSetting,
@@ -2094,3 +2095,54 @@ test('the wide-angle mirrors setting hides class IV, gives class II its full siz
     await context.close();
   }
 });
+
+test(
+  "the wide-angle mirrors option in the pause sheet changes the running drive's layout",
+  heavyAt('low'),
+  async ({ browser }) => {
+    test.slow();
+    const context = await browser.newContext({
+      locale: 'en-US',
+      // Class II only grows without class IV where the screen is tight: not at 1920x1080.
+      viewport: { width: 1536, height: 729 },
+    });
+    try {
+      const page = await context.newPage();
+      await seedStorage(page, { settings: { graphics: 'low' } });
+      await page.goto('./');
+      await startExercise(page, en, 'straight-reverse');
+      // hudReady counts the Balanced mirror set; Low draws no class V mirror.
+      await expect(page.locator('.hud-gauge')).toHaveCount(2);
+      const wide = page.locator('[data-hud^="wide"]:not([hidden])');
+      const mirror = page.locator('[data-hud="mirrorLeft"]');
+      const height = async () => {
+        const [b] = await boxes(mirror);
+        if (b === undefined) throw new Error('mirror');
+        return b.bottom - b.top;
+      };
+      await expect(wide).toHaveCount(2);
+      const withWide = await height();
+
+      await page.getByRole('button', { name: en.pause }).click();
+      const sheet = page.getByRole('dialog', { name: en.paused });
+      await sheet.getByRole('button', { name: en.settings }).click();
+      const mirrors = sheet.getByRole('radiogroup', { name: en.wideMirrors });
+      await mirrors.getByRole('radio', { name: en.settingOff }).check();
+      await expect(wide).toHaveCount(0);
+      await expect.poll(height).toBeGreaterThan(withWide);
+
+      await mirrors.getByRole('radio', { name: en.settingOn }).check();
+      await expect(wide).toHaveCount(2);
+      await expect.poll(height).toBe(withWide);
+
+      await mirrors.getByRole('radio', { name: en.settingOff }).check();
+      await page.keyboard.press('Escape');
+      await page.keyboard.press('Escape');
+      await expect(sheet).toBeHidden();
+      await expect(wide).toHaveCount(0);
+      await expect.poll(height).toBeGreaterThan(withWide);
+    } finally {
+      await context.close();
+    }
+  },
+);

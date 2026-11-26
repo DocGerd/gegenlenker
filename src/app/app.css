@@ -159,6 +159,9 @@
 
 .pause-back {
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .pause-title {

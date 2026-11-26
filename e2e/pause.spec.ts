@@ -404,9 +404,9 @@ test(
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await expect(choice(page, en.graphics, en.graphicsBalanced)).toBeFocused();
+    await expect(sheet(page).getByText(en.appliesNextStart)).toBeVisible();
     await page.keyboard.press('ArrowLeft');
     await expect(choice(page, en.graphics, en.graphicsLow)).toBeChecked();
-    await expect(sheet(page).getByText(en.appliesNextStart)).toBeVisible();
     await expect(chase).toHaveCount(1);
 
     await page.keyboard.press('Escape');

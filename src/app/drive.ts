@@ -40,7 +40,7 @@ import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { showPauseSheet, type PauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
-import { updateSettings, type Settings } from './settings';
+import { currentSettings, updateSettings, type Settings } from './settings';
 
 export type RunConfig = {
   readonly layoutId: LayoutId;
@@ -172,6 +172,11 @@ export function startDrive(
       restart,
       finish,
       leave: exercise === null ? null : leaveUnscored,
+      settingChanged: (id) => {
+        if (id !== 'wideMirrors') return;
+        wideMirrors = currentSettings().wideMirrors;
+        arrange();
+      },
     });
   };
 
@@ -203,6 +208,8 @@ export function startDrive(
   let topDownLayout = settings.topDownLayout;
   let savedLayout = topDownLayout;
   let topDown: TopDownMode = settings.topDown;
+  // The pause sheet can change it during the drive.
+  let wideMirrors = settings.wideMirrors;
   // Set by anything visual besides a sim step; a frame with neither is not redrawn.
   let dirty = true;
   let pathStale = true;
@@ -217,7 +224,7 @@ export function startDrive(
       undefined,
       undefined,
       null,
-      extraMirrors(graphics, settings.wideMirrors),
+      extraMirrors(graphics, wideMirrors),
     ),
     topDown,
     aids,
@@ -352,7 +359,7 @@ export function startDrive(
       measured.set(paneWidth, bottom);
       return bottom;
     };
-    const extra = extraMirrors(graphics, settings.wideMirrors);
+    const extra = extraMirrors(graphics, wideMirrors);
     let views = computeViewports(
       width,
       height,
