@@ -102,8 +102,11 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
     // The drive reads the stored settings when it mounts, so the screen's options freeze with Start.
-    for (const row of button.closest('[data-screen]')?.querySelectorAll('fieldset') ?? [])
-      row.disabled = true;
+    const screen = button.closest('[data-screen]');
+    for (const row of screen?.querySelectorAll('fieldset') ?? []) row.disabled = true;
+    // Nothing else on the screen may start or open anything meanwhile.
+    for (const item of screen?.querySelectorAll<HTMLButtonElement>('.menu-item') ?? [])
+      item.disabled = true;
     deps.start(run);
   };
 
@@ -117,6 +120,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
     },
   };
   const activate = (item: Item, button?: HTMLButtonElement): void => {
+    if (busy) return;
     if ('screen' in item.target) {
       go({ type: 'open', item: item.id });
       return;

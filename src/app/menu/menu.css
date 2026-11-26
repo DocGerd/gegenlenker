@@ -195,7 +195,7 @@
   text-align: left;
 }
 
-.menu-item:hover {
+.menu-item:hover:not(:disabled) {
   border-color: var(--color-accent);
 }
 
@@ -218,14 +218,13 @@
   font-weight: var(--weight-semibold);
 }
 
-.menu-item-primary:hover {
+.menu-item-primary:hover:not(:disabled) {
   border-color: transparent;
   background: var(--color-accent-strong);
 }
 
 /* Replay sits under Continue as the quieter half of the last-session block. */
-.menu-session .menu-items-entry + .menu-items-entry .menu-item-primary,
-.menu-session .menu-items-entry + .menu-items-entry .menu-item-primary:hover {
+:where(.menu-session .menu-items-entry + .menu-items-entry) .menu-item-primary {
   border-color: var(--color-border);
   background: var(--color-surface);
   color: var(--color-text);
@@ -233,8 +232,23 @@
   font-weight: var(--weight-medium);
 }
 
-.menu-session .menu-items-entry + .menu-items-entry .menu-item-primary:hover {
+:where(.menu-session .menu-items-entry + .menu-items-entry)
+  .menu-item-primary:hover:not(:disabled) {
   border-color: var(--color-accent);
+  background: var(--color-surface);
+}
+
+/* Once a start is under way every control of the screen is inert; the pressed one also shows it. */
+.menu-item:disabled {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: progress;
+}
+
+/* Language-neutral and kept out of the accessible name (empty alt text); `aria-busy` tells assistive tech. */
+.menu-item[aria-busy='true'] .menu-item-label::after {
+  content: ' …' / '';
 }
 
 .menu-item-detail {
