@@ -393,8 +393,8 @@ const insetSizes: {
   { width: 800, height: 585, mirrorsOnly: true },
 ];
 
-for (const { slot, keysOpen = false, ...size } of insetSizes) {
-  const mirrorsOnly = slot !== undefined || size.mirrorsOnly === true;
+for (const { slot, mirrorsOnly: bare = false, keysOpen = false, ...size } of insetSizes) {
+  const mirrorsOnly = slot !== undefined || bare;
   const screen = mirrorsOnly ? 'mirror-only drive' : 'drive screen';
   test(`the ${screen} stays inside the safe area at ${size.width}x${size.height}`, async ({
     browser,
