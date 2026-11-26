@@ -426,7 +426,7 @@ test('the role row names the Einweiser entry his way and hides the driver bests'
   await setup.locator('[data-menu="role"] input[value="einweiser"]').click();
   await expect(heading).toHaveText(`1 ${en.guideStraightReverse}`);
   await expect(setup).toContainText(en.guideBriefStraightReverse);
-  await expect(setup.locator('[data-menu="bests"]')).toBeHidden();
+  await expect(setup.locator('[data-menu="bests"]')).toHaveCount(0);
   await expect(view).toContainText(en.einweiserViewNoTop);
 
   await setup.locator('[data-menu="role"] input[value="driver"]').click();

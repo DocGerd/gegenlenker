@@ -105,43 +105,47 @@ export function setupScreen(ctx: SetupContext): {
   const exercise = ctx.entry.kind === 'exercise' ? exerciseById(ctx.entry.id) : null;
   const bests = element('div', 'menu-bests');
   bests.dataset['menu'] = 'bests';
-  if (exercise !== null) info.append(toleranceLine(exercise), bests);
+  if (exercise !== null) info.append(toleranceLine(exercise));
 
   const stepId = entry.steps[ctx.step];
   if (stepId === undefined) throw new Error(`${entryKey(ctx.entry)} has no setup step ${ctx.step}`);
   const fields = SETUP_STEPS[stepId];
-  const options = element('div', 'menu-setup-options');
-  if (offered.length > 1) {
-    options.append(
-      choiceRow(ROLE_ROW, role, (value) => {
-        role = offered.find((r) => r === value) ?? role;
-        paint();
-      }),
-    );
-  }
   const optionRow = (id: OptionId): HTMLFieldSetElement =>
     choiceRow(roleField(id, role), optionValue(currentSettings(), id), (value) => {
       if (applyOption(id, value) && exercise !== null && role === 'driver')
         paintBests(bests, exercise);
     });
   let rows = fields.map(optionRow);
-  options.append(...rows, element('p', 'menu-note', t('estimateNote')));
 
-  /** Heading, brief, bests and field names follow the role; an Einweiser keeps no bests (owner). */
-  function paint(): void {
+  /** Heading, brief and bests follow the role; an Einweiser keeps no bests (owner). */
+  const paint = (): void => {
     const shown: EntryRef = { ...ctx.entry, role };
     frame.heading.textContent = entryHeading(shown);
     brief.textContent = t(entryOf(shown).brief);
-    bests.hidden = role === 'einweiser';
-    if (exercise !== null && role === 'driver') paintBests(bests, exercise);
-    const next = fields.map(optionRow);
-    rows.forEach((row, i) => {
-      const fresh = next[i];
-      if (fresh !== undefined) row.replaceWith(fresh);
-    });
-    rows = next;
-  }
+    if (exercise !== null && role === 'driver') {
+      info.append(bests);
+      paintBests(bests, exercise);
+    } else bests.remove();
+  };
   paint();
+
+  const options = element('div', 'menu-setup-options');
+  if (offered.length > 1) {
+    options.append(
+      choiceRow(ROLE_ROW, role, (value) => {
+        role = offered.find((r) => r === value) ?? role;
+        paint();
+        // the rows name some fields the role's way
+        const next = fields.map(optionRow);
+        rows.forEach((row, i) => {
+          const fresh = next[i];
+          if (fresh !== undefined) row.replaceWith(fresh);
+        });
+        rows = next;
+      }),
+    );
+  }
+  options.append(...rows, element('p', 'menu-note', t('estimateNote')));
 
   const last = ctx.step + 1 >= entry.steps.length;
   // Only the last step starts; a `next` label joins the catalogue with a second step.

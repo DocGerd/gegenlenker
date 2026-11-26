@@ -111,13 +111,10 @@ test('the pause sheet lists the look settings for the Einweiser only, and they a
   });
 });
 
-test('the driver pause sheet and the Settings screen list no Einweiser options without the preview', async ({
-  page,
-}) => {
+test('the Settings screen lists the Einweiser options on a desktop', async ({ page }) => {
   await seedStorage(page, { settings: { graphics: 'low' } });
   await page.goto('./');
   await page.getByRole('button', { name: en.settings }).click();
-  await expect(page.getByRole('heading', { name: en.settingsGraphics })).toBeVisible();
-  await expect(page.getByRole('radiogroup', { name: en.fov, exact: true })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: en.settingsEinweiser })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: en.settingsEinweiser })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: en.fov, exact: true })).toBeVisible();
 });
