@@ -40,7 +40,7 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | cab.glassSill | 900 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.glassHeight | 756 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.sideGlassSetback | 176 mm | typical for the vehicle class, no source found |
-| MAN LE 18.280 | cab.sideGlassLength | 924 mm | rear edge 1.10 m behind the cab front, scaled from a side-view drawing of the LE compact cab (https://getoutlines.com/blueprints/car/man/man-le-4x2-8ton.gif) at its 1536 mm length, or 1.22 m measured from the front axle, 0.1 m behind the glass in the drawing; front edge at the A-pillar setback; no manufacturer source found |
+| MAN LE 18.280 | cab.sideGlassLength | 924 mm | rear edge 1.10 m behind the cab front, scaled from a side-view drawing of the LE compact cab (https://getoutlines.com/blueprints/car/man/man-le-4x2-8ton.gif) at its 1536 mm length (https://man.lauerbach.de/wiki/view.do?page=Geschichte); the front axle in the drawing is 0.1 m behind the glass, so measured from the axle it would be 1.22 m; front edge at the A-pillar setback; no manufacturer source found |
 | MAN LE 18.280 | cab.grilleWidth | 1245 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.grilleSill | 144 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | cab.grilleHeight | 540 mm | typical for the vehicle class, no source found |
