@@ -69,10 +69,10 @@ When a change intentionally alters a promise, edit the property in the spec in t
 
 ## Coverage record
 
-Sync commit: `c20e558`, the last commit that touched the covered files when this verification was last synced. A skill cannot hold its own SHA, so staleness is measured against the covered files:
+Sync commit: `3fdb921`, the last commit that touched the covered files when this verification was last synced. A skill cannot hold its own SHA, so staleness is measured against the covered files:
 
 ```
-git log --oneline c20e558..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
+git log --oneline 3fdb921..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
 ```
 
 With the code at the sync commit and the spec synced to it, the check exits 0: every counterexample is a known finding, filed as an issue and listed in `KNOWN_FINDINGS`.
