@@ -2292,6 +2292,10 @@ async function expectEinweiserHudClear(page: Page, size: Size, messages: Message
   const [band] = await boxes(page.locator('.hud-band'));
   const [cockpit] = await boxes(page.locator('.hud-cockpit'));
   if (band === undefined || cockpit === undefined) throw new Error('no band or view');
+  // the longest name, which wraps at its soft hyphen in German
+  await page.locator('[data-hud="signName"]').evaluate((el, text) => {
+    el.textContent = text;
+  }, messages.signAbstand);
   const inBand = await boxes(page.locator('.hud-sign, .hud-sign-name'));
   expect(inBand).toHaveLength(10);
   for (const b of inBand) {
