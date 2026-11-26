@@ -5,19 +5,24 @@
 import type { EinweiserFault, SignId } from '../contracts/einweiser';
 import type { ExerciseDefinition, ExerciseId, TargetZone } from '../contracts/exercise';
 import type { Obstacle, Rect2 } from '../contracts/layout';
-import type { ContactQuery, Pose2, SimSnapshot, StartState, Vec2 } from '../contracts/sim';
+import type {
+  ContactQuery,
+  ControlVector,
+  Pose2,
+  SimSnapshot,
+  StartState,
+  Vec2,
+} from '../contracts/sim';
 import type { TrailerId, TruckId, VehicleParams } from '../contracts/vehicle';
 import { BARRIER_X, LANE } from '../content/exercises/slalom';
 import { exerciseById } from '../content/registry';
 import { resolveRun } from '../content/run';
 import { wrapAngle } from '../sim/angle';
-import { DT } from '../sim/constants';
+import { ACCEL, BRAKE_DECEL, DECEL, DT, V_MAX } from '../sim/constants';
 import { createContactQuery } from '../sim/collision';
 import { bodyFootprints } from '../sim/geometry';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById, trailers, trucks } from '../vehicles/registry';
-import type { ControlVector } from '../contracts/sim';
-import { ACCEL, BRAKE_DECEL, DECEL, V_MAX } from '../sim/constants';
 import {
   couplingAngle,
   joints,
@@ -274,11 +279,12 @@ const RESCUE_CLEARANCE = 0.3;
 /** The fresh reverse joins the leg no later than this far (m) from its end on its final straight, on arcs of this radius (m). */
 const RESCUE_FINAL = 16;
 const RESCUE_RADIUS = 18;
-/** Longer pull-forwards tried in this step (m); the way back may turn no arc past this (rad). */
+/** Longer pull-forwards tried in this step (m). */
 const RESCUE_STEP = 3;
 /** The way back may rejoin the leg up to this far (m) before the latest join, tried in this step (m). */
 const RESCUE_REJOIN = 30;
 const RESCUE_REJOIN_STEP = 2;
+/** The way back may turn no arc past this (rad). */
 const RESCUE_TURN = (100 * Math.PI) / 180;
 
 /** The curvature the reversing rear should run at to close on `path` at index `j`. */
@@ -1293,10 +1299,9 @@ const SLALOM_VIA = Array.from({ length: 24 }, (_, i) => {
 });
 
 /**
- * How the Einweiser picks signs, per exercise (PR #515): the rollout search scored on the body
- * heading, the search scored on the leading end's own direction of motion, or (reverse legs) the
- * tracking LQR. The rear's motion heading cost reverse-corner a case; the LQR did worse on reverse-bay
- * and slalom.
+ * How the Einweiser picks signs, per exercise (why each: PR #515): the rollout search scored on the
+ * body heading, the search scored on the leading end's own direction of motion, or (reverse legs) the
+ * tracking LQR.
  */
 type SignPolicy = 'search' | 'leadSearch' | 'lqr';
 const POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
@@ -1306,7 +1311,7 @@ const POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
 };
 /** How far (s) the search looks ahead. */
 const SEARCH_HORIZON = 12;
-/** A longer look on the slalom's reverse weave damps its swing with the long trailer (PR #515). */
+/** A longer look on the reverse legs, per exercise (PR #515). */
 const REVERSE_HORIZON: Partial<Record<ExerciseId, number>> = { slalom: 15 };
 
 /** Room to pull forward along the target axis (m) before reversing onto it again. */
@@ -1361,7 +1366,7 @@ const LEGS: Partial<Record<ExerciseId, (setup: Setup) => Leg[]>> = {
       params.trailerWheelbase +
       params.trailerRearOverhang;
     const forward = straight({ x: target.x, y: target.y + over - reach }, -Math.PI / 2, over);
-    const legs: Leg[] = [
+    return [
       {
         gear: 'R',
         path: reverse,
@@ -1372,9 +1377,7 @@ const LEGS: Partial<Record<ExerciseId, (setup: Setup) => Leg[]>> = {
           beside(reverse, i, 7, 3.2, false),
         ],
       },
-    ];
-    {
-      legs.push({
+      {
         gear: 'D',
         path: forward,
         anchors: (i) => [
@@ -1382,9 +1385,8 @@ const LEGS: Partial<Record<ExerciseId, (setup: Setup) => Leg[]>> = {
           beside(forward, i, 8, 3),
           beside(forward, i, 8, -3),
         ],
-      });
-    }
-    return legs;
+      },
+    ];
   },
   'reverse-bay': ({ params, start }) => {
     const target = exerciseById('reverse-bay').target.pose;

@@ -90,12 +90,12 @@ describe.each(pairs)('signs for $truck.id with $trailer.id', ({ truck, trailer }
     place: (s: SimSnapshot) => Pose2,
     lead: 'rear' | 'front',
   ) => {
-    let from: { x: number; travelled: number } | null = null;
+    let from: { x: number } | null = null;
     const { s, steps } = signal(
       truck,
       trailer,
       (now, step) => {
-        if (from === null && creeping(now) && step > 60) from = { x: now.truck.x, travelled: 0 };
+        if (from === null && creeping(now) && step > 60) from = { x: now.truck.x };
         return { sign: from === null ? 'herkommen' : sign, pose: place(now) };
       },
       (now) => from !== null && Math.abs(now.truck.x - from.x) > (lead === 'rear' ? 8 : 4),
