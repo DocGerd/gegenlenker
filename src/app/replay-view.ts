@@ -14,6 +14,8 @@ import { isDefaultView } from '../input/top-down-view';
 import { formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { computeViewports } from '../render/viewports';
+import { layoutOccluders, sightGeometry } from '../einweiser/sight';
+import { createEinweiserReplay } from '../scoring/einweiser';
 import { createEventScanner, runStartStep, type ReplayEventKind } from '../scoring/replay-events';
 import { createRunTracker, runSeconds, type RunTracker } from '../scoring/score';
 import { DT } from '../sim/constants';
@@ -100,7 +102,20 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     return (snapshot) => tracker?.update(snapshot);
   });
   // One pass over the log finds the marked moments; it runs across frames after the first paint.
-  const scanner = createEventScanner(exercise);
+  const scanner = createEventScanner(
+    exercise,
+    log.einweiser === undefined
+      ? null
+      : createEinweiserReplay(
+          {
+            g: sightGeometry(truckById(log.truckId), trailerById(log.trailerId)),
+            occluders: layoutOccluders(layout),
+            contacts,
+          },
+          log.einweiser,
+          makeSim().snapshot(),
+        ),
+  );
   let scan: ReplayCursor | null = createReplayCursor(
     log,
     makeSim,
