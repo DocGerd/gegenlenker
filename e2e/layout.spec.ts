@@ -489,12 +489,12 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
   });
 }
 
-test('the goal cue yields to the toast in a mirror-only drive too narrow for both, at 801x585', async ({
+test('the goal cue yields to the toast in a mirror-only drive too narrow for both, at 620x640', async ({
   browser,
 }) => {
   const context = await browser.newContext({
     locale: 'en-US',
-    viewport: { width: 801, height: 585 },
+    viewport: { width: 620, height: 640 },
   });
   try {
     const page = await context.newPage();
