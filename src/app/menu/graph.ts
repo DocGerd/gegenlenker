@@ -66,6 +66,7 @@ export const GRAPH: readonly Screen[] = [
         target: { screen: 'whatsNew' },
         badgeWhen: 'hasNews',
       },
+      { id: 'about', label: 'about', tier: 'secondary', target: { screen: 'about' } },
     ],
     lazy: false,
     focus: ['continue', 'exercises'],
@@ -100,6 +101,7 @@ export const GRAPH: readonly Screen[] = [
   },
   { id: 'controls', kind: 'content', title: 'controls', items: [], lazy: true },
   { id: 'whatsNew', kind: 'content', title: 'whatsNew', items: [], lazy: true },
+  { id: 'about', kind: 'content', title: 'about', items: [], lazy: true },
 ];
 
 export function screenOf(id: ScreenId): Screen {

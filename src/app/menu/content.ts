@@ -6,4 +6,5 @@ export type ContentModule = { readonly render: (body: HTMLElement) => void };
 export const CONTENT: Readonly<Partial<Record<ScreenId, () => Promise<ContentModule>>>> = {
   controls: () => import('./screens/controls'),
   whatsNew: () => import('../whats-new'),
+  about: () => import('./screens/about'),
 };

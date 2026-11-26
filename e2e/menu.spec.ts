@@ -58,6 +58,7 @@ for (const { locale, messages } of [
     await expect(titleEntry(page, messages.replayLastRun)).toBeVisible();
     await expect(titleEntry(page, messages.controls)).toBeVisible();
     await expect(titleEntry(page, messages.whatsNew)).toBeVisible();
+    await expect(titleEntry(page, messages.about)).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
 
     const [over, reserve] = await page.evaluate(() => {
@@ -185,8 +186,8 @@ test('arrow keys, Home and End move within the title and the list and stop at th
   page,
 }) => {
   await page.goto('./');
-  const entries = [en.exercises, en.freeYard, en.settings, en.controls, en.whatsNew].map((name) =>
-    titleEntry(page, name),
+  const entries = [en.exercises, en.freeYard, en.settings, en.controls, en.whatsNew, en.about].map(
+    (name) => titleEntry(page, name),
   );
   const [first] = entries;
   const last = entries.at(-1);
