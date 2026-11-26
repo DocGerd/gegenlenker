@@ -1008,7 +1008,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         c.brake !== lastControl.brake ||
         c.gear !== lastControl.gear);
     lastControl = c;
-    if (shortScreen && (keysOpen || aidOpen) && changed) {
+    // his snapshot's control is the AI driver's, not an input of his
+    if (driver && shortScreen && (keysOpen || aidOpen) && changed) {
       keysOpen = false;
       aidOpen = false;
       syncToggles();
