@@ -370,6 +370,15 @@ test(
       }
     }
     await page.keyboard.press('w');
+    await page.keyboard.press('2');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(sheet(page)).toBeHidden();
+    // A few frames of the resumed sim would apply any key that reached the run.
+    await page.evaluate(async () => {
+      for (let i = 0; i < 5; i++) await new Promise((r) => requestAnimationFrame(r));
+    });
+    await expect(gear(page)).toHaveText('P');
     await expect(speed(page)).toHaveText('0.0 km/h');
   },
 );
@@ -378,7 +387,9 @@ test('the theme changes at once from the pause sheet', heavyAt('low'), async ({ 
   await pauseWith(page, { graphics: 'low', theme: 'light' });
   await expect(page.locator('html[data-theme="light"]')).toHaveCount(1);
   await openSettings(page);
-  await choice(page, en.theme, en.themeDark).check();
+  // Pointer users hit the label, not the small radio.
+  await sheet(page).getByText(en.themeDark, { exact: true }).click();
+  await expect(choice(page, en.theme, en.themeDark)).toBeChecked();
   await expect(page.locator('html[data-theme="dark"]')).toHaveCount(1);
 });
 
@@ -390,7 +401,11 @@ test(
     const chase = page.locator('[data-view="chase"]');
     await expect(chase).toHaveCount(1);
     await openSettings(page);
-    await choice(page, en.graphics, en.graphicsLow).check();
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(choice(page, en.graphics, en.graphicsBalanced)).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(choice(page, en.graphics, en.graphicsLow)).toBeChecked();
     await expect(sheet(page).getByText(en.appliesNextStart)).toBeVisible();
     await expect(chase).toHaveCount(1);
 
