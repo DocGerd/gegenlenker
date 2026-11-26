@@ -79,7 +79,6 @@ type Box = {
 
 /** The smallest supported CSS viewport height (`docs/usage.md`): a 1080p laptop at 150 % scaling. */
 const MIN_HEIGHT = 585;
-// The landscape boxes below start at 800 CSS px wide, the smallest supported landscape width (`docs/usage.md`).
 
 /**
  * Default: each box is exhaustive, the boxes are not contiguous. Laptops incl. the short ones in
@@ -98,6 +97,7 @@ const DEFAULT_BOXES: readonly Box[] = [
 /** `VERIFY_LAYOUT=full`: one contiguous box over the laptops and desktops, and one each for tablets in landscape and portrait. */
 const FULL_BOXES: readonly Box[] = [
   { name: 'laptop and desktop', w: [1024, 2560], h: [MIN_HEIGHT, 1440] },
+  // From the smallest supported landscape width (`docs/usage.md`).
   { name: 'tablet landscape', w: [800, 1023], h: [MIN_HEIGHT, 1000] },
   { name: 'tablet portrait', w: [600, 1280], h: [800, 1600] },
 ];
