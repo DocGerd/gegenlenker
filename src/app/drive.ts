@@ -29,10 +29,10 @@ import { arrowClearRect, clearRect, targetArrow } from '../render/follow-framing
 import { mountPerfOverlay, perfRequested } from '../render/perf-overlay';
 import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
-import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
+import { createRunTracker } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
 import { bodyFootprints } from '../sim/geometry';
-import { CONTACT_WARN_DISTANCE, DT } from '../sim/constants';
+import { CONTACT_WARN_DISTANCE } from '../sim/constants';
 import { NO_PREDICTION, predictCombination, warnAhead, type Ahead } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
@@ -40,6 +40,7 @@ import { measureChrome, measureDivider } from './chrome';
 import { startEinweiserDrive } from './einweiser-drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
 import { pauseFields } from './menu/options';
+import { createRunStepper } from './run-stepper';
 import { showPauseSheet, type PauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
@@ -102,11 +103,6 @@ export function startDrive(
   const recorder = createInputRecorder();
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
-  let reached = false;
-  let runOver = false;
-  // Sticky over aid toggles; only sim steps after the first driving input with an aid on count.
-  let assisted = false;
-  let startTime: number | null = null;
 
   const stage = document.createElement('div');
   stage.className = 'drive';
@@ -118,6 +114,8 @@ export function startDrive(
     role === 'einweiser' && trailer !== null
       ? startEinweiserDrive(stage, { truck, trailer, layout, contacts, start: snapshot, lighting })
       : null;
+
+  const stepper = createRunStepper(sim, recorder, tracker, einweiser);
 
   const cleanups: (() => void)[] = [];
   let disposed = false;
@@ -145,23 +143,12 @@ export function startDrive(
     );
     const driven =
       scored && exercise !== null
-        ? runResult(
-            snapshot,
-            exercise,
-            run.truckId,
-            run.trailerId,
-            reached,
-            tracker?.waypointVisited() ?? true,
-            assisted,
-            startTime ?? snapshot.time,
-            lighting,
-            mirrorsOnly,
-          )
+        ? stepper.result(exercise, run.truckId, run.trailerId, lighting, mirrorsOnly)
         : null;
     const result =
       driven === null || einweiser === null ? driven : { ...driven, einweiser: einweiser.result() };
     dispose();
-    onExit({ log, result, runOver });
+    onExit({ log, result, runOver: stepper.runOver() });
   };
   const finish = (): void => exit(true);
   const restart = (): void => {
@@ -546,33 +533,14 @@ export function startDrive(
     },
     halted: halt,
     frame(seconds) {
-      if (reached || runOver) {
+      if (stepper.over()) {
         finish();
         return;
       }
       viewInput.step(seconds);
       const clock = sheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
-      for (let i = 0; i < clock.steps; i++) {
-        source.tick(DT, snapshot);
-        const control = source.control();
-        recorder.record(snapshot.step, control);
-        if (startTime === null && isDrivingInput(control)) startTime = snapshot.time;
-        if (startTime !== null && anyAid(aids, trailer === null)) assisted = true;
-        snapshot = sim.step(control);
-        if (einweiser !== null) {
-          einweiser.settle(snapshot);
-          // the hit ends the run, reached or not; the next frame exits
-          runOver = einweiser.runOver();
-          if (runOver) break;
-        }
-        if (tracker !== null) {
-          // an Einweiser run ends only on a stop in the target after a recognised Halt
-          reached = tracker.update(snapshot) && (einweiser?.halted() ?? true);
-          // render this final snapshot first; the next frame exits, so the HUD's last time is the result time
-          if (reached) break;
-        }
-      }
+      snapshot = stepper.advance(clock.steps, source, anyAid(aids, trailer === null));
       if (clock.steps === 0 && !dirty) {
         renderer.skipFrame();
         return;
@@ -606,6 +574,7 @@ export function startDrive(
       }
       hud.update(snapshot, warning);
       if (einweiser !== null) hud.setEinweiser(einweiser.hud());
+      const startTime = stepper.startTime();
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goalCue(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
