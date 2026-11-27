@@ -311,8 +311,8 @@ const LEGEND_BOXES = {
   overlay: { width: 97, height: 42 },
   driveOnly: { width: 282, height: 126 },
   compact: { width: 159, height: 194 },
-  full: { width: 315, height: 286 },
-  mirrorsFull: { width: 303, height: 190 },
+  full: { width: 329, height: 286 },
+  mirrorsFull: { width: 317, height: 190 },
 };
 /** The Einweiser's (hud.ts never makes his compact): the walk, look and sign rows, in two columns. */
 const EINWEISER_LEGEND_BOXES = {

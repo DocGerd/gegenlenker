@@ -1,5 +1,6 @@
 import { t } from '../../../i18n/i18n';
 import { ABOUT_CREDITS } from '../../about-credits';
+import { assetAuthors, assetKindLabel } from '../../about-credit-text';
 import type { AssetCredit, LicenceText, ThirdParty } from '../../about-credits-types';
 import { buildLabel } from '../../build-info';
 import { element } from './frame';
@@ -41,13 +42,15 @@ function thirdPartyItem(entry: ThirdParty): HTMLLIElement {
   return item;
 }
 
-function assetItem({ title, licence, authors, page }: AssetCredit): HTMLLIElement {
+function assetItem(credit: AssetCredit): HTMLLIElement {
   const item = element('li', 'about-entry');
   item.dataset['about'] = 'asset';
-  item.lang = 'en';
   const heading = element('p', 'about-asset-title');
-  heading.append(externalLink(page, title.replaceAll('`', '')));
-  item.append(heading, element('p', 'about-meta', `${licence} · ${authors}`));
+  heading.append(externalLink(credit.page, `${assetKindLabel(credit.kind, t)}: ${credit.asset}`));
+  item.append(
+    heading,
+    element('p', 'about-meta', `${credit.licence} · ${assetAuthors(credit, t)}`),
+  );
   return item;
 }
 
