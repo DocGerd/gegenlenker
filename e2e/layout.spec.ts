@@ -21,7 +21,7 @@ import {
 
 type Size = { width: number; height: number };
 
-/** Frames stepped after the HUD is laid out, for the elements a frame places (the target arrow). */
+/** Frames stepped after the HUD is laid out, for the elements a frame places. */
 const FROZEN_FRAMES = 6;
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
@@ -870,7 +870,10 @@ async function overlayTrouble(page: Page, sel: string): Promise<string[]> {
 /** Pages whose clock is paused (`startFrozenReverse`): their animation frames only run when stepped. */
 const frozenPages = new WeakSet<Page>();
 
-/** Two animation frames: the legend's resize observer re-lays out after the first one. */
+/**
+ * Free-running page: two real animation frames, since the legend's resize observer re-lays out after
+ * the first. Paused page: layout is already synchronous, so two stepped frames only flush the clock.
+ */
 const settled = (page: Page) =>
   frozenPages.has(page)
     ? page.clock.runFor(2 * FRAME_MS)
@@ -1746,16 +1749,19 @@ test('the class IV mirrors hang from the class II arms at 1920x1080', async ({ b
   }
 });
 
-/** Sizes where the front mirror is shown and where it is not: the toast column is too narrow or too short there. */
+/**
+ * Sizes where the front mirror is shown and where it is not. Without one, `inPane` rows are portrait
+ * sizes where the toast column falls to the top-down pane (`messageColumn`).
+ */
 const frontShown = [
-  { width: 1280, height: 800, front: 1 },
-  { width: 1366, height: 768, front: 1 },
-  { width: 768, height: 1024, front: 1 },
-  { width: 800, height: 585, front: 0 },
-  { width: 1024, height: 600, front: 0 },
+  { width: 1280, height: 800, front: 1, inPane: false },
+  { width: 1366, height: 768, front: 1, inPane: false },
+  { width: 768, height: 1024, front: 1, inPane: false },
+  { width: 600, height: 640, front: 0, inPane: true },
+  { width: 768, height: 800, front: 0, inPane: true },
 ];
 
-for (const { width, height, front } of frontShown) {
+for (const { width, height, front, inPane } of frontShown) {
   test(`the longest German toast fits and clears the controls and the mirrors at ${width}x${height}`, async ({
     browser,
   }) => {
@@ -1764,6 +1770,15 @@ for (const { width, height, front } of frontShown) {
       const page = await context.newPage();
       await startFrozenReverse(page, de);
       await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(front);
+      if (inPane) {
+        const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
+        const [pane] = await boxes(page.locator('.hud-topdown'));
+        if (!wrap || !pane) throw new Error('no toast column or pane');
+        expect(wrap.left, 'toast column inside the pane').toBeGreaterThanOrEqual(pane.left);
+        expect(wrap.right).toBeLessThanOrEqual(pane.right);
+        expect(wrap.top).toBeGreaterThanOrEqual(pane.top);
+        expect(wrap.bottom).toBeLessThanOrEqual(pane.bottom);
+      }
       await expectMessagesClear(page, de.blockedTurntable, de.goalInside);
     } finally {
       await context.close();
