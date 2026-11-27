@@ -303,7 +303,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
 
   const frame: Frame = {
     snapshot: cursor.snapshot(),
-    views: computeViewports(1, 1, 'replay'),
+    views: computeViewports(1, 1, { mode: 'replay' }),
     topDown,
     aids: AIDS,
     predicted: NO_PREDICTION,
@@ -333,7 +333,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
 
   view.start({
     resized(width, height) {
-      frame.views = computeViewports(width, height, 'replay');
+      frame.views = computeViewports(width, height, { mode: 'replay' });
       viewInput.relayout();
       dirty = true;
     },

@@ -109,7 +109,7 @@ mountPerfOverlay(stage, () => renderer.stats());
 const frame = (now: number): void => {
   const renderFrame: RenderFrame = {
     snapshot: snapshotAt(fixedTime ?? now / 1000, params),
-    views: computeViewports(width, height, mode),
+    views: computeViewports(width, height, { mode }),
     topDown: 'follow',
     aids: { pivots: false, path: false, tracks: false, ghost: false },
     predicted: NO_PREDICTION,

@@ -207,6 +207,25 @@ function paneLever(insets: Insets): number {
   return 1.5 * tokenPx('--size-target', 44) + INSET + insets.right + MESSAGE_GAP;
 }
 
+/** The inputs of `topDownSplit`. */
+export interface SplitOptions {
+  /** The stored share (default `DEFAULT_TOP_DOWN_LAYOUT`). */
+  readonly layout?: TopDownLayout | undefined;
+  /** The measured key legend. */
+  readonly legend?: LegendBox | null | undefined;
+  /** The safe-area insets (default: read from the CSS tokens). */
+  readonly insets?: Insets | undefined;
+  /** The measured panel stack above the divider. */
+  readonly panels?: PanelStack | null | undefined;
+}
+
+/** The inputs of `computeViewports`; `mode` is required. */
+export interface ViewportOptions extends SplitOptions {
+  readonly mode: ViewMode | 'mirrors';
+  readonly extra?: ExtraMirrors | undefined;
+  readonly role?: Role | undefined;
+}
+
 /**
  * The top-down share in use. It may not take the cockpit below what its controls need: in landscape
  * the wheel, gears and compact legend side by side, in portrait the controls plus the smallest
@@ -218,10 +237,12 @@ function paneLever(insets: Insets): number {
 export function topDownSplit(
   cssWidth: number,
   cssHeight: number,
-  layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
-  legend: LegendBox | null = null,
-  safeInsets?: Insets,
-  panels: PanelStack | null = null,
+  {
+    layout = DEFAULT_TOP_DOWN_LAYOUT,
+    legend = null,
+    insets: safeInsets,
+    panels = null,
+  }: SplitOptions = {},
 ): TopDownSplit {
   const insets = safeInsets ?? readSafeInsets();
   const orientation = orientationOf(cssWidth, cssHeight);
@@ -274,14 +295,17 @@ export const hasTopDown = (views: ViewRects): boolean =>
 export function computeViewports(
   cssWidth: number,
   cssHeight: number,
-  mode: ViewMode | 'mirrors',
-  legend: LegendBox | null = null,
-  safeInsets?: Insets,
-  layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
-  panels: PanelStack | null = null,
-  extra: ExtraMirrors = NO_EXTRA_MIRRORS,
-  role: Role = 'driver',
+  options: ViewportOptions,
 ): ViewRects {
+  const {
+    mode,
+    legend = null,
+    insets: safeInsets,
+    layout = DEFAULT_TOP_DOWN_LAYOUT,
+    panels = null,
+    extra = NO_EXTRA_MIRRORS,
+    role = 'driver',
+  } = options;
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
     return {
@@ -299,7 +323,7 @@ export function computeViewports(
   const mirrorsOnly = mode === 'mirrors';
   const { share, min } = mirrorsOnly
     ? { share: 0, min: 0 }
-    : topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
+    : topDownSplit(cssWidth, cssHeight, { layout, legend, insets, panels });
   let topDown: Rect;
   let cockpit: Rect;
   /** Portrait, how many px the cockpit's top can still rise as the share shrinks to its minimum. */

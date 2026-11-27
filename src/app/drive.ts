@@ -258,17 +258,11 @@ export function startDrive(
   let warning: Ahead = null;
   const frame: Frame = {
     snapshot,
-    views: computeViewports(
-      1,
-      1,
-      driveMode,
-      null,
-      undefined,
-      undefined,
-      null,
-      extraMirrors(graphics, wideMirrors),
+    views: computeViewports(1, 1, {
+      mode: driveMode,
+      extra: extraMirrors(graphics, wideMirrors),
       role,
-    ),
+    }),
     topDown,
     aids,
     predicted: NO_PREDICTION,
@@ -416,35 +410,28 @@ export function startDrive(
       return bottom;
     };
     const extra = extraMirrors(graphics, wideMirrors);
-    let views = computeViewports(
-      width,
-      height,
-      driveMode,
-      null,
-      undefined,
-      topDownLayout,
+    let views = computeViewports(width, height, {
+      mode: driveMode,
+      layout: topDownLayout,
       panels,
       extra,
       role,
-    );
+    });
     hud.layout(views);
     const legend = hud.legendBox();
     if (legend !== null) {
-      views = computeViewports(
-        width,
-        height,
-        driveMode,
+      views = computeViewports(width, height, {
+        mode: driveMode,
         legend,
-        undefined,
-        topDownLayout,
+        layout: topDownLayout,
         panels,
         extra,
         role,
-      );
+      });
       hud.layout(views);
     }
     if (!mirrorsOnly) {
-      hud.setSplit(topDownSplit(width, height, topDownLayout, legend, undefined, panels));
+      hud.setSplit(topDownSplit(width, height, { layout: topDownLayout, legend, panels }));
     }
     frame.views = views;
     viewInput.relayout();

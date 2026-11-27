@@ -152,10 +152,15 @@ async function expectedViews(
     const stage = hud.getBoundingClientRect();
     return { right: r.right - stage.left, height: stage.bottom - r.top };
   });
-  return computeViewports(size.width, size.height, mode, legend, insets, undefined, null, {
-    front: QUALITY_FLAGS.balanced.frontMirror,
-    wide: QUALITY_FLAGS.balanced.wideMirrors && wide,
-    close: QUALITY_FLAGS.balanced.closeMirror,
+  return computeViewports(size.width, size.height, {
+    mode,
+    legend,
+    insets,
+    extra: {
+      front: QUALITY_FLAGS.balanced.frontMirror,
+      wide: QUALITY_FLAGS.balanced.wideMirrors && wide,
+      close: QUALITY_FLAGS.balanced.closeMirror,
+    },
   });
 }
 
@@ -2351,17 +2356,11 @@ async function expectEinweiserHudClear(page: Page, size: Size, messages: Message
   const sight = page.locator('[data-hud="sight"]');
   const [cue] = await boxes(sight);
   if (cue === undefined) throw new Error('no sight cue');
-  const views = computeViewports(
-    size.width,
-    size.height,
-    (await page.locator('.hud[data-mirrors]').count()) > 0 ? 'mirrors' : 'drive',
-    null,
-    NO_INSETS,
-    undefined,
-    null,
-    undefined,
-    'einweiser',
-  );
+  const views = computeViewports(size.width, size.height, {
+    mode: (await page.locator('.hud[data-mirrors]').count()) > 0 ? 'mirrors' : 'drive',
+    insets: NO_INSETS,
+    role: 'einweiser',
+  });
   if (views.cockpit === null) throw new Error('no view');
   const model = sightCueBox(views.cockpit, NO_INSETS);
   expect(cue.bottom - cue.top, 'the sight cue is taller than modelled').toBeLessThanOrEqual(
