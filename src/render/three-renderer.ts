@@ -54,7 +54,7 @@ import {
   MIRRORS,
 } from './mirror';
 import { readScenePalette } from './palette';
-import { lookFor } from './look';
+import { lookFor, type Look } from './look';
 import { QUALITY_FLAGS } from './quality';
 import { hasTopDown } from './viewports';
 import {
@@ -79,7 +79,26 @@ const MAX_LEAD_STEP_SECONDS = 0.25;
 const YARD_MARGIN = 5;
 const SKY_HEIGHT = 200;
 
+/** One scene part: `object` joins `parent` (default the scene); look and teardown follow the list. */
+type Part = {
+  readonly object: Object3D;
+  readonly parent?: Object3D;
+  /** Survives a rebuild: its owner carries it into the next `Built`. */
+  readonly keepOnRebuild?: boolean;
+  setLook(look: Look): void;
+  dispose(): void;
+};
+
+/** Wraps a part to place it, without copying its methods off their owner. */
+const placed = (part: Part, how: Pick<Part, 'parent' | 'keepOnRebuild'>): Part => ({
+  object: part.object,
+  setLook: (look) => part.setLook(look),
+  dispose: () => part.dispose(),
+  ...how,
+});
+
 type Built = {
+  readonly parts: readonly Part[];
   readonly layout: ResolvedLayout;
   readonly truckSpec: TruckSpec;
   readonly trailerSpec: TrailerSpec;
@@ -152,6 +171,15 @@ function drawViewModel(gl: WebGPURenderer, scene: Scene, arms: EinweiserArms): v
     gl.autoClearStencil = autoClearStencil;
   }
 }
+
+/** What one frame's passes share. */
+type Pass = {
+  readonly gl: WebGPURenderer;
+  readonly out: Frame;
+  readonly b: Built;
+  readonly frame: RenderFrame;
+  readonly pixelRatio: number;
+};
 
 /** `rect` in the pane's own px. */
 function relativeTo(pane: Rect, rect: Rect): Rect {
@@ -343,26 +371,16 @@ export function createThreeSceneRenderer(
 
   function applyLookTo(b: Built): void {
     const look = lookFor(quality, lighting);
-    b.environment.setLook(look);
-    b.aids.setLook(look);
-    b.truck.setLook(look);
-    b.trailer.setLook(look);
-    b.interior.setLook(look);
-    b.arms.setLook(look);
-    b.sight.setLook(look);
+    for (const part of b.parts) part.setLook(look);
     for (const { mirror } of mirrors) mirror.invalidate();
   }
 
-  /** `keep` is the aids part, whose track history a rebuild carries over. */
-  function disposeBuilt(keep?: AidsLayer): void {
+  /** `keepRebuildParts` spares parts flagged `keepOnRebuild`: the aids part carries its track history over a rebuild. */
+  function disposeBuilt({ keepRebuildParts = false } = {}): void {
     if (built === null) return;
-    built.truck.dispose();
-    built.trailer.dispose();
-    built.environment.dispose();
-    if (built.aids !== keep) built.aids.dispose();
-    built.interior.dispose();
-    built.arms.dispose();
-    built.sight.dispose();
+    for (const part of built.parts) {
+      if (!(keepRebuildParts && part.keepOnRebuild === true)) part.dispose();
+    }
     built.scene.clear();
     built = null;
   }
@@ -389,16 +407,18 @@ export function createThreeSceneRenderer(
     sight.setFlags(sightFlags);
     const extent = combinationExtent(truck, trailer);
     setAidsLayer(aids.object);
-    scene.add(
-      environment.object,
-      truckVisual.object,
-      trailerVisual.object,
-      aids.object,
-      arms.object,
-      sight.object,
-    );
-    (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
+    const list: readonly Part[] = [
+      environment,
+      truckVisual,
+      trailerVisual,
+      placed(aids, { keepOnRebuild: true }),
+      arms,
+      sight,
+      placed(interior, { parent: interior.frame === 'truck' ? truckVisual.object : scene }),
+    ];
+    for (const part of list) (part.parent ?? scene).add(part.object);
     built = {
+      parts: list,
       layout: nextLayout,
       truckSpec: truck,
       trailerSpec: trailer,
@@ -469,6 +489,163 @@ export function createThreeSceneRenderer(
     );
     topDownCamera.updateMatrixWorld();
     topDownRect = rect;
+  }
+
+  function updateScene({ b, frame }: Pass): void {
+    const { snapshot, views } = frame;
+    b.truck.update(snapshot, frame.lamps);
+    b.trailer.update(snapshot, frame.lamps);
+    shadowPasses = 0;
+    b.environment.update(frame, {
+      ...vehicleCentre(snapshot, b.anchors.frontX),
+      radius: b.radius,
+    });
+    b.aids.update(frame);
+    b.arms.update(views.cockpit === null ? undefined : frame.einweiser);
+    b.sight.update(frame);
+    b.scene.updateMatrixWorld();
+  }
+
+  function captureMirrors({ gl, b, frame, pixelRatio }: Pass): void {
+    const { snapshot, views } = frame;
+    const before = gl.info.render.drawCalls;
+    for (const { mirror, rect } of mirrors) {
+      const r = rect(views);
+      if (r === null) {
+        mirror.invalidate();
+        continue;
+      }
+      const { spec } = mirror;
+      const facing = mirrorFacing(
+        snapshot.truck,
+        mirrorAnchor(spec, b.mounts),
+        mirrorYaw(spec, b.truckId),
+        mirrorPosition,
+      );
+      mirror.place(mirrorPosition, facing);
+      mirror.capture(
+        gl,
+        b.scene,
+        r.width * pixelRatio,
+        r.height * pixelRatio,
+        b.palette.sky,
+        frameIndex,
+      );
+    }
+    mirrorCalls = gl.info.render.drawCalls - before;
+    frameIndex++;
+  }
+
+  // The panes tile the canvas, so on WebGL 2 each clears its own rect as part of its pass: a clear
+  // of its own would resolve the whole multisample target once more, and the scissor keeps it to
+  // the pane. WebGPU turns an in-pass clear into a load op that ignores the scissor and would wipe
+  // the panes drawn before, so there one clear takes the whole target. The sky dome covers each
+  // perspective pane.
+  function clearTarget({ gl, out, b }: Pass): void {
+    gl.setRenderTarget(out.target);
+    gl.setClearColor(lighting === 'night' ? b.palette.nightBackdrop : b.palette.backdrop);
+    if (scissoredClear(backend)) {
+      gl.autoClear = true;
+    } else {
+      out.target.scissorTest = false;
+      gl.clear();
+    }
+  }
+
+  /** In the Einweiser role the cockpit rect is his first-person view: his eye stands outside the cab. */
+  function drawCockpit({ gl, out, b, frame, pixelRatio }: Pass): void {
+    const { cockpit, mirrorLeft, mirrorRight } = frame.views;
+    if (cockpit === null) return;
+    if (frame.einweiser !== undefined) {
+      placeEinweiserCamera(einweiserCamera, frame.einweiser, cockpit, frame.fov);
+      out.place(cockpit, pixelRatio);
+      gl.render(b.scene, einweiserCamera);
+      placeViewModelCamera(b.arms.camera, cockpit);
+      drawViewModel(gl, b.scene, b.arms);
+    } else {
+      const { truck } = frame.snapshot;
+      const head = b.interior.looksAround === true ? (frame.head ?? HEAD_REST) : HEAD_REST;
+      placeCockpitCamera(cockpitCamera, truck, b.anchors.eye, cockpit, head);
+      b.interior.place({
+        camera: cockpitCamera,
+        heading: truck.heading,
+        cockpit,
+        mirrorLeft,
+        mirrorRight,
+      });
+      out.place(cockpit, pixelRatio);
+      gl.render(b.scene, cockpitCamera);
+    }
+  }
+
+  function placeChase(
+    { b, frame }: Pass,
+    topDown: Rect,
+    chaseWasShown: boolean,
+    chaseWasFlown: boolean,
+  ): void {
+    const { snapshot } = frame;
+    const view = frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW;
+    // a reset, a switch to the view or the end of a flight is a cut: the eye starts where the view puts it
+    if (
+      !chaseWasShown ||
+      chaseWasFlown !== chaseFlown ||
+      (isDefault(view) && !isDefault(chaseView))
+    ) {
+      chaseArm.cut();
+    }
+    chaseView = view;
+    const rig = {
+      truck: snapshot.truck,
+      centre: vehicleCentre(snapshot, b.anchors.frontX),
+      extent: b.extent,
+      face: b.cabFront,
+      colliders: b.colliders,
+    };
+    const paneFrame = {
+      width: topDown.width,
+      height: topDown.height,
+      clear: relativeTo(topDown, frame.topDownClear ?? topDown),
+    };
+    if (frame.freePose !== undefined) {
+      placeFreeCamera(chaseCamera, frame.freePose, rig, paneFrame);
+    } else {
+      placeChaseCamera(chaseCamera, rig, paneFrame, view, (limit, open) =>
+        chaseArm.hold(limit, open, performance.now()),
+      );
+    }
+  }
+
+  /** The top-down pane: the chase or free view, else the plan view. */
+  function drawPane(pass: Pass): void {
+    const { gl, out, b, frame, pixelRatio } = pass;
+    const { topDown } = frame.views;
+    // A mirror-only drive has no top-down pane: the cockpit took the whole canvas.
+    const hasPane = hasTopDown(frame.views);
+    if (hasPane) out.place(topDown, pixelRatio);
+    const chaseWasShown = chaseShown;
+    const chaseWasFlown = chaseFlown;
+    chaseShown = hasPane && frame.topDown === 'chase';
+    chaseFlown = chaseShown && frame.freePose !== undefined;
+    if (!hasPane) {
+      topDownRect = null;
+    } else if (chaseShown) {
+      placeChase(pass, topDown, chaseWasShown, chaseWasFlown);
+      gl.render(b.scene, chaseCamera);
+    } else {
+      placeTopDown(frame, topDown, b);
+      renderLitBy(topDownLighting, gl, b.scene, topDownCamera);
+    }
+  }
+
+  function compositeMirrors({ gl, out, frame, pixelRatio }: Pass): void {
+    gl.autoClear = false;
+    for (const { mirror, rect } of mirrors) {
+      const r = rect(frame.views);
+      if (r === null) continue;
+      out.place(r, pixelRatio);
+      mirror.composite(gl);
+    }
   }
 
   function releaseGpu(): void {
@@ -577,7 +754,7 @@ export function createThreeSceneRenderer(
     rebuildScene() {
       if (built === null) return;
       const { layout: nextLayout, truckSpec, trailerSpec, palette, aids } = built;
-      disposeBuilt(aids);
+      disposeBuilt({ keepRebuildParts: true });
       resetTiming('rebuild');
       build(nextLayout, truckSpec, trailerSpec, palette, aids);
     },
@@ -631,144 +808,22 @@ export function createThreeSceneRenderer(
     render(frame) {
       if (renderer === null || built === null || contextLost) return;
       if (cssWidth === 0) return;
-      const gl = renderer;
       const out = drawing;
-      const b = built;
       if (out === null) return;
       timer.frame(performance.now());
       if (ratio() !== appliedRatio) applySize();
-      const pixelRatio = appliedRatio;
+      const pass: Pass = { gl: renderer, out, b: built, frame, pixelRatio: appliedRatio };
 
-      const { snapshot, views } = frame;
-      const sky = b.palette.sky;
-      b.truck.update(snapshot, frame.lamps);
-      b.trailer.update(snapshot, frame.lamps);
-      shadowPasses = 0;
-      b.environment.update(frame, {
-        ...vehicleCentre(snapshot, b.anchors.frontX),
-        radius: b.radius,
-      });
-      b.aids.update(frame);
-      b.arms.update(views.cockpit === null ? undefined : frame.einweiser);
-      b.sight.update(frame);
-      b.scene.updateMatrixWorld();
-
-      gl.info.reset();
-
-      const anchors = b.anchors;
-      const { cockpit, mirrorLeft: leftRect, mirrorRight: rightRect, topDown } = views;
-
-      const mirrorCallsBefore = gl.info.render.drawCalls;
-      for (const { mirror, rect } of mirrors) {
-        const r = rect(views);
-        if (r === null) {
-          mirror.invalidate();
-          continue;
-        }
-        const { spec } = mirror;
-        const facing = mirrorFacing(
-          snapshot.truck,
-          mirrorAnchor(spec, b.mounts),
-          mirrorYaw(spec, b.truckId),
-          mirrorPosition,
-        );
-        mirror.place(mirrorPosition, facing);
-        mirror.capture(gl, b.scene, r.width * pixelRatio, r.height * pixelRatio, sky, frameIndex);
-      }
-      mirrorCalls = gl.info.render.drawCalls - mirrorCallsBefore;
-      frameIndex++;
-
-      // The panes tile the canvas, so on WebGL 2 each clears its own rect as part of its pass: a clear
-      // of its own would resolve the whole multisample target once more, and the scissor keeps it to
-      // the pane. WebGPU turns an in-pass clear into a load op that ignores the scissor and would wipe
-      // the panes drawn before, so there one clear takes the whole target. The sky dome covers each
-      // perspective pane.
-      gl.setRenderTarget(out.target);
-      gl.setClearColor(lighting === 'night' ? b.palette.nightBackdrop : b.palette.backdrop);
-      const clearInPass = scissoredClear(backend);
-      if (clearInPass) {
-        gl.autoClear = true;
-      } else {
-        out.target.scissorTest = false;
-        gl.clear();
-      }
-
-      // In the Einweiser role the cockpit rect is his first-person view: his eye stands outside the cab.
-      if (cockpit !== null && frame.einweiser !== undefined) {
-        placeEinweiserCamera(einweiserCamera, frame.einweiser, cockpit, frame.fov);
-        out.place(cockpit, pixelRatio);
-        gl.render(b.scene, einweiserCamera);
-        placeViewModelCamera(b.arms.camera, cockpit);
-        drawViewModel(gl, b.scene, b.arms);
-      } else if (cockpit !== null) {
-        const head = b.interior.looksAround === true ? (frame.head ?? HEAD_REST) : HEAD_REST;
-        placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit, head);
-        b.interior.place({
-          camera: cockpitCamera,
-          heading: snapshot.truck.heading,
-          cockpit,
-          mirrorLeft: leftRect,
-          mirrorRight: rightRect,
-        });
-        out.place(cockpit, pixelRatio);
-        gl.render(b.scene, cockpitCamera);
-      }
-
-      // A mirror-only drive has no top-down pane: the cockpit took the whole canvas.
-      const hasPane = hasTopDown(views);
-      if (hasPane) out.place(topDown, pixelRatio);
-      const chaseWasShown = chaseShown;
-      const chaseWasFlown = chaseFlown;
-      chaseShown = hasPane && frame.topDown === 'chase';
-      chaseFlown = chaseShown && frame.freePose !== undefined;
-      if (!hasPane) {
-        topDownRect = null;
-      } else if (chaseShown) {
-        const view = frame.topDownView ?? DEFAULT_TOP_DOWN_VIEW;
-        // a reset, a switch to the view or the end of a flight is a cut: the eye starts where the view puts it
-        if (
-          !chaseWasShown ||
-          chaseWasFlown !== chaseFlown ||
-          (isDefault(view) && !isDefault(chaseView))
-        ) {
-          chaseArm.cut();
-        }
-        chaseView = view;
-        const rig = {
-          truck: snapshot.truck,
-          centre: vehicleCentre(snapshot, b.anchors.frontX),
-          extent: b.extent,
-          face: b.cabFront,
-          colliders: b.colliders,
-        };
-        const paneFrame = {
-          width: topDown.width,
-          height: topDown.height,
-          clear: relativeTo(topDown, frame.topDownClear ?? topDown),
-        };
-        if (frame.freePose !== undefined) {
-          placeFreeCamera(chaseCamera, frame.freePose, rig, paneFrame);
-        } else {
-          placeChaseCamera(chaseCamera, rig, paneFrame, view, (limit, open) =>
-            chaseArm.hold(limit, open, performance.now()),
-          );
-        }
-        gl.render(b.scene, chaseCamera);
-      } else {
-        placeTopDown(frame, topDown, b);
-        renderLitBy(topDownLighting, gl, b.scene, topDownCamera);
-      }
-
-      gl.autoClear = false;
-      for (const { mirror, rect } of mirrors) {
-        const r = rect(views);
-        if (r === null) continue;
-        out.place(r, pixelRatio);
-        mirror.composite(gl);
-      }
-      out.present();
+      updateScene(pass);
+      pass.gl.info.reset();
+      captureMirrors(pass);
+      clearTarget(pass);
+      drawCockpit(pass);
+      drawPane(pass);
+      compositeMirrors(pass);
+      pass.out.present();
       // includes the one output pass that draws the frame target to the canvas
-      drawCalls = gl.info.render.drawCalls;
+      drawCalls = pass.gl.info.render.drawCalls;
     },
 
     chasePose() {

@@ -209,7 +209,7 @@ const FORWARD_GRID = grid(40);
 
 const widest = Math.max(
   ...WINDOWS.map(([w, h]) => {
-    const { cockpit } = computeViewports(w, h, 'drive', null);
+    const { cockpit } = computeViewports(w, h, { mode: 'drive' });
     return (cockpit?.width ?? 1) / (cockpit?.height ?? 1);
   }),
 );
@@ -293,7 +293,7 @@ describe.each(trucks)('cab interior for looking around, $id', (spec) => {
     );
     const all = names.map((n) => solidPart(params.meshes[n]));
     for (const [w, h] of WINDOWS) {
-      const { cockpit } = computeViewports(w, h, 'drive', null);
+      const { cockpit } = computeViewports(w, h, { mode: 'drive' });
       const aspect = (cockpit?.width ?? 1) / (cockpit?.height ?? 1);
       for (const ndc of FORWARD_GRID) {
         const d = toThree(direction(ndc, 0, -BASE_PITCH, aspect));

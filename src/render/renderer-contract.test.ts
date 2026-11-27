@@ -141,7 +141,7 @@ const frame: RenderFrame = {
     { truck: layouts.depot.start },
     createContactQuery(layout.obstacles),
   ).snapshot(),
-  views: computeViewports(800, 600, 'replay'),
+  views: computeViewports(800, 600, { mode: 'replay' }),
   topDown: 'yard',
   aids: { pivots: false, path: false, tracks: false, ghost: false },
   predicted: NO_PREDICTION,
