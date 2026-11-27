@@ -80,6 +80,8 @@ export const de: Record<MessageKey, string> = {
   graphicsLow: 'Niedrig',
   graphicsBalanced: 'Ausgewogen',
   graphicsHigh: 'Hoch',
+  graphicsHint:
+    'Niedrig eignet sich für ältere Tablets. Hoch braucht für die Offline-Nutzung einen größeren Download.',
   wideMirrors: 'Weitwinkelspiegel',
   settingOn: 'An',
   settingOff: 'Aus',
@@ -191,8 +193,10 @@ export const de: Record<MessageKey, string> = {
   reload: 'Neu laden',
   later: 'Später',
   offlineReady: 'Offline bereit',
-  offlineSetupFailed: 'Offline-Nutzung konnte nicht eingerichtet werden.',
-  offlineIncomplete: 'Für diese Grafikqualität noch nicht offline bereit.',
+  offlineSetupFailed:
+    'Offline-Nutzung konnte nicht eingerichtet werden. Zum erneuten Versuch neu laden.',
+  offlineIncomplete:
+    'Für diese Grafikqualität noch nicht offline bereit. Zum Abschließen online gehen und neu laden.',
   dismiss: 'Schließen',
   noWebgl:
     'Dieses Gerät kann keine WebGL-2-Grafik anzeigen. Hardwarebeschleunigung in den Browsereinstellungen einschalten oder ein aktuelles Chrome, Edge, Firefox oder Safari verwenden.',

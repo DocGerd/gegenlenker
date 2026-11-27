@@ -74,6 +74,7 @@ export const en = {
   graphicsLow: 'Low',
   graphicsBalanced: 'Balanced',
   graphicsHigh: 'High',
+  graphicsHint: 'Low suits older tablets. High needs a larger download to work offline.',
   wideMirrors: 'Wide-angle mirrors',
   settingOn: 'On',
   settingOff: 'Off',
@@ -185,8 +186,9 @@ export const en = {
   reload: 'Reload',
   later: 'Later',
   offlineReady: 'Ready offline',
-  offlineSetupFailed: 'Offline use could not be set up.',
-  offlineIncomplete: 'Not yet offline-ready for this graphics quality.',
+  offlineSetupFailed: 'Offline use could not be set up. Reload to retry.',
+  offlineIncomplete:
+    'Not yet offline-ready for this graphics quality. Go online and reload to finish.',
   dismiss: 'Dismiss',
   noWebgl:
     'This device cannot show WebGL 2 graphics. Turn on hardware acceleration in the browser settings or use a current Chrome, Edge, Firefox or Safari.',
