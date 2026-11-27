@@ -16,7 +16,7 @@ import { resolveCombination } from '../vehicles/resolve';
 import { CAB_HEIGHT, FRAME_TOP } from './cab-dims';
 import { FREE_FOV, poseFromGaze } from './free-look';
 import { CAMERA_FAR, CHASE_LAYERS, enableLayers } from './seams';
-import { sceneryBuildings, type BuildingKind } from './skyline-layout';
+import { roofRise, sceneryBuildings, type BuildingKind } from './skyline-layout';
 
 const CHASE_FOV = FREE_FOV;
 /** Distance beyond the one that just fits the combination. */
@@ -191,7 +191,7 @@ export function chaseColliders(
         halfWidth: b.depth / 2,
         heading: b.heading,
       },
-      height: b.height,
+      height: b.height + roofRise(b),
     }));
   return [...layout.obstacles, ...solids, ...scenery];
 }

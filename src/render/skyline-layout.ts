@@ -21,6 +21,20 @@ export type Building = {
   readonly haze: number;
 };
 
+/** Height of the roof's top above `height`, the eave. */
+export function roofRise({ roof, depth }: Pick<Building, 'roof' | 'depth'>): number {
+  switch (roof) {
+    case 'flat':
+      return 0;
+    case 'gable':
+      return depth * 0.12;
+    case 'shed':
+      return depth * 0.08;
+    case 'sawtooth':
+      return 2.8;
+  }
+}
+
 /** Deterministic xorshift in [0, 1): the same skyline in every session. */
 export function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;

@@ -476,6 +476,28 @@ describe('free camera', () => {
     expect(camera.position.y).toBe(3);
   });
 
+  it("lifts an eye over each walled scenery building above its drawn roof's top", () => {
+    const layout = resolveLayout(layouts.depot, null);
+    const colliders = chaseColliders(layout);
+    const camera = createChaseCamera();
+    const walled = sceneryBuildings(layout).filter((b) =>
+      ['hall', 'warehouse', 'office'].includes(b.kind),
+    );
+    expect(walled.some((b) => b.roof !== 'flat')).toBe(true);
+    for (const b of walled) {
+      const geometry = skylineGeometry([b]);
+      geometry.computeBoundingBox();
+      const top = geometry.boundingBox?.max.y ?? Infinity;
+      placeFreeCamera(
+        camera,
+        { x: b.x, y: b.y, z: 1.5, yaw: 0, pitch: 0 },
+        { ...rig, colliders },
+        frame,
+      );
+      expect(camera.position.y, `${b.kind} ${b.roof}`).toBeGreaterThan(top);
+    }
+  });
+
   it('leaves the camera alone on a zero-size pane', () => {
     const camera = createChaseCamera();
     const before = camera.position.clone();
