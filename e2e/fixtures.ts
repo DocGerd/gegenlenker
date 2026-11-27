@@ -31,7 +31,7 @@ export const test = base.extend<
         await page.close();
         if (isSoftwareGl(renderer))
           throw new Error(
-            `E2E_GPU=1 got software GL (${renderer}); needs WSLg (DISPLAY) and Mesa d3d12 (GALLIUM_DRIVER=d3d12, /usr/lib/wsl/lib); headless Chromium gets no GPU on WSL2, so set HEADED=1.`,
+            `E2E_GPU=1 got software GL (${renderer}); needs WSL2 with Mesa d3d12 (GALLIUM_DRIVER=d3d12, /usr/lib/wsl/lib) and access to the GPU render node (render group).`,
           );
       }
       await use(undefined);
