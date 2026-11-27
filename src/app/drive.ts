@@ -110,6 +110,8 @@ export function startDrive(
 
   const stage = document.createElement('div');
   stage.className = 'drive';
+  // e2e: a solo rig attaches no trailer shell (`readyMarkers`)
+  stage.toggleAttribute('data-solo', trailer === null);
   root.append(stage);
   // resolveRun refuses an Einweiser run solo
   const einweiser =

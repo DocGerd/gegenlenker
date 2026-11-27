@@ -325,7 +325,7 @@ const MARKUP = (
         mode === 'exercise'
           ? `<dl class="hud-counters" data-hud="counters" data-chrome>
         <dt data-i18n="contacts"></dt><dd class="mono" data-hud="contacts"></dd>
-        <dt data-i18n="jackknifes"></dt><dd class="mono" data-hud="jackknifes"></dd>
+        ${solo ? '' : '<dt data-i18n="jackknifes"></dt><dd class="mono" data-hud="jackknifes"></dd>'}
         <dt data-i18n="directionChanges"></dt><dd class="mono" data-hud="directionChanges"></dd>
         <dt data-i18n="time"></dt><dd class="mono" data-hud="time"></dd>
       </dl>`
@@ -403,7 +403,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const topDown = query(hud, 'topDown', HTMLElement);
   const infoRow = query(hud, 'info', HTMLElement);
   const toolbar = query(hud, 'toolbar', HTMLElement);
-  // the driver's of a combination alone
+  // the driver's only; the gauges also need a trailer
   const gaugeBox = hud.querySelector<HTMLElement>('[data-hud="gauges"]');
   const speed = hud.querySelector<HTMLElement>('[data-hud="speed"]');
   const gearEl = hud.querySelector<HTMLElement>('[data-hud="gear"]');

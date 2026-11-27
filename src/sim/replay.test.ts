@@ -262,6 +262,8 @@ describe('replay', () => {
     expect(parseInputLog(serializeInputLog(solo, fingerprint), fingerprint)).toEqual(solo);
     expect(parse({ ...solo, trailerId: 'none' })).toBeNull();
     expect(parse({ ...solo, trailerId: undefined })).toBeNull();
+    expect(parse({ ...solo, version: 3, trailerId: ids.trailerId })).not.toBeNull();
+    expect(parse({ ...solo, version: 3 })).toBeNull();
     const einweiser = {
       role: 'einweiser',
       einweiser: { samples: [{ step: 0, x: 0, y: 0, heading: 0, pitch: 0 }], signs: [] },

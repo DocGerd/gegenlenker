@@ -39,9 +39,11 @@ export function compareResults(a: RunResult, b: RunResult): number {
   );
 }
 
-/** Reached with any vehicle pair. */
-export function exerciseDone(best: BestResults, exerciseId: ExerciseId): boolean {
-  return Object.values(best).some((r) => r.exerciseId === exerciseId && r.reached);
+/** Reached with any vehicle pair, or with any truck solo when `solo`: the two are done apart. */
+export function exerciseDone(best: BestResults, exerciseId: ExerciseId, solo: boolean): boolean {
+  return Object.values(best).some(
+    (r) => r.exerciseId === exerciseId && r.reached && (r.trailerId === null) === solo,
+  );
 }
 
 export function recordBest(

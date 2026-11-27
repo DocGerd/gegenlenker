@@ -204,7 +204,7 @@ const PAUSE_FIELDS: Readonly<Record<Role, readonly OptionId[]>> = {
 /** What a running drive can take: shown in the pause sheet, in this order. */
 export const pauseFields = (role: Role): readonly OptionId[] => PAUSE_FIELDS[role];
 
-/** The trailer as `role` starts with it. */
+/** `role` matters for the trailer only. */
 export function optionValue(settings: Settings, id: OptionId, role: Role = 'driver'): string {
   switch (id) {
     case 'truck':

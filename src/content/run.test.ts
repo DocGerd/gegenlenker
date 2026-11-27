@@ -53,7 +53,14 @@ function pinned(
 ) {
   const ids = { layoutId, exerciseId, truckId: 'man-le-18-280', trailerId } as const;
   const fingerprint = (i: RunIds): string => resolveRun(i).fingerprint;
-  const stored = { ...FIXED_LOG, ...ids, fingerprint: fingerprint({ ...ids, role: 'driver' }) };
+  // only version 4 holds a solo run
+  const solo = trailerId === null ? { version: 4, role: 'driver' } : {};
+  const stored = {
+    ...FIXED_LOG,
+    ...solo,
+    ...ids,
+    fingerprint: fingerprint({ ...ids, role: 'driver' }),
+  };
   const log = parseInputLog(JSON.stringify(stored), fingerprint);
   if (log === null) throw new Error('stored log expected to load');
   const { params, exercise, start, contacts } = resolveRun(log);

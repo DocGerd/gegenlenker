@@ -2,22 +2,19 @@ import type { Locator, Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { startExercise, toTitle } from './menu-flow';
-
-const SETTINGS_KEY = 'gegenlenker.settings.v1';
+import { seedStorage } from './menu-seed';
 
 const titleEntry = (page: Page, name: string): Locator =>
   page.locator('[data-screen="title"]').getByRole('button', { name });
 
 test('the truck drives solo without the angle display, finishes and replays', async ({ page }) => {
-  await page.addInitScript((key) => {
-    if (localStorage.getItem(key) === null) {
-      localStorage.setItem(key, JSON.stringify({ version: 1, graphics: 'low' }));
-    }
-  }, SETTINGS_KEY);
+  await seedStorage(page, { settings: { graphics: 'low' } });
   await page.goto('./');
   await startExercise(page, en, 'reverse-bay', { trailer: 'none' });
 
-  // No trailer, so no angles: the angle display, its legend line and the gauges are gone.
+  // No trailer, so no angles: the angle display, its legend line, the gauges and the limit-stop counter are gone.
+  await expect(page.locator('[data-hud="contacts"]')).toBeVisible();
+  await expect(page.locator('[data-hud="jackknifes"]')).toHaveCount(0);
   await expect(page.locator('[data-aid]')).toHaveCount(3);
   await expect(page.locator('[data-aid="pivots"]')).toHaveCount(0);
   await expect(page.locator('[data-aid-legend="pivots"]')).toHaveCount(0);

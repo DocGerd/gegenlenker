@@ -1761,8 +1761,8 @@ async function expectDividerClearOrHidden(page: Page, size: Size): Promise<void>
 }
 
 test('opening the aid legend re-measures the divider against the panels', async ({ page }) => {
-  // The tallest landscape screen here where the in-flow legend leaves the divider no room (below 700 px it is an overlay).
-  const size = { width: 1280, height: 700 };
+  // 700 px is the lowest height with the in-flow legend (below, it is an overlay); this narrow, the open legend leaves the divider no room.
+  const size = { width: 1024, height: 700 };
   await page.setViewportSize(size);
   await startStraightReverse(page, en);
   await expect(handle(page)).toBeVisible();

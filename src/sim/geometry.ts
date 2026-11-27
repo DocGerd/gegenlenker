@@ -18,7 +18,7 @@ const along = (from: Vec2, length: number, heading: number): Vec2 => ({
   y: from.y + length * Math.sin(heading),
 });
 
-/** Solo: the truck's alone. */
+/** Solo: the truck's footprint only. */
 export function bodyFootprints(
   params: RigParams,
   s: Pick<SimSnapshot, 'truck' | 'coupling' | 'dolly' | 'trailer'>,
