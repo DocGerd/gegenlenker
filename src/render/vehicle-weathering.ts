@@ -40,8 +40,9 @@ const CONTACT_REACH = 0.5;
 /** Far enough from any vehicle part that an unused axle slot adds nothing. */
 const NO_AXLE = 1e4;
 
-/** Albedo multiplier where the grime is full: a warm road-dust grey, as on a working vehicle. */
-const DIRT_TONE = new Color(0xb3a896);
+/** Road dust: it darkens light paint and greys the black chassis, as on a working vehicle. */
+const DIRT = new Color(0x6b6257);
+const DIRT_COVER = 0.6; // share of dust where the grime is full
 const CONTACT_DARKEN = 0.3;
 const GRIME_ROUGHNESS = 0.85;
 const BLOTCH_FREQUENCY = 1.6; // per metre: patches of spray
@@ -156,9 +157,9 @@ function terms<T>(o: Arith<T>, x: T, h: T, axles: readonly T[], radius: T): Term
 export const grimeAt = (x: number, h: number, axles: readonly number[], radius: number) =>
   terms(numbers, x, h, axles, radius);
 
-/** Albedo multiplier and roughness of the weathered surface, faded in by `strength`. */
+/** Albedo and roughness of the weathered surface, faded in by `strength`. */
 export type Weathering = {
-  readonly albedo: Node<'vec3'>;
+  albedo(base: Node<'vec3'>): Node<'vec3'>;
   roughness(base: Node<'float'>): Node<'float'>;
 };
 
@@ -169,13 +170,15 @@ export function weatheringNodes(strength: Node<'float'>): Weathering {
     if (found === null) return self.value.identity();
     return self.value.copy(found.group.matrixWorld).invert();
   });
-  const axles = uniform(new Vector4()).onObjectUpdate(({ object }, self) => {
-    const list = (object === null ? null : weatherFrameOf(object))?.frame.axles ?? [];
-    const [a = NO_AXLE, b = NO_AXLE, c = NO_AXLE, d = NO_AXLE] = list;
-    return self.value.set(a, b, c, d);
-  });
+  const axles = uniform(new Vector4(NO_AXLE, NO_AXLE, NO_AXLE, NO_AXLE)).onObjectUpdate(
+    ({ object }, self) => {
+      const list = (object === null ? null : weatherFrameOf(object))?.frame.axles ?? [];
+      const [a = NO_AXLE, b = NO_AXLE, c = NO_AXLE, d = NO_AXLE] = list;
+      return self.value.set(a, b, c, d);
+    },
+  );
   // wheel radius, then the fabric region's front and floor
-  const shape = uniform(new Vector3()).onObjectUpdate(({ object }, self) => {
+  const shape = uniform(new Vector3(0, -NO_AXLE, NO_AXLE)).onObjectUpdate(({ object }, self) => {
     const frame = (object === null ? null : weatherFrameOf(object))?.frame;
     const fabric = frame?.fabric;
     return self.value.set(
@@ -202,12 +205,12 @@ export function weatheringNodes(strength: Node<'float'>): Weathering {
     .mul(smoothstep(shape.z, shape.z.add(0.01), p.y));
   const fine = mx_noise_float(p.mul(mix(float(PAINT_FREQUENCY), FABRIC_FREQUENCY, fabric)));
   const variation = mix(float(PAINT_VARIATION), FABRIC_VARIATION, fabric).mul(strength);
-  const tone = vec3(DIRT_TONE.r, DIRT_TONE.g, DIRT_TONE.b);
-  const albedo = mix(vec3(1), tone, grime)
-    .mul(float(1).sub(contact.mul(CONTACT_DARKEN).mul(strength)))
+  const dirt = vec3(DIRT.r, DIRT.g, DIRT.b);
+  const shade = float(1)
+    .sub(contact.mul(CONTACT_DARKEN).mul(strength))
     .mul(float(1).add(blotch.mul(MOTTLE).mul(strength)));
   return {
-    albedo,
+    albedo: (base) => mix(base, dirt, grime.mul(DIRT_COVER)).mul(shade),
     roughness: (base) =>
       mix(clamp(base.add(fine.mul(variation)), 0, 1), float(GRIME_ROUGHNESS), grime),
   };

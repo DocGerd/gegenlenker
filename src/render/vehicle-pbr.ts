@@ -129,7 +129,7 @@ export class VehicleNodeMaterial extends MeshStandardNodeMaterial {
     const metal = role(ROLE_HUES.metal, lo, hi);
     const glass = role(ROLE_HUES.glass, lo / 2, hi / 2).toVar(VEHICLE_SHADER_MARKER);
     const weather = weatheringNodes(this.weathering);
-    this.colorNode = mix(rgb.mul(weather.albedo), vec3(GLASS_REFLECTANCE), glass);
+    this.colorNode = mix(weather.albedo(rgb), vec3(GLASS_REFLECTANCE), glass);
     this.roughnessNode = mix(
       mix(weather.roughness(float(PAINT_ROUGHNESS)), GLASS_ROUGHNESS, glass),
       weather.roughness(float(METAL_ROUGHNESS)),
