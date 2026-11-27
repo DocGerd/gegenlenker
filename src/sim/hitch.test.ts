@@ -234,6 +234,23 @@ describe.each(pairs)('$name', ({ p, jaw }) => {
   });
 });
 
+it('drops a turntable stop with the trailer: uncoupled at the stop, the truck drives forward', () => {
+  const pair = pairs.find((c) => c.name === 'man-le-18-280 + hueffermann-hpa-24-81-l');
+  if (pair === undefined) throw new Error('no pair');
+  const sim = parkedSim(pair.p, pair.jaw, approach(pair.p, 0, 0, 1));
+  let s = reverse(sim, 0.2);
+  for (let i = 0; i < CAP && s.blocked !== 'turntable'; i++)
+    s = sim.step(ctl({ lever: 0.5, steer: 1 }));
+  expect(s.blocked).toBe('turntable');
+  for (let i = 0; i < CAP && s.speed !== 0; i++) s = sim.step(ctl({ brake: true, steer: 1 }));
+  s = sim.step(ctl({ brake: true, steer: 1, uncouple: true }));
+  expect(s.hitch?.coupled).toBe(false);
+  const from = s.coupling;
+  for (let i = 0; i < 120; i++) s = sim.step(ctl({ lever: 0.5, steer: 1 }));
+  expect(s.blocked).not.toBe('turntable');
+  expect(Math.hypot(s.coupling.x - from.x, s.coupling.y - from.y)).toBeGreaterThan(0.5);
+});
+
 it('keeps the catch inside the frame end for every truck, so a clean approach meets no drawbar', () => {
   for (const truck of trucks) {
     const jaw = resolveJaw(truck);

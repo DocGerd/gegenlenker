@@ -442,8 +442,10 @@
   color: var(--color-accent-strong);
 }
 
+/* The icon is the only coupled indicator, so a disabled button keeps its colour and shows it in border and fill. */
 .hud-uncouple:disabled {
-  opacity: 0.4;
+  border-style: dashed;
+  background: transparent;
   cursor: default;
 }
 

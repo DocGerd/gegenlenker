@@ -212,6 +212,8 @@ export function createSimulation(
           dolly: { x: j.dolly.x, y: j.dolly.y },
           contacts: parkedContacts(hitch.params, j),
         };
+        // a pivot stop belongs to the coupled rig
+        if (blocked !== null && blocked !== 'contact') blocked = null;
       }
       steer = approach(steer, control.steer, params.steerRate * DT);
       const delta = steer * params.maxRoadWheelAngle;
