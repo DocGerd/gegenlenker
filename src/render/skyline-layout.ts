@@ -259,6 +259,9 @@ function corners({ x, y, heading, length, depth }: Footprint): [number, number][
 
 /** Whether two footprints, each grown by `gap` / 2, overlap: separating axes. */
 function overlap(a: Footprint, b: Footprint, gap: number): boolean {
+  // this far apart, one of a's two axes already separates them: the same answer without the corners
+  const reach = (f: Footprint): number => Math.hypot(f.length, f.depth) / 2;
+  if (Math.hypot(a.x - b.x, a.y - b.y) >= Math.SQRT2 * (reach(a) + reach(b) + gap)) return false;
   const ca = corners(a);
   const cb = corners(b);
   for (const heading of [a.heading, a.heading + Math.PI / 2, b.heading, b.heading + Math.PI / 2]) {
