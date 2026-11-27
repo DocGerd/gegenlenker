@@ -67,6 +67,33 @@ describe('computeViewports mirrors', () => {
   });
 });
 
+describe('computeViewports in the Einweiser role', () => {
+  const every = { front: true, wide: true, close: true };
+  const sizes: [number, number][] = [
+    [1280, 720],
+    [1536, 729],
+    [820, 1180],
+  ];
+  it.each(sizes)('splits as the driver does and draws no mirror at %ix%i', (w, h) => {
+    for (const mode of ['drive', 'mirrors'] as const) {
+      const driver = computeViewports(w, h, mode, null, NO_INSETS, undefined, null, every);
+      expect(
+        computeViewports(w, h, mode, null, NO_INSETS, undefined, null, every, 'einweiser'),
+        mode,
+      ).toEqual({
+        cockpit: driver.cockpit,
+        mirrorLeft: null,
+        mirrorRight: null,
+        wideLeft: null,
+        wideRight: null,
+        front: null,
+        close: null,
+        topDown: driver.topDown,
+      });
+    }
+  });
+});
+
 describe('computeViewports key legend', () => {
   it('keeps the mirrors above a legend that reaches under them', () => {
     for (let w = 320; w <= 2000; w += 20) {

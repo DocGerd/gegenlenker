@@ -11,6 +11,7 @@ import {
   type ViewMode,
   type ViewRects,
 } from '../contracts/render';
+import type { Role } from '../contracts/exercise';
 import { de } from '../i18n/de';
 import { en, type MessageKey } from '../i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop, frontBand } from './cockpit-band';
@@ -245,6 +246,8 @@ export const hasTopDown = (views: ViewRects): boolean =>
 /**
  * `mirrors` is the drive screen without the top-down view: the cockpit takes the whole window.
  * `legend` is the measured key legend: the mirrors stay above it where it reaches under them.
+ * In the `einweiser` role the cockpit rect is his first-person view, split from the top view as the
+ * driver's is, with no mirrors (`docs/einweiser-spike.md` §3.7).
  */
 export function computeViewports(
   cssWidth: number,
@@ -255,6 +258,7 @@ export function computeViewports(
   layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
   panels: PanelStack | null = null,
   extra: ExtraMirrors = NO_EXTRA_MIRRORS,
+  role: Role = 'driver',
 ): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
@@ -291,6 +295,18 @@ export function computeViewports(
     topDown = { x: 0, y: 0, width: cssWidth, height: h };
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
     rise = h - paneHeight(min);
+  }
+  if (role === 'einweiser') {
+    return {
+      cockpit,
+      mirrorLeft: null,
+      mirrorRight: null,
+      wideLeft: null,
+      wideRight: null,
+      front: null,
+      close: null,
+      topDown,
+    };
   }
   const room = { cssWidth, cssHeight, mirrorsOnly, legend, insets, extra };
   let placed = placeMirrors({ ...room, cockpit, rise });

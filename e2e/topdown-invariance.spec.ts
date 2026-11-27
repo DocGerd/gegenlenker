@@ -49,6 +49,9 @@ const MIN_TOKEN_SHARE: Readonly<
   ],
 };
 
+/** Least share of the follow pane his token's core fills: well under its drawn area, so only a missing token fails. */
+const MIN_EINWEISER_SHARE = 2e-4;
+
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
 // One exercise per yard, so each yard's restyled props are covered.
 for (const { id, title: exercise } of [
@@ -109,6 +112,46 @@ for (const { id, title: exercise } of [
       });
       expect(new Set(scales.map((e) => e.scale)).size, scaleLines.join('; ')).toBe(1);
       expect(mismatches, 'top-down shots differ between presets').toEqual([]);
+    },
+  );
+}
+
+// The Einweiser role draws his token in the top view and his own first-person view in the cockpit rect.
+for (const lighting of ['day', 'night'] as const) {
+  test(
+    `the Einweiser's top-down view is the same at every graphics preset and shows his token: ${lighting}`,
+    { tag: HEAVY },
+    async ({ context }, testInfo) => {
+      test.setTimeout(PRESETS.reduce((sum, preset) => sum + PRESET_TIMEOUT_MS[preset], 0));
+      const entry = { ...exerciseEntry('straight-reverse'), role: 'einweiser' } as const;
+      const hashes: string[] = [];
+      for (const preset of PRESETS) {
+        const page = await context.newPage();
+        await startPinnedDrive(page, { preset, lighting }, entry);
+        await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(0);
+        const own = await shoot(page, 'cockpit');
+        const top = await shoot(page, 'follow');
+        for (const [name, png] of [
+          ['first-person', own],
+          ['follow', top],
+        ] as const) {
+          await testInfo.attach(`${preset} ${lighting} ${name}.png`, {
+            body: png,
+            contentType: 'image/png',
+          });
+          expect(await distinctColours(page, png), `${preset} ${name}`).toBeGreaterThan(
+            MIN_DRAWN_COLOURS,
+          );
+        }
+        // the token is unlit, so its core is the exact token; his own view never shows it
+        expect(await tokenShare(page, top, 'einweiser', 0), `${preset} token`).toBeGreaterThan(
+          MIN_EINWEISER_SHARE,
+        );
+        expect(await tokenShare(page, own, 'einweiser', 0), `${preset} own view`).toBe(0);
+        hashes.push(`${preset} ${sha(top)}`);
+        await page.close();
+      }
+      expect(new Set(hashes.map((h) => h.split(' ')[1])).size, hashes.join('; ')).toBe(1);
     },
   );
 }

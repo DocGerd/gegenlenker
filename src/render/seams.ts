@@ -46,6 +46,8 @@ export type ShadowFocus = { readonly x: number; readonly y: number; readonly rad
 export const COCKPIT_LAYERS = [PERSPECTIVE_LAYER, INTERIOR_LAYER];
 export const MIRROR_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
 export const CHASE_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
+/** The Einweiser's own eye stands outside the cab: he sees its exterior, never its interior. */
+export const EINWEISER_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
 export const TOP_DOWN_LAYERS = [AIDS_LAYER];
 const lostRenderers = new WeakSet<WebGPURenderer>();
 /** For the loss handler, which replaces three's and so its private loss flag. */

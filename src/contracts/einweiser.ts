@@ -54,6 +54,20 @@ export type EinweiserStatus = {
   readonly reading: ReadingKind;
 };
 
+/** The first-person field of view choices (degrees, horizontal at 16:9; `docs/einweiser-spike.md` §3.2). */
+export const FOV_CHOICES = [70, 80, 90, 100, 110] as const;
+export type Fov = (typeof FOV_CHOICES)[number];
+export const DEFAULT_FOV: Fov = 90;
+
+/** Look speed per mouse count, in degrees (estimates; `docs/einweiser-spike.md` §3.1). */
+export const MOUSE_SENSITIVITIES = ['low', 'medium', 'high'] as const;
+export type MouseSensitivity = (typeof MOUSE_SENSITIVITIES)[number];
+export const DEG_PER_COUNT: Readonly<Record<MouseSensitivity, number>> = {
+  low: 0.025,
+  medium: 0.05,
+  high: 0.1,
+};
+
 /** An Einweiser run's own scoring, beside the driver measures of `RunResult`. */
 export type EinweiserResult = {
   /** The vehicle hit him: the run ended at once, not reached. */

@@ -1,13 +1,7 @@
 import { t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { choiceRow } from './menu/choice-row';
-import {
-  applyOption,
-  OPTION_FIELDS,
-  optionValue,
-  PAUSE_FIELDS,
-  type OptionId,
-} from './menu/options';
+import { applyOption, OPTION_FIELDS, optionValue, type OptionId } from './menu/options';
 import { ignoreHeldBrakeKeys } from './held-keys';
 import { currentSettings } from './settings';
 
@@ -17,6 +11,8 @@ export type PauseActions = {
   finish: () => void;
   /** Drops the run without a result or replay; null where finishing already does that. */
   leave: (() => void) | null;
+  /** The options the running drive can take, in this order (`pauseFields`). */
+  fields: readonly OptionId[];
   /** Called after a Settings change was stored. */
   settingChanged: (id: OptionId) => void;
 };
@@ -44,6 +40,7 @@ const tabStops = (level: HTMLElement): HTMLElement[] => [
 /** The level with Back and the options a running drive can take; a change is stored at once. */
 function settingsLevel(
   back: () => void,
+  fields: readonly OptionId[],
   settingChanged: (id: OptionId) => void,
 ): {
   readonly root: HTMLElement;
@@ -63,7 +60,7 @@ function settingsLevel(
   root.append(backButton, heading);
 
   const settings = currentSettings();
-  for (const id of PAUSE_FIELDS) {
+  for (const id of fields) {
     const row = choiceRow(OPTION_FIELDS[id], optionValue(settings, id), (value) => {
       if (applyOption(id, value)) settingChanged(id);
     });
@@ -104,7 +101,7 @@ export function showPauseSheet(
   const openSettings = action(
     'settings',
     () => {
-      const next = settingsLevel(back, actions.settingChanged);
+      const next = settingsLevel(back, actions.fields, actions.settingChanged);
       swap(next.root, next.first);
     },
     false,
