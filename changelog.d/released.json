@@ -1,5 +1,119 @@
 [
   {
+    "version": "1.3.0",
+    "date": "2026-11-27",
+    "entries": [
+      {
+        "id": "505.fixed",
+        "category": "fixed",
+        "prs": [505],
+        "en": "The front mirror and the wide-angle mirrors no longer disappear and come back while you drag the top view divider in portrait: the front mirror now goes once and stays away until the top view is smaller again, so portrait windows about 660 to 765 px wide can be without it at the default split."
+      },
+      {
+        "id": "506.fixed",
+        "category": "fixed",
+        "prs": [506],
+        "en": "On a portrait screen with a notch at the top, a run with the mirrors only keeps its toast, its goal message and the cockpit label below the notch."
+      },
+      {
+        "id": "509.fixed",
+        "category": "fixed",
+        "prs": [509],
+        "en": "Offline-ready now also waits for the assets of the chosen graphics quality to be downloaded, so choosing High while online makes it work offline."
+      },
+      {
+        "id": "510.fixed",
+        "category": "fixed",
+        "prs": [510],
+        "en": "On a portrait tablet, a run with the mirrors only keeps the gear, the speed and the counters inside the bar at the bottom of the screen, clear of the brief and the speed lever."
+      },
+      {
+        "id": "516.fixed",
+        "category": "fixed",
+        "prs": [516],
+        "en": "The side windows of the Arocs and MAN cabs now end at the B-pillar just behind the driver, as on the real cabs, so the driver sees out beside him and the glass matches the open cockpit."
+      },
+      {
+        "id": "520.fixed",
+        "category": "fixed",
+        "prs": [520],
+        "en": "The mirror-only drive keeps the counters clear of the speed lever on narrow landscape screens, wrapping them below the gear and the speed."
+      },
+      {
+        "id": "530.added",
+        "category": "added",
+        "prs": [530],
+        "en": "The outside view no longer looks out over bare ground beyond the yard: a neighbouring estate of sheds, offices and poplar rows now surrounds the site, and on Balanced the plots around the yard show their halls, office and trees."
+      },
+      {
+        "id": "542.added",
+        "category": "added",
+        "prs": [542],
+        "en": "Einweiser mode: on a desktop, the exercise and free yard setup lets you play as the ground guide, who walks the yard in first person and guides a simulated driver with the BG hand signals; the result lists his faults by rule, and Continue and the replay pick up his runs."
+      },
+      {
+        "id": "558.changed",
+        "category": "changed",
+        "prs": [558],
+        "en": "A hidden tab or minimised window now opens the pause sheet, so the run no longer carries on at once on return."
+      },
+      {
+        "id": "559.fixed",
+        "category": "fixed",
+        "prs": [559],
+        "en": "The German About screen translates the asset credit labels, and the German steering wheel hint mentions scrolling."
+      },
+      {
+        "id": "560.added",
+        "category": "added",
+        "prs": [560],
+        "en": "The steering wheel and the speed lever now tell screen readers their name and value, such as \"12 % left\" and \"80 %\"."
+      },
+      {
+        "id": "561.changed",
+        "category": "changed",
+        "prs": [561],
+        "en": "The pause sheet now explains what Finish and Leave without scoring do, and the German Finish button reads \"Fahrt werten\" instead of \"Beenden\"."
+      },
+      {
+        "id": "562.changed",
+        "category": "changed",
+        "prs": [562],
+        "en": "Parked trailers and container chassis in the yard roll on round wheels with rims, and the curtain-siders gain chevrons on the underrun guard, side rails with amber markers, rear lamps and sturdier landing gear."
+      },
+      {
+        "id": "563.added",
+        "category": "added",
+        "prs": [563],
+        "en": "Trucks and trailers show rounded tyres with a tread, dished rims with studs, brake drums and axles in the mirrors and the outside view on the Balanced and High graphics settings."
+      },
+      {
+        "id": "564.changed",
+        "category": "changed",
+        "prs": [564],
+        "en": "Settings now explains the graphics quality choice, the offline status names what to do next, \"Ready offline\" no longer shows twice, and Controls has the same chevron as other rows."
+      },
+      {
+        "id": "565.added",
+        "category": "added",
+        "prs": [565],
+        "en": "The title now says up front when the device has no WebGL 2 graphics and what to try, and the Start buttons stay disabled instead of failing after a press."
+      },
+      {
+        "id": "566.added",
+        "category": "added",
+        "prs": [566],
+        "en": "On High, the vehicles show road grime on their lower body, wheel arches and chassis, and a slight variation in their paint and tarpaulin."
+      },
+      {
+        "id": "567.fixed",
+        "category": "fixed",
+        "prs": [567],
+        "en": "The angle gauge labels no longer break in the middle of a word on small screens."
+      }
+    ]
+  },
+  {
     "version": "1.2.0",
     "date": "2026-11-26",
     "entries": [
