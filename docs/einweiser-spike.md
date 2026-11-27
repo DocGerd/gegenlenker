@@ -69,7 +69,7 @@ With a turntable drawbar trailer in reverse, the trailer rear first goes the way
 
 Accepted by the owner (2026-11-26) after the gate (PR 2), which departs from the planner above in three ways:
 
-- Reverse steering is LQR state feedback on the linearised articulation, not the nine-candidate planner. In the scripted Einweiser the dock-ramp reverse legs also choose their sign by LQR cost-to-go; the driver itself is unchanged by that.
+- Reverse steering is LQR state feedback on the linearised articulation, not the nine-candidate planner. In the scripted Einweiser the dock-ramp and reverse-bay reverse legs also choose their sign by LQR cost-to-go (their forward legs by the rollout search on the body heading); the driver itself is unchanged by that.
 - "Straight" after a curve: the driver holds one reference heading per gear. Rechts/Links turn it; Herkommen, Entfernen and Abstand hold it, so the vehicle finishes the indicated turn.
 - The curve radius depends on the gear (`CURVE_RADIUS = { D: 8, R: 15 }`): the slalom weave needs a truck curvature above 1/15 m⁻¹.
 

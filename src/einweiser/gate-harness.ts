@@ -269,7 +269,7 @@ const CUT_SHORT = 8;
 const RESCUE_STRAIGHT = 0.02;
 const RESCUE_MIN = 4;
 const RESCUE_MAX = 25;
-/** Clearance (m) the pull-forward keeps from obstacles. */
+/** Clearance (m) the pull-forward keeps from obstacles, unless the rig already stands nearer. */
 const RESCUE_CLEARANCE = 0.3;
 /** The fresh reverse joins the leg no later than this far (m) from its end on its final straight, on arcs of this radius (m). */
 const RESCUE_FINAL = 16;
@@ -517,6 +517,8 @@ function scripted(world: World, planned: readonly Leg[]) {
   let doomed = false;
   let replan = false;
   let rescues = 0;
+  /** The last spot search found nothing and nothing has changed since. */
+  let fruitless = false;
 
   const show = (next: SignId | null, step: number): void => {
     if (next === sign) return;
@@ -721,10 +723,14 @@ function scripted(world: World, planned: readonly Leg[]) {
     }
     return bestGain >= 1.5 ? best : null;
   }
-  /** Whether his spot stays valid if he lets the vehicle go on now and calls Halt at the next check. */
+  /**
+   * Whether his spot stays valid if he lets the vehicle go on now and calls Halt at the next check,
+   * and a Halt from the next check or the one after is readable where he stands when it is due.
+   */
   function holds(s: SimSnapshot, l: Leg, at: Station, held: Pose2, step: number): boolean {
     if (spot === null || sign === null) return false;
     const c = spot;
+    const read = Math.round(recognitionTime('halt') / DT);
     let ok = true;
     follow(
       s,
@@ -737,6 +743,13 @@ function scripted(world: World, planned: readonly Leg[]) {
       240,
       (m, k) => {
         if (k % 15 === 14 && !valid(m, c, l.gear)) ok = false;
+        // his held pose, not the planned spot: he stops within the walk's arrival tolerance of it
+        if (
+          k >= HOLD_STEPS + read - 2 &&
+          k < 2 * HOLD_STEPS + read &&
+          !canShow(m, { x: held.x, y: held.y, heading: facing(m, held) }, 'halt')
+        )
+          ok = false;
         return !ok || (k > 3 * HOLD_STEPS && m.speed === 0);
       },
     );
@@ -866,12 +879,14 @@ function scripted(world: World, planned: readonly Leg[]) {
       q.x < yard.maxX - margin &&
       q.y > yard.minY + margin &&
       q.y < yard.maxY - margin;
+    // a rig already nearer an obstacle than the clearance pulls forward as long as it touches nothing
+    const margin = world.contacts(grown(s, RESCUE_CLEARANCE)) === null ? RESCUE_CLEARANCE : 0;
     const clear = (q: KinematicState): boolean => {
       const front = {
         x: q.x + p.truckFront * Math.cos(q.th0),
         y: q.y + p.truckFront * Math.sin(q.th0),
       };
-      return inside(front, 2) && world.contacts(grown(joints(p, q), RESCUE_CLEARANCE)) === null;
+      return inside(front, 2) && world.contacts(grown(joints(p, q), margin)) === null;
     };
     const q0 = {
       x: s.truck.x,
@@ -944,6 +959,7 @@ function scripted(world: World, planned: readonly Leg[]) {
   return {
     phase: () => `${phase}:${leg} ${note}`,
     step({ s, walker, held, reading, step }: View): Act {
+      if (reading.kind !== 'none') fruitless = false;
       if (reading.kind === 'recognised') {
         if (reading.sign === sign) pending = false;
         recognised = reading.sign;
@@ -992,6 +1008,7 @@ function scripted(world: World, planned: readonly Leg[]) {
           }
           finishing = false;
           phase = 'place';
+          fruitless = false;
           spot = null;
           show(null, step);
         }
@@ -1000,9 +1017,11 @@ function scripted(world: World, planned: readonly Leg[]) {
 
       if (phase === 'place') {
         if (sign !== null && !pending) show(null, step);
-        if (step % HOLD_STEPS !== 0) return { keys: NO_KEYS, heading, sign };
+        if (step % HOLD_STEPS !== 0 || fruitless) return { keys: NO_KEYS, heading, sign };
         spot = place(s, l);
         if (spot === null) {
+          // the vehicle stands, so the same search finds nothing until the driver reads something
+          fruitless = true;
           note = `nospot@${(step / 60).toFixed(1)}`;
           return { keys: NO_KEYS, heading, sign };
         }
@@ -1038,6 +1057,8 @@ function scripted(world: World, planned: readonly Leg[]) {
           return { keys: NO_KEYS, heading, sign };
         const next = achtung ? (choose(s, l, at, held, S0) ?? S0) : 'achtung';
         if (!canShow(s, held, next)) {
+          // a spot he cannot sign from would be found again at once
+          if (spot !== null) spent.add(keyOf(spot));
           phase = 'place';
           return { keys: NO_KEYS, heading, sign };
         }
@@ -1291,14 +1312,14 @@ const SLALOM_VIA = Array.from({ length: 24 }, (_, i) => {
 });
 
 /**
- * How the Einweiser picks signs, per exercise (why each: PR #515): the rollout search scored on the
- * body heading, the search scored on the leading end's own direction of motion, or (reverse legs) the
- * tracking LQR.
+ * How the Einweiser picks signs, per exercise (why each: PR #515, reverse-bay's since the side glass
+ * of PR #529): the rollout search scored on the body heading, the search scored on the leading end's
+ * own direction of motion, or the tracking LQR on reverse legs with the body-heading search forward.
  */
 type SignPolicy = 'search' | 'leadSearch' | 'lqr';
 const POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
   'dock-ramp': 'lqr',
-  'reverse-bay': 'leadSearch',
+  'reverse-bay': 'lqr',
   slalom: 'leadSearch',
 };
 /** How far (s) the search looks ahead. */
