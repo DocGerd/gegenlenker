@@ -93,7 +93,7 @@ describe.each(rigs)('signs for $name', ({ truck, trailer }) => {
     expect(s.speed).toBeGreaterThan(0);
   });
 
-  // a few metres into the curve, against the straight line the leading end started on
+  // a few metres into the curve (short enough that the Krone rigs keep him in sight), against the straight line the leading end started on
   const turned = (
     sign: 'rechts' | 'links',
     place: (s: SimSnapshot) => Pose2,
@@ -112,9 +112,13 @@ describe.each(rigs)('signs for $name', ({ truck, trailer }) => {
         return { sign: mark.from === null ? 'herkommen' : sign, pose: place(now) };
       },
       (now) =>
-        mark.from !== null && Math.abs(now.truck.x - mark.from.x) > (lead === 'rear' ? 8 : 4),
+        mark.from !== null && Math.abs(now.truck.x - mark.from.x) > (lead === 'rear' ? 5 : 4),
     );
-    expect(steps.map((d) => d.reading.kind)).not.toContain('unclear');
+    const kinds = steps.map((d) => d.reading.kind);
+    expect(kinds).not.toContain('lost');
+    expect(kinds).not.toContain('unclear');
+    // the run ended on `until`, not on the step cap
+    expect(steps.length).toBeLessThan(60 * 60);
     const { from } = mark;
     if (from === null) throw new Error('never crept');
     return { from, end: endOf(s), pose: place(s), jackknifes: s.jackknifes };
