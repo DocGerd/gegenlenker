@@ -246,6 +246,7 @@ export function proceduralEnvironment(
   if (decorStandInGeometry !== null) {
     geometries.push(decorStandInGeometry);
     const mesh = new Mesh(decorStandInGeometry, solid);
+    castAndReceive(mesh);
     decorStandIns.add(mesh);
     props.push(mesh);
   }
