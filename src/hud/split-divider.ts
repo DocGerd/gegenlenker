@@ -1,12 +1,14 @@
 import type { Orientation, TopDownSplit } from '../contracts/render';
 import { t } from '../i18n/i18n';
-import type { HudAction } from './hud';
 
 /** Key steps move the divider by this share of the screen. */
 const SPLIT_STEP = 0.02;
 const percent = (share: number): number => Math.round(share * 100);
 
-export type SplitAction = Extract<HudAction, { type: 'split' | 'splitReset' }>;
+export type SplitAction =
+  /** A proposed top-down share for an orientation; `commit` ends a drag or is a key press, so it is worth storing. */
+  | { type: 'split'; orientation: Orientation; share: number; commit: boolean }
+  | { type: 'splitReset' };
 
 export type SplitDividerElements = {
   /** Sizes the pane: a drag moves the share by its fraction of this element. */

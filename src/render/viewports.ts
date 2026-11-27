@@ -207,7 +207,7 @@ function paneLever(insets: Insets): number {
   return 1.5 * tokenPx('--size-target', 44) + INSET + insets.right + MESSAGE_GAP;
 }
 
-/** The inputs of `topDownSplit`; each defaults as noted at its use. */
+/** The inputs of `topDownSplit`. */
 export interface SplitOptions {
   /** The stored share (default `DEFAULT_TOP_DOWN_LAYOUT`). */
   readonly layout?: TopDownLayout | undefined;

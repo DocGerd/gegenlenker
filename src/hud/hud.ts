@@ -2,7 +2,6 @@ import type {
   AidFlags,
   CollapsedPanels,
   LegendBox,
-  Orientation,
   Rect,
   TopDownMode,
   TopDownSplit,
@@ -26,7 +25,7 @@ import type { Ahead } from '../sim/predict';
 import { createGauge, type Gauge } from './gauges';
 import { SIGHT_CUE_KEY, sightCue, type SightCue } from './sight-cue';
 import { signPictogram } from './sign-pictogram';
-import { createSplitDivider } from './split-divider';
+import { createSplitDivider, type SplitAction } from './split-divider';
 import './hud.css';
 
 export type HudAction =
@@ -34,9 +33,7 @@ export type HudAction =
   | { type: 'resetView' }
   /** The free camera button or its key: toggles it, entering the outside view first when another is shown. */
   | { type: 'freeCamera' }
-  /** A proposed top-down share for an orientation; `commit` ends a drag or is a key press, so it is worth storing. */
-  | { type: 'split'; orientation: Orientation; share: number; commit: boolean }
-  | { type: 'splitReset' }
+  | SplitAction
   | { type: 'aid'; aid: keyof AidFlags; on: boolean }
   | { type: 'collapse'; panel: keyof CollapsedPanels; collapsed: boolean }
   /** The aid legend opened or closed, which changes the height of the panels. */

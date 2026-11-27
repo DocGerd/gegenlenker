@@ -17,8 +17,8 @@ class FakeElement extends EventTarget {
   }
 }
 
-const percents = (actions: SplitAction[]): (number | false)[] =>
-  actions.map((a) => a.type === 'split' && Math.round(a.share * 100));
+const percents = (actions: SplitAction[]): number[] =>
+  actions.flatMap((a) => (a.type === 'split' ? [Math.round(a.share * 100)] : []));
 
 const split = (orientation: 'landscape' | 'portrait', share: number): TopDownSplit => ({
   orientation,
@@ -41,11 +41,11 @@ function setup(initial: TopDownSplit) {
     { emit: (a) => actions.push(a), signal: new AbortController().signal },
   );
   divider.set(initial, true);
-  const press = (key: string, repeat = false): Event => {
+  const press = (key: string, repeat = false, ctrlKey = false): Event => {
     const e = Object.assign(new Event('keydown', { cancelable: true }), {
       key,
       repeat,
-      ctrlKey: false,
+      ctrlKey,
       metaKey: false,
       altKey: false,
     });
@@ -115,14 +115,7 @@ describe('split divider keys', () => {
 
   it('ignores keys with a modifier', () => {
     const d = setup(split('landscape', 0.4));
-    const e = Object.assign(new Event('keydown', { cancelable: true }), {
-      key: 'ArrowLeft',
-      repeat: false,
-      ctrlKey: true,
-      metaKey: false,
-      altKey: false,
-    });
-    d.handle.dispatchEvent(e);
+    const e = d.press('ArrowLeft', false, true);
     expect(e.defaultPrevented).toBe(false);
     expect(d.actions).toEqual([]);
   });
