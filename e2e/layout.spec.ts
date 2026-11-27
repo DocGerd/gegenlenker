@@ -1424,7 +1424,7 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
  * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
-const paneToolAbsent = new Set(['en-US 800x585', 'de-DE 800x585']);
+const paneToolAbsent = new Set(['en-US 800x585']);
 
 async function expectPaneToolClear(page: Page, at: string): Promise<void> {
   await page.keyboard.press('o');
