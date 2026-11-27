@@ -56,7 +56,7 @@ export const de: Record<MessageKey, string> = {
   coupled: 'Gekuppelt',
   notCoupled: 'Nicht gekuppelt',
   uncouple: 'Abkuppeln',
-  couplingSpeed: 'Tempo beim Kuppeln',
+  couplingSpeed: 'Tempo beim Ankuppeln',
   best: 'Bestwert',
   withAids: 'mit Hilfen',
   noAids: 'ohne Hilfen',

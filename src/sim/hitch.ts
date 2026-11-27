@@ -78,26 +78,41 @@ export function jawOffset(
   return { along: dx * c + dy * s, lateral: -dx * s + dy * c };
 }
 
-/** The parked drawbar and body as the truck's obstacles; a touch names the trailer's part, against `self`. */
-export function parkedContacts(p: VehicleParams, j: Joints): ContactQuery {
+/**
+ * The parked drawbar and body as obstacles to the truck standing as `from`; a touch names the trailer's
+ * part, against `self`. Uncoupled at an angle, the frame end stands over the drawbar and drives off: the
+ * drawbar counts once the truck is clear of it, which it can then never re-enter.
+ */
+export function parkedContacts(
+  p: VehicleParams,
+  j: Joints,
+): (from: readonly BodyFootprint[]) => ContactQuery {
   const parts = bodyFootprints(p, { ...j, coupling: eyeOf(p, j.dolly) }).filter(
     (b) => b.body !== 'truck',
   );
-  return (bodies) => {
+  const body = parts.filter((b) => b.body !== 'drawbar');
+  const drawbar = parts.filter((b) => b.body === 'drawbar');
+  const touch = (
+    bodies: readonly BodyFootprint[],
+    among: readonly BodyFootprint[],
+  ): SimContact | null => {
     for (const { body, obb } of bodies) {
       if (body !== 'truck') continue;
-      for (const part of parts) {
+      for (const part of among) {
         if (obbOverlap(obb, part.obb)) {
-          const hit: SimContact = {
+          return {
             body: part.body,
             obstacleId: SELF_OBSTACLE_ID,
             point: contactPoint(obb, part.obb),
           };
-          return hit;
         }
       }
     }
     return null;
+  };
+  return (from) => {
+    const among = touch(from, drawbar) === null ? parts : body;
+    return (bodies) => touch(bodies, among);
   };
 }
 
@@ -117,7 +132,7 @@ export function drivenRig(
 ): { readonly params: RigParams; readonly contacts: ContactQuery; readonly reach: number } {
   if (s.hitch?.coupled !== false || !hasTrailer(params))
     return { params, contacts, reach: Infinity };
-  const parked = parkedContacts(params, s);
+  const parked = parkedContacts(params, s)(bodyFootprints(truckOnly(params), s));
   const { along, lateral } = jawOffset(s.coupling, s.hitch.eye, s.dolly.heading);
   const lined =
     jaw !== undefined &&

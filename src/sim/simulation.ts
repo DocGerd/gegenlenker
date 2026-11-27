@@ -1,5 +1,6 @@
 import type {
   BlockReason,
+  BodyFootprint,
   ContactQuery,
   ControlVector,
   SimContact,
@@ -80,8 +81,11 @@ export function createSimulation(
     hasTrailer(params) && start.parked !== undefined
       ? { params, truck: truckOnly(params), ...start.parked }
       : null;
-  /** While uncoupled, where the parked trailer's turntable stands, and the truck's contacts with it. */
-  let parked: { readonly dolly: Vec2; readonly contacts: ContactQuery } | null = null;
+  /** While uncoupled, where the parked trailer's turntable stands, and the truck's contacts with it (`parkedContacts`). */
+  let parked: {
+    readonly dolly: Vec2;
+    readonly contacts: (from: readonly BodyFootprint[]) => ContactQuery;
+  } | null = null;
   let couplingSpeed: number | null = null;
   if (hitch !== null) {
     const { heading, turntable } = hitch.trailer;
@@ -133,7 +137,7 @@ export function createSimulation(
       hit = contacts(bodyFootprints(params, joints(params, next)));
     } else {
       const bodies = bodyFootprints(hitch.truck, jointsOf(next));
-      hit = contacts(bodies) ?? parked.contacts(bodies);
+      hit = contacts(bodies) ?? parked.contacts(bodyFootprints(hitch.truck, jointsOf(q)))(bodies);
     }
     return hit === null
       ? null

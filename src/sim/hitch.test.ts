@@ -11,9 +11,9 @@ import type { VehicleParams } from '../contracts/vehicle';
 import { resolveCombination, resolveJaw } from '../vehicles/resolve';
 import { trailers, trucks } from '../vehicles/registry';
 import { wrapAngle } from './angle';
-import { createContactQuery } from './collision';
+import { createContactQuery, obbOverlap } from './collision';
 import { DRAWBAR_WIDTH, DT, V_MAX } from './constants';
-import { drivenRig, jawOffset } from './hitch';
+import { drawnFootprints, drivenRig, jawOffset } from './hitch';
 import { predictCombination } from './predict';
 import { createSimulation } from './simulation';
 
@@ -63,6 +63,24 @@ function reverse(sim: Simulation, lever: number, limit = 1): SimSnapshot {
     if (s.coupling.x < -limit) break;
   }
   return s;
+}
+
+/** The coupling angle beyond which a stopped truck's frame end stands over the drawbar: the jaw's clearance behind it against the drawbar's half width. */
+const overAngle = (p: VehicleParams): number =>
+  Math.asin((p.couplingOffset - p.truckRear) / (DRAWBAR_WIDTH / 2));
+
+/** Couples straight, tows at full left lock to `angle` (rad) between truck and drawbar, stops and uncouples. */
+function uncoupleAt(
+  p: VehicleParams,
+  jaw: ReturnType<typeof resolveJaw>,
+  angle: number,
+): { sim: Simulation; s: SimSnapshot } {
+  const sim = parkedSim(p, jaw, approach(p, 0, 0, 1));
+  let s = reverse(sim, 0.2);
+  for (let i = 0; i < CAP && Math.abs(s.couplingAngle) < angle; i++)
+    s = sim.step(ctl({ lever: 0.3, steer: 1 }));
+  for (let i = 0; i < CAP && s.speed !== 0; i++) s = sim.step(ctl({ brake: true, steer: 1 }));
+  return { sim, s: sim.step(ctl({ brake: true, steer: 1, uncouple: true })) };
 }
 
 describe.each(pairs)('$name', ({ p, jaw }) => {
@@ -143,6 +161,53 @@ describe.each(pairs)('$name', ({ p, jaw }) => {
     ).toBeGreaterThan(1);
     expect(reverse(sim, 0.2).hitch?.coupled).toBe(true);
   });
+
+  it('does not couple where the coupled rig would be rejected: the truck runs on into the drawbar', () => {
+    // hits the trailer only, which the truck alone never has
+    const trailerHit: ContactQuery = (bodies) => {
+      const trailer = bodies.find((b) => b.body === 'trailer');
+      return trailer === undefined
+        ? null
+        : { body: 'trailer', obstacleId: 'wall', point: { x: trailer.obb.cx, y: trailer.obb.cy } };
+    };
+    const s = reverse(parkedSim(p, jaw, approach(p, 0, 0, 1), trailerHit), 0.2);
+    expect(s.hitch?.coupled).toBe(false);
+    expect(s.contact).toMatchObject({ body: 'drawbar', self: true });
+  });
+
+  // Arocs about 12.5°, MAN about 30°: beyond it the frame end stands over the drawbar it drops.
+  it.each([20, Math.ceil((overAngle(p) * 180) / Math.PI) + 2])(
+    'uncouples at %i° and drives off; the drawbar counts once the truck is clear of it',
+    (degrees) => {
+      const angle = (degrees * Math.PI) / 180;
+      const { sim, s: uncoupled } = uncoupleAt(p, jaw, angle);
+      let s = uncoupled;
+      expect(s.hitch?.coupled).toBe(false);
+      expect(Math.abs(s.couplingAngle)).toBeGreaterThanOrEqual(angle);
+      const [truck, drawbar] = ['truck', 'drawbar'].map((body) => {
+        const part = drawnFootprints(p, s).find((b) => b.body === body);
+        if (part === undefined) throw new Error(`no ${body} footprint`);
+        return part.obb;
+      });
+      if (truck === undefined || drawbar === undefined) throw new Error('no footprints');
+      expect(obbOverlap(truck, drawbar)).toBe(angle > overAngle(p));
+      // the predicted path agrees: no block on leaving, only where full lock circles back
+      const rig = drivenRig(p, s, noContacts, jaw);
+      expect(predictCombination(rig.params, s, rig.contacts).blockedAt ?? Infinity).toBeGreaterThan(
+        2,
+      );
+      const dropped = s.coupling;
+      for (let i = 0; i < 300; i++) s = sim.step(ctl({ lever: 0.5, steer: 1 }));
+      expect(s.blocked).toBeNull();
+      expect(Math.hypot(s.coupling.x - dropped.x, s.coupling.y - dropped.y)).toBeGreaterThan(2);
+      expect([s.contacts, s.jackknifes]).toEqual([0, 0]);
+      // back along the same arc
+      for (let i = 0; i < CAP && s.blocked === null; i++)
+        s = sim.step(ctl({ gear: 'R', lever: 0.2, steer: 1 }));
+      expect(s.contact).toMatchObject({ body: 'drawbar', self: true });
+      expect(s.contacts).toBe(1);
+    },
+  );
 
   it('the parked drawbar blocks the predicted path of a truck reversing past the eye', () => {
     const sim = parkedSim(p, jaw, approach(p, 1.2 * jaw.width, 0, 3));
