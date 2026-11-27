@@ -4,12 +4,13 @@ import { element } from './screens/frame';
 
 /**
  * A labelled radio group with every value visible; arrow keys change the value natively. `onChange` gets the
- * newly checked value.
+ * newly checked value. A `hint` is read after the label and values, and drawn under them.
  */
 export function choiceRow(
   field: ChoiceField,
   value: string,
   onChange: (value: string) => void,
+  hint?: string,
 ): HTMLFieldSetElement {
   const row = element('fieldset', 'choice-row');
   row.setAttribute('role', 'radiogroup');
@@ -42,5 +43,11 @@ export function choiceRow(
     }),
   );
   row.append(legend, values);
+  if (hint !== undefined) {
+    const note = element('p', 'choice-row-hint', hint);
+    note.id = `option-${field.id}-hint`;
+    row.setAttribute('aria-describedby', note.id);
+    row.append(note);
+  }
   return row;
 }

@@ -6,7 +6,6 @@ import { failOnRedundantInstall, precached, setOfflineStatus } from './offline-s
 import { browserHost, createPresetCache } from './preset-cache';
 import './update-prompt.css';
 
-const OFFLINE_READY_MS = 4000;
 const UPDATE_CHECK_MS = 60 * 60 * 1000;
 
 /** `preset` is the saved graphics preset; call the returned function after it changes. */
@@ -25,13 +24,10 @@ export function startUpdatePrompt(root: HTMLElement, preset: () => GraphicsPrese
   new ResizeObserver(reserve).observe(toast);
   window.addEventListener('resize', reserve);
 
-  let hideTimer: number | undefined;
   const hide = () => {
-    window.clearTimeout(hideTimer);
     toast.hidden = true;
   };
   const show = (message: string, ...actions: HTMLButtonElement[]) => {
-    window.clearTimeout(hideTimer);
     const text = document.createElement('span');
     text.textContent = message;
     toast.replaceChildren(text, ...actions);
@@ -47,16 +43,10 @@ export function startUpdatePrompt(root: HTMLElement, preset: () => GraphicsPrese
 
   // Offline-ready needs the precache and the saved preset's own assets, which are fetched while online.
   let shellCached = false;
-  let announce = false;
   const presets = createPresetCache(
     browserHost(() => presetAssetUrls(preset())),
     (ready) => {
       setOfflineStatus(ready ? 'ready' : 'incomplete');
-      if (ready && announce) {
-        announce = false;
-        show(t('offlineReady'));
-        hideTimer = window.setTimeout(hide, OFFLINE_READY_MS);
-      }
     },
   );
   const refreshPreset = () => {
@@ -96,10 +86,7 @@ export function startUpdatePrompt(root: HTMLElement, preset: () => GraphicsPrese
       if (!shellCached && !precached()) setOfflineStatus('failed');
       show(t('offlineSetupFailed'), button(t('dismiss'), hide));
     },
-    onOfflineReady() {
-      announce = true;
-      markShellCached();
-    },
+    onOfflineReady: markShellCached,
   });
   return () => {
     // Not ready for the new preset until its assets are found.

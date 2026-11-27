@@ -414,6 +414,12 @@ ol.menu-rows .menu-row {
   white-space: nowrap;
 }
 
+.menu-row-chevron {
+  grid-area: done;
+  align-self: center;
+  color: var(--color-text-secondary);
+}
+
 .menu-row-brief {
   grid-area: brief;
   font-size: var(--text-sm);
@@ -517,6 +523,13 @@ ol.menu-rows .menu-row {
   padding: 0;
   margin-bottom: var(--space-1);
   font-weight: var(--weight-medium);
+}
+
+.choice-row-hint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  color: var(--color-text-muted);
 }
 
 .choice-row-values {
