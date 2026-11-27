@@ -1,7 +1,8 @@
 import type { Locator, Page } from '@playwright/test';
-import { EXERCISE_BRIEF, EXERCISE_TITLE } from '../src/app/entry-keys';
+import { EXERCISE_BRIEF, EXERCISE_TITLE, LAYOUT_NAME } from '../src/app/entry-keys';
 import { exerciseById } from '../src/content/registry';
 import { EXERCISE_IDS, type ExerciseId } from '../src/contracts/exercise';
+import { LAYOUT_IDS } from '../src/contracts/layout';
 import { TRAILER_IDS, TRUCK_IDS } from '../src/contracts/vehicle';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
@@ -53,17 +54,28 @@ test.describe('the longest title footer', () => {
         serviceWorkers: 'block',
       });
       const exerciseId = 'reverse-bay';
-      // the Einweiser's Continue and replay lines are the longest: his title and role
-      const guide = EXERCISE_IDS.map((id) => EXERCISE_TITLE.einweiser[id]).reduce((a, b) =>
-        messages[b].length > messages[a].length ? b : a,
-      );
-      const guideId = EXERCISE_IDS.find((id) => EXERCISE_TITLE.einweiser[id] === guide);
+      // the Einweiser's lines are the longest: his exercise title or yard name, and his role
+      const guides = [
+        ...EXERCISE_IDS.map((id) => ({
+          entry: { role: 'einweiser', kind: 'exercise', id },
+          heading: `${String(EXERCISE_IDS.indexOf(id) + 1)} ${messages[EXERCISE_TITLE.einweiser[id]]}`,
+          context: messages[EXERCISE_TITLE.einweiser[id]],
+        })),
+        ...LAYOUT_IDS.map((id) => {
+          const context = `${messages.freeYard} · ${messages[LAYOUT_NAME[id]]}`;
+          return { entry: { role: 'einweiser', kind: 'yard', id }, heading: context, context };
+        }),
+      ];
+      const longest = (by: (g: (typeof guides)[number]) => string) =>
+        guides.reduce((a, b) => (by(b).length > by(a).length ? b : a));
+      const resumed = longest((g) => g.heading);
+      const replayed = longest((g) => g.context);
       await seedStorage(context, {
         settings: {
           truckId: arocs,
           trailerId: hueffermann,
           ...night,
-          lastEntry: { role: 'einweiser', kind: 'exercise', id: guideId },
+          lastEntry: resumed.entry,
         },
         lastRun: { layoutId: exerciseById(exerciseId).layout, exerciseId, truckId, trailerId },
       });
@@ -71,13 +83,13 @@ test.describe('the longest title footer', () => {
       await page.goto('./');
       await expect(titleEntry(page, messages.continue)).toBeVisible();
       await expect(titleEntry(page, messages.replayLastRun)).toBeVisible();
-      await expect(titleEntry(page, messages.continue)).toContainText(messages[guide]);
+      await expect(titleEntry(page, messages.continue)).toContainText(resumed.heading);
       // an Einweiser run is not seeded here (its log needs his track): give the replay his line
       await titleEntry(page, messages.replayLastRun)
         .locator('.menu-item-detail')
         .evaluate((el, text) => {
           el.textContent = text;
-        }, [messages[guide], messages.roleEinweiser, messages.lightingNight, messages.einweiserViewNoTop].join(' · '));
+        }, [replayed.context, messages.roleEinweiser, messages.lightingNight, messages.einweiserViewNoTop].join(' · '));
       await expect(titleEntry(page, messages.controls)).toBeVisible();
       await expect(titleEntry(page, messages.whatsNew)).toBeVisible();
       await expect(titleEntry(page, messages.about)).toBeVisible();
