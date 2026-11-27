@@ -29,6 +29,8 @@ export type TitleContext = {
   readonly hasNews: () => Promise<boolean>;
   /** `button` is the control that was activated, for actions that go busy. */
   readonly activate: (item: Item, button: HTMLButtonElement) => void;
+  /** No graphics backend: the notice shows and what starts a run is disabled. */
+  readonly graphicsMissing: boolean;
 };
 
 const BADGE: Readonly<Partial<Record<ConditionId, MessageKey>>> = { hasNews: 'whatsNewBadge' };
@@ -87,6 +89,7 @@ export function titleScreen(ctx: TitleContext): {
     const button = element('button', `menu-item menu-item-${tier}`);
     button.type = 'button';
     button.dataset['menu'] = item.id;
+    button.disabled = ctx.graphicsMissing && 'action' in item.target;
     const label = element('span', 'menu-item-label', t(item.label));
     button.append(label);
     if (item.badgeWhen !== undefined) {
@@ -131,6 +134,11 @@ export function titleScreen(ctx: TitleContext): {
     element('h1', 'menu-title', t('appName')),
     element('p', 'menu-tagline', t('tagline')),
   );
+  if (ctx.graphicsMissing) {
+    const note = element('p', 'menu-note', t('noWebgl'));
+    note.dataset['menu'] = 'noGraphics';
+    header.append(note);
+  }
 
   const nav = element('nav', 'menu-nav');
   nav.setAttribute('aria-label', t('menu'));

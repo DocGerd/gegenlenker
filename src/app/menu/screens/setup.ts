@@ -29,6 +29,8 @@ export type SetupContext = {
   readonly step: number;
   readonly back: () => void;
   readonly next: () => void;
+  /** No graphics backend: Start is disabled and the notice shows. */
+  readonly graphicsMissing: boolean;
   /** Starts the run once; the button shows the busy state until the drive takes over. */
   readonly start: (button: HTMLButtonElement, run: RunConfig, entry: EntryRef) => void;
 };
@@ -152,6 +154,7 @@ export function setupScreen(ctx: SetupContext): {
   const start = element('button', 'menu-setup-start', t('start'));
   start.type = 'button';
   start.dataset['menu'] = 'start';
+  start.disabled = ctx.graphicsMissing;
   start.addEventListener('click', () => {
     if (!last) {
       ctx.next();
@@ -161,6 +164,11 @@ export function setupScreen(ctx: SetupContext): {
     ctx.start(start, runConfigOf(started, currentSettings()), started);
   });
   options.append(start);
+  if (ctx.graphicsMissing) {
+    const note = element('p', 'menu-note', t('noWebgl'));
+    note.dataset['menu'] = 'noGraphics';
+    options.append(note);
+  }
 
   layout.append(info, options);
   frame.body.append(layout);

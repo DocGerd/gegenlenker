@@ -226,6 +226,11 @@ export function startApp(root: HTMLElement): void {
       menu();
     });
   };
+  // A probe that throws is left to the drive's own check.
+  const graphicsMissing = probeGraphics().then(
+    (backend) => backend === null,
+    () => false,
+  );
   const menu = (initial?: NavState): void => {
     closeMenu?.();
     const log = lastRun();
@@ -249,6 +254,7 @@ export function startApp(root: HTMLElement): void {
                 },
               },
         hasNews: () => import('./whats-new-seen').then((m) => m.hasUnseen()),
+        graphicsMissing,
         hold: enter,
         release: leave,
         failed: (error, retry) => {

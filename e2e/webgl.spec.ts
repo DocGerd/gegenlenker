@@ -1,9 +1,11 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
-import { startExercise } from './menu-flow';
+import { exerciseEntry, openSetup, startControl, startExercise } from './menu-flow';
 
-test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ page }) => {
+test('tells the trainee up front, disables every start and loads no renderer without WebGL 2', async ({
+  page,
+}) => {
   await page.addInitScript(() => {
     const original: unknown = Reflect.get(HTMLCanvasElement.prototype, 'getContext');
     if (typeof original !== 'function') return;
@@ -20,14 +22,23 @@ test('shows a notice and loads no renderer when WebGL 2 is missing', async ({ pa
   });
 
   await page.goto('./');
-  await startExercise(page, en, 'straight-reverse');
-  await expect(page.getByText(en.noWebgl)).toBeVisible();
-  expect(chunks).toEqual([]);
-  await expect(page.getByRole('alertdialog', { name: en.noWebgl })).toBeVisible();
-  await expect(page.getByRole('button', { name: en.back })).toBeFocused();
+  const title = page.locator('[data-screen="title"]');
+  await expect(title.locator('[data-menu="noGraphics"]')).toHaveText(en.noWebgl);
 
-  await page.getByRole('button', { name: en.back }).click();
+  await openSetup(page, en, exerciseEntry('straight-reverse'));
+  const setup = page.locator('[data-screen="setup"]');
+  await expect(setup.locator('[data-menu="noGraphics"]')).toHaveText(en.noWebgl);
+  await expect(startControl(page, en, exerciseEntry('straight-reverse'))).toBeDisabled();
+  expect(chunks).toEqual([]);
+});
+
+test('shows no notice and keeps Start enabled when WebGL 2 is available', async ({ page }) => {
+  await page.goto('./');
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('[data-menu="noGraphics"]')).toHaveCount(0);
+  await openSetup(page, en, exerciseEntry('straight-reverse'));
+  await expect(startControl(page, en, exerciseEntry('straight-reverse'))).toBeEnabled();
 });
 
 test('the menu loads no three.js chunk until a drive starts', async ({ page }) => {
