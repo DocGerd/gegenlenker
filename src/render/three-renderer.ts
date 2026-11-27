@@ -1,4 +1,4 @@
-import { OrthographicCamera, Scene, Vector3, type Object3D } from 'three';
+import { OrthographicCamera, Scene, Vector3, type Camera, type Object3D } from 'three';
 import { Lighting, WebGPURenderer } from 'three/webgpu';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import {
@@ -37,6 +37,7 @@ import {
 } from './chase-camera';
 import type { SceneRenderer } from './scene-renderer';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
+import { createEinweiserArms, placeViewModelCamera, type EinweiserArms } from './einweiser-arms';
 import { createEinweiserCamera, placeEinweiserCamera } from './einweiser-camera';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
@@ -87,6 +88,7 @@ type Built = {
   readonly environment: Environment;
   readonly aids: AidsLayer;
   readonly interior: CockpitInterior;
+  readonly arms: EinweiserArms;
   readonly truckId: TruckId;
   readonly anchors: TruckAnchors;
   readonly mounts: MirrorMounts;
@@ -104,6 +106,50 @@ type Built = {
  * perspective ones (light-rig.ts), so a list of its own keeps both, and every cache key, stable.
  */
 const topDownLighting = new WeakMap<WebGPURenderer, Lighting>();
+/** The Einweiser's arms see no light at all: their pass keeps a list of its own for the same reason. */
+const viewModelLighting = new WeakMap<WebGPURenderer, Lighting>();
+
+/** Renders `camera`'s pass with the light list `lists` keeps for `gl`. */
+function renderLitBy(
+  lists: WeakMap<WebGPURenderer, Lighting>,
+  gl: WebGPURenderer,
+  scene: Scene,
+  camera: Camera,
+): void {
+  const shared = gl.lighting;
+  let own = lists.get(gl);
+  if (own === undefined) {
+    own = new Lighting();
+    lists.set(gl, own);
+  }
+  gl.lighting = own;
+  try {
+    gl.render(scene, camera);
+  } finally {
+    gl.lighting = shared;
+  }
+}
+
+/**
+ * Draws the arms over the pane just drawn: their depth is cleared in the pass, so they never clip into
+ * the scene, and its colour kept. On WebGPU the depth clear ignores the scissor, which leaves the colour
+ * of the panes drawn before intact.
+ */
+function drawViewModel(gl: WebGPURenderer, scene: Scene, arms: EinweiserArms): void {
+  const { autoClear, autoClearColor, autoClearDepth, autoClearStencil } = gl;
+  gl.autoClear = true;
+  gl.autoClearColor = false;
+  gl.autoClearDepth = true;
+  gl.autoClearStencil = false;
+  try {
+    renderLitBy(viewModelLighting, gl, scene, arms.camera);
+  } finally {
+    gl.autoClear = autoClear;
+    gl.autoClearColor = autoClearColor;
+    gl.autoClearDepth = autoClearDepth;
+    gl.autoClearStencil = autoClearStencil;
+  }
+}
 
 /** `rect` in the pane's own px. */
 function relativeTo(pane: Rect, rect: Rect): Rect {
@@ -299,6 +345,7 @@ export function createThreeSceneRenderer(
     b.truck.setLook(look);
     b.trailer.setLook(look);
     b.interior.setLook(look);
+    b.arms.setLook(look);
     for (const { mirror } of mirrors) mirror.invalidate();
   }
 
@@ -310,6 +357,7 @@ export function createThreeSceneRenderer(
     built.environment.dispose();
     if (built.aids !== keep) built.aids.dispose();
     built.interior.dispose();
+    built.arms.dispose();
     built.scene.clear();
     built = null;
   }
@@ -331,9 +379,16 @@ export function createThreeSceneRenderer(
     const environment = parts.environment(nextLayout, palette);
     const aids = kept ?? parts.aids(truck, trailer, nextLayout, palette);
     const interior = parts.interior(truck, palette);
+    const arms = createEinweiserArms();
     const extent = combinationExtent(truck, trailer);
     setAidsLayer(aids.object);
-    scene.add(environment.object, truckVisual.object, trailerVisual.object, aids.object);
+    scene.add(
+      environment.object,
+      truckVisual.object,
+      trailerVisual.object,
+      aids.object,
+      arms.object,
+    );
     (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
     built = {
       layout: nextLayout,
@@ -345,6 +400,7 @@ export function createThreeSceneRenderer(
       environment,
       aids,
       interior,
+      arms,
       truckId: truck.id,
       anchors: truckAnchors(truck),
       mounts: mirrorMounts(truck),
@@ -577,6 +633,7 @@ export function createThreeSceneRenderer(
         radius: b.radius,
       });
       b.aids.update(frame);
+      b.arms.update(views.cockpit === null ? undefined : frame.einweiser);
       b.scene.updateMatrixWorld();
 
       gl.info.reset();
@@ -624,6 +681,8 @@ export function createThreeSceneRenderer(
         placeEinweiserCamera(einweiserCamera, frame.einweiser, cockpit, frame.fov);
         out.place(cockpit, pixelRatio);
         gl.render(b.scene, einweiserCamera);
+        placeViewModelCamera(b.arms.camera, cockpit);
+        drawViewModel(gl, b.scene, b.arms);
       } else if (cockpit !== null) {
         const head = b.interior.looksAround === true ? (frame.head ?? HEAD_REST) : HEAD_REST;
         placeCockpitCamera(cockpitCamera, snapshot.truck, anchors.eye, cockpit, head);
@@ -680,18 +739,7 @@ export function createThreeSceneRenderer(
         gl.render(b.scene, chaseCamera);
       } else {
         placeTopDown(frame, topDown, b);
-        const shared = gl.lighting;
-        let own = topDownLighting.get(gl);
-        if (own === undefined) {
-          own = new Lighting();
-          topDownLighting.set(gl, own);
-        }
-        gl.lighting = own;
-        try {
-          gl.render(b.scene, topDownCamera);
-        } finally {
-          gl.lighting = shared;
-        }
+        renderLitBy(topDownLighting, gl, b.scene, topDownCamera);
       }
 
       gl.autoClear = false;

@@ -34,6 +34,8 @@ export const SHADOW_ONLY_LAYER = 5; // seen by no camera: casters stood in for w
  * floodlights' static shadow cameras draw, so a vehicle never lands in a map rendered once.
  */
 export const YARD_CASTER_LAYER = 6;
+/** The Einweiser's first-person arms: seen by their own camera alone (`einweiser-arms.ts`), never by a shadow camera. */
+export const VIEWMODEL_LAYER = 7;
 /** What the sun's shadow camera draws: no aids, and not the cockpit-only interior. */
 export const SHADOW_CASTER_LAYERS = [
   DEFAULT_LAYER,

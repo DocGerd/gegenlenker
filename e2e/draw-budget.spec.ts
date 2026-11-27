@@ -138,23 +138,24 @@ for (const run of RUNS) {
     );
   }
 
+  // every preset: the view and the arms are the mode, not a realism layer, so Low draws them too
+  test(
+    `the Einweiser view and his arms stay within the draw-call budget at ${label}, with the driver's shadow passes`,
+    slowAt(preset),
+    async ({ context }) => {
+      test.setTimeout(timeoutWithSettles(preset, 2));
+      const page = await context.newPage();
+      await startAtFullSize(page, run, {
+        ...exerciseEntry('straight-reverse'),
+        role: 'einweiser',
+      });
+      const calls = await drawnCalls(page, run, 'Einweiser view');
+      expect(calls, `draw calls over ${DRAW_CALL_BUDGET}`).toBeLessThanOrEqual(DRAW_CALL_BUDGET);
+    },
+  );
+
   // High only: the free camera sees the most from the greatest height, and the lower presets draw less of it
   if (preset === 'high') {
-    test(
-      `the Einweiser view stays within the draw-call budget at ${label}, with the driver's shadow passes`,
-      slowAt(preset),
-      async ({ context }) => {
-        test.setTimeout(timeoutWithSettles(preset, 2));
-        const page = await context.newPage();
-        await startAtFullSize(page, run, {
-          ...exerciseEntry('straight-reverse'),
-          role: 'einweiser',
-        });
-        const calls = await drawnCalls(page, run, 'Einweiser view');
-        expect(calls, `draw calls over ${DRAW_CALL_BUDGET}`).toBeLessThanOrEqual(DRAW_CALL_BUDGET);
-      },
-    );
-
     test(
       `the free camera stays within the draw-call budget at ${label}, from the greatest height`,
       slowAt(preset),
