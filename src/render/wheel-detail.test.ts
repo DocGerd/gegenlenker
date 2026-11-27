@@ -1,4 +1,4 @@
-import { Box3, type BufferGeometry, Layers, Mesh, type Object3D, Vector3 } from 'three';
+import { Box3, type BufferGeometry, Layers, Mesh, type Object3D, Raycaster, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import type { ScenePalette } from '../contracts/render';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
@@ -13,8 +13,10 @@ import {
   enableLayers,
   MIRROR_LAYERS,
   PERSPECTIVE_LAYER,
+  SHADOW_CASTER_LAYERS,
   TOP_DOWN_LAYERS,
 } from './seams';
+import { wheelGeometry } from './vehicle-geometry';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
 import {
   detailedWheel,
@@ -229,6 +231,34 @@ describe('wheelDetail on the vehicles', () => {
       expect(detailed.box.max.x).toBeLessThanOrEqual(envelope.max.x + EPS);
     },
   );
+
+  it.each(visuals)("keeps a sun shadow caster on every base wheel's tread (%s)", (_id, make) => {
+    const { visual, moved } = both(make);
+    visual.object.updateMatrixWorld(true);
+    const casters = meshesOf(visual.object).filter((m) => m.castShadow);
+    const ray = new Raycaster();
+    ray.layers.disableAll();
+    enableLayers(ray.layers, SHADOW_CASTER_LAYERS);
+    const perWheel = wheelGeometry(1, 1).getAttribute('position').count;
+    let wheels = 0;
+    for (const mesh of moved) {
+      const position = mesh.geometry.getAttribute('position');
+      for (let start = 0; start < position.count; start += perWheel) {
+        const box = new Box3();
+        for (let i = start; i < start + perWheel; i++) {
+          box.expandByPoint(
+            new Vector3().fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld),
+          );
+        }
+        const centre = box.getCenter(new Vector3());
+        ray.set(new Vector3(centre.x, -1, centre.z), new Vector3(0, 1, 0));
+        const [hit] = ray.intersectObjects(casters, false);
+        expect(hit?.point.y).toBeLessThan(0.01);
+        wheels++;
+      }
+    }
+    expect(wheels).toBeGreaterThanOrEqual(4);
+  });
 
   it('adds at most 20k triangles to a truck and trailer pair', () => {
     const added = (make: () => Visual): number => {
