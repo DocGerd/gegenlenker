@@ -162,6 +162,9 @@ const DRIVE_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
   high: 450_000,
 };
 
+/** What one drive takes: the follow and yard shots, or the yard shot (it maps the zoom) and one zoom. */
+type Part = 'framed' | Zoom;
+
 const DAY_LOW: RenderConfig = { preset: 'low', lighting: 'day' };
 const NIGHT_LOW: RenderConfig = { preset: 'low', lighting: 'night' };
 const NIGHT_BALANCED: RenderConfig = { preset: 'balanced', lighting: 'night' };
@@ -178,7 +181,8 @@ type Run = {
 /**
  * Drives `drives` in turn, each on a fresh page, and keeps their shots; the timeout is the sum of
  * the drives'. With `lampKeys`, each drive then presses the lamp keys and checks the top-down shots
- * did not change, and takes no zoomed shots.
+ * did not change, and takes no zoomed shots. With `part`, each drive takes only that part's shots,
+ * so a High drive too slow for one test splits across several.
  */
 async function runDrives(
   context: BrowserContext,
@@ -186,8 +190,12 @@ async function runDrives(
   { id, title: exercise, zooms: allZooms }: (typeof EXERCISES)[number],
   drives: readonly RenderConfig[],
   lampKeys = false,
+  part?: Part,
 ): Promise<Run> {
-  const zooms = lampKeys ? [] : allZooms;
+  const framed: readonly (typeof SHOTS)[number][] =
+    part === undefined || part === 'framed' ? SHOTS : ['yard'];
+  const zooms: readonly Zoom[] =
+    lampKeys || part === 'framed' ? [] : part === undefined ? allZooms : [part];
   const found = exercises.find((e) => e.id === id);
   if (found === undefined) throw new Error(`no exercise ${id}`);
   const layout = resolveLayout(layouts[found.layout], found);
@@ -195,7 +203,7 @@ async function runDrives(
     target: layout.target?.pose ?? null,
     gate: layout.waypoint,
   };
-  const names: readonly string[] = [...SHOTS, ...zooms];
+  const names: readonly string[] = [...framed, ...zooms];
   test.setTimeout(
     drives.reduce(
       (sum, { preset }) => sum + timeoutWithSettles(preset, 2, DRIVE_TIMEOUT_MS[preset]),
@@ -224,7 +232,7 @@ async function runDrives(
     };
     let yardPng: Buffer | null = null;
     const hashes = new Map<string, string>();
-    for (const shot of SHOTS) {
+    for (const shot of framed) {
       const png = await shoot(page, shot);
       hashes.set(shot, sha(png));
       const label = await taken(shot, png, true);
@@ -248,7 +256,7 @@ async function runDrives(
       await settle(page, preset);
       await expect(page.locator('[data-ctl="lights"]')).toHaveAttribute('aria-pressed', 'false');
       await expect(page.locator('[data-ctl="hazard"]')).toHaveAttribute('aria-pressed', 'true');
-      for (const shot of SHOTS) {
+      for (const shot of framed) {
         expect(
           sha(await shoot(page, shot)),
           `${exercise} ${preset} ${shot} with the lamp keys pressed`,
@@ -348,32 +356,39 @@ for (const kind of EXERCISES) {
   );
 
   for (const preset of COMPARED) {
-    test(
-      `the top-down view at night is the same at ${preset} as at low: ${exercise}`,
-      slowAt(preset),
-      async ({ context }, testInfo) => {
-        const compared: RenderConfig = { preset, lighting: 'night' };
-        const run = await runDrives(context, testInfo, kind, [NIGHT_LOW, compared]);
-        const scratch = await context.newPage();
-        const mismatches: string[] = [];
-        for (const shot of run.names) {
-          const base = run.png(NIGHT_LOW, shot);
-          const png = run.png(compared, shot);
-          if (sha(png) === sha(base)) continue;
-          const pair = `${exercise} ${shot} at night: low vs ${preset}`;
-          const diff = await diffShot(scratch, base, png);
-          if (diff === null) {
-            mismatches.push(`${pair} differ in size`);
-            continue;
+    // A High drive costs most of a slice, so High takes each part in a test of its own.
+    const parts: readonly (Part | undefined)[] =
+      preset === 'high' ? ['framed', ...kind.zooms] : [undefined];
+    for (const part of parts) {
+      const what =
+        part === undefined ? '' : part === 'framed' ? ' (follow and yard)' : ` (${part} zoom)`;
+      test(
+        `the top-down view at night is the same at ${preset} as at low: ${exercise}${what}`,
+        slowAt(preset),
+        async ({ context }, testInfo) => {
+          const compared: RenderConfig = { preset, lighting: 'night' };
+          const run = await runDrives(context, testInfo, kind, [NIGHT_LOW, compared], false, part);
+          const scratch = await context.newPage();
+          const mismatches: string[] = [];
+          for (const shot of run.names) {
+            const base = run.png(NIGHT_LOW, shot);
+            const png = run.png(compared, shot);
+            if (sha(png) === sha(base)) continue;
+            const pair = `${exercise} ${shot} at night: low vs ${preset}`;
+            const diff = await diffShot(scratch, base, png);
+            if (diff === null) {
+              mismatches.push(`${pair} differ in size`);
+              continue;
+            }
+            const { heatmap, ...counts } = diff;
+            await testInfo.attach(`${pair} diff.png`, { body: heatmap, contentType: 'image/png' });
+            mismatches.push(`${pair} ${JSON.stringify(counts)}`);
           }
-          const { heatmap, ...counts } = diff;
-          await testInfo.attach(`${pair} diff.png`, { body: heatmap, contentType: 'image/png' });
-          mismatches.push(`${pair} ${JSON.stringify(counts)}`);
-        }
-        await scratch.close();
-        expect(mismatches, 'top-down shots at night differ between presets').toEqual([]);
-      },
-    );
+          await scratch.close();
+          expect(mismatches, 'top-down shots at night differ between presets').toEqual([]);
+        },
+      );
+    }
   }
 
   test(

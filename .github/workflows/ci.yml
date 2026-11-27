@@ -119,23 +119,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { id: 1, runs: 'heavy:16/16 layout:8/12 slow:3/12' }
+          - { id: 1, runs: 'heavy:16/16 layout:8/12 slow:3/15 slow:15/15' }
           - { id: 2, runs: 'heavy:4/16 layout:12/12' }
-          - { id: 3, runs: 'heavy:1/16 heavy:7/16 light:1/6' }
-          - { id: 4, runs: 'layout:4/12 layout:10/12 slow:5/12' }
-          - { id: 5, runs: 'heavy:5/16 light:3/6 slow:10/12' }
-          - { id: 6, runs: 'heavy:6/16 heavy:13/16 slow:2/12' }
-          - { id: 7, runs: 'layout:6/12 light:2/6 slow:4/12' }
-          - { id: 8, runs: 'heavy:14/16 slow:7/12' }
+          - { id: 3, runs: 'heavy:1/16 heavy:7/16 light:1/6 slow:13/15' }
+          - { id: 4, runs: 'layout:4/12 layout:10/12 slow:5/15' }
+          - { id: 5, runs: 'heavy:5/16 light:3/6 slow:10/15' }
+          - { id: 6, runs: 'heavy:6/16 heavy:13/16 slow:2/15' }
+          - { id: 7, runs: 'layout:6/12 light:2/6 slow:4/15' }
+          - { id: 8, runs: 'heavy:14/16 slow:7/15' }
           - { id: 9, runs: 'layout:3/12 layout:7/12 light:4/6' }
-          - { id: 10, runs: 'heavy:12/16 light:6/6 slow:1/12' }
+          - { id: 10, runs: 'heavy:12/16 light:6/6 slow:1/15' }
           - { id: 11, runs: 'heavy:2/16 layout:2/12 light:5/6' }
-          - { id: 12, runs: 'heavy:9/16 layout:1/12 layout:9/12' }
-          - { id: 13, runs: 'heavy:15/16 slow:8/12' }
-          - { id: 14, runs: 'layout:11/12 slow:12/12' }
-          - { id: 15, runs: 'heavy:8/16 slow:6/12' }
-          - { id: 16, runs: 'layout:5/12 slow:11/12' }
-          - { id: 17, runs: 'heavy:10/16 slow:9/12' }
+          - { id: 12, runs: 'heavy:9/16 layout:1/12 layout:9/12 slow:12/15' }
+          - { id: 13, runs: 'heavy:15/16 slow:8/15' }
+          - { id: 14, runs: 'layout:11/12 slow:14/15' }
+          - { id: 15, runs: 'heavy:8/16 slow:6/15' }
+          - { id: 16, runs: 'layout:5/12 slow:11/15' }
+          - { id: 17, runs: 'heavy:10/16 slow:9/15' }
           - { id: 18, runs: 'heavy:3/16 heavy:11/16' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
