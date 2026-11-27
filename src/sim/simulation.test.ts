@@ -9,7 +9,7 @@ import type {
   Vec2,
 } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
-import { resolveCombination } from '../vehicles/resolve';
+import { resolveCombination, resolveTruck } from '../vehicles/resolve';
 import { trailerById, trailers, truckById, trucks } from '../vehicles/registry';
 import { wrapAngle } from './angle';
 import { advanceClock } from './clock';
@@ -841,5 +841,56 @@ describe('simulation', () => {
         expect(predictCombination(p, sim.step(ctl({ gear })), noContacts)).toEqual(NO_PREDICTION);
       }
     });
+  });
+});
+
+describe('solo', () => {
+  const solos = trucks.map((truck) => resolveTruck(truck));
+  const sides = [
+    [1, (r: Prediction) => r.left],
+    [-1, (r: Prediction) => r.right],
+  ] as const;
+
+  it('reversing with left steer swings the rear end left, and nothing bends or folds', () => {
+    for (const p of solos) {
+      const bent = { ...origin, couplingAngle: 0.3, turntableAngle: -0.3 };
+      const sim = createSimulation(p, bent, noContacts);
+      const reverse = ctl({ steer: 0.5, lever: 1, gear: 'R' });
+      const first = driveUntil(sim, reverse, (s) => Math.abs(s.trailerRear.y) > 0.05);
+      expect(last(first).trailerRear.y).toBeGreaterThan(0);
+      // full lock far enough to fold any trailer
+      const snaps = [...first, ...drive(sim, ctl({ steer: 1, lever: 1, gear: 'R' }), 3000)];
+      for (const s of snaps) {
+        expect([s.couplingAngle, s.turntableAngle]).toEqual([0, 0]);
+        expect(s.trailer).toEqual(s.truck);
+        expect(s.dolly).toEqual({ ...s.coupling, heading: s.truck.heading });
+        expect(dist2(s.coupling, s.truck)).toBeCloseTo(p.couplingOffset, 9);
+        expect(dist2(s.trailerRear, s.truck)).toBeCloseTo(p.truckRear, 9);
+      }
+      expect(last(snaps)).toMatchObject({ jackknifes: 0, blocked: null });
+      expect(bodyFootprints(p, last(snaps)).map((b) => b.body)).toEqual(['truck']);
+    }
+  });
+
+  it('the corridor leads with the truck rear in R and its front in D, and never stops at a pivot', () => {
+    for (const p of solos) {
+      for (const gear of ['D', 'R'] as const) {
+        const sim = createSimulation(p, origin, noContacts);
+        const from = sim.step(ctl({ steer: 1, gear }));
+        const predicted = predictCombination(p, from, noContacts);
+        expect(predicted.lead).toBe(gear === 'D' ? 'truck' : 'trailer');
+        expect(predicted.blocked).toBeNull();
+        const [box] = bodyFootprints(p, from);
+        if (box === undefined) throw new Error('no truck footprint');
+        const end = gear === 'D' ? p.truckFront : -p.truckRear;
+        const centre = { x: from.truck.x + end, y: from.truck.y };
+        for (const [side, line] of sides) {
+          const first = line(predicted)[0];
+          if (first === undefined) throw new Error('empty corridor');
+          expect(first.x).toBeCloseTo(centre.x, 9);
+          expect(first.y).toBeCloseTo(centre.y + side * box.obb.halfWidth, 9);
+        }
+      }
+    }
   });
 });

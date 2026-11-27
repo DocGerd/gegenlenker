@@ -10,7 +10,7 @@ import {
 import type { ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette } from '../contracts/render';
 import type { Obb, SimSnapshot } from '../contracts/sim';
-import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
+import type { RigParams, TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import {
   bodyOccluders,
   bodyPoints,
@@ -75,7 +75,7 @@ function bounds(obbs: readonly Obb[]): { x0: number; x1: number; y0: number; y1:
  * over, are left out. Yields after each cell.
  */
 export function* sightCells(
-  g: SightGeometry,
+  g: SightGeometry<RigParams>,
   s: Snapshot,
   occluders: readonly Occluder[],
   reach = REACH,
@@ -119,7 +119,7 @@ export function* sightCells(
 
 /** `sightCells` run to the end. */
 export function sightRuns(
-  g: SightGeometry,
+  g: SightGeometry<RigParams>,
   s: Snapshot,
   occluders: readonly Occluder[],
   reach = REACH,
@@ -187,7 +187,7 @@ export type SightCones = {
 
 export function createSightCones(
   truck: TruckSpec,
-  trailer: TrailerSpec,
+  trailer: TrailerSpec | null,
   layout: ResolvedLayout,
   palette: ScenePalette,
   now: () => number = () => performance.now(),

@@ -9,7 +9,7 @@ import type { MessageKey } from '../../../i18n/en';
 import { formatNumber, formatSeconds, t } from '../../../i18n/i18n';
 import { bestKey } from '../../../scoring/best';
 import type { RunConfig } from '../../drive';
-import { currentSettings } from '../../settings';
+import { currentSettings, runTrailer } from '../../settings';
 import { bestResults } from '../../storage';
 import {
   entryHeading,
@@ -62,7 +62,8 @@ function bestLine(result: RunResult): HTMLElement {
     ),
     stat('time', formatSeconds(result.time)),
     stat('contacts', formatNumber(result.contacts, 0)),
-    stat('jackknifes', formatNumber(result.jackknifes, 0)),
+    // the truck solo has no limit stops
+    ...(result.trailerId === null ? [] : [stat('jackknifes', formatNumber(result.jackknifes, 0))]),
     stat('directionChanges', formatNumber(result.directionChanges, 0)),
   );
   return line;
@@ -78,7 +79,9 @@ function toleranceLine({ tolerances }: ExerciseDefinition): HTMLElement {
 /** The best lines for the chosen vehicles, time of day and driving view. */
 function paintBests(block: HTMLElement, exercise: ExerciseDefinition): void {
   const best = bestResults();
-  const { truckId, trailerId, lighting, mirrorsOnly } = currentSettings();
+  const settings = currentSettings();
+  const { truckId, lighting, mirrorsOnly } = settings;
+  const trailerId = runTrailer(settings, 'driver');
   const lines = [false, true]
     .map(
       (assisted) => best[bestKey(exercise.id, truckId, trailerId, assisted, lighting, mirrorsOnly)],
@@ -113,7 +116,7 @@ export function setupScreen(ctx: SetupContext): {
   if (stepId === undefined) throw new Error(`${entryKey(ctx.entry)} has no setup step ${ctx.step}`);
   const fields = SETUP_STEPS[stepId];
   const optionRow = (id: OptionId): HTMLFieldSetElement =>
-    choiceRow(roleField(id, role), optionValue(currentSettings(), id), (value) => {
+    choiceRow(roleField(id, role), optionValue(currentSettings(), id, role), (value) => {
       if (applyOption(id, value) && exercise !== null && role === 'driver')
         paintBests(bests, exercise);
     });

@@ -19,7 +19,8 @@ export interface SceneRenderer {
   init(canvas: HTMLCanvasElement): Promise<void>;
   /** `listener` runs when the GPU renderer is lost for good; returns the unsubscribe. */
   onLost(listener: () => void): () => void;
-  setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec): void;
+  /** A null trailer: the truck solo. */
+  setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec | null): void;
   /** Builds the current scene again under the current quality, keeping the aids and their tracks; no-op without one. */
   rebuildScene(): void;
   /** `listener` runs when an asset attached, detached or failed on its own, so a still frame is stale; returns the unsubscribe. */

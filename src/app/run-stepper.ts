@@ -26,7 +26,8 @@ export type RunStepper = {
   result(
     exercise: ExerciseDefinition,
     truckId: TruckId,
-    trailerId: TrailerId,
+    /** Null: the truck solo. */
+    trailerId: TrailerId | null,
     lighting: LightingMode,
     mirrorsOnly: boolean,
   ): RunResult;

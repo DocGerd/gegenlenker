@@ -4,14 +4,7 @@ import { DRAW_CALL_BUDGET, QUALITY_FLAGS } from '../src/render/quality';
 import { drawnBackend, parseOverlay } from './perf/tablet-logic';
 import { FREE_FOV } from '../src/render/free-look';
 import type { LightingMode } from '../src/contracts/render';
-import {
-  type Preset,
-  settle,
-  slowAt,
-  startPinnedDrive,
-  step,
-  timeoutWithSettles,
-} from './pinned-shoot';
+import { type Preset, slowAt, startPinnedDrive, step, timeoutWithSettles } from './pinned-shoot';
 import { exerciseEntry, type MenuEntry } from './menu-flow';
 
 // High at night is the one lit scene with the sun's shadow pass taken out, the aids unlit and the lamps' passes in.
@@ -26,8 +19,10 @@ const VIEWS = [
   { view: 'yard', key: 'y' },
   { view: 'chase', key: 'o' },
 ] as const;
-/** Longer than the overlay's refresh interval, with frames in between. */
+/** Longer than the overlay's refresh interval. */
 const PAST_REFRESH_MS = 500;
+/** Frames that draw a view or camera change before the overlay is read. */
+const FRAMES_AFTER_CHANGE = 4;
 /** The sun at High by day; at night the two dipped lamps and the trailer's rear light, all lit at the start. */
 const SHADOW_PASSES = { day: 1, night: 3 } as const;
 
@@ -37,14 +32,23 @@ const FLY_BACK_NOTCHES = 3;
 type Run = { preset: Preset; lighting: LightingMode };
 
 /** The overlay's draw calls once the frames after a change have been drawn; `what` names the view in failures. */
-async function drawnCalls(page: Page, { preset, lighting }: Run, what: string): Promise<number> {
+async function drawnCalls(
+  page: Page,
+  { preset, lighting }: Run,
+  what: string,
+  { mirrors = true }: { mirrors?: boolean } = {},
+): Promise<number> {
   const label = lighting === 'night' ? `${preset} at night` : preset;
-  await settle(page, preset);
-  await page.clock.runFor(PAST_REFRESH_MS);
+  // the frames draw the change; the overlay refreshes on a timer, which a fast-forward fires once, so the reading is the state after the last frame
+  await step(page, FRAMES_AFTER_CHANGE);
+  await page.clock.fastForward(PAST_REFRESH_MS);
   const text = await page.locator('div.mono', { hasText: /calls \d+/ }).textContent();
   const reading = parseOverlay(text ?? '');
   if (reading === null) throw new Error(`${label} ${what}: no overlay reading`);
   expect(drawnBackend(reading.gl), `${label} ${what} backend`).toBe('webgl2');
+  // a lower scale or an undrawn mirror would read below the worst case and pass the budget silently
+  expect(reading.scale, `${label} ${what} resolution scale`).toBe(1);
+  if (mirrors) expect(reading.mirror, `${label} ${what} mirror draws`).toBeGreaterThan(0);
   expect(reading.calls, `${label} ${what} drew nothing`).toBeGreaterThan(0);
   expect(reading.shadow, `${label} ${what} shadow passes`).toBe(
     preset === 'high' ? SHADOW_PASSES[lighting] : 0,
@@ -127,7 +131,7 @@ for (const run of RUNS) {
       `the ${view} view stays within the draw-call budget at ${label}`,
       slowAt(preset),
       async ({ context }) => {
-        test.setTimeout(timeoutWithSettles(preset, 2));
+        test.setTimeout(timeoutWithSettles(preset, 1));
         const page = await context.newPage();
         await startAtFullSize(page, run);
         await page.keyboard.press(key);
@@ -143,13 +147,13 @@ for (const run of RUNS) {
     `the Einweiser view and his arms stay within the draw-call budget at ${label}, with the driver's shadow passes`,
     slowAt(preset),
     async ({ context }) => {
-      test.setTimeout(timeoutWithSettles(preset, 2));
+      test.setTimeout(timeoutWithSettles(preset, 1));
       const page = await context.newPage();
       await startAtFullSize(page, run, {
         ...exerciseEntry('straight-reverse'),
         role: 'einweiser',
       });
-      const calls = await drawnCalls(page, run, 'Einweiser view');
+      const calls = await drawnCalls(page, run, 'Einweiser view', { mirrors: false });
       expect(calls, `draw calls over ${DRAW_CALL_BUDGET}`).toBeLessThanOrEqual(DRAW_CALL_BUDGET);
     },
   );
@@ -160,7 +164,7 @@ for (const run of RUNS) {
       `the free camera stays within the draw-call budget at ${label}, from the greatest height`,
       slowAt(preset),
       async ({ context }) => {
-        test.setTimeout(timeoutWithSettles(preset, 2));
+        test.setTimeout(timeoutWithSettles(preset, 1));
         const page = await context.newPage();
         await startFreeCamera(page, run);
         await flyToGreatestHeight(page);
@@ -175,7 +179,7 @@ for (const run of RUNS) {
       `the free camera stays within the draw-call budget at ${label}, looking across the yard to the horizon from a corner at the greatest height`,
       slowAt(preset),
       async ({ context }) => {
-        test.setTimeout(timeoutWithSettles(preset, 2));
+        test.setTimeout(timeoutWithSettles(preset, 1));
         const page = await context.newPage();
         await startFreeCamera(page, run);
         await flyToGreatestHeight(page);

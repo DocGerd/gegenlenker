@@ -6,6 +6,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | ----------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | Marked target rectangle, or gap to reverse into | bay                                                                         | Bucht                                                             |
 | Truck                                           | truck                                                                       | Lkw                                                               |
+| Truck driven without its trailer                | no trailer (solo)                                                           | ohne Anhänger (solo)                                              |
 | Trailer's front steering part                   | drawbar                                                                     | Deichsel                                                          |
 | Truck-to-drawbar angle                          | coupling angle                                                              | Kupplungswinkel                                                   |
 | Drawbar-to-trailer angle                        | turntable angle                                                             | Drehschemelwinkel                                                 |

@@ -6,7 +6,7 @@ import { t } from '../../i18n/i18n';
 import { pointerLookAvailable } from '../../input/pointer-lock';
 import type { RunConfig } from '../drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE, LAYOUT_BRIEF, LAYOUT_NAME } from '../entry-keys';
-import type { Settings } from '../settings';
+import { runTrailer, type Settings } from '../settings';
 import type { OptionId } from './options';
 
 /** On the catalogue entry, not the exercise, so a later role can reuse an exercise definition. */
@@ -93,8 +93,9 @@ export function entryHeading(ref: EntryRef): string {
 }
 
 export function runConfigOf(ref: EntryRef, settings: Settings): RunConfig {
-  const { truckId, trailerId } = settings;
+  const { truckId } = settings;
   const { role } = ref;
+  const trailerId = runTrailer(settings, role);
   return ref.kind === 'exercise'
     ? { layoutId: entryOf(ref).layout, exercise: exerciseById(ref.id), truckId, trailerId, role }
     : { layoutId: ref.id, exercise: null, truckId, trailerId, role };

@@ -193,7 +193,9 @@ export function parseInputLog(
     return null;
   }
   if (!isRecord(data) || ![1, 2, 3, 4].includes(data.version as number)) return null;
-  const { layoutId, exerciseId, truckId, trailerId, steps, changes } = data;
+  const { layoutId, exerciseId, truckId, steps, changes } = data;
+  const trailerId =
+    data.trailerId === null || isMember(TRAILER_IDS, data.trailerId) ? data.trailerId : undefined;
   // Versions 1 to 3 predate roles: every such run was driven.
   const role = data.version === 4 ? data.role : 'driver';
   if (!isMember(ROLES, role)) return null;
@@ -206,7 +208,9 @@ export function parseInputLog(
   const mirrorsOnly = data.version === 1 || data.version === 2 ? false : data.mirrorsOnly;
   if (typeof mirrorsOnly !== 'boolean') return null;
   if (!isMember(LAYOUT_IDS, layoutId) || !isMember(TRUCK_IDS, truckId)) return null;
-  if (!isMember(TRAILER_IDS, trailerId) || !isStep(steps)) return null;
+  // solo (no trailer) is a v4 driver run only
+  const soloRefused = trailerId === null && (data.version !== 4 || role !== 'driver');
+  if (trailerId === undefined || soloRefused || !isStep(steps)) return null;
   if (exerciseId !== null && !isMember(EXERCISE_IDS, exerciseId)) return null;
   if (data.fingerprint !== fingerprint({ layoutId, exerciseId, truckId, trailerId, role }))
     return null;

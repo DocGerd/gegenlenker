@@ -71,9 +71,10 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
 
   const state = (): MenuState => {
     const best = bestResults();
-    const last = lastEntryOf(currentSettings().lastEntry, deps.replay?.log ?? null);
+    const settings = currentSettings();
+    const last = lastEntryOf(settings.lastEntry, deps.replay?.log ?? null);
     return {
-      done: EXERCISE_IDS.filter((id) => exerciseDone(best, id)),
+      done: EXERCISE_IDS.filter((id) => exerciseDone(best, id, settings.solo)),
       replayable: deps.replay !== null,
       hasNews: false,
       lastEntry: last === null ? null : offeredEntry(last),

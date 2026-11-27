@@ -12,10 +12,10 @@ export const en = {
   exerciseReverseCorner: 'Reverse around a corner',
   exerciseDockRamp: 'Dock at a ramp',
   exerciseSlalom: 'Slalom forward and back',
-  briefStraightReverse: 'Reverse the trailer straight back into the marked bay and stop.',
-  briefReverseBay: 'Reverse the trailer between the parked vehicles into the marked bay and stop.',
+  briefStraightReverse: 'Reverse straight back into the marked bay and stop.',
+  briefReverseBay: 'Reverse between the parked vehicles into the marked bay and stop.',
   briefReverseCorner: 'Reverse around the corner into the side street and stop in the marked bay.',
-  briefDockRamp: 'Reverse the trailer square up to the ramp and stop in the marked bay.',
+  briefDockRamp: 'Reverse square up to the ramp and stop in the marked bay.',
   briefSlalom:
     'Drive the slalom forward to the marked circle, then reverse back and stop in the marked bay.',
   guideBriefDepot: 'Guide the truck freely in the depot yard, without a target.',
@@ -45,6 +45,7 @@ export const en = {
   goalPositionOk: 'position ok · angle off',
   truck: 'Truck',
   trailer: 'Trailer',
+  noTrailer: 'No trailer',
   best: 'Best',
   withAids: 'with aids',
   noAids: 'no aids',
@@ -136,6 +137,9 @@ export const en = {
   legendSightTop:
     'Ground where the driver has sight contact with you: directly, or only in a mirror.',
   legendSightGround: 'The same sight areas on the ground of your own view.',
+  legendPathSolo:
+    'Solid: truck rear corners (reversing). Dashed: truck front corners (forward). Stop bar: where the held steer stops.',
+  legendGhostSolo: 'Truck outline at the target.',
   aidTopViewOnly: 'Shown in the follow and whole-yard views only',
   panelAids: 'Aids',
   panelGauges: 'Angles',

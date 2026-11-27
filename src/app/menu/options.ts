@@ -9,7 +9,7 @@ import {
 import { setLanguage, t, type Lang } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/en';
 import { trailers, trucks } from '../../vehicles/registry';
-import { updateSettings, type Settings } from '../settings';
+import { runTrailer, updateSettings, type Settings } from '../settings';
 import { applyTheme } from '../theme';
 
 export type OptionId =
@@ -89,6 +89,12 @@ const SWITCH: readonly (keyof typeof SWITCH_NAME)[] = ['on', 'off'];
 const OFF_ON: readonly (keyof typeof SWITCH_NAME)[] = ['off', 'on'];
 const TRUCKS = trucks.map((s) => s.id);
 const TRAILERS = trailers.map((s) => s.id);
+/** The trailer row's value for the truck solo. */
+const NO_TRAILER = 'none';
+const TRAILER_CHOICES: readonly Choice[] = trailers.map((s) => ({
+  value: s.id,
+  label: { text: s.name },
+}));
 
 const named = <T extends string>(
   values: readonly T[],
@@ -110,7 +116,7 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
     id: 'trailer',
     label: 'trailer',
     group: 'run',
-    choices: trailers.map((s) => ({ value: s.id, label: { text: s.name } })),
+    choices: [...TRAILER_CHOICES, { value: NO_TRAILER, label: 'noTrailer' }],
     applies: 'run',
   },
   lighting: {
@@ -178,8 +184,9 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
   },
 };
 
-/** Where the Einweiser names a field his own way: the same setting, so the same values. */
+/** Where the Einweiser names a field his own way: the same setting, so the same values. He guides a combination only. */
 const EINWEISER_FIELDS: Readonly<Partial<Record<OptionId, OptionField>>> = {
+  trailer: { ...OPTION_FIELDS.trailer, choices: TRAILER_CHOICES },
   driveView: {
     ...OPTION_FIELDS.driveView,
     label: 'einweiserView',
@@ -200,12 +207,13 @@ const PAUSE_FIELDS: Readonly<Record<Role, readonly OptionId[]>> = {
 /** What a running drive can take: shown in the pause sheet, in this order. */
 export const pauseFields = (role: Role): readonly OptionId[] => PAUSE_FIELDS[role];
 
-export function optionValue(settings: Settings, id: OptionId): string {
+/** `role` matters for the trailer only. */
+export function optionValue(settings: Settings, id: OptionId, role: Role = 'driver'): string {
   switch (id) {
     case 'truck':
       return settings.truckId;
     case 'trailer':
-      return settings.trailerId;
+      return runTrailer(settings, role) ?? NO_TRAILER;
     case 'lighting':
       return settings.lighting;
     case 'driveView':
@@ -241,7 +249,8 @@ export function optionPatch(id: OptionId, value: string): SettingsPatch | null {
     case 'truck':
       return patchOf(TRUCKS, value, (truckId) => ({ truckId }));
     case 'trailer':
-      return patchOf(TRAILERS, value, (trailerId) => ({ trailerId }));
+      if (value === NO_TRAILER) return { solo: true };
+      return patchOf(TRAILERS, value, (trailerId) => ({ trailerId, solo: false }));
     case 'lighting':
       return patchOf(LIGHTING_MODES, value, (lighting) => ({ lighting }));
     case 'driveView':

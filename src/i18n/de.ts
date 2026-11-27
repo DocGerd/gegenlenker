@@ -14,14 +14,12 @@ export const de: Record<MessageKey, string> = {
   exerciseReverseCorner: 'Rückwärts um die Ecke',
   exerciseDockRamp: 'An die Rampe setzen',
   exerciseSlalom: 'Slalom vor und zurück',
-  briefStraightReverse:
-    'Den Anhänger geradeaus rückwärts in die markierte Bucht setzen und anhalten.',
+  briefStraightReverse: 'Geradeaus rückwärts in die markierte Bucht setzen und anhalten.',
   briefReverseBay:
-    'Den Anhänger zwischen den parkenden Fahrzeugen rückwärts in die markierte Bucht setzen und anhalten.',
+    'Zwischen den parkenden Fahrzeugen rückwärts in die markierte Bucht setzen und anhalten.',
   briefReverseCorner:
     'Rückwärts um die Ecke in die Seitenstraße fahren und in der markierten Bucht anhalten.',
-  briefDockRamp:
-    'Den Anhänger rechtwinklig an die Rampe setzen und in der markierten Bucht anhalten.',
+  briefDockRamp: 'Rechtwinklig an die Rampe setzen und in der markierten Bucht anhalten.',
   briefSlalom:
     'Den Slalom vorwärts bis zum markierten Kreis fahren, dann zurücksetzen und in der markierten Bucht anhalten.',
   guideBriefDepot: 'Frei im Betriebshof einweisen, ohne Ziel.',
@@ -51,6 +49,7 @@ export const de: Record<MessageKey, string> = {
   goalPositionOk: 'Position ok · Winkel falsch',
   truck: 'Lkw',
   trailer: 'Anhänger',
+  noTrailer: 'Ohne Anhänger',
   best: 'Bestwert',
   withAids: 'mit Hilfen',
   noAids: 'ohne Hilfen',
@@ -142,6 +141,9 @@ export const de: Record<MessageKey, string> = {
   legendGhost: 'Anhänger-Umriss am Ziel.',
   legendSightTop: 'Boden mit Sichtkontakt zum Fahrer: direkt oder nur im Spiegel.',
   legendSightGround: 'Dieselben Sichtbereiche am Boden in der eigenen Ansicht.',
+  legendPathSolo:
+    'Durchgezogen: Lkw hinten (rückwärts). Gestrichelt: Lkw vorn (vorwärts). Querbalken: Halt bei gehaltener Lenkung.',
+  legendGhostSolo: 'Lkw-Umriss am Ziel.',
   aidTopViewOnly: 'Nur in den Ansichten Folgen und Ganzer Hof sichtbar',
   panelAids: 'Hilfen',
   panelGauges: 'Winkel',

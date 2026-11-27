@@ -113,6 +113,35 @@ describe('sightRuns', () => {
   });
 });
 
+describe('the truck solo', () => {
+  const solo = sightGeometry(truck, null);
+  const first = createSimulation(solo.params, { truck: POSE }, () => null).snapshot();
+  const runs = sightRuns(solo, first, []);
+
+  it('has its truck as the only body, and the sight check agrees at each cell it draws', () => {
+    expect(bodyOccluders(solo, first).map((b) => b.body)).toEqual(['truck']);
+    expect(area(runs.direct)).toBeGreaterThan(10);
+    expect(area(runs.mirror)).toBeGreaterThan(1);
+    const [row] = runs.direct;
+    if (row === undefined) throw new Error('no direct run');
+    const [x, y] = [row.from + CELL / 2, row.y + CELL / 2];
+    expect(sightOf(solo, first, bodyPoints({ x, y }), []).direct).toBe(true);
+  });
+
+  it('is sampled by the cones without a trailer', () => {
+    const cones = createSightCones(truck, null, layout, palette, () => 0);
+    cones.setFlags({ top: true, ground: false });
+    cones.update({
+      snapshot: first,
+      views: { topDown: { x: 0, y: 0, width: 400, height: 300 } },
+      einweiser: { pose: POSE, pitch: 0, sign: null, phase: 0 },
+    } as RenderFrame);
+    expect(cones.pending()).toBe(false);
+    expect(cones.object.children.map((m) => m.visible)).toEqual([true, false, true, false]);
+    cones.dispose();
+  });
+});
+
 describe('the sight cones in the scene', () => {
   // a clock that never moves: each update samples to the end, as in the pinned e2e shots
   const cones = createSightCones(truck, trailer, layout, palette, () => 0);
