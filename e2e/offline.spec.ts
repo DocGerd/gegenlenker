@@ -281,7 +281,7 @@ test(
       }, high)
       .toEqual(drawn.map(() => 1));
 
-    // The marker follows the preset: Balanced draws no reflections, so it is gone.
+    // The markers follow the preset: Balanced keeps the ground texture and drops the High-only layers.
     await page.getByRole('button', { name: en.pause }).click();
     await page
       .getByRole('dialog', { name: en.paused })
