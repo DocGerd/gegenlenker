@@ -665,11 +665,29 @@ test('a hidden tab pauses the free yard too', async ({ page }) => {
   await expect(sheet(page)).toBeVisible();
 });
 
-test('a hidden tab on the result screen opens no sheet', async ({ page }) => {
+test('a hidden tab after leaving the run builds no sheet', async ({ page }) => {
+  // A leaked listener would build its sheet on the detached stage, where no locator sees it.
+  await page.addInitScript(() => {
+    let built = 0;
+    Object.defineProperty(window, 'sheetsBuilt', { get: () => built });
+    const append = Object.getOwnPropertyDescriptor(Element.prototype, 'append')?.value as (
+      ...nodes: (Node | string)[]
+    ) => void;
+    Element.prototype.append = function (this: Element, ...nodes: (Node | string)[]): void {
+      if (nodes.some((n) => n instanceof Element && n.classList.contains('pause-sheet'))) built++;
+      append.apply(this, nodes);
+    };
+  });
+  const built = (): Promise<number> =>
+    page.evaluate(() => (window as unknown as { sheetsBuilt: number }).sheetsBuilt);
+  await page.goto('./');
   await startAndRoll(page);
-  await finishRun(page);
+  await page.keyboard.press('Escape');
+  await sheet(page).getByRole('button', { name: en.leaveUnscored }).click();
+  await toTitle(page, en);
+
+  const before = await built();
+  expect(before).toBeGreaterThan(0);
   await setVisibility(page, 'hidden');
-  await setVisibility(page, 'visible');
-  await expect(sheet(page)).toBeHidden();
-  await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
+  expect(await built()).toBe(before);
 });
