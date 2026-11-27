@@ -15,6 +15,8 @@ export type QualityFlags = {
   readonly yardKit: boolean;
   readonly cabGlb: boolean;
   readonly vehicleGlb: boolean;
+  /** Rounded tyres with a tread, dished rims, brake drums and axles in the perspective views, in place of flat discs. */
+  readonly wheelDetail: boolean;
   readonly chaseView: boolean;
   /** The class VI front mirror in the cockpit view's windscreen. */
   readonly frontMirror: boolean;
@@ -59,6 +61,7 @@ const BALANCED: QualityFlags = {
   yardKit: false,
   cabGlb: true,
   vehicleGlb: true,
+  wheelDetail: true,
   chaseView: true,
   frontMirror: true,
   wideMirrors: true,
@@ -92,6 +95,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     yardKit: false,
     cabGlb: false,
     vehicleGlb: false,
+    wheelDetail: false,
     chaseView: false,
     frontMirror: true,
     wideMirrors: true,
