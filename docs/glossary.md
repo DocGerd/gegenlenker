@@ -94,5 +94,6 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Fault rule set by the trainer, not a source     | trainer convention                                                          | Trainerregel                                                      |
 | Look sensitivity setting                        | mouse sensitivity                                                           | Mausempfindlichkeit                                               |
 | Invert vertical look setting                    | invert mouse                                                                | Maus invertieren                                                  |
+| Hint while the pointer is locked                | P or Esc releases the mouse                                                 | P oder Esc gibt die Maus frei                                     |
 | First-person field of view setting              | field of view                                                               | Sichtfeld                                                         |
 | Walk, jog and look keys of the Einweiser legend | walk, jog, look around                                                      | Gehen, Laufen, Umsehen                                            |

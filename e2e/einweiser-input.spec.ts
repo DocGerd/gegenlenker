@@ -13,6 +13,14 @@ test.use({ channel: 'chromium' });
 const einweiser = { ...yardEntry('depot'), role: 'einweiser' } as const;
 const sheet = (page: Page) => page.getByRole('dialog', { name: en.paused });
 const surface = (page: Page) => page.locator('.drive-surface');
+const locked = (page: Page): Promise<boolean> =>
+  page.evaluate(() => document.pointerLockElement?.classList.contains('drive-surface') === true);
+/** A click in the middle of his own view, above the band. */
+async function clickView(page: Page): Promise<void> {
+  const view = await page.locator('.hud-cockpit').boundingBox();
+  if (view === null) throw new Error('no view');
+  await page.mouse.click(view.x + view.width / 2, view.y + view.height / 3);
+}
 
 type Shown = { sign: SignId | null; pose: { x: number; y: number; heading: number } };
 const shown = (page: Page): Promise<Shown> =>
@@ -70,11 +78,9 @@ test('a click takes the pointer lock, mouse buttons sign under it, and losing it
   page,
 }) => {
   await startEinweiser(page);
-  const locked = (): Promise<boolean> =>
-    page.evaluate(() => document.pointerLockElement?.classList.contains('drive-surface') === true);
 
   await surface(page).click({ position: { x: 300, y: 200 } });
-  await expect.poll(locked).toBe(true);
+  await expect.poll(() => locked(page)).toBe(true);
   // the click that took the lock shows no sign
   expect((await shown(page)).sign).toBeNull();
 
@@ -90,11 +96,11 @@ test('a click takes the pointer lock, mouse buttons sign under it, and losing it
     document.exitPointerLock();
   });
   await expect(sheet(page)).toBeVisible();
-  await expect.poll(locked).toBe(false);
+  await expect.poll(() => locked(page)).toBe(false);
   // resuming takes a click: the lock is not asked for again by itself
   await sheet(page).getByRole('button', { name: en.continue }).click();
   await expect(sheet(page)).toBeHidden();
-  expect(await locked()).toBe(false);
+  expect(await locked(page)).toBe(false);
 });
 
 test('the pause sheet lists the look settings for the Einweiser only, and they apply at once', async ({
@@ -121,4 +127,42 @@ test('the Settings screen lists the Einweiser options on a desktop', async ({ pa
   await page.getByRole('button', { name: en.settings }).click();
   await expect(page.getByRole('heading', { name: en.settingsEinweiser })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: en.fov, exact: true })).toBeVisible();
+});
+
+test('a click in the top view pans it and leaves the mouse free, a click in his view takes the lock', async ({
+  page,
+}) => {
+  await startEinweiser(page);
+  const reset = page.locator('[data-hud="resetView"]');
+  const hint = page.locator('[data-hud="lockHint"]');
+  await expect(reset).toBeDisabled();
+
+  const pane = await page.locator('.hud-topdown').boundingBox();
+  if (pane === null) throw new Error('no top-down pane');
+  const x = pane.x + pane.width / 2;
+  const y = pane.y + pane.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 80, y + 30, { steps: 5 });
+  await page.mouse.up();
+  await expect(reset).toBeEnabled();
+  expect(await locked(page)).toBe(false);
+  await expect(hint).toBeHidden();
+
+  await clickView(page);
+  await expect.poll(() => locked(page)).toBe(true);
+  await expect(hint).toBeVisible();
+  await expect(hint).toHaveText(en.lockHint);
+});
+
+test('P releases the mouse like Esc: the hint goes and the pause sheet opens', async ({ page }) => {
+  await startEinweiser(page);
+  await clickView(page);
+  await expect.poll(() => locked(page)).toBe(true);
+  await expect(page.locator('[data-hud="lockHint"]')).toBeVisible();
+
+  await page.keyboard.press('KeyP');
+  await expect(sheet(page)).toBeVisible();
+  await expect.poll(() => locked(page)).toBe(false);
+  await expect(page.locator('[data-hud="lockHint"]')).toBeHidden();
 });
