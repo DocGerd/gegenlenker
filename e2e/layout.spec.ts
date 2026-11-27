@@ -6,7 +6,7 @@ import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
 import { computeViewports, NO_INSETS, sightCueBox, type Insets } from '../src/render/viewports';
 import { seedStorage } from './menu-seed';
-import { heavyAt, startPinnedDrive } from './pinned-shoot';
+import { FRAME_MS, heavyAt, startPinnedDrive } from './pinned-shoot';
 import {
   chooseSetting,
   entryName,
@@ -20,6 +20,9 @@ import {
 } from './menu-flow';
 
 type Size = { width: number; height: number };
+
+/** Frames stepped after the HUD is laid out, for the elements a frame places (the target arrow). */
+const FROZEN_FRAMES = 6;
 
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 
@@ -782,7 +785,7 @@ for (const [height, openFull] of [
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height });
-    await startStraightReverse(page, en);
+    await startFrozenReverse(page, en);
     await expect(page.locator('.hud-legend dt.hud-legend-view').first()).toBeVisible({
       visible: openFull,
     });
@@ -864,16 +867,22 @@ async function overlayTrouble(page: Page, sel: string): Promise<string[]> {
   ];
 }
 
+/** Pages whose clock is paused (`startFrozenReverse`): their animation frames only run when stepped. */
+const frozenPages = new WeakSet<Page>();
+
 /** Two animation frames: the legend's resize observer re-lays out after the first one. */
 const settled = (page: Page) =>
-  page.evaluate(
-    () =>
-      new Promise<void>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-      }),
-  );
+  frozenPages.has(page)
+    ? page.clock.runFor(2 * FRAME_MS)
+    : page.evaluate(
+        () =>
+          new Promise<void>((resolve) => {
+            requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+          }),
+      );
 
 async function startFreeYard(page: Page, messages: Messages): Promise<void> {
+  await freezeClock(page);
   await page.goto('./');
   await startYard(page, messages, 'depot');
   // No exercise, so no counters or brief: the toolbar and the controls are what stands.
@@ -883,13 +892,38 @@ async function startFreeYard(page: Page, messages: Messages): Promise<void> {
   await expect
     .poll(() => page.locator('.hud-mirror:not([hidden])').count())
     .toBeGreaterThanOrEqual(2);
-  await settled(page);
+  await stepFrozen(page);
 }
 
 async function startStraightReverse(page: Page, messages: Messages): Promise<void> {
   await page.goto('./');
   await startExercise(page, messages, 'straight-reverse');
   await hudReady(page);
+}
+
+/**
+ * Opens the straight-reverse drive with the clock paused, so the render loop draws only the frames
+ * stepped here. The cases that use it read DOM boxes, which the observers lay out without a frame;
+ * a free-running software-GL loop only slows their polls. The brief fold and the open overlays
+ * need the free-running start (`startStraightReverse`): they fail on a paused clock.
+ */
+async function startFrozenReverse(page: Page, messages: Messages): Promise<void> {
+  await freezeClock(page);
+  await page.goto('./');
+  await startExercise(page, messages, 'straight-reverse');
+  await hudReady(page);
+  await stepFrozen(page);
+}
+
+async function freezeClock(page: Page): Promise<void> {
+  frozenPages.add(page);
+  await page.clock.install({ time: 0 });
+  await page.clock.pauseAt(1000);
+}
+
+async function stepFrozen(page: Page): Promise<void> {
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
+  await page.clock.runFor(FROZEN_FRAMES * FRAME_MS);
 }
 
 const aidToggle = (page: Page) => page.locator('[data-hud="aidLegendToggle"]');
@@ -1135,7 +1169,7 @@ for (const { locale, messages } of locales) {
         });
         try {
           const page = await context.newPage();
-          await startStraightReverse(page, messages);
+          await startFrozenReverse(page, messages);
           await settled(page);
           const [gauges] = await boxes(page.locator('.hud-gauges'));
           const [counters] = await boxes(page.locator('.hud-counters'));
@@ -1198,7 +1232,7 @@ for (const size of [
     const context = await browser.newContext({ locale: 'de-DE', viewport: size });
     try {
       const page = await context.newPage();
-      await startStraightReverse(page, de);
+      await startFrozenReverse(page, de);
       await settled(page);
       const breaks = await gaugeLabelBreaks(page);
       // A label that fits on one line would pass vacuously: pick a size where it wraps.
@@ -1231,7 +1265,7 @@ for (const { locale, messages } of locales) {
       const context = await browser.newContext({ locale, viewport: size });
       try {
         const page = await context.newPage();
-        await startStraightReverse(page, messages);
+        await startFrozenReverse(page, messages);
         await settled(page);
         const breaks = await gaugeLabelBreaks(page);
         expect(
@@ -1487,7 +1521,7 @@ for (const { locale, messages } of locales) {
       const context = await browser.newContext({ locale, viewport: size });
       try {
         const page = await context.newPage();
-        await startStraightReverse(page, messages);
+        await startFrozenReverse(page, messages);
         await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
           await test.step('the toolbar takes no reserve against the lever column', () =>
@@ -1704,7 +1738,7 @@ test('the class IV mirrors hang from the class II arms at 1920x1080', async ({ b
   });
   try {
     const page = await context.newPage();
-    await startStraightReverse(page, en);
+    await startFrozenReverse(page, en);
     await hudReady(page);
     await expectWideArms(page);
   } finally {
@@ -1717,8 +1751,8 @@ const frontShown = [
   { width: 1280, height: 800, front: 1 },
   { width: 1366, height: 768, front: 1 },
   { width: 768, height: 1024, front: 1 },
-  { width: 390, height: 844, front: 0 },
-  { width: 360, height: 800, front: 0 },
+  { width: 800, height: 585, front: 0 },
+  { width: 1024, height: 600, front: 0 },
 ];
 
 for (const { width, height, front } of frontShown) {
@@ -1728,7 +1762,7 @@ for (const { width, height, front } of frontShown) {
     const context = await browser.newContext({ locale: 'de-DE', viewport: { width, height } });
     try {
       const page = await context.newPage();
-      await startStraightReverse(page, de);
+      await startFrozenReverse(page, de);
       await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(front);
       await expectMessagesClear(page, de.blockedTurntable, de.goalInside);
     } finally {
@@ -2027,7 +2061,7 @@ for (const { size, folded } of closeScreens) {
       const context = await browser.newContext({ locale: 'en-US', viewport: size });
       try {
         const page = await context.newPage();
-        await startStraightReverse(page, en);
+        await startFrozenReverse(page, en);
         if (folded) {
           const toggle = page.locator('[data-hud="keysToggle"]');
           await toggle.click();
@@ -2075,7 +2109,7 @@ for (const size of [
     const context = await browser.newContext({ locale: 'en-US', viewport: size });
     try {
       const page = await context.newPage();
-      await startStraightReverse(page, en);
+      await startFrozenReverse(page, en);
       await expect(page.locator('[data-hud="close"]')).toBeHidden();
       await expect(page.locator('[data-hud="close"]:not([hidden])')).toHaveCount(0);
     } finally {
@@ -2106,7 +2140,7 @@ for (const { size, locale, messages } of laptops) {
     const context = await browser.newContext({ locale, viewport: size });
     try {
       const page = await context.newPage();
-      await startStraightReverse(page, messages);
+      await startFrozenReverse(page, messages);
       await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
       await expectMirrorsClearControls(page, size);
       await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
@@ -2132,7 +2166,7 @@ for (const { size, locale, messages } of [
         SETTINGS_KEY,
         JSON.stringify({ version: 1, graphics: 'high' }),
       ] as const);
-      await startStraightReverse(page, messages);
+      await startFrozenReverse(page, messages);
       await expect(page.locator('.hud-legend')).toContainText(messages.lookAround);
       await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
       await expectMirrorsClearControls(page, size);

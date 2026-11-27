@@ -52,7 +52,7 @@ export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
 export const HIGH_WAIT_MS = 60_000;
 
 export const SETTINGS_KEY = 'gegenlenker.settings.v1';
-const FRAME_MS = 16;
+export const FRAME_MS = 16;
 /** Frames stepped after the scene is ready, so every lazily built resource is in place. */
 const SETTLE_FRAMES = 30;
 /** Wall-clock bound on each phase of `settle`, so a preset that never readies fails by name, not by the test timeout; High loads its KTX2 files one after another. */
