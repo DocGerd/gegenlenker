@@ -35,17 +35,7 @@ function panes(): { label: string; width: number; height: number }[] {
   for (let w = 600; w <= 2560; w += 160) {
     for (let h = 500; h <= 1440; h += 120) {
       for (const mode of ['drive', 'mirrors'] as const) {
-        const { cockpit } = computeViewports(
-          w,
-          h,
-          mode,
-          null,
-          NO_INSETS,
-          undefined,
-          null,
-          undefined,
-          'einweiser',
-        );
+        const { cockpit } = computeViewports(w, h, { mode, insets: NO_INSETS, role: 'einweiser' });
         if (cockpit !== null) out.push({ label: `${String(w)}x${String(h)} ${mode}`, ...cockpit });
       }
     }
