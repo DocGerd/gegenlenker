@@ -92,9 +92,23 @@ describe('exerciseDone', () => {
         reached: false,
       }),
     };
-    expect(exerciseDone(best, 'reverse-bay')).toBe(true);
-    expect(exerciseDone(best, 'slalom')).toBe(false);
-    expect(exerciseDone({}, 'reverse-bay')).toBe(false);
+    expect(exerciseDone(best, 'reverse-bay', false)).toBe(true);
+    expect(exerciseDone(best, 'slalom', false)).toBe(false);
+    expect(exerciseDone({}, 'reverse-bay', false)).toBe(false);
+  });
+
+  it('tracks solo finishes apart from combination ones', () => {
+    const solo = result({ trailerId: null });
+    const soloOnly = {
+      [bestKey('reverse-bay', 'man-le-18-280', null, false, 'day', false)]: solo,
+    };
+    expect(exerciseDone(soloOnly, 'reverse-bay', true)).toBe(true);
+    expect(exerciseDone(soloOnly, 'reverse-bay', false)).toBe(false);
+    const combinationOnly = {
+      [bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'day', false)]: result(),
+    };
+    expect(exerciseDone(combinationOnly, 'reverse-bay', false)).toBe(true);
+    expect(exerciseDone(combinationOnly, 'reverse-bay', true)).toBe(false);
   });
 });
 
@@ -401,6 +415,21 @@ describe('best results', () => {
     expect(recordBest(assisted.best, result({ time: 40 })).previous?.time).toBe(30);
   });
 
+  it('ranks solo runs apart and stores them', () => {
+    const soloKey = bestKey('reverse-bay', 'man-le-18-280', null, false, 'day', false);
+    expect(soloKey).toBe('reverse-bay/man-le-18-280/solo/unaided');
+    const combination = recordBest({}, result({ time: 30 })).best;
+    const solo = recordBest(combination, result({ trailerId: null, time: 50 }));
+    expect(solo.isNewBest).toBe(true);
+    expect(solo.previous).toBeNull();
+    expect(solo.best[KEY]?.time).toBe(30);
+    expect(solo.best[soloKey]?.time).toBe(50);
+    const fingerprint = (): string => 'f';
+    expect(parseBestResults(serializeBestResults(solo.best, fingerprint), fingerprint)).toEqual(
+      solo.best,
+    );
+  });
+
   it('ranks night runs apart and leaves day keys unsuffixed', () => {
     expect(KEY).toBe('reverse-bay/man-le-18-280/krone-azw-18/unaided');
     const nightKey = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'night', false);
@@ -411,7 +440,9 @@ describe('best results', () => {
     expect(night.previous).toBeNull();
     expect(night.best[KEY]?.time).toBe(30);
     expect(night.best[nightKey]?.time).toBe(50);
-    expect(exerciseDone({ [nightKey]: result({ lighting: 'night' }) }, 'reverse-bay')).toBe(true);
+    expect(exerciseDone({ [nightKey]: result({ lighting: 'night' }) }, 'reverse-bay', false)).toBe(
+      true,
+    );
   });
 
   it('ranks mirror-only runs apart and reads bests stored before them as with the top view', () => {

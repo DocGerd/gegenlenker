@@ -129,7 +129,7 @@ export type RendererParts = {
   readonly interior: (truck: TruckSpec, palette: ScenePalette) => CockpitInterior;
   readonly aids: (
     truck: TruckSpec,
-    trailer: TrailerSpec,
+    trailer: TrailerSpec | null,
     layout: ResolvedLayout,
     palette: ScenePalette,
   ) => AidsLayer;

@@ -6,7 +6,7 @@ import type {
   SimSnapshot,
   Vec2,
 } from '../contracts/sim';
-import type { VehicleParams } from '../contracts/vehicle';
+import { hasTrailer, type RigParams } from '../contracts/vehicle';
 import { CONTACT_WARN_DISTANCE, PREDICT_DISTANCE, PREDICT_STEP } from './constants';
 import { bodyFootprints } from './geometry';
 import { joints, pivotViolation, rk4, type KinematicState } from './kinematics';
@@ -32,7 +32,7 @@ type Held = {
 };
 
 /** The held target steer from `from`; null outside D and R. */
-function hold(params: VehicleParams, from: SimSnapshot): Held | null {
+function hold(params: RigParams, from: SimSnapshot): Held | null {
   const { gear, steer } = from.control;
   if (gear !== 'D' && gear !== 'R') return null;
   const target = Math.min(1, Math.max(-1, steer)) * params.maxRoadWheelAngle;
@@ -68,13 +68,13 @@ function ease(
 }
 
 /**
- * The paths of the two corners of the leading end with the target steer held: the trailer's rear
- * when reversing, the truck's front when driving forward. Unit speed makes time steps arc-length
+ * The paths of the two corners of the leading end with the target steer held: the rear end when
+ * reversing (the trailer's, solo the truck's), the truck's front when driving forward. Unit speed makes time steps arc-length
  * steps; the road wheels ramp toward the target along the arc at the rate they would at the current
  * speed, and reach it at once from standstill.
  */
 export function predictCombination(
-  params: VehicleParams,
+  params: RigParams,
   from: SimSnapshot,
   contacts: ContactQuery,
   distance = PREDICT_DISTANCE,
@@ -83,6 +83,7 @@ export function predictCombination(
   if (held === null) return NO_PREDICTION;
   const { direction } = held;
   const lead = direction === 1 ? 'truck' : 'trailer';
+  const leadBody = direction === 1 || !hasTrailer(params) ? 'truck' : 'trailer';
 
   let memo: { q: KinematicState; bodies: readonly BodyFootprint[] } | null = null;
   const footprints = (q: KinematicState): readonly BodyFootprint[] => {
@@ -98,8 +99,8 @@ export function predictCombination(
   const left: Vec2[] = [];
   const right: Vec2[] = [];
   const record = (q: KinematicState): void => {
-    const body = footprints(q).find((b) => b.body === lead)?.obb;
-    if (body === undefined) throw new Error(`no ${lead} footprint`);
+    const body = footprints(q).find((b) => b.body === leadBody)?.obb;
+    if (body === undefined) throw new Error(`no ${leadBody} footprint`);
     const [ux, uy] = [Math.cos(body.heading), Math.sin(body.heading)];
     const end = direction * body.halfLength;
     for (const [line, side] of [
@@ -154,7 +155,7 @@ export function predictCombination(
  * `PREDICT_STEP` up to `distance`, ending early at a pivot limit; empty outside D and R.
  */
 export function sweptBodies(
-  params: VehicleParams,
+  params: RigParams,
   from: SimSnapshot,
   distance: number,
 ): BodyFootprint[] {

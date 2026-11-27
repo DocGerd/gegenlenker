@@ -78,9 +78,10 @@ export type Hud = {
   dispose(): void;
 };
 
-export type HudOptions = {
-  couplingLimit: number;
-  turntableLimit: number;
+/** The coupling and turntable limits, radians; the truck solo has no angles to show. */
+type PivotOptions = { couplingLimit: number; turntableLimit: number } | { solo: true };
+
+export type HudOptions = PivotOptions & {
   mode: 'exercise' | 'yard';
   /** Title and brief shown for an exercise run. */
   exercise: { title: string; brief: string } | null;
@@ -183,6 +184,12 @@ const AIDS: readonly [keyof AidFlags, MessageKey, MessageKey][] = [
   ['tracks', 'aidTracks', 'legendTracks'],
   ['ghost', 'aidGhost', 'legendGhost'],
 ];
+/** The truck solo has no angles to show, and its own corridor and ghost. */
+const SOLO_AIDS: typeof AIDS = [
+  ['path', 'aidPath', 'legendPathSolo'],
+  ['tracks', 'aidTracks', 'legendTracks'],
+  ['ghost', 'aidGhost', 'legendGhostSolo'],
+];
 const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
   ['aids', 'panelAids'],
   ['gauges', 'panelGauges'],
@@ -252,9 +259,9 @@ const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
 const keyRows = (chase: boolean, look: boolean, mirrorsOnly: boolean, role: Role): string =>
   driveLegendRows({ chase, look, mirrorsOnly, role }).map(legendRowMarkup).join('');
 
-/** The Einweiser has no gauges to fold. */
-const panelButtons = (driver: boolean): string =>
-  PANELS.filter(([p]) => driver || p !== 'gauges')
+/** Only a combination's driver has gauges to fold. */
+const panelButtons = (gauged: boolean): string =>
+  PANELS.filter(([p]) => gauged || p !== 'gauges')
     .map(([p, k]) => panelButton(p, k))
     .join('');
 
@@ -275,7 +282,10 @@ const MARKUP = (
   look: boolean | undefined,
   mirrorsOnly: boolean,
   role: Role,
+  solo: boolean,
   driver = role === 'driver',
+  gauged = driver && !solo,
+  aids = solo ? SOLO_AIDS : AIDS,
 ): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
@@ -300,19 +310,19 @@ const MARKUP = (
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
-        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${panelButtons(driver)}</div>
+        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${panelButtons(gauged)}</div>
       <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
-        <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
-        <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
+        <div class="hud-group">${aids.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
+        <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${aids.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
       </div>
     </div>
     <div class="hud-info" data-hud="info">
-      ${driver ? '<div class="hud-gauges" id="hud-panel-gauges" data-hud="gauges" data-chrome></div>' : ''}
+      ${gauged ? '<div class="hud-gauges" id="hud-panel-gauges" data-hud="gauges" data-chrome></div>' : ''}
       ${
         mode === 'exercise'
           ? `<dl class="hud-counters" data-hud="counters" data-chrome>
         <dt data-i18n="contacts"></dt><dd class="mono" data-hud="contacts"></dd>
-        <dt data-i18n="jackknifes"></dt><dd class="mono" data-hud="jackknifes"></dd>
+        ${solo ? '' : '<dt data-i18n="jackknifes"></dt><dd class="mono" data-hud="jackknifes"></dd>'}
         <dt data-i18n="directionChanges"></dt><dd class="mono" data-hud="directionChanges"></dd>
         <dt data-i18n="time"></dt><dd class="mono" data-hud="time"></dd>
       </dl>`
@@ -371,9 +381,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   const role = opts.role ?? 'driver';
   const driver = role === 'driver';
+  const solo = 'solo' in opts;
   root.insertAdjacentHTML(
     'beforeend',
-    MARKUP(opts.mode, opts.chase, opts.look, opts.mirrorsOnly === true, role),
+    MARKUP(opts.mode, opts.chase, opts.look, opts.mirrorsOnly === true, role, solo),
   );
   const hud = query(root, 'root', HTMLElement);
   hud.dataset['role'] = role;
@@ -389,7 +400,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const topDown = query(hud, 'topDown', HTMLElement);
   const infoRow = query(hud, 'info', HTMLElement);
   const toolbar = query(hud, 'toolbar', HTMLElement);
-  // the driver's alone
+  // the driver's only; the gauges also need a trailer
   const gaugeBox = hud.querySelector<HTMLElement>('[data-hud="gauges"]');
   const speed = hud.querySelector<HTMLElement>('[data-hud="speed"]');
   const gearEl = hud.querySelector<HTMLElement>('[data-hud="gear"]');
@@ -426,7 +437,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   briefToggle.setAttribute('aria-label', t('briefToggle'));
 
   let gauges: { readonly coupling: Gauge; readonly turntable: Gauge } | null = null;
-  if (gaugeBox !== null) {
+  if (gaugeBox !== null && !('solo' in opts)) {
     gauges = {
       coupling: createGauge(t('couplingAngle'), opts.couplingLimit),
       turntable: createGauge(t('turntableAngle'), opts.turntableLimit),
@@ -478,7 +489,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const collapsed = { ...opts.collapsed };
   const aidsBox = query(hud, 'aids', HTMLElement);
   const legendItems = new Map(
-    AIDS.map(([aid]) => {
+    (solo ? SOLO_AIDS : AIDS).map(([aid]) => {
       const li = hud.querySelector<HTMLElement>(`[data-aid-legend="${aid}"]`);
       if (li === null) throw new Error(`no legend item for ${aid}`);
       return [aid, li] as const;

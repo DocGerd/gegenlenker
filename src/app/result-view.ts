@@ -232,10 +232,15 @@ export function showResult(
       bad: result.contacts > 0,
       delta: delta('contacts', 0, ''),
     }),
-    row('jackknifes', formatNumber(result.jackknifes, 0), {
-      bad: result.jackknifes > 0,
-      delta: delta('jackknifes', 0, ''),
-    }),
+    // the truck solo has no limit stops
+    ...(result.trailerId === null
+      ? []
+      : [
+          row('jackknifes', formatNumber(result.jackknifes, 0), {
+            bad: result.jackknifes > 0,
+            delta: delta('jackknifes', 0, ''),
+          }),
+        ]),
     row('directionChanges', formatNumber(result.directionChanges, 0), {
       delta: delta('directionChanges', 0, ''),
     }),

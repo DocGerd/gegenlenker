@@ -97,14 +97,18 @@ const BACKEND_READY = (v: string): boolean => v !== '';
 export type MarkerChecks = Readonly<Record<string, (value: string) => boolean>>;
 
 /** The `<html>` markers whose values say `preset`'s asynchronous attachments are in place; a shot before they land would differ. */
-export function readyMarkers(preset: Preset, overrides: MarkerChecks = {}): MarkerChecks {
+export function readyMarkers(
+  preset: Preset,
+  overrides: MarkerChecks = {},
+  solo = false,
+): MarkerChecks {
   const flags = QUALITY_FLAGS[preset];
   const drawn = Object.values<Attachment>(ATTACHMENTS).filter((a) =>
     a.flags.every((f) => flags[f]),
   );
   return {
     'data-render-backend': BACKEND_READY,
-    ...Object.fromEntries(drawn.map((a) => [a.marker, a.ready])),
+    ...Object.fromEntries(drawn.map((a) => [a.marker, (v: string) => a.ready(v, solo)])),
     ...overrides,
   };
 }
@@ -281,7 +285,8 @@ async function attachments(
   preset: Preset,
   overrides?: MarkerChecks,
 ): Promise<{ ready: boolean; values: (string | null)[] }> {
-  const want = readyMarkers(preset, overrides);
+  const solo = (await page.locator('.drive[data-solo]').count()) > 0;
+  const want = readyMarkers(preset, overrides, solo);
   const values = await page.evaluate((names) => {
     const html = document.documentElement;
     return names.map((n) => html.getAttribute(n));

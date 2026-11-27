@@ -20,7 +20,7 @@ import {
   type Fov,
   type MouseSensitivity,
 } from '../contracts/einweiser';
-import { EXERCISE_IDS, ROLES } from '../contracts/exercise';
+import { EXERCISE_IDS, ROLES, type Role } from '../contracts/exercise';
 import { LAYOUT_IDS } from '../contracts/layout';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
@@ -33,6 +33,8 @@ export type Settings = {
   readonly theme: 'system' | 'light' | 'dark';
   readonly truckId: TruckId;
   readonly trailerId: TrailerId;
+  /** The driver takes the truck without a trailer; `trailerId` stays for the Einweiser, who guides a combination. */
+  readonly solo: boolean;
   readonly aids: AidFlags;
   readonly topDown: DrivingView;
   readonly topDownLayout: TopDownLayout;
@@ -108,6 +110,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
     theme: pick(THEMES, s['theme'], 'system'),
     truckId: pick(TRUCK_IDS, s['truckId'], TRUCK_IDS[0]),
     trailerId: pick(TRAILER_IDS, s['trailerId'], TRAILER_IDS[0]),
+    solo: flag(s['solo'], false),
     aids: {
       pivots: flag(aids['pivots'], DEFAULT_AIDS.pivots),
       path: flag(aids['path'], DEFAULT_AIDS.path),
@@ -134,6 +137,10 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
     invertMouse: flag(s['invertMouse'], false),
   };
 }
+
+/** The trailer `role` starts with; null: the truck solo. */
+export const runTrailer = (settings: Settings, role: Role): TrailerId | null =>
+  settings.solo && role === 'driver' ? null : settings.trailerId;
 
 // Held in memory as well, so choices survive the session when storage is unavailable.
 let current: Settings | null = null;

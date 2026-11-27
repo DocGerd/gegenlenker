@@ -50,7 +50,7 @@ function replayLabel(log: InputLog): string {
 
 /** The chosen value's name as the setup screen shows it to `role`, without the field name. */
 function valueLabel(id: OptionId, role: Role = 'driver'): string {
-  const value = optionValue(currentSettings(), id);
+  const value = optionValue(currentSettings(), id, role);
   const choice = roleField(id, role).choices.find((c) => c.value === value);
   return choice === undefined ? '' : labelOf(choice);
 }
@@ -62,7 +62,7 @@ function continueLines({ state }: TitleContext): readonly string[] {
   const role = entry.role === 'einweiser' && entry.kind === 'yard' ? [t('roleEinweiser')] : [];
   return [
     entryHeading(entry),
-    `${valueLabel('truck')} · ${valueLabel('trailer')}`,
+    `${valueLabel('truck')} · ${valueLabel('trailer', entry.role)}`,
     [...role, valueLabel('lighting'), valueLabel('driveView', entry.role)].join(' · '),
   ];
 }

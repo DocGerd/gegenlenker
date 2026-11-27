@@ -1466,7 +1466,7 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
  * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
-const paneToolAbsent = new Set(['en-US 800x585', 'de-DE 800x585']);
+const paneToolAbsent = new Set(['en-US 800x585']);
 
 async function expectPaneToolClear(page: Page, at: string): Promise<void> {
   await page.keyboard.press('o');
@@ -1815,8 +1815,8 @@ async function expectDividerClearOrHidden(page: Page, size: Size): Promise<void>
 }
 
 test('opening the aid legend re-measures the divider against the panels', async ({ page }) => {
-  // The tallest landscape screen here where the in-flow legend leaves the divider no room (below 700 px it is an overlay).
-  const size = { width: 1280, height: 700 };
+  // 700 px is the lowest height with the in-flow legend (below, it is an overlay); this narrow, the open legend leaves the divider no room.
+  const size = { width: 1024, height: 700 };
   await page.setViewportSize(size);
   await startStraightReverse(page, en);
   await expect(handle(page)).toBeVisible();

@@ -12,7 +12,7 @@ import {
   type RenderFrame,
   type TopDownMode,
 } from '../contracts/render';
-import type { TrailerId, TruckId } from '../contracts/vehicle';
+import { hasTrailer, type TrailerId, type TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
 import { t } from '../i18n/i18n';
 import { createControls } from '../input/controls';
@@ -36,7 +36,6 @@ import { CONTACT_WARN_DISTANCE } from '../sim/constants';
 import { NO_PREDICTION, predictCombination, warnAhead, type Ahead } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
-import { trailerById, truckById } from '../vehicles/registry';
 import { measureChrome, measureDivider } from './chrome';
 import { startEinweiserDrive } from './einweiser-drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
@@ -51,7 +50,8 @@ export type RunConfig = {
   readonly layoutId: LayoutId;
   readonly exercise: ExerciseDefinition | null;
   readonly truckId: TruckId;
-  readonly trailerId: TrailerId;
+  /** Null: the truck solo, a driver run only. */
+  readonly trailerId: TrailerId | null;
   /** Absent: a driver run. */
   readonly role?: Role;
 };
@@ -67,7 +67,9 @@ export type DriveOutcome = {
 const ARROW_MARGIN = 24;
 const EXPOSE_FRAMING = new URLSearchParams(location.search).get('framing') === '1';
 
-const anyAid = (a: AidFlags): boolean => a.pivots || a.path || a.tracks || a.ghost;
+/** The truck solo has no angle display, whatever the setting says. */
+const anyAid = (a: AidFlags, solo: boolean): boolean =>
+  (a.pivots && !solo) || a.path || a.tracks || a.ghost;
 /** Every aid draws in the top-down view only, so a mirror-only run has none, whatever the settings. */
 const NO_AIDS: AidFlags = { pivots: false, path: false, tracks: false, ghost: false };
 
@@ -89,15 +91,13 @@ export function startDrive(
   { onExit, onRestart, onLeave }: DriveHandlers,
 ): () => void {
   const role: Role = run.role ?? 'driver';
-  const { params, layout, exercise, start, contacts } = resolveRun({
+  const { params, layout, exercise, start, contacts, truck, trailer } = resolveRun({
     layoutId: run.layoutId,
     exerciseId: run.exercise?.id ?? null,
     truckId: run.truckId,
     trailerId: run.trailerId,
     role,
   });
-  const truck = truckById(run.truckId);
-  const trailer = trailerById(run.trailerId);
   const sim = createSimulation(params, start, contacts);
   const { lighting, mirrorsOnly } = settings;
   const recorder = createInputRecorder();
@@ -106,9 +106,12 @@ export function startDrive(
 
   const stage = document.createElement('div');
   stage.className = 'drive';
+  // e2e: a solo rig attaches no trailer shell (`readyMarkers`)
+  stage.toggleAttribute('data-solo', trailer === null);
   root.append(stage);
+  // resolveRun refuses an Einweiser run solo
   const einweiser =
-    role === 'einweiser'
+    role === 'einweiser' && trailer !== null
       ? startEinweiserDrive(stage, { truck, trailer, layout, contacts, start: snapshot, lighting })
       : null;
 
@@ -317,8 +320,9 @@ export function startDrive(
   });
   live.push(() => viewInput.dispose());
   const hud = createHud(stage, {
-    couplingLimit: params.couplingLimit,
-    turntableLimit: params.turntableLimit,
+    ...(hasTrailer(params)
+      ? { couplingLimit: params.couplingLimit, turntableLimit: params.turntableLimit }
+      : { solo: true as const }),
     mode: exercise === null ? 'yard' : 'exercise',
     exercise:
       exercise === null
@@ -527,7 +531,7 @@ export function startDrive(
       viewInput.step(seconds);
       const clock = sheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
-      snapshot = stepper.advance(clock.steps, source, anyAid(aids));
+      snapshot = stepper.advance(clock.steps, source, anyAid(aids, trailer === null));
       if (clock.steps === 0 && !dirty) {
         renderer.skipFrame();
         return;

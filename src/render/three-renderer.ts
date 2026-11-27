@@ -100,10 +100,11 @@ type Built = {
   readonly parts: readonly Part[];
   readonly layout: ResolvedLayout;
   readonly truckSpec: TruckSpec;
-  readonly trailerSpec: TrailerSpec;
+  /** Null: the truck solo. */
+  readonly trailerSpec: TrailerSpec | null;
   readonly scene: Scene;
   readonly truck: VehicleVisual;
-  readonly trailer: VehicleVisual;
+  readonly trailer: VehicleVisual | null;
   readonly environment: Environment;
   readonly aids: AidsLayer;
   readonly interior: CockpitInterior;
@@ -385,7 +386,7 @@ export function createThreeSceneRenderer(
   function build(
     nextLayout: ResolvedLayout,
     truck: TruckSpec,
-    trailer: TrailerSpec,
+    trailer: TrailerSpec | null,
     palette: ScenePalette,
     kept?: AidsLayer,
   ): void {
@@ -395,17 +396,18 @@ export function createThreeSceneRenderer(
       if (isShadowCamera(camera)) shadowPasses++;
     };
     const truckVisual = parts.truck(truck, palette);
-    const trailerVisual = parts.trailer(trailer, palette);
+    const trailerVisual = trailer === null ? null : parts.trailer(trailer, palette);
     const environment = parts.environment(nextLayout, palette);
     const aids = kept ?? parts.aids(truck, trailer, nextLayout, palette);
     const interior = parts.interior(truck, palette);
     const arms = createEinweiserArms();
     const extent = combinationExtent(truck, trailer);
     setAidsLayer(aids.object);
+    // the scene order of a combination is kept: its lights' order is part of every program
     const list: readonly Part[] = [
       environment,
       truckVisual,
-      trailerVisual,
+      ...(trailerVisual === null ? [] : [trailerVisual]),
       placed(aids, { keepOnRebuild: true }),
       arms,
       placed(interior, { parent: interior.frame === 'truck' ? truckVisual.object : scene }),
@@ -487,7 +489,7 @@ export function createThreeSceneRenderer(
   function updateScene({ b, frame }: Pass): void {
     const { snapshot, views } = frame;
     b.truck.update(snapshot, frame.lamps);
-    b.trailer.update(snapshot, frame.lamps);
+    b.trailer?.update(snapshot, frame.lamps);
     shadowPasses = 0;
     b.environment.update(frame, {
       ...vehicleCentre(snapshot, b.anchors.frontX),

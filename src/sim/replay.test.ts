@@ -254,6 +254,24 @@ describe('replay', () => {
     expect(withTrack({ signs: [] })).toEqual({ ...log, einweiser: { ...track, signs: [] } });
   });
 
+  it('round-trips a solo run, which only a driver drives', () => {
+    const fingerprint = (): string => 'data-a';
+    const solo: InputLog = { version: 4, ...recorded, trailerId: null, steps: 10, changes: [] };
+    const parse = (o: object) =>
+      parseInputLog(JSON.stringify({ ...o, fingerprint: 'data-a' }), fingerprint);
+    expect(parseInputLog(serializeInputLog(solo, fingerprint), fingerprint)).toEqual(solo);
+    expect(parse({ ...solo, trailerId: 'none' })).toBeNull();
+    expect(parse({ ...solo, trailerId: undefined })).toBeNull();
+    expect(parse({ ...solo, version: 3, trailerId: ids.trailerId })).not.toBeNull();
+    expect(parse({ ...solo, version: 3 })).toBeNull();
+    const einweiser = {
+      role: 'einweiser',
+      einweiser: { samples: [{ step: 0, x: 0, y: 0, heading: 0, pitch: 0 }], signs: [] },
+    };
+    expect(parse({ ...solo, ...einweiser, trailerId: ids.trailerId })).not.toBeNull();
+    expect(parse({ ...solo, ...einweiser })).toBeNull();
+  });
+
   it('accepts a log only for the data that produced it', () => {
     const valid: InputLog = { version: 4, ...recorded, steps: 10, changes: [] };
     const seen: unknown[] = [];
