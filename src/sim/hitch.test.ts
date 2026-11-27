@@ -147,11 +147,19 @@ describe.each(pairs)('$name', ({ p, jaw }) => {
   it('the parked drawbar blocks the predicted path of a truck reversing past the eye', () => {
     const sim = parkedSim(p, jaw, approach(p, 1.2 * jaw.width, 0, 3));
     const s = sim.step(ctl({ gear: 'R', lever: 0.2 }));
-    const rig = drivenRig(p, s, noContacts);
+    const rig = drivenRig(p, s, noContacts, jaw);
+    expect(rig.reach).toBe(Infinity);
     const predicted = predictCombination(rig.params, s, rig.contacts);
     expect(predicted.blocked).toBe('contact');
     expect(predicted.blockedAt).toBeGreaterThan(2.9);
     expect(predicted.blockedAt).toBeLessThan(3.3);
+    // lined up inside the catch, the path ends at the eye, where it couples, and warns of nothing
+    const lined = parkedSim(p, jaw, approach(p, 0.5 * jaw.width, 0, 3));
+    const on = lined.step(ctl({ gear: 'R', lever: 0.2 }));
+    const ahead = drivenRig(p, on, noContacts, jaw);
+    expect(ahead.reach).toBeCloseTo(3, 2);
+    expect(predictCombination(ahead.params, on, ahead.contacts, ahead.reach).blocked).toBeNull();
+    expect(predictCombination(ahead.params, on, ahead.contacts).blocked).toBe('contact');
     // coupled, the rig is the whole combination again
     const coupled = parkedSim(p, jaw, approach(p, 0, 0, 0.5));
     const joined = reverse(coupled, 0.2);

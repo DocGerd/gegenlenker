@@ -416,6 +416,27 @@
   color: var(--color-text-secondary);
 }
 
+/* Outside the brief, so a collapsed card still offers it. */
+.hud-goal-hitch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.hud-hitch {
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.hud-hitch[data-coupled] {
+  color: var(--color-accent-strong);
+}
+
 .hud-topdown {
   box-sizing: border-box;
   display: flex;

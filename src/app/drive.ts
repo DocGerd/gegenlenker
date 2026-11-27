@@ -31,8 +31,8 @@ import { computeViewports, orientationOf, topDownSplit } from '../render/viewpor
 import { holdWakeLock } from '../pwa/wake-lock';
 import { createRunTracker } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
-import { bodyFootprints } from '../sim/geometry';
-import { CONTACT_WARN_DISTANCE } from '../sim/constants';
+import { CONTACT_WARN_DISTANCE, PREDICT_DISTANCE } from '../sim/constants';
+import { drawnFootprints, drivenRig } from '../sim/hitch';
 import { NO_PREDICTION, predictCombination, warnAhead, type Ahead } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
@@ -340,6 +340,7 @@ export function startDrive(
     mirrorsOnly,
     role,
     ...(controls === null ? {} : { pedalsBox: () => controls.pedalsBox() }),
+    hitch: exercise?.parkedTrailer !== undefined,
   });
   cleanups.push(() => hud.dispose());
 
@@ -368,7 +369,7 @@ export function startDrive(
   const exposeVehicleBox = (): void => {
     const xs: number[] = [];
     const ys: number[] = [];
-    for (const { obb } of bodyFootprints(params, snapshot)) {
+    for (const { obb } of drawnFootprints(params, snapshot)) {
       const c = Math.cos(obb.heading);
       const sn = Math.sin(obb.heading);
       for (const [a, b] of [
@@ -494,6 +495,8 @@ export function startDrive(
         updateSettings({ topDownLayout: savedLayout });
       }
       arrange();
+    } else if (action.type === 'uncouple') {
+      controls?.uncouple();
     } else if (action.type === 'aidLegend' || action.type === 'brief') {
       arrange();
     } else if (action.type === 'collapse') {
@@ -539,13 +542,24 @@ export function startDrive(
       dirty = false;
       if (clock.steps > 0 || pathStale) {
         pathStale = false;
+        const rig = drivenRig(params, snapshot, contacts, start.parked?.jaw);
         frame.predicted = aids.path
-          ? predictCombination(params, snapshot, contacts)
+          ? predictCombination(
+              rig.params,
+              snapshot,
+              rig.contacts,
+              Math.min(PREDICT_DISTANCE, rig.reach),
+            )
           : NO_PREDICTION;
         // the warning does not depend on the path aid, so a short look-ahead stands in when it is off
         const ahead = aids.path
           ? frame.predicted
-          : predictCombination(params, snapshot, contacts, CONTACT_WARN_DISTANCE);
+          : predictCombination(
+              rig.params,
+              snapshot,
+              rig.contacts,
+              Math.min(CONTACT_WARN_DISTANCE, rig.reach),
+            );
         warning = snapshot.speed !== 0 ? warnAhead(ahead) : null;
       }
       frame.snapshot = snapshot;

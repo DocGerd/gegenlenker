@@ -9,6 +9,8 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Truck driven without its trailer                | no trailer (solo)                                                           | ohne Anhänger (solo)                                              |
 | Trailer's front steering part                   | drawbar                                                                     | Deichsel                                                          |
 | Truck-to-drawbar angle                          | coupling angle                                                              | Kupplungswinkel                                                   |
+| Join truck and trailer / part them              | couple / uncouple                                                           | ankuppeln / abkuppeln                                             |
+| Ring at the drawbar's front end                 | drawbar eye                                                                 | Zugöse                                                            |
 | Drawbar-to-trailer angle                        | turntable angle                                                             | Drehschemelwinkel                                                 |
 | Angle reached its limit                         | limit stop                                                                  | Anschlag (am Anschlag)                                            |
 | Steer the other way to ease an angle            | countersteer                                                                | gegenlenken                                                       |

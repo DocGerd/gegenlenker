@@ -26,6 +26,7 @@ The menu's Controls screen, opened from the title or from Settings, lists the dr
 - Space: brake (zeroes the lever; hold to keep braking).
 - 1 / 2 / 3 / 4: gear P / R / N / D.
 - H / X: lights / hazard lights.
+- U: uncouple (in "Couple and uncouple", standing still).
 - Esc: pause, and close the pause sheet again. The sheet offers Continue and Restart; in an exercise also "Finish" and "Leave without scoring", in the free yard "Menu"; always Settings, which Esc or back leaves for the actions again. The Pause button in the drive opens it too.
 
 Keys typed into a form field or the pause sheet do not drive, and combinations with Ctrl, Alt or Meta are ignored.
@@ -59,12 +60,15 @@ The menu opens on a title screen with Exercises, Free yard, Settings, Controls, 
 - Straight reverse
 - Reverse into a bay
 - Reverse around a corner
+- Couple and uncouple
 - Dock at a ramp
 - Slalom forward and back
 
 Choosing an exercise opens its setup: the brief, the tolerance (position and angle) and the best result for the chosen vehicles, time of day and driving view, then Truck, Trailer, Time of day, Driving view and "Start".
 
 Stop inside the marked bay within tolerance to reach the target; a vehicle still moving does not count. The result shows position error, angle error, contacts, limit stops, direction changes and time, and offers Retry, Replay and Next exercise. Bests are kept separately with and without aids.
+
+"Couple and uncouple" starts the truck solo in front of a parked trailer, with the drawbar in line. Reverse onto the drawbar eye: the coupling closes by itself when the jaw meets the eye within its catch (`jaw` in [vehicle data](vehicle-data.md)) and stops the truck; a miss runs the truck into the drawbar, a contact. Pull the trailer forward into the marked bay, stop, uncouple with U or the Uncouple button on the exercise card (it acts only at a standstill), and drive away from the trailer. The run ends at the next stop with the trailer within tolerance. The card says whether the truck is coupled, and the result adds the coupling speed against its limit. The exercise always takes a trailer, even with "No trailer" chosen, and has no Einweiser variant yet.
 
 "Free yard" lists the Depot and the Logistics yard, which open the same setup and drive without a target or score. "Replay last run" replays the last drive you finished.
 
@@ -74,7 +78,7 @@ Stop inside the marked bay within tolerance to reach the target; a vehicle still
 
 On the setup screen of an exercise or yard:
 
-- Truck, Trailer: the vehicle pair. "No trailer" drives the truck solo in every exercise and yard: the target takes the truck's rear end, the ghost shows the truck, and neither the angle display nor limit stops are shown. An exercise is done solo and with a trailer separately; the lists and Continue follow the current choice. The Einweiser always guides a truck with its trailer: with "No trailer" chosen, his runs take the last trailer chosen. Some dimensions are estimates, see [vehicle data](vehicle-data.md).
+- Truck, Trailer: the vehicle pair. "No trailer" drives the truck solo in every exercise but "Couple and uncouple", and in every yard: the target takes the truck's rear end, the ghost shows the truck, and neither the angle display nor limit stops are shown. An exercise is done solo and with a trailer separately; the lists and Continue follow the current choice. The Einweiser always guides a truck with its trailer: with "No trailer" chosen, his runs take the last trailer chosen. Some dimensions are estimates, see [vehicle data](vehicle-data.md).
 - Time of day: Day or Night. Night turns the lights on at the start.
 - Driving view: "With top view" or "Mirrors only".
 

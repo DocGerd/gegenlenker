@@ -84,7 +84,9 @@ export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
     const error = targetError(s, exercise.target);
     const ok = withinTolerance(error, exercise.tolerances);
     let state: GoalState = 'away';
-    const waiting = couples && (!coupledOnce || (s.hitch?.coupled === false && ok.position && ok.angle && !left(s)));
+    const waiting =
+      couples &&
+      (!coupledOnce || (s.hitch?.coupled === false && ok.position && ok.angle && !left(s)));
     if (waypointVisited && !waiting) {
       if (ok.position && ok.angle) state = 'inside';
       else if (error.position <= exercise.target.length) state = 'outside';

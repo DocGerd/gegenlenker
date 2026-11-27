@@ -31,14 +31,22 @@ export const SETUP_STEPS: Readonly<Record<SetupStepId, readonly OptionId[]>> = {
   conditions: ['truck', 'trailer', 'lighting', 'driveView'],
 };
 
+/** An exercise that couples is driven, with the trailer it couples to (`resolveRun`). */
+export const couples = (ref: { readonly kind: EntryKind; readonly id: string }): boolean => {
+  const id = ref.kind === 'exercise' ? EXERCISE_IDS.find((e) => e === ref.id) : undefined;
+  return id !== undefined && exerciseById(id).parkedTrailer !== undefined;
+};
+
 const entries = (role: Role): readonly CatalogueEntry[] => [
-  ...EXERCISE_IDS.map((id): CatalogueEntry => ({
-    ref: { role, kind: 'exercise', id },
-    title: EXERCISE_TITLE[role][id],
-    brief: EXERCISE_BRIEF[role][id],
-    layout: exerciseById(id).layout,
-    steps: ['conditions'],
-  })),
+  ...EXERCISE_IDS.filter((id) => role === 'driver' || !couples({ kind: 'exercise', id })).map(
+    (id): CatalogueEntry => ({
+      ref: { role, kind: 'exercise', id },
+      title: EXERCISE_TITLE[role][id],
+      brief: EXERCISE_BRIEF[role][id],
+      layout: exerciseById(id).layout,
+      steps: ['conditions'],
+    }),
+  ),
   ...LAYOUT_IDS.map((id): CatalogueEntry => ({
     ref: { role, kind: 'yard', id },
     title: LAYOUT_NAME[id],
@@ -56,12 +64,13 @@ const BY_ROLE: Readonly<Record<Role, readonly CatalogueEntry[]>> = {
 
 export const CATALOGUE: readonly CatalogueEntry[] = Object.values(BY_ROLE).flat();
 
-/** The Einweiser needs mouse look, so a device without it offers the driver only. */
-export const offeredRoles = (): readonly Role[] => (pointerLookAvailable() ? ROLES : ['driver']);
+/** The Einweiser needs mouse look, so a device without it offers the driver only; so does an exercise that couples. */
+export const offeredRoles = (ref?: EntryRef): readonly Role[] =>
+  (ref === undefined || !couples(ref)) && pointerLookAvailable() ? ROLES : ['driver'];
 
 /** The entry as this device can start it: a role it does not offer becomes the driver's. */
 export const offeredEntry = (ref: EntryRef): EntryRef =>
-  offeredRoles().includes(ref.role) ? ref : { ...ref, role: 'driver' };
+  offeredRoles(ref).includes(ref.role) ? ref : { ...ref, role: 'driver' };
 
 export const entryKey = (ref: EntryRef): string => `${ref.role}:${ref.kind}:${ref.id}`;
 
@@ -74,6 +83,13 @@ export function entryOf(ref: EntryRef): CatalogueEntry {
   const entry = CATALOGUE.find((e) => entryKey(e.ref) === key);
   if (entry === undefined) throw new Error(`Unknown catalogue entry ${key}`);
   return entry;
+}
+
+/** The exercise after `ref` in its role's curriculum; null after the last. */
+export function nextExercise(ref: EntryRef): EntryRef | null {
+  const key = entryKey(ref);
+  const list = entriesOf(ref.role, 'exercise');
+  return list[list.findIndex((e) => entryKey(e.ref) === key) + 1]?.ref ?? null;
 }
 
 /** An exercise's 1-based place in its role's curriculum. */
@@ -95,7 +111,7 @@ export function entryHeading(ref: EntryRef): string {
 export function runConfigOf(ref: EntryRef, settings: Settings): RunConfig {
   const { truckId } = settings;
   const { role } = ref;
-  const trailerId = runTrailer(settings, role);
+  const trailerId = couples(ref) ? settings.trailerId : runTrailer(settings, role);
   return ref.kind === 'exercise'
     ? { layoutId: entryOf(ref).layout, exercise: exerciseById(ref.id), truckId, trailerId, role }
     : { layoutId: ref.id, exercise: null, truckId, trailerId, role };

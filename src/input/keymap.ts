@@ -21,6 +21,7 @@ export type Action =
   | 'gearD'
   | 'lights'
   | 'hazard'
+  | 'uncouple'
   | 'escape'
   | 'viewFollow'
   | 'viewYard'
@@ -167,6 +168,8 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     legend: { term: 'H / X', desc: 'lampKeys', viewOnly: true },
   },
   { action: 'hazard', match: { by: 'code', values: ['KeyX'] }, scope: 'drive' },
+  // shown on the HUD's uncouple button, which only a coupling run has
+  { action: 'uncouple', match: { by: 'code', values: ['KeyU'] }, scope: 'drive' },
   // The Einweiser's keys: after the driver's, before the shared ones, which is the order of his legend.
   {
     action: 'walkForward',

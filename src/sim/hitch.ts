@@ -1,5 +1,7 @@
 import type {
+  BodyFootprint,
   ContactQuery,
+  JawCatch,
   ParkedTrailer,
   Pose2,
   SimContact,
@@ -12,6 +14,7 @@ import {
   type TruckParams,
   type VehicleParams,
 } from '../contracts/vehicle';
+import { wrapAngle } from './angle';
 import { contactPoint, obbOverlap, SELF_OBSTACLE_ID } from './collision';
 import { bodyFootprints } from './geometry';
 import { joints, type Joints, type KinematicState } from './kinematics';
@@ -98,13 +101,33 @@ export function parkedContacts(p: VehicleParams, j: Joints): ContactQuery {
   };
 }
 
-/** What drives now: uncoupled, the truck alone, with its parked trailer among the obstacles. */
+/** The bodies as drawn: uncoupled, the parked drawbar runs from its eye, not from the truck's jaw. */
+export const drawnFootprints = (params: RigParams, s: SimSnapshot): BodyFootprint[] =>
+  bodyFootprints(params, s.hitch?.coupled === false ? { ...s, coupling: s.hitch.eye } : s);
+
+/**
+ * What drives now: uncoupled, the truck alone, with its parked trailer among the obstacles. Reversing
+ * lined up inside the `jaw` catch, the path ends at the eye, where the coupling closes: `reach` m on.
+ */
 export function drivenRig(
   params: RigParams,
   s: SimSnapshot,
   contacts: ContactQuery,
-): { readonly params: RigParams; readonly contacts: ContactQuery } {
-  if (s.hitch?.coupled !== false || !hasTrailer(params)) return { params, contacts };
+  jaw?: JawCatch,
+): { readonly params: RigParams; readonly contacts: ContactQuery; readonly reach: number } {
+  if (s.hitch?.coupled !== false || !hasTrailer(params))
+    return { params, contacts, reach: Infinity };
   const parked = parkedContacts(params, s);
-  return { params: truckOnly(params), contacts: (bodies) => contacts(bodies) ?? parked(bodies) };
+  const { along, lateral } = jawOffset(s.coupling, s.hitch.eye, s.dolly.heading);
+  const lined =
+    jaw !== undefined &&
+    s.control.gear === 'R' &&
+    along >= 0 &&
+    Math.abs(lateral) <= jaw.width &&
+    Math.abs(wrapAngle(s.truck.heading - s.dolly.heading)) <= jaw.angle;
+  return {
+    params: truckOnly(params),
+    contacts: (bodies) => contacts(bodies) ?? parked(bodies),
+    reach: lined ? along : Infinity,
+  };
 }

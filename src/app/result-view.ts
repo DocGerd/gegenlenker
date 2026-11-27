@@ -12,9 +12,13 @@ import {
   type Deltas,
   type FaultBasis,
 } from '../scoring/debrief';
+import { COUPLING_SPEED } from '../scoring/score';
 import { EXERCISE_TITLE } from './exercise-text';
 import { ignoreHeldBrakeKeys } from './held-keys';
 import './results.css';
+
+const KMH = 3.6;
+const kmh = (speed: number): string => `${formatNumber(speed * KMH, 1)} km/h`;
 
 export type ResultActions = {
   /** Set after a reached run when a further exercise follows. */
@@ -224,6 +228,15 @@ export function showResult(
     values.append(
       row('waypoint', '', {
         passed: !result.waypointMissed,
+      }),
+    );
+  }
+  if (result.coupling !== undefined) {
+    const { speed } = result.coupling;
+    values.append(
+      row('couplingSpeed', speed === null ? '–' : kmh(speed), {
+        limit: kmh(COUPLING_SPEED),
+        passed: speed !== null && speed <= COUPLING_SPEED,
       }),
     );
   }

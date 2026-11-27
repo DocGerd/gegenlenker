@@ -191,6 +191,12 @@ const EINWEISER_FIELDS: Readonly<Partial<Record<OptionId, OptionField>>> = {
   },
 };
 
+/** The Trailer row of an exercise that couples: the trailer it couples to, never none. */
+export const COUPLED_TRAILER_FIELD: OptionField = {
+  ...OPTION_FIELDS.trailer,
+  choices: TRAILER_CHOICES,
+};
+
 /** The field as the role sees it. */
 export const roleField = (id: OptionId, role: Role): OptionField =>
   (role === 'einweiser' ? EINWEISER_FIELDS[id] : undefined) ?? OPTION_FIELDS[id];

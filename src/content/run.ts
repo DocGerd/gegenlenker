@@ -48,7 +48,8 @@ export function resolveRun(ids: RunIds): ResolvedRun {
     bend === undefined
       ? { truck: pose }
       : { truck: pose, couplingAngle: bend.coupling, turntableAngle: bend.turntable };
-  if (parked !== undefined && jaw !== undefined) start = { ...start, parked: { trailer: parked, jaw } };
+  if (parked !== undefined && jaw !== undefined)
+    start = { ...start, parked: { trailer: parked, jaw } };
   // Driver runs hash exactly the driver thresholds, so their stored runs keep their fingerprints.
   let scoring: RunData['scoring'] = SCORING_THRESHOLDS;
   if (ids.role === 'einweiser') {

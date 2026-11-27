@@ -87,7 +87,10 @@ export function createSimulation(
     const { heading, turntable } = hitch.trailer;
     q = { ...q, th1: wrapAngle(heading), th2: wrapAngle(heading - turntable) };
     const dolly = parkedDolly(hitch.params, hitch.trailer);
-    parked = { dolly, contacts: parkedContacts(hitch.params, parkedJoints(hitch.params, q, dolly)) };
+    parked = {
+      dolly,
+      contacts: parkedContacts(hitch.params, parkedJoints(hitch.params, q, dolly)),
+    };
   }
 
   // Uncoupled, the truck drives alone and the trailer's headings stand still.
@@ -153,38 +156,41 @@ export function createSimulation(
     return rejection(joined, true) === null ? joined : null;
   };
 
-  const snapshot = (): SimSnapshot => ({
-    step,
-    time: step * DT,
-    ...jointsOf(q),
-    couplingAngle: couplingAngle(q),
-    turntableAngle: turntableAngle(q),
-    steer,
-    roadWheelAngle: steer * params.maxRoadWheelAngle,
-    speed,
-    control,
-    blocked,
-    contact:
-      blocked === 'contact' && blockedContact !== null
-        ? {
-            body: blockedContact.body,
-            point: blockedContact.point,
-            self: blockedContact.obstacleId === SELF_OBSTACLE_ID,
-          }
-        : null,
-    contacts: contactCount,
-    jackknifes,
-    directionChanges,
-    ...(hitch === null
-      ? {}
-      : {
-          hitch: {
-            coupled: parked === null,
-            eye: parked === null ? jointsOf(q).coupling : eyeOf(hitch.params, jointsOf(q).dolly),
-            couplingSpeed,
-          },
-        }),
-  });
+  const snapshot = (): SimSnapshot => {
+    const at = jointsOf(q);
+    return {
+      step,
+      time: step * DT,
+      ...at,
+      couplingAngle: couplingAngle(q),
+      turntableAngle: turntableAngle(q),
+      steer,
+      roadWheelAngle: steer * params.maxRoadWheelAngle,
+      speed,
+      control,
+      blocked,
+      contact:
+        blocked === 'contact' && blockedContact !== null
+          ? {
+              body: blockedContact.body,
+              point: blockedContact.point,
+              self: blockedContact.obstacleId === SELF_OBSTACLE_ID,
+            }
+          : null,
+      contacts: contactCount,
+      jackknifes,
+      directionChanges,
+      ...(hitch === null
+        ? {}
+        : {
+            hitch: {
+              coupled: parked === null,
+              eye: parked === null ? at.coupling : eyeOf(hitch.params, at.dolly),
+              couplingSpeed,
+            },
+          }),
+    };
+  };
 
   return {
     snapshot,
@@ -198,7 +204,10 @@ export function createSimulation(
       };
       if (control.uncouple === true && hitch !== null && parked === null && speed === 0) {
         const j = joints(hitch.params, q);
-        parked = { dolly: { x: j.dolly.x, y: j.dolly.y }, contacts: parkedContacts(hitch.params, j) };
+        parked = {
+          dolly: { x: j.dolly.x, y: j.dolly.y },
+          contacts: parkedContacts(hitch.params, j),
+        };
       }
       steer = approach(steer, control.steer, params.steerRate * DT);
       const delta = steer * params.maxRoadWheelAngle;
