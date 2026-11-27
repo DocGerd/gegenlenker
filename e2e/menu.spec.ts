@@ -53,12 +53,17 @@ test.describe('the longest title footer', () => {
         serviceWorkers: 'block',
       });
       const exerciseId = 'reverse-bay';
+      // the Einweiser's Continue and replay lines are the longest: his title and role
+      const guide = EXERCISE_IDS.map((id) => EXERCISE_TITLE.einweiser[id]).reduce((a, b) =>
+        messages[b].length > messages[a].length ? b : a,
+      );
+      const guideId = EXERCISE_IDS.find((id) => EXERCISE_TITLE.einweiser[id] === guide);
       await seedStorage(context, {
         settings: {
           truckId: arocs,
           trailerId: hueffermann,
           ...night,
-          lastEntry: exerciseRef(exerciseId),
+          lastEntry: { role: 'einweiser', kind: 'exercise', id: guideId },
         },
         lastRun: { layoutId: exerciseById(exerciseId).layout, exerciseId, truckId, trailerId },
       });
@@ -66,6 +71,13 @@ test.describe('the longest title footer', () => {
       await page.goto('./');
       await expect(titleEntry(page, messages.continue)).toBeVisible();
       await expect(titleEntry(page, messages.replayLastRun)).toBeVisible();
+      await expect(titleEntry(page, messages.continue)).toContainText(messages[guide]);
+      // an Einweiser run is not seeded here (its log needs his track): give the replay his line
+      await titleEntry(page, messages.replayLastRun)
+        .locator('.menu-item-detail')
+        .evaluate((el, text) => {
+          el.textContent = text;
+        }, [messages[guide], messages.roleEinweiser, messages.lightingNight, messages.einweiserViewNoTop].join(' · '));
       await expect(titleEntry(page, messages.controls)).toBeVisible();
       await expect(titleEntry(page, messages.whatsNew)).toBeVisible();
       await expect(titleEntry(page, messages.about)).toBeVisible();
