@@ -1,4 +1,4 @@
-import { Color, type BufferGeometry } from 'three';
+import { BoxGeometry, Color, Matrix4, type BufferGeometry } from 'three';
 import {
   colliderId,
   type Collider,
@@ -16,7 +16,7 @@ import {
 import { REALISM_HUES as HUE } from './realism-hues';
 import { tint, withEmit, withRetro } from './tint';
 import { headGlow } from './yard-lights';
-import { box, merge } from './vehicle-geometry';
+import { box, merge, wheelGeometry } from './vehicle-geometry';
 import { concreteWall, kerb, loadingRamp, trafficCone } from './yard-concrete';
 import {
   hoopPost,
@@ -61,7 +61,9 @@ const DOOR = { width: 2.7, height: 2.8, lift: 0.1, relief: 0.08, frame: 0.15 };
 const BUMPER = { offset: 1, width: 0.25, bottom: 0.85, top: 1.15, relief: 0.1 };
 const GUIDE = { offset: 1.45, width: 0.1, length: 2.4, height: 0.12, setback: 0.3 };
 const FENCE = { postPitch: 2.5, barPitch: 0.25, barWidth: 0.025, rails: 3 };
-const TYRE = { width: 0.3, length: 1, height: 1 };
+const WHEEL = { radius: 0.5, width: 0.3, hub: 0.035, rim: 0.02, rimRatio: 0.62, hubRatio: 0.22 };
+const REAR_LAMP = { width: 0.22, relief: 0.03 };
+const MARKER = { length: 0.16, relief: 0.02, pitch: 4 };
 const CONTAINER_HUES = [
   HUE.containerBlue,
   HUE.containerRed,
@@ -100,6 +102,38 @@ export class Parts {
 }
 
 const around = (centre: number, half: number): Range => [centre - half, centre + half];
+
+/** A round wheel of the trailer fleet's size on one side, axle at `x`, its outer face flush with the body edge. */
+function wheel(p: Parts, x: number, side: number, bodyWidth: number): void {
+  const y = side * (bodyWidth / 2 - WHEEL.width / 2);
+  const tyre = WHEEL.width - 2 * WHEEL.hub;
+  const disc = (ratio: number, relief: number, hue: number): void => {
+    p.add(
+      wheelGeometry(WHEEL.radius * ratio, tyre + 2 * relief).translate(x, WHEEL.radius, -y),
+      hue,
+    );
+  };
+  disc(1, 0, HUE.chevronBlack);
+  disc(WHEEL.rimRatio, WHEEL.rim, HUE.whiteAluminium);
+  disc(WHEEL.hubRatio, WHEEL.hub, HUE.chevronBlack);
+}
+
+/** Slanted black stripes on the rear face of a yellow guard, mirrored about the centreline into a chevron. */
+function guardChevrons(p: Parts, x: number, halfLength: number, z: Range): void {
+  const height = z[1] - z[0];
+  const width = height / 2;
+  const pitch = width * 2;
+  for (
+    let yc = -halfLength + width / 2 + height / 2;
+    yc + width / 2 + height / 2 <= halfLength;
+    yc += pitch
+  ) {
+    const stripe = new BoxGeometry(OVERLAY, height, width)
+      .applyMatrix4(new Matrix4().makeShear(0, 0, 0, 0, 0, yc >= 0 ? 1 : -1))
+      .translate(x + OVERLAY / 2, (z[0] + z[1]) / 2, -yc);
+    p.add(stripe, HUE.chevronBlack);
+  }
+}
 
 export function isOnYard(yard: Rect2, cx: number, cy: number): boolean {
   return cx > yard.minX && cx < yard.maxX && cy > yard.minY && cy < yard.maxY;
@@ -453,8 +487,7 @@ function container(o: Collider, index: number): PropPiece {
   for (const side of [-1, 1]) {
     p.box(x, around(side * (w / 2 - 0.25), 0.1), [0.55, deck], HUE.anthracite);
     for (const axle of [1.6, 2.9]) {
-      const y: Range = side > 0 ? [w / 2 - TYRE.width, w / 2] : [-w / 2, -w / 2 + TYRE.width];
-      p.box(around(l / 2 - axle, TYRE.length / 2), y, [0, TYRE.height], HUE.chevronBlack);
+      wheel(p, l / 2 - axle, side, w);
     }
     p.box(
       around(-l / 2 + 1.6, 0.08),
@@ -575,24 +608,36 @@ function curtainSider(o: Collider, index: number): PropPiece {
     p.box(around(sx, 0.04), [w / 2 - 0.05, w / 2], [deck, h - 0.1], HUE.anthracite);
     p.box(around(sx, 0.04), [-w / 2, -w / 2 + 0.05], [deck, h - 0.1], HUE.anthracite);
   }
-  p.box([l / 2 - 0.2, l / 2], around(0, w / 2 - 0.2), [0.5, 0.7], HUE.signalYellow, 1, 1);
+  const guard: Range = [0.5, 0.7];
+  p.box([l / 2 - 0.2, l / 2], around(0, w / 2 - 0.2), guard, HUE.signalYellow, 1, 1);
+  guardChevrons(p, l / 2, w / 2 - 0.2, guard);
   for (const side of [-1, 1]) {
-    const y: Range = side > 0 ? [w / 2 - TYRE.width, w / 2] : [-w / 2, -w / 2 + TYRE.width];
-    for (let axle = 0; axle < 3; axle++) {
-      p.box(
-        around(l / 2 - 1.4 - 1.3 * axle, TYRE.length / 2),
-        y,
-        [0, TYRE.height],
-        HUE.chevronBlack,
-      );
-    }
+    for (let axle = 0; axle < 3; axle++) wheel(p, l / 2 - 1.4 - 1.3 * axle, side, w);
     p.box(
-      around(-l / 2 + 3.2, 0.08),
-      around(side * (w / 2 - 0.4), 0.08),
-      [0, 0.95],
+      [l / 2 - 0.18, l / 2 - 0.1],
+      around(side * (w / 2 - 0.5), 0.05),
+      [guard[1], 0.95],
       HUE.anthracite,
     );
+    const edge: Range = side > 0 ? [w / 2 - 0.05, w / 2] : [-w / 2, -w / 2 + 0.05];
+    p.box([-l / 2 + 0.1, l / 2 - 0.1], edge, [deck - 0.08, deck], HUE.whiteAluminium);
+    const marker: Range =
+      side > 0 ? [w / 2, w / 2 + MARKER.relief] : [-w / 2 - MARKER.relief, -w / 2];
+    for (let mx = -l / 2 + 0.6; mx < l / 2 - 0.3; mx += MARKER.pitch) {
+      p.box(around(mx, MARKER.length / 2), marker, [deck - 0.07, deck - 0.01], HUE.sideMarker);
+    }
+    p.box(
+      [l / 2, l / 2 + REAR_LAMP.relief],
+      around(side * (w / 2 - 0.2), REAR_LAMP.width / 2),
+      [0.98, 1.18],
+      HUE.tailLamp,
+    );
+    // landing gear: leg, foot plate
+    const leg = around(side * (w / 2 - 0.4), 0.08);
+    p.box(around(-l / 2 + 3.2, 0.08), leg, [0.04, 0.95], HUE.anthracite);
+    p.box(around(-l / 2 + 3.2, 0.2), around(side * (w / 2 - 0.4), 0.15), [0, 0.04], HUE.anthracite);
   }
+  p.box(around(-l / 2 + 3.2, 0.03), around(0, w / 2 - 0.48), [0.45, 0.52], HUE.anthracite); // landing gear cross brace
   return { x: o.obb.cx, y: o.obb.cy, geometry: p.place(o.obb.cx, o.obb.cy, heading) };
 }
 

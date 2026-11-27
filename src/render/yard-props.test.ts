@@ -419,3 +419,52 @@ describe('retro sheeting', () => {
     });
   });
 });
+
+describe('parked trailer wheels', () => {
+  const [base] = cases;
+  if (base === undefined) throw new Error('no layout');
+  const RADIUS = 0.5;
+  const SEGMENTS = 20;
+  const centre = { x: 20, y: 20 };
+
+  /** Vertices (three space) around one wheel's axle, on the outer side of a heading-0 parked body. */
+  const aroundWheel = (obstacle: Obstacle, axleX: number): Vector3[] => {
+    const [piece] = yardProps({ ...base.resolved, obstacles: [obstacle], props: [] });
+    if (piece === undefined) throw new Error('no piece');
+    const position = piece.geometry.getAttribute('position');
+    const out: Vector3[] = [];
+    for (let i = 0; i < position.count; i++) {
+      const v = new Vector3().fromBufferAttribute(position, i);
+      const outer = -v.z - centre.y;
+      const inBand =
+        outer >= obstacle.obb.halfWidth - 0.3 - 1e-3 && outer <= obstacle.obb.halfWidth + 1e-3;
+      // the window stops under the wheel top, where ribs and frames start
+      if (inBand && Math.abs(v.x - centre.x - axleX) <= RADIUS + 1e-3 && v.y <= 0.95) out.push(v);
+    }
+    return out;
+  };
+
+  it.each([
+    { name: 'curtain-sider', halfLength: 7, halfWidth: 1.3, height: 4, axles: [5.6, 4.3, 3] },
+    { name: 'container', halfLength: 6, halfWidth: 1.25, height: 2.6, axles: [4.4, 3.1] },
+  ])(
+    'stand a $name on round wheels, none of them a box',
+    ({ halfLength, halfWidth, height, axles }) => {
+      const obstacle = {
+        id: 'synthetic-parked',
+        kind: 'parked',
+        obb: { cx: centre.x, cy: centre.y, halfLength, halfWidth, heading: 0 },
+        height,
+      } satisfies Obstacle;
+      for (const axle of axles) {
+        const near = aroundWheel(obstacle, axle);
+        const radial = (v: Vector3): number => Math.hypot(v.x - centre.x - axle, v.y - RADIUS);
+        expect(
+          near.filter((v) => Math.abs(radial(v) - RADIUS) < 1e-3).length,
+          `axle ${axle}`,
+        ).toBeGreaterThanOrEqual(SEGMENTS);
+        for (const v of near) expect(radial(v), `axle ${axle}`).toBeLessThanOrEqual(RADIUS + 1e-3);
+      }
+    },
+  );
+});
