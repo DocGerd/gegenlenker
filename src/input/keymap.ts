@@ -49,7 +49,8 @@ export type Action =
   | 'signEntfernen'
   | 'signLinks'
   | 'signRechts'
-  | 'signAbstand';
+  | 'signAbstand'
+  | 'groundSight';
 
 /** The sign a `'sign'` action shows. */
 export const SIGN_OF: Readonly<Partial<Record<Action, SignId>>> = {
@@ -212,6 +213,8 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
   },
   { action: 'signAbstand', match: { by: 'code', values: ['Digit9', 'Numpad9'] }, scope: 'sign' },
   { legend: { term: { key: 'keyMouseButtons' }, desc: 'signMouse', roles: EINWEISER } },
+  // His sight areas in his own view; the pause sheet's row names the key, not the legend
+  { action: 'groundSight', match: { by: 'code', values: ['KeyG'] }, scope: 'walk' },
   {
     action: 'escape',
     match: { by: 'code', values: ['Escape'] },

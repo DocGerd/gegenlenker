@@ -131,8 +131,8 @@ export const de: Record<MessageKey, string> = {
   aidPath: 'Vorausschau',
   aidTracks: 'Radspuren',
   aidGhost: 'Zielbild',
-  aidSightTop: 'Sichtbereiche',
-  aidSightGround: 'Bodensicht',
+  aidSightTop: 'Sichtbereiche (Draufsicht)',
+  aidSightGround: 'Sichtbereiche (eigene Ansicht)',
   aidLegend: 'Was die Hilfslinien bedeuten',
   briefToggle: 'Übungsbeschreibung ein- oder ausblenden',
   legendPivots: 'Mittellinien von Lkw, Deichsel und Anhänger; der Spalt ist der Winkel.',
@@ -311,4 +311,5 @@ export const de: Record<MessageKey, string> = {
   finishHint:
     'Die Fahrt endet jetzt, wird mit dem erreichten Stand gewertet und bleibt gespeichert.',
   leaveHint: 'Beim Verlassen wird die Fahrt verworfen: keine Wertung, keine gespeicherte Fahrt.',
+  groundSightKeyHint: 'G schaltet sie beim Gehen ein oder aus.',
 };

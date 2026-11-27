@@ -42,6 +42,19 @@ describe('a low box', () => {
   it('lets a line above it pass', () => {
     expect(blocks(box, { x: 0, y: 0, z: 2.35 }, { x: 10, y: 0, z: 2 })).toBe(false);
   });
+
+  // 3.1 + (0.9 - 3.1) rounds to 0.8999999999999999, under the top: the clip blocks it, so the early rejects must too
+  it('blocks a line that ends inside it exactly at its height, as the clip rounds', () => {
+    const [cx, cy] = [1.799483299255371, 13.851428031921387];
+    const obb = { cx, cy, halfLength: 0.5, halfWidth: 0.5, heading: Math.PI / 4 };
+    expect(
+      blocks(
+        { obb, height: 0.9 },
+        { x: 29.478435516357422, y: -8.94979476928711, z: 3.1 },
+        { x: 1.880835483425887, y: 13.91335759959893, z: 0.9 },
+      ),
+    ).toBe(true);
+  });
 });
 
 describe.each(pairs)('sight for $truck.id with $trailer.id', ({ truck, trailer }) => {

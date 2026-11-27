@@ -124,8 +124,8 @@ export const en = {
   aidPath: 'Predicted path',
   aidTracks: 'Wheel tracks',
   aidGhost: 'Target ghost',
-  aidSightTop: 'Sight areas',
-  aidSightGround: 'Ground sight',
+  aidSightTop: 'Sight areas (top view)',
+  aidSightGround: 'Sight areas (own view)',
   aidLegend: 'What the aid lines mean',
   briefToggle: 'Show or hide the exercise brief',
   legendPivots: 'Center lines of truck, drawbar and trailer; the gap is the angle.',
@@ -303,6 +303,7 @@ export const en = {
   // Pause sheet hints.
   finishHint: 'Finishing scores the run as it stands and keeps the replay.',
   leaveHint: 'Leaving drops the run: no result, no replay.',
+  groundSightKeyHint: 'G switches them on or off while you walk.',
 } as const;
 
 export type MessageKey = keyof typeof en;

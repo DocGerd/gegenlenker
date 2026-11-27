@@ -62,6 +62,8 @@ export type Hud = {
   setViewChanged(changed: boolean): void;
   /** Shows the free camera button as pressed while it flies. */
   setFree(on: boolean): void;
+  /** The Einweiser's sight areas as set elsewhere (pause sheet, key): the chips follow. */
+  setSight(flags: SightFlags): void;
   /** What a new graphics preset offers; losing the outside view while shown selects the last other view. */
   setOffers(offers: HudOffers): void;
   /** The divider between the views: its value, range and orientation. */
@@ -1255,6 +1257,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     },
     setFree(on) {
       freeCameraButton?.setAttribute('aria-pressed', String(on));
+    },
+    setSight(flags) {
+      Object.assign(sight, flags);
+      syncToggles();
     },
     setOffers(next) {
       chaseOffered = next.chase;

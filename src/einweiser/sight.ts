@@ -85,8 +85,9 @@ export const bodyOccluders = (g: SightGeometry, s: Bodies): BodyOccluder[] =>
 /** Whether the segment `a`-`b` passes through the box: its ground track clipped to the box, then the lower clip end against the top. */
 export function blocks(o: Occluder, a: Vec3, b: Vec3): boolean {
   const { cx, cy, halfLength, halfWidth, heading } = o.obb;
-  // a segment wholly above the box, or farther from its centre than its corners, cannot pass through it
-  if (Math.min(a.z, b.z) >= o.height) return false;
+  // a segment wholly above the box, or farther from its centre than its corners, cannot pass through it;
+  // the slack keeps a box exactly as tall as the lower end blocking where the clip below rounds under it
+  if (Math.min(a.z, b.z) >= o.height + 1e-9) return false;
   const [dx, dy] = [b.x - a.x, b.y - a.y];
   const length2 = dx * dx + dy * dy;
   const along = length2 === 0 ? 0 : ((cx - a.x) * dx + (cy - a.y) * dy) / length2;

@@ -123,11 +123,21 @@ test('the Settings screen lists the Einweiser options on a desktop', async ({ pa
   await expect(page.getByRole('radiogroup', { name: en.fov, exact: true })).toBeVisible();
 });
 
-test('the Einweiser toggles the driver sight areas, stored and drawn without a render error', async ({
+test('the Einweiser toggles the driver sight areas on the chips, his key and the pause sheet, stored and drawn without a render error', async ({
   page,
 }) => {
   await startEinweiser(page);
   const chip = (flag: string) => page.locator(`[data-sight="${flag}"]`);
+  const group = (name: string) => sheet(page).getByRole('radiogroup', { name, exact: true });
+  const drive = page.locator('.drive');
+  /** Frames on until both are sampled and drawn; the fixtures fail the test on a shader or render error. */
+  const sampled = async (): Promise<void> => {
+    const from = Number(await drive.getAttribute('data-drawn'));
+    await expect
+      .poll(async () => Number(await drive.getAttribute('data-drawn')))
+      .toBeGreaterThan(from + 1);
+    await expect(drive).toHaveAttribute('data-sight-pending', 'false');
+  };
   await expect(chip('top')).toHaveAttribute('aria-pressed', 'false');
   await expect(chip('ground')).toHaveAttribute('aria-pressed', 'false');
 
@@ -136,20 +146,51 @@ test('the Einweiser toggles the driver sight areas, stored and drawn without a r
   await expect(chip('top')).toHaveAttribute('aria-pressed', 'true');
   await expect(chip('ground')).toHaveAttribute('aria-pressed', 'true');
   expect(await stored(page)).toMatchObject({ sight: { top: true, ground: true } });
-  // frames with both drawn; the fixtures fail the test on a shader or render error
-  await page.evaluate(
-    () =>
-      new Promise<void>((done) => {
-        let frames = 0;
-        const tick = (): void => {
-          if (++frames > 10) done();
-          else requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      }),
-  );
+  await sampled();
 
-  await chip('top').click();
-  await expect(chip('top')).toHaveAttribute('aria-pressed', 'false');
+  await page.keyboard.press('KeyG');
+  await expect(chip('ground')).toHaveAttribute('aria-pressed', 'false');
+  expect(await stored(page)).toMatchObject({ sight: { top: true, ground: false } });
+
+  // after his look settings; the own view's row names the key
+  await page.keyboard.press('Escape');
+  await sheet(page).getByRole('button', { name: en.settings }).click();
+  expect(
+    await sheet(page)
+      .getByRole('radiogroup')
+      .evaluateAll((rows) => rows.map((row) => row.getAttribute('data-menu'))),
+  ).toEqual([
+    'fov',
+    'mouseSensitivity',
+    'invertMouse',
+    'sightTop',
+    'sightGround',
+    'theme',
+    'graphics',
+  ]);
+  await expect(group(en.aidSightGround)).toHaveAccessibleDescription(en.groundSightKeyHint);
+  await group(en.aidSightTop).getByText(en.settingOff, { exact: true }).click();
+  await group(en.aidSightGround).getByText(en.settingOn, { exact: true }).click();
   expect(await stored(page)).toMatchObject({ sight: { top: false, ground: true } });
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await expect(sheet(page)).toBeHidden();
+  await expect(chip('top')).toHaveAttribute('aria-pressed', 'false');
+  await expect(chip('ground')).toHaveAttribute('aria-pressed', 'true');
+
+  // without the top view: only his own view's row, and the stored top-view flag is kept
+  await page.evaluate((key) => {
+    const settings = JSON.parse(localStorage.getItem(key) ?? '{}') as Record<string, unknown>;
+    localStorage.setItem(
+      key,
+      JSON.stringify({ ...settings, mirrorsOnly: true, sight: { top: true, ground: true } }),
+    );
+  }, SETTINGS_KEY);
+  await startEinweiser(page);
+  await sampled();
+  await page.keyboard.press('Escape');
+  await sheet(page).getByRole('button', { name: en.settings }).click();
+  await expect(group(en.aidSightTop)).toHaveCount(0);
+  await group(en.aidSightGround).getByText(en.settingOff, { exact: true }).click();
+  expect(await stored(page)).toMatchObject({ sight: { top: true, ground: false } });
 });

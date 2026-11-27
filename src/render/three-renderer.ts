@@ -619,6 +619,8 @@ export function createThreeSceneRenderer(
       built?.sight.setFlags(flags);
     },
 
+    sightPending: () => built?.sight.pending() ?? false,
+
     resize(width, height) {
       cssWidth = width;
       cssHeight = height;
