@@ -244,7 +244,6 @@ export async function startPinnedDrive(
       lighting,
       topDown: 'follow',
       theme,
-      ...(entry.role === 'einweiser' ? { einweiserPreview: true } : {}),
     }),
   ] as const);
   await page.clock.install({ time: 0 });

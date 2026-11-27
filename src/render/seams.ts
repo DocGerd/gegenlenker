@@ -34,6 +34,8 @@ export const SHADOW_ONLY_LAYER = 5; // seen by no camera: casters stood in for w
  * floodlights' static shadow cameras draw, so a vehicle never lands in a map rendered once.
  */
 export const YARD_CASTER_LAYER = 6;
+/** The Einweiser's first-person arms: seen by their own camera alone (`einweiser-arms.ts`), never by a shadow camera. */
+export const VIEWMODEL_LAYER = 7;
 /** What the sun's shadow camera draws: no aids, and not the cockpit-only interior. */
 export const SHADOW_CASTER_LAYERS = [
   DEFAULT_LAYER,
@@ -46,6 +48,8 @@ export type ShadowFocus = { readonly x: number; readonly y: number; readonly rad
 export const COCKPIT_LAYERS = [PERSPECTIVE_LAYER, INTERIOR_LAYER];
 export const MIRROR_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
 export const CHASE_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
+/** The Einweiser's own eye stands outside the cab: he sees its exterior, never its interior. */
+export const EINWEISER_LAYERS = [PERSPECTIVE_LAYER, CAB_LAYER];
 export const TOP_DOWN_LAYERS = [AIDS_LAYER];
 const lostRenderers = new WeakSet<WebGPURenderer>();
 /** For the loss handler, which replaces three's and so its private loss flag. */

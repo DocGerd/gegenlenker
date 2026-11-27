@@ -1,4 +1,4 @@
-import type { ExerciseId } from '../contracts/exercise';
+import type { ExerciseId, Role } from '../contracts/exercise';
 import type { LayoutId } from '../contracts/layout';
 import type { MessageKey } from '../i18n/en';
 
@@ -7,23 +7,41 @@ export const LAYOUT_NAME: Readonly<Record<LayoutId, MessageKey>> = {
   logistics: 'layoutLogistics',
 };
 
-export const LAYOUT_BRIEF: Readonly<Record<LayoutId, MessageKey>> = {
-  depot: 'briefDepot',
-  logistics: 'briefLogistics',
+export const LAYOUT_BRIEF: Readonly<Record<Role, Readonly<Record<LayoutId, MessageKey>>>> = {
+  driver: { depot: 'briefDepot', logistics: 'briefLogistics' },
+  einweiser: { depot: 'guideBriefDepot', logistics: 'guideBriefLogistics' },
 };
 
-export const EXERCISE_TITLE: Readonly<Record<ExerciseId, MessageKey>> = {
-  'straight-reverse': 'exerciseStraightReverse',
-  'reverse-bay': 'exerciseReverseBay',
-  'reverse-corner': 'exerciseReverseCorner',
-  'dock-ramp': 'exerciseDockRamp',
-  slalom: 'exerciseSlalom',
+export const EXERCISE_TITLE: Readonly<Record<Role, Readonly<Record<ExerciseId, MessageKey>>>> = {
+  driver: {
+    'straight-reverse': 'exerciseStraightReverse',
+    'reverse-bay': 'exerciseReverseBay',
+    'reverse-corner': 'exerciseReverseCorner',
+    'dock-ramp': 'exerciseDockRamp',
+    slalom: 'exerciseSlalom',
+  },
+  einweiser: {
+    'straight-reverse': 'guideStraightReverse',
+    'reverse-bay': 'guideReverseBay',
+    'reverse-corner': 'guideReverseCorner',
+    'dock-ramp': 'guideDockRamp',
+    slalom: 'guideSlalom',
+  },
 };
 
-export const EXERCISE_BRIEF: Readonly<Record<ExerciseId, MessageKey>> = {
-  'straight-reverse': 'briefStraightReverse',
-  'reverse-bay': 'briefReverseBay',
-  'reverse-corner': 'briefReverseCorner',
-  'dock-ramp': 'briefDockRamp',
-  slalom: 'briefSlalom',
+export const EXERCISE_BRIEF: Readonly<Record<Role, Readonly<Record<ExerciseId, MessageKey>>>> = {
+  driver: {
+    'straight-reverse': 'briefStraightReverse',
+    'reverse-bay': 'briefReverseBay',
+    'reverse-corner': 'briefReverseCorner',
+    'dock-ramp': 'briefDockRamp',
+    slalom: 'briefSlalom',
+  },
+  einweiser: {
+    'straight-reverse': 'guideBriefStraightReverse',
+    'reverse-bay': 'guideBriefReverseBay',
+    'reverse-corner': 'guideBriefReverseCorner',
+    'dock-ramp': 'guideBriefDockRamp',
+    slalom: 'guideBriefSlalom',
+  },
 };

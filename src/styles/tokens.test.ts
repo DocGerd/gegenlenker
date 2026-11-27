@@ -360,6 +360,11 @@ describe('scene tokens', () => {
     expect(contrast(scene('accent'), scene('wheel'))).toBeGreaterThanOrEqual(3);
   });
 
+  // The Einweiser token: an unlit core on the wheel casing, the same by day and night.
+  it('Einweiser token core against its casing is 3:1 or more', () => {
+    expect(contrast(scene('einweiser'), scene('wheel'))).toBeGreaterThanOrEqual(3);
+  });
+
   // Contact marker: a marking-coloured core on the wheel casing, drawn over what is touched.
   // The core carries the dark surfaces, the casing the light ones.
   const darkContactSurfaces = [
@@ -440,6 +445,17 @@ describe('scene tokens', () => {
       }
     }
 
+    it.each(['yard', 'pavement', 'street', 'verge', 'body', 'cab'])(
+      'the Einweiser token reads on %s through its casing or core, 3:1 or more',
+      (ground) => {
+        const best = Math.max(
+          ratio(flat('wheel'), litDay(ground)),
+          ratio(flat('einweiser'), litDay(ground)),
+        );
+        expect(best).toBeGreaterThanOrEqual(3);
+      },
+    );
+
     it('crosses at least the yard', () => {
       expect(crossed.has('yard')).toBe(true);
     });
@@ -491,7 +507,7 @@ describe('scene tokens', () => {
     });
 
     // TN-b: the unlit cores read against the night clear colour.
-    it.each(['nightAccent', 'marking'])(
+    it.each(['nightAccent', 'marking', 'einweiser'])(
       'TN-b: the %s core against nightBackdrop is 3:1 or more',
       (core) => {
         expect(ratio(flat(core), flat('nightBackdrop'))).toBeGreaterThanOrEqual(3);
@@ -510,6 +526,17 @@ describe('scene tokens', () => {
         const best = Math.max(
           ratio(flat('wheel'), lit(ground)),
           ratio(flat('nightAccent'), lit(ground)),
+        );
+        expect(best).toBeGreaterThanOrEqual(3);
+      },
+    );
+
+    it.each([...grounds, 'body', 'cab'])(
+      'the Einweiser token reads on %s through its casing or core, 3:1 or more',
+      (ground) => {
+        const best = Math.max(
+          ratio(flat('wheel'), lit(ground)),
+          ratio(flat('einweiser'), lit(ground)),
         );
         expect(best).toBeGreaterThanOrEqual(3);
       },

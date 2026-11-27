@@ -12,6 +12,7 @@ import {
   type ResolvedLayout,
 } from '../contracts/layout';
 import { OVERLAY } from './yard-concrete';
+import { WHEEL_SEGMENTS } from './vehicle-geometry';
 import { EMIT_ATTRIBUTE, RETRO_ATTRIBUTE } from './tint';
 import { yardLightSpec } from './yard-lights';
 import { cornerHoops, decorPieces, type PropPiece, RESTYLED_KINDS, yardProps } from './yard-props';
@@ -417,5 +418,78 @@ describe('retro sheeting', () => {
         expect(sheetingOf(resolved, o), o.id).toBe(sheetingOf(base.resolved, o));
       }
     });
+  });
+});
+
+describe('parked trailer wheels', () => {
+  const [base] = cases;
+  if (base === undefined) throw new Error('no layout');
+  const RADIUS = 0.5;
+  const centre = { x: 20, y: 20 };
+
+  const vertices = (obstacle: Obstacle): Vector3[] => {
+    const [piece] = yardProps({ ...base.resolved, obstacles: [obstacle], props: [] });
+    if (piece === undefined) throw new Error('no piece');
+    const position = piece.geometry.getAttribute('position');
+    return Array.from({ length: position.count }, (_, i) =>
+      new Vector3().fromBufferAttribute(position, i),
+    );
+  };
+
+  /** Vertices (three space) around one wheel's axle, on the outer `side` of a heading-0 parked body. */
+  const aroundWheel = (obstacle: Obstacle, axleX: number, side: number): Vector3[] => {
+    const out: Vector3[] = [];
+    for (const v of vertices(obstacle)) {
+      const outer = side * (-v.z - centre.y);
+      const inBand =
+        outer >= obstacle.obb.halfWidth - 0.3 - 1e-3 && outer <= obstacle.obb.halfWidth + 1e-3;
+      // the window stops under the wheel top, where ribs and frames start
+      if (inBand && Math.abs(v.x - centre.x - axleX) <= RADIUS + 1e-3 && v.y <= 0.95) out.push(v);
+    }
+    return out;
+  };
+
+  it.each([
+    { name: 'curtain-sider', halfLength: 7, halfWidth: 1.3, height: 4, axles: [5.6, 4.3, 3] },
+    { name: 'container', halfLength: 6, halfWidth: 1.25, height: 2.6, axles: [4.4, 3.1] },
+  ])(
+    'stand a $name on round wheels, none of them a box',
+    ({ halfLength, halfWidth, height, axles }) => {
+      const obstacle = {
+        id: 'synthetic-parked',
+        kind: 'parked',
+        obb: { cx: centre.x, cy: centre.y, halfLength, halfWidth, heading: 0 },
+        height,
+      } satisfies Obstacle;
+      for (const side of [-1, 1]) {
+        for (const axle of axles) {
+          const near = aroundWheel(obstacle, axle, side);
+          const radial = (v: Vector3): number => Math.hypot(v.x - centre.x - axle, v.y - RADIUS);
+          const label = `axle ${axle}, side ${side}`;
+          expect(
+            near.filter((v) => Math.abs(radial(v) - RADIUS) < 1e-3).length,
+            label,
+          ).toBeGreaterThanOrEqual(WHEEL_SEGMENTS);
+          for (const v of near) expect(radial(v), label).toBeLessThanOrEqual(RADIUS + 1e-3);
+        }
+      }
+    },
+  );
+
+  it('keeps the guard chevrons inside the yellow guard', () => {
+    const obstacle = {
+      id: 'synthetic-parked',
+      kind: 'parked',
+      obb: { cx: centre.x, cy: centre.y, halfLength: 7, halfWidth: 1.3, heading: 0 },
+      height: 4,
+    } satisfies Obstacle;
+    // the guard spans height 0.5 to 0.7 and 0.2 in from each side; its stripes stand OVERLAY proud of the rear face
+    const stripes = vertices(obstacle).filter((v) => Math.abs(v.x - centre.x - 7 - OVERLAY) < 1e-4);
+    expect(stripes.length).toBeGreaterThan(0);
+    for (const v of stripes) {
+      expect(v.y).toBeGreaterThanOrEqual(0.5 - 1e-4);
+      expect(v.y).toBeLessThanOrEqual(0.7 + 1e-4);
+      expect(Math.abs(-v.z - centre.y)).toBeLessThanOrEqual(1.3 - 0.2 + 1e-4);
+    }
   });
 });

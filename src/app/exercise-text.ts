@@ -8,5 +8,5 @@ export { EXERCISE_BRIEF, EXERCISE_TITLE, LAYOUT_NAME } from './entry-keys';
 export function replayContext(log: InputLog): string {
   return log.exerciseId === null
     ? `${t('freeYard')} · ${t(LAYOUT_NAME[log.layoutId])}`
-    : t(EXERCISE_TITLE[log.exerciseId]);
+    : t(EXERCISE_TITLE[log.role][log.exerciseId]);
 }

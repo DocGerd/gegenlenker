@@ -17,6 +17,7 @@ import { trailerAnchors } from '../vehicles/anchors';
 import { placePose } from './coords';
 import { outlineGeometry } from './ground-geometry';
 import type { Look } from './look';
+import { createEinweiserToken } from './einweiser-token';
 import { AID_DASH_OFF, AID_DASH_ON, AID_STROKE, AIDS_LAYER, type AidsLayer } from './seams';
 
 const PATH_WIDTH = AID_STROKE.path;
@@ -343,12 +344,15 @@ export function proceduralAids(
     material(palette.wheel, true, 1, -3),
     OVERLAY_ORDER + 2,
   );
+  // shown whatever the aid toggles say, like the contact marker
+  const einweiser = createEinweiserToken(palette);
   group.add(
     ...solid.map((c) => c.object),
     ...dashed.map((c) => c.object),
     stopBar.object,
     pivots.object,
     marker.object,
+    einweiser.object,
     ...tracks.map((t) => t.mesh),
   );
 
@@ -471,6 +475,7 @@ export function proceduralAids(
       }
 
       if (ghost !== null) ghost.visible = aids.ghost;
+      einweiser.update(frame.einweiser);
     },
     dispose(): void {
       solid.forEach((c) => c.dispose());
@@ -478,6 +483,7 @@ export function proceduralAids(
       stopBar.dispose();
       pivots.dispose();
       marker.dispose();
+      einweiser.dispose();
       tracks.forEach((t) => t.dispose());
       geometries.forEach((g) => g.dispose());
       materials.forEach((m) => m.dispose());

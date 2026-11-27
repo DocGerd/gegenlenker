@@ -11,6 +11,7 @@ import {
   type ViewMode,
   type ViewRects,
 } from '../contracts/render';
+import type { Role } from '../contracts/exercise';
 import { de } from '../i18n/de';
 import { en, type MessageKey } from '../i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop, frontBand } from './cockpit-band';
@@ -72,9 +73,31 @@ export const MESSAGE_KEYS = {
     'blockedContactSelf',
     'blockedCoupling',
     'blockedTurntable',
+    'blockedContactTruckGuide',
+    'blockedContactDrawbarGuide',
+    'blockedContactTrailerGuide',
+    'blockedContactSelfGuide',
+    'blockedCouplingGuide',
+    'blockedTurntableGuide',
   ],
   cue: ['goalInside', 'goalDistance', 'goalAngleOk', 'goalAngleOff', 'goalPositionOk'],
+  /** The Einweiser's sight cue (`sightCueBox`), not part of the stack. */
+  sight: [
+    'sightDirect',
+    'sightMirrorLeft',
+    'sightMirrorRight',
+    'sightWideLeft',
+    'sightWideRight',
+    'sightClose',
+    'sightFront',
+    'sightNone',
+    'sightUnclear',
+  ],
 } as const satisfies Record<string, readonly MessageKey[]>;
+/** The sight cue's width, `--hud-sight-w` in hud.css. */
+export const SIGHT_CUE_WIDTH = 240;
+/** What the sight cue's text leaves of its width: padding and borders, the eye icon and its gap (`.hud-sight`). */
+const SIGHT_CUE_CHROME = 62;
 /** Where a word may break, showing a hyphen (`wrapLines`). */
 export const SOFT_HYPHEN = '\u00AD';
 /**
@@ -245,6 +268,8 @@ export const hasTopDown = (views: ViewRects): boolean =>
 /**
  * `mirrors` is the drive screen without the top-down view: the cockpit takes the whole window.
  * `legend` is the measured key legend: the mirrors stay above it where it reaches under them.
+ * In the `einweiser` role the cockpit rect is his first-person view, split from the top view as the
+ * driver's is, with no mirrors (`docs/einweiser-spike.md` §3.7).
  */
 export function computeViewports(
   cssWidth: number,
@@ -255,6 +280,7 @@ export function computeViewports(
   layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
   panels: PanelStack | null = null,
   extra: ExtraMirrors = NO_EXTRA_MIRRORS,
+  role: Role = 'driver',
 ): ViewRects {
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
@@ -291,6 +317,18 @@ export function computeViewports(
     topDown = { x: 0, y: 0, width: cssWidth, height: h };
     cockpit = { x: 0, y: h, width: cssWidth, height: cssHeight - h };
     rise = h - paneHeight(min);
+  }
+  if (role === 'einweiser') {
+    return {
+      cockpit,
+      mirrorLeft: null,
+      mirrorRight: null,
+      wideLeft: null,
+      wideRight: null,
+      front: null,
+      close: null,
+      topDown,
+    };
   }
   const room = { cssWidth, cssHeight, mirrorsOnly, legend, insets, extra };
   let placed = placeMirrors({ ...room, cockpit, rise });
@@ -747,12 +785,76 @@ function frontRect(
 /** The toast column; where `cueYields`, the goal cue hides while a toast shows (hud.css). */
 export type MessageColumn = Rect & { readonly cueYields: boolean };
 
+/** The Einweiser's sight cue at the top left of his view, below the display cut-out; tall enough for its longest text. */
+export function sightCueBox(view: Rect, insets: Insets): Rect {
+  const lines = mostLines(textsOf(MESSAGE_KEYS.sight), SIGHT_CUE_WIDTH - SIGHT_CUE_CHROME);
+  return {
+    x: view.x + insets.left + INSET,
+    y: belowCutOut(view, insets).y + INSET,
+    width: SIGHT_CUE_WIDTH,
+    height: lines * MESSAGE_LINE + MESSAGE_BOX,
+  };
+}
+
+/**
+ * His view has no mirrors and no controls: the stack stands top-centre, between the sight cue and an
+ * equal margin on the right where it fits there, else across the view below the cue. Where the key
+ * legend leaves neither room, the top view takes it as it does the driver's; without one, the goal cue
+ * yields.
+ */
+function einweiserColumn(
+  views: ViewRects & { readonly cockpit: Rect },
+  legend: LegendBox | null,
+  insets: Insets,
+): MessageColumn {
+  const view = views.cockpit;
+  const area = belowCutOut(view, insets);
+  const cue = sightCueBox(view, insets);
+  const margin = INSET + SIGHT_CUE_WIDTH + MESSAGE_GAP + Math.max(insets.left, insets.right);
+  const beside = { ...area, x: view.x + margin, width: view.width - 2 * margin };
+  const below = {
+    x: view.x + insets.left,
+    y: cue.y + cue.height,
+    width: view.width - insets.left - insets.right,
+    height: area.y + area.height - cue.y - cue.height,
+  };
+  const bandTop = view.y + (1 - HUD_BAND_SHARE) * view.height;
+  // his view reaches the screen's bottom, which the legend's height is measured from
+  const stageBottom = view.y + view.height;
+  const fits = (column: Rect, yields: boolean): boolean => {
+    if (column.width < MIN_MESSAGE_WIDTH) return false;
+    const { toast, cue: goal } = messageHeights(column.width);
+    const bottom = column.y + INSET + (yields ? Math.max(toast, goal) : toast + MESSAGE_GAP + goal);
+    const overLegend =
+      legend !== null &&
+      column.x < legend.right &&
+      column.x + column.width > INSET + insets.left &&
+      bottom > stageBottom - legend.height;
+    return bottom <= bandTop && !overLegend;
+  };
+  for (const column of [beside, below]) {
+    if (fits(column, false)) return { ...column, cueYields: false };
+  }
+  // as the driver's: a key legend reaching that high sends them to the top view
+  if (hasTopDown(views)) {
+    const { topDown } = views;
+    const cssWidth = Math.max(view.x + view.width, topDown.x + topDown.width);
+    const cssHeight = Math.max(view.y + view.height, topDown.y + topDown.height);
+    return paneColumn(topDown, insets, cssWidth >= cssHeight);
+  }
+  for (const column of [beside, below]) {
+    if (fits(column, true)) return { ...column, cueYields: true };
+  }
+  return { ...below, cueYields: true };
+}
+
 /**
  * Where the toast and the goal cue stand, clear of the safe area: the column starts below the display
  * cut-out, which hud.css therefore leaves out. Beside the front mirror they take the cockpit's top
  * between the left mirror and the front mirror. Without one they take the span between the class II
  * mirrors where the stack fits there (`messagesFit`), else the top-down pane, below the finish button
  * and clear of the lever. With no such pane the cue yields to the toast between the class II mirrors.
+ * In the Einweiser's view, see `einweiserColumn`.
  */
 export function messageColumn(
   views: ViewRects,
@@ -761,6 +863,9 @@ export function messageColumn(
 ): MessageColumn {
   const { cockpit, topDown, front, mirrorLeft, mirrorRight } = views;
   const insets = safeInsets ?? readSafeInsets();
+  // only the Einweiser's view has no class II mirrors
+  if (cockpit !== null && mirrorLeft === null)
+    return einweiserColumn({ ...views, cockpit }, legend, insets);
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
     const whole = belowCutOut(cockpit ?? topDown, insets);
     return {
@@ -783,14 +888,18 @@ export function messageColumn(
   if (fits) return { ...area, ...between, cueYields: false };
   // Mirror-only: the cue yields to the toast; no span beside the sight cone fits at a supported size.
   if (!hasTopDown(views)) return { ...area, ...between, cueYields: true };
-  // Below the finish button; in landscape also left of the stop button and lever, which stand at the
-  // screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). In portrait the pane spans the screen.
+  return paneColumn(topDown, insets, cssWidth >= cssHeight);
+}
+
+/**
+ * The top-down pane below the finish button; in landscape also left of the stop button and lever, which
+ * stand at the screen's right edge (`.ctl-stop`, `.ctl-lever` in controls.css). In portrait the pane spans the screen.
+ */
+function paneColumn(topDown: Rect, insets: Insets, landscape: boolean): MessageColumn {
   const pane = belowCutOut(topDown, insets);
   const drop = tokenPx('--size-target', 44) + MESSAGE_GAP;
-  const landscape = cssWidth >= cssHeight;
-  const lever = landscape ? paneLever(insets) : 0;
   const left = landscape ? 0 : insets.left;
-  const right = landscape ? lever : insets.right;
+  const right = landscape ? paneLever(insets) : insets.right;
   return {
     ...pane,
     x: pane.x + left,

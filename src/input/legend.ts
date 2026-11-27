@@ -1,3 +1,4 @@
+import type { Role } from '../contracts/exercise';
 import type { MessageKey } from '../i18n/en';
 import { legendRows, type LegendRow } from './keymap';
 
@@ -11,13 +12,14 @@ const TOP_DOWN_ROWS: readonly MessageKey[] = [
   'resetViewAndSize',
 ];
 
-/** The key legend of a drive: `chase` is whether the outside view exists, `look` whether the cockpit view looks around. */
+/** The key legend of a drive: `chase` is whether the outside view exists, `look` whether the cockpit view looks around; `role` is the driver's when absent. */
 export const driveLegendRows = (opts: {
   readonly chase: boolean;
   readonly look: boolean;
   readonly mirrorsOnly: boolean;
+  readonly role?: Role;
 }): LegendRow[] =>
-  legendRows(opts.chase, opts.look).filter(
+  legendRows(opts.chase, opts.look, opts.role).filter(
     (row) => !(opts.mirrorsOnly && TOP_DOWN_ROWS.includes(row.desc)),
   );
 

@@ -1,7 +1,8 @@
 import { Camera, Color, Vector3, type BufferGeometry } from 'three';
 import { UniformNode, type MeshLambertNodeMaterial, type Node } from 'three/webgpu';
 import { describe, expect, it } from 'vitest';
-import { layouts } from '../content/registry';
+import { exercises, layouts } from '../content/registry';
+import { resolveLayout } from '../content/resolve-layout';
 import { BOUNDS } from '../content/street';
 import { AIDS_LAYER, CAMERA_FAR, PERSPECTIVE_LAYER } from './seams';
 import { createSkyline } from './skyline';
@@ -14,7 +15,14 @@ import {
   SINK,
   skylineGeometry,
 } from './skyline-geometry';
-import { CLEARANCE, REACH, skylineBuildings, type Building } from './skyline-layout';
+import {
+  CLEARANCE,
+  perimeterBuildings,
+  REACH,
+  sceneryBuildings,
+  skylineBuildings,
+  type Building,
+} from './skyline-layout';
 
 function triangles(g: BufferGeometry): [Vector3, Vector3, Vector3][] {
   const p = g.getAttribute('position');
@@ -97,24 +105,73 @@ describe('skyline', () => {
     }
   });
 
-  it('keeps every building outside the bounds and inside the far plane from any camera spot', () => {
-    const corners = [BOUNDS.minX, BOUNDS.maxX].flatMap((x) =>
-      [BOUNDS.minY, BOUNDS.maxY].map((y) => new Vector3(x, 0, -y)),
-    );
-    const p = skylineGeometry(buildings).getAttribute('position');
-    const v = new Vector3();
-    for (let i = 0; i < p.count; i++) {
-      v.set(p.getX(i), p.getY(i), p.getZ(i));
-      for (const corner of corners) expect(v.distanceTo(corner)).toBeLessThan(REACH);
-      const inside =
-        v.x > BOUNDS.minX - CLEARANCE / 2 &&
-        v.x < BOUNDS.maxX + CLEARANCE / 2 &&
-        -v.z > BOUNDS.minY - CLEARANCE / 2 &&
-        -v.z < BOUNDS.maxY + CLEARANCE / 2;
-      expect(inside).toBe(false);
-    }
-    expect(REACH).toBeLessThan(CAMERA_FAR);
-  });
+  it.each(Object.values(layouts))(
+    'keeps every building outside the bounds and inside the far plane from any camera spot: $id',
+    (layout) => {
+      const { bounds } = layout;
+      const corners = [bounds.minX, bounds.maxX].flatMap((x) =>
+        [bounds.minY, bounds.maxY].map((y) => new Vector3(x, 0, -y)),
+      );
+      const p = skylineGeometry(sceneryBuildings(resolveLayout(layout, null))).getAttribute(
+        'position',
+      );
+      const v = new Vector3();
+      for (let i = 0; i < p.count; i++) {
+        v.set(p.getX(i), p.getY(i), p.getZ(i));
+        for (const corner of corners) expect(v.distanceTo(corner)).toBeLessThan(REACH);
+        const inside =
+          v.x > bounds.minX - CLEARANCE / 2 &&
+          v.x < bounds.maxX + CLEARANCE / 2 &&
+          -v.z > bounds.minY - CLEARANCE / 2 &&
+          -v.z < bounds.maxY + CLEARANCE / 2;
+        expect(inside).toBe(false);
+      }
+      expect(REACH).toBeLessThan(CAMERA_FAR);
+    },
+  );
+
+  it.each(Object.values(layouts))(
+    'rings the bounds with a belt that keeps clear of the rings and of the street leaving the bounds: $id',
+    (layout) => {
+      const resolved = resolveLayout(layout, null);
+      const rings = skylineBuildings(resolved.bounds);
+      const belt = perimeterBuildings(resolved, rings);
+      expect(perimeterBuildings(resolved, rings)).toEqual(belt);
+      expect(sceneryBuildings(resolved)).toEqual([...rings, ...belt]);
+      // the same whatever exercise is set up in the layout
+      for (const exercise of exercises.filter((e) => e.layout === layout.id)) {
+        expect(sceneryBuildings(resolveLayout(layout, exercise)), exercise.id).toEqual([
+          ...rings,
+          ...belt,
+        ]);
+      }
+      const { bounds } = resolved;
+      const cx = (bounds.minX + bounds.maxX) / 2;
+      const cy = (bounds.minY + bounds.maxY) / 2;
+      // every side carries some of it
+      const sides = new Set(
+        belt.map((b) =>
+          Math.abs(b.x - cx) / (bounds.maxX - bounds.minX) >
+          Math.abs(b.y - cy) / (bounds.maxY - bounds.minY)
+            ? Math.sign(b.x - cx) * 2
+            : Math.sign(b.y - cy),
+        ),
+      );
+      expect(sides.size).toBe(4);
+      const street = resolved.surfaces.filter(
+        (s) => s.rect.minX <= bounds.minX || s.rect.maxX >= bounds.maxX,
+      );
+      expect(street.length).toBeGreaterThan(0);
+      const p = skylineGeometry(belt).getAttribute('position');
+      for (let i = 0; i < p.count; i++) {
+        const [x, y] = [p.getX(i), -p.getZ(i)];
+        for (const { rect } of street) {
+          const across = y > rect.minY && y < rect.maxY;
+          expect(across && (x < bounds.minX || x > bounds.maxX), `${x}, ${y}`).toBe(false);
+        }
+      }
+    },
+  );
 
   it('plants every building at or below the ground', () => {
     for (const b of buildings) {
@@ -154,7 +211,7 @@ describe('skyline', () => {
   );
 
   it('is seen by the perspective cameras only', () => {
-    const skyline = createSkyline(BOUNDS, new Color(0xdcebf2));
+    const skyline = createSkyline(resolveLayout(layouts.depot, null), new Color(0xdcebf2));
     const perspective = new Camera();
     perspective.layers.enable(PERSPECTIVE_LAYER);
     const topDown = new Camera();
@@ -220,7 +277,7 @@ describe('skyline windows', () => {
   });
 
   it('flips a uniform and leaves the material and its program alone', () => {
-    const skyline = createSkyline(BOUNDS, new Color(0xdcebf2));
+    const skyline = createSkyline(resolveLayout(layouts.depot, null), new Color(0xdcebf2));
     const material = skyline.mesh.material as MeshLambertNodeMaterial;
     const uniforms = (root: Node | null): number[] => {
       const found: number[] = [];
