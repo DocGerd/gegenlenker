@@ -41,7 +41,8 @@ export type EinweiserDrive = {
 
 export type EinweiserDriveSetup = {
   readonly truck: TruckSpec;
-  readonly trailer: TrailerSpec;
+  /** Null: the truck solo. */
+  readonly trailer: TrailerSpec | null;
   readonly layout: ResolvedLayout;
   readonly contacts: ContactQuery;
   /** The run's first snapshot. */

@@ -81,7 +81,7 @@ function paintBests(block: HTMLElement, exercise: ExerciseDefinition): void {
   const best = bestResults();
   const settings = currentSettings();
   const { truckId, lighting, mirrorsOnly } = settings;
-  const trailerId = runTrailer(settings, 'driver');
+  const trailerId = runTrailer(settings);
   const lines = [false, true]
     .map(
       (assisted) => best[bestKey(exercise.id, truckId, trailerId, assisted, lighting, mirrorsOnly)],
@@ -116,7 +116,7 @@ export function setupScreen(ctx: SetupContext): {
   if (stepId === undefined) throw new Error(`${entryKey(ctx.entry)} has no setup step ${ctx.step}`);
   const fields = SETUP_STEPS[stepId];
   const optionRow = (id: OptionId): HTMLFieldSetElement =>
-    choiceRow(roleField(id, role), optionValue(currentSettings(), id, role), (value) => {
+    choiceRow(roleField(id, role), optionValue(currentSettings(), id), (value) => {
       if (applyOption(id, value) && exercise !== null && role === 'driver')
         paintBests(bests, exercise);
     });

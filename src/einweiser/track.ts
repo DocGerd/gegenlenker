@@ -51,7 +51,7 @@ export type EinweiserRunSetup = {
   /** The layout's sight blockers (`layoutOccluders`); the combination's bodies are added per step. */
   readonly occluders: readonly Occluder[];
   readonly yard: Rect2;
-  /** The run's first snapshot: he starts behind the trailer (`startWalker`). */
+  /** The run's first snapshot: he starts behind the rear end (`startWalker`). */
   readonly start: SimSnapshot;
   /** The pilot the driver acts through; pass one to look ahead with its forks. */
   readonly pilot?: Pilot;

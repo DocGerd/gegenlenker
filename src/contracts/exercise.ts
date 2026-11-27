@@ -86,7 +86,7 @@ export type InputLog = {
   readonly layoutId: LayoutId;
   readonly exerciseId: ExerciseId | null;
   readonly truckId: TruckId;
-  /** Null: the truck solo, a driver run only. */
+  /** Null: the truck solo. */
   readonly trailerId: TrailerId | null;
   readonly lighting: LightingMode;
   readonly mirrorsOnly: boolean;

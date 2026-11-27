@@ -50,7 +50,7 @@ function replayLabel(log: InputLog): string {
 
 /** The chosen value's name as the setup screen shows it to `role`, without the field name. */
 function valueLabel(id: OptionId, role: Role = 'driver'): string {
-  const value = optionValue(currentSettings(), id, role);
+  const value = optionValue(currentSettings(), id);
   const choice = roleField(id, role).choices.find((c) => c.value === value);
   return choice === undefined ? '' : labelOf(choice);
 }

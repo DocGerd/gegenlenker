@@ -40,32 +40,34 @@ type MirrorView = {
 };
 
 /**
- * What the sight check reads of a combination: the full mirror set at fixed optics, whatever the
+ * What the sight check reads of a rig: the full mirror set at fixed optics, whatever the
  * preset, the settings or the window, so the result never depends on graphics.
  */
-export type SightGeometry<P extends RigParams = VehicleParams> = {
+export type SightGeometry<P extends RigParams = RigParams> = {
   readonly params: P;
   readonly eye: Vec3;
   readonly glass: CabGlass;
   readonly mirrors: readonly MirrorView[];
-  /** Each body's top above the road. */
-  readonly heights: Readonly<Record<BodyId, number>>;
+  /** Each body's top above the road; solo, the truck's only. */
+  readonly heights: Readonly<Partial<Record<BodyId, number>>>;
 };
 
-/** A null trailer is the truck solo, its one body. */
-export function sightGeometry(truck: TruckSpec, trailer: TrailerSpec): SightGeometry;
-export function sightGeometry(
-  truck: TruckSpec,
-  trailer: TrailerSpec | null,
-): SightGeometry<RigParams>;
-export function sightGeometry(
-  truck: TruckSpec,
-  trailer: TrailerSpec | null,
-): SightGeometry<RigParams> {
+/** Null trailer: the truck solo. */
+export function sightGeometry(truck: TruckSpec, trailer: TrailerSpec): SightGeometry<VehicleParams>;
+export function sightGeometry(truck: TruckSpec, trailer: TrailerSpec | null): SightGeometry;
+export function sightGeometry(truck: TruckSpec, trailer: TrailerSpec | null): SightGeometry {
   const mounts = mirrorMounts(truck);
   const ids = Object.keys(mounts) as MirrorId[];
-  const truckTop = Math.max(metres(truck.cab.height), metres(truck.bodyTop));
-  const deck = trailer === null ? truckTop : metres(trailer.deckHeight);
+  const top = Math.max(metres(truck.cab.height), metres(truck.bodyTop));
+  let heights: SightGeometry['heights'] = { truck: top };
+  if (trailer !== null) {
+    const deck = metres(trailer.deckHeight);
+    heights = {
+      truck: top,
+      drawbar: COUPLING_HEIGHT,
+      trailer: trailer.swapBodyHeight === undefined ? deck : deck + metres(trailer.swapBodyHeight),
+    };
+  }
   return {
     params: resolveRig(truck, trailer),
     eye: truckAnchors(truck).eye,
@@ -75,11 +77,7 @@ export function sightGeometry(
       const tanV = Math.tan((fov * Math.PI) / 360);
       return { id, mount: mounts[id], yaw, pitch, roll, tanV, tanH: aspect * tanV };
     }),
-    heights: {
-      truck: truckTop,
-      drawbar: COUPLING_HEIGHT,
-      trailer: trailer?.swapBodyHeight === undefined ? deck : deck + metres(trailer.swapBodyHeight),
-    },
+    heights,
   };
 }
 
@@ -95,9 +93,13 @@ export const layoutOccluders = ({
 type Bodies = Pick<SimSnapshot, 'truck' | 'coupling' | 'dolly' | 'trailer'>;
 type BodyOccluder = Occluder & { readonly body: BodyId };
 
-/** The combination's bodies at `s`. */
-export const bodyOccluders = (g: SightGeometry<RigParams>, s: Bodies): BodyOccluder[] =>
-  bodyFootprints(g.params, s).map(({ body, obb }) => ({ body, obb, height: g.heights[body] }));
+/** The rig's bodies at `s`. */
+export const bodyOccluders = (g: SightGeometry, s: Bodies): BodyOccluder[] =>
+  bodyFootprints(g.params, s).map(({ body, obb }) => {
+    const height = g.heights[body];
+    if (height === undefined) throw new Error(`no height for the ${body}`);
+    return { body, obb, height };
+  });
 
 /** Whether the segment `a`-`b` passes through the box: its ground track clipped to the box, then the lower clip end against the top. */
 export function blocks(o: Occluder, a: Vec3, b: Vec3): boolean {
@@ -215,7 +217,7 @@ function inFrustum(m: MirrorFrame, p: Vec3): boolean {
 
 /** How the driver sees points, past the layout's `occluders` and the combination's own bodies: the snapshot's bodies and mirrors are read once for any number of points. */
 export function sightField(
-  g: SightGeometry<RigParams>,
+  g: SightGeometry,
   s: Bodies,
   occluders: readonly Occluder[],
 ): {
@@ -254,7 +256,7 @@ export function sightField(
 
 /** How the driver sees world point `p`, past the layout's `occluders` and the combination's own bodies. */
 export const pointSight = (
-  g: SightGeometry<RigParams>,
+  g: SightGeometry,
   s: Bodies,
   p: Vec3,
   occluders: readonly Occluder[],
@@ -262,7 +264,7 @@ export const pointSight = (
 
 /** Sight of any of `points`: direct if one is seen directly, and every mirror that shows one. */
 export const sightOf = (
-  g: SightGeometry<RigParams>,
+  g: SightGeometry,
   s: Bodies,
   points: readonly Vec3[],
   occluders: readonly Occluder[],

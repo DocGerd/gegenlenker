@@ -1,6 +1,6 @@
 import type { Rect2 } from '../contracts/layout';
 import type { Obb, Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
-import type { VehicleParams } from '../contracts/vehicle';
+import { hasTrailer, type RigParams } from '../contracts/vehicle';
 import type { Occluder } from './sight';
 
 /** Walker measures and speeds (estimates; walk after Weidmann's 1.34 m/s mean). */
@@ -11,7 +11,7 @@ export const JOG_SPEED = 3;
 export const WALK_RAMP = 0.2;
 /** Lower obstacles, such as kerbs, are stepped over. */
 export const STEP_HEIGHT = 0.3;
-/** He starts this far behind the trailer rear, and this far outboard of its left side. */
+/** He starts this far behind the rear end (the trailer's, solo the truck's), and this far outboard of its left side. */
 export const START_BEHIND = 3;
 export const START_OUTBOARD = 1;
 
@@ -113,10 +113,11 @@ export function walkStep(
   return { x, y, heading: w.heading, vx, vy };
 }
 
-/** His start: behind the trailer rear, out to its left (the driver's side), facing along the trailer. */
-export function startWalker(params: VehicleParams, s: SimSnapshot): Walker {
+/** His start: behind the rear end, out to its left (the driver's side), facing along the rear body. */
+export function startWalker(params: RigParams, s: SimSnapshot): Walker {
   const h = s.trailer.heading;
-  const out = params.trailerWidth / 2 + START_OUTBOARD;
+  const width = hasTrailer(params) ? params.trailerWidth : params.truckWidth;
+  const out = width / 2 + START_OUTBOARD;
   return {
     x: s.trailerRear.x - START_BEHIND * Math.cos(h) - out * Math.sin(h),
     y: s.trailerRear.y - START_BEHIND * Math.sin(h) + out * Math.cos(h),
