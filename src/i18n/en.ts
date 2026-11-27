@@ -171,7 +171,8 @@ export const en = {
   endedMoving:
     'Position and angle were within tolerance, but the vehicle was still moving. Stop it inside the target.',
   runOver: 'Ground guide run over: the run has ended.',
-  trailerNotLeft: 'Not finished: uncouple the trailer in the target, drive away from it, then stop.',
+  trailerNotLeft:
+    'Not finished: uncouple the trailer in the target, drive away from it, then stop.',
   endedWithoutHalt:
     'Position and angle were within tolerance, but the run ends only on a stop after a recognized Halt.',
   walkedBackwards: 'Signal Halt, reposition while it stands, then guide on.',
