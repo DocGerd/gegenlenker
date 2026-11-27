@@ -21,6 +21,8 @@ import {
   MESSAGE_KEYS,
   MIN_FRONT_WIDTH,
   MIN_MESSAGE_WIDTH,
+  SIGHT_CUE_WIDTH,
+  sightCueBox,
   SPACE_PX,
   SOFT_HYPHEN,
   wordPx,
@@ -39,7 +41,7 @@ import {
   type Insets,
   type PanelStack,
 } from './viewports';
-import { declared, padding, px, SOURCE } from './viewports-css';
+import { declared, numberConst, padding, px, SOURCE } from './viewports-css';
 
 describe('computeViewports mirrors', () => {
   it('stay inside the cockpit and above the controls at every size', () => {
@@ -67,6 +69,8 @@ describe('computeViewports mirrors', () => {
   });
 });
 
+const right = (r: Rect): number => r.x + r.width;
+
 describe('computeViewports in the Einweiser role', () => {
   const every = { front: true, wide: true, close: true };
   const sizes: [number, number][] = [
@@ -91,6 +95,70 @@ describe('computeViewports in the Einweiser role', () => {
         topDown: driver.topDown,
       });
     }
+  });
+
+  it('centres the messages in his view, beside the sight cue where they fit, else below it', () => {
+    const count = { beside: 0, below: 0 };
+    for (const [w, h] of [...sizes, [1024, 600], [600, 900]] as const) {
+      for (const mode of ['drive', 'mirrors'] as const) {
+        const views = computeViewports(
+          w,
+          h,
+          mode,
+          null,
+          NO_INSETS,
+          undefined,
+          null,
+          every,
+          'einweiser',
+        );
+        const { cockpit } = views;
+        if (cockpit === null) throw new Error('the Einweiser has a view');
+        const column = messageColumn(views, null, NO_INSETS);
+        const cue = sightCueBox(cockpit, NO_INSETS);
+        const at = `${mode} ${w}x${h}`;
+        expect(column.x - cockpit.x, at).toBeCloseTo(right(cockpit) - right(column), 9);
+        if (column.x >= right(cue)) count.beside++;
+        else {
+          expect(column.y, at).toBeGreaterThanOrEqual(cue.y + cue.height);
+          count.below++;
+        }
+      }
+    }
+    expect(count.beside).toBeGreaterThan(0);
+    expect(count.below).toBeGreaterThan(0);
+  });
+
+  it('sends the messages to the top view where the key legend leaves them no room in his view', () => {
+    const tall: LegendBox = { right: 600, height: 700 };
+    const views = computeViewports(
+      620,
+      774,
+      'drive',
+      null,
+      NO_INSETS,
+      undefined,
+      null,
+      every,
+      'einweiser',
+    );
+    const { topDown } = views;
+    const column = messageColumn(views, tall, NO_INSETS);
+    expect(column.y + column.height).toBe(topDown.y + topDown.height);
+    expect(column.cueYields).toBe(false);
+    // without the top view, the goal cue yields
+    const bare = computeViewports(
+      620,
+      774,
+      'mirrors',
+      null,
+      NO_INSETS,
+      undefined,
+      null,
+      every,
+      'einweiser',
+    );
+    expect(messageColumn(bare, tall, NO_INSETS).cueYields).toBe(true);
   });
 });
 
@@ -364,6 +432,8 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   'Drehschemel\u00ADwinkel': 131,
   'Drehschemel-': 93,
   Gegenrichtung: 99,
+  zeigen: 45,
+  signal: 41,
   In: 12,
   'Kupplungs\u00ADwinkel': 116,
   'Kupplungs-': 78,
@@ -417,6 +487,31 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   zu: 16,
   '–': 8,
   '·': 3,
+  // the sight cue's
+  Sight: 35,
+  sight: 34,
+  contact: 51,
+  left: 23,
+  right: 32,
+  main: 32,
+  mirror: 40,
+  'wide-angle': 76,
+  'close-proximity': 104,
+  front: 32,
+  No: 18,
+  Signal: 42,
+  unclear: 50,
+  Sichtkontakt: 85,
+  im: 16,
+  Hauptspiegel: 91,
+  links: 32,
+  rechts: 42,
+  Weitwinkelspiegel: 124,
+  Rampenspiegel: 105,
+  Frontspiegel: 84,
+  Kein: 28,
+  Zeichen: 52,
+  unklar: 42,
 };
 const MEASURED_SPACE_PX = 3;
 
@@ -660,7 +755,7 @@ describe('computeViewports front mirror', () => {
   });
 
   it('wraps no fewer lines than the measured words do, at every column width', () => {
-    for (const keys of [MESSAGE_KEYS.toast, MESSAGE_KEYS.cue]) {
+    for (const keys of [MESSAGE_KEYS.toast, MESSAGE_KEYS.cue, MESSAGE_KEYS.sight]) {
       for (const key of keys) {
         for (const text of [en[key], de[key]]) {
           for (let width = 100; width <= 600; width++) {
@@ -693,6 +788,21 @@ describe('computeViewports front mirror', () => {
     expect(MIN_MESSAGE_WIDTH).toBe(widest + 41 + 32);
   });
 
+  it('knows every word of the sight cue, and its text room breaks none of them', () => {
+    const words = MESSAGE_KEYS.sight
+      .flatMap((key) => [en[key], de[key]])
+      .flatMap((text) => text.split(/\s+/));
+    for (const word of words) {
+      expect(
+        MESSAGE_WORD_PX[word],
+        `${word} is unmeasured: add it to MESSAGE_WORD_PX`,
+      ).toBeDefined();
+      expect(wordPx(word), word).toBeGreaterThanOrEqual(MESSAGE_WORD_PX[word] ?? Infinity);
+    }
+    const room = SIGHT_CUE_WIDTH - numberConst(SOURCE.viewports, 'SIGHT_CUE_CHROME');
+    expect(Math.max(...words.map(wordPx))).toBeLessThanOrEqual(room);
+  });
+
   it('gives the messages the whole column: the toast wrap has no side padding', () => {
     // `messagesFit` and the layout spec take the column's width as the toasts' room
     const sides = padding(SOURCE.hud, '.hud-toast-wrap');
@@ -711,6 +821,7 @@ describe('computeViewports front mirror', () => {
       keysOf(/^(blocked|contactAhead|limitAhead|selectGear)/),
     );
     expect([...MESSAGE_KEYS.cue].sort()).toEqual(keysOf(/^goal(Inside|Distance|Angle|Position)/));
+    expect([...MESSAGE_KEYS.sight].sort()).toEqual(keysOf(/^sight/));
   });
 
   it('puts the toast column between the class II mirrors without a front mirror, or else in the top-down pane', () => {

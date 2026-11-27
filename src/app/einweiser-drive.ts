@@ -7,9 +7,13 @@ import type { ContactQuery, ControlVector, SimSnapshot } from '../contracts/sim'
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { layoutOccluders, sightGeometry } from '../einweiser/sight';
 import { createEinweiserRun, type EinweiserStep } from '../einweiser/track';
+import type { EinweiserHud } from '../hud/hud';
 import { createWalkInput, type WalkInput } from '../input/walk-input';
 import { createEinweiserTracker } from '../scoring/einweiser';
 import { currentSettings } from './settings';
+
+/** How long the sight cue says a sign was unclear, sim seconds (estimate). */
+const UNCLEAR_CUE_SECONDS = 2;
 
 /** What a drive in the Einweiser role adds to the driver's: the AI driver as its control source, and the Einweiser. */
 export type EinweiserDrive = {
@@ -24,6 +28,8 @@ export type EinweiserDrive = {
   visual(): EinweiserVisual;
   /** For the run's log. */
   track(): EinweiserTrack;
+  /** What his HUD shows; null before the first sim step. */
+  hud(): EinweiserHud | null;
   /** After each `sim.step`, with its snapshot: scores the step the source just ticked. */
   settle(after: SimSnapshot): void;
   /** The vehicle hit him: the run ends at once. */
@@ -67,6 +73,9 @@ export function startEinweiserDrive(
   let control: ControlVector = start.control;
   let status: EinweiserStatus | null = null;
   let ticked: { readonly before: SimSnapshot; readonly step: EinweiserStep } | null = null;
+  // sim time, so the cue holds while the pause sheet stops the run
+  let time = start.time;
+  let unclearAt = -Infinity;
   stage.dataset['role'] = 'einweiser';
   return {
     attach: (surface, onLockLost) => input.attach(surface, onLockLost),
@@ -79,6 +88,10 @@ export function startEinweiserDrive(
         ticked = { before: snapshot, step };
         control = step.control;
         status = step.status;
+        time = snapshot.time;
+        // a later reading, or sight lost, ends the cue
+        if (step.reading.kind === 'unclear') unclearAt = time;
+        else if (step.reading.kind !== 'none') unclearAt = -Infinity;
       },
       control: () => control,
       lamps: () => lamps,
@@ -93,6 +106,14 @@ export function startEinweiserDrive(
       return { pose: { x, y, heading }, pitch, sign: status.sign, phase: status.phase };
     },
     track: () => run.track(),
+    hud: () =>
+      status === null
+        ? null
+        : {
+            sign: status.sign,
+            sight: status.sight,
+            unclear: time - unclearAt < UNCLEAR_CUE_SECONDS,
+          },
     settle(after) {
       if (ticked === null) return;
       const { before, step } = ticked;

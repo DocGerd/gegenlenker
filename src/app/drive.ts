@@ -598,6 +598,7 @@ export function startDrive(
         else hud.setFree(false);
       }
       hud.update(snapshot, warning);
+      if (einweiser !== null) hud.setEinweiser(einweiser.hud());
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goalCue(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);

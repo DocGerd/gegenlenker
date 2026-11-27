@@ -1,7 +1,8 @@
 import '../src/styles/fonts';
 import '../src/styles/tokens.css';
 import '../src/styles/base.css';
-import type { BlockReason, SimSnapshot } from '../src/contracts/sim';
+import { SIGN_IDS, type Sight } from '../src/contracts/einweiser';
+import type { BlockReason, ControlVector, SimSnapshot } from '../src/contracts/sim';
 import { createHud } from '../src/hud/hud';
 import { createControls } from '../src/input/controls';
 import { setLanguage } from '../src/i18n/i18n';
@@ -10,7 +11,9 @@ import { computeViewports } from '../src/render/viewports';
 // ?lang=de|en  ?theme=light|dark  ?mode=exercise|yard  ?view=drive|replay
 // ?frac=0.6 freezes both pivot angles at that share of the limit (negative: right)
 // ?blocked=contact|coupling|turntable freezes the toast
+// ?role=einweiser shows his HUD: the sign bar and the sight cue cycle, without controls
 const params = new URLSearchParams(location.search);
+const role = params.get('role') === 'einweiser' ? 'einweiser' : 'driver';
 setLanguage(params.get('lang') === 'en' ? 'en' : 'de');
 if (params.get('theme')) document.documentElement.dataset['theme'] = params.get('theme') ?? '';
 
@@ -31,7 +34,9 @@ const mirrorEls = [rect('mirror-left', 'mirror'), rect('mirror-right', 'mirror')
 const COUPLING_LIMIT = (80 * Math.PI) / 180;
 const TURNTABLE_LIMIT = (85 * Math.PI) / 180;
 
-const controls = createControls(stage, { lockToLockTurns: 5, steerRate: 0.6 });
+const controls =
+  role === 'driver' ? createControls(stage, { lockToLockTurns: 5, steerRate: 0.6 }) : null;
+const STILL: ControlVector = { steer: 0, lever: 0, brake: false, gear: 'R' };
 const hud = createHud(stage, {
   couplingLimit: COUPLING_LIMIT,
   turntableLimit: TURNTABLE_LIMIT,
@@ -45,6 +50,7 @@ const hud = createHud(stage, {
   chase: true,
   interior: true,
   collapsed: { aids: false, gauges: false, keys: false },
+  role,
 });
 hud.onAction((a) => console.info('hud action', JSON.stringify(a)));
 
@@ -62,6 +68,12 @@ const relayout = (): void => {
     stage.clientWidth,
     stage.clientHeight,
     params.get('view') === 'replay' ? 'replay' : 'drive',
+    null,
+    undefined,
+    undefined,
+    null,
+    undefined,
+    role,
   );
   place(topDownEl, views.topDown);
   cockpitEl.hidden = !views.cockpit;
@@ -82,7 +94,7 @@ const frozenBlock = params.get('blocked') as BlockReason | null;
 const triangle = (t: number): number => Math.abs((((t % 2) + 2) % 2) - 1) * 2 - 1;
 
 const snapshot = (time: number): SimSnapshot => {
-  const control = controls.control();
+  const control = controls?.control() ?? STILL;
   const sweep = (period: number, phase: number): number => triangle(time / period + phase);
   const coupling =
     frozen !== null ? Number(frozen) * COUPLING_LIMIT : sweep(10, 0.5) * COUPLING_LIMIT;
@@ -113,13 +125,27 @@ const snapshot = (time: number): SimSnapshot => {
   };
 };
 
+const SIGHTS: readonly Sight[] = [
+  { direct: true, mirrors: [] },
+  { direct: false, mirrors: ['mirrorLeft'] },
+  { direct: false, mirrors: ['wideRight', 'close'] },
+  { direct: false, mirrors: ['front'] },
+  { direct: false, mirrors: [] },
+];
+
 const start = performance.now();
 let last = start;
 const frame = (now: number): void => {
-  controls.tick((now - last) / 1000, { steer: controls.control().steer });
+  controls?.tick((now - last) / 1000, { steer: controls.control().steer });
   last = now;
-  hud.update(snapshot((now - start) / 1000));
-  hud.setRunTime((now - start) / 1000);
+  const time = (now - start) / 1000;
+  hud.update(snapshot(time));
+  hud.setRunTime(time);
+  hud.setEinweiser({
+    sign: SIGN_IDS[Math.floor(time / 2) % (SIGN_IDS.length + 1)] ?? null,
+    sight: SIGHTS[Math.floor(time / 3) % SIGHTS.length] ?? { direct: false, mirrors: [] },
+    unclear: time % 7 < 2,
+  });
   requestAnimationFrame(frame);
 };
 requestAnimationFrame(frame);

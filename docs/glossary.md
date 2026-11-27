@@ -13,13 +13,6 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Steer the other way to ease an angle            | countersteer                                | gegenlenken                                  |
 | Vehicle touches an obstacle or itself           | contact                                     | Berührung                                    |
 | Best stored result                              | best                                        | Bestwert                                     |
-| Vehicle hits the Einweiser: the run ends        | run over                                    | überfahren                                   |
-| Einweiser fault: inside the swept path          | in the vehicle's path                       | im Fahrweg                                   |
-| Einweiser fault: out of the driver's sight      | out of sight                                | außer Sicht                                  |
-| Driver cannot read a sign                       | signal unclear                              | Zeichen unklar                               |
-| Contact after the warning under a moving sign   | halt too late                               | Halt zu spät                                 |
-| Moving sign before the first Achtung            | no Attention signal first                   | ohne Achtung begonnen                        |
-| Fault rule set by the trainer, not a source     | trainer convention                          | Trainerregel                                 |
 | Driving area                                    | yard                                        | Hof                                          |
 | Aids on / off                                   | aids                                        | Hilfen                                       |
 | Toggle for both angle readouts                  | angle display                               | Winkelanzeige                                |
@@ -80,6 +73,17 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Sign 8: right arm moved sideways                | move right                                  | Rechts fahren                                |
 | Sign 9: palms brought together                  | closing distance                            | Abstandsverringerung                         |
 | No sign key held: arms down                     | no signal                                   | Kein Zeichen                                 |
+| Driver sees the Einweiser                       | sight contact (direct / in mirror / none)   | Sichtkontakt (direkt / im Spiegel / kein)    |
+| Sight cue: class II / IV mirror                 | main / wide-angle mirror                    | Hauptspiegel / Weitwinkelspiegel             |
+| Sight cue: class V / VI mirror                  | close-proximity / front mirror              | Rampenspiegel / Frontspiegel                 |
+| Driver cannot read a sign                       | signal unclear                              | Zeichen unklar                               |
+| Blocked-vehicle toast: advice to the Einweiser  | signal the other way                        | Gegenrichtung zeigen                         |
+| Vehicle hits the Einweiser: the run ends        | run over                                    | überfahren                                   |
+| Einweiser fault: inside the swept path          | in the vehicle's path                       | im Fahrweg                                   |
+| Einweiser fault: out of the driver's sight      | out of sight                                | außer Sicht                                  |
+| Contact after the warning under a moving sign   | halt too late                               | Halt zu spät                                 |
+| Moving sign before the first Achtung            | no Attention signal first                   | ohne Achtung begonnen                        |
+| Fault rule set by the trainer, not a source     | trainer convention                          | Trainerregel                                 |
 | Look sensitivity setting                        | mouse sensitivity                           | Mausempfindlichkeit                          |
 | Invert vertical look setting                    | invert mouse                                | Maus invertieren                             |
 | First-person field of view setting              | field of view                               | Sichtfeld                                    |

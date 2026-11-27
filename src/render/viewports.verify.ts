@@ -49,6 +49,7 @@ import {
   MIN_WIDE_WIDTH,
   NO_INSETS,
   orientationOf,
+  sightCueBox,
   topDownSplit,
   wheelSize,
   wideHeight,
@@ -255,6 +256,26 @@ const VARIANTS: readonly Variant[] = [
     mode: 'mirrors',
     insets: NOTCH,
   }),
+  base('einweiser, legend', { role: 'einweiser', legend: 'measured' }),
+  base('einweiser, legend with all keys', { role: 'einweiser', legend: 'keysOpen' }),
+  base('einweiser, notch, legend, panels steps, share min', {
+    role: 'einweiser',
+    insets: NOTCH,
+    legend: 'measured',
+    panels: 'steps',
+    layout: SHARE_MIN,
+  }),
+  base('einweiser without the top view, legend', {
+    role: 'einweiser',
+    mode: 'mirrors',
+    legend: 'measured',
+  }),
+  base('einweiser without the top view, notch, legend with all keys', {
+    role: 'einweiser',
+    mode: 'mirrors',
+    insets: NOTCH,
+    legend: 'keysOpen',
+  }),
   base('replay', { mode: 'replay', extra: NO_EXTRA_MIRRORS }),
   base('replay, notch', { mode: 'replay', extra: NO_EXTRA_MIRRORS, insets: NOTCH }),
 ];
@@ -292,6 +313,13 @@ const LEGEND_BOXES = {
   compact: { width: 159, height: 194 },
   full: { width: 315, height: 286 },
   mirrorsFull: { width: 303, height: 190 },
+};
+/** The Einweiser's (hud.ts never makes his compact): the walk, look and sign rows, in two columns. */
+const EINWEISER_LEGEND_BOXES = {
+  overlay: { width: 98, height: 42 },
+  driveOnly: { width: 369, height: 158 },
+  full: { width: 369, height: 222 },
+  mirrorsFull: { width: 369, height: 174 },
 };
 const { SHORT_SCREEN, SHORT_HEIGHT, COMPACT_WIDTH, COMPACT_WIDTH_WITH_LEVER } = HUD_THRESHOLDS;
 
@@ -331,6 +359,8 @@ const PROPERTIES = [
   'message-column-valid',
   'message-column-inside-safe-area',
   'message-column-placement',
+  'sight-cue-placement',
+  'sight-cue-clear-of-legend',
   'message-cue-yields-only-without-room',
   'message-stack-fits-pane',
   'message-stack-clear-of-sight-cone',
@@ -338,6 +368,7 @@ const PROPERTIES = [
   'message-stack-clear-of-legend',
   'message-stack-clear-of-mirrors',
   'message-stack-clear-of-action-button',
+  'message-stack-clear-of-sight-cue',
 ] as const;
 type Property = (typeof PROPERTIES)[number];
 
@@ -464,6 +495,17 @@ function messageHeights(room: number): { toast: number; cue: number } {
   stackCache.set(room, heights);
   return heights;
 }
+/** The Einweiser's sight cue texts (hud.css `.hud-sight`). */
+const sightTexts: readonly string[] = [en, de].flatMap((lang) =>
+  MESSAGE_KEYS.sight.map((key) => lang[key]),
+);
+/** `.hud-action`: the pause button at the screen's top right corner. */
+const actionBox = (w: number, m: Metrics): Rect => ({
+  x: w - m.actionRight - GEOM.actionW,
+  y: m.actionTop,
+  width: GEOM.actionW,
+  height: GEOM.actionH,
+});
 /**
  * Height of the longest toast, the gap and the goal cue in a column `room` px wide; where the cue
  * `yields` to a toast, of the taller one alone.
@@ -500,31 +542,34 @@ function coneDepth(rect: Rect, cockpit: Rect): number {
  * Chromium, en and de; `LEGEND_BOXES`). Null where it is hidden.
  */
 function legendFor(
-  kind: LegendKind,
-  mode: Mode,
+  v: Variant,
   views: ViewRects,
   w: number,
   h: number,
   m: Metrics,
 ): { box: LegendBox; left: number; width: number } | null {
   const { cockpit } = views;
+  const { legend: kind, mode } = v;
   if (kind === 'none' || cockpit === null) return null;
   if (mode === 'mirrors' && w < h) return null;
+  const einweiser = v.role === 'einweiser';
+  const boxes = einweiser ? EINWEISER_LEGEND_BOXES : LEGEND_BOXES;
   // `spansRight` in hud.ts
   const compact =
+    !einweiser &&
     cockpit.width < (right(cockpit) >= w - 1 ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH);
   const state =
     h < SHORT_SCREEN
-      ? LEGEND_BOXES.overlay
+      ? boxes.overlay
       : compact
         ? LEGEND_BOXES.compact
         : cockpit.height < SHORT_HEIGHT && kind === 'measured'
-          ? LEGEND_BOXES.driveOnly
+          ? boxes.driveOnly
           : mode === 'mirrors'
-            ? LEGEND_BOXES.mirrorsFull
-            : LEGEND_BOXES.full;
-  // `.hud-legend` stands at `--hud-inset` from the cockpit's left and above the HUD band
-  const left = m.hudInset;
+            ? boxes.mirrorsFull
+            : boxes.full;
+  // `.hud-legend` stands at `--hud-inset` from the cockpit's left (his at the screen's edge) and above the HUD band
+  const left = einweiser ? SPACE_4 + v.insets.left : m.hudInset;
   const lift = HUD_BAND_SHARE * cockpit.height + GEOM.legendLift;
   return {
     box: { right: left + state.width, height: lift + state.height },
@@ -545,7 +590,7 @@ function evaluate(v: Variant, w: number, h: number): void {
     computeViewports(w, h, v.mode, legend, insets, v.layout, panels, extra, v.role);
 
   const first = run(null, v.extra);
-  const legend = legendFor(v.legend, v.mode, first, w, h, m);
+  const legend = legendFor(v, first, w, h, m);
   const views = legend === null ? first : run(legend.box, v.extra);
   const { cockpit, topDown } = views;
   const landscape = w >= h;
@@ -738,9 +783,66 @@ function evaluate(v: Variant, w: number, h: number): void {
   };
 
   if (einweiser) {
-    // His messages span his view's top, below the display cut-out (#498 gives them their own place).
+    // The sight cue: top left of his view below the display cut-out, as tall as its longest text wraps.
+    const cue = sightCueBox(cockpit, insets);
+    const cueHeight = mostLines(sightTexts, GEOM.sightW - GEOM.sightChrome) * GEOM.sightLine;
+    const cuePlaced =
+      cue.x === cockpit.x + insets.left + SPACE_4 &&
+      cue.y === cockpit.y + topInset + SPACE_4 &&
+      cue.width === GEOM.sightW &&
+      cue.height >= cueHeight + GEOM.sightBox &&
+      right(cue) <= right(cockpit) - insets.right &&
+      !overlaps(cue, hudBand);
+    if (!chk('sight-cue-placement', cuePlaced)) {
+      fail('sight-cue-placement', () => `cue ${fmt(cue)} view ${fmt(cockpit)}`);
+    }
+    const legendRect: Rect | null =
+      legend === null
+        ? null
+        : {
+            x: legend.left,
+            y: h - legend.box.height,
+            width: legend.width,
+            height: legend.box.height,
+          };
+    if (legendRect !== null && !chk('sight-cue-clear-of-legend', !overlaps(cue, legendRect))) {
+      fail(
+        'sight-cue-clear-of-legend',
+        () => `cue ${fmt(cue)} overlaps legend ${fmt(legendRect)}`,
+        depth(cue, legendRect),
+      );
+    }
+    const pane = v.mode !== 'mirrors';
+    // A key legend that leaves no room in his view sends them to the top view, as the driver's.
+    const inView =
+      column.x >= cockpit.x && right(column) <= right(cockpit) + 1e-9 && column.y >= cockpit.y;
+    if (!chk('message-cue-yields-only-without-room', !column.cueYields || (inView && !pane))) {
+      fail('message-cue-yields-only-without-room', () => `column ${fmt(column)} yields`);
+    }
+    if (!inView) {
+      const placed =
+        pane &&
+        column.x >= topDown.x &&
+        right(column) <= right(topDown) + 1e-9 &&
+        column.y >= topDown.y + insets.top + TARGET &&
+        bottom(column) <= bottom(topDown) + 1e-9;
+      if (!chk('message-column-placement', placed)) {
+        fail('message-column-placement', () => `column ${fmt(column)} pane ${fmt(topDown)}`);
+      }
+      const need = GEOM.stackTop + stackHeight(column.width);
+      if (!chk('message-stack-fits-pane', need <= column.height + 1e-9)) {
+        fail(
+          'message-stack-fits-pane',
+          () => `stack needs ${need} px, column ${fmt(column)}`,
+          need - column.height,
+        );
+      }
+      return;
+    }
+    // His messages stand top-centre in his view, below the display cut-out.
     const placed =
-      column.y === cockpit.y + topInset &&
+      column.y >= cockpit.y + topInset &&
+      Math.abs(column.x - cockpit.x - (right(cockpit) - right(column))) <= 1e-9 &&
       column.x >= cockpit.x + insets.left &&
       right(column) <= right(cockpit) - insets.right + 1e-9;
     if (!chk('message-column-placement', placed)) {
@@ -749,14 +851,22 @@ function evaluate(v: Variant, w: number, h: number): void {
     const stack: Rect = {
       ...column,
       y: column.y + GEOM.stackTop,
-      height: stackHeight(column.width),
+      height: stackHeight(column.width, column.cueYields),
     };
-    if (!chk('message-stack-clear-of-controls-and-hud-band', !overlaps(stack, hudBand))) {
-      fail(
-        'message-stack-clear-of-controls-and-hud-band',
-        () => `stack ${fmt(stack)} overlaps the HUD band ${fmt(hudBand)}`,
-        depth(stack, hudBand),
-      );
+    const clear: readonly [Property, string, Rect | null][] = [
+      ['message-stack-clear-of-sight-cue', 'the sight cue', cue],
+      ['message-stack-clear-of-controls-and-hud-band', 'the HUD band', hudBand],
+      ['message-stack-clear-of-legend', 'the legend', legendRect],
+      ['message-stack-clear-of-action-button', 'the action button', actionBox(w, m)],
+    ];
+    for (const [property, name, rect] of clear) {
+      if (rect !== null && !chk(property, !overlaps(stack, rect))) {
+        fail(
+          property,
+          () => `stack ${fmt(stack)} overlaps ${name} ${fmt(rect)}`,
+          depth(stack, rect),
+        );
+      }
     }
     return;
   }
@@ -807,13 +917,7 @@ function evaluate(v: Variant, w: number, h: number): void {
     width: PEDAL_W,
     height: pedalsHeight,
   };
-  /** `.hud-action`: the pause button at the screen's top right corner. */
-  const pauseBox: Rect = {
-    x: w - m.actionRight - GEOM.actionW,
-    y: m.actionTop,
-    width: GEOM.actionW,
-    height: GEOM.actionH,
-  };
+  const pauseBox = actionBox(w, m);
   const controlBoxes: Named[] = [
     { name: 'wheel', rect: wheelBox },
     { name: 'gears', rect: gearsBox },
