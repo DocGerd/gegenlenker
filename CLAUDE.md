@@ -67,7 +67,7 @@ Dev server: `pnpm dev`. `pnpm verify` (`pnpm check`, then `pnpm test:e2e`, which
 - `ControlVector.steer` is the target, -1 (full right) to 1 (full left), rate-limited in the snapshot; `lever` is 0 to 1 of the speed cap; direction comes from `gear` (`R` gives negative speed).
 - `couplingAngle` = truck heading - drawbar heading; `turntableAngle` = drawbar heading - trailer heading.
 - Reversing with left steer, the trailer rear first goes LEFT (double inversion); `src/sim/simulation.test.ts` pins it for every vehicle pair.
-- Solo (no trailer): the snapshot's `dolly`/`trailer`/`trailerRear` alias the truck as its rear body and both angles stay 0, so scoring, prediction and the cameras need no solo branch; `hasTrailer()` guards trailer-only code.
+- Solo (no trailer, `joints()` in `src/sim/kinematics.ts`): `trailer` is the truck's pose, `dolly` its coupling point and `trailerRear` its rear, and both angles stay 0, so rear-end consumers (scoring, follow framing) read the truck; `hasTrailer()` guards trailer-only code.
 
 ## Vehicle data
 
@@ -129,7 +129,7 @@ Test logic and critical paths only; no blanket coverage, no tests without value.
 - Commit as `13460098+DocGerd@users.noreply.github.com` (repo-local `user.email`), never the owner's real address.
 - The `main`, `develop` and `release/*` rulesets (no bypass) require resolved review threads; `main` and `release/*` also require up-to-date PRs: after a merge, `gh api -X PUT repos/DocGerd/gegenlenker/pulls/<n>/update-branch` the next PR on the same base and wait for CI. `develop` does not, so its merge result can be a tree no PR ran: pushes to `develop` run e2e, queued without cancelling (a superseded waiting run is dropped).
 - A red develop (push CI) blocks merges into develop: fix or revert first.
-- A CI e2e job failing in `playwright install --with-deps` (apt "Unable to locate package fonts-…") is a runner flake: `gh run rerun <run-id> --failed`, don't debug tests.
+- A CI e2e job that fails in its `playwright install --with-deps` step is a runner flake: `gh run rerun <run-id> --failed`, don't debug tests.
 - Agents author every PR as `DocGerd` and GitHub blocks self-approval: a required (code-owner) review can never gate an agent PR.
 - CI runs `lint`, `unit` and `e2e` in parallel, and `channels` after `lint` and `unit`; the rulesets require the aggregate job `check` (needs all four; on pushes to `main` e2e is skipped and `check` accepts that, on pushes to `develop` it runs): keep that job name in `ci.yml`. On PRs into `main`, `lint` also requires a `release/*`/`hotfix/*` head and runs `release:check` with tags fetched; a PR retargeted to `main` keeps its old `check`, so close and reopen it.
 - Pin actions to a full commit SHA with a `# vX.Y.Z` comment (repo enforces `sha_pinning_required`); Dependabot keeps them current.
