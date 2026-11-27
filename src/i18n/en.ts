@@ -16,8 +16,7 @@ export const en = {
   briefStraightReverse: 'Reverse straight back into the marked bay and stop.',
   briefReverseBay: 'Reverse between the parked vehicles into the marked bay and stop.',
   briefReverseCorner: 'Reverse around the corner into the side street and stop in the marked bay.',
-  briefCoupling:
-    'Reverse onto the drawbar eye until the coupling closes, pull the trailer forward into the marked bay, stop, uncouple and drive away.',
+  briefCoupling: 'Couple up, uncouple in the bay and drive away.',
   briefDockRamp: 'Reverse square up to the ramp and stop in the marked bay.',
   briefSlalom:
     'Drive the slalom forward to the marked circle, then reverse back and stop in the marked bay.',

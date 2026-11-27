@@ -1,4 +1,5 @@
 import { type Locator, type Page } from '@playwright/test';
+import type { ExerciseId } from '../src/contracts/exercise';
 import { expect, test } from './fixtures';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
@@ -910,15 +911,19 @@ async function startStraightReverse(page: Page, messages: Messages): Promise<voi
 }
 
 /**
- * Opens the straight-reverse drive with the clock paused, so the render loop draws only the frames
+ * Opens the straight-reverse drive, or exercise `id`, with the clock paused, so the render loop draws only the frames
  * stepped here. The cases that use it read DOM boxes, which the observers lay out without a frame;
  * a free-running software-GL loop only slows their polls. The brief fold and the open overlays
  * need the free-running start (`startStraightReverse`): they fail on a paused clock.
  */
-async function startFrozenReverse(page: Page, messages: Messages): Promise<void> {
+async function startFrozenReverse(
+  page: Page,
+  messages: Messages,
+  id: ExerciseId = 'straight-reverse',
+): Promise<void> {
   await freezeClock(page);
   await page.goto('./');
-  await startExercise(page, messages, 'straight-reverse');
+  await startExercise(page, messages, id);
   await hudReady(page);
   await stepFrozen(page);
 }
@@ -1520,17 +1525,36 @@ async function expectToolbarClear(page: Page): Promise<void> {
   }
 }
 
+/** The counters stand inside the pane, below however tall a brief. */
+async function expectCountersInPane(page: Page): Promise<void> {
+  const [counters] = await boxes(page.locator('.hud-counters'));
+  const [pane] = await boxes(page.locator('.hud-topdown'));
+  if (counters === undefined || pane === undefined) throw new Error('no counters or no pane');
+  expect(counters.bottom, 'the counters inside the pane').toBeLessThanOrEqual(pane.bottom);
+}
+
+/** Straight reverse at every size; the coupling card, which holds the uncouple button, where the pane leaves the least room. */
+const holdCases: readonly (Size & { id: ExerciseId })[] = sizes.flatMap((size) => [
+  { ...size, id: 'straight-reverse' as const },
+  ...(['800x585', '800x820', '620x774'].includes(`${size.width}x${size.height}`)
+    ? [{ ...size, id: 'coupling' as const }]
+    : []),
+]);
+
 for (const { locale, messages } of locales) {
-  for (const size of sizes) {
+  for (const { id, ...size } of holdCases) {
     const at = `${locale} ${size.width}x${size.height}`;
 
-    test(`the layout holds at ${at}`, async ({ browser }) => {
+    test(`the layout holds at ${at}${id === 'coupling' ? ' with the coupling card' : ''}`, async ({
+      browser,
+    }) => {
       test.slow();
       const context = await browser.newContext({ locale, viewport: size });
       try {
         const page = await context.newPage();
-        await startFrozenReverse(page, messages);
+        await startFrozenReverse(page, messages, id);
         await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
+        await test.step('the counters stand inside the pane', () => expectCountersInPane(page));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
           await test.step('the toolbar takes no reserve against the lever column', () =>
             expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve'));
@@ -1618,13 +1642,15 @@ async function expectMirrorsOnlyClear(page: Page, size: Size): Promise<void> {
   }
 }
 
-for (const size of [
+for (const { id = 'straight-reverse', ...size } of [
   { width: 1366, height: 768 },
   { width: 1280, height: 585 },
   { width: 768, height: 1024 },
+  // in portrait the brief stands under the sight cone
+  { width: 768, height: 1024, id: 'coupling' as const },
 ]) {
   for (const { locale, messages } of locales) {
-    test(`the mirror-only drive clears the controls and holds the brief at ${locale} ${size.width}x${size.height}`, async ({
+    test(`the mirror-only drive clears the controls and holds the brief at ${locale} ${size.width}x${size.height}${id === 'coupling' ? ' with the coupling card' : ''}`, async ({
       browser,
     }) => {
       test.slow();
@@ -1637,7 +1663,7 @@ for (const size of [
           }
         }, SETTINGS_KEY);
         await page.goto('./');
-        await startExercise(page, messages, 'straight-reverse');
+        await startExercise(page, messages, id);
         await hudReady(page, { mirrorsOnly: true });
         // both messages fit at once here, so the two-message check holds
         await expect(page.locator('[data-hud="toastWrap"]')).not.toHaveAttribute('data-cue-yields');

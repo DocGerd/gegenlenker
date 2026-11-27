@@ -107,7 +107,7 @@ export type HudOptions = PivotOptions & {
   mirrorsOnly?: boolean;
   /** The stop button and lever column, which the toolbar stays clear of; absent where there are no controls. */
   pedalsBox?: () => DOMRect;
-  /** A coupling run: the goal card says whether the truck is coupled and holds the uncouple button. */
+  /** A coupling run: the goal card's head holds the uncouple button, which shows whether the truck is coupled. */
   hitch?: boolean;
   /**
    * Whose key legend it lists, the driver's when absent. The Einweiser's band holds the sign bar, and
@@ -243,6 +243,10 @@ const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l
 const INFO_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>';
 
+/** A link of two halves: the bar between them shows while the truck is coupled. */
+const HITCH_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7H7a5 5 0 0 0 0 10h3M14 7h3a5 5 0 0 1 0 10h-3" /><path class="hud-uncouple-bar" d="M8 12h8" /></svg>';
+
 const RESET_VIEW_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 3v4M12 17v4M3 12h4M17 12h4" /></svg>';
 
@@ -327,7 +331,7 @@ const MARKUP = (
   <div class="hud-mirror" data-hud="front" hidden></div>
   <div class="hud-mirror" data-hud="close" hidden></div>
   <div class="hud-topdown" data-hud="topDown">
-    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div>${hitch && driver ? '<div class="hud-goal-hitch"><span class="hud-hitch" data-hud="hitch"></span><button type="button" class="hud-toggle hud-uncouple" data-hud="uncouple" aria-keyshortcuts="U" data-i18n="uncouple" disabled></button></div>' : ''}</div>
+    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div>${hitch && driver ? `<span class="hud-hitch" data-hud="hitch" role="status"></span><button type="button" class="hud-uncouple" data-hud="uncouple" aria-keyshortcuts="U" disabled>${HITCH_ICON}</button>` : ''}<button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${panelButtons(gauged)}</div>
@@ -789,6 +793,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   });
   if (uncouple !== null) {
     uncouple.title = `${t('uncouple')} (U)`;
+    uncouple.setAttribute('aria-label', t('uncouple'));
     uncouple.addEventListener('click', () => emit({ type: 'uncouple' }), { signal });
   }
 
@@ -965,7 +970,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         if (coupled !== shownCoupled) {
           shownCoupled = coupled;
           hitchEl.textContent = t(coupled ? 'coupled' : 'notCoupled');
-          hitchEl.toggleAttribute('data-coupled', coupled);
+          uncouple.toggleAttribute('data-coupled', coupled);
         }
         // the sim uncouples a standing truck only
         const offered = coupled && s.speed === 0;
