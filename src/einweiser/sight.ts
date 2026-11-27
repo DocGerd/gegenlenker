@@ -1,12 +1,19 @@
 import type { Sight } from '../contracts/einweiser';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { BodyId, Obb, Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
-import type { MirrorId, TrailerSpec, TruckSpec, Vec3, VehicleParams } from '../contracts/vehicle';
+import type {
+  MirrorId,
+  RigParams,
+  TrailerSpec,
+  TruckSpec,
+  Vec3,
+  VehicleParams,
+} from '../contracts/vehicle';
 import { bodyFootprints } from '../sim/geometry';
 import { COUPLING_HEIGHT, truckAnchors } from '../vehicles/anchors';
 import { type CabGlass, cabGlass, metres } from '../vehicles/cab';
 import { mirrorMounts, mirrorOptics } from '../vehicles/mirrors';
-import { resolveCombination } from '../vehicles/resolve';
+import { resolveRig } from '../vehicles/resolve';
 
 /** A 2.5D box from the ground up to `height`, world frame. */
 export type Occluder = { readonly obb: Obb; readonly height: number };
@@ -33,24 +40,36 @@ type MirrorView = {
 };
 
 /**
- * What the sight check reads of a combination: the full mirror set at fixed optics, whatever the
+ * What the sight check reads of a rig: the full mirror set at fixed optics, whatever the
  * preset, the settings or the window, so the result never depends on graphics.
  */
-export type SightGeometry = {
-  readonly params: VehicleParams;
+export type SightGeometry<P extends RigParams = RigParams> = {
+  readonly params: P;
   readonly eye: Vec3;
   readonly glass: CabGlass;
   readonly mirrors: readonly MirrorView[];
-  /** Each body's top above the road. */
-  readonly heights: Readonly<Record<BodyId, number>>;
+  /** Each body's top above the road; solo, the truck's only. */
+  readonly heights: Readonly<Partial<Record<BodyId, number>>>;
 };
 
-export function sightGeometry(truck: TruckSpec, trailer: TrailerSpec): SightGeometry {
+/** Null trailer: the truck solo. */
+export function sightGeometry(truck: TruckSpec, trailer: TrailerSpec): SightGeometry<VehicleParams>;
+export function sightGeometry(truck: TruckSpec, trailer: TrailerSpec | null): SightGeometry;
+export function sightGeometry(truck: TruckSpec, trailer: TrailerSpec | null): SightGeometry {
   const mounts = mirrorMounts(truck);
   const ids = Object.keys(mounts) as MirrorId[];
-  const deck = metres(trailer.deckHeight);
+  const top = Math.max(metres(truck.cab.height), metres(truck.bodyTop));
+  let heights: SightGeometry['heights'] = { truck: top };
+  if (trailer !== null) {
+    const deck = metres(trailer.deckHeight);
+    heights = {
+      truck: top,
+      drawbar: COUPLING_HEIGHT,
+      trailer: trailer.swapBodyHeight === undefined ? deck : deck + metres(trailer.swapBodyHeight),
+    };
+  }
   return {
-    params: resolveCombination(truck, trailer),
+    params: resolveRig(truck, trailer),
     eye: truckAnchors(truck).eye,
     glass: cabGlass(truck),
     mirrors: ids.map((id) => {
@@ -58,11 +77,7 @@ export function sightGeometry(truck: TruckSpec, trailer: TrailerSpec): SightGeom
       const tanV = Math.tan((fov * Math.PI) / 360);
       return { id, mount: mounts[id], yaw, pitch, roll, tanV, tanH: aspect * tanV };
     }),
-    heights: {
-      truck: Math.max(metres(truck.cab.height), metres(truck.bodyTop)),
-      drawbar: COUPLING_HEIGHT,
-      trailer: trailer.swapBodyHeight === undefined ? deck : deck + metres(trailer.swapBodyHeight),
-    },
+    heights,
   };
 }
 
@@ -78,9 +93,13 @@ export const layoutOccluders = ({
 type Bodies = Pick<SimSnapshot, 'truck' | 'coupling' | 'dolly' | 'trailer'>;
 type BodyOccluder = Occluder & { readonly body: BodyId };
 
-/** The combination's bodies at `s`. */
+/** The rig's bodies at `s`. */
 export const bodyOccluders = (g: SightGeometry, s: Bodies): BodyOccluder[] =>
-  bodyFootprints(g.params, s).map(({ body, obb }) => ({ body, obb, height: g.heights[body] }));
+  bodyFootprints(g.params, s).map(({ body, obb }) => {
+    const height = g.heights[body];
+    if (height === undefined) throw new Error(`no height for the ${body}`);
+    return { body, obb, height };
+  });
 
 /** Whether the segment `a`-`b` passes through the box: its ground track clipped to the box, then the lower clip end against the top. */
 export function blocks(o: Occluder, a: Vec3, b: Vec3): boolean {

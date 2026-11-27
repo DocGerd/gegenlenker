@@ -74,7 +74,7 @@ Stop inside the marked bay within tolerance to reach the target; a vehicle still
 
 On the setup screen of an exercise or yard:
 
-- Truck, Trailer: the vehicle pair. "No trailer" drives the truck solo in every exercise and yard: the target takes the truck's rear end, the ghost shows the truck, and neither the angle display nor limit stops are shown. An exercise is done solo and with a trailer separately; the lists and Continue follow the current choice. The Einweiser always guides a truck with its trailer: with "No trailer" chosen, his runs take the last trailer chosen. Some dimensions are estimates, see [vehicle data](vehicle-data.md).
+- Truck, Trailer: the vehicle pair. "No trailer" drives the truck solo in every exercise and yard: the target takes the truck's rear end, the ghost shows the truck, and neither the angle display nor limit stops are shown. An exercise is done solo and with a trailer separately; the lists and Continue follow the current choice. The choice holds for both roles: solo, the Einweiser guides the truck alone and its rear end is the rear his signs refer to. Some dimensions are estimates, see [vehicle data](vehicle-data.md).
 - Time of day: Day or Night. Night turns the lights on at the start.
 - Driving view: "With top view" or "Mirrors only".
 

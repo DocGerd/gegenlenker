@@ -8,7 +8,12 @@ import {
   type EinweiserResult,
   type SignId,
 } from '../contracts/einweiser';
-import type { ExerciseDefinition, ExerciseId, TargetZone } from '../contracts/exercise';
+import {
+  EXERCISE_IDS,
+  type ExerciseDefinition,
+  type ExerciseId,
+  type TargetZone,
+} from '../contracts/exercise';
 import type { Obstacle, Rect2 } from '../contracts/layout';
 import type {
   ContactQuery,
@@ -18,16 +23,16 @@ import type {
   StartState,
   Vec2,
 } from '../contracts/sim';
-import type { TrailerId, TruckId, VehicleParams } from '../contracts/vehicle';
+import { hasTrailer, type RigParams, type TrailerId, type TruckId } from '../contracts/vehicle';
 import { BARRIER_X, LANE } from '../content/exercises/slalom';
 import { exerciseById } from '../content/registry';
-import { guidedRun } from '../content/run';
+import { resolveRun } from '../content/run';
 import { wrapAngle } from '../sim/angle';
 import { ACCEL, BRAKE_DECEL, DECEL, DT, V_MAX } from '../sim/constants';
 import { createContactQuery } from '../sim/collision';
 import { bodyFootprints } from '../sim/geometry';
 import { createSimulation } from '../sim/simulation';
-import { trailerById, truckById, trailers, trucks } from '../vehicles/registry';
+import { trailers, trucks } from '../vehicles/registry';
 import {
   couplingAngle,
   joints,
@@ -102,7 +107,7 @@ function modelFrom(s: SimSnapshot, pilot: Pilot): Model {
   };
 }
 
-function stepModel(p: VehicleParams, m: Model, reading: Reading, pose: Pose2): void {
+function stepModel(p: RigParams, m: Model, reading: Reading, pose: Pose2): void {
   const c = m.pilot.step(m.s, reading, pose);
   const control = {
     steer: Math.max(-1, Math.min(1, c.steer)),
@@ -139,7 +144,7 @@ type Plan = readonly { readonly at: number; readonly sign: SignId | null }[];
  * always readable at `station`: `pending` is the shown sign's age when it is not yet acted on.
  */
 function rollout(
-  p: VehicleParams,
+  p: RigParams,
   m: Model,
   plan: Plan,
   steps: number,
@@ -238,18 +243,21 @@ function curvatureAt(path: readonly Pt[], i: number): number {
   return a && b && to > from ? wrapAngle(b.h - a.h) / ((to - from) * DS) : 0;
 }
 
-/** The trailer rear's own direction of motion in reverse: on a curve its overhang swings it off the body heading. */
-function rearMotion(p: VehicleParams, s: SimSnapshot): number {
-  return s.trailer.heading + Math.PI + Math.atan(p.trailerRearOverhang * trailerYaw(p, s));
+/** The rear end's own direction of motion in reverse: on a curve its overhang swings it off the body heading. */
+function rearMotion(p: RigParams, s: SimSnapshot): number {
+  const overhang = hasTrailer(p) ? p.trailerRearOverhang : p.truckRear;
+  return s.trailer.heading + Math.PI + Math.atan(overhang * trailerYaw(p, s));
 }
 /** The leading end's own direction of motion: forward, the truck's front swings off its heading by its reach ahead of the rear axle. */
-function leadMotion(p: VehicleParams, s: SimSnapshot, gear: 'D' | 'R'): number {
+function leadMotion(p: RigParams, s: SimSnapshot, gear: 'D' | 'R'): number {
   if (gear === 'R') return rearMotion(p, s);
   return s.truck.heading + Math.atan((p.truckFront * Math.tan(s.roadWheelAngle)) / p.wheelbase);
 }
-/** The trailer's heading change per metre reversed (left turn of the motion positive). */
-const trailerYaw = (p: VehicleParams, s: SimSnapshot): number =>
-  -Math.sin(s.turntableAngle) / p.trailerWheelbase;
+/** The rear body's heading change per metre reversed (left turn of the motion positive). */
+const trailerYaw = (p: RigParams, s: SimSnapshot): number =>
+  hasTrailer(p)
+    ? -Math.sin(s.turntableAngle) / p.trailerWheelbase
+    : -Math.tan(s.roadWheelAngle) / p.wheelbase;
 
 /** Length scale (m) of the reverse tracking LQR: how far the rear takes to close on the path. */
 const TRACK_LENGTH = 6;
@@ -283,7 +291,7 @@ const RESCUE_REJOIN_STEP = 2;
 const RESCUE_TURN = (100 * Math.PI) / 180;
 
 /** The curvature the reversing rear should run at to close on `path` at index `j`. */
-function wantedCurvature(p: VehicleParams, s: SimSnapshot, path: readonly Pt[], j: number): number {
+function wantedCurvature(p: RigParams, s: SimSnapshot, path: readonly Pt[], j: number): number {
   const q = path[j];
   if (!q) return 0;
   const { e, he } = pathError(q, s.trailerRear, rearMotion(p, s));
@@ -330,7 +338,7 @@ function trackCostToGo(L: number): number[][] {
 const TRACK_COST = trackCostToGo(TRACK_LENGTH);
 
 /** `TRACK_COST` of the reversing rear's state about `path` at index `j`. */
-function trackCost(p: VehicleParams, s: SimSnapshot, path: readonly Pt[], j: number): number {
+function trackCost(p: RigParams, s: SimSnapshot, path: readonly Pt[], j: number): number {
   const q = path[j];
   if (!q) return 0;
   const { e, he } = pathError(q, s.trailerRear, rearMotion(p, s));
@@ -361,14 +369,20 @@ const pathError = (p: Pt, at: Vec2, motion: number) => ({
   he: wrapAngle(motion - p.h),
 });
 
-const frontOf = (p: VehicleParams, s: SimSnapshot): Vec2 => ({
+/** From the front bumper to the rear end, straight. */
+const reachOf = (p: RigParams): number =>
+  hasTrailer(p)
+    ? p.truckFront + p.couplingOffset + p.drawbar + p.trailerWheelbase + p.trailerRearOverhang
+    : p.truckFront + p.truckRear;
+
+const frontOf = (p: RigParams, s: SimSnapshot): Vec2 => ({
   x: s.truck.x + p.truckFront * Math.cos(s.truck.heading),
   y: s.truck.y + p.truckFront * Math.sin(s.truck.heading),
 });
 
 /** Pure pursuit of the truck rear axle along `route`, forward; the trace of every step. */
 function pursue(
-  p: VehicleParams,
+  p: RigParams,
   start: StartState,
   contacts: ContactQuery,
   waypoints: readonly Vec2[],
@@ -1133,7 +1147,7 @@ type Outcome = {
 };
 
 type Setup = {
-  readonly params: VehicleParams;
+  readonly params: RigParams;
   readonly start: SimSnapshot;
   readonly contacts: ContactQuery;
   readonly startState: StartState;
@@ -1171,20 +1185,21 @@ export type GateScoring = {
 export function runGate(
   exerciseId: ExerciseId,
   truckId: TruckId,
-  trailerId: TrailerId,
+  /** Null: the truck solo. */
+  trailerId: TrailerId | null,
   { createRunTracker, createEinweiserTracker, targetError }: GateScoring,
 ): Outcome {
   const legsFor = LEGS[exerciseId];
   if (!legsFor) throw new Error(`no gate legs for ${exerciseId}`);
   const exercise = exerciseById(exerciseId);
-  const run = guidedRun({
+  const run = resolveRun({
     layoutId: exercise.layout,
     exerciseId,
     truckId,
     trailerId,
     role: 'driver',
   });
-  const g = sightGeometry(truckById(truckId), trailerById(trailerId));
+  const g = sightGeometry(run.truck, run.trailer);
   const occluders = layoutOccluders(run.layout);
   const sim = createSimulation(run.params, run.start, run.contacts);
   const tracker = createRunTracker(exercise);
@@ -1205,7 +1220,10 @@ export function runGate(
       contacts: run.contacts,
       obstacles: run.layout.obstacles,
       recover: (now) => recovery(run.params, now, exercise.target.pose, RECOVER[exerciseId] ?? 0),
-      policy: POLICY[exerciseId] ?? 'search',
+      policy:
+        (trailerId === null ? SOLO_POLICY[exerciseId] : undefined) ??
+        POLICY[exerciseId] ??
+        'search',
       reverseHorizon: REVERSE_HORIZON[exerciseId] ?? SEARCH_HORIZON,
     },
     legs,
@@ -1322,6 +1340,11 @@ const POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
   'reverse-bay': 'lqr',
   slalom: 'leadSearch',
 };
+/** The truck solo: the search, where the tracking LQR tuned on trailers ends in a contact. */
+const SOLO_POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
+  'dock-ramp': 'search',
+  'reverse-bay': 'search',
+};
 /** How far (s) the search looks ahead. */
 const SEARCH_HORIZON = 12;
 /** A longer look on the reverse legs, per exercise (PR #515). */
@@ -1336,7 +1359,7 @@ const RECOVER: Partial<Record<ExerciseId, number>> = {
 };
 
 /** Pull forward along the target axis, then reverse straight onto the target. */
-function recovery(params: VehicleParams, s: SimSnapshot, target: Pose2, room: number): Leg[] {
+function recovery(params: RigParams, s: SimSnapshot, target: Pose2, room: number): Leg[] {
   if (room <= 0) return [];
   const u = { x: Math.cos(target.heading), y: Math.sin(target.heading) };
   const along = (q: Vec2): number => (q.x - target.x) * u.x + (q.y - target.y) * u.y;
@@ -1345,12 +1368,7 @@ function recovery(params: VehicleParams, s: SimSnapshot, target: Pose2, room: nu
   const rear = along(s.trailerRear);
   const forward = straight(on(front), target.heading, room);
   const reverse = straight(on(rear + room), target.heading + Math.PI, rear + room);
-  const reach =
-    params.truckFront +
-    params.couplingOffset +
-    params.drawbar +
-    params.trailerWheelbase +
-    params.trailerRearOverhang;
+  const reach = reachOf(params);
   return [
     { gear: 'D', path: forward, anchors: (i) => forwardAnchors(forward, i) },
     {
@@ -1372,12 +1390,7 @@ const LEGS: Partial<Record<ExerciseId, (setup: Setup) => Leg[]>> = {
       { len: (R * Math.PI) / 2, k: -1 / R },
       { len: target.y + over - (rear.y + R), k: 0 },
     ]);
-    const reach =
-      params.truckFront +
-      params.couplingOffset +
-      params.drawbar +
-      params.trailerWheelbase +
-      params.trailerRearOverhang;
+    const reach = reachOf(params);
     const forward = straight({ x: target.x, y: target.y + over - reach }, -Math.PI / 2, over);
     return [
       {
@@ -1416,12 +1429,7 @@ const LEGS: Partial<Record<ExerciseId, (setup: Setup) => Leg[]>> = {
     ]);
     const last = forward[forward.length - 1];
     if (!last) throw new Error('no forward leg');
-    const reach =
-      params.truckFront +
-      params.couplingOffset +
-      params.drawbar +
-      params.trailerWheelbase +
-      params.trailerRearOverhang;
+    const reach = reachOf(params);
     const rearX = last.x + reach;
     const reverse = arcs({ x: rearX, y: lane, heading: 0 }, [
       { len: target.x - R - rearX, k: 0 },
@@ -1506,8 +1514,12 @@ const LEGS: Partial<Record<ExerciseId, (setup: Setup) => Leg[]>> = {
     const out = pursue(params, startState, contacts, [...SLALOM_VIA, waypoint], within(2.4));
     const forward = resample(out.map((s) => frontOf(params, s)));
     const target = exerciseById('slalom').target.pose;
-    const reach =
-      params.trailerRearOverhang + params.trailerWheelbase + params.drawbar + params.couplingOffset;
+    const reach = hasTrailer(params)
+      ? params.trailerRearOverhang +
+        params.trailerWheelbase +
+        params.drawbar +
+        params.couplingOffset
+      : params.truckRear;
     const back = pursue(
       params,
       { truck: { x: target.x + reach, y: target.y, heading: 0 } },
@@ -1538,6 +1550,10 @@ const LEGS: Partial<Record<ExerciseId, (setup: Setup) => Leg[]>> = {
 /** Every truck with every trailer. */
 export const GATE_PAIRS = trucks.flatMap((t) =>
   trailers.map((r) => ({ truck: t.id, trailer: r.id })),
+);
+/** Every exercise with every truck solo. */
+export const GATE_SOLO = EXERCISE_IDS.flatMap((exercise) =>
+  trucks.map((t) => ({ exercise, truck: t.id })),
 );
 /** A case runs for minutes of sim time: well past vitest's default timeout. */
 export const GATE_TIMEOUT = 300_000;

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SignId } from '../contracts/einweiser';
 import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
+import { hasTrailer } from '../contracts/vehicle';
 import { BRAKE_DECEL, DECEL, DT, V_MAX } from '../sim/constants';
 import { createSimulation } from '../sim/simulation';
 import { mirrorMounts } from '../vehicles/mirrors';
@@ -10,15 +11,21 @@ import { sightGeometry } from './sight';
 import { stoppingDistance } from './signs';
 import { startWalker } from './walk';
 
-const pairs = trucks.flatMap((truck) => trailers.map((trailer) => ({ truck, trailer })));
+const rigs = trucks.flatMap((truck) =>
+  [...trailers, null].map((trailer) => ({
+    truck,
+    trailer,
+    name: `${truck.id} ${trailer === null ? 'solo' : `with ${trailer.id}`}`,
+  })),
+);
 const CREEP = CREEP_LEVER * V_MAX;
 
 type Script = (s: SimSnapshot, step: number) => { sign: SignId | null; pose: Pose2 };
 
-/** Drives the combination from a straight start at the origin, heading +x, under the signs of `script`. */
+/** Drives the rig from a straight start at the origin, heading +x, under the signs of `script`. */
 function signal(
   truck: (typeof trucks)[number],
-  trailer: (typeof trailers)[number],
+  trailer: (typeof trailers)[number] | null,
   script: Script,
   until: (s: SimSnapshot, d: DriverStep) => boolean,
 ): { s: SimSnapshot; trace: SimSnapshot[]; steps: DriverStep[] } {
@@ -45,8 +52,9 @@ const toWorld = (s: SimSnapshot, p: Vec2): Vec2 => {
   return { x: s.truck.x + c * p.x - n * p.y, y: s.truck.y + n * p.x + c * p.y };
 };
 
-describe.each(pairs)('signs for $truck.id with $trailer.id', ({ truck, trailer }) => {
+describe.each(rigs)('signs for $name', ({ truck, trailer }) => {
   const g = sightGeometry(truck, trailer);
+  const { params } = g;
   const mount = mirrorMounts(truck).mirrorLeft;
   /** Behind the trailer and out to its left, keeping his place ahead of the reversing rear, facing the left main mirror. */
   const behind = (s: SimSnapshot): Pose2 => {
@@ -66,7 +74,7 @@ describe.each(pairs)('signs for $truck.id with $trailer.id', ({ truck, trailer }
       truck,
       trailer,
       (now) => ({ sign: 'herkommen', pose: behind(now) }),
-      (now) => now.trailerRear.x < -g.params.trailerWheelbase - 8,
+      (now) => now.trailerRear.x < -(hasTrailer(params) ? params.trailerWheelbase : 0) - 8,
     );
     expect(steps.map((d) => d.reading.kind)).not.toContain('unclear');
     expect(s.control.gear).toBe('R');
@@ -105,7 +113,7 @@ describe.each(pairs)('signs for $truck.id with $trailer.id', ({ truck, trailer }
     return { end, pose: place(s), jackknifes: s.jackknifes };
   };
 
-  it('Rechts from behind moves the trailer rear to his right', () => {
+  it('Rechts from behind moves the rear end to his right', () => {
     const { end, pose, jackknifes } = turned('rechts', behind, 'rear');
     const right = {
       x: Math.cos(pose.heading - Math.PI / 2),
@@ -113,7 +121,9 @@ describe.each(pairs)('signs for $truck.id with $trailer.id', ({ truck, trailer }
     };
     // he faces the cab along the truck, so his right is the truck's right: -y
     expect(right.y).toBeLessThan(-0.9);
-    expect(end.x * right.x + end.y * right.y).toBeGreaterThan(0.3);
+    // solo the mirror he faces swings with the rear, turning his facing: measure off the start line, y = 0
+    const across = trailer === null ? -end.y : end.x * right.x + end.y * right.y;
+    expect(across).toBeGreaterThan(0.3);
     expect(jackknifes).toBe(0);
   });
 

@@ -20,7 +20,7 @@ import {
   type Fov,
   type MouseSensitivity,
 } from '../contracts/einweiser';
-import { EXERCISE_IDS, ROLES, type Role } from '../contracts/exercise';
+import { EXERCISE_IDS, ROLES } from '../contracts/exercise';
 import { LAYOUT_IDS } from '../contracts/layout';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
@@ -33,7 +33,7 @@ export type Settings = {
   readonly theme: 'system' | 'light' | 'dark';
   readonly truckId: TruckId;
   readonly trailerId: TrailerId;
-  /** The driver takes the truck without a trailer; `trailerId` stays for the Einweiser, who guides a combination. */
+  /** The truck without a trailer, in either role; `trailerId` keeps the last trailer. */
   readonly solo: boolean;
   readonly aids: AidFlags;
   readonly topDown: DrivingView;
@@ -138,9 +138,9 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
   };
 }
 
-/** The trailer `role` starts with; null: the truck solo. */
-export const runTrailer = (settings: Settings, role: Role): TrailerId | null =>
-  settings.solo && role === 'driver' ? null : settings.trailerId;
+/** The trailer a run starts with; null: the truck solo. */
+export const runTrailer = (settings: Settings): TrailerId | null =>
+  settings.solo ? null : settings.trailerId;
 
 // Held in memory as well, so choices survive the session when storage is unavailable.
 let current: Settings | null = null;

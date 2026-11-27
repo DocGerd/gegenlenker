@@ -50,7 +50,7 @@ export type RunConfig = {
   readonly layoutId: LayoutId;
   readonly exercise: ExerciseDefinition | null;
   readonly truckId: TruckId;
-  /** Null: the truck solo, a driver run only. */
+  /** Null: the truck solo. */
   readonly trailerId: TrailerId | null;
   /** Absent: a driver run. */
   readonly role?: Role;
@@ -109,9 +109,8 @@ export function startDrive(
   // e2e: a solo rig attaches no trailer shell (`readyMarkers`)
   stage.toggleAttribute('data-solo', trailer === null);
   root.append(stage);
-  // resolveRun refuses an Einweiser run solo
   const einweiser =
-    role === 'einweiser' && trailer !== null
+    role === 'einweiser'
       ? startEinweiserDrive(stage, { truck, trailer, layout, contacts, start: snapshot, lighting })
       : null;
 

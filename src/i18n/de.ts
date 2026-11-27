@@ -30,13 +30,13 @@ export const de: Record<MessageKey, string> = {
   guideDockRamp: 'An die Rampe einweisen',
   guideSlalom: 'Slalom vor und zurück einweisen',
   guideBriefStraightReverse:
-    'Achtung geben, dann den Anhänger gerade rückwärts in die markierte Bucht einweisen und dort Halt geben.',
+    'Achtung geben, dann gerade rückwärts in die markierte Bucht einweisen und dort Halt geben.',
   guideBriefReverseBay:
-    'Den Anhänger zwischen den parkenden Fahrzeugen in die markierte Bucht einweisen. Sichtkontakt halten.',
+    'Zwischen den parkenden Fahrzeugen in die markierte Bucht einweisen. Sichtkontakt halten.',
   guideBriefReverseCorner:
-    'Den Anhänger um die Ecke in die markierte Bucht in der Seitenstraße einweisen. Nicht in den Fahrweg treten.',
+    'Um die Ecke in die markierte Bucht in der Seitenstraße einweisen. Nicht in den Fahrweg treten.',
   guideBriefDockRamp:
-    'Den Anhänger rechtwinklig an die Rampe einweisen. Früh Halt geben: Der Lkw braucht Platz zum Anhalten.',
+    'Rechtwinklig an die Rampe einweisen. Früh Halt geben: Der Lkw braucht Platz zum Anhalten.',
   guideBriefSlalom:
     'Den Slalom vorwärts bis zum markierten Kreis einweisen, dann von hinten zurück in die markierte Bucht.',
   tolerance: 'Toleranz',

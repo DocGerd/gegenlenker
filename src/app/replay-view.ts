@@ -103,8 +103,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   // One pass over the log finds the marked moments; it runs across frames after the first paint.
   const scanner = createEventScanner(
     exercise,
-    // an Einweiser log always has a trailer (`parseInputLog`)
-    log.einweiser === undefined || trailer === null
+    log.einweiser === undefined
       ? null
       : createEinweiserReplay(
           {

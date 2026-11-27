@@ -26,13 +26,12 @@ export const en = {
   guideDockRamp: 'Guide up to a ramp',
   guideSlalom: 'Guide the slalom forward and back',
   guideBriefStraightReverse:
-    'Give Attention, then guide the trailer straight back into the marked bay and give Halt.',
+    'Give Attention, then guide straight back into the marked bay and give Halt.',
   guideBriefReverseBay:
-    'Guide the trailer between the parked vehicles into the marked bay. Keep sight contact with the driver.',
+    'Guide between the parked vehicles into the marked bay. Keep sight contact with the driver.',
   guideBriefReverseCorner:
-    "Guide the trailer around the corner into the marked bay in the side street. Stay out of the vehicle's path.",
-  guideBriefDockRamp:
-    'Guide the trailer square up to the ramp. Give Halt early: the truck needs room to stop.',
+    "Guide around the corner into the marked bay in the side street. Stay out of the vehicle's path.",
+  guideBriefDockRamp: 'Guide square up to the ramp. Give Halt early: the truck needs room to stop.',
   guideBriefSlalom:
     'Guide the slalom forward to the marked circle, then from behind back into the marked bay.',
   tolerance: 'Tolerance',

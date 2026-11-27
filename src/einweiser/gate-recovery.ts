@@ -3,7 +3,7 @@
  * until the combination is straight, then a fresh reverse path onto the leg's final straight.
  */
 import type { Pose2 } from '../contracts/sim';
-import type { VehicleParams } from '../contracts/vehicle';
+import type { RigParams } from '../contracts/vehicle';
 import { couplingAngle, rk4, turntableAngle, type KinematicState } from '../sim/kinematics';
 
 /** A straight (`k` 0) or an arc of curvature `k` (left turn positive), `len` metres long. */
@@ -16,7 +16,7 @@ const STEP = 0.05;
  * are both within `tolerance` (rad), `max` metres are driven, or the next step is not `clear`.
  */
 export function straighten(
-  p: VehicleParams,
+  p: RigParams,
   from: KinematicState,
   tolerance: number,
   max: number,

@@ -45,11 +45,10 @@ export function resolveRun(ids: RunIds): ResolvedRun {
       ? { truck: pose }
       : { truck: pose, couplingAngle: bend.coupling, turntableAngle: bend.turntable };
   // Driver runs hash exactly the driver thresholds, so their stored runs keep their fingerprints.
-  let scoring: RunData['scoring'] = SCORING_THRESHOLDS;
-  if (ids.role === 'einweiser') {
-    if (trailer === null) throw new Error('an Einweiser run guides a truck with its trailer');
-    scoring = { ...SCORING_THRESHOLDS, ...einweiserScoring(truck, trailer, layout) };
-  }
+  const scoring: RunData['scoring'] =
+    ids.role === 'einweiser'
+      ? { ...SCORING_THRESHOLDS, ...einweiserScoring(truck, trailer, layout) }
+      : SCORING_THRESHOLDS;
   return {
     truck,
     trailer,
@@ -68,7 +67,7 @@ export function resolveRun(ids: RunIds): ResolvedRun {
   };
 }
 
-/** A run of the truck with its trailer, as every Einweiser run is (`parseInputLog`). */
+/** A run of the truck with its trailer. */
 export type GuidedRun = ResolvedRun & {
   readonly trailer: TrailerSpec;
   readonly params: VehicleParams;
