@@ -13,6 +13,8 @@ export type QualityFlags = {
   readonly yardDetail: boolean;
   /** The yard kit's meshes and atlases in the perspective views; a download, off until a preset draws it. */
   readonly yardKit: boolean;
+  /** Plain shapes for the kit's surroundings wherever the kit is not drawn; needs `yardDetail`. */
+  readonly kitStandIns: boolean;
   readonly cabGlb: boolean;
   readonly vehicleGlb: boolean;
   /** Rounded tyres with a tread, dished rims, brake drums and axles in the perspective views, in place of flat discs. */
@@ -59,6 +61,7 @@ const BALANCED: QualityFlags = {
   skylineWindows: true,
   yardDetail: true,
   yardKit: false,
+  kitStandIns: true,
   cabGlb: true,
   vehicleGlb: true,
   wheelDetail: true,
@@ -93,6 +96,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     skylineWindows: false,
     yardDetail: false,
     yardKit: false,
+    kitStandIns: false,
     cabGlb: false,
     vehicleGlb: false,
     wheelDetail: false,

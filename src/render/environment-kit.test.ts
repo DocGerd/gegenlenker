@@ -147,6 +147,15 @@ describe('the yard kit props', () => {
     env.dispose();
   });
 
+  it("draw the surroundings' stand-ins only where the preset asks for them", () => {
+    const { env, off } = setup();
+    env.setLook(lookFor({ ...QUALITY_FLAGS.balanced, kitStandIns: false }, 'day'));
+    const without = seen(env.object, cockpit);
+    expect(minus(off, without)).toHaveLength(1);
+    expect(minus(without, off)).toEqual([]);
+    env.dispose();
+  });
+
   it('cast the sun shadow only where the sun does, and only the atlas receives it', () => {
     const { env, load } = setup();
     // what the sun's shadow camera draws: the cockpit camera's layers would pass a kit on the wrong one
