@@ -4,14 +4,7 @@ import { DRAW_CALL_BUDGET, QUALITY_FLAGS } from '../src/render/quality';
 import { drawnBackend, parseOverlay } from './perf/tablet-logic';
 import { FREE_FOV } from '../src/render/free-look';
 import type { LightingMode } from '../src/contracts/render';
-import {
-  type Preset,
-  settle,
-  slowAt,
-  startPinnedDrive,
-  step,
-  timeoutWithSettles,
-} from './pinned-shoot';
+import { type Preset, slowAt, startPinnedDrive, step, timeoutWithSettles } from './pinned-shoot';
 import { exerciseEntry, type MenuEntry } from './menu-flow';
 
 // High at night is the one lit scene with the sun's shadow pass taken out, the aids unlit and the lamps' passes in.
@@ -26,8 +19,10 @@ const VIEWS = [
   { view: 'yard', key: 'y' },
   { view: 'chase', key: 'o' },
 ] as const;
-/** Longer than the overlay's refresh interval, with frames in between. */
+/** Longer than the overlay's refresh interval. */
 const PAST_REFRESH_MS = 500;
+/** Frames that draw a view or camera change before the overlay is read. */
+const FRAMES_AFTER_CHANGE = 4;
 /** The sun at High by day; at night the two dipped lamps and the trailer's rear light, all lit at the start. */
 const SHADOW_PASSES = { day: 1, night: 3 } as const;
 
@@ -39,8 +34,10 @@ type Run = { preset: Preset; lighting: LightingMode };
 /** The overlay's draw calls once the frames after a change have been drawn; `what` names the view in failures. */
 async function drawnCalls(page: Page, { preset, lighting }: Run, what: string): Promise<number> {
   const label = lighting === 'night' ? `${preset} at night` : preset;
-  await settle(page, preset);
-  await page.clock.runFor(PAST_REFRESH_MS);
+  // a few frames draw the change; the overlay refreshes on a timer, which a fast-forward fires once
+  await step(page, FRAMES_AFTER_CHANGE);
+  await page.clock.fastForward(PAST_REFRESH_MS);
+  await step(page, 1);
   const text = await page.locator('div.mono', { hasText: /calls \d+/ }).textContent();
   const reading = parseOverlay(text ?? '');
   if (reading === null) throw new Error(`${label} ${what}: no overlay reading`);
