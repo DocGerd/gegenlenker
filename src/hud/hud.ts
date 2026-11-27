@@ -21,7 +21,8 @@ import { goalCueTexts } from './goal-cue';
 import { hasTopDown, messageColumn, readSafeInsets, sightCueBox } from '../render/viewports';
 import { actionFor, isAction, type Action } from '../input/keymap';
 import { driveLegendRows, legendRowMarkup } from '../input/legend';
-import { aidSwatch } from './aid-swatches';
+import type { SightFlags } from '../render/scene-renderer';
+import { aidSwatch, sightSwatch } from './aid-swatches';
 import type { Ahead } from '../sim/predict';
 import { createGauge, type Gauge } from './gauges';
 import { SIGHT_CUE_KEY, sightCue, type SightCue } from './sight-cue';
@@ -37,6 +38,8 @@ export type HudAction =
   | { type: 'split'; orientation: Orientation; share: number; commit: boolean }
   | { type: 'splitReset' }
   | { type: 'aid'; aid: keyof AidFlags; on: boolean }
+  /** One of the Einweiser's sight areas (his role only), shown in the top view or on the ground of his own. */
+  | { type: 'sight'; flag: keyof SightFlags; on: boolean }
   | { type: 'collapse'; panel: keyof CollapsedPanels; collapsed: boolean }
   /** The aid legend opened or closed, which changes the height of the panels. */
   | { type: 'aidLegend' }
@@ -85,6 +88,8 @@ export type HudOptions = {
   /** Title and brief shown for an exercise run. */
   exercise: { title: string; brief: string } | null;
   aids: AidFlags;
+  /** The Einweiser's sight areas; absent means none. */
+  sight?: SightFlags;
   topDown: TopDownMode;
   /** Offers the chase view; the preset's `chaseView` flag. */
   chase: boolean;
@@ -183,6 +188,11 @@ const AIDS: readonly [keyof AidFlags, MessageKey, MessageKey][] = [
   ['tracks', 'aidTracks', 'legendTracks'],
   ['ghost', 'aidGhost', 'legendGhost'],
 ];
+/** The Einweiser's own toggles, after the aids; each draws the driver's sight areas. */
+const SIGHTS: readonly [keyof SightFlags, MessageKey, MessageKey][] = [
+  ['top', 'aidSightTop', 'legendSightTop'],
+  ['ground', 'aidSightGround', 'legendSightGround'],
+];
 const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
   ['aids', 'panelAids'],
   ['gauges', 'panelGauges'],
@@ -252,6 +262,9 @@ const panelButton = (panel: string, key: MessageKey): string =>
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-chip" data-aid="${aid}" aria-describedby="aid-meaning-${aid}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
+const sightButton = (flag: keyof SightFlags, key: MessageKey): string =>
+  `<button type="button" class="hud-toggle hud-chip" data-sight="${flag}" aria-describedby="sight-meaning-${flag}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
+
 const keyRows = (chase: boolean, look: boolean, mirrorsOnly: boolean, role: Role): string =>
   driveLegendRows({ chase, look, mirrorsOnly, role }).map(legendRowMarkup).join('');
 
@@ -305,8 +318,8 @@ const MARKUP = (
       <div class="hud-group" data-hud="views" data-chrome>
         <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${panelButtons(driver)}</div>
       <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
-        <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
-        <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
+        <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}${driver ? '' : SIGHTS.map(([f, k]) => sightButton(f, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
+        <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}${driver ? '' : SIGHTS.map(([f, , k]) => `<li data-sight-legend="${f}">${sightSwatch()}<span id="sight-meaning-${f}" data-i18n="${k}"></span></li>`).join('')}</ul>
       </div>
     </div>
     <div class="hud-info" data-hud="info">
@@ -449,6 +462,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   /** The view a preset without the outside view falls back to. */
   let lastOther: TopDownMode = view === 'chase' ? 'follow' : view;
   const aids = { ...opts.aids };
+  const sight = { top: opts.sight?.top === true, ground: opts.sight?.ground === true };
   const allViewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
   const chaseSegment = query(hud, 'views', HTMLElement).querySelector<HTMLElement>(
     '[data-view="chase"]',
@@ -476,6 +490,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   };
   syncChaseOffer();
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
+  const sightButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-sight]')];
   const panelButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
   const aidsBox = query(hud, 'aids', HTMLElement);
@@ -553,6 +568,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       item.toggleAttribute('data-disabled', b.disabled);
       if (b.disabled) b.title = t('aidTopViewOnly');
       else b.removeAttribute('title');
+    }
+    for (const b of sightButtons) {
+      b.setAttribute('aria-pressed', String(sight[b.dataset['sight'] as keyof SightFlags]));
     }
     for (const b of panelButtons) {
       const panel = b.dataset['panel'] as keyof CollapsedPanels;
@@ -661,6 +679,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         aids[aid] = !aids[aid];
         syncToggles();
         emit({ type: 'aid', aid, on: aids[aid] });
+      },
+      { signal },
+    );
+  }
+  for (const b of sightButtons) {
+    b.addEventListener(
+      'click',
+      () => {
+        const flag = b.dataset['sight'] as keyof SightFlags;
+        sight[flag] = !sight[flag];
+        syncToggles();
+        emit({ type: 'sight', flag, on: sight[flag] });
       },
       { signal },
     );

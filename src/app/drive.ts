@@ -44,7 +44,7 @@ import { pauseFields } from './menu/options';
 import { showPauseSheet, type PauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
-import { currentSettings, updateSettings, type Settings } from './settings';
+import { currentSettings, NO_SIGHT, updateSettings, type Settings } from './settings';
 
 export type RunConfig = {
   readonly layoutId: LayoutId;
@@ -258,6 +258,9 @@ export function startDrive(
 
   const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
   let aids: AidFlags = mirrorsOnly ? NO_AIDS : settings.aids;
+  // his alone; the driver's views draw none
+  let sight = einweiser === null ? NO_SIGHT : settings.sight;
+  renderer.setSightCones(sight);
   let collapsed = settings.collapsed;
   let topDownLayout = settings.topDownLayout;
   let savedLayout = topDownLayout;
@@ -343,6 +346,7 @@ export function startDrive(
             brief: t(EXERCISE_BRIEF[role][exercise.id]),
           },
     aids,
+    sight,
     topDown,
     chase: chaseOffered(graphics),
     interior: interiorAvailable(graphics),
@@ -518,6 +522,11 @@ export function startDrive(
       collapsed = { ...collapsed, [action.panel]: action.collapsed };
       updateSettings({ collapsed });
       arrange();
+    } else if (action.type === 'sight') {
+      sight = { ...sight, [action.flag]: action.on };
+      renderer.setSightCones(sight);
+      dirty = true;
+      updateSettings({ sight });
     } else if (action.type === 'aid') {
       aids = { ...aids, [action.aid]: action.on };
       dirty = true;

@@ -122,3 +122,34 @@ test('the Settings screen lists the Einweiser options on a desktop', async ({ pa
   await expect(page.getByRole('heading', { name: en.settingsEinweiser })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: en.fov, exact: true })).toBeVisible();
 });
+
+test('the Einweiser toggles the driver sight areas, stored and drawn without a render error', async ({
+  page,
+}) => {
+  await startEinweiser(page);
+  const chip = (flag: string) => page.locator(`[data-sight="${flag}"]`);
+  await expect(chip('top')).toHaveAttribute('aria-pressed', 'false');
+  await expect(chip('ground')).toHaveAttribute('aria-pressed', 'false');
+
+  await chip('top').click();
+  await chip('ground').click();
+  await expect(chip('top')).toHaveAttribute('aria-pressed', 'true');
+  await expect(chip('ground')).toHaveAttribute('aria-pressed', 'true');
+  expect(await stored(page)).toMatchObject({ sight: { top: true, ground: true } });
+  // frames with both drawn; the fixtures fail the test on a shader or render error
+  await page.evaluate(
+    () =>
+      new Promise<void>((done) => {
+        let frames = 0;
+        const tick = (): void => {
+          if (++frames > 10) done();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+
+  await chip('top').click();
+  await expect(chip('top')).toHaveAttribute('aria-pressed', 'false');
+  expect(await stored(page)).toMatchObject({ sight: { top: false, ground: true } });
+});

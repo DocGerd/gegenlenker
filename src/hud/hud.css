@@ -515,6 +515,17 @@
   stroke: var(--scene-tracks);
 }
 
+/* The sight areas are translucent fills of the Einweiser and accent tokens, as the scene draws them (sight-cones.ts). */
+.hud-swatch .swatch-sight-direct {
+  fill: var(--scene-einweiser);
+  fill-opacity: 0.4;
+}
+
+.hud-swatch .swatch-sight-mirror {
+  fill: var(--scene-accent);
+  fill-opacity: 0.4;
+}
+
 /* The legend draws what the top-down view shows at night: the yard dimmed to the night light (tokens.test.ts checks it), the night strokes. */
 [data-render-lighting='night'] .hud-swatch {
   background: #84878c;
@@ -522,6 +533,10 @@
 
 [data-render-lighting='night'] .swatch-core {
   stroke: var(--scene-night-accent);
+}
+
+[data-render-lighting='night'] .hud-swatch .swatch-sight-mirror {
+  fill: var(--scene-night-accent);
 }
 
 [data-render-lighting='night'] .swatch-tracks {

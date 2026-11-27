@@ -85,6 +85,14 @@ export const bodyOccluders = (g: SightGeometry, s: Bodies): BodyOccluder[] =>
 /** Whether the segment `a`-`b` passes through the box: its ground track clipped to the box, then the lower clip end against the top. */
 export function blocks(o: Occluder, a: Vec3, b: Vec3): boolean {
   const { cx, cy, halfLength, halfWidth, heading } = o.obb;
+  // a segment wholly above the box, or farther from its centre than its corners, cannot pass through it
+  if (Math.min(a.z, b.z) >= o.height) return false;
+  const [dx, dy] = [b.x - a.x, b.y - a.y];
+  const length2 = dx * dx + dy * dy;
+  const along = length2 === 0 ? 0 : ((cx - a.x) * dx + (cy - a.y) * dy) / length2;
+  const reach = Math.min(1, Math.max(0, along));
+  const [ex, ey] = [a.x + reach * dx - cx, a.y + reach * dy - cy];
+  if (ex * ex + ey * ey > halfLength * halfLength + halfWidth * halfWidth + 1e-4) return false;
   const [c, s] = [Math.cos(heading), Math.sin(heading)];
   const local = (p: Vec3): Vec2 => ({
     x: c * (p.x - cx) + s * (p.y - cy),
@@ -145,60 +153,99 @@ export function throughGlass(g: CabGlass, eye: Vec3, p: Vec3): boolean {
   return false;
 }
 
-/** Whether mirror `m` on a truck at `truck` frames world point `p`. */
-function inFrustum(m: MirrorView, truck: Pose2, p: Vec3): boolean {
-  const at = toWorld(truck, m.mount);
+/** A mirror's frame on a truck at a pose, fixed for every point asked of it. */
+type MirrorFrame = {
+  readonly id: MirrorId;
+  readonly at: Vec3;
+  readonly forward: Vec3;
+  readonly right0: Vec3;
+  readonly up0: Vec3;
+  readonly cr: number;
+  readonly sr: number;
+  readonly tanV: number;
+  readonly tanH: number;
+};
+
+function mirrorFrame(m: MirrorView, truck: Pose2): MirrorFrame {
   const facing = truck.heading + Math.PI + m.yaw;
   const [cf, sf] = [Math.cos(facing), Math.sin(facing)];
   const [cp, sp] = [Math.cos(m.pitch), Math.sin(m.pitch)];
-  const forward = { x: cp * cf, y: cp * sf, z: sp };
-  const right0 = { x: sf, y: -cf, z: 0 };
-  const up0 = { x: -sp * cf, y: -sp * sf, z: cp };
-  const [cr, sr] = [Math.cos(m.roll), Math.sin(m.roll)];
-  const d = { x: p.x - at.x, y: p.y - at.y, z: p.z - at.z };
+  return {
+    id: m.id,
+    at: toWorld(truck, m.mount),
+    forward: { x: cp * cf, y: cp * sf, z: sp },
+    right0: { x: sf, y: -cf, z: 0 },
+    up0: { x: -sp * cf, y: -sp * sf, z: cp },
+    cr: Math.cos(m.roll),
+    sr: Math.sin(m.roll),
+    tanV: m.tanV,
+    tanH: m.tanH,
+  };
+}
+
+/** Whether mirror `m` frames world point `p`. */
+function inFrustum(m: MirrorFrame, p: Vec3): boolean {
+  const d = { x: p.x - m.at.x, y: p.y - m.at.y, z: p.z - m.at.z };
   const dot = (v: Vec3): number => d.x * v.x + d.y * v.y + d.z * v.z;
-  const depth = dot(forward);
+  const depth = dot(m.forward);
   if (depth <= 0) return false;
-  const [r0, u0] = [dot(right0), dot(up0)];
-  const across = cr * r0 + sr * u0;
-  const along = -sr * r0 + cr * u0;
+  const [r0, u0] = [dot(m.right0), dot(m.up0)];
+  const across = m.cr * r0 + m.sr * u0;
+  const along = -m.sr * r0 + m.cr * u0;
   return Math.abs(across) <= depth * m.tanH && Math.abs(along) <= depth * m.tanV;
 }
 
+/** How the driver sees points, past the layout's `occluders` and the combination's own bodies: the snapshot's bodies and mirrors are read once for any number of points. */
+export function sightField(
+  g: SightGeometry,
+  s: Bodies,
+  occluders: readonly Occluder[],
+): {
+  readonly point: (p: Vec3) => Sight;
+  readonly of: (points: readonly Vec3[]) => Sight;
+} {
+  const bodies = bodyOccluders(g, s);
+  // the eye sits inside the truck's box; the glass test stands in for the cab
+  const others = bodies.filter((b) => b.body !== 'truck');
+  const eye = toWorld(s.truck, g.eye);
+  const frames = g.mirrors.map((m) => mirrorFrame(m, s.truck));
+  const point = (p: Vec3): Sight => {
+    const direct =
+      throughGlass(g.glass, g.eye, toBody(s.truck, p)) &&
+      clear(occluders, eye, p) &&
+      clear(others, eye, p);
+    const mirrors = frames
+      .filter((m) => inFrustum(m, p) && clear(occluders, m.at, p) && clear(bodies, m.at, p))
+      .map((m) => m.id);
+    return { direct, mirrors };
+  };
+  return {
+    point,
+    /** Sight of any of `points`: direct if one is seen directly, and every mirror that shows one. */
+    of(points) {
+      const each = points.map(point);
+      return {
+        direct: each.some((v) => v.direct),
+        mirrors: g.mirrors
+          .map((m) => m.id)
+          .filter((id) => each.some((v) => v.mirrors.includes(id))),
+      };
+    },
+  };
+}
+
 /** How the driver sees world point `p`, past the layout's `occluders` and the combination's own bodies. */
-export function pointSight(
+export const pointSight = (
   g: SightGeometry,
   s: Bodies,
   p: Vec3,
   occluders: readonly Occluder[],
-): Sight {
-  const bodies = bodyOccluders(g, s);
-  // the eye sits inside the truck's box; the glass test stands in for the cab
-  const others = bodies.filter((b) => b.body !== 'truck');
-  const direct =
-    throughGlass(g.glass, g.eye, toBody(s.truck, p)) &&
-    clear(occluders, toWorld(s.truck, g.eye), p) &&
-    clear(others, toWorld(s.truck, g.eye), p);
-  const mirrors = g.mirrors
-    .filter((m) => {
-      if (!inFrustum(m, s.truck, p)) return false;
-      const at = toWorld(s.truck, m.mount);
-      return clear(occluders, at, p) && clear(bodies, at, p);
-    })
-    .map((m) => m.id);
-  return { direct, mirrors };
-}
+): Sight => sightField(g, s, occluders).point(p);
 
 /** Sight of any of `points`: direct if one is seen directly, and every mirror that shows one. */
-export function sightOf(
+export const sightOf = (
   g: SightGeometry,
   s: Bodies,
   points: readonly Vec3[],
   occluders: readonly Occluder[],
-): Sight {
-  const each = points.map((p) => pointSight(g, s, p, occluders));
-  return {
-    direct: each.some((v) => v.direct),
-    mirrors: g.mirrors.map((m) => m.id).filter((id) => each.some((v) => v.mirrors.includes(id))),
-  };
-}
+): Sight => sightField(g, s, occluders).of(points);

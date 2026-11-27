@@ -1,0 +1,279 @@
+import {
+  BufferAttribute,
+  BufferGeometry,
+  DoubleSide,
+  DynamicDrawUsage,
+  Group,
+  Mesh,
+  MeshBasicMaterial,
+} from 'three';
+import type { ResolvedLayout } from '../contracts/layout';
+import type { RenderFrame, ScenePalette } from '../contracts/render';
+import type { Obb, SimSnapshot } from '../contracts/sim';
+import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
+import {
+  bodyOccluders,
+  bodyPoints,
+  layoutOccluders,
+  type Occluder,
+  type SightGeometry,
+  sightField,
+  sightGeometry,
+} from '../einweiser/sight';
+import type { Look } from './look';
+import { AIDS_LAYER, SIGHT_GROUND_LAYER } from './seams';
+import type { SightFlags } from './scene-renderer';
+
+/** What a frame may spend on sampling (ms): the rest of the footprint follows on the next frames. */
+const BUDGET_MS = 4;
+/** Side of a ground cell (m), and how far the sampled area reaches past the vehicle's bodies. */
+export const CELL = 0.5;
+export const REACH = 12;
+const MAX_RUNS = 4096;
+const SIGHT_Y = 0.02;
+const OPACITY = 0.4;
+/** The vehicle must move this far (m) or turn this far (rad) before the footprint is sampled again. */
+const MOVE = 0.25;
+const TURN = 0.03;
+
+/** A row of equal cells: x from `from` to `to`, y from `y` to `y + CELL`. */
+export type Run = { readonly from: number; readonly to: number; readonly y: number };
+export type SightRuns = { readonly direct: Run[]; readonly mirror: Run[] };
+
+type Snapshot = Pick<SimSnapshot, 'truck' | 'coupling' | 'dolly' | 'trailer'>;
+
+/** Where a ground point stands in `obb`, with the heading's cosine and sine read once. */
+const standIn = ({ cx, cy, halfLength, halfWidth, heading }: Obb) => {
+  const [c, s] = [Math.cos(heading), Math.sin(heading)];
+  return (x: number, y: number): boolean => {
+    const [dx, dy] = [x - cx, y - cy];
+    return Math.abs(c * dx + s * dy) <= halfLength && Math.abs(-s * dx + c * dy) <= halfWidth;
+  };
+};
+
+function bounds(obbs: readonly Obb[]): { x0: number; x1: number; y0: number; y1: number } {
+  const b = { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity };
+  for (const { cx, cy, halfLength, halfWidth, heading } of obbs) {
+    const [c, s] = [Math.cos(heading), Math.sin(heading)];
+    const ex = Math.abs(c) * halfLength + Math.abs(s) * halfWidth;
+    const ey = Math.abs(s) * halfLength + Math.abs(c) * halfWidth;
+    b.x0 = Math.min(b.x0, cx - ex);
+    b.x1 = Math.max(b.x1, cx + ex);
+    b.y0 = Math.min(b.y0, cy - ey);
+    b.y1 = Math.max(b.y1, cy + ey);
+  }
+  return b;
+}
+
+/**
+ * The ground around the vehicle where the driver sees an Einweiser standing: `direct` through the
+ * glass, `mirror` only in a mirror. Each cell is the sight check at its centre for his head and chest
+ * (`bodyPoints`), the very check the sign reading and the fault scoring make, so the drawing and
+ * the scoring agree. Cells inside the bodies and the layout's blockers are left out.
+ */
+export function* sightRows(
+  g: SightGeometry,
+  s: Snapshot,
+  occluders: readonly Occluder[],
+  reach = REACH,
+): Generator<undefined, SightRuns> {
+  const bodies = bodyOccluders(g, s);
+  const box = bounds(bodies.map((b) => b.obb));
+  const [x0, x1] = [box.x0 - reach, box.x1 + reach];
+  const [y0, y1] = [box.y0 - reach, box.y1 + reach];
+  // a blocker outside the sampled area cannot cross a sight line into it
+  const near = occluders.filter((o) => {
+    const b = bounds([o.obb]);
+    return b.x1 >= x0 && b.x0 <= x1 && b.y1 >= y0 && b.y0 <= y1;
+  });
+  const field = sightField(g, s, near);
+  const occupied = [...bodies, ...near].map((o) => standIn(o.obb));
+  const out: SightRuns = { direct: [], mirror: [] };
+  for (let j = Math.floor(y0 / CELL); j < Math.ceil(y1 / CELL); j++) {
+    const y = j * CELL;
+    let open: { kind: 'direct' | 'mirror'; from: number } | null = null;
+    const close = (to: number): void => {
+      if (open !== null) out[open.kind].push({ from: open.from, to, y });
+      open = null;
+    };
+    for (let i = Math.floor(x0 / CELL); i < Math.ceil(x1 / CELL); i++) {
+      const [cx, cy] = [(i + 0.5) * CELL, y + CELL / 2];
+      let kind: 'direct' | 'mirror' | null = null;
+      if (!occupied.some((stands) => stands(cx, cy))) {
+        const sight = field.of(bodyPoints({ x: cx, y: cy }));
+        kind = sight.direct ? 'direct' : sight.mirrors.length > 0 ? 'mirror' : null;
+      }
+      if (open !== null && open.kind !== kind) close(i * CELL);
+      if (kind !== null && open === null) open = { kind, from: i * CELL };
+    }
+    close(Math.ceil(x1 / CELL) * CELL);
+    yield undefined;
+  }
+  return out;
+}
+
+/** `sightRows` run to the end. */
+export function sightRuns(
+  g: SightGeometry,
+  s: Snapshot,
+  occluders: readonly Occluder[],
+  reach = REACH,
+): SightRuns {
+  const rows = sightRows(g, s, occluders, reach);
+  for (let step = rows.next(); ; step = rows.next()) if (step.done === true) return step.value;
+}
+
+/** Quads in preallocated buffers; sim (x, y) becomes three's (x, up, -y). */
+class RunQuads {
+  readonly geometry = new BufferGeometry();
+  private readonly positions = new Float32Array(MAX_RUNS * 12);
+  private readonly attribute = new BufferAttribute(this.positions, 3).setUsage(DynamicDrawUsage);
+
+  constructor() {
+    const index = new Uint16Array(MAX_RUNS * 6);
+    for (let i = 0; i < MAX_RUNS; i++) {
+      const v = i * 4;
+      index.set([v, v + 1, v + 2, v + 1, v + 3, v + 2], i * 6);
+    }
+    this.geometry.setAttribute('position', this.attribute);
+    this.geometry.setIndex(new BufferAttribute(index, 1));
+    this.geometry.setDrawRange(0, 0);
+  }
+
+  set(runs: readonly Run[]): void {
+    const count = Math.min(runs.length, MAX_RUNS);
+    const p = this.positions;
+    for (let i = 0; i < count; i++) {
+      const { from, to, y } = runs[i] as Run;
+      p.set(
+        [from, SIGHT_Y, -y, from, SIGHT_Y, -(y + CELL), to, SIGHT_Y, -y, to, SIGHT_Y, -(y + CELL)],
+        i * 12,
+      );
+    }
+    this.attribute.clearUpdateRanges();
+    this.attribute.addUpdateRange(0, count * 12);
+    this.attribute.needsUpdate = true;
+    this.geometry.setDrawRange(0, count * 6);
+  }
+}
+
+/**
+ * The Einweiser's sight areas on the ground: in the top-down view (`AIDS_LAYER`) and in his own
+ * first-person view (`SIGHT_GROUND_LAYER`, which no other camera enables), each its own mesh pair
+ * over the same sampled geometry.
+ */
+export type SightCones = {
+  readonly object: Group;
+  setFlags(flags: SightFlags): void;
+  setLook(look: Look): void;
+  update(frame: RenderFrame): void;
+  dispose(): void;
+};
+
+export function createSightCones(
+  truck: TruckSpec,
+  trailer: TrailerSpec,
+  layout: ResolvedLayout,
+  palette: ScenePalette,
+): SightCones {
+  const g = sightGeometry(truck, trailer);
+  const occluders = layoutOccluders(layout);
+  const material = (color: number): MeshBasicMaterial =>
+    new MeshBasicMaterial({
+      color,
+      side: DoubleSide,
+      transparent: true,
+      opacity: OPACITY,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
+    });
+  const kinds = [
+    { runs: 'direct', material: material(palette.einweiser), quads: new RunQuads() },
+    { runs: 'mirror', material: material(palette.accent), quads: new RunQuads() },
+  ] as const;
+  const group = new Group();
+  const top: Mesh[] = [];
+  const ground: Mesh[] = [];
+  for (const { material: m, quads } of kinds) {
+    for (const [meshes, layer] of [
+      [top, AIDS_LAYER],
+      [ground, SIGHT_GROUND_LAYER],
+    ] as const) {
+      const mesh = new Mesh(quads.geometry, m);
+      mesh.layers.set(layer);
+      mesh.frustumCulled = false;
+      mesh.visible = false;
+      meshes.push(mesh);
+      group.add(mesh);
+    }
+  }
+  let flags: SightFlags = { top: false, ground: false };
+  let sampled: Snapshot | null = null;
+  /** The sampling under way and the bodies it reads; it finishes before a new one starts. */
+  let job: Generator<undefined, SightRuns> | null = null;
+  /** Whether a footprint is on show: until then a frame samples to the end, as no later one may come to finish it. */
+  let drawn = false;
+
+  const moved = (s: Snapshot): boolean =>
+    sampled === null ||
+    (['truck', 'dolly', 'trailer'] as const).some((k) => {
+      const [a, b] = [sampled?.[k], s[k]];
+      return (
+        a === undefined ||
+        Math.hypot(a.x - b.x, a.y - b.y) > MOVE ||
+        Math.abs(Math.atan2(Math.sin(a.heading - b.heading), Math.cos(a.heading - b.heading))) >
+          TURN
+      );
+    });
+
+  return {
+    object: group,
+    setFlags(next) {
+      flags = next;
+    },
+    setLook(look: Look): void {
+      const night = look.mode === 'night';
+      kinds[1].material.color.set(night ? palette.nightAccent : palette.accent);
+    },
+    update(frame) {
+      const live = frame.einweiser !== undefined;
+      for (const m of top) m.visible = live && flags.top;
+      for (const m of ground) m.visible = live && flags.ground;
+      if (!live || !(flags.top || flags.ground)) {
+        sampled = null;
+        job = null;
+        drawn = false;
+        return;
+      }
+      const { snapshot } = frame;
+      if (job === null && moved(snapshot)) {
+        sampled = {
+          truck: snapshot.truck,
+          coupling: snapshot.coupling,
+          dolly: snapshot.dolly,
+          trailer: snapshot.trailer,
+        };
+        job = sightRows(g, sampled, occluders);
+      }
+      if (job === null) return;
+      const until = drawn ? performance.now() + BUDGET_MS : Infinity;
+      for (let step = job.next(); ; step = job.next()) {
+        if (step.done === true) {
+          for (const { runs: key, quads } of kinds) quads.set(step.value[key]);
+          job = null;
+          drawn = true;
+          return;
+        }
+        if (performance.now() > until) return;
+      }
+    },
+    dispose() {
+      for (const { material: m, quads } of kinds) {
+        m.dispose();
+        quads.geometry.dispose();
+      }
+    },
+  };
+}

@@ -9,6 +9,7 @@ const defaults: Settings = {
   truckId: 'man-le-18-280',
   trailerId: 'krone-azw-18',
   aids: { pivots: true, path: true, tracks: false, ghost: true },
+  sight: { top: false, ground: false },
   topDown: 'follow',
   topDownLayout: { landscape: 0.4, portrait: 0.45 },
   collapsed: { aids: false, gauges: false, keys: false },
@@ -29,6 +30,7 @@ const stored: Settings = {
   truckId: 'arocs-1835-ak',
   trailerId: 'hueffermann-hpa-24-81-l',
   aids: { pivots: false, path: false, tracks: true, ghost: false },
+  sight: { top: true, ground: true },
   topDown: 'yard',
   topDownLayout: { landscape: 0.5, portrait: 0.35 },
   collapsed: { aids: true, gauges: true, keys: true },
@@ -67,6 +69,7 @@ describe('loadSettings', () => {
       truckId: 7,
       trailerId: 'hueffermann-hpa-24-81-l',
       aids: { pivots: 'no', tracks: true },
+      sight: { top: true, ground: 'yes' },
       topDown: null,
       collapsed: { aids: true, gauges: 'no' },
       graphics: 'ultra',
@@ -81,6 +84,7 @@ describe('loadSettings', () => {
       theme: 'dark',
       trailerId: 'hueffermann-hpa-24-81-l',
       aids: { ...defaults.aids, tracks: true },
+      sight: { top: true, ground: false },
       collapsed: { aids: true, gauges: false, keys: false },
     });
     expect(loadSettings(JSON.stringify({ version: 1, aids: [true] }), 'en').aids).toEqual(

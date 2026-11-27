@@ -124,6 +124,8 @@ export const en = {
   aidPath: 'Predicted path',
   aidTracks: 'Wheel tracks',
   aidGhost: 'Target ghost',
+  aidSightTop: 'Sight areas',
+  aidSightGround: 'Ground sight',
   aidLegend: 'What the aid lines mean',
   briefToggle: 'Show or hide the exercise brief',
   legendPivots: 'Center lines of truck, drawbar and trailer; the gap is the angle.',
@@ -131,6 +133,9 @@ export const en = {
     'Solid: trailer rear corners (reversing). Dashed: truck front corners (forward). Stop bar: where the held steer stops.',
   legendTracks: 'Where the wheels have been.',
   legendGhost: 'Trailer outline at the target.',
+  legendSightTop:
+    'Ground where the driver has sight contact with you: directly, or only in a mirror.',
+  legendSightGround: 'The same sight areas on the ground of your own view.',
   aidTopViewOnly: 'Shown in the follow and whole-yard views only',
   panelAids: 'Aids',
   panelGauges: 'Angles',
