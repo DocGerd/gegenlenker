@@ -11,7 +11,7 @@ import {
   Scene,
   type Texture,
 } from 'three';
-import { distance, float, max, mix, smoothstep, vec3, vertexColor } from 'three/tsl';
+import { distance, float, max, mix, smoothstep, uniform, vec3, vertexColor } from 'three/tsl';
 import {
   MeshStandardNodeMaterial,
   type Node,
@@ -33,6 +33,7 @@ import {
 import { createLampEmission, type LampEmission, withSlot } from './lamp-lens';
 import { REALISM_HUES } from './realism-hues';
 import { enableLayers, gpuLost, TOP_DOWN_LAYERS } from './seams';
+import { GRIME_MARKER, weatheringNodes } from './vehicle-weathering';
 
 /*
  * Reflective vehicle shading for the High preset (#69). The map goes on each material, never on
@@ -103,13 +104,18 @@ export class VehicleLightingModel extends PhysicalLightingModel {
   }
 }
 
-/** Roles from the vertex colour: glass and aluminium get their own roughness, metalness and specular share. */
+/**
+ * Roles from the vertex colour: glass and aluminium get their own roughness, metalness and specular
+ * share. Everything but glass weathers (`vehicle-weathering.ts`) by `weathering`, a uniform, so the
+ * `vehicleWeathering` flag shares one program.
+ */
 export class VehicleNodeMaterial extends MeshStandardNodeMaterial {
   static override get type(): string {
     return 'VehicleNodeMaterial';
   }
 
   readonly specularShare: Node<'float'>;
+  readonly weathering = uniform(0);
 
   constructor(envMap: Texture) {
     // the vertex colour is folded into colorNode, so the glass albedo is not multiplied by it again
@@ -122,14 +128,20 @@ export class VehicleNodeMaterial extends MeshStandardNodeMaterial {
     };
     const metal = role(ROLE_HUES.metal, lo, hi);
     const glass = role(ROLE_HUES.glass, lo / 2, hi / 2).toVar(VEHICLE_SHADER_MARKER);
-    this.colorNode = mix(rgb, vec3(GLASS_REFLECTANCE), glass);
+    const weather = weatheringNodes(this.weathering);
+    this.colorNode = mix(rgb.mul(weather.albedo), vec3(GLASS_REFLECTANCE), glass);
     this.roughnessNode = mix(
-      mix(float(PAINT_ROUGHNESS), GLASS_ROUGHNESS, glass),
-      METAL_ROUGHNESS,
+      mix(weather.roughness(float(PAINT_ROUGHNESS)), GLASS_ROUGHNESS, glass),
+      weather.roughness(float(METAL_ROUGHNESS)),
       metal,
     );
     this.metalnessNode = mix(mix(float(0), 1, glass), METAL_METALNESS, metal);
     this.specularShare = mix(float(PAINT_SPECULAR), 1, max(glass, metal));
+  }
+
+  /** Road grime and surface variation, the `vehicleWeathering` flag. */
+  setWeathering(on: boolean): void {
+    this.weathering.value = on ? 1 : 0;
   }
 
   override setupLightingModel(): VehicleLightingModel {
@@ -209,7 +221,7 @@ async function buildVehicleShader(gpu: WebGPURenderer, envMap: Texture): Promise
   });
   try {
     const built = await compileShader(gpu, scene, new PerspectiveCamera(), mesh);
-    const markers = graded ? [VEHICLE_SHADER_MARKER, GRADE_SHADER_MARKER] : [VEHICLE_SHADER_MARKER];
+    const markers = [VEHICLE_SHADER_MARKER, GRIME_MARKER, ...(graded ? [GRADE_SHADER_MARKER] : [])];
     if (!markers.every((marker) => built.fragment?.includes(marker) === true)) {
       console.warn('Vehicle reflection shader failed to build');
       return null;

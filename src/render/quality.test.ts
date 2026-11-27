@@ -14,6 +14,7 @@ const DOWNLOADS: readonly (keyof QualityFlags)[] = [
 /** Flags High adds over Balanced that cost compute only: each new High-only flag is classified here or in DOWNLOADS. */
 const COMPUTE_ONLY: readonly (keyof QualityFlags)[] = [
   'pbr',
+  'vehicleWeathering',
   'perspectiveLighting',
   'aerialPerspective',
   'sunShadow',
@@ -75,6 +76,14 @@ describe('quality flags', () => {
       if (flags.groundPbr) expect(flags.groundTexture, preset).toBe(true);
     }
     expect(GRAPHICS_PRESETS.filter((p) => QUALITY_FLAGS[p].groundPbr)).toEqual(['high']);
+  });
+
+  it('weathers only the reflective vehicles, on High', () => {
+    expect(GRAPHICS_PRESETS.filter((p) => QUALITY_FLAGS[p].vehicleWeathering)).toEqual(['high']);
+    for (const preset of GRAPHICS_PRESETS) {
+      const flags = QUALITY_FLAGS[preset];
+      if (flags.vehicleWeathering) expect(flags.pbr, preset).toBe(true);
+    }
   });
 
   it('hazes only graded views, on High', () => {

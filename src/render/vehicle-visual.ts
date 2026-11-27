@@ -99,6 +99,7 @@ import {
   type VehicleNodeMaterial,
 } from './vehicle-pbr';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
+import { setWeatherFrame } from './vehicle-weathering';
 
 /** The mesh name of a night twin: top-down only, so never a caster. */
 export const TWIN_NAME = 'night-twin';
@@ -180,6 +181,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const pbrToken = {};
   let pbrWanted = false;
   let pbrMode: LightingMode = DEFAULT_LIGHTING;
+  let pbrWeathered = false;
   let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
   let sunShadowed = false;
@@ -218,13 +220,20 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     if (pbrRoot !== null) setPbr(pbrRoot);
   });
   /**
-   * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
-   * has taken out of it; without `on` it repeats the last request, for shells that attach later.
+   * Reflective shading (#69), weathered (#556) when `weathered`, for everything below `root` and for
+   * the detail meshes a shell swap has taken out of it; without `on` it repeats the last request, for
+   * shells that attach later.
    */
-  const setPbr = (root: Object3D, on = pbrWanted, mode = pbrMode): void => {
+  const setPbr = (
+    root: Object3D,
+    on = pbrWanted,
+    mode = pbrMode,
+    weathered = pbrWeathered,
+  ): void => {
     pbrRoot = root;
     pbrWanted = on;
     pbrMode = mode;
+    pbrWeathered = weathered;
     const map = on ? (env?.texture(palette, mode) ?? null) : null;
     if (map !== null) {
       if (pbrMaterial === null) {
@@ -232,6 +241,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
         setGraded(pbrMaterial, gradeOn);
       }
       pbrMaterial.envMap = map;
+      pbrMaterial.setWeathering(weathered);
     } else if (pbrMaterial !== null) {
       pbrMaterial.envMap = null;
     }
@@ -559,6 +569,13 @@ export function proceduralTruck(
   const detailMesh = res.detail(detail.geometry);
   const rearWheelMesh = res.mesh(merge(rearWheels), wheelMaterial);
   const group = new Group();
+  setWeatherFrame(group, {
+    axles: [a.frontAxle.x, a.rearAxle.x],
+    wheelRadius: TRUCK_WHEEL_RADIUS,
+    ...(look.body.kind === 'tarp' && {
+      fabric: { front: bodyFrontX(a.frontX, look.cab.length), floor: FLOOR_TOP },
+    }),
+  });
   res.attachLampLights(truckLampLights(spec), group);
   const glow = res.markerGlow(truckLamps(spec, look.cab.length).lamps);
   if (glow !== null) group.add(glow);
@@ -749,7 +766,7 @@ export function proceduralTruck(
       res.setSunShadow(shadow);
       res.setLamps(lamps);
       res.setLampLight(lampLight, lampShadow);
-      res.setPbr(group, flags.pbr, mode);
+      res.setPbr(group, flags.pbr, mode, flags.vehicleWeathering);
       res.setNight(mode === 'night');
     },
     dispose() {
@@ -960,6 +977,8 @@ export function proceduralTrailer(
     res.twin(frameMesh, nightChassis, () => shown),
   );
   dolly.add(res.twin(dollyChassisMesh, nightChassis, () => shown));
+  setWeatherFrame(dolly, { axles: [a.frontAxle.x], wheelRadius: radius });
+  setWeatherFrame(trailer, { axles: a.rearAxles.map((axle) => axle.x), wheelRadius: radius });
   const group = new Group();
   group.add(dolly, trailer);
   res.attachLampLights([trailerLampLight(spec)], trailer);
@@ -1087,7 +1106,7 @@ export function proceduralTrailer(
       res.setSunShadow(shadow);
       res.setLamps(lamps);
       res.setLampLight(lampLight, lampShadow);
-      res.setPbr(group, flags.pbr, mode);
+      res.setPbr(group, flags.pbr, mode, flags.vehicleWeathering);
       res.setNight(mode === 'night');
     },
     dispose() {
