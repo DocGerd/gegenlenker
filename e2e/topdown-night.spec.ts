@@ -168,7 +168,7 @@ type Part = 'framed' | Zoom;
 const DAY_LOW: RenderConfig = { preset: 'low', lighting: 'day' };
 const NIGHT_LOW: RenderConfig = { preset: 'low', lighting: 'night' };
 const NIGHT_BALANCED: RenderConfig = { preset: 'balanced', lighting: 'night' };
-/** The presets compared with Low at night, one test each, so no test drives all three. */
+/** The presets compared with Low at night, in tests of their own, so no test drives all three. */
 const COMPARED = ['balanced', 'high'] as const satisfies readonly Preset[];
 
 type Run = {
