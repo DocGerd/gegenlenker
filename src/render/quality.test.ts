@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { GRAPHICS_PRESETS } from '../contracts/render';
 import { QUALITY_FLAGS, type QualityFlags } from './quality';
 
-/** Flags whose asset is a download: the tablet preset must not pay for them. A new one is added here. */
+/** Flags whose asset is a download: the tablet preset must not pay for them, bar `BALANCED_DOWNLOADS`. A new one is added here. */
 const DOWNLOADS: readonly (keyof QualityFlags)[] = [
   'groundTexture',
   'groundPbr',
@@ -10,6 +10,9 @@ const DOWNLOADS: readonly (keyof QualityFlags)[] = [
   'yardKit',
   'interiorGlb',
 ];
+
+/** Downloads Balanced pays for too: they join the default precache (#552). */
+const BALANCED_DOWNLOADS: readonly (keyof QualityFlags)[] = ['groundTexture'];
 
 /** Flags High adds over Balanced that cost compute only: each new High-only flag is classified here or in DOWNLOADS. */
 const COMPUTE_ONLY: readonly (keyof QualityFlags)[] = [
@@ -36,7 +39,6 @@ describe('quality flags', () => {
       skyline: true,
       yardDetail: true,
       cabGlb: true,
-      groundTexture: false,
       pbr: false,
     });
   });
@@ -57,6 +59,7 @@ describe('quality flags', () => {
 
   it('differs from balanced on high only in classified flags', () => {
     const classified: readonly string[] = [...DOWNLOADS, ...COMPUTE_ONLY];
+    const highOnly = DOWNLOADS.filter((key) => !BALANCED_DOWNLOADS.includes(key));
     const changed = (Object.keys(QUALITY_FLAGS.high) as (keyof QualityFlags)[]).filter(
       (key) => QUALITY_FLAGS.high[key] !== QUALITY_FLAGS.balanced[key],
     );
@@ -66,7 +69,14 @@ describe('quality flags', () => {
     expect(DOWNLOADS).toEqual(
       expect.arrayContaining(['groundTexture', 'groundPbr', 'hdriSky', 'yardKit']),
     );
-    for (const key of DOWNLOADS) expect(QUALITY_FLAGS.balanced[key], key).toBe(false);
+    for (const key of highOnly) expect(QUALITY_FLAGS.balanced[key], key).toBe(false);
+  });
+
+  it('draws the ground detail map on balanced and high, not on low', () => {
+    expect(GRAPHICS_PRESETS.filter((p) => QUALITY_FLAGS[p].groundTexture)).toEqual([
+      'balanced',
+      'high',
+    ]);
   });
 
   it('draws the PBR ground only over the detail ground', () => {
