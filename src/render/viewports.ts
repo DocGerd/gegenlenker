@@ -73,6 +73,12 @@ export const MESSAGE_KEYS = {
     'blockedContactSelf',
     'blockedCoupling',
     'blockedTurntable',
+    'blockedContactTruckGuide',
+    'blockedContactDrawbarGuide',
+    'blockedContactTrailerGuide',
+    'blockedContactSelfGuide',
+    'blockedCouplingGuide',
+    'blockedTurntableGuide',
   ],
   cue: ['goalInside', 'goalDistance', 'goalAngleOk', 'goalAngleOff', 'goalPositionOk'],
   /** The Einweiser's sight cue (`sightCueBox`), not part of the stack. */

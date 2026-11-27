@@ -432,6 +432,8 @@ const MESSAGE_WORD_PX: Readonly<Record<string, number>> = {
   'Drehschemel\u00ADwinkel': 131,
   'Drehschemel-': 93,
   Gegenrichtung: 99,
+  zeigen: 45,
+  signal: 41,
   In: 12,
   'Kupplungs\u00ADwinkel': 116,
   'Kupplungs-': 78,

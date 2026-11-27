@@ -77,6 +77,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Sight cue: class II / IV mirror                 | main / wide-angle mirror                    | Hauptspiegel / Weitwinkelspiegel             |
 | Sight cue: class V / VI mirror                  | close-proximity / front mirror              | Rampenspiegel / Frontspiegel                 |
 | Driver cannot read a sign                       | signal unclear                              | Zeichen unklar                               |
+| Blocked-vehicle toast: advice to the Einweiser  | signal the other way                        | Gegenrichtung zeigen                         |
 | Vehicle hits the Einweiser: the run ends        | run over                                    | überfahren                                   |
 | Einweiser fault: inside the swept path          | in the vehicle's path                       | im Fahrweg                                   |
 | Einweiser fault: out of the driver's sight      | out of sight                                | außer Sicht                                  |
