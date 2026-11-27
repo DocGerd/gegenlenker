@@ -190,7 +190,8 @@ export const en = {
   offlineIncomplete:
     'Not yet offline-ready for this graphics quality. Go online and reload to finish.',
   dismiss: 'Dismiss',
-  noWebgl: 'This device cannot show WebGL 2 graphics.',
+  noWebgl:
+    'This device cannot show WebGL 2 graphics. Turn on hardware acceleration in the browser settings or use a current Chrome, Edge, Firefox or Safari.',
   contextLost: 'The graphics stopped and could not restart. Reload to continue.',
   graphicsFailed: 'The graphics could not start. Reload to try again.',
   runFailed: 'Something went wrong during the run. Reload to continue.',
