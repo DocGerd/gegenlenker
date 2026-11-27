@@ -32,6 +32,7 @@ const GRIME_TOP = 1.5; // metres above the ground where the road grime has faded
 const GRIME_FULL = 0.3;
 const LOW_SHARE = 0.55;
 const ARCH_REACH = 0.4; // beyond the tyre
+const ARCH_INSET = 0.1; // inside the tread: the rim and the sidewall below it stay out of the arch
 const ARCH_SHARE = 0.55;
 const SPRAY_LENGTH = 1.4; // behind the tyre
 const SPRAY_TOP = 1.3;
@@ -124,8 +125,8 @@ type Terms<T> = { readonly grime: T; readonly contact: T };
 
 /**
  * Grime and contact shading in 0..1 at body-frame `x` and height `h`: a band over the lowest metre,
- * strongest on the arches around each wheel and in the spray behind it; contact darkens near the
- * ground and the tyres.
+ * strongest on the arches in a ring around each tyre and in the spray behind it; contact darkens near
+ * the ground and the tyres.
  */
 function terms<T>(o: Arith<T>, x: T, h: T, axles: readonly T[], radius: T): Terms<T> {
   const one = o.c(1);
@@ -135,7 +136,11 @@ function terms<T>(o: Arith<T>, x: T, h: T, axles: readonly T[], radius: T): Term
   for (const axle of axles) {
     const dx = o.sub(x, axle);
     const toHub = o.hypot(dx, o.sub(h, radius));
-    arch = o.max(arch, fade(radius, o.add(radius, o.c(ARCH_REACH)), toHub));
+    const ring = o.mul(
+      o.smoothstep(o.sub(radius, o.c(ARCH_INSET)), radius, toHub),
+      fade(radius, o.add(radius, o.c(ARCH_REACH)), toHub),
+    );
+    arch = o.max(arch, ring);
     const behind = o.mul(
       o.smoothstep(o.sub(o.c(-SPRAY_LENGTH), radius), o.mul(radius, o.c(-1)), dx),
       fade(o.mul(radius, o.c(-0.5)), o.c(0), dx),

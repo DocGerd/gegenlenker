@@ -51,6 +51,13 @@ describe('road grime', () => {
     expect(grimeAt(-1.2, h2, axles, r).grime).toBeGreaterThan(grimeAt(1.2, h2, axles, r).grime);
   });
 
+  it('rings the tyre with the arch and leaves the rim to the low band', () => {
+    const hub = (dh: number) => grimeAt(0, r + dh, [0], r).grime;
+    const lowOnly = (dh: number) => grimeAt(0, r + dh, [], r).grime;
+    expect(hub(r + 0.05)).toBeGreaterThan(lowOnly(r + 0.05) + 0.3);
+    expect(hub(r / 2)).toBeCloseTo(lowOnly(r / 2));
+  });
+
   it('adds nothing for an unused axle slot', () => {
     expect(grimeAt(1, 0.8, [0, 1e4, 1e4, 1e4], r)).toEqual(grimeAt(1, 0.8, [0], r));
   });
