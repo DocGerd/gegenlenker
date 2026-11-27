@@ -129,7 +129,7 @@ function guardChevrons(p: Parts, x: number, halfLength: number, z: Range): void 
     yc += pitch
   ) {
     const stripe = new BoxGeometry(OVERLAY, height, width)
-      .applyMatrix4(new Matrix4().makeShear(0, 0, 0, 0, 0, yc >= 0 ? 1 : -1))
+      .applyMatrix4(new Matrix4().makeShear(0, 0, 0, yc >= 0 ? 1 : -1, 0, 0))
       .translate(x + OVERLAY / 2, (z[0] + z[1]) / 2, -yc);
     p.add(stripe, HUE.chevronBlack);
   }
@@ -476,7 +476,7 @@ function rampGoods(p: Parts, bay: number, c: number, y: number, z: number): void
   }
 }
 
-/** Container on a skeletal chassis: corrugation, corner castings, locking rods, tyres. */
+/** Container on a skeletal chassis: corrugation, corner castings, locking rods, wheels. */
 function container(o: Collider, index: number): PropPiece {
   const { along: l, across: w, heading } = longFrame(o);
   const h = o.height;
@@ -592,7 +592,7 @@ function decorPiece({ asset, footprint: f, variant }: Exclude<Decor, KitDecor>):
 export const decorPieces = (decor: readonly Decor[]): PropPiece[] =>
   decor.filter((d): d is Exclude<Decor, KitDecor> => !isKitDecor(d)).map(decorPiece);
 
-/** Curtain-sider semitrailer: frame, strapped curtain, headboard, underrun bar, tandem-plus axles. */
+/** Curtain-sider semitrailer: frame, strapped curtain, headboard, chevron underrun guard, side markers, rear lamps, landing gear, tandem-plus axles. */
 function curtainSider(o: Collider, index: number): PropPiece {
   const { along: l, across: w, heading } = longFrame(o);
   const h = o.height;
@@ -609,6 +609,7 @@ function curtainSider(o: Collider, index: number): PropPiece {
     p.box(around(sx, 0.04), [-w / 2, -w / 2 + 0.05], [deck, h - 0.1], HUE.anthracite);
   }
   const guard: Range = [0.5, 0.7];
+  const gearX = -l / 2 + 3.2;
   p.box([l / 2 - 0.2, l / 2], around(0, w / 2 - 0.2), guard, HUE.signalYellow, 1, 1);
   guardChevrons(p, l / 2, w / 2 - 0.2, guard);
   for (const side of [-1, 1]) {
@@ -632,12 +633,11 @@ function curtainSider(o: Collider, index: number): PropPiece {
       [0.98, 1.18],
       HUE.tailLamp,
     );
-    // landing gear: leg, foot plate
-    const leg = around(side * (w / 2 - 0.4), 0.08);
-    p.box(around(-l / 2 + 3.2, 0.08), leg, [0.04, 0.95], HUE.anthracite);
-    p.box(around(-l / 2 + 3.2, 0.2), around(side * (w / 2 - 0.4), 0.15), [0, 0.04], HUE.anthracite);
+    const legY = side * (w / 2 - 0.4);
+    p.box(around(gearX, 0.08), around(legY, 0.08), [0.04, 0.95], HUE.anthracite);
+    p.box(around(gearX, 0.2), around(legY, 0.15), [0, 0.04], HUE.anthracite);
   }
-  p.box(around(-l / 2 + 3.2, 0.03), around(0, w / 2 - 0.48), [0.45, 0.52], HUE.anthracite); // landing gear cross brace
+  p.box(around(gearX, 0.03), around(0, w / 2 - 0.48), [0.45, 0.52], HUE.anthracite);
   return { x: o.obb.cx, y: o.obb.cy, geometry: p.place(o.obb.cx, o.obb.cy, heading) };
 }
 
