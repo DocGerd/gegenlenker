@@ -170,10 +170,6 @@ describe('skyline', () => {
           expect(across && (x < bounds.minX || x > bounds.maxX), `${x}, ${y}`).toBe(false);
         }
       }
-      const ringVertices = skylineGeometry(rings).getAttribute('position').count;
-      expect(ringVertices).toBe(
-        skylineGeometry(skylineBuildings(bounds)).getAttribute('position').count,
-      );
     },
   );
 

@@ -102,6 +102,8 @@ const MIN_SCENERY = 0.01;
 const MAX_BARE = 0.5;
 /** Most of the frame the verge beyond the bounds may cover, where only the skyline stands. */
 const MAX_BEYOND = 0.3;
+/** Most the verge beyond the bounds may cover on average over an exercise's frames. */
+const MAX_MEAN_BEYOND = 0.03;
 /** From this pitch the frame may show only the driveable ground around the vehicle. */
 const STEEP = 45;
 const deg = (d: number): number => (d * Math.PI) / 180;
@@ -162,6 +164,7 @@ describe('chase view scenery at the farthest orbit', () => {
       const open = { ...rig, colliders: [] };
       for (const preset of ['balanced', 'high'] as const) {
         const boxes = scenery(layout, preset);
+        const beyondShares: number[] = [];
         for (const frame of FRAMES) {
           for (const pitch of PITCHES) {
             for (let yaw = 0; yaw < 360; yaw += YAW_STEP) {
@@ -177,6 +180,7 @@ describe('chase view scenery at the farthest orbit', () => {
               if (camera.position.distanceTo(pivot) < farthest - 1e-6) continue;
               const { scenery: drawnScenery, bare, drawn, beyond } = shoot(layout, boxes, pivot);
               if (drawn === 0) continue;
+              beyondShares.push(beyond / drawn);
               const label = `${preset} ${String(frame.width)}x${String(frame.height)} pitch ${String(pitch)} yaw ${String(yaw)}`;
               expect(beyond / drawn, `${label}: verge beyond the bounds`).toBeLessThanOrEqual(
                 MAX_BEYOND,
@@ -189,6 +193,10 @@ describe('chase view scenery at the farthest orbit', () => {
             }
           }
         }
+        const mean = beyondShares.reduce((sum, share) => sum + share, 0) / beyondShares.length;
+        expect(mean, `${preset}: mean verge beyond the bounds`).toBeLessThanOrEqual(
+          MAX_MEAN_BEYOND,
+        );
       }
     },
     SWEEP_TIMEOUT_MS,
