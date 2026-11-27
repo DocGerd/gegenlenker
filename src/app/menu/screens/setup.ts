@@ -62,7 +62,8 @@ function bestLine(result: RunResult): HTMLElement {
     ),
     stat('time', formatSeconds(result.time)),
     stat('contacts', formatNumber(result.contacts, 0)),
-    stat('jackknifes', formatNumber(result.jackknifes, 0)),
+    // the truck solo has no limit stops
+    ...(result.trailerId === null ? [] : [stat('jackknifes', formatNumber(result.jackknifes, 0))]),
     stat('directionChanges', formatNumber(result.directionChanges, 0)),
   );
   return line;
