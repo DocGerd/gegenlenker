@@ -217,6 +217,12 @@ export function startDrive(
   };
   window.addEventListener('keydown', onEscape);
   live.push(() => window.removeEventListener('keydown', onEscape));
+  // A hidden tab freezes the frames; the sheet keeps the run from carrying on at once on return.
+  const onHidden = (): void => {
+    if (document.visibilityState === 'hidden' && sheet === null) togglePause();
+  };
+  document.addEventListener('visibilitychange', onHidden);
+  live.push(() => document.removeEventListener('visibilitychange', onHidden));
   const { renderer } = view;
   // The pause sheet can change it during the drive.
   let graphics = view.graphics;

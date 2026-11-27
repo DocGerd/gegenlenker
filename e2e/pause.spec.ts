@@ -620,3 +620,56 @@ test(
     await expect(page.locator('.drive')).toHaveCount(1);
   },
 );
+
+// Headless pages stay visible, so the tab state is emulated.
+const setVisibility = (page: Page, state: 'hidden' | 'visible'): Promise<void> =>
+  page.evaluate((next) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => next });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+
+test('a hidden tab pauses the run and the sheet stays open on return', async ({ page }) => {
+  await startAndRoll(page);
+  await setVisibility(page, 'hidden');
+  await expect(sheet(page)).toBeVisible();
+  const pausedAt = await clock(page).textContent();
+
+  await setVisibility(page, 'visible');
+  await page.waitForTimeout(600);
+  await expect(sheet(page)).toBeVisible();
+  await expect(clock(page)).toHaveText(pausedAt ?? '');
+
+  await page.keyboard.press('Escape');
+  await expect(sheet(page)).toBeHidden();
+  await expect(clock(page)).not.toHaveText(pausedAt ?? '');
+});
+
+test('a hidden tab leaves an open sheet as it is', async ({ page }) => {
+  await page.goto('./');
+  await startExercise(page, en, 'straight-reverse');
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  await page.keyboard.press('Escape');
+  await openSettings(page);
+
+  await setVisibility(page, 'hidden');
+  await setVisibility(page, 'visible');
+  await expect(sheet(page)).toHaveCount(1);
+  await expect(sheet(page).getByRole('heading', { name: en.settings })).toBeVisible();
+});
+
+test('a hidden tab pauses the free yard too', async ({ page }) => {
+  await page.goto('./');
+  await startYard(page, en, 'depot');
+  await expect(speed(page)).toHaveText('0.0 km/h'); // the drive has mounted
+  await setVisibility(page, 'hidden');
+  await expect(sheet(page)).toBeVisible();
+});
+
+test('a hidden tab on the result screen opens no sheet', async ({ page }) => {
+  await startAndRoll(page);
+  await finishRun(page);
+  await setVisibility(page, 'hidden');
+  await setVisibility(page, 'visible');
+  await expect(sheet(page)).toBeHidden();
+  await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
+});
