@@ -372,10 +372,11 @@ export function createThreeSceneRenderer(
     for (const { mirror } of mirrors) mirror.invalidate();
   }
 
-  function disposeBuilt(rebuild = false): void {
+  /** `keepRebuildParts` spares parts flagged `keepOnRebuild`: the aids part carries its track history over a rebuild. */
+  function disposeBuilt({ keepRebuildParts = false } = {}): void {
     if (built === null) return;
     for (const part of built.parts) {
-      if (!(rebuild && part.keepOnRebuild === true)) part.dispose();
+      if (!(keepRebuildParts && part.keepOnRebuild === true)) part.dispose();
     }
     built.scene.clear();
     built = null;
@@ -745,7 +746,7 @@ export function createThreeSceneRenderer(
     rebuildScene() {
       if (built === null) return;
       const { layout: nextLayout, truckSpec, trailerSpec, palette, aids } = built;
-      disposeBuilt(true);
+      disposeBuilt({ keepRebuildParts: true });
       resetTiming('rebuild');
       build(nextLayout, truckSpec, trailerSpec, palette, aids);
     },
