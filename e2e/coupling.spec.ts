@@ -26,17 +26,21 @@ test('the truck couples to the parked trailer, uncouples by key and button, and 
   const uncouple = page.getByRole('button', { name: en.uncouple });
   await expect(hitch).toHaveText(en.notCoupled);
   await expect(uncouple).toBeDisabled();
+  // the button's link shows the state: open, closed while coupled
+  await expect(uncouple).not.toHaveAttribute('data-coupled');
   await expect(page.locator('.drive')).not.toHaveAttribute('data-solo');
 
   // Reverse onto the eye at full lever: the jaw closes, too fast for a clean coupling.
   await page.keyboard.press('2');
   for (let i = 0; i < 10; i++) await page.keyboard.press('w');
   await expect(hitch).toHaveText(en.coupled, { timeout: COUPLE_MS });
+  await expect(uncouple).toHaveAttribute('data-coupled');
   await page.keyboard.press('Space');
   await expect(uncouple).toBeEnabled();
   await page.keyboard.press('u');
   await expect(hitch).toHaveText(en.notCoupled);
   await expect(uncouple).toBeDisabled();
+  await expect(uncouple).not.toHaveAttribute('data-coupled');
 
   // The jaw stands at the eye: a creep back couples again, and the button uncouples.
   await page.keyboard.press('w');

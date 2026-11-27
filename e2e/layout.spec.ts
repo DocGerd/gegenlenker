@@ -1525,8 +1525,9 @@ async function expectToolbarClear(page: Page): Promise<void> {
   }
 }
 
-/** The counters stand inside the pane, below however tall a brief. */
+/** The counters stand inside the pane, below however tall a brief, with the outside view's segment widening the toolbar. */
 async function expectCountersInPane(page: Page): Promise<void> {
+  await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
   const [counters] = await boxes(page.locator('.hud-counters'));
   const [pane] = await boxes(page.locator('.hud-topdown'));
   if (counters === undefined || pane === undefined) throw new Error('no counters or no pane');
@@ -1554,7 +1555,6 @@ for (const { locale, messages } of locales) {
         const page = await context.newPage();
         await startFrozenReverse(page, messages, id);
         await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
-        await test.step('the counters stand inside the pane', () => expectCountersInPane(page));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
           await test.step('the toolbar takes no reserve against the lever column', () =>
             expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve'));
@@ -1567,6 +1567,7 @@ for (const { locale, messages } of locales) {
           await expectPaneToolClear(page, at);
           await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
         });
+        await test.step('the counters stand inside the pane', () => expectCountersInPane(page));
         // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
           expectDividerClears(page, size));
