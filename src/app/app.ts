@@ -226,6 +226,19 @@ export function startApp(root: HTMLElement): void {
       menu();
     });
   };
+  // The last verdict. A failed probe is not cached, so each opening of the menu asks again; a probe that
+  // throws counts as capable and is left to the drive's own check.
+  let graphicsMissing = false;
+  const recheckGraphics = (): Promise<boolean> =>
+    probeGraphics()
+      .then(
+        (backend) => backend === null,
+        () => false,
+      )
+      .then((missing) => {
+        graphicsMissing = missing;
+        return missing;
+      });
   const menu = (initial?: NavState): void => {
     closeMenu?.();
     const log = lastRun();
@@ -249,6 +262,7 @@ export function startApp(root: HTMLElement): void {
                 },
               },
         hasNews: () => import('./whats-new-seen').then((m) => m.hasUnseen()),
+        graphics: { missing: graphicsMissing, recheck: recheckGraphics() },
         hold: enter,
         release: leave,
         failed: (error, retry) => {
