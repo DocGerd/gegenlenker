@@ -48,7 +48,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Controls group for the keys and wheel rows      | keyboard and mouse                          | Tastatur und Maus                            |
 | Controls group for the pointer controls         | touch and mouse                             | Touch und Maus                               |
 | Round control that steers                       | steering wheel                              | Lenkrad                                      |
-| Slider that sets the share of the speed cap     | speed lever                                 | Hebel                                        |
+| Lever that sets the share of the speed cap      | speed lever                                 | Hebel                                        |
 | Gear and lamp controls on the touchscreen       | buttons                                     | Schaltflächen                                |
 | Split of the screen into cockpit and top view   | view size                                   | Ansichtsgröße                                |
 | Legend: reset both view and view size           | reset view / size                           | Standardansicht                              |

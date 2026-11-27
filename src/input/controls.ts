@@ -45,8 +45,12 @@ const LIGHTS_ICON =
 const HAZARD_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5L21.5 20h-19z" /><path d="M12 9.5L16.5 17.5h-9z" /></svg>';
 
-/** Seconds between assistive-technology value updates; a screen reader must not hear every frame. */
-const ARIA_INTERVAL = 0.25;
+/**
+ * Milliseconds between value updates to the accessibility tree. The meters are neither focusable nor
+ * live, so nothing is announced: assistive technology reads them on demand. A timer, not the sim
+ * tick, so a pause cannot leave the last value stale.
+ */
+const ARIA_INTERVAL_MS = 250;
 
 const markup = (lockToLockTurns: number): string => `
 <div class="ctl" data-ctl="root">
@@ -397,7 +401,7 @@ export function createControls(
   lightsButton.setAttribute('aria-pressed', String(lamps.lights));
   render(state.steer);
   syncValues();
-  let sinceValues = 0;
+  const valueTimer = setInterval(syncValues, ARIA_INTERVAL_MS);
 
   return {
     control() {
@@ -413,16 +417,12 @@ export function createControls(
       keyboard.tick(dt);
       stepReset(state, opts.steerRate, dt);
       render(snapshot.steer);
-      sinceValues += dt;
-      if (sinceValues >= ARIA_INTERVAL) {
-        sinceValues = 0;
-        syncValues();
-      }
     },
     pedalsBox() {
       return pedals.getBoundingClientRect();
     },
     dispose() {
+      clearInterval(valueTimer);
       abort.abort();
       keyboard.dispose();
       container.remove();
