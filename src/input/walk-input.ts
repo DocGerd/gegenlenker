@@ -1,4 +1,5 @@
 import type { SignId } from '../contracts/einweiser';
+import type { Rect } from '../contracts/render';
 import type { EinweiserInput } from '../einweiser/track';
 import { isFormField } from './keyboard';
 import { actionFor, SIGN_OF, type Action } from './keymap';
@@ -19,15 +20,22 @@ export type WalkInputOptions = {
   readonly look: () => LookSettings;
 };
 
+export type WalkSurface = {
+  /** His own view in the surface's CSS px; a click outside it is left to the view input, which pans the top view. */
+  readonly view: () => Rect | null;
+  /** Follows every change of the pointer lock. */
+  readonly onLockChange: (locked: boolean) => void;
+};
+
 export type WalkInput = {
   /** What he does now; read once per sim step. */
   sample(): EinweiserInput;
   /**
    * Listens on `surface` (which holds the pointer lock) and the window; register it before any other
-   * listener that should not see the keys and clicks he uses. `onLockLost` follows every lock → unlock.
-   * Returns the teardown, which also releases the lock.
+   * listener that should not see the keys and clicks he uses. Returns the teardown, which also
+   * releases the lock.
    */
-  attach(surface: HTMLElement, onLockLost: () => void): () => void;
+  attach(surface: HTMLElement, options: WalkSurface): () => void;
   /** Lets go of every key and button and releases the lock, as the pause sheet opens. */
   pause(): void;
 };
@@ -63,17 +71,17 @@ export function createWalkInput({ heading, look: settings }: WalkInputOptions): 
         sign: signs.current(),
       };
     },
-    attach(surface, onLockLost) {
+    attach(surface, { view, onLockChange }) {
       const abort = new AbortController();
       const { signal } = abort;
       const pointer = createPointerLock(surface, (locked) => {
         if (locked) {
           look.lock();
-          return;
+        } else {
+          look.unlock();
+          releaseButtons();
         }
-        look.unlock();
-        releaseButtons();
-        onLockLost();
+        onLockChange(locked);
       });
       lock = pointer;
 
@@ -81,6 +89,11 @@ export function createWalkInput({ heading, look: settings }: WalkInputOptions): 
         'keydown',
         (e) => {
           if (isFormField(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+          if (actionFor('walk', e) === 'releaseMouse') {
+            e.preventDefault();
+            pointer.exit();
+            return;
+          }
           const walk = actionFor('walk', e);
           const sign = actionFor('sign', e);
           if (walk === undefined && sign === undefined) return;
@@ -109,14 +122,24 @@ export function createWalkInput({ heading, look: settings }: WalkInputOptions): 
         { signal },
       );
 
-      // Registered before the view input's, which a click here must never reach: it would pan the pane,
-      // and cancelling `pointerdown` suppresses the mouse events used below. The pointer events'
-      // `buttons` also read 0 in the browser's own hover moves, so the buttons come from the mouse
-      // events, which fire for each button.
+      const inView = (e: MouseEvent): boolean => {
+        const rect = view();
+        if (rect === null) return true;
+        const box = surface.getBoundingClientRect();
+        const x = e.clientX - box.left - rect.x;
+        const y = e.clientY - box.top - rect.y;
+        return x >= 0 && y >= 0 && x <= rect.width && y <= rect.height;
+      };
+      // Registered before the view input's, which a click in his view must never reach: it would pan
+      // the pane, and cancelling `pointerdown` suppresses the mouse events used below. A click
+      // elsewhere reaches it so the top view pans, unless the lock is on: its pointer no longer moves.
+      // The pointer events' `buttons` also read 0 in the browser's own hover moves, so the buttons
+      // come from the mouse events, which fire for each button.
       surface.addEventListener(
         'pointerdown',
         (e) => {
           if (e.pointerType !== 'mouse') return;
+          if (!pointer.locked && !inView(e)) return;
           e.stopImmediatePropagation();
           if (!pointer.locked) pointer.request();
         },
