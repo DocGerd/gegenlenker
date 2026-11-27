@@ -3,6 +3,7 @@ import {
   type BufferGeometry,
   CanvasTexture,
   Color,
+  CylinderGeometry,
   Matrix4,
   PlaneGeometry,
   SRGBColorSpace,
@@ -30,6 +31,7 @@ import {
 import type { LowLoaderDeck } from './trailer-dims';
 import { PLATE_TEXT, REALISM_HUES as HUE } from './realism-hues';
 import { box, merge, wheelGeometry } from './vehicle-geometry';
+import { detailedWheel, drumReach } from './wheel-detail';
 
 /*
  * Perspective-only detail, built from the dimensions the visuals already derive from vehicle Params.
@@ -46,6 +48,16 @@ const PLATE_WIDTH = 0.52; // EU standard plate
 const PLATE_HEIGHT = 0.11;
 const FLAP_THICKNESS = 0.02;
 const FLAP_MARGIN = 0.04;
+/** Running gear under the `wheelDetail` wheels: render estimates, in metres. */
+const GEAR = {
+  axleTube: { radius: 0.07, overlap: 0.02 }, // truck rear axle tube, into the drums
+  diff: { radius: 0.14, length: 0.3 }, // differential housing about body x, under the rails
+  pinion: { radius: 0.06, length: 0.22 },
+  beam: { halfDepth: 0.05, below: 0.07, above: 0.03 }, // truck front axle beam about the hub height
+  beamClearance: 0.08, // inboard of the drum, which yaws with the steering
+  spring: { halfLength: 0.4, halfWidth: 0.04, height: 0.05 }, // trailer leaf spring on the beam
+  hanger: { halfLength: 0.03, inset: 0.08 }, // inboard of the drum
+} as const;
 
 const m = (param: Param): number => param.value / 1000;
 
@@ -67,6 +79,8 @@ type Sink = {
   /** `slot` picks the lamp lens emission (lamp-lens.ts); everything else stays dark. */
   add(geometry: BufferGeometry, hue: number, slot?: number): void;
   box(x: Range, y: Range, z: Range, hue: number, slot?: number): void;
+  /** A part that brings its own linear vertex colours and no UVs. */
+  painted(geometry: BufferGeometry): void;
 };
 
 /** Which build a part belongs to: both, only the procedural one, or only the one shown with a shell. */
@@ -78,7 +92,11 @@ function collector() {
     const add = (geometry: BufferGeometry, hue: number, slot = DARK_SLOT): void => {
       parts.push({ geometry: withSlot(tint(geometry, new Color(hue)), slot), only });
     };
-    return { add, box: (x, y, z, hue, slot) => add(box(x, y, z), hue, slot) };
+    return {
+      add,
+      box: (x, y, z, hue, slot) => add(box(x, y, z), hue, slot),
+      painted: (geometry) => parts.push({ geometry: withSlot(geometry), only }),
+    };
   };
   const build = (skip: Only): BufferGeometry =>
     merge(parts.filter((part) => part.only !== skip).map((part) => part.geometry));
@@ -128,11 +146,58 @@ function wheelFaces(
   });
 }
 
+type WheelSpot = {
+  readonly at: readonly [number, number, number];
+  readonly outward: 1 | -1;
+  /** Outboard and inboard faces that show: a twin pair hides the faces it turns to each other. */
+  readonly rimFace?: boolean;
+  readonly drum?: boolean;
+};
+
+/** Discs, or with `detailed` the `wheelDetail` wheel (wheel-detail.ts). */
+function wheel(
+  c: Sink,
+  radius: number,
+  width: number,
+  { at, outward, rimFace = true, drum = true }: WheelSpot,
+  truck: boolean,
+  detailed: boolean,
+): void {
+  if (!detailed) {
+    wheelFaces(c, radius, width, at, truck);
+    return;
+  }
+  const [x, y, z] = at;
+  for (const part of detailedWheel({ radius, width, outward, truck, rimFace, drum })) {
+    c.painted(part.translate(x, z, -y));
+  }
+}
+
 /** Rims for a wheel that steers: centred on the origin so a kingpin pivot can carry it. */
-export function frontWheelDetail(radius: number, width: number): BufferGeometry {
+export function frontWheelDetail(
+  radius: number,
+  width: number,
+  detailed = false,
+  outward: 1 | -1 = 1,
+): BufferGeometry {
   const c = collector();
-  wheelFaces(c, radius, width, [0, 0, 0], true);
+  wheel(c, radius, width, { at: [0, 0, 0], outward }, true, detailed);
   return c.build();
+}
+
+/** A body-frame cylinder along body x or y, centred at (x, y, z). */
+function bar(
+  axis: 'x' | 'y',
+  radius: number,
+  length: number,
+  [x, y, z]: readonly [number, number, number],
+): BufferGeometry {
+  const geometry = new CylinderGeometry(radius, radius, length, 12);
+  return (axis === 'x' ? geometry.rotateZ(Math.PI / 2) : geometry.rotateX(Math.PI / 2)).translate(
+    x,
+    z,
+    -y,
+  );
 }
 
 function mudflap(
@@ -200,6 +265,13 @@ export type TruckDetailParams = {
   readonly rearTrack: number;
   readonly rearTyres: RearTyreSet;
   readonly wheelRadius: number;
+  readonly frontAxleX: number;
+  /** Hub height of the front wheels. */
+  readonly frontHub: number;
+  readonly frontTrack: number;
+  readonly frontWheelWidth: number;
+  /** The `wheelDetail` wheels and running gear in place of the discs. */
+  readonly wheelDetail: boolean;
 };
 
 export function truckDetail(p: TruckDetailParams): {
@@ -257,22 +329,60 @@ export function truckDetail(p: TruckDetailParams): {
       p.wheelRadius,
       p.rearX + RELIEF,
     );
+    const inner = Math.min(...offsets.map((o) => o * side));
+    const outer = Math.max(...offsets.map((o) => o * side));
     for (const offset of offsets) {
-      wheelFaces(
+      wheel(
         c,
         p.wheelRadius,
         width,
-        [p.rearAxleX, (side * p.rearTrack) / 2 + offset, p.wheelRadius],
+        {
+          at: [p.rearAxleX, (side * p.rearTrack) / 2 + offset, p.wheelRadius],
+          outward: side > 0 ? 1 : -1,
+          rimFace: offset * side === outer,
+          drum: offset * side === inner,
+        },
         true,
+        p.wheelDetail,
       );
     }
   }
+  if (p.wheelDetail) truckRunningGear(c, p);
 
   return {
     geometry: c.build(),
     cabFront: cabFront.build(),
     plate: { x: p.frontX + PLATE_RELIEF, y: 0, z: (bumper[0] + bumper[1]) / 2, facing: 1 },
   };
+}
+
+/** Rear axle tube with its differential, and the front axle beam between the kingpins. */
+function truckRunningGear(c: Sink, p: TruckDetailParams): void {
+  const { offsets, width } = p.rearTyres;
+  const hub = p.wheelRadius;
+  const tubeEnd =
+    p.rearTrack / 2 -
+    Math.max(...offsets.map(Math.abs)) -
+    drumReach(hub, width) +
+    GEAR.axleTube.overlap;
+  c.add(bar('y', GEAR.axleTube.radius, 2 * tubeEnd, [p.rearAxleX, 0, hub]), HUE.chevronBlack);
+  c.add(bar('x', GEAR.diff.radius, GEAR.diff.length, [p.rearAxleX, 0, hub]), HUE.chevronBlack);
+  c.add(
+    bar('x', GEAR.pinion.radius, GEAR.pinion.length, [
+      p.rearAxleX + (GEAR.diff.length + GEAR.pinion.length) / 2,
+      0,
+      hub,
+    ]),
+    HUE.chevronBlack,
+  );
+  const beamEnd =
+    p.frontTrack / 2 - drumReach(p.wheelRadius, p.frontWheelWidth) - GEAR.beamClearance;
+  c.box(
+    [p.frontAxleX - GEAR.beam.halfDepth, p.frontAxleX + GEAR.beam.halfDepth],
+    [-beamEnd, beamEnd],
+    [p.frontHub - GEAR.beam.below, p.frontHub + GEAR.beam.above],
+    HUE.chevronBlack,
+  );
 }
 
 /** Slanted black stripes across a yellow bar, mirrored about the centreline into a chevron. */
@@ -305,6 +415,10 @@ export type TrailerDetailParams = {
   readonly track: number;
   readonly wheelWidth: number;
   readonly rearAxleXs: readonly number[];
+  /** Top of the axle beams. */
+  readonly axleTop: number;
+  /** The `wheelDetail` wheels, and spring hangers on the axle beams, in place of the discs. */
+  readonly wheelDetail: boolean;
   /** The low-loader shell's deck, which the marking, rear contour and tail lamps follow with the shell on. */
   readonly shellDeck: LowLoaderDeck | null;
 };
@@ -412,9 +526,17 @@ export function trailerDetail(p: TrailerDetailParams): {
         p.rearX + RELIEF,
         p.underside,
       );
-      wheelFaces(c, p.radius, p.wheelWidth, [axleX, y, p.radius]);
+      wheel(
+        c,
+        p.radius,
+        p.wheelWidth,
+        { at: [axleX, y, p.radius], outward: side > 0 ? 1 : -1 },
+        false,
+        p.wheelDetail,
+      );
     }
   }
+  if (p.wheelDetail) springHangers(c, p);
 
   return {
     geometry: c.build(),
@@ -428,6 +550,31 @@ export function trailerDetail(p: TrailerDetailParams): {
   };
 }
 
+/** A leaf spring on each axle beam inboard of the drums, hung from the deck's underside at both ends. */
+function springHangers(c: Sink, p: TrailerDetailParams): void {
+  const { spring, hanger } = GEAR;
+  const xs = [...p.rearAxleXs].sort((a, b) => a - b);
+  const pitch = xs.slice(1).reduce((least, x, i) => Math.min(least, x - (xs[i] ?? x)), Infinity);
+  const half = Math.min(spring.halfLength, pitch / 2 - 2 * hanger.halfLength);
+  const yc = p.track / 2 - drumReach(p.radius, p.wheelWidth) - hanger.inset;
+  const springTop = p.axleTop + spring.height;
+  for (const x of p.rearAxleXs) {
+    for (const side of [-1, 1]) {
+      const y = lateral(side, yc - spring.halfWidth, yc + spring.halfWidth);
+      c.box([x - half, x + half], y, [p.axleTop, springTop], HUE.chevronBlack);
+      for (const end of [-1, 1]) {
+        const at = x + end * (half - hanger.halfLength);
+        c.box(
+          [at - hanger.halfLength, at + hanger.halfLength],
+          y,
+          [springTop, p.underside],
+          HUE.chevronBlack,
+        );
+      }
+    }
+  }
+}
+
 /** The dolly's rims, and its lamps of `layout`. */
 export function dollyDetail(
   radius: number,
@@ -435,10 +582,18 @@ export function dollyDetail(
   frontAxleX: number,
   track: number,
   layout?: LampLayout,
+  wheelDetail = false,
 ): BufferGeometry {
   const c = collector();
   for (const side of [-1, 1])
-    wheelFaces(c, radius, width, [frontAxleX, (side * track) / 2, radius]);
+    wheel(
+      c,
+      radius,
+      width,
+      { at: [frontAxleX, (side * track) / 2, radius], outward: side > 0 ? 1 : -1 },
+      false,
+      wheelDetail,
+    );
   if (layout !== undefined) lamps(c, layout, ['dolly'], false);
   return c.build();
 }
