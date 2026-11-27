@@ -85,12 +85,14 @@ describe('weather frames', () => {
       [dolly, [a.frontAxle.x]],
       [trailer, a.rearAxles.map((axle) => axle.x)],
     ]);
-    const worn = reflective(visual.object);
-    expect(worn.length).toBeGreaterThan(0);
-    for (const mesh of worn) {
+    const halves = new Set<Object3D>();
+    for (const mesh of reflective(visual.object)) {
       const found = weatherFrameOf(mesh);
-      expect(found?.frame.axles).toEqual(expected.get(found?.group));
+      if (found === null) throw new Error('a reflective mesh has no weather frame');
+      expect(found.frame.axles).toEqual(expected.get(found.group));
+      halves.add(found.group);
     }
+    expect(halves).toEqual(new Set([dolly, trailer]));
     visual.setLook(lookFor({ ...QUALITY_FLAGS.high, vehicleWeathering: false }, 'day'));
     for (const mesh of reflective(visual.object)) {
       expect((mesh.material as VehicleNodeMaterial).weathering.value).toBe(0);
