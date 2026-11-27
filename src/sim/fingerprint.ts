@@ -1,6 +1,6 @@
 import type { ExerciseDefinition } from '../contracts/exercise';
 import type { Obstacle } from '../contracts/layout';
-import type { Pose2 } from '../contracts/sim';
+import type { JawCatch, Pose2 } from '../contracts/sim';
 import type { RigParams } from '../contracts/vehicle';
 import { SIM_CONSTANTS } from './constants';
 
@@ -19,6 +19,8 @@ export type RunData = {
   readonly exercise: ExerciseDefinition | null;
   /** Scoring thresholds and what else scoring reads, passed in so the sim layer does not depend on scoring. */
   readonly scoring: { readonly [key: string]: JsonData };
+  /** Present exactly for a run that couples. */
+  readonly jaw?: JawCatch;
 };
 
 /**
@@ -26,7 +28,14 @@ export type RunData = {
  * Visual-only content (markings, surfaces, obstacle ids, heights and kinds) is left out; obstacle order
  * is hashed, since the first contact in list order is the one reported.
  */
-export function dataFingerprint({ params, obstacles, start, exercise, scoring }: RunData): string {
+export function dataFingerprint({
+  params,
+  obstacles,
+  start,
+  exercise,
+  scoring,
+  jaw,
+}: RunData): string {
   const text = JSON.stringify([
     SIM_REVISION,
     params,
@@ -37,9 +46,11 @@ export function dataFingerprint({ params, obstacles, start, exercise, scoring }:
       exercise.tolerances,
       exercise.waypoint,
       ...(exercise.startArticulation === undefined ? [] : [exercise.startArticulation]),
+      ...(exercise.parkedTrailer === undefined ? [] : [{ parkedTrailer: exercise.parkedTrailer }]),
     ],
     SIM_CONSTANTS,
     scoring,
+    ...(jaw === undefined ? [] : [jaw]),
   ]);
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {

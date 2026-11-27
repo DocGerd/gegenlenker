@@ -1,13 +1,14 @@
 import type { EinweiserResult, SignId } from './einweiser';
 import type { LayoutId, Marking, Obstacle } from './layout';
 import type { LightingMode } from './render';
-import type { InputChange, Pose2, Vec2 } from './sim';
+import type { InputChange, ParkedTrailer, Pose2, Vec2 } from './sim';
 import type { TrailerId, TruckId } from './vehicle';
 /** Curriculum order, easiest first; the menu lists them in this order (`content.test.ts` pins it). */
 export const EXERCISE_IDS = [
   'straight-reverse',
   'reverse-bay',
   'reverse-corner',
+  'coupling',
   'dock-ramp',
   'slalom',
 ] as const;
@@ -33,6 +34,8 @@ export type ExerciseDefinition = {
   readonly start: Pose2;
   /** The combination starts bent; absent means straight. */
   readonly startArticulation?: StartArticulation;
+  /** The truck starts solo before this trailer, couples to it and leaves it in the target; a driver run with a trailer only. */
+  readonly parkedTrailer?: ParkedTrailer;
   readonly target: TargetZone;
   readonly tolerances: Tolerances;
   readonly waypoint: Vec2 | null;
@@ -61,6 +64,8 @@ export type RunResult = {
   readonly time: number;
   /** Present exactly for an Einweiser run. */
   readonly einweiser?: EinweiserResult;
+  /** Present exactly for an exercise with a parked trailer: the fastest approach a coupling closed at (m/s), null if none did. */
+  readonly coupling?: { readonly speed: number | null };
 };
 export type BestResults = Readonly<Record<string, RunResult>>;
 export const ROLES = ['driver', 'einweiser'] as const;

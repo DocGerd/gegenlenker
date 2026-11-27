@@ -9,12 +9,12 @@ import {
   type VehicleParams,
 } from '../contracts/vehicle';
 import { einweiserScoring } from '../einweiser/fingerprint';
-import { SCORING_THRESHOLDS } from '../scoring/score';
+import { COUPLING_THRESHOLDS, SCORING_THRESHOLDS } from '../scoring/score';
 import { createContactQuery } from '../sim/collision';
 import { dataFingerprint, type RunData } from '../sim/fingerprint';
 import type { RunIds } from '../sim/replay';
 import { trailerById, truckById } from '../vehicles/registry';
-import { resolveRig } from '../vehicles/resolve';
+import { resolveJaw, resolveRig } from '../vehicles/resolve';
 import { exerciseById, layouts } from './registry';
 import { resolveLayout } from './resolve-layout';
 
@@ -40,16 +40,22 @@ export function resolveRun(ids: RunIds): ResolvedRun {
   const layout = resolveLayout(layouts[ids.layoutId], exercise);
   const pose = exercise?.start ?? layouts[ids.layoutId].start;
   const bend = trailer === null ? undefined : exercise?.startArticulation;
-  const start: StartState =
+  const parked = exercise?.parkedTrailer;
+  if (parked !== undefined && (trailer === null || ids.role !== 'driver'))
+    throw new Error('a coupling run is driven, with a trailer');
+  const jaw = parked === undefined ? undefined : resolveJaw(truck);
+  let start: StartState =
     bend === undefined
       ? { truck: pose }
       : { truck: pose, couplingAngle: bend.coupling, turntableAngle: bend.turntable };
+  if (parked !== undefined && jaw !== undefined) start = { ...start, parked: { trailer: parked, jaw } };
   // Driver runs hash exactly the driver thresholds, so their stored runs keep their fingerprints.
   let scoring: RunData['scoring'] = SCORING_THRESHOLDS;
   if (ids.role === 'einweiser') {
     if (trailer === null) throw new Error('an Einweiser run guides a truck with its trailer');
     scoring = { ...SCORING_THRESHOLDS, ...einweiserScoring(truck, trailer, layout) };
   }
+  if (parked !== undefined) scoring = { ...scoring, ...COUPLING_THRESHOLDS };
   return {
     truck,
     trailer,
@@ -64,6 +70,7 @@ export function resolveRun(ids: RunIds): ResolvedRun {
       start: pose,
       exercise,
       scoring,
+      ...(jaw === undefined ? {} : { jaw }),
     }),
   };
 }

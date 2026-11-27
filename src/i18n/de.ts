@@ -12,6 +12,7 @@ export const de: Record<MessageKey, string> = {
   exerciseStraightReverse: 'Gerade rückwärts',
   exerciseReverseBay: 'Rückwärts in eine Bucht',
   exerciseReverseCorner: 'Rückwärts um die Ecke',
+  exerciseCoupling: 'An- und Abkuppeln',
   exerciseDockRamp: 'An die Rampe setzen',
   exerciseSlalom: 'Slalom vor und zurück',
   briefStraightReverse: 'Geradeaus rückwärts in die markierte Bucht setzen und anhalten.',
@@ -19,6 +20,8 @@ export const de: Record<MessageKey, string> = {
     'Zwischen den parkenden Fahrzeugen rückwärts in die markierte Bucht setzen und anhalten.',
   briefReverseCorner:
     'Rückwärts um die Ecke in die Seitenstraße fahren und in der markierten Bucht anhalten.',
+  briefCoupling:
+    'Rückwärts an die Zugöse setzen, bis die Kupplung schließt, den Anhänger vorwärts in die markierte Bucht ziehen, anhalten, abkuppeln und wegfahren.',
   briefDockRamp: 'Rechtwinklig an die Rampe setzen und in der markierten Bucht anhalten.',
   briefSlalom:
     'Den Slalom vorwärts bis zum markierten Kreis fahren, dann zurücksetzen und in der markierten Bucht anhalten.',
