@@ -34,6 +34,8 @@ export type MenuDeps = {
   readonly replay: { readonly log: InputLog; readonly start: () => void } | null;
   /** Re-read whenever the title renders. */
   readonly hasNews: () => Promise<boolean>;
+  /** Whether no graphics backend can run a drive: the last verdict, and the next one when it settles. */
+  readonly graphics: { readonly missing: boolean; readonly recheck: Promise<boolean> };
   /** Holds the app's history entry; `onBack` runs when it is popped. */
   readonly hold: (onBack: () => void) => void;
   readonly release: () => void;
@@ -63,6 +65,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   let closed = false;
   // Set by Start and Continue until the drive replaces the menu (or a failure notice does): nothing navigates meanwhile.
   let busy = false;
+  let graphicsMissing = deps.graphics.missing;
   // Where focus goes on the next `show` instead of the level's remembered one.
   let refocus: string | null = null;
 
@@ -99,7 +102,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   };
 
   const startRun = (button: HTMLButtonElement, run: RunConfig, entry: EntryRef): void => {
-    if (busy) return;
+    if (busy || graphicsMissing) return;
     busy = true;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
@@ -127,6 +130,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
       go({ type: 'open', item: item.id });
       return;
     }
+    if (graphicsMissing) return;
     actions[item.target.action](button);
   };
 
@@ -174,6 +178,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           replay: deps.replay?.log ?? null,
           hasNews: deps.hasNews,
           activate,
+          graphicsMissing,
         });
       case 'entries':
         return entriesScreen({
@@ -191,6 +196,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           entry,
           step: level.step ?? 0,
           back,
+          graphicsMissing,
           next: () => {
             go({ type: 'next' });
           },
@@ -244,6 +250,13 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   };
   window.addEventListener('keydown', onEscape);
   show();
+  deps.graphics.recheck
+    .then((missing) => {
+      if (closed || missing === graphicsMissing) return;
+      graphicsMissing = missing;
+      if (!busy) show();
+    })
+    .catch(() => undefined);
 
   return {
     close: () => {
