@@ -1,5 +1,6 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
 import {
   exerciseEntry,
@@ -380,6 +381,60 @@ test('the free yard pause sheet has no restart hint', async ({ page }) => {
   await expect(sheet(page)).toBeVisible();
   await expect(sheet(page).getByText(en.restartHint)).toHaveCount(0);
 });
+
+for (const { locale, messages } of [
+  { locale: 'en-US', messages: en },
+  { locale: 'de-DE', messages: de },
+]) {
+  for (const size of [
+    { width: 800, height: 585 },
+    { width: 820, height: 1180 },
+  ]) {
+    test(`the sheet explains Finish and Leave and fits ${size.width}x${size.height} in ${locale}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      const page = await context.newPage();
+      await page.goto('./');
+      await startExercise(page, messages, 'straight-reverse');
+      await expect(speed(page)).toHaveText(/^0[.,]0 km\/h$/);
+      await page.keyboard.press('Escape');
+      const dialog = page.getByRole('dialog', { name: messages.paused });
+      await expect(dialog).toBeVisible();
+
+      const pairs = [
+        [messages.restart, messages.restartHint],
+        [messages.finish, messages.finishHint],
+        [messages.leaveUnscored, messages.leaveHint],
+      ] as const;
+      for (const [label, hint] of pairs) {
+        const button = dialog.getByRole('button', { name: label, exact: true });
+        const text = dialog.getByText(hint, { exact: true });
+        await expect(text).toBeVisible();
+        // The hint sits right under its own button, not under a neighbour's.
+        const b = await button.boundingBox();
+        const h = await text.boundingBox();
+        if (b === null || h === null) throw new Error('no box');
+        expect(h.y, `${label} hint below its button`).toBeGreaterThanOrEqual(b.y + b.height);
+        expect(h.y - (b.y + b.height), `${label} hint hugs its button`).toBeLessThan(12);
+      }
+
+      // Nothing scrolls or clips: the content fits the sheet, and the sheet the viewport.
+      const fit = await dialog.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return {
+          overflow: el.scrollHeight - el.clientHeight,
+          top: r.top,
+          bottom: window.innerHeight - r.bottom,
+        };
+      });
+      expect(fit.overflow, 'the sheet scrolls').toBeLessThanOrEqual(0);
+      expect(fit.top, 'the sheet starts inside the viewport').toBeGreaterThanOrEqual(0);
+      expect(fit.bottom, 'the sheet ends inside the viewport').toBeGreaterThanOrEqual(0);
+      await context.close();
+    });
+  }
+}
 
 async function pauseWith(page: Page, settings: object): Promise<void> {
   await seedStorage(page, { settings });

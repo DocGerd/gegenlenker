@@ -27,6 +27,16 @@ export type PauseSheet = {
   readonly back: () => boolean;
 };
 
+function hinted(button: HTMLButtonElement, hint: MessageKey): HTMLElement {
+  const item = document.createElement('div');
+  item.className = 'pause-item';
+  const text = document.createElement('p');
+  text.className = 'pause-hint';
+  text.textContent = t(hint);
+  item.append(button, text);
+  return item;
+}
+
 function action(label: MessageKey, onClick: () => void, primary: boolean): HTMLButtonElement {
   const button = document.createElement('button');
   button.type = 'button';
@@ -95,12 +105,19 @@ export function showPauseSheet(
   const resume = action('continue', actions.continue, true);
   const buttons = document.createElement('div');
   buttons.className = 'pause-actions';
-  buttons.append(
-    resume,
-    action('restart', actions.restart, false),
-    action(finishLabel, actions.finish, false),
-  );
-  if (actions.leave !== null) buttons.append(action('leaveUnscored', actions.leave, false));
+  const restart = action('restart', actions.restart, false);
+  const finish = action(finishLabel, actions.finish, false);
+  // Nothing is scored in the free yard, so there is nothing to warn about.
+  if (actions.leave === null) {
+    buttons.append(resume, restart, finish);
+  } else {
+    buttons.append(
+      resume,
+      hinted(restart, 'restartHint'),
+      hinted(finish, 'finishHint'),
+      hinted(action('leaveUnscored', actions.leave, false), 'leaveHint'),
+    );
+  }
   const openSettings = action(
     'settings',
     () => {
@@ -112,13 +129,6 @@ export function showPauseSheet(
   buttons.append(openSettings);
 
   main.append(title, buttons);
-  // Nothing is scored in the free yard, so there is nothing to warn about.
-  if (actions.leave !== null) {
-    const hint = document.createElement('p');
-    hint.className = 'pause-hint';
-    hint.textContent = t('restartHint');
-    main.append(hint);
-  }
 
   let level: HTMLElement = main;
   // Focus moves into the new level before the old one leaves, so the focusout guard never sees it drop.

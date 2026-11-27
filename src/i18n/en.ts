@@ -225,6 +225,10 @@ export const en = {
   signRechts: 'Move right',
   signAbstand: 'Closing distance',
   signNone: 'No signal',
+
+  // Pause sheet hints.
+  finishHint: 'Finishing scores the run as it stands and keeps the replay.',
+  leaveHint: 'Leaving drops the run: no result, no replay.',
 } as const;
 
 export type MessageKey = keyof typeof en;

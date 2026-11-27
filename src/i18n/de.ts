@@ -116,7 +116,7 @@ export const de: Record<MessageKey, string> = {
   panelGauges: 'Winkel',
   panelGaugesNeedsAid: 'Nur bei eingeschalteter Winkelanzeige sichtbar',
   targetDirection: 'Richtung zum Ziel',
-  finish: 'Beenden',
+  finish: 'Fahrt werten',
   leaveUnscored: 'Ohne Wertung verlassen',
   menu: 'Menü',
   result: 'Ergebnis',
@@ -231,4 +231,8 @@ export const de: Record<MessageKey, string> = {
   signRechts: 'Rechts fahren',
   signAbstand: 'Abstandsverringerung',
   signNone: 'Kein Zeichen',
+
+  // Pause sheet hints.
+  finishHint: 'Die Fahrt endet jetzt und wird mit dem erreichten Stand gewertet.',
+  leaveHint: 'Beim Verlassen wird die Fahrt verworfen: keine Wertung, keine gespeicherte Fahrt.',
 };
