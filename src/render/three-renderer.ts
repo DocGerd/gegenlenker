@@ -35,10 +35,11 @@ import {
   type ChaseCollider,
   type CombinationExtent,
 } from './chase-camera';
-import type { SceneRenderer } from './scene-renderer';
+import type { SceneRenderer, SightFlags } from './scene-renderer';
 import { createCockpitCamera, placeCockpitCamera } from './cockpit-camera';
 import { createEinweiserArms, placeViewModelCamera, type EinweiserArms } from './einweiser-arms';
 import { createEinweiserCamera, placeEinweiserCamera } from './einweiser-camera';
+import { createSightCones, type SightCones } from './sight-cones';
 import { followFraming, leadTarget, yardFraming } from './follow-framing';
 import { createFrameTimer } from './governor';
 import { createFrame, type Frame } from './frame-target';
@@ -109,6 +110,7 @@ type Built = {
   readonly aids: AidsLayer;
   readonly interior: CockpitInterior;
   readonly arms: EinweiserArms;
+  readonly sight: SightCones;
   readonly truckId: TruckId;
   readonly anchors: TruckAnchors;
   readonly mounts: MirrorMounts;
@@ -303,6 +305,7 @@ export function createThreeSceneRenderer(
   topDownCamera.position.y = SKY_HEIGHT;
   let quality = QUALITY_FLAGS[DEFAULT_GRAPHICS];
   let lighting: LightingMode = DEFAULT_LIGHTING;
+  let sightFlags: SightFlags = { top: false, ground: false };
   const mirrors = MIRRORS.map((spec) => ({
     mirror: createMirror(spec, quality.mirrorMsaa),
     rect: (views: ViewRects): Rect | null => views[spec.view],
@@ -401,6 +404,8 @@ export function createThreeSceneRenderer(
     const aids = kept ?? parts.aids(truck, trailer, nextLayout, palette);
     const interior = parts.interior(truck, palette);
     const arms = createEinweiserArms();
+    const sight = createSightCones(truck, trailer, nextLayout, palette);
+    sight.setFlags(sightFlags);
     const extent = combinationExtent(truck, trailer);
     setAidsLayer(aids.object);
     // the scene order of a combination is kept: its lights' order is part of every program
@@ -410,6 +415,7 @@ export function createThreeSceneRenderer(
       ...(trailerVisual === null ? [] : [trailerVisual]),
       placed(aids, { keepOnRebuild: true }),
       arms,
+      sight,
       placed(interior, { parent: interior.frame === 'truck' ? truckVisual.object : scene }),
     ];
     for (const part of list) (part.parent ?? scene).add(part.object);
@@ -425,6 +431,7 @@ export function createThreeSceneRenderer(
       aids,
       interior,
       arms,
+      sight,
       truckId: truck.id,
       anchors: truckAnchors(truck),
       mounts: mirrorMounts(truck),
@@ -497,6 +504,7 @@ export function createThreeSceneRenderer(
     });
     b.aids.update(frame);
     b.arms.update(views.cockpit === null ? undefined : frame.einweiser);
+    b.sight.update(frame);
     b.scene.updateMatrixWorld();
   }
 
@@ -784,6 +792,13 @@ export function createThreeSceneRenderer(
         timer.warmUp('lighting', { liftParks: true });
       }
     },
+
+    setSightCones(flags: SightFlags) {
+      sightFlags = flags;
+      built?.sight.setFlags(flags);
+    },
+
+    sightPending: () => built?.sight.pending() ?? false,
 
     resize(width, height) {
       cssWidth = width;

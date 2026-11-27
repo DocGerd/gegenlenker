@@ -85,6 +85,9 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Steering value read by a screen reader: side    | left / right                                                                | links / rechts                                                    |
 | Steering value read by a screen reader: centre  | straight                                                                    | geradeaus                                                         |
 | Driver sees the Einweiser                       | sight contact (direct / in mirror / none)                                   | Sichtkontakt (direkt / im Spiegel / kein)                         |
+| Einweiser toggle: sight areas in the top view   | sight (top view)                                                            | Sicht (Draufsicht)                                                |
+| Einweiser toggle: sight areas in his own view   | sight (own view)                                                            | Sicht (Ich)                                                       |
+| Pause sheet hint: key for the own-view areas    | G switches them on or off while you walk                                    | G schaltet sie beim Gehen ein oder aus                            |
 | Sight cue: class II / IV mirror                 | main / wide-angle mirror                                                    | Hauptspiegel / Weitwinkelspiegel                                  |
 | Sight cue: class V / VI mirror                  | close-proximity / front mirror                                              | Rampenspiegel / Frontspiegel                                      |
 | Driver cannot read a sign                       | signal unclear                                                              | Zeichen unklar                                                    |

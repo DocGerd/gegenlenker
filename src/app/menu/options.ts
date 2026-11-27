@@ -101,6 +101,9 @@ const named = <T extends string>(
   names: Readonly<Record<T, MessageKey>>,
 ): readonly Choice[] => values.map((value) => ({ value, label: names[value] }));
 
+/** A switch that is off by default: Off first. */
+export const OFF_ON_CHOICES: readonly Choice[] = named(OFF_ON, SWITCH_NAME);
+
 export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
   truck: {
     id: 'truck',
@@ -176,7 +179,7 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
     id: 'invertMouse',
     label: 'invertMouse',
     group: 'einweiser',
-    choices: named(OFF_ON, SWITCH_NAME),
+    choices: OFF_ON_CHOICES,
     applies: 'live',
   },
 };
