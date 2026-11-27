@@ -13,6 +13,13 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Steer the other way to ease an angle            | countersteer                                | gegenlenken                                  |
 | Vehicle touches an obstacle or itself           | contact                                     | Berührung                                    |
 | Best stored result                              | best                                        | Bestwert                                     |
+| Vehicle hits the Einweiser: the run ends        | run over                                    | überfahren                                   |
+| Einweiser fault: inside the swept path          | in the vehicle's path                       | im Fahrweg                                   |
+| Einweiser fault: out of the driver's sight      | out of sight                                | außer Sicht                                  |
+| Driver cannot read a sign                       | signal unclear                              | Zeichen unklar                               |
+| Contact after the warning under a moving sign   | halt too late                               | Halt zu spät                                 |
+| Moving sign before the first Achtung            | no Attention signal first                   | ohne Achtung begonnen                        |
+| Fault rule set by the trainer, not a source     | trainer convention                          | Trainerregel                                 |
 | Driving area                                    | yard                                        | Hof                                          |
 | Aids on / off                                   | aids                                        | Hilfen                                       |
 | Toggle for both angle readouts                  | angle display                               | Winkelanzeige                                |

@@ -1,6 +1,7 @@
-import type { SignId } from '../contracts/einweiser';
-import type { SimSnapshot, Vec2 } from '../contracts/sim';
+import { HOLD_STEPS, type SignId } from '../contracts/einweiser';
+import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
+import { DT } from '../sim/constants';
 import { bodyFootprints } from '../sim/geometry';
 import { MOVEMENT_SIGNS, REACTION_TIME } from './signs';
 import { overlaps, WALKER_RADIUS } from './walk';
@@ -40,3 +41,12 @@ export const signOutOfSight = (
 /** An obstacle contact under a movement sign, with the contact warning up for longer than `REACTION_TIME`. */
 export const lateHalt = (contact: boolean, sign: SignId | null, warnedFor: number): boolean =>
   contact && sign !== null && MOVEMENT_SIGNS.has(sign) && warnedFor > REACTION_TIME;
+
+/** Walking against his facing faster than this (m/s, estimate) is the debrief's walking-backwards note. */
+export const WALK_BACK_SPEED = 0.3;
+
+/** Between two held samples one hold interval apart, he walked backwards: against his later facing. */
+export function walkedBackwards(from: Vec2, to: Pose2): boolean {
+  const along = (to.x - from.x) * Math.cos(to.heading) + (to.y - from.y) * Math.sin(to.heading);
+  return -along / (HOLD_STEPS * DT) > WALK_BACK_SPEED;
+}
