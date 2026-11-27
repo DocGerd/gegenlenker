@@ -1,4 +1,5 @@
 import { type Locator, type Page } from '@playwright/test';
+import { EXERCISE_IDS, type ExerciseId } from '../src/contracts/exercise';
 import { expect, test } from './fixtures';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
@@ -910,15 +911,19 @@ async function startStraightReverse(page: Page, messages: Messages): Promise<voi
 }
 
 /**
- * Opens the straight-reverse drive with the clock paused, so the render loop draws only the frames
+ * Opens the straight-reverse drive, or exercise `id`, with the clock paused, so the render loop draws only the frames
  * stepped here. The cases that use it read DOM boxes, which the observers lay out without a frame;
  * a free-running software-GL loop only slows their polls. The brief fold and the open overlays
  * need the free-running start (`startStraightReverse`): they fail on a paused clock.
  */
-async function startFrozenReverse(page: Page, messages: Messages): Promise<void> {
+async function startFrozenReverse(
+  page: Page,
+  messages: Messages,
+  id: ExerciseId = 'straight-reverse',
+): Promise<void> {
   await freezeClock(page);
   await page.goto('./');
-  await startExercise(page, messages, 'straight-reverse');
+  await startExercise(page, messages, id);
   await hudReady(page);
   await stepFrozen(page);
 }
@@ -1466,13 +1471,14 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
  * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
-const paneToolAbsent = new Set(['en-US 800x585']);
+const paneToolAbsent = (at: string, id: ExerciseId): boolean =>
+  at.endsWith(' 800x585') && id !== 'straight-reverse';
 
-async function expectPaneToolClear(page: Page, at: string): Promise<void> {
+async function expectPaneToolClear(page: Page, at: string, id: ExerciseId): Promise<void> {
   await page.keyboard.press('o');
   const tool = page.locator('[data-hud="freeCamera"]');
   await settled(page);
-  if (paneToolAbsent.has(at)) {
+  if (paneToolAbsent(at, id)) {
     await expect(tool, 'no room for it here').toBeHidden();
     return;
   }
@@ -1520,16 +1526,35 @@ async function expectToolbarClear(page: Page): Promise<void> {
   }
 }
 
+/** The counters stand inside the pane, below however tall a brief, with the outside view's segment widening the toolbar. */
+async function expectCountersInPane(page: Page): Promise<void> {
+  await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
+  const [counters] = await boxes(page.locator('.hud-counters'));
+  const [pane] = await boxes(page.locator('.hud-topdown'));
+  if (counters === undefined || pane === undefined) throw new Error('no counters or no pane');
+  expect(counters.bottom, 'the counters inside the pane').toBeLessThanOrEqual(pane.bottom);
+}
+
+/** Straight reverse at every size; the other exercises, whose cards differ, where the pane leaves the least room. */
+const holdCases: readonly (Size & { id: ExerciseId })[] = sizes.flatMap((size) => [
+  { ...size, id: 'straight-reverse' as const },
+  ...(size.width === 800 && size.height === 585
+    ? EXERCISE_IDS.filter((id) => id !== 'straight-reverse').map((id) => ({ ...size, id }))
+    : []),
+]);
+
 for (const { locale, messages } of locales) {
-  for (const size of sizes) {
+  for (const { id, ...size } of holdCases) {
     const at = `${locale} ${size.width}x${size.height}`;
 
-    test(`the layout holds at ${at}`, async ({ browser }) => {
+    test(`the layout holds at ${at}${id === 'straight-reverse' ? '' : ` with the ${id} card`}`, async ({
+      browser,
+    }) => {
       test.slow();
       const context = await browser.newContext({ locale, viewport: size });
       try {
         const page = await context.newPage();
-        await startFrozenReverse(page, messages);
+        await startFrozenReverse(page, messages, id);
         await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
           await test.step('the toolbar takes no reserve against the lever column', () =>
@@ -1540,9 +1565,10 @@ for (const { locale, messages } of locales) {
         await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
           expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         await test.step("the outside view's free camera button clears the panels, the divider, the mirrors, the target arrow and the messages", async () => {
-          await expectPaneToolClear(page, at);
+          await expectPaneToolClear(page, at, id);
           await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
         });
+        await test.step('the counters stand inside the pane', () => expectCountersInPane(page));
         // Last: the divider moves the stored split.
         await test.step('the divider at its smallest and largest share clears the cockpit and the panels', () =>
           expectDividerClears(page, size));
