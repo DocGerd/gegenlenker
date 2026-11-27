@@ -12,6 +12,20 @@ export const element = <K extends keyof HTMLElementTagNameMap>(
   return el;
 };
 
+/** The notice that explains why a start is unavailable, and the control that keeps it focusable. */
+export function noGraphicsNote(): HTMLElement {
+  const note = element('p', 'menu-note', t('noWebgl'));
+  note.id = 'menu-no-graphics';
+  note.dataset['menu'] = 'noGraphics';
+  return note;
+}
+
+/** Unavailable but focusable (not `disabled`), so focus stays put and the notice is read with the control. */
+export function markUnavailable(button: HTMLButtonElement): void {
+  button.setAttribute('aria-disabled', 'true');
+  button.setAttribute('aria-describedby', 'menu-no-graphics');
+}
+
 /** Back and the heading stay in view; `body` is the screen's one scroll container. */
 export function screenFrame(
   id: ScreenId,

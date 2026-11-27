@@ -22,13 +22,15 @@ import {
 } from '../catalogue';
 import { choiceRow } from '../choice-row';
 import { applyOption, optionValue, roleField, type ChoiceField, type OptionId } from '../options';
-import { element, screenFrame } from './frame';
+import { element, markUnavailable, noGraphicsNote, screenFrame } from './frame';
 
 export type SetupContext = {
   readonly entry: EntryRef;
   readonly step: number;
   readonly back: () => void;
   readonly next: () => void;
+  /** No graphics backend: Start is disabled and the notice shows. */
+  readonly graphicsMissing: boolean;
   /** Starts the run once; the button shows the busy state until the drive takes over. */
   readonly start: (button: HTMLButtonElement, run: RunConfig, entry: EntryRef) => void;
 };
@@ -152,7 +154,10 @@ export function setupScreen(ctx: SetupContext): {
   const start = element('button', 'menu-setup-start', t('start'));
   start.type = 'button';
   start.dataset['menu'] = 'start';
+  const unavailable = ctx.graphicsMissing && last;
+  if (unavailable) markUnavailable(start);
   start.addEventListener('click', () => {
+    if (unavailable) return;
     if (!last) {
       ctx.next();
       return;
@@ -161,6 +166,7 @@ export function setupScreen(ctx: SetupContext): {
     ctx.start(start, runConfigOf(started, currentSettings()), started);
   });
   options.append(start);
+  if (ctx.graphicsMissing) options.append(noGraphicsNote());
 
   layout.append(info, options);
   frame.body.append(layout);
