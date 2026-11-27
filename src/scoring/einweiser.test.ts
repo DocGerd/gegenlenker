@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { exerciseById } from '../content/registry';
-import { guidedRun } from '../content/run';
+import { resolveRun } from '../content/run';
 import { HOLD_STEPS, type EinweiserResult, type SignId } from '../contracts/einweiser';
 import type { SimSnapshot } from '../contracts/sim';
 import { layoutOccluders, sightGeometry } from '../einweiser/sight';
@@ -40,7 +40,7 @@ const read = ({ before, held, moved, sign, inSight, reading }: EinweiserFacts) =
 });
 
 const scene = (ids: RunIds) => {
-  const run = guidedRun(ids);
+  const run = resolveRun(ids);
   const g = sightGeometry(run.truck, run.trailer);
   return { run, g, occluders: layoutOccluders(run.layout), contacts: run.contacts };
 };
@@ -93,33 +93,39 @@ const left = (s: SimSnapshot, w: Walker): number =>
   -(w.x - s.trailerRear.x) * Math.sin(s.trailer.heading) +
   (w.y - s.trailerRear.y) * Math.cos(s.trailer.heading);
 
-const CASES: readonly {
+type Case = {
   name: string;
   ids: RunIds;
   script: Script;
   expected: (r: EinweiserResult) => void;
   /** A reading the run must contain, so the case keeps covering it. */
   reads?: Reading['kind'];
-}[] = [
-  {
-    // Herkommen without Achtung, a walk backwards, then a jog into the reversing trailer's track.
-    name: 'run over',
-    ids: yard,
-    script: (step, s, w) => ({
-      keys:
-        step >= 200 && step < 260
-          ? { ...STILL, back: true }
-          : s.speed !== 0 && behind(s, w) < 0.9
-            ? { ...STILL, right: true, jog: true }
-            : STILL,
-      sign: step >= 30 ? 'herkommen' : null,
-    }),
-    expected: (r) => {
-      expect(r.runOver).toBe(true);
-      expect(r.walkedBackwards).toBe(true);
-      expect(r.faults).toMatchObject({ noAchtung: 1, inPath: 1, tooClose: 1, lateHalt: 0 });
-    },
+};
+
+const RUN_OVER: Case = {
+  // Herkommen without Achtung, a walk backwards, then a jog into the reversing trailer's track.
+  name: 'run over',
+  ids: yard,
+  script: (step, s, w) => ({
+    keys:
+      step >= 200 && step < 260
+        ? { ...STILL, back: true }
+        : s.speed !== 0 && behind(s, w) < 0.9
+          ? { ...STILL, right: true, jog: true }
+          : STILL,
+    sign: step >= 30 ? 'herkommen' : null,
+  }),
+  expected: (r) => {
+    expect(r.runOver).toBe(true);
+    expect(r.walkedBackwards).toBe(true);
+    expect(r.faults).toMatchObject({ noAchtung: 1, inPath: 1, tooClose: 1, lateHalt: 0 });
   },
+};
+
+const CASES: readonly Case[] = [
+  RUN_OVER,
+  // the truck solo: its rear end reverses into him
+  { ...RUN_OVER, name: 'run over solo', ids: { ...yard, trailerId: null } },
   {
     // Achtung, Herkommen, then he steps into the trailer's track far enough back that the driver
     // stops for him: the in-path readings run up to the step the vehicle comes to rest.

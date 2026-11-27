@@ -22,7 +22,7 @@ export const EINWEISER_REVISION = 1;
  */
 export function einweiserScoring(
   truck: TruckSpec,
-  trailer: TrailerSpec,
+  trailer: TrailerSpec | null,
   layout: Pick<ResolvedLayout, 'obstacles' | 'decor'>,
 ): { readonly [key: string]: JsonData } {
   const { eye, glass, mirrors, heights } = sightGeometry(truck, trailer);

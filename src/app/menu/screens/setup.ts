@@ -84,7 +84,7 @@ function paintBests(block: HTMLElement, exercise: ExerciseDefinition): void {
   const { truckId, lighting, mirrorsOnly } = settings;
   const trailerId = couples({ kind: 'exercise', id: exercise.id })
     ? settings.trailerId
-    : runTrailer(settings, 'driver');
+    : runTrailer(settings);
   const lines = [false, true]
     .map(
       (assisted) => best[bestKey(exercise.id, truckId, trailerId, assisted, lighting, mirrorsOnly)],

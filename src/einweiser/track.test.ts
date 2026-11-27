@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HOLD_STEPS } from '../contracts/einweiser';
 import type { InputLog } from '../contracts/exercise';
-import { guidedRun, resolveRun } from '../content/run';
+import { pairedRun, resolveRun } from '../content/run';
 import { parseInputLog, serializeInputLog, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { layoutOccluders, sightGeometry } from './sight';
@@ -18,7 +18,7 @@ const ids: RunIds = {
 
 /** Stands with arms down, then walks forward looking up and shows Achtung, then stands again. */
 function drive(steps: number) {
-  const run = guidedRun(ids);
+  const run = pairedRun(ids);
   const g = sightGeometry(run.truck, run.trailer);
   const sim = createSimulation(run.params, run.start, run.contacts);
   let s = sim.snapshot();

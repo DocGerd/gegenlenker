@@ -184,9 +184,8 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
   },
 };
 
-/** Where the Einweiser names a field his own way: the same setting, so the same values. He guides a combination only. */
+/** Where the Einweiser names a field his own way: the same setting, so the same values. */
 const EINWEISER_FIELDS: Readonly<Partial<Record<OptionId, OptionField>>> = {
-  trailer: { ...OPTION_FIELDS.trailer, choices: TRAILER_CHOICES },
   driveView: {
     ...OPTION_FIELDS.driveView,
     label: 'einweiserView',
@@ -219,16 +218,15 @@ export function entryOption(
 ): { readonly field: OptionField; readonly value: string } {
   return coupled && id === 'trailer'
     ? { field: COUPLED_TRAILER_FIELD, value: settings.trailerId }
-    : { field: roleField(id, role), value: optionValue(settings, id, role) };
+    : { field: roleField(id, role), value: optionValue(settings, id) };
 }
 
-/** `role` matters for the trailer only. */
-export function optionValue(settings: Settings, id: OptionId, role: Role = 'driver'): string {
+export function optionValue(settings: Settings, id: OptionId): string {
   switch (id) {
     case 'truck':
       return settings.truckId;
     case 'trailer':
-      return runTrailer(settings, role) ?? NO_TRAILER;
+      return runTrailer(settings) ?? NO_TRAILER;
     case 'lighting':
       return settings.lighting;
     case 'driveView':

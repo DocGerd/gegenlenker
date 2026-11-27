@@ -108,6 +108,24 @@ describe.each(pairs)('sight for $truck.id with $trailer.id', ({ truck, trailer }
   });
 });
 
+describe.each(trucks)('sight for $id solo', (truck) => {
+  const g = sightGeometry(truck, null);
+  const s = createSimulation(g.params, { truck: ORIGIN }, () => null).snapshot();
+  const [body] = bodyFootprints(g.params, s).map((f) => f.obb);
+  if (body === undefined) throw new Error('no truck footprint');
+  const rear = body.cx - body.halfLength;
+
+  it('sees him off the rear left corner in the left class II', () => {
+    const sight = sightOf(g, s, bodyPoints({ x: rear + 1, y: body.halfWidth + 1 }), []);
+    expect(sight.mirrors).toContain('mirrorLeft');
+  });
+
+  it('does not see him straight behind the truck', () => {
+    const point = { x: rear - 3, y: 0 };
+    expect(sightOf(g, s, bodyPoints(point), [])).toEqual({ direct: false, mirrors: [] });
+  });
+});
+
 describe.each(pairs.filter(({ trailer }) => trailer.body === 'box'))(
   'sight past the $trailer.id body behind $truck.id',
   ({ truck, trailer }) => {

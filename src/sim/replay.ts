@@ -214,8 +214,8 @@ export function parseInputLog(
   const mirrorsOnly = data.version === 1 || data.version === 2 ? false : data.mirrorsOnly;
   if (typeof mirrorsOnly !== 'boolean') return null;
   if (!isMember(LAYOUT_IDS, layoutId) || !isMember(TRUCK_IDS, truckId)) return null;
-  // solo (no trailer) is a v4 driver run only
-  const soloRefused = trailerId === null && (data.version !== 4 || role !== 'driver');
+  // solo (no trailer) is a v4 run only
+  const soloRefused = trailerId === null && data.version !== 4;
   if (trailerId === undefined || soloRefused || !isStep(steps)) return null;
   if (exerciseId !== null && !isMember(EXERCISE_IDS, exerciseId)) return null;
   let expected: string;

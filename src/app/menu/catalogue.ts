@@ -111,7 +111,7 @@ export function entryHeading(ref: EntryRef): string {
 export function runConfigOf(ref: EntryRef, settings: Settings): RunConfig {
   const { truckId } = settings;
   const { role } = ref;
-  const trailerId = couples(ref) ? settings.trailerId : runTrailer(settings, role);
+  const trailerId = couples(ref) ? settings.trailerId : runTrailer(settings);
   return ref.kind === 'exercise'
     ? { layoutId: entryOf(ref).layout, exercise: exerciseById(ref.id), truckId, trailerId, role }
     : { layoutId: ref.id, exercise: null, truckId, trailerId, role };

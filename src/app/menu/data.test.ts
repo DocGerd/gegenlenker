@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { EXERCISE_IDS } from '../../contracts/exercise';
+import { EXERCISE_IDS, ROLES } from '../../contracts/exercise';
 import { LAYOUT_IDS } from '../../contracts/layout';
+import { TRAILER_IDS } from '../../contracts/vehicle';
 import { loadSettings } from '../settings';
 import { entriesOf, nextExercise, offeredRoles, runConfigOf, SETUP_STEPS } from './catalogue';
 import { CONTENT } from './content';
@@ -44,13 +45,16 @@ describe('menu options', () => {
     }
   });
 
-  it('the driver can take the truck solo; the Einweiser keeps guiding the last trailer', () => {
-    const chosen = { ...loadSettings(null, 'en'), ...optionPatch('trailer', 'none') };
+  it('either role takes the truck solo, and a trailer again once one is picked', () => {
+    const solo = { ...loadSettings(null, 'en'), ...optionPatch('trailer', 'none') };
     const yard = { kind: 'yard', id: 'depot' } as const;
-    expect(runConfigOf({ ...yard, role: 'driver' }, chosen).trailerId).toBeNull();
-    expect(roleField('trailer', 'einweiser').choices.map((c) => c.value)).not.toContain('none');
-    expect(optionValue(chosen, 'trailer', 'einweiser')).toBe(chosen.trailerId);
-    expect(runConfigOf({ ...yard, role: 'einweiser' }, chosen).trailerId).toBe(chosen.trailerId);
+    const last = TRAILER_IDS[1];
+    const paired = { ...solo, ...optionPatch('trailer', last) };
+    for (const role of ROLES) {
+      expect(roleField('trailer', role).choices.map((c) => c.value)).toContain('none');
+      expect(runConfigOf({ ...yard, role }, solo).trailerId).toBeNull();
+      expect(runConfigOf({ ...yard, role }, paired).trailerId).toBe(last);
+    }
   });
 
   it('drives the coupling exercise with the kept trailer, solo or not, and never as the Einweiser', () => {

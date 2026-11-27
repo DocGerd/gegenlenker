@@ -13,7 +13,7 @@ import { createRunTracker, runResult } from '../scoring/score';
 import { SIM_REVISION } from '../sim/fingerprint';
 import { createReplayCursor, parseInputLog, replaySnapshots, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
-import { guidedRun, resolveRun } from './run';
+import { resolveRun } from './run';
 
 const ctl = (c: Partial<ControlVector>): ControlVector => ({
   steer: 0,
@@ -139,10 +139,14 @@ describe('run behaviour pin', () => {
   });
 });
 
-it('refuses an Einweiser run solo', () => {
+it('hashes an Einweiser run solo apart from his runs with a trailer and the driver solo', () => {
   const ids = { layoutId: 'depot', exerciseId: null, truckId: 'man-le-18-280' } as const;
-  expect(resolveRun({ ...ids, trailerId: 'krone-azw-18', role: 'einweiser' })).toBeDefined();
-  expect(() => resolveRun({ ...ids, trailerId: null, role: 'einweiser' })).toThrow();
+  const prints = [
+    resolveRun({ ...ids, trailerId: null, role: 'einweiser' }),
+    resolveRun({ ...ids, trailerId: 'krone-azw-18', role: 'einweiser' }),
+    resolveRun({ ...ids, trailerId: null, role: 'driver' }),
+  ].map((r) => r.fingerprint);
+  expect(new Set(prints).size).toBe(prints.length);
 });
 
 // His track as offsets (m, rad) from his start pose, and the signs he shows, over FIXED_LOG's controls.
@@ -167,14 +171,13 @@ const FIXED_TRACK = {
 };
 
 /** What the driver reads of him along a fixed Einweiser log: sight and readings, as a replay derives them. */
-function pinnedEinweiser(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' | 'reverse-bay') {
-  const ids = {
-    layoutId,
-    exerciseId,
-    truckId: 'man-le-18-280',
-    trailerId: 'krone-azw-18',
-  } as const;
-  const driver = guidedRun({ ...ids, role: 'driver' });
+function pinnedEinweiser(
+  layoutId: 'depot' | 'logistics',
+  exerciseId: 'slalom' | 'reverse-bay',
+  trailerId: TrailerId | null = 'krone-azw-18',
+) {
+  const ids = { layoutId, exerciseId, truckId: 'man-le-18-280', trailerId } as const;
+  const driver = resolveRun({ ...ids, role: 'driver' });
   const first = createSimulation(driver.params, driver.start, driver.contacts).snapshot();
   const base = startWalker(driver.params, first);
   const round = (v: number, scale: number): number => Math.round(v * scale) / scale;
@@ -195,7 +198,7 @@ function pinnedEinweiser(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' |
     fingerprint,
   );
   if (log?.einweiser === undefined) throw new Error('stored Einweiser log expected to load');
-  const run = guidedRun(log);
+  const run = resolveRun(log);
   expect(run.fingerprint).not.toBe(driver.fingerprint);
 
   const g = sightGeometry(run.truck, run.trailer);
@@ -266,6 +269,26 @@ describe('Einweiser run pin', () => {
           outOfSight: 0,
           signOutOfSight: 0,
           unclear: 3,
+          lateHalt: 0,
+          noAchtung: 0,
+        },
+        walkedBackwards: true,
+      },
+    });
+  });
+
+  it('logistics solo', () => {
+    expect(pinnedEinweiser('logistics', 'reverse-bay', null)).toEqual({
+      EINWEISER_REVISION: 1,
+      digest: '8ef43f78',
+      result: {
+        runOver: false,
+        faults: {
+          inPath: 0,
+          tooClose: 0,
+          outOfSight: 1,
+          signOutOfSight: 0,
+          unclear: 1,
           lateHalt: 0,
           noAchtung: 0,
         },

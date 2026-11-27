@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { guidedRun, resolveRun } from '../content/run';
+import { pairedRun, resolveRun } from '../content/run';
 import type { Obstacle } from '../contracts/layout';
 import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import { SCORING_THRESHOLDS } from '../scoring/score';
@@ -12,7 +12,7 @@ const ids = {
   trailerId: 'krone-azw-18',
   role: 'driver',
 } as const;
-const run = guidedRun(ids);
+const run = pairedRun(ids);
 const { exercise } = run;
 if (exercise === null) throw new Error('exercise expected');
 const data: RunData = {
