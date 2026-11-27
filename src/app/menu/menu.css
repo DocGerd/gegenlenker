@@ -195,7 +195,7 @@
   text-align: left;
 }
 
-.menu-item:hover:not(:disabled) {
+.menu-item:hover:not(:disabled, [aria-disabled='true']) {
   border-color: var(--color-accent);
 }
 
@@ -218,7 +218,7 @@
   font-weight: var(--weight-semibold);
 }
 
-.menu-item-primary:hover:not(:disabled) {
+.menu-item-primary:hover:not(:disabled, [aria-disabled='true']) {
   border-color: transparent;
   background: var(--color-accent-strong);
 }
@@ -233,7 +233,7 @@
 }
 
 :where(.menu-session .menu-items-entry + .menu-items-entry)
-  .menu-item-primary:hover:not(:disabled) {
+  .menu-item-primary:hover:not(:disabled, [aria-disabled='true']) {
   border-color: var(--color-accent);
   background: var(--color-surface);
 }
@@ -244,6 +244,14 @@
   background: var(--color-surface-muted);
   color: var(--color-text-muted);
   cursor: progress;
+}
+
+/* Unavailable without graphics: still focusable, so the notice is read with it. */
+.menu-item[aria-disabled='true'] {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
 }
 
 /* Language-neutral and kept out of the accessible name (empty alt text); `aria-busy` tells assistive tech. */
@@ -488,15 +496,20 @@ ol.menu-rows .menu-row {
   font-weight: var(--weight-semibold);
 }
 
-.menu-setup-start:hover:not(:disabled) {
+.menu-setup-start:hover:not(:disabled, [aria-disabled='true']) {
   background: var(--color-accent-strong);
 }
 
-.menu-setup-start:disabled {
+.menu-setup-start:disabled,
+.menu-setup-start[aria-disabled='true'] {
   border-color: var(--color-border);
   background: var(--color-surface-muted);
   color: var(--color-text-muted);
   cursor: progress;
+}
+
+.menu-setup-start[aria-disabled='true'] {
+  cursor: not-allowed;
 }
 
 /* Language-neutral and kept out of the accessible name (empty alt text); `aria-busy` tells assistive tech. */

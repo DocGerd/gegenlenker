@@ -1,7 +1,10 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { exerciseById } from '../src/content/registry';
+import { TRAILER_IDS, TRUCK_IDS } from '../src/contracts/vehicle';
 import { en } from '../src/i18n/en';
 import { exerciseEntry, openSetup, startControl, startExercise } from './menu-flow';
+import { seedStorage } from './menu-seed';
 
 test('tells the trainee up front, disables every start and loads no renderer without WebGL 2', async ({
   page,
@@ -28,14 +31,57 @@ test('tells the trainee up front, disables every start and loads no renderer wit
   await openSetup(page, en, exerciseEntry('straight-reverse'));
   const setup = page.locator('[data-screen="setup"]');
   await expect(setup.locator('[data-menu="noGraphics"]')).toHaveText(en.noWebgl);
-  await expect(startControl(page, en, exerciseEntry('straight-reverse'))).toBeDisabled();
+  // Unavailable yet focusable, with the notice as its description: Enter starts nothing.
+  const start = startControl(page, en, exerciseEntry('straight-reverse'));
+  await expect(start).toBeDisabled();
+  await expect(start).toBeFocused();
+  await expect(start).toHaveAccessibleDescription(en.noWebgl);
+  await page.keyboard.press('Enter');
+  await expect(setup).toBeVisible();
   expect(chunks).toEqual([]);
+});
+
+test('Continue and Replay stay focusable but start nothing without WebGL 2', async ({ page }) => {
+  const [truckId] = TRUCK_IDS;
+  const [trailerId] = TRAILER_IDS;
+  await seedStorage(page, {
+    settings: { lastEntry: { role: 'driver', kind: 'exercise', id: 'straight-reverse' } },
+    lastRun: {
+      layoutId: exerciseById('straight-reverse').layout,
+      exerciseId: 'straight-reverse',
+      truckId,
+      trailerId,
+    },
+  });
+  await page.addInitScript(() => {
+    const original: unknown = Reflect.get(HTMLCanvasElement.prototype, 'getContext');
+    if (typeof original !== 'function') return;
+    Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+      configurable: true,
+      value(this: HTMLCanvasElement, id: string, ...rest: unknown[]): unknown {
+        return id === 'webgl2' ? null : Reflect.apply(original, this, [id, ...rest]);
+      },
+    });
+  });
+  await page.goto('./');
+  const title = page.locator('[data-screen="title"]');
+  const resume = title.getByRole('button', { name: en.continue });
+  const replay = title.getByRole('button', { name: en.replayLastRun });
+  await expect(title.locator('[data-menu="noGraphics"]')).toHaveText(en.noWebgl);
+  for (const control of [resume, replay]) {
+    await expect(control).toBeDisabled();
+    await expect(control).toHaveAccessibleDescription(en.noWebgl);
+  }
+  await expect(resume).toBeFocused();
+  await page.keyboard.press('Enter');
+  await replay.click({ force: true });
+  await expect(title).toBeVisible();
+  await expect(page.locator('[data-screen]:not([data-screen="title"])')).toHaveCount(0);
 });
 
 test('shows no notice and keeps Start enabled when WebGL 2 is available', async ({ page }) => {
   await page.goto('./');
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
-  await page.waitForLoadState('networkidle');
   await expect(page.locator('[data-menu="noGraphics"]')).toHaveCount(0);
   await openSetup(page, en, exerciseEntry('straight-reverse'));
   await expect(startControl(page, en, exerciseEntry('straight-reverse'))).toBeEnabled();

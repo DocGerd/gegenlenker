@@ -22,7 +22,7 @@ import {
 } from '../catalogue';
 import { choiceRow } from '../choice-row';
 import { applyOption, optionValue, roleField, type ChoiceField, type OptionId } from '../options';
-import { element, screenFrame } from './frame';
+import { element, markUnavailable, noGraphicsNote, screenFrame } from './frame';
 
 export type SetupContext = {
   readonly entry: EntryRef;
@@ -154,8 +154,10 @@ export function setupScreen(ctx: SetupContext): {
   const start = element('button', 'menu-setup-start', t('start'));
   start.type = 'button';
   start.dataset['menu'] = 'start';
-  start.disabled = ctx.graphicsMissing;
+  const unavailable = ctx.graphicsMissing && last;
+  if (unavailable) markUnavailable(start);
   start.addEventListener('click', () => {
+    if (unavailable) return;
     if (!last) {
       ctx.next();
       return;
@@ -164,11 +166,7 @@ export function setupScreen(ctx: SetupContext): {
     ctx.start(start, runConfigOf(started, currentSettings()), started);
   });
   options.append(start);
-  if (ctx.graphicsMissing) {
-    const note = element('p', 'menu-note', t('noWebgl'));
-    note.dataset['menu'] = 'noGraphics';
-    options.append(note);
-  }
+  if (ctx.graphicsMissing) options.append(noGraphicsNote());
 
   layout.append(info, options);
   frame.body.append(layout);

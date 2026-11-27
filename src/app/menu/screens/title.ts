@@ -19,7 +19,7 @@ import {
 } from '../graph';
 import { labelOf, optionValue, roleField, type OptionId } from '../options';
 import { titleArt } from '../title-art';
-import { element } from './frame';
+import { element, markUnavailable, noGraphicsNote } from './frame';
 
 export type TitleContext = {
   readonly state: MenuState;
@@ -89,7 +89,7 @@ export function titleScreen(ctx: TitleContext): {
     const button = element('button', `menu-item menu-item-${tier}`);
     button.type = 'button';
     button.dataset['menu'] = item.id;
-    button.disabled = ctx.graphicsMissing && 'action' in item.target;
+    if (ctx.graphicsMissing && 'action' in item.target) markUnavailable(button);
     const label = element('span', 'menu-item-label', t(item.label));
     button.append(label);
     if (item.badgeWhen !== undefined) {
@@ -134,11 +134,7 @@ export function titleScreen(ctx: TitleContext): {
     element('h1', 'menu-title', t('appName')),
     element('p', 'menu-tagline', t('tagline')),
   );
-  if (ctx.graphicsMissing) {
-    const note = element('p', 'menu-note', t('noWebgl'));
-    note.dataset['menu'] = 'noGraphics';
-    header.append(note);
-  }
+  if (ctx.graphicsMissing) header.append(noGraphicsNote());
 
   const nav = element('nav', 'menu-nav');
   nav.setAttribute('aria-label', t('menu'));
