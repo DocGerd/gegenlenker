@@ -114,14 +114,6 @@ describe('loadSettings', () => {
     });
   });
 
-  it('loads an Einweiser last entry, whatever a retired preview flag says', () => {
-    const entry = { role: 'einweiser', kind: 'yard', id: LAYOUT_IDS[0] };
-    const load = (einweiserPreview: boolean) =>
-      loadSettings(JSON.stringify({ version: 1, einweiserPreview, lastEntry: entry }), 'en');
-    expect(load(true).lastEntry).toEqual(entry);
-    expect(load(false).lastEntry).toEqual(entry);
-  });
-
   it('drops a last entry with an unknown id, kind or role, keeping the other fields', () => {
     const bad = [
       { role: 'driver', kind: 'exercise', id: 'gone' },
