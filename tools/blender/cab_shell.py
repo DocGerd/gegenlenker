@@ -36,8 +36,9 @@ CORNER_LENGTH = 0.5  # white lower front corner wraps this far back along each s
 CORNER_HEIGHT = 0.5
 STRIPE = (0.62, 0.76)  # side stripe, above the frame top: a thin line, a gap, then the broad band
 STRIPE_LINE = (0.03, 0.02)  # thin line and gap at the stripe's foot
-# Pillar gap and length of the second side window. Estimate: gap : pane : blank = 0.47 : 0.52 : 0.21 of the front pane
-# on the THW MzKW photo, scaled to fill the 3.0 m cab behind the front pane.
+# Pillar gap and length of the second side window. Lower bounds in metres from the THW MzKW photo (perspective
+# foreshortens): gap >= 0.47, rear pane >= 0.52, blank >= 0.21 at the 0.924 m front pane; scaled uniformly to fill the
+# cab length behind the front pane.
 CREW_GLASS = (0.74, 0.82)
 ARCH = {  # angles, and inner and outer radius beyond the tyre; the crew cab's flares are wider
     "day": ((35, 145), (0.06, 0.16)),
