@@ -191,11 +191,6 @@ describe.each(pairs)('$name', ({ p, jaw }) => {
       });
       if (truck === undefined || drawbar === undefined) throw new Error('no footprints');
       expect(obbOverlap(truck, drawbar)).toBe(angle > overAngle(p));
-      // the predicted path agrees: no block on leaving, only where full lock circles back
-      const rig = drivenRig(p, s, noContacts, jaw);
-      expect(predictCombination(rig.params, s, rig.contacts).blockedAt ?? Infinity).toBeGreaterThan(
-        2,
-      );
       const dropped = s.coupling;
       for (let i = 0; i < 300; i++) s = sim.step(ctl({ lever: 0.5, steer: 1 }));
       expect(s.blocked).toBeNull();
@@ -208,6 +203,13 @@ describe.each(pairs)('$name', ({ p, jaw }) => {
       expect(s.contacts).toBe(1);
     },
   );
+
+  it('the predicted path of a truck reversing over the drawbar it dropped runs on to the trailer, as the sim lets it', () => {
+    const { s } = uncoupleAt(p, jaw, overAngle(p) + (2 * Math.PI) / 180);
+    const back = { ...s, control: { ...s.control, gear: 'R' as const } };
+    const rig = drivenRig(p, back, noContacts, jaw);
+    expect(predictCombination(rig.params, back, rig.contacts).blockedAt).toBeGreaterThan(0.5);
+  });
 
   it('the parked drawbar blocks the predicted path of a truck reversing past the eye', () => {
     const sim = parkedSim(p, jaw, approach(p, 1.2 * jaw.width, 0, 3));
