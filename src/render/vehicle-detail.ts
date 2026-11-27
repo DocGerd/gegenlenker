@@ -13,6 +13,7 @@ import {
   CAB_GAP,
   CONTOUR_STRIP as STRIP,
   MARKING_END_MARGIN as END_MARGIN,
+  RAIL_HALF_GAP,
   type RearTyreSet,
 } from './body-dims';
 import { PLATE_RELIEF, RELIEF } from './cab-dims';
@@ -56,7 +57,7 @@ const GEAR = {
   beam: { halfDepth: 0.05, below: 0.07, above: 0.03 }, // truck front axle beam about the hub height
   beamClearance: 0.08, // inboard of the drum, which yaws with the steering
   spring: { halfLength: 0.4, halfWidth: 0.04, height: 0.05 }, // trailer leaf spring on the beam
-  hanger: { halfLength: 0.03, inset: 0.08 }, // inboard of the drum
+  hanger: { halfLength: 0.03 },
 } as const;
 
 const m = (param: Param): number => param.value / 1000;
@@ -550,13 +551,13 @@ export function trailerDetail(p: TrailerDetailParams): {
   };
 }
 
-/** A leaf spring on each axle beam inboard of the drums, hung from the deck's underside at both ends. */
+/** A leaf spring on each axle beam under the rails, where every trailer shell has its main beams, hung from the underside at both ends. */
 function springHangers(c: Sink, p: TrailerDetailParams): void {
   const { spring, hanger } = GEAR;
   const xs = [...p.rearAxleXs].sort((a, b) => a - b);
   const pitch = xs.slice(1).reduce((least, x, i) => Math.min(least, x - (xs[i] ?? x)), Infinity);
   const half = Math.min(spring.halfLength, pitch / 2 - 2 * hanger.halfLength);
-  const yc = p.track / 2 - drumReach(p.radius, p.wheelWidth) - hanger.inset;
+  const yc = RAIL_HALF_GAP;
   const springTop = p.axleTop + spring.height;
   for (const x of p.rearAxleXs) {
     for (const side of [-1, 1]) {

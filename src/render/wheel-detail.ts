@@ -134,6 +134,8 @@ export function detailedWheel(o: WheelOptions): BufferGeometry[] {
       lathe([
         { r: bead, h: plane, color: rim },
         { r: R * L.dishRim, h: face, color: rim },
+        // a second point at the cap's edge keeps a silver rim from fading into the cap
+        ...(o.truck ? [] : [{ r: R * L.cap, h: face, color: rim }]),
         { r: R * L.cap, h: face, color: dark },
         { r: R * L.cap * 0.8, h: face + R * L.capHeight, color: dark },
         { r: 0, h: face + R * L.capHeight, color: dark },
