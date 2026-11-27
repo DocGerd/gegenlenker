@@ -124,6 +124,8 @@ export const en = {
   aidPath: 'Predicted path',
   aidTracks: 'Wheel tracks',
   aidGhost: 'Target ghost',
+  aidSightTop: 'Sight (top view)',
+  aidSightGround: 'Sight (own view)',
   aidLegend: 'What the aid lines mean',
   briefToggle: 'Show or hide the exercise brief',
   legendPivots: 'Center lines of truck, drawbar and trailer; the gap is the angle.',
@@ -131,6 +133,9 @@ export const en = {
     'Solid: trailer rear corners (reversing). Dashed: truck front corners (forward). Stop bar: where the held steer stops.',
   legendTracks: 'Where the wheels have been.',
   legendGhost: 'Trailer outline at the target.',
+  legendSightTop:
+    'Ground where the driver has sight contact with you: directly, or only in a mirror.',
+  legendSightGround: 'The same sight areas on the ground of your own view.',
   legendPathSolo:
     'Solid: truck rear corners (reversing). Dashed: truck front corners (forward). Stop bar: where the held steer stops.',
   legendGhostSolo: 'Truck outline at the target.',
@@ -302,6 +307,7 @@ export const en = {
   // Pause sheet hints.
   finishHint: 'Finishing scores the run as it stands and keeps the replay.',
   leaveHint: 'Leaving drops the run: no result, no replay.',
+  groundSightKeyHint: 'G switches them on or off while you walk.',
 } as const;
 
 export type MessageKey = keyof typeof en;
