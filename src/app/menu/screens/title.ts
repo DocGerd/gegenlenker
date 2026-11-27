@@ -1,4 +1,4 @@
-import type { InputLog } from '../../../contracts/exercise';
+import type { InputLog, Role } from '../../../contracts/exercise';
 import type { MessageKey } from '../../../i18n/en';
 import { t } from '../../../i18n/i18n';
 import { offlineStatus, onOfflineStatus } from '../../../pwa/offline-status';
@@ -17,7 +17,7 @@ import {
   type Item,
   type MenuState,
 } from '../graph';
-import { labelOf, OPTION_FIELDS, optionValue, type OptionId } from '../options';
+import { labelOf, optionValue, roleField, type OptionId } from '../options';
 import { titleArt } from '../title-art';
 import { element } from './frame';
 
@@ -36,29 +36,33 @@ const BADGE: Readonly<Partial<Record<ConditionId, MessageKey>>> = { hasNews: 'wh
 /** The replay entry's detail line; a night run says so, as it replays at night whatever the settings say. */
 function replayLabel(log: InputLog): string {
   const notes = [
+    // an exercise title already says Guide…/…einweisen: only a yard needs the role
+    ...(log.role === 'einweiser' && log.exerciseId === null ? [t('roleEinweiser')] : []),
     ...(log.lighting === 'night' ? [t('lightingNight')] : []),
-    ...(log.mirrorsOnly ? [t('driveViewMirrors')] : []),
+    ...(log.mirrorsOnly
+      ? [t(log.role === 'einweiser' ? 'einweiserViewNoTop' : 'driveViewMirrors')]
+      : []),
   ];
   return [replayContext(log), ...notes].join(' · ');
 }
 
-/** The chosen value's name as the setup screen shows it, without the field name. */
-function valueLabel(id: OptionId): string {
+/** The chosen value's name as the setup screen shows it to `role`, without the field name. */
+function valueLabel(id: OptionId, role: Role = 'driver'): string {
   const value = optionValue(currentSettings(), id);
-  const choice = OPTION_FIELDS[id].choices.find((c) => c.value === value);
+  const choice = roleField(id, role).choices.find((c) => c.value === value);
   return choice === undefined ? '' : labelOf(choice);
 }
 
-/** What Continue starts and the setup it starts with: all four values, defaults included. */
+/** What Continue starts and the setup it starts with: all four values, defaults included, and an Einweiser's role. */
 function continueLines({ state }: TitleContext): readonly string[] {
   const entry = continueEntry(state.lastEntry, state.done);
-  return entry === null
-    ? []
-    : [
-        entryHeading(entry),
-        `${valueLabel('truck')} · ${valueLabel('trailer')}`,
-        `${valueLabel('lighting')} · ${valueLabel('driveView')}`,
-      ];
+  if (entry === null) return [];
+  const role = entry.role === 'einweiser' && entry.kind === 'yard' ? [t('roleEinweiser')] : [];
+  return [
+    entryHeading(entry),
+    `${valueLabel('truck')} · ${valueLabel('trailer')}`,
+    [...role, valueLabel('lighting'), valueLabel('driveView', entry.role)].join(' · '),
+  ];
 }
 
 /** The detail lines under an action's label. */

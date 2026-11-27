@@ -18,6 +18,23 @@ export const en = {
   briefDockRamp: 'Reverse the trailer square up to the ramp and stop in the marked bay.',
   briefSlalom:
     'Drive the slalom forward to the marked circle, then reverse back and stop in the marked bay.',
+  guideBriefDepot: 'Guide the truck freely in the depot yard, without a target.',
+  guideBriefLogistics: 'Guide the truck freely in the logistics yard, without a target.',
+  guideStraightReverse: 'Guide straight back',
+  guideReverseBay: 'Guide into a bay',
+  guideReverseCorner: 'Guide around a corner',
+  guideDockRamp: 'Guide up to a ramp',
+  guideSlalom: 'Guide the slalom forward and back',
+  guideBriefStraightReverse:
+    'Give Attention, then guide the trailer straight back into the marked bay and give Halt.',
+  guideBriefReverseBay:
+    'Guide the trailer between the parked vehicles into the marked bay. Keep sight contact with the driver.',
+  guideBriefReverseCorner:
+    "Guide the trailer around the corner into the marked bay in the side street. Stay out of the vehicle's path.",
+  guideBriefDockRamp:
+    'Guide the trailer square up to the ramp. Give Halt early: the truck needs room to stop.',
+  guideBriefSlalom:
+    'Guide the slalom forward to the marked circle, then from behind back into the marked bay.',
   tolerance: 'Tolerance',
   exerciseDone: 'Done',
   start: 'Start',
@@ -48,6 +65,8 @@ export const en = {
   driveView: 'Driving view',
   driveViewStandard: 'With top view',
   driveViewMirrors: 'Mirrors only',
+  einweiserView: 'View',
+  einweiserViewNoTop: 'Without top view',
   role: 'Role',
   roleDriver: 'Driver',
   roleEinweiser: 'Ground guide',

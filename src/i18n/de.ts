@@ -24,6 +24,23 @@ export const de: Record<MessageKey, string> = {
     'Den Anhänger rechtwinklig an die Rampe setzen und in der markierten Bucht anhalten.',
   briefSlalom:
     'Den Slalom vorwärts bis zum markierten Kreis fahren, dann zurücksetzen und in der markierten Bucht anhalten.',
+  guideBriefDepot: 'Frei im Betriebshof einweisen, ohne Ziel.',
+  guideBriefLogistics: 'Frei im Logistikhof einweisen, ohne Ziel.',
+  guideStraightReverse: 'Gerade rückwärts einweisen',
+  guideReverseBay: 'In eine Bucht einweisen',
+  guideReverseCorner: 'Um die Ecke einweisen',
+  guideDockRamp: 'An die Rampe einweisen',
+  guideSlalom: 'Slalom vor und zurück einweisen',
+  guideBriefStraightReverse:
+    'Achtung geben, dann den Anhänger gerade rückwärts in die markierte Bucht einweisen und dort Halt geben.',
+  guideBriefReverseBay:
+    'Den Anhänger zwischen den parkenden Fahrzeugen in die markierte Bucht einweisen. Sichtkontakt halten.',
+  guideBriefReverseCorner:
+    'Den Anhänger um die Ecke in die markierte Bucht in der Seitenstraße einweisen. Nicht in den Fahrweg treten.',
+  guideBriefDockRamp:
+    'Den Anhänger rechtwinklig an die Rampe einweisen. Früh Halt geben: Der Lkw braucht Platz zum Anhalten.',
+  guideBriefSlalom:
+    'Den Slalom vorwärts bis zum markierten Kreis einweisen, dann von hinten zurück in die markierte Bucht.',
   tolerance: 'Toleranz',
   exerciseDone: 'Geschafft',
   start: 'Starten',
@@ -54,6 +71,8 @@ export const de: Record<MessageKey, string> = {
   driveView: 'Fahransicht',
   driveViewStandard: 'Mit Draufsicht',
   driveViewMirrors: 'Nur Spiegel',
+  einweiserView: 'Ansicht',
+  einweiserViewNoTop: 'Ohne Draufsicht',
   role: 'Rolle',
   roleDriver: 'Fahrer',
   roleEinweiser: 'Einweiser',

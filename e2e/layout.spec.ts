@@ -2267,7 +2267,7 @@ const longestSight = (messages: Messages): string =>
   ].reduce((a, b) => (b.length > a.length ? b : a));
 
 async function startEinweiser(page: Page, messages: Messages, mirrorsOnly: boolean): Promise<void> {
-  await seedStorage(page, { settings: { einweiserPreview: true, mirrorsOnly } });
+  await seedStorage(page, { settings: { mirrorsOnly } });
   await page.goto('./');
   await startEntry(page, messages, { ...exerciseEntry('straight-reverse'), role: 'einweiser' });
   await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();

@@ -338,7 +338,10 @@ export function startDrive(
     exercise:
       exercise === null
         ? null
-        : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
+        : {
+            title: t(EXERCISE_TITLE[role][exercise.id]),
+            brief: t(EXERCISE_BRIEF[role][exercise.id]),
+          },
     aids,
     topDown,
     chase: chaseOffered(graphics),
