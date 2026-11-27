@@ -191,12 +191,20 @@ test(
     test.setTimeout(timeoutWithSettles('balanced', 1));
     await pinnedDrive(page, 'balanced');
     const cockpit = await boxOf(page, '.hud-cockpit');
-    // Above the skyline, under the header: just right of the front mirror's frame, and just above the horizon.
+    // Under the header, just right of the front mirror's frame, down to just above the horizon; the
+    // haze is the lowest sky in that column, above whatever stands on the plots.
     const front = await boxOf(page, '[data-hud="front"]');
     const x = Math.round(front.x + front.width - cockpit.x + FRONT_FRAME_CLEAR);
-    const points = [0.14, 0.31].map((f) => [x, Math.round(cockpit.height * f)] as const);
-    const [top = [], horizon = []] = await panePixels(page, '.hud-cockpit', points);
+    const points = Array.from({ length: 18 }, (_, i) => 0.14 + i * 0.01).map(
+      (f) => [x, Math.round(cockpit.height * f)] as const,
+    );
+    const column = await panePixels(page, '.hud-cockpit', points);
+    const top = column[0] ?? [];
+    const below = column.findIndex((p) => !isSky(p));
+    const sky = below < 0 ? column : column.slice(0, below);
+    const horizon = sky.at(-1) ?? [];
     expect(isSky(top), 'sky near the top').toBe(true);
+    expect(sky.length, 'sky down towards the horizon').toBeGreaterThan(column.length / 2);
     expect(top[0] ?? 0, 'red channel: the haze is paler than the zenith').toBeLessThan(
       (horizon[0] ?? 0) - HAZE_STEP,
     );
