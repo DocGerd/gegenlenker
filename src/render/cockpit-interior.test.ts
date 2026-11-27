@@ -134,12 +134,7 @@ function shootWith<I extends CockpitInterior>(
   const { cockpit, mirrorLeft, mirrorRight, front, wideLeft, wideRight, close } = computeViewports(
     width,
     height,
-    'drive',
-    legend,
-    insets,
-    undefined,
-    null,
-    { front: true, wide: true, close: true },
+    { mode: 'drive', legend, insets, extra: { front: true, wide: true, close: true } },
   );
   if (cockpit === null || mirrorLeft === null || mirrorRight === null) throw new Error('no views');
   const pose = { x: 12, y: -7, heading };

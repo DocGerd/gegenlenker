@@ -64,17 +64,10 @@ const place = (el: HTMLElement, r: { x: number; y: number; width: number; height
   });
 };
 const relayout = (): void => {
-  const views = computeViewports(
-    stage.clientWidth,
-    stage.clientHeight,
-    params.get('view') === 'replay' ? 'replay' : 'drive',
-    null,
-    undefined,
-    undefined,
-    null,
-    undefined,
+  const views = computeViewports(stage.clientWidth, stage.clientHeight, {
+    mode: params.get('view') === 'replay' ? 'replay' : 'drive',
     role,
-  );
+  });
   place(topDownEl, views.topDown);
   cockpitEl.hidden = !views.cockpit;
   if (views.cockpit) place(cockpitEl, views.cockpit);

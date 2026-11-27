@@ -38,7 +38,7 @@ type Occluder = { readonly mesh: Mesh; readonly pose: Pose2 };
 
 function mirrorOf(id: TruckId, screen: readonly [number, number], side: 'left' | 'right') {
   const key = side === 'left' ? 'mirrorLeft' : 'mirrorRight';
-  const rect = computeViewports(screen[0], screen[1], 'drive', null, NO_INSETS)[key];
+  const rect = computeViewports(screen[0], screen[1], { mode: 'drive', insets: NO_INSETS })[key];
   if (rect === null) throw new Error(`no ${side} rectangle`);
   const mirror = createMirror();
   const position = new Vector3();

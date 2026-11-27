@@ -136,16 +136,11 @@ export async function startProbe(root: HTMLElement): Promise<void> {
     const snapshot = snapshotAt(now / 1000, centre, truckAnchor, trailerAnchor, fold);
     const frame: RenderFrame = {
       snapshot,
-      views: computeViewports(
-        width,
-        height,
-        'drive',
-        null,
-        NO_INSETS,
-        undefined,
-        null,
-        extraMirrors(DEFAULT_GRAPHICS, true),
-      ),
+      views: computeViewports(width, height, {
+        mode: 'drive',
+        insets: NO_INSETS,
+        extra: extraMirrors(DEFAULT_GRAPHICS, true),
+      }),
       topDown: 'follow',
       aids: { pivots: true, path: true, tracks: true, ghost: true },
       predicted: predictCombination(params, snapshot, noContacts),
