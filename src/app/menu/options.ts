@@ -48,6 +48,11 @@ export type ChoiceField = Pick<OptionField, 'label' | 'choices'> & { readonly id
 export const labelOf = ({ label }: Choice): string =>
   typeof label === 'string' ? t(label) : label.text;
 
+/** A line under an option's row that says what the choice costs or changes. */
+export const OPTION_HINTS: Readonly<Partial<Record<OptionId, MessageKey>>> = {
+  graphics: 'graphicsHint',
+};
+
 type SettingsPatch = Partial<Omit<Settings, 'version'>>;
 
 const LANG_NAME: Readonly<Record<Lang, MessageKey>> = { de: 'langDe', en: 'langEn' };

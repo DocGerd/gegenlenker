@@ -634,6 +634,21 @@ test('a Settings change applies at once and survives a reload', async ({ page })
   await expect(settingsRadio(page, en.theme, 'dark')).toBeChecked();
 });
 
+test('Settings explains the graphics quality and marks Controls as a drill-down row', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await titleEntry(page, en.settings).click();
+  const settings = screen(page, 'settings');
+  await expect(
+    settings.getByRole('radiogroup', { name: en.graphics, exact: true }),
+  ).toHaveAccessibleDescription(en.graphicsHint);
+  await expect(
+    settings.getByRole('radiogroup', { name: en.theme, exact: true }),
+  ).toHaveAccessibleDescription('');
+  await expect(settings.getByRole('button', { name: en.controls, exact: true })).toContainText('›');
+});
+
 test('Settings stores every change and the helpers read it back', async ({ page }) => {
   await page.goto('./');
   await chooseSetting(page, en, 'graphics', 'low');

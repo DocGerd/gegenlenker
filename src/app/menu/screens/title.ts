@@ -1,7 +1,7 @@
 import type { InputLog, Role } from '../../../contracts/exercise';
 import type { MessageKey } from '../../../i18n/en';
 import { t } from '../../../i18n/i18n';
-import { offlineStatus, onOfflineStatus } from '../../../pwa/offline-status';
+import { claimStatusDisplay, offlineStatus, onOfflineStatus } from '../../../pwa/offline-status';
 import { buildLabel } from '../../build-info';
 import { CHANNEL } from '../../channel';
 import { replayContext } from '../../exercise-text';
@@ -179,6 +179,7 @@ export function titleScreen(ctx: TitleContext): {
   };
   paintOffline();
   const stopOffline = onOfflineStatus(paintOffline);
+  const releaseStatus = claimStatusDisplay();
 
   let open = true;
   ctx
@@ -202,6 +203,7 @@ export function titleScreen(ctx: TitleContext): {
     close: () => {
       open = false;
       stopOffline();
+      releaseStatus();
     },
   };
 }
