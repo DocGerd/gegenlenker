@@ -28,9 +28,9 @@ export const en = {
   guideBriefStraightReverse:
     'Give Attention, then guide the trailer straight back into the marked bay and give Halt.',
   guideBriefReverseBay:
-    "Guide the trailer between the parked vehicles into the bay. Stay in the driver's sight.",
+    'Guide the trailer between the parked vehicles into the marked bay. Keep sight contact with the driver.',
   guideBriefReverseCorner:
-    'Guide the truck around the corner into the side street. Stay out of its path.',
+    "Guide the trailer around the corner into the marked bay in the side street. Stay out of the vehicle's path.",
   guideBriefDockRamp:
     'Guide the trailer square up to the ramp. Give Halt early: the truck needs room to stop.',
   guideBriefSlalom:
