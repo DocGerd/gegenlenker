@@ -169,8 +169,22 @@ test('the Einweiser toggles the driver sight areas on the chips, his key and the
     'graphics',
   ]);
   await expect(group(en.aidSightGround)).toHaveAccessibleDescription(en.groundSightKeyHint);
+  // both off for one drawn frame drops the old sample, so the next toggle samples anew
+  const drawnAfter = async (from: number): Promise<void> => {
+    await expect
+      .poll(async () => Number(await drive.getAttribute('data-drawn')))
+      .toBeGreaterThan(from);
+  };
+  const first = Number(await drive.getAttribute('data-drawn'));
   await group(en.aidSightTop).getByText(en.settingOff, { exact: true }).click();
+  await group(en.aidSightGround).getByText(en.settingOff, { exact: true }).click();
+  await drawnAfter(first);
+  const before = Number(await drive.getAttribute('data-drawn'));
   await group(en.aidSightGround).getByText(en.settingOn, { exact: true }).click();
+  // paused behind the sheet, the drive keeps drawing until the new sample is done; the marker is
+  // written on drawn frames only, so wait for one before reading it
+  await drawnAfter(before);
+  await expect(drive).toHaveAttribute('data-sight-pending', 'false');
   expect(await stored(page)).toMatchObject({ sight: { top: false, ground: true } });
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
