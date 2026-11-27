@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { HOLD_STEPS } from '../contracts/einweiser';
 import type { InputLog } from '../contracts/exercise';
-import { resolveRun } from '../content/run';
+import { guidedRun, resolveRun } from '../content/run';
 import { parseInputLog, serializeInputLog, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
-import { trailerById, truckById } from '../vehicles/registry';
 import { layoutOccluders, sightGeometry } from './sight';
 import { createEinweiserRun, createTrackCursor, type EinweiserInput, type TrackAt } from './track';
 import { STILL } from './walk';
@@ -19,8 +18,8 @@ const ids: RunIds = {
 
 /** Stands with arms down, then walks forward looking up and shows Achtung, then stands again. */
 function drive(steps: number) {
-  const run = resolveRun(ids);
-  const g = sightGeometry(truckById(ids.truckId), trailerById(ids.trailerId));
+  const run = guidedRun(ids);
+  const g = sightGeometry(run.truck, run.trailer);
   const sim = createSimulation(run.params, run.start, run.contacts);
   let s = sim.snapshot();
   const einweiser = createEinweiserRun({

@@ -12,7 +12,7 @@ export const EXERCISE_IDS = [
   'slalom',
 ] as const;
 export type ExerciseId = (typeof EXERCISE_IDS)[number];
-/** pose: trailer rear-end centre and trailer heading at the goal; the drawn zone extends `length` along pose.heading. */
+/** pose: rear-end centre and heading of the trailer (solo: the truck) at the goal; the drawn zone extends `length` along pose.heading. */
 export type TargetZone = {
   readonly pose: Pose2;
   readonly length: number;
@@ -42,7 +42,8 @@ export type ExerciseDefinition = {
 export type RunResult = {
   readonly exerciseId: ExerciseId;
   readonly truckId: TruckId;
-  readonly trailerId: TrailerId;
+  /** Null: the truck solo. */
+  readonly trailerId: TrailerId | null;
   readonly reached: boolean;
   /** Any aid was on while the run drove. */
   readonly assisted: boolean;
@@ -85,7 +86,8 @@ export type InputLog = {
   readonly layoutId: LayoutId;
   readonly exerciseId: ExerciseId | null;
   readonly truckId: TruckId;
-  readonly trailerId: TrailerId;
+  /** Null: the truck solo, a driver run only. */
+  readonly trailerId: TrailerId | null;
   readonly lighting: LightingMode;
   readonly mirrorsOnly: boolean;
   readonly steps: number;

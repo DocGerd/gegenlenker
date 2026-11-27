@@ -1,7 +1,7 @@
 import type { ExerciseDefinition } from '../contracts/exercise';
 import type { Obstacle } from '../contracts/layout';
 import type { Pose2 } from '../contracts/sim';
-import type { VehicleParams } from '../contracts/vehicle';
+import type { RigParams } from '../contracts/vehicle';
 import { SIM_CONSTANTS } from './constants';
 
 // Bump when simulation, collision or scoring behaviour changes, so stored runs and replays of old
@@ -13,7 +13,7 @@ export type JsonData =
   number | string | boolean | null | readonly JsonData[] | { readonly [key: string]: JsonData };
 
 export type RunData = {
-  readonly params: VehicleParams;
+  readonly params: RigParams;
   readonly obstacles: readonly Obstacle[];
   readonly start: Pose2;
   readonly exercise: ExerciseDefinition | null;

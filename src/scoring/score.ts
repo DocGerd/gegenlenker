@@ -99,7 +99,7 @@ export function runResult(
   s: SimSnapshot,
   exercise: ExerciseDefinition,
   truckId: TruckId,
-  trailerId: TrailerId,
+  trailerId: TrailerId | null,
   reached: boolean,
   waypointVisited: boolean,
   assisted: boolean,

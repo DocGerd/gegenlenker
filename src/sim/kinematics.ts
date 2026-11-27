@@ -1,5 +1,5 @@
 import type { BlockReason, Pose2, Vec2 } from '../contracts/sim';
-import type { VehicleParams } from '../contracts/vehicle';
+import { hasTrailer, type RigParams } from '../contracts/vehicle';
 import { wrapAngle } from './angle';
 
 /** Truck rear-axle centre and the truck, dolly and trailer headings. */
@@ -19,8 +19,11 @@ export type Joints = {
   readonly trailerRear: Vec2;
 };
 
-function derivative(p: VehicleParams, q: KinematicState, v: number, delta: number): KinematicState {
+function derivative(p: RigParams, q: KinematicState, v: number, delta: number): KinematicState {
   const w0 = (v * Math.tan(delta)) / p.wheelbase;
+  // solo: the trailer headings turn with the truck, so both angles stay 0
+  if (!hasTrailer(p))
+    return { x: v * Math.cos(q.th0), y: v * Math.sin(q.th0), th0: w0, th1: w0, th2: w0 };
   const phi1 = q.th0 - q.th1;
   const w1 = (v * Math.sin(phi1) - p.couplingOffset * w0 * Math.cos(phi1)) / p.drawbar;
   const v1 = v * Math.cos(phi1) + p.couplingOffset * w0 * Math.sin(phi1);
@@ -38,7 +41,7 @@ const add = (q: KinematicState, k: KinematicState, h: number): KinematicState =>
 
 /** Classical RK4 over `h` with speed `v` and road-wheel angle `delta` held. */
 export function rk4(
-  p: VehicleParams,
+  p: RigParams,
   q: KinematicState,
   v: number,
   delta: number,
@@ -62,23 +65,38 @@ export function rk4(
 export const couplingAngle = (q: KinematicState): number => wrapAngle(q.th0 - q.th1);
 export const turntableAngle = (q: KinematicState): number => wrapAngle(q.th1 - q.th2);
 
-export function pivotViolation(p: VehicleParams, q: KinematicState): BlockReason | null {
+export function pivotViolation(p: RigParams, q: KinematicState): BlockReason | null {
+  if (!hasTrailer(p)) return null;
   if (Math.abs(couplingAngle(q)) > p.couplingLimit) return 'coupling';
   if (Math.abs(turntableAngle(q)) > p.turntableLimit) return 'turntable';
   return null;
 }
 
-/** Positions are derived from the state, so the joints hold by construction. */
-export function joints(p: VehicleParams, q: KinematicState): Joints {
+/**
+ * Positions are derived from the state, so the joints hold by construction. Solo, the rear body is
+ * the truck: the dolly is the coupling at the truck's heading, the trailer the truck's rear axle, and
+ * the trailer rear its rear end.
+ */
+export function joints(p: RigParams, q: KinematicState): Joints {
   const back = (from: Vec2, length: number, heading: number): Vec2 => ({
     x: from.x - length * Math.cos(heading),
     y: from.y - length * Math.sin(heading),
   });
   const coupling = back(q, p.couplingOffset, q.th0);
+  const truck = { x: q.x, y: q.y, heading: q.th0 };
+  if (!hasTrailer(p)) {
+    return {
+      truck,
+      coupling,
+      dolly: { ...coupling, heading: q.th0 },
+      trailer: { ...truck },
+      trailerRear: back(q, p.truckRear, q.th0),
+    };
+  }
   const dolly = back(coupling, p.drawbar, q.th1);
   const trailer = back(dolly, p.trailerWheelbase, q.th2);
   return {
-    truck: { x: q.x, y: q.y, heading: q.th0 },
+    truck,
     coupling,
     dolly: { ...dolly, heading: q.th1 },
     trailer: { ...trailer, heading: q.th2 },

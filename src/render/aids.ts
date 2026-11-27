@@ -13,7 +13,7 @@ import type { ResolvedLayout } from '../contracts/layout';
 import type { RenderFrame, ScenePalette } from '../contracts/render';
 import type { Pose2, Prediction, Vec2 } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
-import { trailerAnchors } from '../vehicles/anchors';
+import { trailerAnchors, truckAnchors } from '../vehicles/anchors';
 import { placePose } from './coords';
 import { outlineGeometry } from './ground-geometry';
 import type { Look } from './look';
@@ -278,9 +278,10 @@ function stopBarEnds(
   ];
 }
 
+/** Solo (no trailer): the ghost is the truck's outline, and there are no pivots or trailer tracks. */
 export function proceduralAids(
   truck: TruckSpec,
-  trailer: TrailerSpec,
+  trailer: TrailerSpec | null,
   layout: ResolvedLayout,
   palette: ScenePalette,
 ): AidsLayer {
@@ -316,7 +317,7 @@ export function proceduralAids(
   };
   const accent = accentMaterial(false);
   const casing = material(palette.wheel, false, 1, -3);
-  // the corridor's two lines: solid behind the trailer, dashed ahead of the truck
+  // the corridor's two lines: solid behind the rear end, dashed ahead of the truck
   const solid = [0, 1].map(
     () => new CasedRibbon(PATH_CAPACITY, PATH_WIDTH, PATH_Y, accent, casing),
   );
@@ -360,9 +361,9 @@ export function proceduralAids(
   let ghost: Group | null = null;
   const { target } = layout;
   if (target !== null) {
-    const a = trailerAnchors(trailer);
+    const a = trailer === null ? truckAnchors(truck) : trailerAnchors(trailer);
     const length = a.frontX - a.rearX;
-    const width = mm(trailer.width.value);
+    const width = mm((trailer ?? truck).width.value);
     const geometry = outlineGeometry(length, width, GHOST_STRIP);
     const casingGeometry = outlineGeometry(length, width, GHOST_STRIP + 2 * CASING);
     geometries.push(geometry, casingGeometry);
@@ -379,7 +380,7 @@ export function proceduralAids(
   }
 
   const truckHalf = mm(truck.rearTrack.value) / 2;
-  const trailerHalf = mm(trailer.track.value) / 2;
+  const trailerHalf = trailer === null ? null : mm(trailer.track.value) / 2;
   const history = new TrackHistory(4, TRACK_CAPACITY, TRACK_SPACING, TRACK_JUMP);
   let pivotSlot = 0;
 
@@ -414,8 +415,10 @@ export function proceduralAids(
       history.observe(s.step);
       sampleWheel(0, s.truck, truckHalf);
       sampleWheel(1, s.truck, -truckHalf);
-      sampleWheel(2, s.trailer, trailerHalf);
-      sampleWheel(3, s.trailer, -trailerHalf);
+      if (trailerHalf !== null) {
+        sampleWheel(2, s.trailer, trailerHalf);
+        sampleWheel(3, s.trailer, -trailerHalf);
+      }
       for (let i = 0; i < tracks.length; i++) {
         const t = tracks[i];
         if (t === undefined) continue;
@@ -453,8 +456,8 @@ export function proceduralAids(
         stopBar.flush(1);
       }
 
-      pivots.object.visible = aids.pivots;
-      if (aids.pivots) {
+      pivots.object.visible = aids.pivots && trailer !== null;
+      if (pivots.object.visible) {
         // rearward centre lines of the two bodies at each pivot; the angle between them is the pivot angle
         pivotSlot = 0;
         ray(s.coupling.x, s.coupling.y, s.truck.heading);

@@ -74,7 +74,7 @@ Stop inside the marked bay within tolerance to reach the target; a vehicle still
 
 On the setup screen of an exercise or yard:
 
-- Truck, Trailer: the vehicle pair. Some dimensions are estimates, see [vehicle data](vehicle-data.md).
+- Truck, Trailer: the vehicle pair. "No trailer" drives the truck solo in every exercise and yard: the target takes the truck's rear end, the ghost shows the truck, and there is no angle display. The Einweiser always guides a truck with its trailer: with "No trailer" chosen, his runs take the last trailer chosen. Some dimensions are estimates, see [vehicle data](vehicle-data.md).
 - Time of day: Day or Night. Night turns the lights on at the start.
 - Driving view: "With top view" or "Mirrors only".
 
@@ -105,7 +105,7 @@ Unknown values fall back to the defaults.
 Choices and results are kept in the browser's `localStorage`. There are no accounts and the app sends no data anywhere. If storage is blocked or full, they last only for the session. The offline cache holds the app's own files only.
 
 - `gegenlenker.settings.v1`: the settings above and the entry of the last drive started, which Continue offers. A malformed value falls back field by field.
-- `gegenlenker.best.v2`: best results per exercise, vehicle pair, aid use, lighting and driving view. Entries driven on vehicle or exercise data that has since changed are dropped.
+- `gegenlenker.best.v2`: best results per exercise, vehicle pair (or truck solo), aid use, lighting and driving view. Entries driven on vehicle or exercise data that has since changed are dropped.
 - `gegenlenker.lastRun.v1`: the input log of the last drive, for replay. Dropped when the data it was driven on changed.
 - `gegenlenker.whatsNewSeen.v1`: which "What's new" entries were opened, for the "New" badge.
 

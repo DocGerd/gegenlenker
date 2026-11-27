@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SignId } from '../contracts/einweiser';
 import type { RunResult } from '../contracts/exercise';
 import type { ControlVector } from '../contracts/sim';
+import type { TrailerId } from '../contracts/vehicle';
 import { EINWEISER_REVISION } from '../einweiser/fingerprint';
 import { layoutOccluders, sightGeometry } from '../einweiser/sight';
 import { createReader, perceive } from '../einweiser/signs';
@@ -12,8 +13,7 @@ import { createRunTracker, runResult } from '../scoring/score';
 import { SIM_REVISION } from '../sim/fingerprint';
 import { createReplayCursor, parseInputLog, replaySnapshots, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
-import { trailerById, truckById } from '../vehicles/registry';
-import { resolveRun } from './run';
+import { guidedRun, resolveRun } from './run';
 
 const ctl = (c: Partial<ControlVector>): ControlVector => ({
   steer: 0,
@@ -46,13 +46,12 @@ const fnv = (text: string): string => {
   return (hash >>> 0).toString(16).padStart(8, '0');
 };
 
-function pinned(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' | 'reverse-bay') {
-  const ids = {
-    layoutId,
-    exerciseId,
-    truckId: 'man-le-18-280',
-    trailerId: 'krone-azw-18',
-  } as const;
+function pinned(
+  layoutId: 'depot' | 'logistics',
+  exerciseId: 'slalom' | 'reverse-bay',
+  trailerId: TrailerId | null = 'krone-azw-18',
+) {
+  const ids = { layoutId, exerciseId, truckId: 'man-le-18-280', trailerId } as const;
   const fingerprint = (i: RunIds): string => resolveRun(i).fingerprint;
   const stored = { ...FIXED_LOG, ...ids, fingerprint: fingerprint({ ...ids, role: 'driver' }) };
   const log = parseInputLog(JSON.stringify(stored), fingerprint);
@@ -98,6 +97,19 @@ describe('run behaviour pin', () => {
       digest: 'cc0d1eb2',
     });
   });
+
+  it('logistics solo', () => {
+    expect(pinned('logistics', 'reverse-bay', null)).toEqual({
+      SIM_REVISION: 2,
+      digest: 'ffb5087d',
+    });
+  });
+});
+
+it('refuses an Einweiser run solo', () => {
+  const ids = { layoutId: 'depot', exerciseId: null, truckId: 'man-le-18-280' } as const;
+  expect(resolveRun({ ...ids, trailerId: 'krone-azw-18', role: 'einweiser' })).toBeDefined();
+  expect(() => resolveRun({ ...ids, trailerId: null, role: 'einweiser' })).toThrow();
 });
 
 // His track as offsets (m, rad) from his start pose, and the signs he shows, over FIXED_LOG's controls.
@@ -129,7 +141,7 @@ function pinnedEinweiser(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' |
     truckId: 'man-le-18-280',
     trailerId: 'krone-azw-18',
   } as const;
-  const driver = resolveRun({ ...ids, role: 'driver' });
+  const driver = guidedRun({ ...ids, role: 'driver' });
   const first = createSimulation(driver.params, driver.start, driver.contacts).snapshot();
   const base = startWalker(driver.params, first);
   const round = (v: number, scale: number): number => Math.round(v * scale) / scale;
@@ -150,10 +162,10 @@ function pinnedEinweiser(layoutId: 'depot' | 'logistics', exerciseId: 'slalom' |
     fingerprint,
   );
   if (log?.einweiser === undefined) throw new Error('stored Einweiser log expected to load');
-  const run = resolveRun(log);
+  const run = guidedRun(log);
   expect(run.fingerprint).not.toBe(driver.fingerprint);
 
-  const g = sightGeometry(truckById(log.truckId), trailerById(log.trailerId));
+  const g = sightGeometry(run.truck, run.trailer);
   const occluders = layoutOccluders(run.layout);
   const sim = createSimulation(run.params, run.start, run.contacts);
   const snapshots = [sim.snapshot(), ...replaySnapshots(log, sim)];

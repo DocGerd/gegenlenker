@@ -401,6 +401,21 @@ describe('best results', () => {
     expect(recordBest(assisted.best, result({ time: 40 })).previous?.time).toBe(30);
   });
 
+  it('ranks solo runs apart and stores them', () => {
+    const soloKey = bestKey('reverse-bay', 'man-le-18-280', null, false, 'day', false);
+    expect(soloKey).toBe('reverse-bay/man-le-18-280/solo/unaided');
+    const combination = recordBest({}, result({ time: 30 })).best;
+    const solo = recordBest(combination, result({ trailerId: null, time: 50 }));
+    expect(solo.isNewBest).toBe(true);
+    expect(solo.previous).toBeNull();
+    expect(solo.best[KEY]?.time).toBe(30);
+    expect(solo.best[soloKey]?.time).toBe(50);
+    const fingerprint = (): string => 'f';
+    expect(parseBestResults(serializeBestResults(solo.best, fingerprint), fingerprint)).toEqual(
+      solo.best,
+    );
+  });
+
   it('ranks night runs apart and leaves day keys unsuffixed', () => {
     expect(KEY).toBe('reverse-bay/man-le-18-280/krone-azw-18/unaided');
     const nightKey = bestKey('reverse-bay', 'man-le-18-280', 'krone-azw-18', false, 'night', false);

@@ -10,17 +10,19 @@ import { wrapAngle } from '../sim/angle';
 import { bodyFootprints } from '../sim/geometry';
 import { createSimulation } from '../sim/simulation';
 import { targetError, WAYPOINT_RADIUS } from '../scoring/score';
-import type { VehicleParams } from '../contracts/vehicle';
-import { resolveCombination } from '../vehicles/resolve';
+import { hasTrailer, type RigParams } from '../contracts/vehicle';
+import { resolveCombination, resolveRig } from '../vehicles/resolve';
 import { trailers, trucks } from '../vehicles/registry';
 import { BARRIER_X, LANE } from './exercises/slalom';
 import { exercises, layouts } from './registry';
 import { resolveLayout } from './resolve-layout';
 import { resolveRun } from './run';
 
-const pairs = trucks.flatMap((truck) =>
-  trailers.map((trailer) => [truck.id, trailer.id, truck, trailer] as const),
-);
+/** Every truck with each trailer, and solo. */
+const pairs = trucks.flatMap((truck) => [
+  ...trailers.map((trailer) => [truck.id, trailer.id, truck, trailer] as const),
+  [truck.id, null, truck, null] as const,
+]);
 
 const cases = [
   ...Object.values(layouts).map((l) => ({
@@ -90,7 +92,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
   it.each(pairs)(
     '%s + %s starts clear and drives forward and backward',
     (truckId, trailerId, truck, trailer) => {
-      const params = resolveCombination(truck, trailer);
+      const params = resolveRig(truck, trailer);
       const query = createContactQuery(resolved.obstacles);
       const begin = resolveRun({ ...ids, truckId, trailerId, role: 'driver' }).start;
       for (const gear of ['D', 'R'] as const) {
@@ -138,7 +140,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
     it.each(pairs)(
       '%s + %s does not start inside the target tolerance',
       (truckId, trailerId, truck, trailer) => {
-        const params = resolveCombination(truck, trailer);
+        const params = resolveRig(truck, trailer);
         const begin = resolveRun({ ...ids, truckId, trailerId, role: 'driver' }).start;
         const sim = createSimulation(params, begin, createContactQuery([]));
         const e = targetError(sim.snapshot(), target);
@@ -156,14 +158,15 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
     it.each(pairs)(
       '%s + %s reaches the reverse-run origin by driving out of the target',
       (_t, _tr, truck, trailer) => {
-        const params = resolveCombination(truck, trailer);
+        const params = resolveRig(truck, trailer);
         const query = createContactQuery(resolved.obstacles);
         const h = target.pose.heading;
-        const reach =
-          params.trailerRearOverhang +
-          params.trailerWheelbase +
-          params.drawbar +
-          params.couplingOffset;
+        const reach = hasTrailer(params)
+          ? params.trailerRearOverhang +
+            params.trailerWheelbase +
+            params.drawbar +
+            params.couplingOffset
+          : params.truckRear;
         const sim = createSimulation(
           params,
           {
@@ -188,7 +191,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
       it.each(pairs)(
         '%s + %s drives forward from the start to the waypoint',
         (truckId, trailerId, truck, trailer) => {
-          const params = resolveCombination(truck, trailer);
+          const params = resolveRig(truck, trailer);
           const sim = createSimulation(
             params,
             resolveRun({ ...ids, truckId, trailerId, role: 'driver' }).start,
@@ -206,7 +209,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
 /** Drives forward along `route`; arrival is within `radius` of its end, and of `heading` if given. */
 function follow(
   sim: Simulation,
-  params: VehicleParams,
+  params: RigParams,
   waypoints: readonly Vec2[],
   radius: number,
   heading: number | null,

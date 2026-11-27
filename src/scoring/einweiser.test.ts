@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { exerciseById } from '../content/registry';
-import { resolveRun } from '../content/run';
+import { guidedRun } from '../content/run';
 import { HOLD_STEPS, type EinweiserResult, type SignId } from '../contracts/einweiser';
 import type { SimSnapshot } from '../contracts/sim';
 import { layoutOccluders, sightGeometry } from '../einweiser/sight';
@@ -9,7 +9,6 @@ import { createEinweiserRun } from '../einweiser/track';
 import { STILL, type Walker, type WalkKeys } from '../einweiser/walk';
 import { createInputRecorder, replaySnapshots, type RunIds } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
-import { trailerById, truckById } from '../vehicles/registry';
 import {
   createEinweiserReplay,
   createEinweiserTracker,
@@ -41,8 +40,8 @@ const read = ({ before, held, moved, sign, inSight, reading }: EinweiserFacts) =
 });
 
 const scene = (ids: RunIds) => {
-  const run = resolveRun(ids);
-  const g = sightGeometry(truckById(ids.truckId), trailerById(ids.trailerId));
+  const run = guidedRun(ids);
+  const g = sightGeometry(run.truck, run.trailer);
   return { run, g, occluders: layoutOccluders(run.layout), contacts: run.contacts };
 };
 

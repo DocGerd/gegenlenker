@@ -2,10 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { EXERCISE_IDS } from '../../contracts/exercise';
 import { LAYOUT_IDS } from '../../contracts/layout';
 import { loadSettings } from '../settings';
-import { entriesOf, SETUP_STEPS } from './catalogue';
+import { entriesOf, runConfigOf, SETUP_STEPS } from './catalogue';
 import { CONTENT } from './content';
 import { GRAPH, screenOf, shownItems, type MenuState, type ScreenId } from './graph';
-import { OPTION_FIELDS, optionPatch, optionValue, pauseFields, type OptionId } from './options';
+import {
+  OPTION_FIELDS,
+  optionPatch,
+  optionValue,
+  pauseFields,
+  roleField,
+  type OptionId,
+} from './options';
 
 const OPTION_IDS = Object.keys(OPTION_FIELDS) as OptionId[];
 
@@ -35,6 +42,15 @@ describe('menu options', () => {
       }
       expect(optionPatch(id, 'nonsense')).toBeNull();
     }
+  });
+
+  it('the driver can take the truck solo; the Einweiser keeps guiding the last trailer', () => {
+    const chosen = { ...loadSettings(null, 'en'), ...optionPatch('trailer', 'none') };
+    const yard = { kind: 'yard', id: 'depot' } as const;
+    expect(runConfigOf({ ...yard, role: 'driver' }, chosen).trailerId).toBeNull();
+    expect(roleField('trailer', 'einweiser').choices.map((c) => c.value)).not.toContain('none');
+    expect(optionValue(chosen, 'trailer', 'einweiser')).toBe(chosen.trailerId);
+    expect(runConfigOf({ ...yard, role: 'einweiser' }, chosen).trailerId).toBe(chosen.trailerId);
   });
 
   it('options apply where the spec says', () => {

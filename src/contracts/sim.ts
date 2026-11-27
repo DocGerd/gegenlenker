@@ -30,6 +30,7 @@ export type StartState = {
   readonly couplingAngle?: number;
   readonly turntableAngle?: number;
 };
+/** Solo, `dolly`, `trailer` and `trailerRear` describe the truck as the rear body (`joints`) and both angles stay 0. */
 export type SimSnapshot = {
   readonly step: number;
   readonly time: number;
@@ -66,7 +67,7 @@ export type InputChange = { readonly step: number; readonly control: ControlVect
  * together, so `left[k]` and `right[k]` lie on one cross-section. They stop where the simulation would block.
  */
 export type Prediction = {
-  /** The trailer's rear when reversing, the truck's front when driving forward; null when nothing is predicted. */
+  /** The rear end when reversing (the trailer's, solo the truck's), the truck's front when driving forward; null when nothing is predicted. */
   readonly lead: 'trailer' | 'truck' | null;
   readonly left: readonly Vec2[];
   readonly right: readonly Vec2[];

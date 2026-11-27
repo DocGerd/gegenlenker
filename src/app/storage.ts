@@ -5,6 +5,7 @@ import {
   parseBestResults,
   recordBest,
   serializeBestResults,
+  SOLO_KEY,
   type ResultIds,
 } from '../scoring/best';
 import { MAX_REPLAY_STEPS, parseInputLog, serializeInputLog, type RunIds } from '../sim/replay';
@@ -67,7 +68,7 @@ const fingerprints = new Map<string, string>();
 
 /** Resolves the ids as drive and replay do, so a stored run matches only the data it was driven on. */
 function runFingerprint(ids: RunIds): string {
-  const key = `${ids.role}/${ids.layoutId}/${ids.exerciseId}/${ids.truckId}/${ids.trailerId}`;
+  const key = `${ids.role}/${ids.layoutId}/${ids.exerciseId}/${ids.truckId}/${ids.trailerId ?? SOLO_KEY}`;
   let fingerprint = fingerprints.get(key);
   if (fingerprint === undefined) {
     fingerprint = resolveRun(ids).fingerprint;

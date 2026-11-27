@@ -22,7 +22,6 @@ import { DT } from '../sim/constants';
 import { NO_PREDICTION } from '../sim/predict';
 import { createReplayCursor, type ReplayCursor } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
-import { trailerById, truckById } from '../vehicles/registry';
 import { chaseViewAvailable } from '../render';
 import { replayContext } from './exercise-text';
 import { mountRenderStage } from './render-stage';
@@ -92,7 +91,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
     onExit();
     return () => undefined;
   }
-  const { params, layout, exercise, start, contacts } = resolveRun(log);
+  const { params, layout, exercise, start, contacts, truck, trailer } = resolveRun(log);
   const makeSim = (): Simulation => createSimulation(params, start, contacts);
 
   // Scrubbing back rebuilds the run from step 0 across frames; the sim is deterministic, so it lands on the played state.
@@ -104,11 +103,12 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   // One pass over the log finds the marked moments; it runs across frames after the first paint.
   const scanner = createEventScanner(
     exercise,
-    log.einweiser === undefined
+    // an Einweiser log always has a trailer (`parseInputLog`)
+    log.einweiser === undefined || trailer === null
       ? null
       : createEinweiserReplay(
           {
-            g: sightGeometry(truckById(log.truckId), trailerById(log.trailerId)),
+            g: sightGeometry(truck, trailer),
             occluders: layoutOccluders(layout),
             contacts,
           },
@@ -152,7 +152,7 @@ export function startReplay(root: HTMLElement, log: InputLog, onExit: () => void
   setNightDrive(log.lighting === 'night');
   cleanups.push(() => setNightDrive(false));
   const { renderer } = view;
-  renderer.setScene(layout, truckById(log.truckId), trailerById(log.trailerId));
+  renderer.setScene(layout, truck, trailer);
 
   let playing = true;
   let speed = DEFAULT_SPEED;

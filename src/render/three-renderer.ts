@@ -81,10 +81,11 @@ const SKY_HEIGHT = 200;
 type Built = {
   readonly layout: ResolvedLayout;
   readonly truckSpec: TruckSpec;
-  readonly trailerSpec: TrailerSpec;
+  /** Null: the truck solo. */
+  readonly trailerSpec: TrailerSpec | null;
   readonly scene: Scene;
   readonly truck: VehicleVisual;
-  readonly trailer: VehicleVisual;
+  readonly trailer: VehicleVisual | null;
   readonly environment: Environment;
   readonly aids: AidsLayer;
   readonly interior: CockpitInterior;
@@ -343,7 +344,7 @@ export function createThreeSceneRenderer(
     b.environment.setLook(look);
     b.aids.setLook(look);
     b.truck.setLook(look);
-    b.trailer.setLook(look);
+    b.trailer?.setLook(look);
     b.interior.setLook(look);
     b.arms.setLook(look);
     for (const { mirror } of mirrors) mirror.invalidate();
@@ -353,7 +354,7 @@ export function createThreeSceneRenderer(
   function disposeBuilt(keep?: AidsLayer): void {
     if (built === null) return;
     built.truck.dispose();
-    built.trailer.dispose();
+    built.trailer?.dispose();
     built.environment.dispose();
     if (built.aids !== keep) built.aids.dispose();
     built.interior.dispose();
@@ -365,7 +366,7 @@ export function createThreeSceneRenderer(
   function build(
     nextLayout: ResolvedLayout,
     truck: TruckSpec,
-    trailer: TrailerSpec,
+    trailer: TrailerSpec | null,
     palette: ScenePalette,
     kept?: AidsLayer,
   ): void {
@@ -375,20 +376,17 @@ export function createThreeSceneRenderer(
       if (isShadowCamera(camera)) shadowPasses++;
     };
     const truckVisual = parts.truck(truck, palette);
-    const trailerVisual = parts.trailer(trailer, palette);
+    const trailerVisual = trailer === null ? null : parts.trailer(trailer, palette);
     const environment = parts.environment(nextLayout, palette);
     const aids = kept ?? parts.aids(truck, trailer, nextLayout, palette);
     const interior = parts.interior(truck, palette);
     const arms = createEinweiserArms();
     const extent = combinationExtent(truck, trailer);
     setAidsLayer(aids.object);
-    scene.add(
-      environment.object,
-      truckVisual.object,
-      trailerVisual.object,
-      aids.object,
-      arms.object,
-    );
+    // the scene order of a combination is kept: its lights' order is part of every program
+    const vehicles = [truckVisual.object];
+    if (trailerVisual !== null) vehicles.push(trailerVisual.object);
+    scene.add(environment.object, ...vehicles, aids.object, arms.object);
     (interior.frame === 'truck' ? truckVisual.object : scene).add(interior.object);
     built = {
       layout: nextLayout,
@@ -626,7 +624,7 @@ export function createThreeSceneRenderer(
       const { snapshot, views } = frame;
       const sky = b.palette.sky;
       b.truck.update(snapshot, frame.lamps);
-      b.trailer.update(snapshot, frame.lamps);
+      b.trailer?.update(snapshot, frame.lamps);
       shadowPasses = 0;
       b.environment.update(frame, {
         ...vehicleCentre(snapshot, b.anchors.frontX),

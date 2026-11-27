@@ -7,7 +7,7 @@ import type {
   SimSnapshot,
   StartState,
 } from '../contracts/sim';
-import type { VehicleParams } from '../contracts/vehicle';
+import { hasTrailer, type RigParams } from '../contracts/vehicle';
 import { wrapAngle } from './angle';
 import { ACCEL, BRAKE_DECEL, DECEL, DT, EVENT_CLEAR_DISTANCE, V_MAX } from './constants';
 import { SELF_OBSTACLE_ID } from './collision';
@@ -58,18 +58,20 @@ function easesPivot(reason: BlockReason, next: KinematicState, q: KinematicState
 }
 
 export function createSimulation(
-  params: VehicleParams,
+  params: RigParams,
   start: StartState,
   contacts: ContactQuery,
 ): Simulation {
   const th0 = wrapAngle(start.truck.heading);
-  const th1 = wrapAngle(th0 - (start.couplingAngle ?? 0));
+  // solo: no trailer to bend, and its headings stay the truck's
+  const solo = !hasTrailer(params);
+  const th1 = solo ? th0 : wrapAngle(th0 - (start.couplingAngle ?? 0));
   let q: KinematicState = {
     x: start.truck.x,
     y: start.truck.y,
     th0,
     th1,
-    th2: wrapAngle(th1 - (start.turntableAngle ?? 0)),
+    th2: solo ? th0 : wrapAngle(th1 - (start.turntableAngle ?? 0)),
   };
   let control = NEUTRAL;
   let steer = 0;

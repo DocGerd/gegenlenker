@@ -21,7 +21,7 @@ import type {
 import type { TrailerId, TruckId, VehicleParams } from '../contracts/vehicle';
 import { BARRIER_X, LANE } from '../content/exercises/slalom';
 import { exerciseById } from '../content/registry';
-import { resolveRun } from '../content/run';
+import { guidedRun } from '../content/run';
 import { wrapAngle } from '../sim/angle';
 import { ACCEL, BRAKE_DECEL, DECEL, DT, V_MAX } from '../sim/constants';
 import { createContactQuery } from '../sim/collision';
@@ -1177,7 +1177,7 @@ export function runGate(
   const legsFor = LEGS[exerciseId];
   if (!legsFor) throw new Error(`no gate legs for ${exerciseId}`);
   const exercise = exerciseById(exerciseId);
-  const run = resolveRun({
+  const run = guidedRun({
     layoutId: exercise.layout,
     exerciseId,
     truckId,
