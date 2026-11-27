@@ -17,6 +17,21 @@ export function setOfflineStatus(next: OfflineStatus): void {
 /** Whether the app shell is cached, whatever the preset's own assets. */
 export const precached = (): boolean => status === 'ready' || status === 'incomplete';
 
+let footers = 0;
+
+/** A screen that shows the status itself claims it; the returned function releases the claim. */
+export function claimStatusDisplay(): () => void {
+  footers++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    footers--;
+  };
+}
+
+export const statusDisplayed = (): boolean => footers > 0;
+
 /** Returns the unsubscribe. */
 export function onOfflineStatus(listener: () => void): () => void {
   listeners.add(listener);

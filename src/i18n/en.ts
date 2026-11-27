@@ -188,7 +188,7 @@ export const en = {
   offlineReady: 'Ready offline',
   offlineSetupFailed: 'Offline use could not be set up. Reload to retry.',
   offlineIncomplete:
-    'Not yet offline-ready for this graphics quality. Start a drive while online to finish.',
+    'Not yet offline-ready for this graphics quality. Go online and reload to finish.',
   dismiss: 'Dismiss',
   noWebgl: 'This device cannot show WebGL 2 graphics.',
   contextLost: 'The graphics stopped and could not restart. Reload to continue.',
