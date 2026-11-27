@@ -1,4 +1,4 @@
-// Imported by playwright.config.ts and e2e/perf/tablet-emulation.ts: no runtime imports, no enums.
+// Shared by the Playwright config and the perf harness: no runtime imports, no enums.
 
 export const WSL_LIB = '/usr/lib/wsl/lib';
 

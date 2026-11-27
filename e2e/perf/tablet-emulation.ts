@@ -578,7 +578,7 @@ async function main(): Promise<boolean> {
   if (isSoftwareGl(renderer)) {
     if (!opts.allowSoftware) {
       throw new Error(
-        `no hardware GL (${renderer}): results would be invalid; --allow-software overrides`,
+        `no hardware GL (${renderer}): results would be invalid; on WSL2 check the user is in the render group (active after wsl --shutdown); --allow-software overrides`,
       );
     }
     console.warn('warning: software GL, results are not valid');
