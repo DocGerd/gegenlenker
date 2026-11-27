@@ -26,6 +26,7 @@ import type { Ahead } from '../sim/predict';
 import { createGauge, type Gauge } from './gauges';
 import { SIGHT_CUE_KEY, sightCue, type SightCue } from './sight-cue';
 import { signPictogram } from './sign-pictogram';
+import { createSplitDivider } from './split-divider';
 import './hud.css';
 
 export type HudAction =
@@ -228,9 +229,6 @@ const FREE_CAMERA_ICON =
 
 const SPLIT_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM14 5v14" /></svg>';
-/** Key steps move the divider by this share of the screen. */
-const SPLIT_STEP = 0.02;
-const percent = (share: number): number => Math.round(share * 100);
 
 const FOLD_ICON =
   '<svg class="hud-fold" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
@@ -732,176 +730,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   });
 
   const split = query(hud, 'split', HTMLElement);
-  const splitHandle = query(hud, 'splitHandle', HTMLElement);
   const splitReset = query(hud, 'splitReset', HTMLButtonElement);
-  splitHandle.setAttribute('aria-label', t('viewSize'));
-  splitReset.title = `${t('resetViewSize')} (L)`;
-  splitReset.setAttribute('aria-label', t('resetViewSize'));
+  const divider = createSplitDivider(
+    { root, split, handle: query(hud, 'splitHandle', HTMLElement), reset: splitReset },
+    { emit, signal },
+  );
   let splitState: TopDownSplit | null = null;
   let hasCockpit = false;
-  type Drag = {
-    pointer: number;
-    orientation: Orientation;
-    /** Pointer position along the drag axis, at the start and latest. */
-    start: number;
-    current: number;
-    /** The share when the drag began, and the last one proposed. */
-    share: number;
-    sent: number;
-    frame: number | null;
-  };
-  let drag: Drag | null = null;
-  let keyDirty = false;
-  const proposeSplit = (orientation: Orientation, share: number, commit: boolean): void =>
-    emit({ type: 'split', orientation, share, commit });
-  const clampShare = (share: number): number =>
-    splitState === null ? share : Math.min(splitState.max, Math.max(splitState.min, share));
-  const along = (e: PointerEvent, orientation: Orientation): number =>
-    orientation === 'landscape' ? e.clientX : e.clientY;
-
-  /** Ends the drag without a result: the share goes back to where it began, and nothing is stored. */
-  const cancelDrag = (): void => {
-    const d = drag;
-    if (d === null) return;
-    drag = null;
-    if (d.frame !== null) cancelAnimationFrame(d.frame);
-    try {
-      if (splitHandle.hasPointerCapture(d.pointer)) splitHandle.releasePointerCapture(d.pointer);
-    } catch {
-      // The pointer is already gone.
-    }
-    splitHandle.blur();
-    // Not inline: this can run inside a layout, which a proposal would re-enter.
-    if (d.sent !== d.share) queueMicrotask(() => proposeSplit(d.orientation, d.share, false));
-  };
-  /** The replay's full-screen pane has no divider, and a screen whose range is a single percent has nothing to drag. */
-  const syncSplitHidden = (): void => {
-    const hide =
-      !hasCockpit || splitState === null || percent(splitState.max) <= percent(splitState.min);
-    setHidden(split, hide);
-    if (hide) cancelDrag();
-  };
-  /** One proposal per frame, however many moves came in. */
-  const proposeDrag = (d: Drag): void => {
-    d.frame = null;
-    const extent = d.orientation === 'landscape' ? root.clientWidth : root.clientHeight;
-    const moved = d.orientation === 'landscape' ? d.start - d.current : d.current - d.start;
-    const next = clampShare(d.share + moved / extent);
-    if (next === d.sent) return;
-    d.sent = next;
-    proposeSplit(d.orientation, next, false);
-  };
-  splitHandle.addEventListener(
-    'pointerdown',
-    (e) => {
-      if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) {
-        // No focus from a right-click or a second finger: a focused divider would keep the arrow keys from steering.
-        e.preventDefault();
-        return;
-      }
-      if (splitState === null || drag !== null) return;
-      try {
-        splitHandle.setPointerCapture(e.pointerId);
-      } catch {
-        return;
-      }
-      const { orientation, share } = splitState;
-      const start = along(e, orientation);
-      drag = {
-        pointer: e.pointerId,
-        orientation,
-        start,
-        current: start,
-        share,
-        sent: share,
-        frame: null,
-      };
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'mousedown',
-    (e) => {
-      if (e.button !== 0) e.preventDefault();
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'pointermove',
-    (e) => {
-      const d = drag;
-      if (d === null || e.pointerId !== d.pointer) return;
-      d.current = along(e, d.orientation);
-      d.frame ??= requestAnimationFrame(() => proposeDrag(d));
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'pointerup',
-    (e) => {
-      // A pointer-focused divider would keep the arrow keys from steering.
-      splitHandle.blur();
-      const d = drag;
-      if (d === null || e.pointerId !== d.pointer) return;
-      drag = null;
-      if (d.frame !== null) cancelAnimationFrame(d.frame);
-      d.current = along(e, d.orientation);
-      proposeDrag(d);
-      // Only a drag that moved the divider is worth storing.
-      if (d.sent !== d.share) proposeSplit(d.orientation, d.sent, true);
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'pointercancel',
-    (e) => {
-      splitHandle.blur();
-      if (e.pointerId === drag?.pointer) cancelDrag();
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'lostpointercapture',
-    (e) => {
-      if (e.pointerId === drag?.pointer) cancelDrag();
-    },
-    { signal },
-  );
-  /** Stores where a burst of key presses ended; the repeats of a held key only move the divider. */
-  const commitKeys = (): void => {
-    if (!keyDirty || splitState === null) return;
-    keyDirty = false;
-    proposeSplit(splitState.orientation, splitState.share, true);
-  };
-  splitHandle.addEventListener(
-    'keydown',
-    (e) => {
-      if (splitState === null || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === 'Escape') {
-        splitHandle.blur();
-        return;
-      }
-      const { share, min, max, orientation } = splitState;
-      const landscape = orientation === 'landscape';
-      let next: number | null = null;
-      if (e.key === (landscape ? 'ArrowLeft' : 'ArrowDown')) next = share + SPLIT_STEP;
-      else if (e.key === (landscape ? 'ArrowRight' : 'ArrowUp')) next = share - SPLIT_STEP;
-      else if (e.key === 'Home') next = min;
-      else if (e.key === 'End') next = max;
-      // The other axis's arrows stay with the steering and the lever.
-      if (next === null) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const clamped = clampShare(next);
-      if (clamped === share) return;
-      keyDirty = e.repeat;
-      proposeSplit(orientation, clamped, !e.repeat);
-    },
-    { signal },
-  );
-  splitHandle.addEventListener('keyup', commitKeys, { signal });
-  splitHandle.addEventListener('blur', commitKeys, { signal });
-  splitReset.addEventListener('click', () => emit({ type: 'splitReset' }), { signal });
 
   const keyboardLike = matchMedia('(hover: hover) and (pointer: fine)');
   let typed = false;
@@ -1150,7 +985,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
       if (hasTopDown(views)) syncToolbarReserve();
       hasCockpit = c !== null;
-      syncSplitHidden();
+      divider.set(splitState, hasCockpit);
       // After the reserves, which narrow the toolbar.
       if (hasTopDown(views)) {
         syncSegmentRows();
@@ -1174,21 +1009,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       }
     },
     setSplit(next) {
-      if (drag !== null && drag.orientation !== next.orientation) cancelDrag();
       splitState = next;
-      syncSplitHidden();
-      const vertical = next.orientation === 'landscape';
-      splitHandle.setAttribute(
-        'aria-keyshortcuts',
-        vertical ? 'ArrowLeft ArrowRight Home End' : 'ArrowUp ArrowDown Home End',
-      );
-      splitHandle.setAttribute('aria-orientation', vertical ? 'vertical' : 'horizontal');
-      splitHandle.setAttribute('aria-valuemin', String(percent(next.min)));
-      splitHandle.setAttribute('aria-valuemax', String(percent(next.max)));
-      splitHandle.setAttribute('aria-valuenow', String(percent(next.share)));
-      splitHandle.setAttribute('aria-valuetext', `${percent(next.share)} %`);
-      const atDefault = Math.abs(next.share - next.fallback) < 1e-4;
-      if (splitReset.disabled !== atDefault) splitReset.disabled = atDefault;
+      divider.set(next, hasCockpit);
     },
     panelsBottom(paneWidth) {
       syncShortScreen();
@@ -1283,7 +1105,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       listeners.push(cb);
     },
     dispose() {
-      if (drag?.frame != null) cancelAnimationFrame(drag.frame);
+      divider.dispose();
       for (const timer of bumps.values()) clearTimeout(timer);
       abort.abort();
       hud.remove();
