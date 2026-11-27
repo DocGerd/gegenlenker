@@ -6,6 +6,10 @@ import { startEntry, yardEntry } from './menu-flow';
 import { seedStorage } from './menu-seed';
 import { SETTINGS_KEY } from './pinned-shoot';
 
+// The default headless shell doubles the frame interval on every frame while the pointer is locked,
+// even on a bare page, so the pointer-lock test timed out; the new headless mode keeps the frame rate.
+test.use({ channel: 'chromium' });
+
 const einweiser = { ...yardEntry('depot'), role: 'einweiser' } as const;
 const sheet = (page: Page) => page.getByRole('dialog', { name: en.paused });
 const surface = (page: Page) => page.locator('.drive-surface');

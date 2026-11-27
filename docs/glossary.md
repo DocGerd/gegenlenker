@@ -43,7 +43,7 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Controls group for the keys and wheel rows      | keyboard and mouse                          | Tastatur und Maus                            |
 | Controls group for the pointer controls         | touch and mouse                             | Touch und Maus                               |
 | Round control that steers                       | steering wheel                              | Lenkrad                                      |
-| Slider that sets the share of the speed cap     | speed lever                                 | Hebel                                        |
+| Lever that sets the share of the speed cap      | speed lever                                 | Hebel                                        |
 | Gear and lamp controls on the touchscreen       | buttons                                     | Schaltflächen                                |
 | Split of the screen into cockpit and top view   | view size                                   | Ansichtsgröße                                |
 | Legend: reset both view and view size           | reset view / size                           | Standardansicht                              |
@@ -77,6 +77,8 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Sign 8: right arm moved sideways                | move right                                  | Rechts fahren                                |
 | Sign 9: palms brought together                  | closing distance                            | Abstandsverringerung                         |
 | No sign key held: arms down                     | no signal                                   | Kein Zeichen                                 |
+| Steering value read by a screen reader: side    | left / right                                | links / rechts                               |
+| Steering value read by a screen reader: centre  | straight                                    | geradeaus                                    |
 | Driver sees the Einweiser                       | sight contact (direct / in mirror / none)   | Sichtkontakt (direkt / im Spiegel / kein)    |
 | Sight cue: class II / IV mirror                 | main / wide-angle mirror                    | Hauptspiegel / Weitwinkelspiegel             |
 | Sight cue: class V / VI mirror                  | close-proximity / front mirror              | Rampenspiegel / Frontspiegel                 |
