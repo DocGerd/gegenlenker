@@ -211,8 +211,12 @@ export function startDrive(
   // Before the view input and the HUD, whose keys and clicks it takes first.
   if (einweiser !== null) {
     live.push(
-      einweiser.attach(view.surface, () => {
-        if (sheet === null) togglePause();
+      einweiser.attach(view.surface, {
+        view: () => frame.views.cockpit,
+        onLockChange(locked) {
+          hud.setMouseLocked(locked);
+          if (!locked && sheet === null) togglePause();
+        },
       }),
     );
   }

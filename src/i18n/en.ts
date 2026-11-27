@@ -285,6 +285,7 @@ export const en = {
   walk: 'Walk',
   jog: 'Jog',
   mouseLook: 'Look around (click to start)',
+  lockHint: 'P or Esc releases the mouse',
   signKeys: 'Hand signal (hold)',
   signLeftRight: 'Move left / right',
   signMouse: 'Come here / Move away',

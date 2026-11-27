@@ -291,6 +291,7 @@ export const de: Record<MessageKey, string> = {
   walk: 'Gehen',
   jog: 'Laufen',
   mouseLook: 'Umsehen (Klick zum Starten)',
+  lockHint: 'P oder Esc gibt die Maus frei',
   signKeys: 'Handzeichen (halten)',
   signLeftRight: 'Links / Rechts fahren',
   signMouse: 'Herkommen / Entfernen',

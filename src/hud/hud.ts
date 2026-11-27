@@ -72,6 +72,8 @@ export type Hud = {
   setGoal(cue: GoalCue): void;
   /** The sign he shows and how the driver sees him; a no-op in the driver's role. Null before the first sim step. */
   setEinweiser(state: EinweiserHud | null): void;
+  /** Whether his mouse look holds the pointer lock, which says how to release it; a no-op in the driver's role. */
+  setMouseLocked(locked: boolean): void;
   onAction(cb: (a: HudAction) => void): void;
   dispose(): void;
 };
@@ -269,7 +271,7 @@ const EYE_ICON =
 
 /** One slot per sign in the keys' order, 1 to 9. */
 const signBar = (): string =>
-  `<div class="hud-sign-name" data-hud="signName"></div><ol class="hud-sign-bar" data-hud="signBar" aria-label="${t('signBar')}">${SIGN_IDS.map(
+  `<div class="hud-sign-side"><div class="hud-sign-name" data-hud="signName"></div><div class="hud-lock-hint" data-hud="lockHint" data-i18n="lockHint" hidden></div></div><ol class="hud-sign-bar" data-hud="signBar" aria-label="${t('signBar')}">${SIGN_IDS.map(
     (sign, i) =>
       `<li class="hud-sign" data-sign="${sign}"><span class="hud-sign-key mono">${i + 1}</span>${signPictogram(sign)}<span class="hud-sign-label" data-i18n="${SIGN_NAME[sign]}"></span></li>`,
   ).join('')}</ol>`;
@@ -407,6 +409,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const sightBox = hud.querySelector<HTMLElement>('[data-hud="sight"]');
   const sightText = hud.querySelector<HTMLElement>('[data-hud="sightText"]');
   const signName = hud.querySelector<HTMLElement>('[data-hud="signName"]');
+  const lockHint = hud.querySelector<HTMLElement>('[data-hud="lockHint"]');
   const signSlots = [...hud.querySelectorAll<HTMLElement>('[data-sign]')];
   const action = query(hud, 'action', HTMLElement);
   const goalCue = query(hud, 'goalCue', HTMLElement);
@@ -1108,6 +1111,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       if (cue === null) return;
       sightText.textContent = t(SIGHT_CUE_KEY[cue]);
       sightBox.dataset['sight'] = cue === 'none' || cue === 'unclear' ? cue : 'seen';
+    },
+    setMouseLocked(locked) {
+      if (lockHint !== null) setHidden(lockHint, !locked);
     },
     onAction(cb) {
       listeners.push(cb);
