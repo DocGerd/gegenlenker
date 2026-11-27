@@ -121,7 +121,7 @@ Nothing is misread. A sign the driver cannot read is unclear: it waits, or stops
   - `walkStep` only clips his own motion and never pushes him out of a body, so a body that moves into him overlaps him and counts as a run-over (§4).
 - Look (`src/input/pointer-lock.ts`, `src/input/walk-input.ts`):
   - `canvas.requestPointerLock({ unadjustedMovement: true })` on a click; on `NotSupportedError` (Chrome on Linux) retry without options; guard the non-promise return.
-  - State comes from `pointerlockchange`/`pointerlockerror`. Losing the lock (Esc, blur, tab switch) opens the pause sheet; resuming takes a click (no auto re-lock; browsers refuse quick re-locks). The sim already freezes while the sheet is open (`advanceClock`, `src/app/drive.ts`).
+  - State comes from `pointerlockchange`/`pointerlockerror`. Releasing the lock with `P` (hinted while locked, no legend row) or losing it (Esc, blur, tab switch) opens the pause sheet; resuming takes a click (no auto re-lock; browsers refuse quick re-locks). The sim already freezes while the sheet is open (`advanceClock`, `src/app/drive.ts`).
   - The first `mousemove` after lock is dropped, single deltas above 300 px (estimate) are clamped, deltas are summed per frame and ignored while unlocked.
   - Yaw/pitch at 0.05°/count (estimate; a raw count with `unadjustedMovement`), pitch clamped to ±85°, no roll, no smoothing, no head bob, no FOV kick.
 - Settings (call): choice rows "Mausempfindlichkeit" (Niedrig/Mittel/Hoch = 0.025/0.05/0.1°/count, estimates on the cited cm/360 scale) and "Maus invertieren" (Aus default/An). Decided (owner): an FOV slider (§3.2). Head bob is not offered.

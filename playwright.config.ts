@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
+import { WSL_LIB, wslGpuLaunch } from './e2e/gpu-launch';
 import { previewPort } from './e2e/preview-port';
 import { WEBGPU_LAUNCH } from './e2e/webgpu-launch';
 
@@ -10,9 +11,7 @@ const UAT_BUILD = 'DEPLOY_CHANNEL=uat BASE_PATH=/gegenlenker/uat/ pnpm build --o
 const url = `http://127.0.0.1:${port}/gegenlenker/`;
 
 // Browsers are headless unless `HEADED=1`: a headed window grabs focus on the desktop (WSLg shows it there).
-// Opt-in `E2E_GPU=1` (WSL2 + NVIDIA) asks for the real GPU via Mesa d3d12. Headless Chromium got no GPU
-// without access to the DRM render node, so it needs `HEADED=1` on a machine like that.
-const WSL_LIB = '/usr/lib/wsl/lib';
+// Opt-in `E2E_GPU=1` (WSL2 + NVIDIA) asks for the real GPU via Mesa d3d12 (`e2e/gpu-launch.ts`), headless too.
 const HEADED = process.env['HEADED'] === '1';
 const GPU = process.env['E2E_GPU'] === '1';
 if (GPU && !existsSync(WSL_LIB))
@@ -21,21 +20,17 @@ if (GPU && !existsSync(WSL_LIB))
 const newHeadless = HEADED ? {} : { channel: 'chromium' as const };
 const GPU_TEXT_METRICS =
   /below 700 px the brief collapses|open overlays stay whole.* 800x600 with a mouse|opening the aid legend re-measures/;
+const wslGpu = existsSync(WSL_LIB) ? wslGpuLaunch(HEADED) : { args: [], env: process.env };
 const gpuLaunch = {
   ...newHeadless,
   args: [
-    '--use-gl=angle',
-    '--use-angle=gl',
+    ...wslGpu.args,
     '--ignore-gpu-blocklist',
     '--enable-gpu',
     '--hide-scrollbars',
     ...(HEADED ? ['--window-position=-32000,-32000', '--no-startup-window'] : []),
   ],
-  env: {
-    ...process.env,
-    GALLIUM_DRIVER: 'd3d12',
-    LD_LIBRARY_PATH: [WSL_LIB, process.env['LD_LIBRARY_PATH']].filter(Boolean).join(':'),
-  },
+  env: wslGpu.env,
 };
 
 export default defineConfig<{ gpuExpected: boolean }>({

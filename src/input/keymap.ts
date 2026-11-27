@@ -41,6 +41,7 @@ export type Action =
   | 'walkLeft'
   | 'walkRight'
   | 'jog'
+  | 'releaseMouse'
   | 'signAchtung'
   | 'signHalt'
   | 'signHaltGefahr'
@@ -183,6 +184,7 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     scope: 'walk',
     legend: { term: { key: 'keyShift' }, desc: 'jog', roles: EINWEISER },
   },
+  { action: 'releaseMouse', match: { by: 'code', values: ['KeyP'] }, scope: 'walk' },
   { legend: { term: { key: 'keyMouse' }, desc: 'mouseLook', roles: EINWEISER } },
   {
     action: 'signAchtung',

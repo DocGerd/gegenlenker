@@ -1143,8 +1143,19 @@
     calc(var(--space-1) + var(--safe-bottom)) calc(var(--space-4) + var(--safe-left));
 }
 
-.hud-sign-name {
+.hud-sign-side {
   align-self: center;
+  min-width: 0;
+}
+
+.hud-lock-hint {
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  color: var(--color-text-secondary);
+}
+
+.hud-sign-name {
   font-size: var(--text-md);
   line-height: var(--leading-sm);
   font-weight: var(--weight-semibold);
