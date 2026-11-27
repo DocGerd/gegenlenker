@@ -789,6 +789,11 @@
   .hud-gauge svg {
     width: 84px;
   }
+
+  /* The eyebrow tracking would break "Turntable" mid-word at the narrowest width. */
+  .hud-gauge .hud-label {
+    letter-spacing: 0.04em;
+  }
 }
 
 .hud-arc,

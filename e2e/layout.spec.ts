@@ -1220,6 +1220,7 @@ for (const size of [
 for (const { locale, messages } of locales) {
   for (const size of [
     { width: 800, height: 585 },
+    { width: 800, height: 720 },
     { width: 900, height: 600 },
     { width: 1024, height: 600 },
     { width: 1280, height: 585 },
