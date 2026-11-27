@@ -25,6 +25,7 @@ import { LAYOUT_IDS } from '../contracts/layout';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
 import type { EntryRef } from './menu/catalogue';
+import type { SightFlags } from '../render/scene-renderer';
 import { SETTINGS_KEY, writeText } from './storage';
 
 export type Settings = {
@@ -36,6 +37,8 @@ export type Settings = {
   /** The driver takes the truck without a trailer; `trailerId` stays for the Einweiser, who guides a combination. */
   readonly solo: boolean;
   readonly aids: AidFlags;
+  /** The Einweiser's sight areas: in the top view, and on the ground of his first-person view. */
+  readonly sight: SightFlags;
   readonly topDown: DrivingView;
   readonly topDownLayout: TopDownLayout;
   readonly collapsed: CollapsedPanels;
@@ -54,6 +57,7 @@ export type Settings = {
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
+export const NO_SIGHT: SightFlags = { top: false, ground: false };
 const DEFAULT_COLLAPSED: CollapsedPanels = { aids: false, gauges: false, keys: false };
 const LANGS: readonly Lang[] = ['de', 'en'];
 const THEMES: readonly Settings['theme'][] = ['system', 'light', 'dark'];
@@ -102,6 +106,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
   }
   const s = isRecord(data) && data['version'] === 1 ? data : {};
   const aids = isRecord(s['aids']) ? s['aids'] : {};
+  const sight = isRecord(s['sight']) ? s['sight'] : {};
   const collapsed = isRecord(s['collapsed']) ? s['collapsed'] : {};
   const layout = isRecord(s['topDownLayout']) ? s['topDownLayout'] : {};
   return {
@@ -116,6 +121,10 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
       path: flag(aids['path'], DEFAULT_AIDS.path),
       tracks: flag(aids['tracks'], DEFAULT_AIDS.tracks),
       ghost: flag(aids['ghost'], DEFAULT_AIDS.ghost),
+    },
+    sight: {
+      top: flag(sight['top'], NO_SIGHT.top),
+      ground: flag(sight['ground'], NO_SIGHT.ground),
     },
     topDown: pick(TOP_DOWN, s['topDown'], 'follow'),
     topDownLayout: {

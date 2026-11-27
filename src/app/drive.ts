@@ -15,8 +15,10 @@ import {
 import { hasTrailer, type TrailerId, type TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
 import { t } from '../i18n/i18n';
+import type { MessageKey } from '../i18n/en';
 import { createControls } from '../input/controls';
-import { isAction } from '../input/keymap';
+import { isFormField } from '../input/keyboard';
+import { actionFor, isAction } from '../input/keymap';
 import { createViewInput } from '../input/view-input';
 import { isDefaultView } from '../input/top-down-view';
 import {
@@ -26,6 +28,7 @@ import {
   lookAroundAvailable,
 } from '../render';
 import { arrowClearRect, clearRect, targetArrow } from '../render/follow-framing';
+import type { SightFlags } from '../render/scene-renderer';
 import { mountPerfOverlay, perfRequested } from '../render/perf-overlay';
 import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
@@ -39,12 +42,12 @@ import { createSimulation } from '../sim/simulation';
 import { measureChrome, measureDivider } from './chrome';
 import { startEinweiserDrive } from './einweiser-drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
-import { pauseFields } from './menu/options';
+import { OFF_ON_CHOICES, OPTION_FIELDS, pauseFields, type OptionId } from './menu/options';
+import { showPauseSheet, type PauseRow, type PauseSheet } from './pause-sheet';
 import { createRunStepper } from './run-stepper';
-import { showPauseSheet, type PauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
-import { currentSettings, updateSettings, type Settings } from './settings';
+import { currentSettings, NO_SIGHT, updateSettings, type Settings } from './settings';
 
 export type RunConfig = {
   readonly layoutId: LayoutId;
@@ -70,6 +73,7 @@ const EXPOSE_FRAMING = new URLSearchParams(location.search).get('framing') === '
 /** The truck solo has no angle display, whatever the setting says. */
 const anyAid = (a: AidFlags, solo: boolean): boolean =>
   (a.pivots && !solo) || a.path || a.tracks || a.ghost;
+const anySight = (s: SightFlags): boolean => s.top || s.ground;
 /** Every aid draws in the top-down view only, so a mirror-only run has none, whatever the settings. */
 const NO_AIDS: AidFlags = { pivots: false, path: false, tracks: false, ghost: false };
 
@@ -181,7 +185,7 @@ export function startDrive(
       restart,
       finish,
       leave: exercise === null ? null : leaveUnscored,
-      fields: pauseFields(role),
+      fields: pauseRows(),
       settingChanged: (id) => {
         if (id === 'graphics') switchGraphics(currentSettings().graphics);
         // the field of view is the first-person camera's: redraw while the run stands still
@@ -252,6 +256,10 @@ export function startDrive(
 
   const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
   let aids: AidFlags = mirrorsOnly ? NO_AIDS : settings.aids;
+  // his alone; the driver's views draw none. Kept as stored: without a top view its pair is not drawn.
+  let sight = einweiser === null ? NO_SIGHT : settings.sight;
+  let shownSight: SightFlags = { top: sight.top && !mirrorsOnly, ground: sight.ground };
+  renderer.setSightCones(shownSight);
   let collapsed = settings.collapsed;
   let topDownLayout = settings.topDownLayout;
   let savedLayout = topDownLayout;
@@ -332,6 +340,7 @@ export function startDrive(
             brief: t(EXERCISE_BRIEF[role][exercise.id]),
           },
     aids,
+    sight,
     topDown,
     chase: chaseOffered(graphics),
     interior: interiorAvailable(graphics),
@@ -342,6 +351,48 @@ export function startDrive(
     ...(controls === null ? {} : { pedalsBox: () => controls.pedalsBox() }),
   });
   cleanups.push(() => hud.dispose());
+
+  /** For the chips, the pause sheet and the key alike. */
+  const setSight = (flag: keyof SightFlags, on: boolean): void => {
+    sight = { ...sight, [flag]: on };
+    shownSight = { top: sight.top && !mirrorsOnly, ground: sight.ground };
+    renderer.setSightCones(shownSight);
+    hud.setSight(sight);
+    dirty = true;
+    updateSettings({ sight });
+  };
+  /** His own rows after his look settings; the top view's only where there is one. */
+  const pauseRows = (): readonly (OptionId | PauseRow)[] => {
+    const fields = pauseFields(role);
+    if (einweiser === null) return fields;
+    const row = (flag: keyof SightFlags, hint?: MessageKey): PauseRow => ({
+      field: {
+        id: flag === 'top' ? 'sightTop' : 'sightGround',
+        label: flag === 'top' ? 'aidSightTop' : 'aidSightGround',
+        choices: OFF_ON_CHOICES,
+      },
+      value: () => (sight[flag] ? 'on' : 'off'),
+      change: (value) => setSight(flag, value === 'on'),
+      ...(hint === undefined ? {} : { hint }),
+    });
+    const look = (id: OptionId): boolean => OPTION_FIELDS[id].group === 'einweiser';
+    return [
+      ...fields.filter(look),
+      ...(mirrorsOnly ? [] : [row('top')]),
+      row('ground', 'groundSightKeyHint'),
+      ...fields.filter((id) => !look(id)),
+    ];
+  };
+  if (einweiser !== null) {
+    // after the walk input's listener, which claims every walk key: so not checked for defaultPrevented
+    const onSightKey = (e: KeyboardEvent): void => {
+      if (sheet !== null || e.repeat || isFormField(e.target)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || actionFor('walk', e) !== 'groundSight') return;
+      setSight('ground', !sight.ground);
+    };
+    window.addEventListener('keydown', onSightKey);
+    live.push(() => window.removeEventListener('keydown', onSightKey));
+  }
 
   /** Chrome moves with the layout and with collapsing panels; the vehicle is framed in what it leaves free. */
   let arrowRects: { clear: Rect; place: Rect } | null = null;
@@ -364,7 +415,7 @@ export function startDrive(
           x: target.pose.x + (Math.cos(target.pose.heading) * target.length) / 2,
           y: target.pose.y + (Math.sin(target.pose.heading) * target.length) / 2,
         };
-  /** Test observable (`?framing=1`), beside `drawn` (frames drawn) and `head`: the screen box of the drawn vehicle and the sim step it shows. */
+  /** Test observable (`?framing=1`), beside `drawn` (frames drawn), `head` and `sightPending`: the screen box of the drawn vehicle and the sim step it shows. */
   const exposeVehicleBox = (): void => {
     const xs: number[] = [];
     const ys: number[] = [];
@@ -500,6 +551,8 @@ export function startDrive(
       collapsed = { ...collapsed, [action.panel]: action.collapsed };
       updateSettings({ collapsed });
       arrange();
+    } else if (action.type === 'sight') {
+      setSight(action.flag, action.on);
     } else if (action.type === 'aid') {
       aids = { ...aids, [action.aid]: action.on };
       dirty = true;
@@ -531,8 +584,13 @@ export function startDrive(
       viewInput.step(seconds);
       const clock = sheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
-      snapshot = stepper.advance(clock.steps, source, anyAid(aids, trailer === null));
-      if (clock.steps === 0 && !dirty) {
+      snapshot = stepper.advance(
+        clock.steps,
+        source,
+        anyAid(aids, trailer === null) || anySight(shownSight),
+      );
+      // a sight sample under way needs frames to finish, paused or not
+      if (clock.steps === 0 && !dirty && !renderer.sightPending()) {
         renderer.skipFrame();
         return;
       }
@@ -575,6 +633,7 @@ export function startDrive(
       if (EXPOSE_FRAMING) {
         exposeVehicleBox();
         stage.dataset['drawn'] = String(drawn);
+        stage.dataset['sightPending'] = String(renderer.sightPending());
         if (visual !== null) stage.dataset['einweiser'] = JSON.stringify(visual);
       }
     },

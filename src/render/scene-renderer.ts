@@ -8,6 +8,9 @@ import type {
 import type { ResolvedLayout } from '../contracts/layout';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 
+/** The Einweiser's sight areas, drawn in the top-down view and on the ground of his first-person view; off for the driver. */
+export type SightFlags = { readonly top: boolean; readonly ground: boolean };
+
 export interface SceneRenderer {
   /**
    * Rejects with a `GraphicsStartError` when no GPU context can be made on `canvas` or a later call
@@ -26,6 +29,10 @@ export interface SceneRenderer {
   setQuality(preset: GraphicsPreset): void;
   /** Applies at once, to the current scene and to every later one. */
   setLighting(mode: LightingMode): void;
+  /** Applies at once, to the current scene and to every later one; drawn in Einweiser runs only, `top` only with a top view. */
+  setSightCones(flags: SightFlags): void;
+  /** Whether the sight areas are still being sampled: skipping frames would leave them unfinished. */
+  sightPending(): boolean;
   resize(cssWidth: number, cssHeight: number): void;
   render(frame: RenderFrame): void;
   /** The outside view's camera as of the last render, to start a free camera from; null while it was not drawn. */
