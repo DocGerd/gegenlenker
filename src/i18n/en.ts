@@ -225,6 +225,17 @@ export const en = {
   signRechts: 'Move right',
   signAbstand: 'Closing distance',
   signNone: 'No signal',
+  creditAnd: 'and',
+  creditKindKitTile: 'Yard-kit tile',
+  creditKindKitLeaves: 'Yard-kit leaves',
+  creditKindSky: 'Sky',
+  creditKindYardConcrete: 'Yard concrete',
+  creditKindStreetAsphalt: 'Street asphalt',
+  creditKindPavers: 'Pavement pavers',
+  creditRoleProcessing: 'processing',
+  creditRolePhotography: 'photography',
+  creditRoleOriginal: 'original',
+  creditRoleSkyEdits: 'sky edits',
 } as const;
 
 export type MessageKey = keyof typeof en;
