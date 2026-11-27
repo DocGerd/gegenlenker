@@ -132,7 +132,7 @@ describe.each(rigs)('signs for $name', ({ truck, trailer }) => {
     expect(jackknifes).toBe(0);
   });
 
-  // the combination's reverse law has its own tests; solo it is the forward law reversed
+  // solo only: from these stations the combination's driver loses sight of him before it straightens
   if (trailer === null) {
     it('Herkommen after Rechts from behind straightens the truck', () => {
       const mark = { curve: Number.NaN, straight: false, heading: 0, travelled: 0 };
