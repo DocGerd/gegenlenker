@@ -587,7 +587,15 @@ function evaluate(v: Variant, w: number, h: number): void {
   const m = metricsAt(w, h, insets);
   const panels = panelsOf(v);
   const run = (legend: LegendBox | null, extra: ExtraMirrors): ViewRects =>
-    computeViewports(w, h, v.mode, legend, insets, v.layout, panels, extra, v.role);
+    computeViewports(w, h, {
+      mode: v.mode,
+      legend,
+      insets,
+      layout: v.layout,
+      panels,
+      extra,
+      role: v.role,
+    });
 
   const first = run(null, v.extra);
   const legend = legendFor(v, first, w, h, m);
@@ -715,7 +723,12 @@ function evaluate(v: Variant, w: number, h: number): void {
   }
 
   /* the split */
-  const split: TopDownSplit = topDownSplit(w, h, v.layout, legend?.box ?? null, insets, panels);
+  const split: TopDownSplit = topDownSplit(w, h, {
+    layout: v.layout,
+    legend: legend?.box ?? null,
+    insets,
+    panels,
+  });
   const limits = TOP_DOWN_SHARE_LIMITS[orientationOf(w, h)];
   if (!mirrorsOnly) {
     const within =

@@ -47,7 +47,7 @@ describe('computeViewports mirrors', () => {
   it('stay inside the cockpit and above the controls at every size', () => {
     for (let w = 320; w <= 2000; w += 20) {
       for (let h = 320; h <= 2000; h += 20) {
-        const { cockpit, mirrorLeft, mirrorRight } = computeViewports(w, h, 'drive');
+        const { cockpit, mirrorLeft, mirrorRight } = computeViewports(w, h, { mode: 'drive' });
         if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
           throw new Error('drive mode has mirrors');
         }
@@ -80,9 +80,9 @@ describe('computeViewports in the Einweiser role', () => {
   ];
   it.each(sizes)('splits as the driver does and draws no mirror at %ix%i', (w, h) => {
     for (const mode of ['drive', 'mirrors'] as const) {
-      const driver = computeViewports(w, h, mode, null, NO_INSETS, undefined, null, every);
+      const driver = computeViewports(w, h, { mode, insets: NO_INSETS, extra: every });
       expect(
-        computeViewports(w, h, mode, null, NO_INSETS, undefined, null, every, 'einweiser'),
+        computeViewports(w, h, { mode, insets: NO_INSETS, extra: every, role: 'einweiser' }),
         mode,
       ).toEqual({
         cockpit: driver.cockpit,
@@ -101,17 +101,12 @@ describe('computeViewports in the Einweiser role', () => {
     const count = { beside: 0, below: 0 };
     for (const [w, h] of [...sizes, [1024, 600], [600, 900]] as const) {
       for (const mode of ['drive', 'mirrors'] as const) {
-        const views = computeViewports(
-          w,
-          h,
+        const views = computeViewports(w, h, {
           mode,
-          null,
-          NO_INSETS,
-          undefined,
-          null,
-          every,
-          'einweiser',
-        );
+          insets: NO_INSETS,
+          extra: every,
+          role: 'einweiser',
+        });
         const { cockpit } = views;
         if (cockpit === null) throw new Error('the Einweiser has a view');
         const column = messageColumn(views, null, NO_INSETS);
@@ -131,33 +126,23 @@ describe('computeViewports in the Einweiser role', () => {
 
   it('sends the messages to the top view where the key legend leaves them no room in his view', () => {
     const tall: LegendBox = { right: 600, height: 700 };
-    const views = computeViewports(
-      620,
-      774,
-      'drive',
-      null,
-      NO_INSETS,
-      undefined,
-      null,
-      every,
-      'einweiser',
-    );
+    const views = computeViewports(620, 774, {
+      mode: 'drive',
+      insets: NO_INSETS,
+      extra: every,
+      role: 'einweiser',
+    });
     const { topDown } = views;
     const column = messageColumn(views, tall, NO_INSETS);
     expect(column.y + column.height).toBe(topDown.y + topDown.height);
     expect(column.cueYields).toBe(false);
     // without the top view, the goal cue yields
-    const bare = computeViewports(
-      620,
-      774,
-      'mirrors',
-      null,
-      NO_INSETS,
-      undefined,
-      null,
-      every,
-      'einweiser',
-    );
+    const bare = computeViewports(620, 774, {
+      mode: 'mirrors',
+      insets: NO_INSETS,
+      extra: every,
+      role: 'einweiser',
+    });
     expect(messageColumn(bare, tall, NO_INSETS).cueYields).toBe(true);
   });
 });
@@ -166,12 +151,12 @@ describe('computeViewports key legend', () => {
   it('keeps the mirrors above a legend that reaches under them', () => {
     for (let w = 320; w <= 2000; w += 20) {
       for (let h = 320; h <= 2000; h += 20) {
-        const { cockpit } = computeViewports(w, h, 'drive');
+        const { cockpit } = computeViewports(w, h, { mode: 'drive' });
         if (cockpit === null) throw new Error('drive mode has a cockpit');
         for (const right of [cockpit.x + 300, cockpit.x + cockpit.width - 40]) {
           const legend = { right, height: 260 };
           // The legend starts right of the left mirror, so only the right one can sit over it.
-          const { mirrorRight: m } = computeViewports(w, h, 'drive', legend);
+          const { mirrorRight: m } = computeViewports(w, h, { mode: 'drive', legend });
           if (m === null) throw new Error('drive mode has mirrors');
           if (m.x < legend.right && m.height > MIN_SQUEEZED_HEIGHT) {
             expect(m.y + m.height, `${w}x${h} legend to ${right}`).toBeLessThanOrEqual(
@@ -184,9 +169,9 @@ describe('computeViewports key legend', () => {
   });
 
   it('leaves the mirrors alone when the legend ends before them', () => {
-    const base = computeViewports(1280, 720, 'drive');
+    const base = computeViewports(1280, 720, { mode: 'drive' });
     const legend = { right: (base.mirrorRight?.x ?? 0) - 1, height: 260 };
-    expect(computeViewports(1280, 720, 'drive', legend)).toEqual(base);
+    expect(computeViewports(1280, 720, { mode: 'drive', legend })).toEqual(base);
   });
 });
 
@@ -201,7 +186,10 @@ describe('computeViewports safe-area insets', () => {
       [768, 1024],
       [800, 820],
     ] as const) {
-      const { cockpit, mirrorLeft, mirrorRight } = computeViewports(w, h, 'drive', null, insets);
+      const { cockpit, mirrorLeft, mirrorRight } = computeViewports(w, h, {
+        mode: 'drive',
+        insets,
+      });
       if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
         throw new Error('drive mode has mirrors');
       }
@@ -220,7 +208,7 @@ describe('computeViewports safe-area insets', () => {
 
   it('shrink class II below the minimum height rather than reach its frame into the inset controls', () => {
     const [w, h] = [800, 801];
-    const { mirrorLeft, mirrorRight } = computeViewports(w, h, 'drive', null, insets);
+    const { mirrorLeft, mirrorRight } = computeViewports(w, h, { mode: 'drive', insets });
     for (const m of [mirrorLeft, mirrorRight]) {
       if (m === null) throw new Error('drive mode has mirrors');
       expect(m.height).toBeLessThan(MIN_MIRROR_HEIGHT);
@@ -232,8 +220,8 @@ describe('computeViewports safe-area insets', () => {
 
   it('match the plain layout when there are none', () => {
     const none = { top: 0, right: 0, bottom: 0, left: 0 };
-    expect(computeViewports(1280, 720, 'drive', null, none)).toEqual(
-      computeViewports(1280, 720, 'drive'),
+    expect(computeViewports(1280, 720, { mode: 'drive', insets: none })).toEqual(
+      computeViewports(1280, 720, { mode: 'drive' }),
     );
   });
 });
@@ -266,14 +254,14 @@ describe('top-down split', () => {
 
   it('keeps the default layout where it was before the split could change', () => {
     for (const [w, h] of sizes) {
-      const { topDown, cockpit } = computeViewports(w, h, 'drive');
+      const { topDown, cockpit } = computeViewports(w, h, { mode: 'drive' });
       if (w >= h) {
         expect(topDown.width, `${w}x${h}`).toBe(Math.round(0.4 * w));
       } else {
         expect(cockpit?.height, `${w}x${h}`).toBe(Math.round(0.55 * h));
       }
-      expect(computeViewports(w, h, 'drive', null, undefined, DEFAULT_TOP_DOWN_LAYOUT)).toEqual(
-        computeViewports(w, h, 'drive'),
+      expect(computeViewports(w, h, { mode: 'drive', layout: DEFAULT_TOP_DOWN_LAYOUT })).toEqual(
+        computeViewports(w, h, { mode: 'drive' }),
       );
     }
   });
@@ -281,7 +269,7 @@ describe('top-down split', () => {
   it('always allows the default and orders min, default and max', () => {
     for (const [w, h] of sizes) {
       for (const inset of [undefined, insets]) {
-        const split = topDownSplit(w, h, undefined, legend, inset, stack(inset));
+        const split = topDownSplit(w, h, { legend, insets: inset, panels: stack(inset) });
         const { min, max, fallback } = split;
         expect(min, `${w}x${h}`).toBeLessThanOrEqual(fallback);
         expect(fallback, `${w}x${h}`).toBeLessThanOrEqual(max);
@@ -292,29 +280,34 @@ describe('top-down split', () => {
 
   it('clamps the share to the screen range', () => {
     const [lo, hi] = edges.map((layout) =>
-      topDownSplit(1280, 720, layout, null, insets, stack(insets)),
+      topDownSplit(1280, 720, { layout, insets, panels: stack(insets) }),
     );
     expect(lo?.share).toBe(lo?.min);
     expect(hi?.share).toBe(hi?.max);
     // The insets crowd the panels, so the pane may not shrink as far as without them.
     expect(lo?.min).toBeCloseTo(360 / 1280);
-    expect(topDownSplit(1280, 720, edges[0], null, NO_INSETS, stack(NO_INSETS)).min).toBeCloseTo(
-      0.25,
-    );
+    expect(
+      topDownSplit(1280, 720, { layout: edges[0], insets: NO_INSETS, panels: stack(NO_INSETS) })
+        .min,
+    ).toBeCloseTo(0.25);
     expect(hi?.max).toBeLessThan(0.6);
     // Portrait: the pane's height holds the panels and the divider row.
-    expect(topDownSplit(1000, 1024, edges[0], null, insets, stack(insets)).min).toBeCloseTo(
-      (305 + insets.top + 44 + 8) / 1024,
-    );
+    expect(
+      topDownSplit(1000, 1024, { layout: edges[0], insets, panels: stack(insets) }).min,
+    ).toBeCloseTo((305 + insets.top + 44 + 8) / 1024);
   });
 
   it('has no room for the divider where no panel row fits above it', () => {
     for (const layout of edges) {
-      const split = topDownSplit(900, 585, layout, null, NO_INSETS, stack(NO_INSETS));
+      const split = topDownSplit(900, 585, { layout, insets: NO_INSETS, panels: stack(NO_INSETS) });
       expect(split).toMatchObject({ min: 0.4, max: 0.4, share: 0.4 });
     }
     // Measured per width: the same screen with a roomier stack has a range again.
-    const roomy = topDownSplit(900, 585, edges[1], null, NO_INSETS, () => 100);
+    const roomy = topDownSplit(900, 585, {
+      layout: edges[1],
+      insets: NO_INSETS,
+      panels: () => 100,
+    });
     // the message column beside the stop button and lever sets the floor
     expect(roomy.min).toBeCloseTo(Math.ceil(MIN_MESSAGE_WIDTH + 1.5 * 44 + 16 + 8) / 900);
     expect(roomy.max).toBeGreaterThan(roomy.min);
@@ -322,9 +315,11 @@ describe('top-down split', () => {
 
   it('finds the narrowest pane the measured panels allow', () => {
     // Fits from a 300 px pane on: the search lands on that width, not the range's edge.
-    const { min } = topDownSplit(1000, 800, edges[0], null, NO_INSETS, (w) =>
-      w >= 300 ? 100 : 5000,
-    );
+    const { min } = topDownSplit(1000, 800, {
+      layout: edges[0],
+      insets: NO_INSETS,
+      panels: (w) => (w >= 300 ? 100 : 5000),
+    });
     expect(min * 1000).toBeGreaterThanOrEqual(300);
     expect(min * 1000).toBeLessThan(301.5);
   });
@@ -334,7 +329,7 @@ describe('top-down split', () => {
     for (let w = 900; w <= 1400; w += 10) {
       for (let h = 585; h <= w; h += 10) {
         for (const inset of [NO_INSETS, insets]) {
-          const views = computeViewports(w, h, 'drive', null, inset, edges[0]);
+          const views = computeViewports(w, h, { mode: 'drive', insets: inset, layout: edges[0] });
           const column = messageColumn(views, null, inset);
           if (column.x < views.topDown.x) continue;
           inPane++;
@@ -352,15 +347,13 @@ describe('top-down split', () => {
       for (const [w, h] of sizes) {
         for (const inset of [undefined, insets]) {
           const at = `${w}x${h} ${JSON.stringify(layout)} ${inset ? 'inset' : 'plain'}`;
-          const { cockpit, topDown, mirrorLeft, mirrorRight } = computeViewports(
-            w,
-            h,
-            'drive',
+          const { cockpit, topDown, mirrorLeft, mirrorRight } = computeViewports(w, h, {
+            mode: 'drive',
             legend,
-            inset,
+            insets: inset,
             layout,
-            stack(inset),
-          );
+            panels: stack(inset),
+          });
           if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
             throw new Error('drive mode has mirrors');
           }
@@ -376,7 +369,12 @@ describe('top-down split', () => {
             expect(m.x + m.width, at).toBeLessThanOrEqual(cockpit.x + cockpit.width);
             expect(m.y, at).toBeGreaterThanOrEqual(cockpit.y);
             // The default layout may itself leave no room; only a range this module widened must clear.
-            const { share, fallback } = topDownSplit(w, h, layout, legend, inset, stack(inset));
+            const { share, fallback } = topDownSplit(w, h, {
+              layout,
+              legend,
+              insets: inset,
+              panels: stack(inset),
+            });
             if (share !== fallback) {
               expect(m.y + m.height, at).toBeLessThanOrEqual(h - controlsHeight(w, h, inset));
             }
@@ -391,9 +389,20 @@ describe('top-down split', () => {
 
   it('leaves the cockpit the room its controls need', () => {
     for (const [w, h] of sizes) {
-      const { share, fallback } = topDownSplit(w, h, edges[1], legend, insets, stack(insets));
+      const { share, fallback } = topDownSplit(w, h, {
+        layout: edges[1],
+        legend,
+        insets,
+        panels: stack(insets),
+      });
       if (share === fallback) continue;
-      const { cockpit } = computeViewports(w, h, 'drive', legend, insets, edges[1], stack(insets));
+      const { cockpit } = computeViewports(w, h, {
+        mode: 'drive',
+        legend,
+        insets,
+        layout: edges[1],
+        panels: stack(insets),
+      });
       const landscape = w >= h;
       const needed = landscape
         ? insets.left + 3 * 16 + 92.4 + 176 + wheelSize(w, h, insets)
@@ -405,7 +414,7 @@ describe('top-down split', () => {
   });
 
   it('is the whole screen in replay whatever the layout', () => {
-    expect(computeViewports(1280, 720, 'replay', null, undefined, edges[1]).topDown).toEqual({
+    expect(computeViewports(1280, 720, { mode: 'replay', layout: edges[1] }).topDown).toEqual({
       x: 0,
       y: 0,
       width: 1280,
@@ -577,8 +586,8 @@ describe('computeViewports front mirror', () => {
 
   it('is only there when asked for, and moves nothing else', () => {
     for (const [w, h] of sizes) {
-      const plain = computeViewports(w, h, 'drive');
-      const extra = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
+      const plain = computeViewports(w, h, { mode: 'drive' });
+      const extra = computeViewports(w, h, { mode: 'drive', extra: FRONT });
       expect(plain.front, `${w}x${h}`).toBeNull();
       expect({ ...extra, front: null }, `${w}x${h}`).toEqual(plain);
     }
@@ -587,8 +596,8 @@ describe('computeViewports front mirror', () => {
   it('keeps the top-down rect and the split the same with it on or off', () => {
     for (const [w, h] of sizes) {
       for (const legend of [null, { right: 300, height: 260 }]) {
-        const plain = computeViewports(w, h, 'drive', legend);
-        const extra = computeViewports(w, h, 'drive', legend, undefined, undefined, null, FRONT);
+        const plain = computeViewports(w, h, { mode: 'drive', legend });
+        const extra = computeViewports(w, h, { mode: 'drive', legend, extra: FRONT });
         expect(extra.topDown, `${w}x${h}`).toEqual(plain.topDown);
         expect(extra.cockpit, `${w}x${h}`).toEqual(plain.cockpit);
         expect(extra.mirrorLeft, `${w}x${h}`).toEqual(plain.mirrorLeft);
@@ -606,31 +615,26 @@ describe('computeViewports front mirror', () => {
       [768, 1024],
       [1210, 720],
     ] as const) {
-      const { front } = computeViewports(w, h, 'drive', null, undefined, undefined, null, FRONT);
+      const { front } = computeViewports(w, h, { mode: 'drive', extra: FRONT });
       expect(front, `${w}x${h}`).not.toBeNull();
     }
   });
 
   it('is replaced by nothing in replay', () => {
-    expect(
-      computeViewports(800, 600, 'replay', null, undefined, undefined, null, FRONT).front,
-    ).toBeNull();
+    expect(computeViewports(800, 600, { mode: 'replay', extra: FRONT }).front).toBeNull();
   });
 
   it('drops once as the portrait top-down share grows, where it first stops fitting, and no extra mirror comes back', () => {
     const ALL = { front: true, wide: true, close: true };
     const h = 1133;
     const at = (w: number, portrait: number, panels: PanelStack | null, extra: typeof ALL) =>
-      computeViewports(
-        w,
-        h,
-        'drive',
-        null,
-        NO_INSETS,
-        { ...DEFAULT_TOP_DOWN_LAYOUT, portrait },
+      computeViewports(w, h, {
+        mode: 'drive',
+        insets: NO_INSETS,
+        layout: { ...DEFAULT_TOP_DOWN_LAYOUT, portrait },
         panels,
         extra,
-      );
+      });
     let drops = 0;
     let compared = 0;
     // Around 700 px wide the messages beside it wrap shorter as class II narrows, so it would fit again.
@@ -676,7 +680,7 @@ describe('computeViewports front mirror', () => {
     let shown = 0;
     for (const [w, h] of sizes) {
       for (const legend of [null, { right: 300, height: 260 }, { right: w - 40, height: 260 }]) {
-        const views = computeViewports(w, h, 'drive', legend, undefined, undefined, null, FRONT);
+        const views = computeViewports(w, h, { mode: 'drive', legend, extra: FRONT });
         const { cockpit, mirrorLeft, mirrorRight, front } = views;
         if (front === null) continue;
         shown++;
@@ -721,9 +725,9 @@ describe('computeViewports front mirror', () => {
       [2560, 1440, 200],
     ] as const) {
       const insets = { top, right: 0, bottom: 0, left: 0 };
-      const plain = computeViewports(w, h, 'drive', null, NO_INSETS, undefined, null, FRONT);
+      const plain = computeViewports(w, h, { mode: 'drive', insets: NO_INSETS, extra: FRONT });
       expect(plain.front?.y, `${w}x${h}`).toBeLessThan(top);
-      const { front } = computeViewports(w, h, 'drive', null, insets, undefined, null, FRONT);
+      const { front } = computeViewports(w, h, { mode: 'drive', insets, extra: FRONT });
       expect(front, `${w}x${h}`).not.toBeNull();
       expect(front?.y, `${w}x${h}`).toBe(top);
     }
@@ -735,7 +739,7 @@ describe('computeViewports front mirror', () => {
     let dropped = 0;
     for (const inset of [NO_INSETS, insets]) {
       for (const [w, h] of sizes) {
-        const views = computeViewports(w, h, 'drive', null, inset, undefined, null, FRONT);
+        const views = computeViewports(w, h, { mode: 'drive', insets: inset, extra: FRONT });
         const { front, mirrorLeft } = views;
         if (front === null || mirrorLeft === null) {
           dropped++;
@@ -828,7 +832,7 @@ describe('computeViewports front mirror', () => {
     const count = { between: 0, pane: 0 };
     for (const insets of [NO_INSETS, { top: 24, right: 0, bottom: 0, left: 48 }]) {
       for (const [w, h] of sizes) {
-        const views = computeViewports(w, h, 'drive', null, insets);
+        const views = computeViewports(w, h, { mode: 'drive', insets });
         const { cockpit, mirrorLeft, mirrorRight, topDown } = views;
         if (cockpit === null || mirrorLeft === null || mirrorRight === null) {
           throw new Error('drive mode has mirrors');
@@ -863,8 +867,8 @@ describe('computeViewports front mirror', () => {
 
   it('moves the toast column into the top-down pane where its stack would cover the open key legend', () => {
     const legend = { right: 755, height: 381 };
-    const open = computeViewports(840, 841, 'drive', legend, NO_INSETS);
-    const closed = computeViewports(840, 841, 'drive', null, NO_INSETS);
+    const open = computeViewports(840, 841, { mode: 'drive', legend, insets: NO_INSETS });
+    const closed = computeViewports(840, 841, { mode: 'drive', insets: NO_INSETS });
     expect(messageColumn(closed, null, NO_INSETS).y).toBe(closed.cockpit?.y);
     const column = messageColumn(open, legend, NO_INSETS);
     expect(column.x).toBe(open.topDown.x);
@@ -873,7 +877,7 @@ describe('computeViewports front mirror', () => {
   });
 
   it('puts the toast column in the whole top-down pane in replay, clear of the safe area', () => {
-    const views = computeViewports(800, 600, 'replay');
+    const views = computeViewports(800, 600, { mode: 'replay' });
     expect(messageColumn(views, null)).toEqual({ ...views.topDown, cueYields: false });
     const insets = { top: 24, right: 48, bottom: 20, left: 48 };
     expect(messageColumn(views, null, insets)).toEqual({
@@ -883,7 +887,7 @@ describe('computeViewports front mirror', () => {
       height: 600 - 24,
       cueYields: false,
     });
-    const portrait = computeViewports(600, 800, 'replay');
+    const portrait = computeViewports(600, 800, { mode: 'replay' });
     expect(messageColumn(portrait, null, insets).y).toBe(24);
   });
 });
@@ -915,7 +919,7 @@ describe('computeViewports class IV mirrors', () => {
     extra: typeof WIDE,
     legend: ReturnType<typeof legends>[number],
     insets?: Insets,
-  ) => computeViewports(w, h, 'drive', legend, insets, undefined, null, extra);
+  ) => computeViewports(w, h, { mode: 'drive', legend, insets, extra });
 
   it('is only there when asked for, and replay has none', () => {
     for (const [w, h] of sizes) {
@@ -923,7 +927,7 @@ describe('computeViewports class IV mirrors', () => {
       expect(plain.wideLeft, `${w}x${h}`).toBeNull();
       expect(plain.wideRight, `${w}x${h}`).toBeNull();
     }
-    const replay = computeViewports(800, 600, 'replay', null, undefined, undefined, null, WIDE);
+    const replay = computeViewports(800, 600, { mode: 'replay', extra: WIDE });
     expect([replay.wideLeft, replay.wideRight]).toEqual([null, null]);
   });
 
@@ -1062,7 +1066,7 @@ describe('computeViewports class IV mirrors', () => {
     for (const [w, h] of targets) {
       for (const mode of ['drive', 'mirrors'] as const) {
         for (const insets of [NO_INSETS, notch]) {
-          const v = computeViewports(w, h, mode, null, insets, undefined, null, WIDE);
+          const v = computeViewports(w, h, { mode, insets, extra: WIDE });
           const { cockpit, mirrorLeft, mirrorRight, wideLeft, wideRight } = v;
           if (cockpit === null) throw new Error('drive and mirror-only have a cockpit');
           if (wideLeft !== null) wide++;
@@ -1085,9 +1089,9 @@ describe('computeViewports class IV mirrors', () => {
     let coneShrunk = 0;
     for (const [w, h] of [[800, 730] as const, ...sizes]) {
       for (const mode of ['drive', 'mirrors'] as const) {
-        const on = computeViewports(w, h, mode, null, notch, undefined, null, WIDE);
-        const off = computeViewports(w, h, mode, null, notch, undefined, null, PLAIN);
-        const free = computeViewports(w, h, mode, null, sideless, undefined, null, PLAIN);
+        const on = computeViewports(w, h, { mode, insets: notch, extra: WIDE });
+        const off = computeViewports(w, h, { mode, insets: notch, extra: PLAIN });
+        const free = computeViewports(w, h, { mode, insets: sideless, extra: PLAIN });
         if (JSON.stringify(on.cockpit) !== JSON.stringify(free.cockpit)) continue;
         const [a, b, ref] = [on.mirrorLeft, off.mirrorLeft, free.mirrorLeft];
         if (a === null || b === null || ref === null) throw new Error('drive mode has mirrors');
@@ -1119,7 +1123,7 @@ describe('computeViewports class IV mirrors', () => {
         let prev: { wide: boolean; width: number; height: number } | null = null;
         for (let pane = Math.ceil(0.3 * h); pane <= Math.floor(0.6 * h); pane++) {
           const layout = { landscape: 0.4, portrait: pane / h };
-          const v = computeViewports(w, h, 'drive', null, NO_INSETS, layout, null, extra);
+          const v = computeViewports(w, h, { mode: 'drive', insets: NO_INSETS, layout, extra });
           if (v.mirrorLeft === null) throw new Error('drive mode has mirrors');
           const now = { wide: v.wideLeft !== null, ...v.mirrorLeft };
           const at = `${w}x${h} pane ${pane} ${JSON.stringify(extra)}`;
@@ -1141,7 +1145,12 @@ describe('computeViewports class IV mirrors', () => {
   it('keeps class IV in portrait until it first stops fitting', () => {
     // 834x1194: at pane 529 the smallest stack is 1 px taller than the room
     const layout = { ...DEFAULT_TOP_DOWN_LAYOUT, portrait: 528 / 1194 };
-    const v = computeViewports(834, 1194, 'drive', null, NO_INSETS, layout, null, WIDE);
+    const v = computeViewports(834, 1194, {
+      mode: 'drive',
+      insets: NO_INSETS,
+      layout,
+      extra: WIDE,
+    });
     expect(v.wideLeft).not.toBeNull();
   });
 
@@ -1149,10 +1158,19 @@ describe('computeViewports class IV mirrors', () => {
     // a 1080p laptop at 150%, landscape at the smallest and the default share; mirror-only at 1366x768
     for (const landscape of [0.25, DEFAULT_TOP_DOWN_LAYOUT.landscape]) {
       const layout = { ...DEFAULT_TOP_DOWN_LAYOUT, landscape };
-      const v = computeViewports(1280, 585, 'drive', null, NO_INSETS, layout, null, WIDE);
+      const v = computeViewports(1280, 585, {
+        mode: 'drive',
+        insets: NO_INSETS,
+        layout,
+        extra: WIDE,
+      });
       expect(v.wideLeft, `share ${String(landscape)}`).not.toBeNull();
     }
-    const mirrors = computeViewports(1366, 768, 'mirrors', null, NO_INSETS, undefined, null, WIDE);
+    const mirrors = computeViewports(1366, 768, {
+      mode: 'mirrors',
+      insets: NO_INSETS,
+      extra: WIDE,
+    });
     expect(mirrors.wideLeft).not.toBeNull();
   });
 
@@ -1218,11 +1236,11 @@ describe('computeViewports class V mirror', () => {
     for (let h = 320; h <= 2000; h += 40) sizes.push([w, h]);
   }
   const views = (w: number, h: number, extra: typeof ALL, legend: LegendBox | null = null) =>
-    computeViewports(w, h, 'drive', legend, undefined, undefined, null, extra);
+    computeViewports(w, h, { mode: 'drive', legend, extra });
 
   it('is only there when asked for, and replay has none', () => {
     for (const [w, h] of sizes) expect(views(w, h, NO_CLOSE).close, `${w}x${h}`).toBeNull();
-    const replay = computeViewports(800, 600, 'replay', null, undefined, undefined, null, ALL);
+    const replay = computeViewports(800, 600, { mode: 'replay', extra: ALL });
     expect(replay.close).toBeNull();
   });
 
@@ -1298,14 +1316,17 @@ describe('computeViewports mirror-only drive', () => {
     [1920, 1080],
   ];
   const mirrorsOnly = (w: number, h: number) =>
-    computeViewports(w, h, 'mirrors', null, NO_INSETS, undefined, null, ALL);
+    computeViewports(w, h, { mode: 'mirrors', insets: NO_INSETS, extra: ALL });
 
   it('gives the cockpit the whole window and the top-down view no area', () => {
     for (const [w, h] of [...landscape, [768, 1024] as const]) {
       const views = mirrorsOnly(w, h);
       expect(views.cockpit, `${w}x${h}`).toEqual({ x: 0, y: 0, width: w, height: h });
       expect(hasTopDown(views), `${w}x${h}`).toBe(false);
-      expect(hasTopDown(computeViewports(w, h, 'drive', null, NO_INSETS)), `${w}x${h}`).toBe(true);
+      expect(
+        hasTopDown(computeViewports(w, h, { mode: 'drive', insets: NO_INSETS })),
+        `${w}x${h}`,
+      ).toBe(true);
     }
   });
 
@@ -1338,16 +1359,16 @@ describe('computeViewports mirror-only drive', () => {
   it('starts the toast column below the display cut-out, in portrait too', () => {
     const notch = { top: 24, right: 48, bottom: 20, left: 48 };
     for (const [w, h] of [...landscape, [768, 1024] as const, [820, 1180] as const]) {
-      const views = computeViewports(w, h, 'mirrors', null, notch, undefined, null, ALL);
+      const views = computeViewports(w, h, { mode: 'mirrors', insets: notch, extra: ALL });
       expect(messageColumn(views, null, notch).y, `${w}x${h}`).toBe(notch.top);
     }
   });
 
   it('lets the goal cue yield to a toast where the span between the mirrors holds not both', () => {
     const notch = { top: 24, right: 48, bottom: 20, left: 48 };
-    const views = computeViewports(620, 640, 'mirrors', null, notch, undefined, null, ALL);
+    const views = computeViewports(620, 640, { mode: 'mirrors', insets: notch, extra: ALL });
     expect(messageColumn(views, null, notch).cueYields).toBe(true);
-    const plain = computeViewports(620, 640, 'mirrors', null, NO_INSETS, undefined, null, ALL);
+    const plain = computeViewports(620, 640, { mode: 'mirrors', insets: NO_INSETS, extra: ALL });
     expect(messageColumn(plain, null, NO_INSETS).cueYields).toBe(false);
   });
 });

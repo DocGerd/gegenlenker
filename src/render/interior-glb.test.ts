@@ -110,7 +110,7 @@ describe.each(trucks)('interior of $id on the presets', (spec) => {
     const interior = createGlbInterior(spec);
     interior.attach(await glb(spec.id));
     interior.setLook(lookFor(QUALITY_FLAGS.high, 'day'));
-    const { cockpit, mirrorLeft, mirrorRight } = computeViewports(1350, 600, 'drive', null);
+    const { cockpit, mirrorLeft, mirrorRight } = computeViewports(1350, 600, { mode: 'drive' });
     const cab = cabShellParams(spec);
     const anchors = truckAnchors(spec);
     for (const heading of [0, 0.7, 2.9]) {
