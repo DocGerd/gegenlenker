@@ -260,13 +260,13 @@ describe('wheelDetail on the vehicles', () => {
     expect(wheels).toBeGreaterThanOrEqual(4);
   });
 
-  it('adds at most 20k triangles to a truck and trailer pair', () => {
+  it('adds at most 6.8k triangles to a truck and trailer pair', () => {
     const added = (make: () => Visual): number => {
       const { discs, detailed } = both(make);
       return detailed.triangles - discs.triangles;
     };
     const worst = (ids: readonly string[]): number =>
       Math.max(...visuals.filter(([id]) => ids.includes(id)).map(([, make]) => added(make)));
-    expect(worst(TRUCK_IDS) + worst(TRAILER_IDS)).toBeLessThanOrEqual(20_000);
+    expect(worst(TRUCK_IDS) + worst(TRAILER_IDS)).toBeLessThanOrEqual(6800);
   });
 });

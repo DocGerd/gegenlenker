@@ -1,5 +1,4 @@
 import {
-  BoxGeometry,
   type BufferGeometry,
   Color,
   Float32BufferAttribute,
@@ -12,11 +11,11 @@ import { tint } from './tint';
 
 /*
  * The `wheelDetail` wheel: a lathe tyre with rounded shoulders, sidewall bulge and tread grooves, a
- * dished rim with studs and a hub cap, and a brake drum on the inboard side. Every proportion is a
+ * dished rim with a hub cap, and a brake drum on the inboard side. Every proportion is a
  * render estimate, not a vehicle Param; lengths are fractions of the tyre radius unless in metres.
  */
 export const WHEEL_LOOK = {
-  segments: 24,
+  segments: 16,
   bead: 0.6, // rim flange radius, where the tyre meets the rim
   shoulder: 0.045, // m
   bulge: 0.01, // m past the tread's half width: the discs' sidewall relief
@@ -27,11 +26,7 @@ export const WHEEL_LOOK = {
   dishRim: 0.46, // where the dish reaches the disc face
   cap: 0.2, // hub cap radius
   capHeight: 0.16, // from the disc face
-  studRing: 0.33,
-  studs: 8,
-  studSize: 0.07,
-  studHeight: 0.06,
-  nutRing: [0.27, 0.39], // truck rims: silver band behind the studs
+  nutRing: [0.27, 0.39], // truck rims: silver band
   drum: 0.42,
   drumDepth: 0.2, // inboard of the bead plane
   treadMix: 0.5, // tread hue: this share of anthracite over the sidewall's black
@@ -104,9 +99,9 @@ export type WheelOptions = {
   readonly width: number;
   /** Which way body y the outboard face looks. */
   readonly outward: 1 | -1;
-  /** Black rim with a silver nut ring and studs; otherwise a silver rim. */
+  /** Black rim with a silver nut ring; otherwise a silver rim. */
   readonly truck: boolean;
-  /** Dished rim, studs and hub cap on the outboard face; a plain disc closes it otherwise (hidden twin faces). */
+  /** Dished rim and hub cap on the outboard face; a plain disc closes it otherwise (hidden twin faces). */
   readonly rimFace: boolean;
   /** Brake drum on the inboard face; a plain disc closes it otherwise. */
   readonly drum: boolean;
@@ -149,21 +144,6 @@ export function detailedWheel(o: WheelOptions): BufferGeometry[] {
             .rotateX(AXLE)
             .translate(0, face + NUT_RING_RELIEF, 0),
           linear(HUE.whiteAluminium),
-        ),
-      );
-    }
-    const size = R * L.studSize;
-    const studHue = linear(o.truck ? HUE.whiteAluminium : HUE.anthracite);
-    for (let i = 0; i < L.studs; i++) {
-      const a = (i / L.studs) * 2 * Math.PI;
-      parts.push(
-        tint(
-          new BoxGeometry(size, R * L.studHeight, size).translate(
-            R * L.studRing * Math.sin(a),
-            face + (R * L.studHeight) / 2,
-            R * L.studRing * Math.cos(a),
-          ),
-          studHue,
         ),
       );
     }
