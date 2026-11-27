@@ -68,14 +68,14 @@ export function resolveRun(ids: RunIds): ResolvedRun {
 }
 
 /** A run of the truck with its trailer. */
-export type GuidedRun = ResolvedRun & {
+export type PairedRun = ResolvedRun & {
   readonly trailer: TrailerSpec;
   readonly params: VehicleParams;
 };
 
-export function guidedRun(ids: RunIds): GuidedRun {
+export function pairedRun(ids: RunIds): PairedRun {
   const run = resolveRun(ids);
   const { trailer, params } = run;
-  if (trailer === null || !hasTrailer(params)) throw new Error('a guided run has a trailer');
+  if (trailer === null || !hasTrailer(params)) throw new Error('a paired run has a trailer');
   return { ...run, trailer, params };
 }

@@ -48,7 +48,7 @@ describe('menu options', () => {
   it('either role takes the truck solo, and a trailer again once one is picked', () => {
     const solo = { ...loadSettings(null, 'en'), ...optionPatch('trailer', 'none') };
     const yard = { kind: 'yard', id: 'depot' } as const;
-    const [last] = TRAILER_IDS;
+    const last = TRAILER_IDS[1];
     const paired = { ...solo, ...optionPatch('trailer', last) };
     for (const role of ROLES) {
       expect(roleField('trailer', role).choices.map((c) => c.value)).toContain('none');

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SignId } from '../contracts/einweiser';
 import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import { hasTrailer } from '../contracts/vehicle';
+import { wrapAngle } from '../sim/angle';
 import { BRAKE_DECEL, DECEL, DT, V_MAX } from '../sim/constants';
 import { createSimulation } from '../sim/simulation';
 import { mirrorMounts } from '../vehicles/mirrors';
@@ -98,34 +99,71 @@ describe.each(rigs)('signs for $name', ({ truck, trailer }) => {
     place: (s: SimSnapshot) => Pose2,
     lead: 'rear' | 'front',
   ) => {
-    let from: { x: number } | null = null;
+    const endOf = (now: SimSnapshot): Vec2 =>
+      lead === 'rear' ? now.trailerRear : toWorld(now, { x: g.params.truckFront, y: 0 });
+    const mark: { from: { x: number; end: Vec2; pose: Pose2 } | null } = { from: null };
     const { s, steps } = signal(
       truck,
       trailer,
       (now, step) => {
-        if (from === null && creeping(now) && step > 60) from = { x: now.truck.x };
-        return { sign: from === null ? 'herkommen' : sign, pose: place(now) };
+        if (mark.from === null && creeping(now) && step > 60) {
+          mark.from = { x: now.truck.x, end: endOf(now), pose: place(now) };
+        }
+        return { sign: mark.from === null ? 'herkommen' : sign, pose: place(now) };
       },
-      (now) => from !== null && Math.abs(now.truck.x - from.x) > (lead === 'rear' ? 8 : 4),
+      (now) =>
+        mark.from !== null && Math.abs(now.truck.x - mark.from.x) > (lead === 'rear' ? 8 : 4),
     );
     expect(steps.map((d) => d.reading.kind)).not.toContain('unclear');
-    const end = lead === 'rear' ? s.trailerRear : toWorld(s, { x: g.params.truckFront, y: 0 });
-    return { end, pose: place(s), jackknifes: s.jackknifes };
+    const { from } = mark;
+    if (from === null) throw new Error('never crept');
+    return { from, end: endOf(s), pose: place(s), jackknifes: s.jackknifes };
   };
 
   it('Rechts from behind moves the rear end to his right', () => {
-    const { end, pose, jackknifes } = turned('rechts', behind, 'rear');
+    const { from, end, jackknifes } = turned('rechts', behind, 'rear');
+    // his right as Rechts is first shown: he faces the cab along the truck, so it is the truck's right, -y
     const right = {
-      x: Math.cos(pose.heading - Math.PI / 2),
-      y: Math.sin(pose.heading - Math.PI / 2),
+      x: Math.cos(from.pose.heading - Math.PI / 2),
+      y: Math.sin(from.pose.heading - Math.PI / 2),
     };
-    // he faces the cab along the truck, so his right is the truck's right: -y
     expect(right.y).toBeLessThan(-0.9);
-    // solo the mirror he faces swings with the rear, turning his facing: measure off the start line, y = 0
-    const across = trailer === null ? -end.y : end.x * right.x + end.y * right.y;
-    expect(across).toBeGreaterThan(0.3);
+    expect((end.x - from.end.x) * right.x + (end.y - from.end.y) * right.y).toBeGreaterThan(0.3);
     expect(jackknifes).toBe(0);
   });
+
+  // the combination's reverse law has its own tests; solo it is the forward law reversed
+  if (trailer === null) {
+    it('Herkommen after Rechts from behind straightens the truck', () => {
+      const mark = { curve: Number.NaN, straight: false, heading: 0, travelled: 0 };
+      let last: Vec2 = { x: 0, y: 0 };
+      const { s, steps } = signal(
+        truck,
+        trailer,
+        (now, step) => {
+          if (Number.isNaN(mark.curve) && creeping(now) && step > 60) mark.curve = now.truck.x;
+          if (mark.straight) {
+            mark.travelled += Math.hypot(now.trailerRear.x - last.x, now.trailerRear.y - last.y);
+          } else if (Math.abs(now.truck.x - mark.curve) > 8) {
+            mark.straight = true;
+            mark.heading = now.trailer.heading;
+          }
+          last = now.trailerRear;
+          const curving = !Number.isNaN(mark.curve) && !mark.straight;
+          return { sign: curving ? 'rechts' : 'herkommen', pose: behind(now) };
+        },
+        () => mark.travelled > 20,
+      );
+      const kinds = steps.map((d) => d.reading.kind);
+      expect(kinds).not.toContain('lost');
+      expect(kinds).not.toContain('unclear');
+      expect(mark.travelled).toBeGreaterThan(20);
+      expect(s.speed).toBeCloseTo(-CREEP, 9);
+      // the curve eases out over a few metres, then the heading holds
+      expect(Math.abs(s.steer)).toBeLessThan(0.01);
+      expect(Math.abs(wrapAngle(s.trailer.heading - mark.heading))).toBeLessThan(0.2);
+    });
+  }
 
   it('Rechts from ahead of the cab mirrors: the truck turns to his right, the driver’s left', () => {
     const { end, pose } = turned('rechts', ahead, 'front');
