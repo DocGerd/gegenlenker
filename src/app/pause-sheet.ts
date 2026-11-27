@@ -27,12 +27,16 @@ export type PauseSheet = {
   readonly back: () => boolean;
 };
 
+let hintCount = 0;
+
 function hinted(button: HTMLButtonElement, hint: MessageKey): HTMLElement {
   const item = document.createElement('div');
   item.className = 'pause-item';
   const text = document.createElement('p');
   text.className = 'pause-hint';
   text.textContent = t(hint);
+  text.id = `pause-hint-${String(hintCount++)}`;
+  button.setAttribute('aria-describedby', text.id);
   item.append(button, text);
   return item;
 }

@@ -380,6 +380,7 @@ test('the free yard pause sheet has no restart hint', async ({ page }) => {
   await page.getByRole('button', { name: en.pause }).click();
   await expect(sheet(page)).toBeVisible();
   await expect(sheet(page).getByText(en.restartHint)).toHaveCount(0);
+  await expect(sheet(page).locator('.pause-hint')).toHaveCount(0);
 });
 
 for (const { locale, messages } of [
@@ -411,6 +412,7 @@ for (const { locale, messages } of [
         const button = dialog.getByRole('button', { name: label, exact: true });
         const text = dialog.getByText(hint, { exact: true });
         await expect(text).toBeVisible();
+        await expect(button).toHaveAccessibleDescription(hint);
         // The hint sits right under its own button, not under a neighbour's.
         const b = await button.boundingBox();
         const h = await text.boundingBox();

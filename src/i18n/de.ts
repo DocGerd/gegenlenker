@@ -233,6 +233,7 @@ export const de: Record<MessageKey, string> = {
   signNone: 'Kein Zeichen',
 
   // Pause sheet hints.
-  finishHint: 'Die Fahrt endet jetzt und wird mit dem erreichten Stand gewertet.',
+  finishHint:
+    'Die Fahrt endet jetzt, wird mit dem erreichten Stand gewertet und bleibt gespeichert.',
   leaveHint: 'Beim Verlassen wird die Fahrt verworfen: keine Wertung, keine gespeicherte Fahrt.',
 };
