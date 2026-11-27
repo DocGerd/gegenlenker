@@ -36,7 +36,8 @@ const BADGE: Readonly<Partial<Record<ConditionId, MessageKey>>> = { hasNews: 'wh
 /** The replay entry's detail line; a night run says so, as it replays at night whatever the settings say. */
 function replayLabel(log: InputLog): string {
   const notes = [
-    ...(log.role === 'einweiser' ? [t('roleEinweiser')] : []),
+    // an exercise title already says Guide…/…einweisen: only a yard needs the role
+    ...(log.role === 'einweiser' && log.exerciseId === null ? [t('roleEinweiser')] : []),
     ...(log.lighting === 'night' ? [t('lightingNight')] : []),
     ...(log.mirrorsOnly
       ? [t(log.role === 'einweiser' ? 'einweiserViewNoTop' : 'driveViewMirrors')]
@@ -56,7 +57,7 @@ function valueLabel(id: OptionId, role: Role = 'driver'): string {
 function continueLines({ state }: TitleContext): readonly string[] {
   const entry = continueEntry(state.lastEntry, state.done);
   if (entry === null) return [];
-  const role = entry.role === 'einweiser' ? [t('roleEinweiser')] : [];
+  const role = entry.role === 'einweiser' && entry.kind === 'yard' ? [t('roleEinweiser')] : [];
   return [
     entryHeading(entry),
     `${valueLabel('truck')} · ${valueLabel('trailer')}`,

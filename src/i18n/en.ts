@@ -24,7 +24,7 @@ export const en = {
   guideReverseBay: 'Guide into a bay',
   guideReverseCorner: 'Guide around a corner',
   guideDockRamp: 'Guide up to a ramp',
-  guideSlalom: 'Guide the slalom',
+  guideSlalom: 'Guide the slalom forward and back',
   guideBriefStraightReverse:
     'Give Attention, then guide the trailer straight back into the marked bay and give Halt.',
   guideBriefReverseBay:

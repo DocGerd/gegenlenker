@@ -60,16 +60,22 @@ test.describe('the longest title footer', () => {
           entry: { role: 'einweiser', kind: 'exercise', id },
           heading: `${String(EXERCISE_IDS.indexOf(id) + 1)} ${messages[EXERCISE_TITLE.einweiser[id]]}`,
           context: messages[EXERCISE_TITLE.einweiser[id]],
+          role: [],
         })),
         ...LAYOUT_IDS.map((id) => {
           const context = `${messages.freeYard} · ${messages[LAYOUT_NAME[id]]}`;
-          return { entry: { role: 'einweiser', kind: 'yard', id }, heading: context, context };
+          return {
+            entry: { role: 'einweiser', kind: 'yard', id },
+            heading: context,
+            context,
+            role: [messages.roleEinweiser],
+          };
         }),
       ];
       const longest = (by: (g: (typeof guides)[number]) => string) =>
         guides.reduce((a, b) => (by(b).length > by(a).length ? b : a));
       const resumed = longest((g) => g.heading);
-      const replayed = longest((g) => g.context);
+      const replayed = longest((g) => [g.context, ...g.role].join(' · '));
       await seedStorage(context, {
         settings: {
           truckId: arocs,
@@ -87,9 +93,17 @@ test.describe('the longest title footer', () => {
       // an Einweiser run is not seeded here (its log needs his track): give the replay his line
       await titleEntry(page, messages.replayLastRun)
         .locator('.menu-item-detail')
-        .evaluate((el, text) => {
-          el.textContent = text;
-        }, [replayed.context, messages.roleEinweiser, messages.lightingNight, messages.einweiserViewNoTop].join(' · '));
+        .evaluate(
+          (el, text) => {
+            el.textContent = text;
+          },
+          [
+            replayed.context,
+            ...replayed.role,
+            messages.lightingNight,
+            messages.einweiserViewNoTop,
+          ].join(' · '),
+        );
       await expect(titleEntry(page, messages.controls)).toBeVisible();
       await expect(titleEntry(page, messages.whatsNew)).toBeVisible();
       await expect(titleEntry(page, messages.about)).toBeVisible();
@@ -514,10 +528,9 @@ test('an Einweiser exercise plays from the menu to his result, and the title con
 
   await page.getByRole('button', { name: en.menu }).click();
   await expect(titleEntry(page, en.continue)).toContainText(en.guideStraightReverse);
-  await expect(titleEntry(page, en.continue)).toContainText(en.roleEinweiser);
-  await expect(titleEntry(page, en.replayLastRun)).toContainText(
-    `${en.guideStraightReverse} · ${en.roleEinweiser}`,
-  );
+  await expect(titleEntry(page, en.continue)).not.toContainText(en.roleEinweiser);
+  await expect(titleEntry(page, en.replayLastRun)).toContainText(en.guideStraightReverse);
+  await expect(titleEntry(page, en.replayLastRun)).not.toContainText(en.roleEinweiser);
   await titleEntry(page, en.continue).click();
   await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
 });
