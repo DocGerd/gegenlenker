@@ -1152,6 +1152,41 @@ for (const { locale, messages } of locales) {
   }
 }
 
+/** Per gauge label: the line breaks that fall inside a word, other than at a soft hyphen, and how often it wraps. */
+async function gaugeLabelBreaks(page: Page): Promise<{ bad: string[]; wraps: number }[]> {
+  const labels = page.locator('.hud-gauge .hud-label');
+  await expect(labels).toHaveCount(2);
+  return labels.evaluateAll((els) =>
+    els.map((el) => {
+      const bad: string[] = [];
+      let wraps = 0;
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = node.textContent ?? '';
+        let last: { char: number; top: number } | undefined;
+        for (let i = 0; i < text.length; i++) {
+          const range = document.createRange();
+          range.setStart(node, i);
+          range.setEnd(node, i + 1);
+          // the first character after a soft-hyphen break reports the hyphen glyph first
+          const rect = [...range.getClientRects()].filter((r) => r.width > 0).at(-1);
+          if (!rect || text[i] === ' ') continue;
+          if (last && rect.top - last.top > 2) {
+            wraps++;
+            const at = text[last.char];
+            const next = text[last.char + 1];
+            if (at !== '\u00AD' && next !== '\u00AD' && next !== ' ') {
+              bad.push(`${text.slice(0, i)}|${text.slice(i)}`);
+            }
+          }
+          last = { char: i, top: rect.top };
+        }
+      }
+      return { bad, wraps };
+    }),
+  );
+}
+
 /** A gauge label that wraps breaks only at a space or a soft hyphen, never mid-word without a hyphen. */
 for (const size of [
   { width: 1280, height: 585 },
@@ -1165,37 +1200,7 @@ for (const size of [
       const page = await context.newPage();
       await startStraightReverse(page, de);
       await settled(page);
-      const labels = page.locator('.hud-gauge .hud-label');
-      await expect(labels).toHaveCount(2);
-      const breaks = await labels.evaluateAll((els) =>
-        els.map((el) => {
-          const bad: string[] = [];
-          let wraps = 0;
-          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-            const text = node.textContent ?? '';
-            let last: { char: number; top: number } | undefined;
-            for (let i = 0; i < text.length; i++) {
-              const range = document.createRange();
-              range.setStart(node, i);
-              range.setEnd(node, i + 1);
-              // the first character after a soft-hyphen break reports the hyphen glyph first
-              const rect = [...range.getClientRects()].filter((r) => r.width > 0).at(-1);
-              if (!rect || text[i] === ' ') continue;
-              if (last && rect.top - last.top > 2) {
-                wraps++;
-                const at = text[last.char];
-                const next = text[last.char + 1];
-                if (at !== '\u00AD' && next !== '\u00AD' && next !== ' ') {
-                  bad.push(`${text.slice(0, i)}|${text.slice(i)}`);
-                }
-              }
-              last = { char: i, top: rect.top };
-            }
-          }
-          return { bad, wraps };
-        }),
-      );
+      const breaks = await gaugeLabelBreaks(page);
       // A label that fits on one line would pass vacuously: pick a size where it wraps.
       expect(
         breaks.map((b) => b.wraps > 0),
@@ -1209,6 +1214,34 @@ for (const size of [
       await context.close();
     }
   });
+}
+
+/** The smallest supported landscape sizes, where the gauge labels are tightest. */
+for (const { locale, messages } of locales) {
+  for (const size of [
+    { width: 800, height: 585 },
+    { width: 900, height: 600 },
+    { width: 1024, height: 600 },
+    { width: 1280, height: 585 },
+  ]) {
+    test(`the gauge labels do not break mid-word at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      try {
+        const page = await context.newPage();
+        await startStraightReverse(page, messages);
+        await settled(page);
+        const breaks = await gaugeLabelBreaks(page);
+        expect(
+          breaks.map((b) => b.bad),
+          'a gauge label breaks inside a word',
+        ).toEqual([[], []]);
+      } finally {
+        await context.close();
+      }
+    });
+  }
 }
 
 /** At the smallest and largest share the divider clears the cockpit and the panels, or is hidden. */

@@ -756,7 +756,7 @@
 .hud-gauge .hud-label {
   max-width: 100%;
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   hyphens: auto;
 }
 
@@ -907,6 +907,11 @@
 
 .hud-topdown[data-short] .hud-gauge svg {
   width: var(--hud-dial);
+}
+
+/* The gauges are squeezed to their dials here: the eyebrow tracking would break "Turntable" mid-word. */
+.hud-topdown[data-short] .hud-gauge .hud-label {
+  letter-spacing: 0.04em;
 }
 
 .hud-topdown[data-short] .hud-counters {
