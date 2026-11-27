@@ -134,7 +134,7 @@ describe('run behaviour pin', () => {
   it('depot coupling', () => {
     expect(pinned('depot', 'coupling', 'krone-azw-18', COUPLING_LOG)).toEqual({
       SIM_REVISION: 2,
-      digest: '62bcd16d',
+      digest: '32e6fe84',
     });
   });
 });

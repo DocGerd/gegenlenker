@@ -195,6 +195,8 @@ export function showResult(
     header.append(element('p', 'result-reason', t('runOver')));
   } else if (result.waypointMissed) {
     header.append(element('p', 'result-reason', t('waypointMissed')));
+  } else if (!result.reached && result.coupling?.left === false) {
+    header.append(element('p', 'result-reason', t('trailerNotLeft')));
   } else if (endedMoving(result, exercise.tolerances)) {
     // an Einweiser run can stand in the target and still not end: it waits for a recognised Halt
     header.append(
@@ -234,9 +236,10 @@ export function showResult(
   if (result.coupling !== undefined) {
     const { speed } = result.coupling;
     values.append(
+      // a fault like a contact, not a criterion of reaching the target
       row('couplingSpeed', speed === null ? '–' : kmh(speed), {
         limit: kmh(COUPLING_SPEED),
-        passed: speed !== null && speed <= COUPLING_SPEED,
+        bad: speed !== null && speed > COUPLING_SPEED,
       }),
     );
   }

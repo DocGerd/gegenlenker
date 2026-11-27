@@ -68,25 +68,29 @@ export type RunTracker = {
   waypointVisited(): boolean;
 };
 
+/** A coupling run's trailer counts once it was coupled, then uncoupled, and the truck has driven away. */
+export function leftTrailer(s: SimSnapshot): boolean {
+  const hitch = s.hitch;
+  if (hitch === undefined || hitch.coupled || hitch.couplingSpeed === null) return false;
+  return Math.hypot(s.coupling.x - hitch.eye.x, s.coupling.y - hitch.eye.y) >= DRIVE_AWAY;
+}
+
 export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
   const waypoint = exercise.waypoint;
   let waypointVisited = waypoint === null;
   const couples = exercise.parkedTrailer !== undefined;
-  let coupledOnce = false;
-  /** A coupling run's trailer counts once it was coupled, then uncoupled, and the truck has driven away. */
-  const left = (s: SimSnapshot): boolean => {
-    const hitch = s.hitch;
-    if (!couples) return true;
-    if (!coupledOnce || hitch === undefined || hitch.coupled) return false;
-    return Math.hypot(s.coupling.x - hitch.eye.x, s.coupling.y - hitch.eye.y) >= DRIVE_AWAY;
-  };
+  const left = (s: SimSnapshot): boolean => !couples || leftTrailer(s);
   const cue = (s: SimSnapshot): GoalCue => {
     const error = targetError(s, exercise.target);
     const ok = withinTolerance(error, exercise.tolerances);
     let state: GoalState = 'away';
+    // a coupling run cues the towed trailer, and the dropped one once the truck has left it
+    const hitch = s.hitch;
     const waiting =
       couples &&
-      (!coupledOnce || (s.hitch?.coupled === false && ok.position && ok.angle && !left(s)));
+      (hitch === undefined ||
+        hitch.couplingSpeed === null ||
+        (!hitch.coupled && ok.position && ok.angle && !leftTrailer(s)));
     if (waypointVisited && !waiting) {
       if (ok.position && ok.angle) state = 'inside';
       else if (error.position <= exercise.target.length) state = 'outside';
@@ -95,7 +99,6 @@ export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
   };
   return {
     update(s) {
-      if (s.hitch?.coupled === true) coupledOnce = true;
       if (
         !waypointVisited &&
         waypoint !== null &&
@@ -149,6 +152,6 @@ export function runResult(
     time: s.time - startTime,
     ...(exercise.parkedTrailer === undefined
       ? {}
-      : { coupling: { speed: s.hitch?.couplingSpeed ?? null } }),
+      : { coupling: { speed: s.hitch?.couplingSpeed ?? null, left: leftTrailer(s) } }),
   };
 }

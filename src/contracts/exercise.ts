@@ -64,8 +64,11 @@ export type RunResult = {
   readonly time: number;
   /** Present exactly for an Einweiser run. */
   readonly einweiser?: EinweiserResult;
-  /** Present exactly for an exercise with a parked trailer: the fastest approach a coupling closed at (m/s), null if none did. */
-  readonly coupling?: { readonly speed: number | null };
+  /**
+   * Present exactly for an exercise with a parked trailer: the fastest approach a coupling closed at (m/s),
+   * null if none did, and whether the run ended with the trailer uncoupled and the truck driven away.
+   */
+  readonly coupling?: { readonly speed: number | null; readonly left: boolean };
 };
 export type BestResults = Readonly<Record<string, RunResult>>;
 export const ROLES = ['driver', 'einweiser'] as const;

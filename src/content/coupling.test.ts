@@ -23,8 +23,11 @@ const runs = TRUCK_IDS.flatMap((truckId) =>
 
 type Phase = 'couple' | 'tow' | 'drop' | 'leave' | 'halt';
 
-/** Couples, tows the trailer's rear to `dropAt` m along x, uncouples there and drives away; stops at the first reach. */
-function drive(ids: (typeof runs)[number], dropAt: number) {
+/**
+ * Couples, tows the trailer's rear to `dropAt` m along x, uncouples there and drives away; stops at the
+ * first reach. Without `uncouple` it ends standing coupled at the drop.
+ */
+function drive(ids: (typeof runs)[number], dropAt: number, uncouple = true) {
   const run = resolveRun(ids);
   const { exercise } = run;
   if (exercise === null) throw new Error('exercise expected');
@@ -41,6 +44,7 @@ function drive(ids: (typeof runs)[number], dropAt: number) {
     } else if (phase === 'tow') {
       control = stopsBy(s.trailerRear.x) ? ctl({ brake: true }) : ctl({ lever: 0.5 });
     } else if (phase === 'drop') {
+      if (!uncouple) break;
       control = ctl({ brake: true, uncouple: true });
     } else if (phase === 'leave') {
       control = ctl({ lever: 0.4 });
@@ -84,6 +88,16 @@ describe.each(runs)('$truckId + $trailerId', (ids) => {
     expect(Math.hypot(s.coupling.x - eye.x, s.coupling.y - eye.y)).toBeGreaterThanOrEqual(
       DRIVE_AWAY,
     );
+  });
+
+  it('does not reach it standing coupled in the target, and says the trailer was not left', () => {
+    const target = resolveRun(ids).exercise?.target.pose.x ?? NaN;
+    const { result, goal, s } = drive(ids, target, false);
+    expect(s.hitch?.coupled).toBe(true);
+    expect(s.speed).toBe(0);
+    expect(goal).toBe('inside');
+    expect(result.reached).toBe(false);
+    expect(result.coupling).toEqual({ speed: expect.any(Number) as number, left: false });
   });
 
   it('does not reach it with the trailer left short of the target', () => {

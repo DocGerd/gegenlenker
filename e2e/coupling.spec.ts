@@ -52,6 +52,11 @@ test('the truck couples to the parked trailer, uncouples by key and button, and 
     .click();
   await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
   const speed = page.locator('.result-row').filter({ hasText: en.couplingSpeed });
-  await expect(speed).toContainText('km/h');
-  await expect(speed).toContainText(en.failed);
+  await expect(speed.locator('.result-bad')).toContainText('km/h');
+
+  // Continue starts it again with the kept trailer, solo or not
+  await page.getByRole('button', { name: en.menu, exact: true }).click();
+  const resume = page.locator('[data-screen="title"]').getByRole('button', { name: en.continue });
+  await expect(resume).toContainText(en.exerciseCoupling);
+  await expect(resume).not.toContainText(en.noTrailer);
 });

@@ -171,6 +171,7 @@ export const de: Record<MessageKey, string> = {
   endedMoving:
     'Position und Winkel lagen in der Toleranz, aber das Fahrzeug rollte noch. Im Ziel anhalten.',
   runOver: 'Einweiser überfahren: Die Fahrt ist beendet.',
+  trailerNotLeft: 'Nicht beendet: Den Anhänger im Ziel abkuppeln, wegfahren und dann anhalten.',
   endedWithoutHalt:
     'Position und Winkel lagen in der Toleranz, aber die Fahrt endet erst mit dem Anhalten auf ein erkanntes Halt.',
   walkedBackwards: 'Halt geben, bei stehendem Fahrzeug umsetzen, dann weiter einweisen.',

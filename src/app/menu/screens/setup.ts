@@ -22,14 +22,7 @@ import {
   type EntryRef,
 } from '../catalogue';
 import { choiceRow } from '../choice-row';
-import {
-  applyOption,
-  COUPLED_TRAILER_FIELD,
-  optionValue,
-  roleField,
-  type ChoiceField,
-  type OptionId,
-} from '../options';
+import { applyOption, entryOption, type ChoiceField, type OptionId } from '../options';
 import { element, markUnavailable, noGraphicsNote, screenFrame } from './frame';
 
 export type SetupContext = {
@@ -125,17 +118,13 @@ export function setupScreen(ctx: SetupContext): {
   const stepId = entry.steps[ctx.step];
   if (stepId === undefined) throw new Error(`${entryKey(ctx.entry)} has no setup step ${ctx.step}`);
   const fields = SETUP_STEPS[stepId];
-  const parked = couples(ctx.entry);
+  const coupled = couples(ctx.entry);
   const optionRow = (id: OptionId): HTMLFieldSetElement => {
-    const coupled = parked && id === 'trailer';
-    return choiceRow(
-      coupled ? COUPLED_TRAILER_FIELD : roleField(id, role),
-      coupled ? currentSettings().trailerId : optionValue(currentSettings(), id, role),
-      (value) => {
-        if (applyOption(id, value) && exercise !== null && role === 'driver')
-          paintBests(bests, exercise);
-      },
-    );
+    const { field, value } = entryOption(currentSettings(), id, role, coupled);
+    return choiceRow(field, value, (picked) => {
+      if (applyOption(id, picked) && exercise !== null && role === 'driver')
+        paintBests(bests, exercise);
+    });
   };
   let rows = fields.map(optionRow);
 
