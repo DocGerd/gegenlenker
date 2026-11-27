@@ -225,6 +225,9 @@ export const en = {
   signRechts: 'Move right',
   signAbstand: 'Closing distance',
   signNone: 'No signal',
+  steerValueLeft: 'left',
+  steerValueRight: 'right',
+  steerValueStraight: 'straight',
 } as const;
 
 export type MessageKey = keyof typeof en;

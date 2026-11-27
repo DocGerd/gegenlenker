@@ -80,3 +80,5 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Sign 8: right arm moved sideways                | move right                                  | Rechts fahren                                |
 | Sign 9: palms brought together                  | closing distance                            | Abstandsverringerung                         |
 | No sign key held: arms down                     | no signal                                   | Kein Zeichen                                 |
+| Steering value read by a screen reader: side    | left / right                                | links / rechts                               |
+| Steering value read by a screen reader: centre  | straight                                    | geradeaus                                    |

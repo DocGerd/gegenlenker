@@ -231,4 +231,7 @@ export const de: Record<MessageKey, string> = {
   signRechts: 'Rechts fahren',
   signAbstand: 'Abstandsverringerung',
   signNone: 'Kein Zeichen',
+  steerValueLeft: 'links',
+  steerValueRight: 'rechts',
+  steerValueStraight: 'geradeaus',
 };
