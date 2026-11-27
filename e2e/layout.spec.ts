@@ -1520,6 +1520,9 @@ async function expectToolbarClear(page: Page): Promise<void> {
   }
 }
 
+/** Sizes where the front mirror shows under the measured legend. */
+const frontShown = new Set(['1280x800', '1366x768', '768x1024']);
+
 for (const { locale, messages } of locales) {
   for (const size of sizes) {
     const at = `${locale} ${size.width}x${size.height}`;
@@ -1530,6 +1533,9 @@ for (const { locale, messages } of locales) {
       try {
         const page = await context.newPage();
         await startFrozenReverse(page, messages);
+        if (frontShown.has(`${size.width}x${size.height}`)) {
+          await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(1);
+        }
         await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
           await test.step('the toolbar takes no reserve against the lever column', () =>
