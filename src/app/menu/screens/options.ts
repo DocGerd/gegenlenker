@@ -1,7 +1,8 @@
 import { t } from '../../../i18n/i18n';
+import { offeredRoles } from '../catalogue';
 import { choiceRow } from '../choice-row';
 import type { Item, Screen } from '../graph';
-import { applyOption, OPTION_FIELDS, optionValue, type OptionId } from '../options';
+import { applyOption, OPTION_FIELDS, OPTION_HINTS, optionValue, type OptionId } from '../options';
 import { currentSettings } from '../../settings';
 import { element, rowItem, screenFrame } from './frame';
 
@@ -14,6 +15,17 @@ export type OptionsContext = {
   readonly redraw: (id: OptionId) => void;
 };
 
+const hintFor = (id: OptionId): string | undefined => {
+  const key = OPTION_HINTS[id];
+  return key === undefined ? undefined : t(key);
+};
+
+const chevron = (): HTMLElement => {
+  const mark = element('span', 'menu-item-chevron menu-row-chevron', '›');
+  mark.setAttribute('aria-hidden', 'true');
+  return mark;
+};
+
 /** Each group's heading and choice rows, then the screen's own items; a change applies and is stored at once. */
 export function optionsScreen(ctx: OptionsContext): {
   readonly root: HTMLElement;
@@ -23,7 +35,9 @@ export function optionsScreen(ctx: OptionsContext): {
   const settings = currentSettings();
   const body = element('div', 'menu-settings');
 
-  ctx.screen.groups?.forEach((group, index) => {
+  const einweiser = offeredRoles().includes('einweiser');
+  const groups = ctx.screen.groups?.filter((g) => g.einweiser !== true || einweiser);
+  groups?.forEach((group, index) => {
     const section = element('section', 'menu-settings-group');
     const heading = element('h2', 'menu-settings-heading', t(group.label));
     heading.id = `settings-group-${index}`;
@@ -31,9 +45,14 @@ export function optionsScreen(ctx: OptionsContext): {
     section.append(
       heading,
       ...group.fields.map((id) =>
-        choiceRow(OPTION_FIELDS[id], optionValue(settings, id), (value) => {
-          if (applyOption(id, value) && id === 'language') ctx.redraw(id);
-        }),
+        choiceRow(
+          OPTION_FIELDS[id],
+          optionValue(settings, id),
+          (value) => {
+            if (applyOption(id, value) && id === 'language') ctx.redraw(id);
+          },
+          hintFor(id),
+        ),
       ),
     );
     body.append(section);
@@ -47,7 +66,7 @@ export function optionsScreen(ctx: OptionsContext): {
           ctx.activate(item);
         });
         button.dataset['menu'] = item.id;
-        button.append(element('span', 'menu-row-title', t(item.label)));
+        button.append(element('span', 'menu-row-title', t(item.label)), chevron());
         return li;
       }),
     );

@@ -13,7 +13,14 @@ import {
   type Orientation,
   type TopDownLayout,
 } from '../contracts/render';
-import { EXERCISE_IDS } from '../contracts/exercise';
+import {
+  DEFAULT_FOV,
+  FOV_CHOICES,
+  MOUSE_SENSITIVITIES,
+  type Fov,
+  type MouseSensitivity,
+} from '../contracts/einweiser';
+import { EXERCISE_IDS, ROLES } from '../contracts/exercise';
 import { LAYOUT_IDS } from '../contracts/layout';
 import { TRAILER_IDS, TRUCK_IDS, type TrailerId, type TruckId } from '../contracts/vehicle';
 import type { Lang } from '../i18n/i18n';
@@ -37,6 +44,11 @@ export type Settings = {
   readonly mirrorsOnly: boolean;
   /** What the last drive was, so the title can offer to continue it. */
   readonly lastEntry: EntryRef | null;
+  /** The Einweiser's first-person field of view, horizontal degrees at 16:9. */
+  readonly fov: Fov;
+  readonly mouseSensitivity: MouseSensitivity;
+  /** Mouse up looks down. */
+  readonly invertMouse: boolean;
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
@@ -45,7 +57,7 @@ const LANGS: readonly Lang[] = ['de', 'en'];
 const THEMES: readonly Settings['theme'][] = ['system', 'light', 'dark'];
 const TOP_DOWN: readonly DrivingView[] = ['follow', 'yard'];
 
-const pick = <T extends string>(ids: readonly T[], v: unknown, fallback: T): T =>
+const pick = <T extends string | number>(ids: readonly T[], v: unknown, fallback: T): T =>
   ids.find((id) => id === v) ?? fallback;
 
 /** A finite number clamped to the orientation's limits; anything else is the default. */
@@ -63,15 +75,17 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 
 /** Role, kind and id must all be known; anything else is no last entry. */
 const entryRef = (v: unknown): EntryRef | null => {
-  if (!isRecord(v) || v['role'] !== 'driver') return null;
-  const { kind, id } = v;
+  if (!isRecord(v)) return null;
+  const { role: stored, kind, id } = v;
+  const role = ROLES.find((r) => r === stored);
+  if (role === undefined) return null;
   if (kind === 'exercise') {
     const known = EXERCISE_IDS.find((e) => e === id);
-    return known === undefined ? null : { role: 'driver', kind, id: known };
+    return known === undefined ? null : { role, kind, id: known };
   }
   if (kind === 'yard') {
     const known = LAYOUT_IDS.find((l) => l === id);
-    return known === undefined ? null : { role: 'driver', kind, id: known };
+    return known === undefined ? null : { role, kind, id: known };
   }
   return null;
 };
@@ -115,6 +129,9 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
     wideMirrors: flag(s['wideMirrors'], true),
     mirrorsOnly: flag(s['mirrorsOnly'], false),
     lastEntry: entryRef(s['lastEntry']),
+    fov: pick(FOV_CHOICES, s['fov'], DEFAULT_FOV),
+    mouseSensitivity: pick(MOUSE_SENSITIVITIES, s['mouseSensitivity'], 'medium'),
+    invertMouse: flag(s['invertMouse'], false),
   };
 }
 
@@ -130,8 +147,20 @@ export function currentSettings(): Settings {
   return current;
 }
 
+const graphicsListeners = new Set<(graphics: GraphicsPreset) => void>();
+
+/** Called after the saved graphics preset changes; returns the unsubscribe. */
+export function onGraphicsChange(listener: (graphics: GraphicsPreset) => void): () => void {
+  graphicsListeners.add(listener);
+  return () => graphicsListeners.delete(listener);
+}
+
 export function updateSettings(patch: Partial<Omit<Settings, 'version'>>): Settings {
+  const before = currentSettings().graphics;
   current = { ...currentSettings(), ...patch };
   writeText(SETTINGS_KEY, JSON.stringify(current));
+  if (current.graphics !== before) {
+    for (const listener of graphicsListeners) listener(current.graphics);
+  }
   return current;
 }

@@ -555,7 +555,8 @@ describe('replay events', () => {
 describe('runStartStep', () => {
   const control = (gear: 'P' | 'D', lever: number) => ({ steer: 0, lever, brake: false, gear });
   const log = (changes: InputLog['changes']): InputLog => ({
-    version: 3,
+    version: 4,
+    role: 'driver',
     layoutId: 'depot',
     exerciseId: null,
     truckId: 'man-le-18-280',

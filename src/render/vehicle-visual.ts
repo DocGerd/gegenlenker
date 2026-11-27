@@ -56,6 +56,7 @@ import { REALISM_HUES } from './realism-hues';
 import {
   AIDS_LAYER,
   CAB_LAYER,
+  DEFAULT_LAYER,
   PERSPECTIVE_LAYER,
   SHADOW_ONLY_LAYER,
   type VehicleVisual,
@@ -98,6 +99,7 @@ import {
   type VehicleNodeMaterial,
 } from './vehicle-pbr';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
+import { setWeatherFrame } from './vehicle-weathering';
 
 /** The mesh name of a night twin: top-down only, so never a caster. */
 export const TWIN_NAME = 'night-twin';
@@ -156,6 +158,14 @@ function wheelAt(radius: number, width: number, x: number, y: number): BufferGeo
   return wheelGeometry(radius, width).translate(x, radius, -y);
 }
 
+/**
+ * The `wheelDetail` wheels replace the base wheels in the perspective views, whose sharp edges would
+ * stand through the rounded tyres; top-down still draws the base wheels.
+ */
+function setWheelLayers(wheels: readonly Mesh[], detailed: boolean): void {
+  for (const mesh of wheels) mesh.layers.set(detailed ? AIDS_LAYER : DEFAULT_LAYER);
+}
+
 /** Owns what a visual allocates so `dispose` releases it exactly once. */
 function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const geometries = new Set<BufferGeometry>();
@@ -171,6 +181,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const pbrToken = {};
   let pbrWanted = false;
   let pbrMode: LightingMode = DEFAULT_LIGHTING;
+  let pbrWeathered = false;
   let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
   let sunShadowed = false;
@@ -209,13 +220,20 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     if (pbrRoot !== null) setPbr(pbrRoot);
   });
   /**
-   * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
-   * has taken out of it; without `on` it repeats the last request, for shells that attach later.
+   * Reflective shading (#69), weathered (#556) when `weathered`, for everything below `root` and for
+   * the detail meshes a shell swap has taken out of it; without `on` it repeats the last request, for
+   * shells that attach later.
    */
-  const setPbr = (root: Object3D, on = pbrWanted, mode = pbrMode): void => {
+  const setPbr = (
+    root: Object3D,
+    on = pbrWanted,
+    mode = pbrMode,
+    weathered = pbrWeathered,
+  ): void => {
     pbrRoot = root;
     pbrWanted = on;
     pbrMode = mode;
+    pbrWeathered = weathered;
     const map = on ? (env?.texture(palette, mode) ?? null) : null;
     if (map !== null) {
       if (pbrMaterial === null) {
@@ -223,6 +241,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
         setGraded(pbrMaterial, gradeOn);
       }
       pbrMaterial.envMap = map;
+      pbrMaterial.setWeathering(weathered);
     } else if (pbrMaterial !== null) {
       pbrMaterial.envMap = null;
     }
@@ -236,6 +255,16 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     );
   };
   return {
+    /** Takes `geometry` for `dispose`, for one a mesh only wears later. */
+    own(geometry: BufferGeometry): BufferGeometry {
+      geometries.add(geometry);
+      return geometry;
+    },
+    /** `discs` (worn now), or the `wheelDetail` build, made on first use. */
+    wheelVariants(discs: BufferGeometry, build: () => BufferGeometry) {
+      let detailed: BufferGeometry | null = null;
+      return (on: boolean): BufferGeometry => (on ? (detailed ??= this.own(build())) : discs);
+    },
     material(color: number): MeshLambertMaterial {
       return track(new MeshLambertMaterial({ color }));
     },
@@ -508,8 +537,19 @@ export function proceduralTruck(
     rearTrack,
     rearTyres,
     wheelRadius: TRUCK_WHEEL_RADIUS,
+    frontAxleX: a.frontAxle.x,
+    frontHub: TRUCK_WHEEL_RADIUS + a.frontAxle.z,
+    frontTrack,
+    frontWheelWidth: TRUCK_WHEEL_WIDTH,
+    wheelDetail: false,
   };
   const detail = truckDetail(detailParams);
+  let wheelDetail = false;
+  const bodyDetail = res.wheelVariants(detail.geometry, () => {
+    const detailed = truckDetail({ ...detailParams, wheelDetail: true });
+    detailed.cabFront.dispose();
+    return detailed.geometry;
+  });
 
   const wheelSpan = 2 * Math.max(...rearTyres.offsets.map(Math.abs)) + rearTyres.width;
   const truckBlobs = [
@@ -527,7 +567,15 @@ export function proceduralTruck(
   const chassisBox = res.mesh(merge(chassis), chassisMaterial);
   const bodyBox = res.mesh(merge(body), bodyMaterial);
   const detailMesh = res.detail(detail.geometry);
+  const rearWheelMesh = res.mesh(merge(rearWheels), wheelMaterial);
   const group = new Group();
+  setWeatherFrame(group, {
+    axles: [a.frontAxle.x, a.rearAxle.x],
+    wheelRadius: TRUCK_WHEEL_RADIUS,
+    ...(look.body.kind === 'tarp' && {
+      fabric: { front: bodyFrontX(a.frontX, look.cab.length), floor: FLOOR_TOP },
+    }),
+  });
   res.attachLampLights(truckLampLights(spec), group);
   const glow = res.markerGlow(truckLamps(spec, look.cab.length).lamps);
   if (glow !== null) group.add(glow);
@@ -537,13 +585,14 @@ export function proceduralTruck(
     cabBox,
     chassisBox,
     bodyBox,
-    res.mesh(merge(rearWheels), wheelMaterial),
+    rearWheelMesh,
     detailMesh,
     cabFront,
     res.plate(detail.plate),
   );
   let cabShown = false;
   let bodyShown = false;
+  let rebaking = false;
   const night = nightPalette(palette);
   group.add(
     res.twin(cabBox, res.material(night.cab), () => cabShown),
@@ -551,13 +600,24 @@ export function proceduralTruck(
     res.twin(bodyBox, res.material(night.body), () => bodyShown),
   );
 
-  // each front wheel yaws about its own kingpin, so the two share one geometry
+  // each front wheel yaws about its own kingpin, so the two share one geometry; the detailed rims face out, one each
   const frontWheel = wheelGeometry(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH);
   const frontDetail = frontWheelDetail(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH);
+  const wheelMeshes = [rearWheelMesh];
+  const frontRims: { mesh: Mesh; variant: (on: boolean) => BufferGeometry }[] = [];
   const kingpin = (side: -1 | 1): Group => {
     const pivot = new Group();
     pivot.position.set(a.frontAxle.x, TRUCK_WHEEL_RADIUS + a.frontAxle.z, (-side * frontTrack) / 2);
-    pivot.add(res.mesh(frontWheel, wheelMaterial), res.detail(frontDetail), schematic.front());
+    const wheel = res.mesh(frontWheel, wheelMaterial);
+    const rims = res.detail(frontDetail);
+    wheelMeshes.push(wheel);
+    frontRims.push({
+      mesh: rims,
+      variant: res.wheelVariants(frontDetail, () =>
+        frontWheelDetail(TRUCK_WHEEL_RADIUS, TRUCK_WHEEL_WIDTH, true, side),
+      ),
+    });
+    pivot.add(wheel, rims, schematic.front());
     group.add(pivot);
     return pivot;
   };
@@ -610,15 +670,20 @@ export function proceduralTruck(
     slotShell(shell, []);
     // the marking is part of the detail, so a longer cab bakes the shortened one into the shell
     const shortened = linked
-      ? truckDetail({ ...detailParams, bodyFront: bodyFrontX(a.frontX, look.cab.length) }).geometry
+      ? truckDetail({
+          ...detailParams,
+          bodyFront: bodyFrontX(a.frontX, look.cab.length),
+          wheelDetail,
+        })
       : null;
+    shortened?.cabFront.dispose();
     bodyShell = applyShell(
       group,
       shell,
       {
         toAids: [bodyBox],
         remove: [detailMesh],
-        detail: shortened ?? detail.geometry,
+        detail: shortened?.geometry ?? bodyDetail(wheelDetail),
         layer: PERSPECTIVE_LAYER,
       },
       {
@@ -627,12 +692,38 @@ export function proceduralTruck(
         onChange: (on) => {
           bodyShown = on;
           res.syncTwins();
-          shells?.body.attached(bodyKey, on);
+          if (!rebaking) shells?.body.attached(bodyKey, on);
         },
       },
     );
-    shortened?.dispose();
+    shortened?.geometry.dispose();
     res.setPbr(group);
+  };
+  /** Swaps in the discs or the detailed wheels, and rebakes an attached body shell's detail. */
+  const setWheelDetail = (on: boolean): void => {
+    if (on === wheelDetail) return;
+    wheelDetail = on;
+    detailMesh.geometry = bodyDetail(on);
+    for (const { mesh, variant } of frontRims) mesh.geometry = variant(on);
+    setWheelLayers(wheelMeshes, on);
+    if (bodyShell === null || loadedShells.body === null) return;
+    // a rebake reports only a change of state
+    const was = bodyShown;
+    rebaking = true;
+    try {
+      bodyShell.dispose();
+      bodyShell = null;
+      attachBody(loadedShells.body);
+    } catch (error) {
+      console.warn(`Shell ${bodyKey} could not be rebaked; keeping the procedural body`, error);
+      if (linked) {
+        cabShell?.dispose();
+        cabShell = null;
+      }
+    } finally {
+      rebaking = false;
+    }
+    if (bodyShown !== was) shells?.body.attached(bodyKey, bodyShown);
   };
   const attachBoth = (): void => {
     if (loadedShells.cab === null || loadedShells.body === null) return;
@@ -668,13 +759,14 @@ export function proceduralTruck(
     setLook({ flags, grade, mode, shadow, lamps, lampLight, lampShadow }) {
       cabGlb = flags.cabGlb;
       vehicleGlb = flags.vehicleGlb;
+      setWheelDetail(flags.wheelDetail);
       cabShell?.setEnabled(cabOn());
       bodyShell?.setEnabled(bodyOn());
       res.setGrade(grade.on);
       res.setSunShadow(shadow);
       res.setLamps(lamps);
       res.setLampLight(lampLight, lampShadow);
-      res.setPbr(group, flags.pbr, mode);
+      res.setPbr(group, flags.pbr, mode, flags.vehicleWeathering);
       res.setNight(mode === 'night');
     },
     dispose() {
@@ -792,14 +884,17 @@ export function proceduralTrailer(
     frontX: a.frontX,
   });
 
-  const dollyRims = dollyDetail(
-    radius,
-    TRAILER_WHEEL_WIDTH,
-    a.frontAxle.x,
-    track,
-    trailerLamps(spec, 'procedural'),
-  );
-  const trailerRig = trailerDetail({
+  const dollyRig = (on: boolean): BufferGeometry =>
+    dollyDetail(
+      radius,
+      TRAILER_WHEEL_WIDTH,
+      a.frontAxle.x,
+      track,
+      trailerLamps(spec, 'procedural'),
+      on,
+    );
+  const dollyRims = dollyRig(false);
+  const rigParams = {
     spec,
     halfWidth: hw,
     rearX: a.rearX,
@@ -812,8 +907,18 @@ export function proceduralTrailer(
     track,
     wheelWidth: TRAILER_WHEEL_WIDTH,
     rearAxleXs: a.rearAxles.map((axle) => axle.x),
+    axleTop: axleZ[1],
     shellDeck: TRAILER_LOOKS[spec.id].kind === 'low-loader' ? lowLoaderDeck(spec) : null,
-  });
+  };
+  const trailerRig = trailerDetail({ ...rigParams, wheelDetail: false });
+  // each attach bakes its own shell detail, for the wheels it shows
+  trailerRig.shellGeometry?.dispose();
+  let wheelDetail = false;
+  const rigDetail = res.wheelVariants(
+    trailerRig.geometry,
+    () => trailerDetail({ ...rigParams, wheelDetail: true }).geometry,
+  );
+  const rimsDetail = res.wheelVariants(dollyRims, () => dollyRig(true));
 
   const dollyBlobs = [
     {
@@ -842,11 +947,15 @@ export function proceduralTrailer(
   const frameMesh = res.mesh(merge([...rails, ...axleBeams]), chassisMaterial);
   const detailMesh = res.detail(trailerRig.geometry);
   const rimsMesh = res.detail(dollyRims);
+  const wheelMeshes = [
+    res.mesh(merge(dollyWheels), wheelMaterial),
+    res.mesh(merge(trailerWheels), wheelMaterial),
+  ] as const;
   const dolly = new Group();
   dolly.add(
     res.shadow(blobShadow(dollyBlobs, SHADOW_HEIGHT)),
     dollyChassisMesh,
-    res.mesh(merge(dollyWheels), wheelMaterial),
+    wheelMeshes[0],
     dollyPlan.mesh,
     rimsMesh,
   );
@@ -856,7 +965,7 @@ export function proceduralTrailer(
     trailerPlan.mesh,
     bodyMesh,
     frameMesh,
-    res.mesh(merge(trailerWheels), wheelMaterial),
+    wheelMeshes[1],
     detailMesh,
     res.plate(trailerRig.plate),
   );
@@ -868,6 +977,8 @@ export function proceduralTrailer(
     res.twin(frameMesh, nightChassis, () => shown),
   );
   dolly.add(res.twin(dollyChassisMesh, nightChassis, () => shown));
+  setWeatherFrame(dolly, { axles: [a.frontAxle.x], wheelRadius: radius });
+  setWeatherFrame(trailer, { axles: a.rearAxles.map((axle) => axle.x), wheelRadius: radius });
   const group = new Group();
   group.add(dolly, trailer);
   res.attachLampLights([trailerLampLight(spec)], trailer);
@@ -883,9 +994,10 @@ export function proceduralTrailer(
   type Applied = ReturnType<typeof applyShell>;
   let applied: { readonly trailer: Applied; readonly dolly: Applied } | null = null;
   let vehicleGlb = true;
+  let loaded: TrailerShell | null = null;
   const key = `${spec.id}-trailer`;
   /** Both halves switch together or not at all; the shell counts as attached only while both show. */
-  const showShell = (on: boolean): void => {
+  const showShell = (on: boolean, report = true): void => {
     if (applied === null || on === shown) return;
     const halves = [applied.trailer, applied.dolly];
     try {
@@ -902,9 +1014,10 @@ export function proceduralTrailer(
     }
     shown = on;
     res.syncTwins();
-    shells?.attached(key, on);
+    if (report) shells?.attached(key, on);
   };
-  const attach = (shell: TrailerShell): void => {
+  /** Bakes both halves, switched off, for the wheels the look shows. */
+  const bake = (shell: TrailerShell): void => {
     const shellLamps = trailerLamps(spec, 'shell').lamps;
     slotShell(
       shell.trailer,
@@ -914,34 +1027,68 @@ export function proceduralTrailer(
     const material = res.detailMaterial();
     // a bare chassis drops the swap body's marking; a low-loader's detail follows its deck
     // both start off, so a failure here leaves the groups as they were
-    const onBody = applyShell(
-      trailer,
-      shell.trailer,
-      {
-        toAids: [bodyMesh, frameMesh],
-        remove: [detailMesh],
-        detail: trailerRig.shellGeometry ?? trailerRig.geometry,
-        layer: PERSPECTIVE_LAYER,
-      },
-      { material, enabled: false },
-    );
-    trailerRig.shellGeometry?.dispose();
+    const rig = trailerDetail({ ...rigParams, wheelDetail });
+    rig.geometry.dispose();
+    let onBody: Applied;
+    try {
+      onBody = applyShell(
+        trailer,
+        shell.trailer,
+        {
+          toAids: [bodyMesh, frameMesh],
+          remove: [detailMesh],
+          detail: rig.shellGeometry ?? rigDetail(wheelDetail),
+          layer: PERSPECTIVE_LAYER,
+        },
+        { material, enabled: false },
+      );
+    } finally {
+      rig.shellGeometry?.dispose();
+    }
     const onDolly = applyShell(
       dolly,
       shell.dolly,
       {
         toAids: [dollyChassisMesh],
         remove: [rimsMesh],
-        detail: dollyRims,
+        detail: rimsDetail(wheelDetail),
         layer: PERSPECTIVE_LAYER,
       },
       { material, enabled: false },
     );
     applied = { trailer: onBody, dolly: onDolly };
+  };
+  const attach = (shell: TrailerShell): void => {
+    loaded = shell;
+    bake(shell);
     showShell(vehicleGlb);
     res.setPbr(group);
   };
   const cancel = shells?.onLoaded(key, attach);
+  /** Swaps in the discs or the detailed wheels, and rebakes an attached shell's detail. */
+  const setWheelDetail = (on: boolean): void => {
+    if (on === wheelDetail) return;
+    wheelDetail = on;
+    detailMesh.geometry = rigDetail(on);
+    rimsMesh.geometry = rimsDetail(on);
+    setWheelLayers(wheelMeshes, on);
+    if (applied === null || loaded === null) return;
+    // a rebake reports only a change of state
+    const was = shown;
+    applied.trailer.dispose();
+    applied.dolly.dispose();
+    applied = null;
+    shown = false;
+    try {
+      bake(loaded);
+      showShell(was, false);
+    } catch (error) {
+      console.warn(`Shell ${key} could not be rebaked; keeping the procedural trailer`, error);
+    }
+    res.syncTwins();
+    if (shown !== was) shells?.attached(key, shown);
+    res.setPbr(group);
+  };
 
   return {
     object: group,
@@ -953,12 +1100,13 @@ export function proceduralTrailer(
     },
     setLook({ flags, grade, mode, shadow, lamps, lampLight, lampShadow }) {
       vehicleGlb = flags.vehicleGlb;
+      setWheelDetail(flags.wheelDetail);
       showShell(vehicleGlb);
       res.setGrade(grade.on);
       res.setSunShadow(shadow);
       res.setLamps(lamps);
       res.setLampLight(lampLight, lampShadow);
-      res.setPbr(group, flags.pbr, mode);
+      res.setPbr(group, flags.pbr, mode, flags.vehicleWeathering);
       res.setNight(mode === 'night');
     },
     dispose() {

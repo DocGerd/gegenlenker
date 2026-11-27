@@ -13,7 +13,7 @@ const LAST_RUN_KEY = 'gegenlenker.lastRun.v1';
 const LAST_RUN_STEPS = 60;
 
 const idsKey = (ids: RunIds): string =>
-  JSON.stringify([ids.layoutId, ids.exerciseId, ids.truckId, ids.trailerId]);
+  JSON.stringify([ids.role, ids.layoutId, ids.exerciseId, ids.truckId, ids.trailerId]);
 
 /** A reached, unaided day result with the default vehicles: marks the exercise done. */
 export const reachedResult = (exerciseId: ExerciseId): RunResult => ({
@@ -99,17 +99,20 @@ function lastRunJson(ids: RunIds, fingerprint: (ids: RunIds) => string): string 
  */
 export async function seedStorage(
   target: Page | BrowserContext,
-  seed: { settings?: object; best?: readonly RunResult[]; lastRun?: RunIds },
+  seed: { settings?: object; best?: readonly RunResult[]; lastRun?: Omit<RunIds, 'role'> },
 ): Promise<void> {
   const bestIds = (seed.best ?? []).map((r): RunIds => ({
     layoutId: exerciseById(r.exerciseId).layout,
     exerciseId: r.exerciseId,
     truckId: r.truckId,
     trailerId: r.trailerId,
+    role: 'driver',
   }));
+  const lastRun: RunIds | undefined =
+    seed.lastRun === undefined ? undefined : { ...seed.lastRun, role: 'driver' };
   const fingerprint = await browserFingerprints(target, [
     ...bestIds,
-    ...(seed.lastRun === undefined ? [] : [seed.lastRun]),
+    ...(lastRun === undefined ? [] : [lastRun]),
   ]);
   const items: [string, string][] = [
     [SETTINGS_KEY, JSON.stringify({ version: 1, ...seed.settings })],
@@ -119,12 +122,11 @@ export async function seedStorage(
     items.push([
       BEST_KEY,
       serializeBestResults(best, (ids) =>
-        fingerprint({ ...ids, layoutId: exerciseById(ids.exerciseId).layout }),
+        fingerprint({ ...ids, layoutId: exerciseById(ids.exerciseId).layout, role: 'driver' }),
       ),
     ]);
   }
-  if (seed.lastRun !== undefined)
-    items.push([LAST_RUN_KEY, lastRunJson(seed.lastRun, fingerprint)]);
+  if (lastRun !== undefined) items.push([LAST_RUN_KEY, lastRunJson(lastRun, fingerprint)]);
   await target.addInitScript(
     ([settingsKey, pairs]) => {
       try {

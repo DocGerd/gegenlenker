@@ -1,6 +1,8 @@
 import { type Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
+import { NBSP } from '../src/input/control-text';
 import { exerciseEntry, openSetup, startControl, startExercise } from './menu-flow';
 
 const stop = (page: Page) => page.locator('[data-ctl="stop"]');
@@ -34,6 +36,33 @@ test('the drive exposes no unnamed image', async ({ page }) => {
   await startDrive(page);
   const snapshot = await page.locator('body').ariaSnapshot();
   expect(snapshot).not.toMatch(/^\s*- img(?!\s+"[^"]+")/m);
+});
+
+test('the wheel and the lever expose their values and stay off the tab order', async ({ page }) => {
+  await startDrive(page);
+  const wheel = page.getByRole('meter', { name: en.steer });
+  const lever = page.getByRole('meter', { name: en.speed });
+  await expect(wheel).toHaveAttribute('aria-valuetext', en.steerValueStraight);
+  await expect(lever).toHaveAttribute('aria-valuetext', `0${NBSP}%`);
+  expect(await page.locator('body').ariaSnapshot()).toMatch(
+    new RegExp(`- meter "${en.steer}"[^\\n]*\\n[\\s\\S]*- meter "${en.speed}"`),
+  );
+
+  await page.keyboard.press('4');
+  await page.keyboard.press('w');
+  await expect(lever).toHaveAttribute('aria-valuenow', '10');
+  await expect(lever).toHaveAttribute('aria-valuetext', `10${NBSP}%`);
+  await page.keyboard.down('a');
+  await expect(wheel).toHaveAttribute(
+    'aria-valuetext',
+    new RegExp(`\\d+${NBSP}%${NBSP}${en.steerValueLeft}$`),
+  );
+  await page.keyboard.up('a');
+  expect(Number(await wheel.getAttribute('aria-valuenow'))).toBeGreaterThan(0);
+
+  for (const meter of [wheel, lever]) {
+    expect(await meter.evaluate((el) => el.tabIndex)).toBe(-1);
+  }
 });
 
 test('Tab from the last pause button wraps to Continue and keeps page focus', async ({ page }) => {
@@ -81,14 +110,20 @@ test('the replay slider announces the visible time', async ({ page }) => {
     .toBe(true);
 });
 
-test('a notice ignores an Enter held from before it appeared', async ({ page }) => {
+test('a notice ignores an Enter held from before it appeared', async ({ page, allow }) => {
+  allow(/Graphics could not start/);
   await page.addInitScript(() => {
     const original: unknown = Reflect.get(HTMLCanvasElement.prototype, 'getContext');
     if (typeof original !== 'function') return;
+    // The title's probe passes; the renderer's own context then fails.
+    let probed = false;
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
       configurable: true,
       value(this: HTMLCanvasElement, id: string, ...rest: unknown[]): unknown {
-        return id === 'webgl2' ? null : Reflect.apply(original, this, [id, ...rest]);
+        if (id !== 'webgl2') return Reflect.apply(original, this, [id, ...rest]);
+        if (probed) return null;
+        probed = true;
+        return Reflect.apply(original, this, [id, ...rest]);
       },
     });
   });
@@ -105,4 +140,24 @@ test('a notice ignores an Enter held from before it appeared', async ({ page }) 
 
   await page.keyboard.press('Enter');
   await expect(page.getByRole('heading', { name: en.appName })).toBeVisible();
+});
+
+test.describe('German', () => {
+  test.use({ locale: 'de-DE' });
+
+  test('the wheel and the lever are named and valued in German', async ({ page }) => {
+    await page.goto('./');
+    await startExercise(page, de, 'straight-reverse');
+    await expect(page.locator('[data-hud="speed"]')).toContainText('km/h');
+    await expect(page.getByRole('meter', { name: de.steer })).toHaveAttribute(
+      'aria-valuetext',
+      de.steerValueStraight,
+    );
+    await page.keyboard.press('4');
+    await page.keyboard.press('w');
+    await expect(page.getByRole('meter', { name: de.speed })).toHaveAttribute(
+      'aria-valuetext',
+      `10${NBSP}%`,
+    );
+  });
 });

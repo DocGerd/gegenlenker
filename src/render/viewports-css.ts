@@ -298,6 +298,7 @@ const { controls, hud } = SOURCE;
 const TOAST = '.hud-toast';
 const CUE = '.hud-goal-cue';
 const WRAP = '.hud-toast-wrap';
+const SIGHT = '.hud-sight';
 /** A toast's `max-width` is the column less this much. */
 const toastMargin = (): number => {
   const value = declared(hud, TOAST, 'max-width');
@@ -340,6 +341,18 @@ export const GEOM = {
     borderWidth(hud, TOAST) +
     px(declared(hud, TOAST, 'border-left-width')),
   cueBox: px(padding(hud, CUE).left) + px(padding(hud, CUE).right) + 2 * borderWidth(hud, CUE),
+  sightW: px('var(--hud-sight-w)'),
+  /** What the sight cue's text leaves of its width: padding, borders, the eye icon and the gap after it. */
+  sightChrome:
+    px(padding(hud, SIGHT).left) +
+    px(padding(hud, SIGHT).right) +
+    2 * borderWidth(hud, SIGHT) +
+    px(declared(hud, `${SIGHT} svg`, 'width')) +
+    px(declared(hud, SIGHT, 'gap')),
+  /** The sight cue's height beside its lines, as a toast's. */
+  sightBox:
+    px(padding(hud, SIGHT).top) + px(padding(hud, SIGHT).bottom) + 2 * borderWidth(hud, SIGHT),
+  sightLine: px(declared(hud, SIGHT, 'line-height')),
   /** The legend stands this far above the HUD band. */
   legendLift: px(declared(hud, '.hud-legend', 'bottom').replace('var(--hud-band)', '0px')),
   /** The lever and the stop button. */

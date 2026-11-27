@@ -1,6 +1,8 @@
 import type { TruckSpec } from '../contracts/vehicle';
 import { SOURCES, estimate, sourced } from './sources';
 
+const doorGlassRear =
+  'rear edge 43 mm ahead of the front axle centre, scaled from a side-view drawing of the Actros cab (https://getoutlines.com/blueprints/20263/mercedes-benz-actros-4x2-stream-space-semi-trailer-tractor-heavy-truck-blueprints; 1.36 m behind its bumper), as on a photo of an 8x4 Arocs (https://commons.wikimedia.org/wiki/File:Mercedes-Benz_Arocs_Hough_Green_Garage_(2).jpg); front edge at the A-pillar setback, about 0.25 m ahead of the real quarter glass; no manufacturer source found';
 const eyeAboveFloor =
   'cab floor 1.1 m above ground (render model), seated eye 1.35 m above it (4x4 tipper seat sits higher than the MAN distribution cab); no source found';
 const mirrorHeight =
@@ -27,6 +29,8 @@ export const arocs1835Ak: TruckSpec = {
   rearTrack: estimate(1850, typical),
   couplingOffset: estimate(1500, 'frame end plus coupling crossmember, no source found'),
   turningRadius: sourced(8150, SOURCES.A),
+  frameTop: estimate(1100, 'chassis top and cab floor of the render model; no source found'),
+  bodyTop: estimate(2500, 'tipper wall top of the procedural body (render model); no source found'),
   eye: {
     height: estimate(2450, eyeAboveFloor),
     behindBumper: estimate(1300, typical),
@@ -44,11 +48,12 @@ export const arocs1835Ak: TruckSpec = {
     maxRate: estimate(1.5, typical),
   },
   cab: {
+    height: estimate(2900, 'cab roof of the render model; no source found'),
     windscreenInset: estimate(150, typical),
     glassSill: estimate(900, typical),
     glassHeight: estimate(756, typical),
     sideGlassSetback: estimate(176, typical),
-    sideGlassLength: estimate(814, typical),
+    sideGlassLength: estimate(1231, doorGlassRear),
     grilleWidth: estimate(1250, typical),
     grilleSill: estimate(144, typical),
     grilleHeight: estimate(540, typical),

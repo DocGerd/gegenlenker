@@ -5,6 +5,7 @@
   --hud-mirror-arm: 8px;
   --hud-arm-inset: 0.38; /* share of a mirror's height above and below its arm */
   --hud-band: 18%; /* mirrors HUD_BAND_SHARE in viewports.ts */
+  --hud-sight-w: 240px; /* SIGHT_CUE_WIDTH in viewports.ts */
   --hud-frame:
     0 0 0 var(--hud-stroke) var(--color-surface),
     0 0 0 calc(2 * var(--hud-stroke)) var(--color-text);
@@ -137,7 +138,11 @@
   left: calc(var(--space-2) + var(--safe-left));
 }
 
-/* Only in landscape does the cockpit start at the screen's top edge. */
+/* Only in landscape, or without a top view, does the cockpit start at the screen's top edge. */
+.hud[data-mirrors] .hud-cockpit > .hud-view-label {
+  top: calc(var(--space-2) + var(--safe-top));
+}
+
 @media (min-aspect-ratio: 1/1) {
   .hud-cockpit > .hud-view-label {
     top: calc(var(--space-2) + var(--safe-top));
@@ -319,12 +324,6 @@
   gap: var(--space-2);
   padding: var(--space-4) 0 0;
   box-sizing: border-box;
-}
-
-@media (min-aspect-ratio: 1/1) {
-  .hud-toast-wrap {
-    padding-top: calc(var(--space-4) + var(--safe-top));
-  }
 }
 
 .hud-toast {
@@ -757,7 +756,7 @@
 .hud-gauge .hud-label {
   max-width: 100%;
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   hyphens: auto;
 }
 
@@ -789,6 +788,11 @@
 
   .hud-gauge svg {
     width: 84px;
+  }
+
+  /* The eyebrow tracking would break "Turntable" mid-word at the narrowest width. */
+  .hud-gauge .hud-label {
+    letter-spacing: 0.04em;
   }
 }
 
@@ -910,6 +914,11 @@
   width: var(--hud-dial);
 }
 
+/* The gauges are squeezed to their dials here: the eyebrow tracking would break "Turntable" mid-word. */
+.hud-topdown[data-short] .hud-gauge .hud-label {
+  letter-spacing: 0.04em;
+}
+
 .hud-topdown[data-short] .hud-counters {
   padding: var(--space-1) var(--space-2);
   column-gap: var(--space-2);
@@ -931,26 +940,35 @@
 }
 
 .hud[data-mirrors] .hud-band {
+  flex-wrap: wrap;
+  align-content: center;
+  row-gap: 0;
   padding-right: var(--hud-lever-clear);
 }
 
+/* Compact, so a band too narrow for the readouts and the counters in one row wraps them below with both rows inside it. */
 .hud[data-mirrors] .hud-counters {
   grid-template-columns: repeat(4, auto);
   margin: 0 0 0 auto;
+  padding: var(--space-1) var(--space-2);
+  column-gap: var(--space-2);
 }
 
-/* Portrait leaves the band too narrow between gears and lever: the counters wrap below the readouts, and the brief takes the key legend's place, so there is no legend. */
+/* Portrait leaves the band too narrow between gears and lever: the readouts keep one row (a grid, since a wrapping row stacks them past the band) with the compact counters below, and the brief takes the key legend's place, so there is no legend. */
 @media not (min-aspect-ratio: 1/1) {
   .hud[data-mirrors] .hud-legend {
     display: none;
   }
 
   .hud[data-mirrors] .hud-band {
-    flex-wrap: wrap;
-    align-content: center;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: var(--space-1) var(--space-2);
+    padding-left: calc(var(--hud-inset) - var(--space-2));
   }
 
   .hud[data-mirrors] .hud-counters {
+    grid-column: 1 / -1;
     grid-template-columns: auto auto;
   }
 }
@@ -1091,4 +1109,148 @@
 /* An open key list or aid legend of a short screen opens from the same corner: the button steps aside, keeping its box. */
 .hud-pane-tools .hud-toggle[data-covered] {
   visibility: hidden;
+}
+
+/* The Einweiser's view has no controls: the band and the legend start at the screen's edge. Last in the file, over the mirror-only band rules. */
+.hud[data-role='einweiser'] .hud-legend {
+  left: calc(var(--space-4) + var(--safe-left));
+}
+
+/* The band holds the shown sign's name and the sign bar, and without the top view the counters. */
+.hud[data-role='einweiser'] .hud-band {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+  align-items: stretch;
+  gap: 0 var(--space-3);
+  padding: var(--space-1) calc(var(--space-4) + var(--safe-right))
+    calc(var(--space-1) + var(--safe-bottom)) calc(var(--space-4) + var(--safe-left));
+}
+
+.hud-sign-name {
+  align-self: center;
+  font-size: var(--text-md);
+  line-height: var(--leading-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.hud-sign-bar {
+  container: signs / size;
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--space-1);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hud-sign {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+}
+
+.hud-sign[aria-current] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+  color: var(--color-accent-strong);
+}
+
+.hud-sign-key {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+}
+
+.hud-sign-figure {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.07;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hud-sign-figure circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+.hud-sign-ghost {
+  opacity: 0.35;
+}
+
+/* Names under the figures only where the slots are wide and tall enough to keep the figures legible. */
+.hud-sign-label {
+  display: none;
+  max-width: 100%;
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+  text-align: center;
+}
+
+@container signs (min-width: 720px) and (min-height: 96px) {
+  .hud-sign-label {
+    display: block;
+  }
+}
+
+.hud[data-role='einweiser'][data-mirrors] .hud-band .hud-counters {
+  grid-column: 3;
+  grid-template-columns: repeat(4, auto);
+  align-self: center;
+}
+
+/* The sight cue: top left of his view (hud.ts places it, `sightCueBox`), in the toasts' type; never colour alone. */
+.hud-sight {
+  position: absolute;
+  box-sizing: border-box;
+  width: var(--hud-sight-w);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  font-weight: var(--weight-medium);
+}
+
+.hud-sight svg {
+  flex: none;
+  width: 20px;
+  height: var(--leading-md);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.hud-sight[data-sight='none'],
+.hud-sight[data-sight='unclear'] {
+  border-color: var(--color-warning);
+}
+
+.hud-sight-strike {
+  display: none;
+}
+
+.hud-sight[data-sight='none'] .hud-sight-strike {
+  display: inline;
 }

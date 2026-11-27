@@ -13,8 +13,12 @@ export type QualityFlags = {
   readonly yardDetail: boolean;
   /** The yard kit's meshes and atlases in the perspective views; a download, off until a preset draws it. */
   readonly yardKit: boolean;
+  /** Plain shapes for the kit's surroundings wherever the kit is not drawn; needs `yardDetail`. */
+  readonly kitStandIns: boolean;
   readonly cabGlb: boolean;
   readonly vehicleGlb: boolean;
+  /** Rounded tyres with a tread, dished rims, brake drums and axles in the perspective views, in place of flat discs. */
+  readonly wheelDetail: boolean;
   readonly chaseView: boolean;
   /** The class VI front mirror in the cockpit view's windscreen. */
   readonly frontMirror: boolean;
@@ -32,6 +36,8 @@ export type QualityFlags = {
   /** Lit perspective copies of the ground markings; the top-down tokens stay flat. */
   readonly litMarkings: boolean;
   readonly pbr: boolean;
+  /** Road grime, contact shading and paint and tarp variation on the reflective vehicles; needs `pbr`. */
+  readonly vehicleWeathering: boolean;
   /** HDRI sun and sky light in the perspective views, tone-mapped in their perspective-only materials. */
   readonly perspectiveLighting: boolean;
   /** Distance haze in the graded materials; needs `perspectiveLighting`. */
@@ -57,8 +63,10 @@ const BALANCED: QualityFlags = {
   skylineWindows: true,
   yardDetail: true,
   yardKit: false,
+  kitStandIns: true,
   cabGlb: true,
   vehicleGlb: true,
+  wheelDetail: true,
   chaseView: true,
   frontMirror: true,
   wideMirrors: true,
@@ -69,6 +77,7 @@ const BALANCED: QualityFlags = {
   groundTexture: false,
   groundPbr: false,
   pbr: false,
+  vehicleWeathering: false,
   perspectiveLighting: false,
   aerialPerspective: false,
   sunShadow: false,
@@ -90,8 +99,10 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     skylineWindows: false,
     yardDetail: false,
     yardKit: false,
+    kitStandIns: false,
     cabGlb: false,
     vehicleGlb: false,
+    wheelDetail: false,
     chaseView: false,
     frontMirror: true,
     wideMirrors: true,
@@ -102,6 +113,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     groundTexture: false,
     groundPbr: false,
     pbr: false,
+    vehicleWeathering: false,
     perspectiveLighting: false,
     aerialPerspective: false,
     sunShadow: false,
@@ -119,6 +131,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     groundTexture: true,
     groundPbr: true,
     pbr: true,
+    vehicleWeathering: true,
     perspectiveLighting: true,
     aerialPerspective: true,
     sunShadow: true,

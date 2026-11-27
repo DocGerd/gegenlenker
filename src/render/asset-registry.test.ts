@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { ASSET_REGISTRY, ATTACHMENTS, type BooleanFlag } from './asset-registry';
 import { QUALITY_FLAGS } from './quality';
 
-/** Flags that publish no marker: the haze is in place as soon as the grade is, and the grade check compiles the shadow receivers. */
+/**
+ * Flags that publish no marker: the haze is in place as soon as the grade is, the grade check
+ * compiles the shadow receivers, and the reflection check compiles the weathering.
+ */
 const SYNC_FLAGS: readonly BooleanFlag[] = [
   'aerialPerspective',
+  'vehicleWeathering',
   'sunShadow',
   'lampShadow',
   'yardShadow',

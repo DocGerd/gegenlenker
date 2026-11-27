@@ -1,4 +1,5 @@
-export type OfflineStatus = 'unknown' | 'ready' | 'failed';
+/** `incomplete`: the app shell is cached but the saved graphics preset's own assets are not yet. */
+export type OfflineStatus = 'unknown' | 'ready' | 'incomplete' | 'failed';
 
 let status: OfflineStatus = 'unknown';
 const listeners = new Set<() => void>();
@@ -12,6 +13,24 @@ export function setOfflineStatus(next: OfflineStatus): void {
   status = next;
   for (const listener of listeners) listener();
 }
+
+/** Whether the app shell is cached, whatever the preset's own assets. */
+export const precached = (): boolean => status === 'ready' || status === 'incomplete';
+
+let footers = 0;
+
+/** A screen that shows the status itself claims it; the returned function releases the claim. */
+export function claimStatusDisplay(): () => void {
+  footers++;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    footers--;
+  };
+}
+
+export const statusDisplayed = (): boolean => footers > 0;
 
 /** Returns the unsubscribe. */
 export function onOfflineStatus(listener: () => void): () => void {
@@ -28,7 +47,7 @@ export function failOnRedundantInstall(registration: InstallHost, controlled: ()
   const worker = registration.installing;
   if (worker === null || controlled()) return;
   worker.addEventListener('statechange', () => {
-    if (worker.state !== 'redundant' || controlled() || status === 'ready') return;
+    if (worker.state !== 'redundant' || controlled() || precached()) return;
     console.error('Service worker install failed');
     setOfflineStatus('failed');
   });

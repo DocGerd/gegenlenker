@@ -1,4 +1,5 @@
-import type { Prediction, SimSnapshot } from './sim';
+import type { Fov, SignId } from './einweiser';
+import type { Pose2, Prediction, SimSnapshot } from './sim';
 export type Rect = {
   readonly x: number;
   readonly y: number;
@@ -145,6 +146,7 @@ export type ScenePaletteKey =
   | 'nightTracks'
   | 'band'
   | 'cladding'
+  | 'einweiser'
   | `night${Capitalize<NightLitKey>}`;
 export type ScenePalette = Readonly<Record<ScenePaletteKey, number>>;
 /** The driver's lamp switches; the lamps' own state follows from them and the controls. */
@@ -187,6 +189,17 @@ export type RenderFrame = {
   readonly freePose?: FreePose;
   /** Absent means not yet passed. */
   readonly waypointVisited?: boolean;
+  /** Set in Einweiser runs only. */
+  readonly einweiser?: EinweiserVisual;
+  /** The Einweiser view's horizontal field of view; absent means `DEFAULT_FOV`. */
+  readonly fov?: Fov;
+};
+/** The Einweiser as drawn: his live pose and look pitch, and the sign with its `phase` (`EinweiserStatus`). */
+export type EinweiserVisual = {
+  readonly pose: Pose2;
+  readonly pitch: number;
+  readonly sign: SignId | null;
+  readonly phase: number;
 };
 /** The GPU API the renderer draws through. */
 export type GraphicsBackend = 'webgpu' | 'webgl2';

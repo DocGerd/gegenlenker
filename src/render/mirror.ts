@@ -1,5 +1,4 @@
 import {
-  MathUtils,
   Mesh,
   MeshBasicMaterial,
   OrthographicCamera,
@@ -12,31 +11,30 @@ import {
 } from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import type { Pose2 } from '../contracts/sim';
-import type { TruckId, TruckSpec, Vec3 } from '../contracts/vehicle';
-import { truckAnchors } from '../vehicles/anchors';
+import type { MirrorId, TruckId, Vec3 } from '../contracts/vehicle';
+import {
+  CLASS_II_OPTICS,
+  CLASS_II_YAW,
+  CLASS_IV_OPTICS,
+  CLASS_VI_OPTICS,
+  type MirrorMounts,
+  WIDE_YAW,
+} from '../vehicles/mirrors';
 import { bodyToThree } from './coords';
 import { CLASS_V } from './close-mirror';
-import { closeMirrorMount, frontMirrorMount } from './mirror-fields';
 import { QUALITY_FLAGS } from './quality';
 import { CAMERA_FAR, enableLayers, MIRROR_LAYERS } from './seams';
-import { FRONT_ASPECT, WIDE_ASPECT } from './viewports';
+
+export { type MirrorMounts, mirrorMounts, WIDE_YAW } from '../vehicles/mirrors';
 
 const NEAR = 0.2;
-/**
- * Class II mirrors look this far outward of straight back, per truck: enough to frame the body side and
- * the whole R46 field (shell-visibility.test.ts).
- */
-const CLASS_II_YAW: Readonly<Record<TruckId, number>> = {
-  'man-le-18-280': MathUtils.degToRad(4),
-  'arocs-1835-ak': MathUtils.degToRad(6),
-};
 
 /** One mirror's camera and capture schedule; angles in radians, `fov` in degrees (three's convention). */
 export type MirrorSpec = {
   /** Where on the truck the camera sits (`mirrorMounts`). */
-  readonly anchor: 'mirrorLeft' | 'mirrorRight' | 'wideLeft' | 'wideRight' | 'front' | 'close';
+  readonly anchor: MirrorId;
   /** The view rect the mirror fills. */
-  readonly view: 'mirrorLeft' | 'mirrorRight' | 'wideLeft' | 'wideRight' | 'front' | 'close';
+  readonly view: MirrorId;
   /** From straight back; positive turns toward the truck's right. Null: outward by the truck's class II yaw (`mirrorYaw`). */
   readonly yaw: number | null;
   readonly pitch: number;
@@ -53,11 +51,7 @@ export type MirrorSpec = {
 };
 
 const CLASS_II = {
-  yaw: null,
-  pitch: MathUtils.degToRad(-8),
-  roll: 0,
-  fov: 46,
-  aspect: null,
+  ...CLASS_II_OPTICS,
   targetScale: 1,
   cadence: 1,
   parity: 0,
@@ -75,16 +69,9 @@ export const CLASS_II_RIGHT: MirrorSpec = {
 };
 export const CLASS_II_MIRRORS: readonly MirrorSpec[] = [CLASS_II_LEFT, CLASS_II_RIGHT];
 
-/**
- * Class IV looks this far outward of straight back, and down: its field is the ground beside the
- * truck. It renders at the rect's full pixel ratio, and at half rate: each side on alternate frames.
- */
-export const WIDE_YAW = MathUtils.degToRad(22);
+/** Class IV renders at the rect's full pixel ratio, and at half rate: each side on alternate frames. */
 const CLASS_IV = {
-  pitch: MathUtils.degToRad(-20),
-  roll: 0,
-  fov: 62,
-  aspect: WIDE_ASPECT,
+  ...CLASS_IV_OPTICS,
   targetScale: 1,
   cadence: 2,
 } as const;
@@ -105,19 +92,11 @@ export const CLASS_IV_RIGHT: MirrorSpec = {
   parity: 1,
 };
 
-/**
- * Class VI: from above the cab front, forward and down onto the ground ahead of the bumper. The
- * camera is rolled upside down, so the bumper lies on the image's top edge, and the composite's
- * mirrored u puts the driver's side on the left.
- */
+/** Class VI (`CLASS_VI_OPTICS`): the composite's mirrored u puts the driver's side on the left. */
 export const CLASS_VI: MirrorSpec = {
+  ...CLASS_VI_OPTICS,
   anchor: 'front',
   view: 'front',
-  yaw: Math.PI,
-  pitch: MathUtils.degToRad(-80),
-  roll: Math.PI,
-  fov: 47,
-  aspect: FRONT_ASPECT,
   targetScale: 1,
   cadence: 1,
   parity: 0,
@@ -134,21 +113,6 @@ export const MIRRORS: readonly MirrorSpec[] = [
   CLASS_VI,
   CLASS_V_MIRROR,
 ];
-
-/** Where each mirror's camera sits on a truck, in the body frame. */
-export type MirrorMounts = Readonly<Record<MirrorSpec['anchor'], Vec3>>;
-
-export function mirrorMounts(truck: TruckSpec): MirrorMounts {
-  const { mirrorLeft, mirrorRight, wideLeft, wideRight } = truckAnchors(truck);
-  return {
-    mirrorLeft,
-    mirrorRight,
-    wideLeft,
-    wideRight,
-    front: frontMirrorMount(truck),
-    close: closeMirrorMount(truck),
-  };
-}
 
 export const mirrorAnchor = (spec: MirrorSpec, mounts: MirrorMounts): Vec3 => mounts[spec.anchor];
 

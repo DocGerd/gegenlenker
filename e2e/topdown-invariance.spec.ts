@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import {
@@ -17,6 +18,33 @@ import { exerciseEntry } from './menu-flow';
 import type { ScenePaletteKey } from '../src/contracts/render';
 
 const sha = (png: Buffer): string => createHash('sha256').update(png).digest('hex');
+/** Least share of his own view his arms fill; lowered, they fill several times this. */
+const MIN_SLEEVE_SHARE = 0.02;
+
+/**
+ * Share of a PNG's pixels in the arms' hi-vis sleeve: unlit vertex colour with no blue and more green
+ * than red, which nothing else in his view has.
+ */
+function sleeveShare(page: Page, png: Buffer): Promise<number> {
+  return page.evaluate(async (data) => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${data}`;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) throw new Error('no 2d context');
+    ctx.drawImage(img, 0, 0);
+    const px = ctx.getImageData(0, 0, img.width, img.height).data;
+    let sleeve = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      const [r, g, b] = [px[i] ?? 0, px[i + 1] ?? 0, px[i + 2] ?? 0];
+      if (b <= 6 && g > r && r >= 60) sleeve++;
+    }
+    return sleeve / (img.width * img.height);
+  }, png.toString('base64'));
+}
 const PRESETS: readonly Preset[] = ['low', 'balanced', 'high'];
 
 /**
@@ -48,6 +76,9 @@ const MIN_TOKEN_SHARE: Readonly<
     ['verge', 0.1],
   ],
 };
+
+/** Least share of the follow pane his token's core fills: well under its drawn area, so only a missing token fails. */
+const MIN_EINWEISER_SHARE = 2e-4;
 
 // DPR 1 only: the preset's pixel-ratio cap changes resolution, a performance knob, not what is drawn.
 // One exercise per yard, so each yard's restyled props are covered.
@@ -109,6 +140,49 @@ for (const { id, title: exercise } of [
       });
       expect(new Set(scales.map((e) => e.scale)).size, scaleLines.join('; ')).toBe(1);
       expect(mismatches, 'top-down shots differ between presets').toEqual([]);
+    },
+  );
+}
+
+// The Einweiser role draws his token in the top view and his own first-person view in the cockpit rect.
+for (const lighting of ['day', 'night'] as const) {
+  test(
+    `the Einweiser's top-down view is the same at every graphics preset and shows his token: ${lighting}`,
+    { tag: HEAVY },
+    async ({ context }, testInfo) => {
+      test.setTimeout(PRESETS.reduce((sum, preset) => sum + PRESET_TIMEOUT_MS[preset], 0));
+      const entry = { ...exerciseEntry('straight-reverse'), role: 'einweiser' } as const;
+      const hashes: string[] = [];
+      for (const preset of PRESETS) {
+        const page = await context.newPage();
+        await startPinnedDrive(page, { preset, lighting }, entry);
+        await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(0);
+        const own = await shoot(page, 'cockpit');
+        const top = await shoot(page, 'follow');
+        for (const [name, png] of [
+          ['first-person', own],
+          ['follow', top],
+        ] as const) {
+          await testInfo.attach(`${preset} ${lighting} ${name}.png`, {
+            body: png,
+            contentType: 'image/png',
+          });
+          expect(await distinctColours(page, png), `${preset} ${name}`).toBeGreaterThan(
+            MIN_DRAWN_COLOURS,
+          );
+        }
+        // the token is unlit, so its core is the exact token; his own view never shows it
+        expect(await tokenShare(page, top, 'einweiser', 0), `${preset} token`).toBeGreaterThan(
+          MIN_EINWEISER_SHARE,
+        );
+        expect(await tokenShare(page, own, 'einweiser', 0), `${preset} own view`).toBe(0);
+        expect(await sleeveShare(page, own), `${preset} own arms`).toBeGreaterThan(
+          MIN_SLEEVE_SHARE,
+        );
+        hashes.push(`${preset} ${sha(top)}`);
+        await page.close();
+      }
+      expect(new Set(hashes.map((h) => h.split(' ')[1])).size, hashes.join('; ')).toBe(1);
     },
   );
 }

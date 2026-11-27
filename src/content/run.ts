@@ -2,6 +2,7 @@ import type { ExerciseDefinition } from '../contracts/exercise';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { ContactQuery, StartState } from '../contracts/sim';
 import type { VehicleParams } from '../contracts/vehicle';
+import { einweiserScoring } from '../einweiser/fingerprint';
 import { SCORING_THRESHOLDS } from '../scoring/score';
 import { createContactQuery } from '../sim/collision';
 import { dataFingerprint } from '../sim/fingerprint';
@@ -23,7 +24,9 @@ export type ResolvedRun = {
 
 /** The single place that turns a run's ids into what drive, replay and storage simulate and hash. */
 export function resolveRun(ids: RunIds): ResolvedRun {
-  const params = resolveCombination(truckById(ids.truckId), trailerById(ids.trailerId));
+  const truck = truckById(ids.truckId);
+  const trailer = trailerById(ids.trailerId);
+  const params = resolveCombination(truck, trailer);
   const exercise = ids.exerciseId === null ? null : exerciseById(ids.exerciseId);
   const layout = resolveLayout(layouts[ids.layoutId], exercise);
   const pose = exercise?.start ?? layouts[ids.layoutId].start;
@@ -43,7 +46,11 @@ export function resolveRun(ids: RunIds): ResolvedRun {
       obstacles: layout.obstacles,
       start: pose,
       exercise,
-      scoring: SCORING_THRESHOLDS,
+      // Driver runs hash exactly the driver thresholds, so their stored runs keep their fingerprints.
+      scoring:
+        ids.role === 'einweiser'
+          ? { ...SCORING_THRESHOLDS, ...einweiserScoring(truck, trailer, layout) }
+          : SCORING_THRESHOLDS,
     }),
   };
 }

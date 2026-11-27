@@ -40,6 +40,7 @@ import {
   YARD_CASTER_LAYER,
 } from './seams';
 import { REALISM_HUES } from './realism-hues';
+import { kitStandInGeometry } from './kit-stand-ins';
 import { createSkyline } from './skyline';
 import { createYardKitLayer, type YardKitParts } from './yard-kit';
 import { createSceneSky, domeGround, nightDomeGround, skyColours } from './scene-sky';
@@ -239,6 +240,22 @@ export function proceduralEnvironment(
   }
   group.add(standInGroup);
   props.push(...standInMeshes);
+  // The surroundings' own stand-ins: drawn where the preset asks for them and the kit is not drawn.
+  const decorStandIns = new Group();
+  const decorStandInGeometry = kitStandInGeometry(layout.decor);
+  if (decorStandInGeometry !== null) {
+    geometries.push(decorStandInGeometry);
+    const mesh = new Mesh(decorStandInGeometry, solid);
+    castAndReceive(mesh);
+    decorStandIns.add(mesh);
+    props.push(mesh);
+  }
+  group.add(decorStandIns);
+  let kitDrawn = false;
+  let decorStandInsWanted = false;
+  const syncDecorStandIns = (): void => {
+    decorStandIns.visible = decorStandInsWanted && !kitDrawn;
+  };
   // Without the props the obstacles must still show in perspective, so the tokens go to every camera.
   const propSwap = tokenCopy(tokens);
   propSwap.set(true); // detail on until the first setLook
@@ -481,10 +498,12 @@ export function proceduralEnvironment(
   const nightGround = nightDomeGround(palette);
   const legacyGround = domeGround(palette, false);
   const splitGround = domeGround(palette, true);
-  const skyline = createSkyline(layout.bounds, haze);
+  const skyline = createSkyline(layout, haze);
   const yardLights = createYardLights(layout, palette);
   const kit = createYardKitLayer(layout, palette, yardKit, (drawn) => {
     standInGroup.visible = !drawn;
+    kitDrawn = drawn;
+    syncDecorStandIns();
     yardLights.queueShadows();
   });
   group.add(sky.mesh, skyline.mesh, kit.object, yardLights.object);
@@ -589,6 +608,8 @@ export function proceduralEnvironment(
       for (const swap of [groundSwap, obstacleSwap, propSwap]) swap.setTopDown(night);
       groundSwap.set(flags.groundTexture);
       propSwap.set(flags.yardDetail);
+      decorStandInsWanted = flags.kitStandIns;
+      syncDecorStandIns();
       flatSwap.set(next.litCopies);
       markYardCasters();
       yardLights.queueShadows();

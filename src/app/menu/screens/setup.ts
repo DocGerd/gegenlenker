@@ -1,5 +1,10 @@
 import { exerciseById } from '../../../content/registry';
-import type { ExerciseDefinition, RunResult } from '../../../contracts/exercise';
+import {
+  ROLES,
+  type ExerciseDefinition,
+  type Role,
+  type RunResult,
+} from '../../../contracts/exercise';
 import type { MessageKey } from '../../../i18n/en';
 import { formatNumber, formatSeconds, t } from '../../../i18n/i18n';
 import { bestKey } from '../../../scoring/best';
@@ -10,21 +15,35 @@ import {
   entryHeading,
   entryKey,
   entryOf,
+  offeredRoles,
   runConfigOf,
   SETUP_STEPS,
   type EntryRef,
 } from '../catalogue';
 import { choiceRow } from '../choice-row';
-import { applyOption, OPTION_FIELDS, optionValue } from '../options';
-import { element, screenFrame } from './frame';
+import { applyOption, optionValue, roleField, type ChoiceField, type OptionId } from '../options';
+import { element, markUnavailable, noGraphicsNote, screenFrame } from './frame';
 
 export type SetupContext = {
   readonly entry: EntryRef;
   readonly step: number;
   readonly back: () => void;
   readonly next: () => void;
+  /** No graphics backend: Start is disabled and the notice shows. */
+  readonly graphicsMissing: boolean;
   /** Starts the run once; the button shows the busy state until the drive takes over. */
-  readonly start: (button: HTMLButtonElement, run: RunConfig) => void;
+  readonly start: (button: HTMLButtonElement, run: RunConfig, entry: EntryRef) => void;
+};
+
+const ROLE_NAME: Readonly<Record<Role, MessageKey>> = {
+  driver: 'roleDriver',
+  einweiser: 'roleEinweiser',
+};
+/** Kept to the setup, not stored: the role belongs to the entry that starts. */
+const ROLE_ROW: ChoiceField = {
+  id: 'role',
+  label: 'role',
+  choices: ROLES.map((value) => ({ value, label: ROLE_NAME[value] })),
 };
 
 function stat(label: MessageKey, value: string): HTMLSpanElement {
@@ -73,43 +92,81 @@ export function setupScreen(ctx: SetupContext): {
   readonly root: HTMLElement;
   readonly focus: (remembered: string | null) => void;
 } {
+  const settings = currentSettings();
+  const offered = offeredRoles();
+  // The role the last run started with, like the other rows show their stored value.
+  const lastRole = settings.lastEntry?.role;
+  let role: Role = lastRole !== undefined && offered.includes(lastRole) ? lastRole : ctx.entry.role;
   const entry = entryOf(ctx.entry);
-  const frame = screenFrame('setup', entryHeading(ctx.entry), ctx.back);
+  const frame = screenFrame('setup', '', ctx.back);
   const layout = element('div', 'menu-setup');
 
   const info = element('div', 'menu-setup-info');
-  info.append(element('p', 'menu-setup-brief', t(entry.brief)));
+  const brief = element('p', 'menu-setup-brief');
+  info.append(brief);
   const exercise = ctx.entry.kind === 'exercise' ? exerciseById(ctx.entry.id) : null;
   const bests = element('div', 'menu-bests');
   bests.dataset['menu'] = 'bests';
-  if (exercise !== null) {
-    info.append(toleranceLine(exercise), bests);
-    paintBests(bests, exercise);
-  }
+  if (exercise !== null) info.append(toleranceLine(exercise));
 
   const stepId = entry.steps[ctx.step];
   if (stepId === undefined) throw new Error(`${entryKey(ctx.entry)} has no setup step ${ctx.step}`);
-  const settings = currentSettings();
+  const fields = SETUP_STEPS[stepId];
+  const optionRow = (id: OptionId): HTMLFieldSetElement =>
+    choiceRow(roleField(id, role), optionValue(currentSettings(), id), (value) => {
+      if (applyOption(id, value) && exercise !== null && role === 'driver')
+        paintBests(bests, exercise);
+    });
+  let rows = fields.map(optionRow);
+
+  /** Heading, brief and bests follow the role; an Einweiser keeps no bests (owner). */
+  const paint = (): void => {
+    const shown: EntryRef = { ...ctx.entry, role };
+    frame.heading.textContent = entryHeading(shown);
+    brief.textContent = t(entryOf(shown).brief);
+    if (exercise !== null && role === 'driver') {
+      info.append(bests);
+      paintBests(bests, exercise);
+    } else bests.remove();
+  };
+  paint();
+
   const options = element('div', 'menu-setup-options');
-  options.append(
-    ...SETUP_STEPS[stepId].map((id) =>
-      choiceRow(OPTION_FIELDS[id], optionValue(settings, id), (value) => {
-        if (applyOption(id, value) && exercise !== null) paintBests(bests, exercise);
+  if (offered.length > 1) {
+    options.append(
+      choiceRow(ROLE_ROW, role, (value) => {
+        role = offered.find((r) => r === value) ?? role;
+        paint();
+        // the rows name some fields the role's way
+        const next = fields.map(optionRow);
+        rows.forEach((row, i) => {
+          const fresh = next[i];
+          if (fresh !== undefined) row.replaceWith(fresh);
+        });
+        rows = next;
       }),
-    ),
-    element('p', 'menu-note', t('estimateNote')),
-  );
+    );
+  }
+  options.append(...rows, element('p', 'menu-note', t('estimateNote')));
 
   const last = ctx.step + 1 >= entry.steps.length;
   // Only the last step starts; a `next` label joins the catalogue with a second step.
   const start = element('button', 'menu-setup-start', t('start'));
   start.type = 'button';
   start.dataset['menu'] = 'start';
+  const unavailable = ctx.graphicsMissing && last;
+  if (unavailable) markUnavailable(start);
   start.addEventListener('click', () => {
-    if (last) ctx.start(start, runConfigOf(ctx.entry, currentSettings()));
-    else ctx.next();
+    if (unavailable) return;
+    if (!last) {
+      ctx.next();
+      return;
+    }
+    const started: EntryRef = { ...ctx.entry, role };
+    ctx.start(start, runConfigOf(started, currentSettings()), started);
   });
   options.append(start);
+  if (ctx.graphicsMissing) options.append(noGraphicsNote());
 
   layout.append(info, options);
   frame.body.append(layout);

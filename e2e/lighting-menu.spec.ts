@@ -106,7 +106,9 @@ test('the menu shows the bests of the chosen time of day, and the choice is save
   };
   const stored = serializeBestResults(
     { [bestKey(exercise.id, truckId, trailerId, false, 'night', false)]: night },
-    (ids) => resolveRun({ ...ids, layoutId: exerciseById(ids.exerciseId).layout }).fingerprint,
+    (ids) =>
+      resolveRun({ ...ids, layoutId: exerciseById(ids.exerciseId).layout, role: 'driver' })
+        .fingerprint,
   );
   await page.addInitScript(
     ([settingsKey, bestKeyName, best]) => {

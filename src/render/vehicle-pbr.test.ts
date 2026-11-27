@@ -42,6 +42,7 @@ import {
   vehicleShaderCompiles,
 } from './vehicle-pbr';
 import { proceduralTrailer, proceduralTruck } from './vehicle-visual';
+import { GRIME_MARKER } from './vehicle-weathering';
 
 const palette = Object.fromEntries(Object.keys(KEYS).map((k) => [k, 0x808080])) as ScenePalette;
 
@@ -652,8 +653,8 @@ describe('vehicle shader check', () => {
     } as unknown as WebGL2RenderingContext;
     hook?.(...([context, {}, 'vertex', fragment] as unknown as Parameters<Hook>));
   };
-  const built = `float ${VEHICLE_SHADER_MARKER}; float ${GRADE_SHADER_MARKER};`;
-  const ungraded = `float ${VEHICLE_SHADER_MARKER};`;
+  const built = `float ${VEHICLE_SHADER_MARKER}; float ${GRIME_MARKER}; float ${GRADE_SHADER_MARKER};`;
+  const ungraded = `float ${VEHICLE_SHADER_MARKER}; float ${GRIME_MARKER};`;
 
   it('passes a shader that built with the markers, and restores the hook', async () => {
     const g = gpu(() => Promise.resolve(built));
@@ -700,6 +701,10 @@ describe('vehicle shader check', () => {
 
   it.each([
     ['three swapped in a plain material', () => Promise.resolve('void main() {}')],
+    [
+      'the weathering was not built',
+      () => Promise.resolve(`float ${VEHICLE_SHADER_MARKER}; float ${GRADE_SHADER_MARKER};`),
+    ],
     [
       'its GLSL fails',
       (hook: Hook | null) => {

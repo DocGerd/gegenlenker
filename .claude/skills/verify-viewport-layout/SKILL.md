@@ -51,7 +51,7 @@ A real bug: the counterexample's rects, read against the promise in CLAUDE.md or
 - a new config input (a mirror, a setting, a preset flag) that no variant in `VARIANTS` carries;
 - a promise that the spec encodes but the code documents otherwise.
 
-To re-measure the legend: start `pnpm dev`, open the drive at each size in en and de with headless Chromium, read the `.hud-legend` box (the stage-bottom distance of its top, width, height), and click `[data-hud="keysToggle"]` through `page.evaluate` for the open-chevron state; update `LEGEND_BOXES`. The legend's branch order in `legendFor` and `LEGEND_BOXES` are checked by no test: only this re-measurement keeps them true.
+To re-measure the legend: start `pnpm dev`, open the drive at each size in en and de with headless Chromium, read the `.hud-legend` box (the stage-bottom distance of its top, width, height), and click `[data-hud="keysToggle"]` through `page.evaluate` for the open-chevron state; update `LEGEND_BOXES`, and `EINWEISER_LEGEND_BOXES` from an Einweiser drive. The legend's branch order in `legendFor` and `LEGEND_BOXES` are checked by no test: only this re-measurement keeps them true.
 
 Check the first counterexample in a browser (`pnpm exec playwright screenshot` or `e2e/layout.spec.ts` at that size) before changing the spec.
 
@@ -69,10 +69,10 @@ When a change intentionally alters a promise, edit the property in the spec in t
 
 ## Coverage record
 
-Sync commit: `c20e558`, the last commit that touched the covered files when this verification was last synced. A skill cannot hold its own SHA, so staleness is measured against the covered files:
+Sync commit: `f3ab722`, the last commit that touched the covered files when this verification was last synced. A skill cannot hold its own SHA, so staleness is measured against the covered files:
 
 ```
-git log --oneline c20e558..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
+git log --oneline f3ab722..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
 ```
 
 With the code at the sync commit and the spec synced to it, the check exits 0: every counterexample is a known finding, filed as an issue and listed in `KNOWN_FINDINGS`.

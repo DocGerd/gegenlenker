@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-// `webgpu` is advisory: it reports, but does not gate a merge. `release` tags after `deploy`, and
+// `webgpu` and `einweiser-gate` are advisory: they report, but do not gate a merge. `release` tags after `deploy`, and
 // the deploy chains run only after a push, so a gate on them would hold every merge.
 const NOT_GATED = new Set([
   'check',
@@ -15,6 +15,7 @@ const NOT_GATED = new Set([
   'build-uat',
   'deploy-uat',
   'webgpu',
+  'einweiser-gate',
 ]);
 
 type Permissions = Record<string, string> | string;

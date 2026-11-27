@@ -1,3 +1,4 @@
+import type { EinweiserResult, SignId } from './einweiser';
 import type { LayoutId, Marking, Obstacle } from './layout';
 import type { LightingMode } from './render';
 import type { InputChange, Pose2, Vec2 } from './sim';
@@ -57,10 +58,30 @@ export type RunResult = {
   readonly jackknifes: number;
   readonly directionChanges: number;
   readonly time: number;
+  /** Present exactly for an Einweiser run. */
+  readonly einweiser?: EinweiserResult;
 };
 export type BestResults = Readonly<Record<string, RunResult>>;
+export const ROLES = ['driver', 'einweiser'] as const;
+export type Role = (typeof ROLES)[number];
+/** The Einweiser's held pose (`docs/einweiser-spike.md` §5): metres and radians in the sim plane. */
+export type EinweiserSample = {
+  readonly step: number;
+  readonly x: number;
+  readonly y: number;
+  readonly heading: number;
+  readonly pitch: number;
+};
+/** Change-only. Replays derive the Einweiser's view and faults from it; the logged controls alone drive the vehicle. */
+export type EinweiserTrack = {
+  readonly samples: readonly EinweiserSample[];
+  readonly signs: readonly { readonly step: number; readonly sign: SignId | null }[];
+};
 export type InputLog = {
-  readonly version: 3;
+  readonly version: 4;
+  readonly role: Role;
+  /** Present exactly when `role` is `'einweiser'`. */
+  readonly einweiser?: EinweiserTrack;
   readonly layoutId: LayoutId;
   readonly exerciseId: ExerciseId | null;
   readonly truckId: TruckId;

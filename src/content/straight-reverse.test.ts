@@ -36,7 +36,13 @@ function reverse(
   control: (s: SimSnapshot, target: TargetZone) => ControlVector,
   turntable?: number,
 ): { final: SimSnapshot; reached: boolean } {
-  const run = resolveRun({ layoutId: 'depot', exerciseId: 'straight-reverse', truckId, trailerId });
+  const run = resolveRun({
+    layoutId: 'depot',
+    exerciseId: 'straight-reverse',
+    truckId,
+    trailerId,
+    role: 'driver',
+  });
   const { exercise } = run;
   if (exercise === null) throw new Error('exercise expected');
   const start = turntable === undefined ? run.start : { ...run.start, turntableAngle: turntable };
@@ -62,6 +68,7 @@ describe('straight reverse starts bent', () => {
       exerciseId: 'straight-reverse',
       truckId: 'man-le-18-280',
       trailerId: 'krone-azw-18',
+      role: 'driver',
     });
     expect(run.start.couplingAngle).toBe(0);
     expect(run.start.turntableAngle).toBeGreaterThan(0);
@@ -70,6 +77,7 @@ describe('straight reverse starts bent', () => {
       exerciseId: 'reverse-bay',
       truckId: 'man-le-18-280',
       trailerId: 'krone-azw-18',
+      role: 'driver',
     });
     expect(Object.keys(other.start)).toEqual(['truck']);
   });

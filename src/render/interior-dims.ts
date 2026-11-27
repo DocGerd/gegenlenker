@@ -70,15 +70,15 @@ const DOOR_TOP_OVER_SILL = 0.07;
 export const PILLAR_DEPTH = 0.09;
 const ROOF_LINING = 0.1;
 
-/** Metres the forward door's rear end is behind the eye. */
+/** Metres the forward door's rear end is behind the eye; it stops at the B-pillar if that is nearer. */
 const DOOR_BACK = 0.2;
 /**
- * The cab behind the forward view, for looking around (#258): the B-pillar stands `behindEye` metres
- * behind the eye, so the side window reaches back to it from the A-pillar. The parts added lie behind
- * the eye plane, under the dash and door tops, or (rail, roof lining) a lap past the plane where no
- * ray of the forward view reaches them (pinned by interior-look-around.test.ts).
+ * The cab behind the forward view, for looking around (#258): the B-pillar stands at the rear edge of
+ * the shell's side glass, so the side window reaches back to it from the A-pillar. The parts added lie
+ * behind the eye plane, under the dash and door tops, or (rail, roof lining) a lap past the plane where
+ * no ray of the forward view reaches them (pinned by interior-look-around.test.ts).
  */
-export const B_PILLAR = { behindEye: 0.55, depth: 0.12, inset: 0.05 } as const;
+export const B_PILLAR = { depth: 0.12, inset: 0.05 } as const;
 /** Metres the rail and roof lining reach ahead of the eye plane, so a ray along it meets them. */
 const EYE_PLANE_LAP = 0.02;
 /** Metres the added parts stand inside the cab's skin. */
@@ -227,6 +227,7 @@ function anchorsOf(spec: TruckSpec) {
     half,
     screen: half - cab.cab.windscreenInset,
     sideFront: frontX - cab.cab.sideGlassSetback,
+    sideRear: frontX - cab.cab.sideGlassSetback - cab.cab.sideGlassLength,
     inner: half - DOOR_THICKNESS,
     sill,
     glassTop: sill + cab.cab.glassHeight,
@@ -291,7 +292,7 @@ function dash(a: Anchors): Solid[] {
 
 function doors(a: Anchors): Solid[] {
   const [ex] = a.eye;
-  const back = ex - DOOR_BACK;
+  const back = Math.max(ex - DOOR_BACK, a.sideRear);
   const bottom = 1.55;
   return ([-1, 1] as const).map((side) => {
     const y: [number, number] = side > 0 ? [a.inner, a.half] : [-a.half, -a.inner];
@@ -409,8 +410,8 @@ function pillars(a: Anchors): Solid[] {
  */
 function lookAround(a: Anchors): Record<InteriorMeshName, Solid[]> {
   const [ex] = a.eye;
-  const back = ex - DOOR_BACK;
-  const bPillar = ex - B_PILLAR.behindEye;
+  const bPillar = a.sideRear;
+  const back = Math.max(ex - DOOR_BACK, bPillar);
   const quarterFront = bPillar - B_PILLAR.depth;
   // stand just inside the cab skin, which the sun shadow takes as the cab's own outside
   const outer = a.half - SKIN_GAP;
@@ -426,9 +427,13 @@ function lookAround(a: Anchors): Record<InteriorMeshName, Solid[]> {
     const lining = lane(side, a.inner, outer);
     const post = lane(side, a.inner - B_PILLAR.inset, outer);
     const skin = [side > 0 ? FACE.y1 : FACE.y0]; // the side facing the cab's skin
-    interior.push(
+    if (back > bPillar) {
       // the door on to the B-pillar, level with the forward door where they meet
-      box('anthracite', [bPillar, back], lining, [doorBottom, doorTop(a, back)], skin),
+      interior.push(
+        box('anthracite', [bPillar, back], lining, [doorBottom, doorTop(a, back)], skin),
+      );
+    }
+    interior.push(
       // the sill panel under the door, which the forward door leaves open below its bottom
       box('anthracite', [bPillar, a.glass], lining, [FRAME_TOP, doorBottom], skin),
       // the rear quarter panel behind the B-pillar, floor to roof lining

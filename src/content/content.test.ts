@@ -92,7 +92,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
     (truckId, trailerId, truck, trailer) => {
       const params = resolveCombination(truck, trailer);
       const query = createContactQuery(resolved.obstacles);
-      const begin = resolveRun({ ...ids, truckId, trailerId }).start;
+      const begin = resolveRun({ ...ids, truckId, trailerId, role: 'driver' }).start;
       for (const gear of ['D', 'R'] as const) {
         const sim = createSimulation(params, begin, query);
         expect(query(bodyFootprints(params, sim.snapshot()))).toBeNull();
@@ -139,7 +139,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
       '%s + %s does not start inside the target tolerance',
       (truckId, trailerId, truck, trailer) => {
         const params = resolveCombination(truck, trailer);
-        const begin = resolveRun({ ...ids, truckId, trailerId }).start;
+        const begin = resolveRun({ ...ids, truckId, trailerId, role: 'driver' }).start;
         const sim = createSimulation(params, begin, createContactQuery([]));
         const e = targetError(sim.snapshot(), target);
         expect({
@@ -191,7 +191,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
           const params = resolveCombination(truck, trailer);
           const sim = createSimulation(
             params,
-            resolveRun({ ...ids, truckId, trailerId }).start,
+            resolveRun({ ...ids, truckId, trailerId, role: 'driver' }).start,
             createContactQuery(resolved.obstacles),
           );
           const route = [...(via[exercise.id] ?? []), waypoint];

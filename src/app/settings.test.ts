@@ -17,6 +17,9 @@ const defaults: Settings = {
   wideMirrors: true,
   mirrorsOnly: false,
   lastEntry: null,
+  fov: 90,
+  mouseSensitivity: 'medium',
+  invertMouse: false,
 };
 
 const stored: Settings = {
@@ -33,7 +36,10 @@ const stored: Settings = {
   lighting: 'night',
   wideMirrors: false,
   mirrorsOnly: true,
-  lastEntry: { role: 'driver', kind: 'exercise', id: 'reverse-bay' },
+  lastEntry: { role: 'einweiser', kind: 'exercise', id: 'reverse-bay' },
+  fov: 110,
+  mouseSensitivity: 'high',
+  invertMouse: true,
 };
 
 describe('loadSettings', () => {
@@ -66,6 +72,9 @@ describe('loadSettings', () => {
       graphics: 'ultra',
       lighting: 'dusk',
       wideMirrors: 'off',
+      fov: 85,
+      mouseSensitivity: 'fast',
+      invertMouse: 'yes',
     });
     expect(loadSettings(raw, 'en')).toEqual({
       ...defaults,

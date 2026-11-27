@@ -8,19 +8,24 @@ import type {
   TopDownSplit,
   ViewRects,
 } from '../contracts/render';
+import { SIGN_IDS, type Sight, type SignId } from '../contracts/einweiser';
+import type { Role } from '../contracts/exercise';
 import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
 import { isDrivingInput, type GoalCue } from '../scoring/score';
 import { applyMessages, formatNumber, formatSeconds, t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
+import { SIGN_NAME } from '../i18n/sign-names';
 import { isFormField } from '../input/keyboard';
 import { CHROME_SELECTOR } from './chrome-selector';
 import { goalCueTexts } from './goal-cue';
-import { hasTopDown, messageColumn, readSafeInsets } from '../render/viewports';
+import { hasTopDown, messageColumn, readSafeInsets, sightCueBox } from '../render/viewports';
 import { actionFor, isAction, type Action } from '../input/keymap';
 import { driveLegendRows, legendRowMarkup } from '../input/legend';
 import { aidSwatch } from './aid-swatches';
 import type { Ahead } from '../sim/predict';
 import { createGauge, type Gauge } from './gauges';
+import { SIGHT_CUE_KEY, sightCue, type SightCue } from './sight-cue';
+import { signPictogram } from './sign-pictogram';
 import './hud.css';
 
 export type HudAction =
@@ -67,6 +72,8 @@ export type Hud = {
   setTargetArrow(arrow: { x: number; y: number; angle: number } | null): void;
   /** The live tolerance cue; a no-op in the free yard. */
   setGoal(cue: GoalCue): void;
+  /** The sign he shows and how the driver sees him; a no-op in the driver's role. Null before the first sim step. */
+  setEinweiser(state: EinweiserHud | null): void;
   onAction(cb: (a: HudAction) => void): void;
   dispose(): void;
 };
@@ -90,6 +97,19 @@ export type HudOptions = {
   mirrorsOnly?: boolean;
   /** The stop button and lever column, which the toolbar stays clear of; absent where there are no controls. */
   pedalsBox?: () => DOMRect;
+  /**
+   * Whose key legend it lists, the driver's when absent. The Einweiser's band holds the sign bar, and
+   * the sight cue takes the cockpit label's place; he has no gear or speed readout, no gauges and no
+   * target arrow.
+   */
+  role?: Role;
+};
+
+export type EinweiserHud = {
+  readonly sign: SignId | null;
+  readonly sight: Sight;
+  /** The driver just met a sign it could not read. */
+  readonly unclear: boolean;
 };
 
 export type HudOffers = {
@@ -114,6 +134,19 @@ const BLOCKED_KEY: Record<Exclude<BlockReason, 'contact'>, MessageKey> = {
   turntable: 'blockedTurntable',
 };
 
+/** The Einweiser cannot drive: a blocked vehicle's advice to him is to signal the other direction. */
+const GUIDE_KEY: Partial<Record<MessageKey, MessageKey>> = {
+  blockedContactTruck: 'blockedContactTruckGuide',
+  blockedContactDrawbar: 'blockedContactDrawbarGuide',
+  blockedContactTrailer: 'blockedContactTrailerGuide',
+  blockedContactSelf: 'blockedContactSelfGuide',
+  blockedCoupling: 'blockedCouplingGuide',
+  blockedTurntable: 'blockedTurntableGuide',
+};
+
+const blockedKey = (key: MessageKey, driver: boolean): MessageKey =>
+  driver ? key : (GUIDE_KEY[key] ?? key);
+
 type ToastLevel = 'warn' | 'danger';
 
 /** Two stages: a predicted contact or limit stop warns, a blocked vehicle states what stopped it. */
@@ -121,18 +154,20 @@ function toastFor(
   s: SimSnapshot,
   ahead: Ahead,
   started: boolean,
+  driver: boolean,
 ): { key: MessageKey; level: ToastLevel } | null {
   if (s.blocked === 'contact') {
     return {
-      key: contactKey(s.contact),
+      key: blockedKey(contactKey(s.contact), driver),
       level: 'danger',
     };
   }
-  if (s.blocked !== null) return { key: BLOCKED_KEY[s.blocked], level: 'danger' };
+  if (s.blocked !== null)
+    return { key: blockedKey(BLOCKED_KEY[s.blocked], driver), level: 'danger' };
   if (ahead === 'contact') return { key: 'contactAhead', level: 'warn' };
   if (ahead === 'limit') return { key: 'limitAhead', level: 'warn' };
   // From the start until the first gear; later, a raised lever in P would move the truck off on shifting.
-  return s.control.gear === 'P' && (!started || s.control.lever > 0)
+  return driver && s.control.gear === 'P' && (!started || s.control.lever > 0)
     ? { key: 'selectGear', level: 'warn' }
     : null;
 }
@@ -217,27 +252,45 @@ const panelButton = (panel: string, key: MessageKey): string =>
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-chip" data-aid="${aid}" aria-describedby="aid-meaning-${aid}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
-const keyRows = (chase: boolean, look: boolean, mirrorsOnly: boolean): string =>
-  driveLegendRows({ chase, look, mirrorsOnly }).map(legendRowMarkup).join('');
+const keyRows = (chase: boolean, look: boolean, mirrorsOnly: boolean, role: Role): string =>
+  driveLegendRows({ chase, look, mirrorsOnly, role }).map(legendRowMarkup).join('');
+
+/** The Einweiser has no gauges to fold. */
+const panelButtons = (driver: boolean): string =>
+  PANELS.filter(([p]) => driver || p !== 'gauges')
+    .map(([p, k]) => panelButton(p, k))
+    .join('');
+
+/** An eye, struck through while out of sight (hud.css). */
+const EYE_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /><path class="hud-sight-strike" d="M4 4l16 16" /></svg>';
+
+/** One slot per sign in the keys' order, 1 to 9. */
+const signBar = (): string =>
+  `<div class="hud-sign-name" data-hud="signName"></div><ol class="hud-sign-bar" data-hud="signBar" aria-label="${t('signBar')}">${SIGN_IDS.map(
+    (sign, i) =>
+      `<li class="hud-sign" data-sign="${sign}"><span class="hud-sign-key mono">${i + 1}</span>${signPictogram(sign)}<span class="hud-sign-label" data-i18n="${SIGN_NAME[sign]}"></span></li>`,
+  ).join('')}</ol>`;
 
 const MARKUP = (
   mode: HudOptions['mode'],
   chase: boolean,
   look: boolean | undefined,
   mirrorsOnly: boolean,
+  role: Role,
+  driver = role === 'driver',
 ): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
-    <span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>
+    ${driver ? '<span class="hud-label hud-view-label" data-i18n="labelCockpit"></span>' : `<div class="hud-sight" data-hud="sight" hidden>${EYE_ICON}<span data-hud="sightText"></span></div>`}
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl data-hud="keys">
-        ${keyRows(chase, look === true, mirrorsOnly)}
+        ${keyRows(chase, look === true, mirrorsOnly, role)}
       </dl>
     </div>
     <div class="hud-band" data-hud="band">
-      <span class="hud-gear mono" data-hud="gear"></span>
-      <span class="hud-speed mono" data-hud="speed"></span>
+      ${driver ? '<span class="hud-gear mono" data-hud="gear"></span><span class="hud-speed mono" data-hud="speed"></span>' : signBar()}
     </div>
   </div>
   <div class="hud-mirror" data-hud="mirrorLeft" hidden></div>
@@ -250,14 +303,14 @@ const MARKUP = (
     <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
-        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${PANELS.map(([p, k]) => panelButton(p, k)).join('')}</div>
+        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${panelButtons(driver)}</div>
       <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
         <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
         <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
       </div>
     </div>
     <div class="hud-info" data-hud="info">
-      <div class="hud-gauges" id="hud-panel-gauges" data-hud="gauges" data-chrome></div>
+      ${driver ? '<div class="hud-gauges" id="hud-panel-gauges" data-hud="gauges" data-chrome></div>' : ''}
       ${
         mode === 'exercise'
           ? `<dl class="hud-counters" data-hud="counters" data-chrome>
@@ -276,7 +329,7 @@ const MARKUP = (
     <button type="button" class="hud-toggle hud-icon hud-split-reset" data-hud="splitReset" aria-keyshortcuts="L" disabled>${SPLIT_ICON}</button>
   </div>
   ${!mirrorsOnly ? `<div class="hud-pane-tools" data-hud="paneTools"><button type="button" class="hud-toggle hud-icon" data-hud="freeCamera" data-chrome aria-pressed="false" hidden>${FREE_CAMERA_ICON}</button></div>` : ''}
-  <div class="hud-arrow" data-hud="targetArrow" role="img" aria-label="${t('targetDirection')}" hidden><svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="M-9 -8L10 0L-9 8L-4 0Z" /></svg></div>
+  ${driver ? `<div class="hud-arrow" data-hud="targetArrow" role="img" aria-label="${t('targetDirection')}" hidden><svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="M-9 -8L10 0L-9 8L-4 0Z" /></svg></div>` : ''}
   <button type="button" class="hud-action" data-chrome data-hud="action" data-i18n="pause"></button>
 </div>`;
 
@@ -319,11 +372,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     for (const cb of listeners) cb(a);
   };
 
+  const role = opts.role ?? 'driver';
+  const driver = role === 'driver';
   root.insertAdjacentHTML(
     'beforeend',
-    MARKUP(opts.mode, opts.chase, opts.look, opts.mirrorsOnly === true),
+    MARKUP(opts.mode, opts.chase, opts.look, opts.mirrorsOnly === true, role),
   );
   const hud = query(root, 'root', HTMLElement);
+  hud.dataset['role'] = role;
   hud.toggleAttribute('data-interior', opts.interior);
   applyMessages(hud);
 
@@ -336,10 +392,17 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const topDown = query(hud, 'topDown', HTMLElement);
   const infoRow = query(hud, 'info', HTMLElement);
   const toolbar = query(hud, 'toolbar', HTMLElement);
-  const gaugeBox = query(hud, 'gauges', HTMLElement);
-  const speed = query(hud, 'speed', HTMLElement);
-  const gearEl = query(hud, 'gear', HTMLElement);
-  const arrow = query(hud, 'targetArrow', HTMLElement);
+  // the driver's alone
+  const gaugeBox = hud.querySelector<HTMLElement>('[data-hud="gauges"]');
+  const speed = hud.querySelector<HTMLElement>('[data-hud="speed"]');
+  const gearEl = hud.querySelector<HTMLElement>('[data-hud="gear"]');
+  const arrow = hud.querySelector<HTMLElement>('[data-hud="targetArrow"]');
+  // the Einweiser's alone
+  const sightBox = hud.querySelector<HTMLElement>('[data-hud="sight"]');
+  const sightText = hud.querySelector<HTMLElement>('[data-hud="sightText"]');
+  const signName = hud.querySelector<HTMLElement>('[data-hud="signName"]');
+  const signSlots = [...hud.querySelectorAll<HTMLElement>('[data-sign]')];
+  const action = query(hud, 'action', HTMLElement);
   const goalCue = query(hud, 'goalCue', HTMLElement);
   const goalDistance = document.createElement('span');
   goalDistance.setAttribute('aria-hidden', 'true');
@@ -364,11 +427,16 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   briefToggle.title = t('briefToggle');
   briefToggle.setAttribute('aria-label', t('briefToggle'));
 
-  const coupling: Gauge = createGauge(t('couplingAngle'), opts.couplingLimit);
-  const turntable: Gauge = createGauge(t('turntableAngle'), opts.turntableLimit);
-  coupling.set(0);
-  turntable.set(0);
-  gaugeBox.append(coupling.el, turntable.el);
+  let gauges: { readonly coupling: Gauge; readonly turntable: Gauge } | null = null;
+  if (gaugeBox !== null) {
+    gauges = {
+      coupling: createGauge(t('couplingAngle'), opts.couplingLimit),
+      turntable: createGauge(t('turntableAngle'), opts.turntableLimit),
+    };
+    gauges.coupling.set(0);
+    gauges.turntable.set(0);
+    gaugeBox.append(gauges.coupling.el, gauges.turntable.el);
+  }
 
   const counter = (name: string): HTMLElement | null =>
     hud.querySelector<HTMLElement>(`[data-hud="${name}"]`);
@@ -404,7 +472,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       return;
     }
     if (chaseSegment !== null && !chaseSegment.isConnected) segmentGroup?.append(chaseSegment);
-    if (paneToolsBox !== null && !paneToolsBox.isConnected) arrow.before(paneToolsBox);
+    if (paneToolsBox !== null && !paneToolsBox.isConnected) (arrow ?? action).before(paneToolsBox);
   };
   syncChaseOffer();
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
@@ -509,7 +577,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     briefToggle.setAttribute('aria-expanded', String(briefOpen));
     goal.toggleAttribute('data-collapsed', foldsBrief() && !briefOpen);
     setHidden(aidsBox, collapsed.aids);
-    setHidden(gaugeBox, !aids.pivots || collapsed.gauges);
+    if (gaugeBox !== null) setHidden(gaugeBox, !aids.pivots || collapsed.gauges);
   };
   syncToggles();
   /** Runs before anything measures the panels: the brief's state is part of their height. */
@@ -897,8 +965,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   // Last written values; update() compares these before touching the DOM.
   let shownTenths = -1;
   let shownGear: Gear | null = 'P';
-  gearEl.textContent = 'P';
-  gearEl.dataset['gear'] = 'P';
+  if (gearEl) {
+    gearEl.textContent = 'P';
+    gearEl.dataset['gear'] = 'P';
+  }
   let shownToast: MessageKey | null = null;
   /** A gear other than P has been selected: the start hint is done. */
   let started = false;
@@ -923,9 +993,22 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   let shownDirection = -1;
   let shownTime = '';
 
+  let shownSign: SignId | null = null;
+  let shownCue: SightCue | null = null;
+  /** Marks `sign`'s slot and names it beside the bar. */
+  const showSign = (sign: SignId | null): void => {
+    shownSign = sign;
+    if (signName !== null) signName.textContent = t(sign === null ? 'signNone' : SIGN_NAME[sign]);
+    for (const slot of signSlots) {
+      if (slot.dataset['sign'] === sign) slot.setAttribute('aria-current', 'true');
+      else slot.removeAttribute('aria-current');
+    }
+  };
+  showSign(null);
+
   const writeSpeed = (tenths: number): void => {
     shownTenths = tenths;
-    speed.textContent = `${formatNumber(tenths / 10, 1)} km/h`;
+    if (speed) speed.textContent = `${formatNumber(tenths / 10, 1)} km/h`;
   };
   writeSpeed(0);
 
@@ -939,7 +1022,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         c.brake !== lastControl.brake ||
         c.gear !== lastControl.gear);
     lastControl = c;
-    if (shortScreen && (keysOpen || aidOpen) && changed) {
+    // his snapshot's control is the AI driver's, not an input of his
+    if (driver && shortScreen && (keysOpen || aidOpen) && changed) {
       keysOpen = false;
       aidOpen = false;
       syncToggles();
@@ -968,16 +1052,16 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
       const gear = s.control.gear;
       if (gear !== 'P') started = true;
-      if (gear !== shownGear) {
+      if (gearEl && gear !== shownGear) {
         shownGear = gear;
         gearEl.textContent = gear;
         gearEl.dataset['gear'] = gear;
       }
 
-      coupling.set(s.couplingAngle);
-      turntable.set(s.turntableAngle);
+      gauges?.coupling.set(s.couplingAngle);
+      gauges?.turntable.set(s.turntableAngle);
 
-      const warning = toastFor(s, ahead, started);
+      const warning = toastFor(s, ahead, started, driver);
       const key = warning?.key ?? null;
       if (key !== shownToast) {
         shownToast = key;
@@ -1017,7 +1101,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       setHidden(cockpit, c === null);
       if (c) {
         place(cockpit, c);
-        const compact = c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH);
+        // with no wheel or gears beside it, his legend has the view's width; its one column would reach the sight cue
+        const compact =
+          driver && c.width < (spansRight(c) ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH);
         cockpit.toggleAttribute('data-compact', compact);
         // The compact legend already drops the view rows.
         const short = !compact && c.height < SHORT_HEIGHT;
@@ -1041,6 +1127,12 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         }
       });
       const insets = readSafeInsets();
+      if (c && sightBox !== null) {
+        // in the cockpit element's frame
+        const box = sightCueBox(c, insets);
+        sightBox.style.left = `${box.x - c.x}px`;
+        sightBox.style.top = `${box.y - c.y}px`;
+      }
       const column = messageColumn(views, legendBox(), insets);
       toastWrap.style.left = `${column.x}px`;
       toastWrap.style.top = `${column.y}px`;
@@ -1050,10 +1142,10 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         place(topDown, views.topDown);
         placeKeysList(views.topDown);
       }
-      // The finish/menu button sits at the screen's top-right corner.
+      // The finish/menu button sits at the screen's top-right corner, below the display cut-out.
       toastWrap.toggleAttribute(
         'data-reserve',
-        column.y < 1 && column.x + column.width >= root.clientWidth - insets.right - 1,
+        column.y < insets.top + 1 && column.x + column.width >= root.clientWidth - insets.right - 1,
       );
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
       if (hasTopDown(views)) syncToolbarReserve();
@@ -1138,12 +1230,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       chaseOffered = next.chase;
       syncChaseOffer();
       hud.toggleAttribute('data-interior', next.interior);
-      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly);
+      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly, role);
       applyMessages(keysList);
       if (!chaseOffered && view === 'chase') selectView(lastOther);
       else syncToggles();
     },
     setTargetArrow(next) {
+      if (arrow === null) return;
       setHidden(arrow, next === null);
       if (next === null) return;
       const x = Math.round(next.x);
@@ -1173,6 +1266,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         goalCue.dataset['goal'] = cue.state;
       }
       setHidden(goalCue, false);
+    },
+    setEinweiser(state) {
+      if (signName === null) return;
+      const sign = state?.sign ?? null;
+      if (sign !== shownSign) showSign(sign);
+      const cue = state === null ? null : sightCue(state.sight, state.unclear);
+      if (cue === shownCue || sightBox === null || sightText === null) return;
+      shownCue = cue;
+      setHidden(sightBox, cue === null);
+      if (cue === null) return;
+      sightText.textContent = t(SIGHT_CUE_KEY[cue]);
+      sightBox.dataset['sight'] = cue === 'none' || cue === 'unclear' ? cue : 'seen';
     },
     onAction(cb) {
       listeners.push(cb);

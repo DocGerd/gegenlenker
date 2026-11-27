@@ -4,7 +4,7 @@ import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
-import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
+import { computeViewports, NO_INSETS, sightCueBox, type Insets } from '../src/render/viewports';
 import { seedStorage } from './menu-seed';
 import { heavyAt, startPinnedDrive } from './pinned-shoot';
 import {
@@ -24,9 +24,8 @@ type Size = { width: number; height: number };
 const SETTINGS_KEY = 'gegenlenker.settings.v1';
 
 const sizes = [
-  { width: 740, height: 649 },
-  { width: 768, height: 700 },
   { width: 768, height: 1024 },
+  { width: 800, height: 585 },
   { width: 800, height: 800 },
   { width: 800, height: 820 },
   { width: 900, height: 649 },
@@ -35,14 +34,13 @@ const sizes = [
   { width: 1024, height: 700 },
   { width: 1200, height: 700 },
   { width: 1210, height: 720 },
+  { width: 1280, height: 585 },
   { width: 1280, height: 649 },
   { width: 1280, height: 720 },
   { width: 1280, height: 800 },
-  { width: 1300, height: 540 },
   { width: 1300, height: 600 },
   { width: 1350, height: 600 },
   { width: 1366, height: 768 },
-  { width: 1172, height: 426 },
   { width: 620, height: 774 },
 ];
 
@@ -82,6 +80,29 @@ const overlaps = (
   a: Awaited<ReturnType<typeof boxes>>[number],
   b: Awaited<ReturnType<typeof boxes>>[number],
 ) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+
+/** The mirror-only band's counters widen with the run time, which stands still before the first input. */
+async function widenTime(page: Page): Promise<void> {
+  const time = page.locator('[data-hud="time"]');
+  await time.evaluate((el) => {
+    el.textContent = el.textContent.replace(/^\d+/, '100');
+  });
+  await expect(time).toHaveText(/^100\D/);
+}
+
+/** The mirror-only band's readouts and counters stay inside it, clear of the brief and the controls beside it. */
+async function expectBandHolds(page: Page, height: number, safeBottom: number): Promise<void> {
+  const [band] = await boxes(page.locator('.hud-band'));
+  const held = await boxes(page.locator('.hud-gear, .hud-speed, .hud-counters'));
+  const around = await boxes(page.locator('.hud-goal:not([hidden]), .ctl-gears, .ctl-lever'));
+  expect(held).toHaveLength(3);
+  expect(around).toHaveLength(3);
+  for (const b of held) {
+    expect(b.top, `${b.name} below the band's top`).toBeGreaterThanOrEqual(band?.top ?? Infinity);
+    expect(b.bottom, `${b.name} above the bottom inset`).toBeLessThanOrEqual(height - safeBottom);
+    for (const o of around) expect(overlaps(b, o), `${b.name} overlaps ${o.name}`).toBe(false);
+  }
+}
 
 /** Rows at the top of a full-viewport screenshot column that show the bare page background. */
 async function blankRows(page: Page, x: number): Promise<number> {
@@ -351,13 +372,14 @@ async function expectMirrorsClearControls(page: Page, size: Size): Promise<void>
 const insets = { top: 24, left: 48, bottom: 20, right: 48 };
 
 /**
- * `slot`: where a mirror-only drive too short for both messages between the mirrors puts them;
- * `keysOpen`: the key legend's chevron starts open.
+ * `slot`: a mirror-only drive, and where it puts the messages; `mirrorsOnly`: one without that
+ * claim; `keysOpen`: the key legend's chevron starts open.
  */
 const insetSizes: {
   width: number;
   height: number;
-  slot?: 'cue yields' | 'right of the cone';
+  slot?: 'between the mirrors';
+  mirrorsOnly?: boolean;
   keysOpen?: boolean;
 }[] = [
   { width: 1280, height: 720 },
@@ -365,13 +387,14 @@ const insetSizes: {
   { width: 900, height: 649 },
   { width: 768, height: 1024 },
   { width: 860, height: 860, keysOpen: true },
-  { width: 950, height: 426, slot: 'cue yields' },
-  // over the brief's side of the cockpit
-  { width: 1030, height: 426, slot: 'right of the cone' },
+  // in portrait too its cockpit starts at the screen's top edge
+  { width: 820, height: 1180, slot: 'between the mirrors' },
+  // the narrowest and shortest supported landscape: the band's readouts and counters share one row only when wide enough
+  { width: 800, height: 585, mirrorsOnly: true },
 ];
 
-for (const { slot, keysOpen = false, ...size } of insetSizes) {
-  const mirrorsOnly = slot !== undefined;
+for (const { slot, mirrorsOnly: bare = false, keysOpen = false, ...size } of insetSizes) {
+  const mirrorsOnly = slot !== undefined || bare;
   const screen = mirrorsOnly ? 'mirror-only drive' : 'drive screen';
   test(`the ${screen} stays inside the safe area at ${size.width}x${size.height}`, async ({
     browser,
@@ -395,6 +418,10 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
       .toBe(`${insets.left}px`);
     await startExercise(page, en, 'straight-reverse');
     await hudReady(page, { insets, mirrorsOnly });
+    if (mirrorsOnly) {
+      await widenTime(page);
+      await expectBandHolds(page, size.height, insets.bottom);
+    }
     if (keysOpen) {
       await expect(page.locator('[data-hud="keysToggle"]')).toHaveAttribute(
         'aria-expanded',
@@ -402,12 +429,14 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
       );
     }
 
+    const landscape = size.width >= size.height;
     const placed = await boxes(
       page.locator(
         [
           '.ctl-wheel, .ctl-reset, .ctl-label, .ctl-gears, .ctl-lamp, .ctl-stop, .ctl-lever',
-          // the mirror-only drive hides the gauges with the top-down pane
-          `.hud-action, .hud-goal:not([hidden]), ${mirrorsOnly ? '' : '.hud-gauge, '}.hud-counters, .hud-legend`,
+          // the mirror-only drive hides the gauges with the top-down pane, and in portrait the key legend
+          `.hud-action, .hud-goal:not([hidden]), ${mirrorsOnly ? '' : '.hud-gauge, '}.hud-counters`,
+          ...(mirrorsOnly && !landscape ? [] : ['.hud-legend']),
           '.hud-gear, .hud-speed, .hud-cockpit > .hud-view-label, .hud-mirror:not([hidden])',
         ].join(', '),
       ),
@@ -422,10 +451,9 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
     const topEdge = await boxes(
       page.locator('.hud-action, .hud-goal:not([hidden]), .hud-cockpit > .hud-view-label'),
     );
-    const landscape = size.width >= size.height;
     for (const b of topEdge) {
-      // In portrait the cockpit label sits mid-screen, so only the top view's panels reach the top edge.
-      if (landscape || !b.name.includes('view-label')) {
+      // In portrait the cockpit label sits mid-screen under a top view, whose panels alone reach the top edge.
+      if (landscape || mirrorsOnly || !b.name.includes('view-label')) {
         expect(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(insets.top);
       }
     }
@@ -443,12 +471,7 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
     }
 
     const wrap = page.locator('[data-hud="toastWrap"]');
-    if (slot === 'cue yields') await expect(wrap).toHaveAttribute('data-cue-yields');
-    else await expect(wrap).not.toHaveAttribute('data-cue-yields');
-    if (slot === 'right of the cone') {
-      const [column] = await boxes(wrap);
-      expect(column?.left, 'the messages right of the sight cone').toBeGreaterThan(size.width / 2);
-    }
+    await expect(wrap).not.toHaveAttribute('data-cue-yields');
     await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
     // the toast stands inside the wrap, which keeps clear of the safe area
     const messages = await boxes(
@@ -460,18 +483,40 @@ for (const { slot, keysOpen = false, ...size } of insetSizes) {
       const at = `${b.name} in the safe area`;
       expect(b.left, at).toBeGreaterThanOrEqual(insets.left);
       expect(b.right, at).toBeLessThanOrEqual(size.width - insets.right);
-      if (landscape && !b.name.includes('toast-wrap')) {
-        expect(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(insets.top);
-      }
+      expect(b.top, `${b.name} below the top inset`).toBeGreaterThanOrEqual(insets.top);
     }
     await context.close();
   });
 }
 
-test('the longest German toast fits the narrowest pane column, inside the safe area, at 800x426', async ({
+test('the goal cue yields to the toast in a mirror-only drive too narrow for both, at 620x640', async ({
   browser,
 }) => {
-  const size = { width: 800, height: 426 };
+  const context = await browser.newContext({
+    locale: 'en-US',
+    viewport: { width: 620, height: 640 },
+  });
+  try {
+    const page = await context.newPage();
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets });
+    await page.addInitScript((key) => {
+      localStorage.setItem(key, JSON.stringify({ version: 1, mirrorsOnly: true }));
+    }, SETTINGS_KEY);
+    await page.goto('./');
+    await startExercise(page, en, 'straight-reverse');
+    await hudReady(page, { insets, mirrorsOnly: true });
+    await expect(page.locator('[data-hud="toastWrap"]')).toHaveAttribute('data-cue-yields');
+    await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
+  } finally {
+    await context.close();
+  }
+});
+
+test('the longest German toast fits the narrowest pane column, inside the safe area, at 800x585', async ({
+  browser,
+}) => {
+  const size = { width: 800, height: 585 };
   const context = await browser.newContext({ locale: 'de-DE', viewport: size });
   try {
     const page = await context.newPage();
@@ -503,6 +548,52 @@ test('the longest German toast fits the narrowest pane column, inside the safe a
     await context.close();
   }
 });
+
+/**
+ * The mirror-only band: German at the narrowest and shortest landscape, the notch insets at 768x1024, and a
+ * small tablet with a portrait tablet's own insets (a status bar and a home indicator, none at the sides).
+ */
+const bandScreens = [
+  { locale: 'de-DE', messages: de, size: { width: 800, height: 585 }, safe: insets },
+  { locale: 'en-US', messages: en, size: { width: 768, height: 1024 }, safe: insets },
+  { locale: 'de-DE', messages: de, size: { width: 768, height: 1024 }, safe: insets },
+  {
+    locale: 'de-DE',
+    messages: de,
+    size: { width: 600, height: 960 },
+    safe: { top: 24, left: 0, bottom: 20, right: 0 },
+  },
+];
+
+for (const { locale, messages, size, safe } of bandScreens) {
+  test(`the mirror-only band holds the readouts and the counters at ${locale} ${size.width}x${size.height}`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale, viewport: size });
+    try {
+      const page = await context.newPage();
+      const cdp = await context.newCDPSession(page);
+      await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: safe });
+      await page.addInitScript((key) => {
+        localStorage.setItem(key, JSON.stringify({ version: 1, mirrorsOnly: true }));
+      }, SETTINGS_KEY);
+      await page.goto('./');
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            getComputedStyle(document.documentElement).getPropertyValue('--safe-bottom'),
+          ),
+        )
+        .toBe(`${safe.bottom}px`);
+      await startExercise(page, messages, 'straight-reverse');
+      await hudReady(page, { insets: safe, mirrorsOnly: true });
+      await widenTime(page);
+      await expectBandHolds(page, size.height, safe.bottom);
+    } finally {
+      await context.close();
+    }
+  });
+}
 
 const starts = [
   { name: 'exercise', entry: exerciseEntry('straight-reverse') },
@@ -701,9 +792,6 @@ for (const [height, openFull] of [
 const handle = (page: Page) => page.locator('[data-hud="splitHandle"]');
 const splitBar = (page: Page) => page.locator('[data-hud="split"]');
 
-/** A short landscape screen: no panel row fits above the divider. */
-const shortLandscape = { width: 844, height: 390 };
-const splitSizes = [...sizes, shortLandscape];
 /** Laptops whose lever column stands well below the toolbar: the toolbar keeps its full width there. */
 const unreservedToolbar = new Set(['1280x800', '1366x768']);
 
@@ -873,8 +961,6 @@ const overlaySizes = [
   { width: 1280, height: 585 },
   { width: 1024, height: 690 },
   { width: 800, height: 600 },
-  { width: 1300, height: 540 },
-  { width: 1172, height: 426 },
 ];
 
 for (const { locale, messages } of locales) {
@@ -1013,26 +1099,6 @@ test('a swipe on the open aid legend scrolls it, and neither steers, drives nor 
   }
 });
 
-test('the key list of a short screen opens at its top again', async ({ page }) => {
-  await page.setViewportSize({ width: 1172, height: 426 });
-  await startStraightReverse(page, en);
-  const list = page.locator(KEY_LIST);
-  await keysToggle(page).click();
-  await expect(list).toBeVisible();
-  await settled(page);
-  expect(await list.evaluate((el) => el.scrollHeight > el.clientHeight), 'no room to scroll').toBe(
-    true,
-  );
-  await list.evaluate((el) => {
-    el.scrollTop = el.scrollHeight;
-  });
-  await keysToggle(page).click();
-  await expect(list).toBeHidden();
-  await keysToggle(page).click();
-  await expect(list).toBeVisible();
-  expect(await list.evaluate((el) => el.scrollTop)).toBe(0);
-});
-
 test('the messages stay clear of the controls with the aid legend open on a short portrait screen', async ({
   page,
 }) => {
@@ -1053,7 +1119,6 @@ test('the messages stay clear of the controls with the aid legend open on a shor
 const counterSizes = [
   { width: 1280, height: 585 },
   { width: 1280, height: 649 },
-  { width: 1300, height: 540 },
   { width: 1350, height: 600 },
 ];
 
@@ -1087,6 +1152,41 @@ for (const { locale, messages } of locales) {
   }
 }
 
+/** Per gauge label: the line breaks that fall inside a word, other than at a soft hyphen, and how often it wraps. */
+async function gaugeLabelBreaks(page: Page): Promise<{ bad: string[]; wraps: number }[]> {
+  const labels = page.locator('.hud-gauge .hud-label');
+  await expect(labels).toHaveCount(2);
+  return labels.evaluateAll((els) =>
+    els.map((el) => {
+      const bad: string[] = [];
+      let wraps = 0;
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const text = node.textContent ?? '';
+        let last: { char: number; top: number } | undefined;
+        for (let i = 0; i < text.length; i++) {
+          const range = document.createRange();
+          range.setStart(node, i);
+          range.setEnd(node, i + 1);
+          // the first character after a soft-hyphen break reports the hyphen glyph first
+          const rect = [...range.getClientRects()].filter((r) => r.width > 0).at(-1);
+          if (!rect || text[i] === ' ') continue;
+          if (last && rect.top - last.top > 2) {
+            wraps++;
+            const at = text[last.char];
+            const next = text[last.char + 1];
+            if (at !== '\u00AD' && next !== '\u00AD' && next !== ' ') {
+              bad.push(`${text.slice(0, i)}|${text.slice(i)}`);
+            }
+          }
+          last = { char: i, top: rect.top };
+        }
+      }
+      return { bad, wraps };
+    }),
+  );
+}
+
 /** A gauge label that wraps breaks only at a space or a soft hyphen, never mid-word without a hyphen. */
 for (const size of [
   { width: 1280, height: 585 },
@@ -1100,37 +1200,7 @@ for (const size of [
       const page = await context.newPage();
       await startStraightReverse(page, de);
       await settled(page);
-      const labels = page.locator('.hud-gauge .hud-label');
-      await expect(labels).toHaveCount(2);
-      const breaks = await labels.evaluateAll((els) =>
-        els.map((el) => {
-          const bad: string[] = [];
-          let wraps = 0;
-          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-            const text = node.textContent ?? '';
-            let last: { char: number; top: number } | undefined;
-            for (let i = 0; i < text.length; i++) {
-              const range = document.createRange();
-              range.setStart(node, i);
-              range.setEnd(node, i + 1);
-              // the first character after a soft-hyphen break reports the hyphen glyph first
-              const rect = [...range.getClientRects()].filter((r) => r.width > 0).at(-1);
-              if (!rect || text[i] === ' ') continue;
-              if (last && rect.top - last.top > 2) {
-                wraps++;
-                const at = text[last.char];
-                const next = text[last.char + 1];
-                if (at !== '\u00AD' && next !== '\u00AD' && next !== ' ') {
-                  bad.push(`${text.slice(0, i)}|${text.slice(i)}`);
-                }
-              }
-              last = { char: i, top: rect.top };
-            }
-          }
-          return { bad, wraps };
-        }),
-      );
+      const breaks = await gaugeLabelBreaks(page);
       // A label that fits on one line would pass vacuously: pick a size where it wraps.
       expect(
         breaks.map((b) => b.wraps > 0),
@@ -1144,6 +1214,35 @@ for (const size of [
       await context.close();
     }
   });
+}
+
+/** The smallest supported landscape sizes, where the gauge labels are tightest. */
+for (const { locale, messages } of locales) {
+  for (const size of [
+    { width: 800, height: 585 },
+    { width: 800, height: 720 },
+    { width: 900, height: 600 },
+    { width: 1024, height: 600 },
+    { width: 1280, height: 585 },
+  ]) {
+    test(`the gauge labels do not break mid-word at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      const context = await browser.newContext({ locale, viewport: size });
+      try {
+        const page = await context.newPage();
+        await startStraightReverse(page, messages);
+        await settled(page);
+        const breaks = await gaugeLabelBreaks(page);
+        expect(
+          breaks.map((b) => b.bad),
+          'a gauge label breaks inside a word',
+        ).toEqual([[], []]);
+      } finally {
+        await context.close();
+      }
+    });
+  }
 }
 
 /** At the smallest and largest share the divider clears the cockpit and the panels, or is hidden. */
@@ -1325,12 +1424,7 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
  * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
-const paneToolAbsent = new Set([
-  'en-US 844x390',
-  'de-DE 844x390',
-  'de-DE 740x649',
-  'de-DE 1172x426',
-]);
+const paneToolAbsent = new Set(['en-US 800x585', 'de-DE 800x585']);
 
 async function expectPaneToolClear(page: Page, at: string): Promise<void> {
   await page.keyboard.press('o');
@@ -1385,7 +1479,7 @@ async function expectToolbarClear(page: Page): Promise<void> {
 }
 
 for (const { locale, messages } of locales) {
-  for (const size of splitSizes) {
+  for (const size of sizes) {
     const at = `${locale} ${size.width}x${size.height}`;
 
     test(`the layout holds at ${at}`, async ({ browser }) => {
@@ -1394,11 +1488,7 @@ for (const { locale, messages } of locales) {
       try {
         const page = await context.newPage();
         await startStraightReverse(page, messages);
-        // The short landscape size has no mirror check, only the messages and the divider.
-        if (size !== shortLandscape) {
-          await test.step('mirrors clear the controls', () =>
-            expectMirrorsClearControls(page, size));
-        }
+        await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
           await test.step('the toolbar takes no reserve against the lever column', () =>
             expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve'));
@@ -1423,7 +1513,7 @@ for (const { locale, messages } of locales) {
 
 // Without an exercise there is no brief: the view row takes its place beside the finish button, and wraps.
 for (const { locale, messages } of locales) {
-  for (const size of splitSizes.filter((s) => s.width <= 1024)) {
+  for (const size of sizes.filter((s) => s.width <= 1024)) {
     test(`the free yard toolbar stays clear at ${locale} ${size.width}x${size.height}`, async ({
       browser,
     }) => {
@@ -1694,10 +1784,10 @@ test('opening the aid legend re-measures the divider against the panels', async 
 });
 
 for (const { locale, messages } of locales) {
-  test(`a wrapped view control rounds the ends of each row at ${locale} 740x649`, async ({
+  test(`a wrapped view control rounds the ends of each row at ${locale} 800x649`, async ({
     browser,
   }) => {
-    const context = await browser.newContext({ locale, viewport: { width: 740, height: 649 } });
+    const context = await browser.newContext({ locale, viewport: { width: 800, height: 649 } });
     try {
       const page = await context.newPage();
       await page.goto('./');
@@ -1747,7 +1837,7 @@ test('folding and unfolding a panel re-measures the divider against the panels',
   page,
 }) => {
   // Short enough that the unfolded aids panel leaves no room for the divider, the folded one does.
-  const size = { width: 1024, height: 560 };
+  const size = { width: 1024, height: 585 };
   await page.setViewportSize(size);
   await startStraightReverse(page, en);
   await expect(splitBar(page)).toHaveAttribute('hidden', '');
@@ -1782,7 +1872,7 @@ test('folding and unfolding a panel re-measures the divider against the panels',
 
 test('toggling the pivots aid re-measures the divider against the panels', async ({ page }) => {
   // The pivots aid shows the gauge panel: with it the divider has no room here, without it it does.
-  const size = { width: 1024, height: 560 };
+  const size = { width: 1024, height: 585 };
   await page.setViewportSize(size);
   await startStraightReverse(page, en);
   const pivots = page.locator('[data-aid="pivots"]');
@@ -2200,3 +2290,183 @@ test(
     }
   },
 );
+
+/** The Einweiser's longest sight cue text in `messages`. */
+const longestSight = (messages: Messages): string =>
+  [
+    messages.sightWideRight,
+    messages.sightWideLeft,
+    messages.sightMirrorRight,
+    messages.sightClose,
+  ].reduce((a, b) => (b.length > a.length ? b : a));
+
+async function startEinweiser(page: Page, messages: Messages, mirrorsOnly: boolean): Promise<void> {
+  await seedStorage(page, { settings: { mirrorsOnly } });
+  await page.goto('./');
+  await startEntry(page, messages, { ...exerciseEntry('straight-reverse'), role: 'einweiser' });
+  await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
+  await expect(page.locator('.hud-sign')).toHaveCount(9);
+  await expect(page.locator('[data-hud="sight"]')).toBeVisible();
+  await expect(page.locator('.hud-counters')).toBeVisible();
+  await expect(page.locator('.hud-action')).toBeVisible();
+  await settled(page);
+}
+
+/**
+ * His HUD: no mirrors, gauges, gear, speed or target arrow; the sign bar and the shown sign's name
+ * inside the band, the sight cue top left above it at no more than its modelled height, and the longest
+ * toast and goal cue clear of the cue, the band, the key legend, the brief and the pause button. The
+ * driver's controls are not checked: his role mounts none (#495).
+ */
+async function expectEinweiserHudClear(page: Page, size: Size, messages: Messages): Promise<void> {
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(0);
+  await expect(
+    page.locator('.hud-gauge, .hud-gear, .hud-speed, [data-hud="targetArrow"]'),
+  ).toHaveCount(0);
+  const [band] = await boxes(page.locator('.hud-band'));
+  const [cockpit] = await boxes(page.locator('.hud-cockpit'));
+  if (band === undefined || cockpit === undefined) throw new Error('no band or view');
+  // the longest name, which wraps at its soft hyphen in German
+  await page.locator('[data-hud="signName"]').evaluate((el, text) => {
+    el.textContent = text;
+  }, messages.signAbstand);
+  const inBand = await boxes(page.locator('.hud-sign, .hud-sign-name'));
+  expect(inBand).toHaveLength(10);
+  for (const b of inBand) {
+    expect(b.left >= band.left && b.right <= band.right, `${b.name} across the band`).toBe(true);
+    expect(b.top >= band.top && b.bottom <= band.bottom + 0.5, `${b.name} down the band`).toBe(
+      true,
+    );
+  }
+  const clipped = await page
+    .locator('.hud-sign-name, .hud-sign-label:visible')
+    .evaluateAll((els) =>
+      els.filter((el) => el.scrollWidth > el.clientWidth).map((el) => el.textContent),
+    );
+  expect(clipped, 'a sign name sticks out of its box').toEqual([]);
+
+  await page.locator('[data-hud="sightText"]').evaluate((el, text) => {
+    el.textContent = text;
+  }, longestSight(messages));
+  const sight = page.locator('[data-hud="sight"]');
+  const [cue] = await boxes(sight);
+  if (cue === undefined) throw new Error('no sight cue');
+  const views = computeViewports(
+    size.width,
+    size.height,
+    (await page.locator('.hud[data-mirrors]').count()) > 0 ? 'mirrors' : 'drive',
+    null,
+    NO_INSETS,
+    undefined,
+    null,
+    undefined,
+    'einweiser',
+  );
+  if (views.cockpit === null) throw new Error('no view');
+  const model = sightCueBox(views.cockpit, NO_INSETS);
+  expect(cue.bottom - cue.top, 'the sight cue is taller than modelled').toBeLessThanOrEqual(
+    model.height,
+  );
+  expect(cue.left, 'sight cue placed as modelled').toBeCloseTo(model.x, 0);
+  expect(cue.top, 'sight cue placed as modelled').toBeCloseTo(model.y, 0);
+  expect(
+    await sight.evaluate((el) => el.scrollWidth - el.clientWidth),
+    'a word sticks out of the sight cue',
+  ).toBe(0);
+  expect(
+    cue.bottom <= band.top && cue.right <= cockpit.right,
+    'sight cue inside the view, above the band',
+  ).toBe(true);
+
+  await page.evaluate(
+    ([toastText, goalText]) => {
+      for (const [name, text] of [
+        ['toast', toastText],
+        ['goalCue', goalText],
+      ] as const) {
+        const el = document.querySelector(`[data-hud="${name}"]`);
+        if (!(el instanceof HTMLElement)) throw new Error(`no ${name}`);
+        el.textContent = text;
+        el.hidden = false;
+      }
+    },
+    [messages.blockedTurntable, messages.goalInside] as const,
+  );
+  const yields = (await page.locator('[data-hud="toastWrap"][data-cue-yields]').count()) > 0;
+  // A key legend reaching up to them sends them to the top view, over its panels, as the driver's.
+  const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
+  if (wrap === undefined) throw new Error('no toast column');
+  const inView = wrap.top >= cockpit.top && wrap.left >= cockpit.left - 0.5;
+  const legend = await boxes(page.locator('.hud-legend:visible'));
+  for (const l of legend)
+    expect(overlaps(cue, l), 'the sight cue overlaps the key legend').toBe(false);
+  const others = [
+    ...(await boxes(page.locator('.hud-action'))),
+    ...(inView
+      ? [
+          { ...cue, name: 'sight cue' },
+          { ...band, name: 'band' },
+          ...legend,
+          ...(await boxes(page.locator('.hud-goal:visible, .hud-counters'))),
+        ]
+      : []),
+  ];
+  const area = inView ? cockpit : { left: 0, top: 0, right: size.width, bottom: size.height };
+  const check = async (count: number): Promise<void> => {
+    const shown = page.locator('[data-hud="toast"]:visible, [data-hud="goalCue"]:visible');
+    await expect(shown).toHaveCount(count);
+    const overflow = await shown.evaluateAll((els) =>
+      els.map((el) => el.scrollWidth - el.clientWidth),
+    );
+    expect(overflow, 'a word sticks out of a message').toEqual(Array<number>(count).fill(0));
+    for (const m of await boxes(shown)) {
+      const inside =
+        m.left >= area.left &&
+        m.right <= area.right &&
+        m.top >= area.top &&
+        m.bottom <= area.bottom;
+      expect(inside, `${m.name} inside ${inView ? 'his view' : 'the screen'}`).toBe(true);
+      for (const o of others) expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
+    }
+  };
+  if (!yields) {
+    await check(2);
+    return;
+  }
+  await check(1);
+  await page.locator('[data-hud="toast"]').evaluate((el) => {
+    if (el instanceof HTMLElement) el.hidden = true;
+  });
+  await check(1);
+}
+
+// Beside the sight cue at the wide views, below it at the narrow ones; with and without the top view.
+const einweiserSizes: readonly (Size & { mirrorsOnly: boolean })[] = [
+  { width: 1280, height: 720, mirrorsOnly: false },
+  { width: 1366, height: 768, mirrorsOnly: false },
+  { width: 1024, height: 600, mirrorsOnly: false },
+  { width: 800, height: 585, mirrorsOnly: false },
+  { width: 768, height: 1024, mirrorsOnly: false },
+  { width: 620, height: 774, mirrorsOnly: false },
+  { width: 1280, height: 585, mirrorsOnly: true },
+  { width: 768, height: 1024, mirrorsOnly: true },
+];
+
+for (const { locale, messages } of locales) {
+  for (const { mirrorsOnly, ...size } of einweiserSizes) {
+    const view = mirrorsOnly ? 'without the top view' : 'with the top view';
+    test(`the Einweiser HUD holds ${view} at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      test.slow();
+      const context = await browser.newContext({ locale, viewport: size });
+      try {
+        const page = await context.newPage();
+        await startEinweiser(page, messages, mirrorsOnly);
+        await expectEinweiserHudClear(page, size, messages);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}

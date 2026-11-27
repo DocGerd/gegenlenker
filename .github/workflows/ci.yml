@@ -103,9 +103,11 @@ jobs:
   # High draws, preset comparisons, many stepped frames), `@slow` (several times a `@heavy` test),
   # the layout spec (many short tests), and the rest (`light`). Each class is cut into slices
   # (`suite:i/n` in `runs`) and each job runs the slices packed to even its cost, from recorded
-  # per-test durations. Retune the table when a class's cost shifts; the lint job checks that every
-  # `i` of each class appears in exactly one job, so each test runs once. Keep the job count under
-  # the account's concurrent-job limit, or the last jobs queue.
+  # per-test durations. `slow` has one test per slice, so a new `@slow` test raises its `n`. Adding
+  # or removing a test moves the later tests of its class into other slices: repack then, and when
+  # a class's cost shifts. The lint job checks that every `i` of each class appears in exactly one
+  # job, so each test runs once. Keep the job count under the account's concurrent-job limit, or
+  # the last jobs queue.
   # Skipped on push to `main`: its strict ruleset (no bypass) makes the merged tree the tree its PR
   # ran e2e on. The `develop` ruleset is not strict, so a PR's e2e may have run on a base that has
   # since moved: pushes to `develop` run it (a superseded waiting run is dropped for the newer one),
@@ -119,24 +121,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { id: 1, runs: 'heavy:16/16 layout:8/12 slow:3/12' }
-          - { id: 2, runs: 'heavy:4/16 layout:12/12' }
-          - { id: 3, runs: 'heavy:1/16 heavy:7/16 light:1/6' }
-          - { id: 4, runs: 'layout:4/12 layout:10/12 slow:5/12' }
-          - { id: 5, runs: 'heavy:5/16 light:3/6 slow:10/12' }
-          - { id: 6, runs: 'heavy:6/16 heavy:10/16 heavy:13/16' }
-          - { id: 7, runs: 'layout:6/12 light:2/6 slow:4/12' }
-          - { id: 8, runs: 'heavy:14/16 slow:7/12' }
-          - { id: 9, runs: 'layout:3/12 layout:7/12 light:4/6' }
-          - { id: 10, runs: 'heavy:12/16 light:6/6 slow:1/12' }
-          - { id: 11, runs: 'heavy:2/16 layout:2/12 light:5/6' }
-          - { id: 12, runs: 'heavy:9/16 layout:1/12 layout:9/12' }
-          - { id: 13, runs: 'heavy:15/16 slow:8/12' }
-          - { id: 14, runs: 'layout:11/12 slow:12/12' }
-          - { id: 15, runs: 'heavy:8/16 slow:6/12' }
-          - { id: 16, runs: 'layout:5/12 slow:11/12' }
-          - { id: 17, runs: 'slow:2/12 slow:9/12' }
-          - { id: 18, runs: 'heavy:3/16 heavy:11/16' }
+          - { id: 1, runs: 'light:1/6 light:4/6' }
+          - { id: 2, runs: 'layout:4/12 layout:5/12 slow:2/17' }
+          - { id: 3, runs: 'heavy:2/16 heavy:7/16 heavy:11/16' }
+          - { id: 4, runs: 'slow:8/17 slow:15/17 slow:16/17' }
+          - { id: 5, runs: 'layout:10/12 layout:12/12 slow:3/17' }
+          - { id: 6, runs: 'heavy:6/16 slow:5/17 slow:11/17' }
+          - { id: 7, runs: 'heavy:3/16 layout:11/12 slow:13/17' }
+          - { id: 8, runs: 'heavy:4/16 heavy:5/16 heavy:13/16' }
+          - { id: 9, runs: 'slow:4/17 slow:10/17 slow:12/17' }
+          - { id: 10, runs: 'layout:7/12 light:5/6 slow:6/17' }
+          - { id: 11, runs: 'heavy:8/16 layout:1/12 light:6/6' }
+          - { id: 12, runs: 'heavy:9/16 layout:3/12 slow:1/17' }
+          - { id: 13, runs: 'heavy:16/16 layout:8/12 slow:7/17' }
+          - { id: 14, runs: 'heavy:1/16 layout:9/12 slow:9/17' }
+          - { id: 15, runs: 'heavy:14/16 layout:6/12 light:3/6' }
+          - { id: 16, runs: 'heavy:10/16 heavy:12/16' }
+          - { id: 17, runs: 'layout:2/12 light:2/6 slow:17/17' }
+          - { id: 18, runs: 'heavy:15/16 slow:14/17' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -264,6 +266,26 @@ jobs:
         with:
           name: test-results-webgpu
           path: test-results/
+
+  # Advisory: not in `check.needs`. The Einweiser gate (`docs/einweiser-spike.md` §9) drives every
+  # exercise x vehicle pair with a scripted Einweiser; it reports, but does not hold a merge.
+  # Skipped on push.
+  einweiser-gate:
+    if: github.event_name != 'push'
+    needs: [lint, unit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:gate
 
   # The UAT build shares the production origin and scope prefix: the production dist with a UAT build
   # inside `uat/` proves each channel leaves the other's pages, keys and caches alone. Unlike e2e it

@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import type { ExerciseId } from '../src/contracts/exercise.ts';
+import type { ExerciseId, Role } from '../src/contracts/exercise.ts';
 import type { LayoutId } from '../src/contracts/layout.ts';
 import type { GraphicsPreset, LightingMode } from '../src/contracts/render.ts';
 import type { TrailerId, TruckId } from '../src/contracts/vehicle.ts';
@@ -12,9 +12,11 @@ import type { Lang } from '../src/i18n/i18n.ts';
 // modules without runtime imports, and use no `expect` or enum.
 
 export type Messages = Readonly<Record<MessageKey, string>>;
-export type MenuEntry =
+/** `role` absent: the driver; `einweiser` needs a desktop context (a fine pointer and pointer lock). */
+export type MenuEntry = { readonly role?: Role } & (
   | { readonly kind: 'exercise'; readonly id: ExerciseId }
-  | { readonly kind: 'yard'; readonly id: LayoutId };
+  | { readonly kind: 'yard'; readonly id: LayoutId }
+);
 export type RunOptions = {
   readonly truck: TruckId;
   readonly trailer: TrailerId;
@@ -34,8 +36,12 @@ const TITLE_POLL_MS = 50;
 export const exerciseEntry = (id: ExerciseId): MenuEntry => ({ kind: 'exercise', id });
 export const yardEntry = (id: LayoutId): MenuEntry => ({ kind: 'yard', id });
 
+/** The name the setup and the drive show: an Einweiser exercise has its own. */
 export function entryName(messages: Messages, entry: MenuEntry): string {
-  return messages[entry.kind === 'exercise' ? EXERCISE_TITLE[entry.id] : LAYOUT_NAME[entry.id]];
+  const role = entry.role ?? 'driver';
+  return messages[
+    entry.kind === 'exercise' ? EXERCISE_TITLE[role][entry.id] : LAYOUT_NAME[entry.id]
+  ];
 }
 
 const catalogue = (lang: string | null): Messages => (lang === 'de' ? de : en);
@@ -59,9 +65,10 @@ export async function openSetup(page: Page, messages: Messages, entry: MenuEntry
       ? (['exercises', 'exercises'] as const)
       : (['freeYard', 'yards'] as const);
   await screen(page, 'title').getByRole('button', { name: messages[item], exact: true }).click();
-  const name = new RegExp(`^${escapeRegExp(entryName(messages, entry))}`);
+  // the lists show the driver's names; the setup's role row picks the Einweiser
+  const name = new RegExp(`^${escapeRegExp(entryName(messages, { ...entry, role: 'driver' }))}`);
   await screen(page, list).getByRole('button', { name }).click();
-  await startControl(page, messages, entry).waitFor();
+  await screen(page, 'setup').getByRole('button', { name: messages.start, exact: true }).waitFor();
 }
 
 /** The setup screen, only while it shows `entry`: its heading ends with the entry's name. */
@@ -117,6 +124,10 @@ export async function startEntry(
   options: Partial<RunOptions> = {},
 ): Promise<void> {
   await openSetup(page, messages, entry);
+  // the row starts on the last run's role, and a touch device has none
+  const role = screen(page, 'setup').locator('[data-menu="role"]');
+  if (entry.role === 'einweiser' || (await role.count()) > 0)
+    await choose(screen(page, 'setup'), 'role', entry.role ?? 'driver');
   if (options.truck !== undefined) await chooseRunOption(page, messages, 'truck', options.truck);
   if (options.trailer !== undefined)
     await chooseRunOption(page, messages, 'trailer', options.trailer);

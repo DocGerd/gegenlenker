@@ -1,6 +1,13 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "lib": ["ES2022"], "types": [] },
-  "include": ["src/contracts", "src/vehicles", "src/sim", "src/scoring", "src/content"],
+  "include": [
+    "src/contracts",
+    "src/vehicles",
+    "src/sim",
+    "src/scoring",
+    "src/content",
+    "src/einweiser"
+  ],
   "exclude": ["src/**/*.test.ts"]
 }

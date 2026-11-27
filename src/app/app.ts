@@ -8,9 +8,15 @@ import type { DriveOutcome, RunConfig } from './drive';
 import type { EntryRef } from './menu/catalogue';
 import { showMenu } from './menu/index';
 import type { NavState } from './menu/nav';
-import { showNotice } from './notice';
+import { showNotice, showToast } from './notice';
 import { showResult, type ResultContext } from './result-view';
-import { currentSettings, initSettings, loadSettings, updateSettings } from './settings';
+import {
+  currentSettings,
+  initSettings,
+  loadSettings,
+  onGraphicsChange,
+  updateSettings,
+} from './settings';
 import {
   isReplayable,
   lastRun,
@@ -155,12 +161,23 @@ export function startApp(root: HTMLElement): void {
       .catch((error: unknown) => loadFailed(error, () => replay(log, onExit)));
   };
   const finished = (run: RunConfig, entry: EntryRef, outcome: DriveOutcome): void => {
-    const stored = outcome.result === null ? null : storeResult(outcome.result);
+    const r = outcome.result;
+    // Einweiser runs keep no bests (owner). The best is written first: its quota fallback drops the last run.
+    const context =
+      r === null
+        ? null
+        : r.einweiser === undefined
+          ? storeResult(r)
+          : { isNewBest: false, previous: null };
     storeLastRun(outcome.log);
-    if (outcome.result === null || stored === null) {
+    if (r === null || context === null) {
       leave();
       menu();
-    } else result(run, entry, outcome.result, stored, outcome.log);
+      // free yard: the run-over is all an Einweiser drive reports there (owner)
+      if (outcome.runOver) showToast(root, 'runOver');
+      return;
+    }
+    result(run, entry, r, context, outcome.log);
   };
   const result = (
     run: RunConfig,
@@ -209,6 +226,19 @@ export function startApp(root: HTMLElement): void {
       menu();
     });
   };
+  // The last verdict. A failed probe is not cached, so each opening of the menu asks again; a probe that
+  // throws counts as capable and is left to the drive's own check.
+  let graphicsMissing = false;
+  const recheckGraphics = (): Promise<boolean> =>
+    probeGraphics()
+      .then(
+        (backend) => backend === null,
+        () => false,
+      )
+      .then((missing) => {
+        graphicsMissing = missing;
+        return missing;
+      });
   const menu = (initial?: NavState): void => {
     closeMenu?.();
     const log = lastRun();
@@ -232,6 +262,7 @@ export function startApp(root: HTMLElement): void {
                 },
               },
         hasNews: () => import('./whats-new-seen').then((m) => m.hasUnseen()),
+        graphics: { missing: graphicsMissing, recheck: recheckGraphics() },
         hold: enter,
         release: leave,
         failed: (error, retry) => {
@@ -271,6 +302,6 @@ export function startApp(root: HTMLElement): void {
   window.addEventListener('unhandledrejection', runFailed);
 
   menu();
-  startUpdatePrompt(root);
+  onGraphicsChange(startUpdatePrompt(root, () => currentSettings().graphics));
   void requestPersistentStorage();
 }

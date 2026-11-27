@@ -15,7 +15,14 @@ import {
   px,
   SOURCE,
 } from './viewports-css';
-import { controlsHeight, MIN_MESSAGE_WIDTH, NO_INSETS, wheelSize, type Insets } from './viewports';
+import {
+  controlsHeight,
+  MIN_MESSAGE_WIDTH,
+  NO_INSETS,
+  SIGHT_CUE_WIDTH,
+  wheelSize,
+  type Insets,
+} from './viewports';
 
 const SIZES: readonly (readonly [number, number])[] = [
   [320, 568],
@@ -109,6 +116,17 @@ describe('the viewports.ts fallbacks match the CSS', () => {
     expect(GEOM.toastBox).toBe(41);
     expect(GEOM.cueBox).toBe(34);
     expect(MIN_MESSAGE_WIDTH).toBe(99 + GEOM.toastBox + margin);
+  });
+
+  it('the sight cue constants equal its rule, which sets its text as the toasts do', () => {
+    expect(SIGHT_CUE_WIDTH).toBe(GEOM.sightW);
+    expect(numberConst(SOURCE.viewports, 'SIGHT_CUE_CHROME')).toBe(GEOM.sightChrome);
+    expect([GEOM.sightBox, GEOM.sightLine]).toEqual([GEOM.messageBox, GEOM.messageLine]);
+    for (const property of ['font-size', 'font-weight']) {
+      expect(declared(SOURCE.hud, '.hud-sight', property), property).toBe(
+        declared(SOURCE.hud, '.hud-toast', property),
+      );
+    }
   });
 
   it('the safe insets default to zero without a display cut-out', () => {

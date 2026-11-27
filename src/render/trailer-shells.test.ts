@@ -18,7 +18,7 @@ import {
 import { TRAILER_LOOKS } from './livery';
 import { KEYS } from './palette';
 import { lookFor } from './look';
-import { QUALITY_FLAGS } from './quality';
+import { QUALITY_FLAGS, type QualityFlags } from './quality';
 import {
   AIDS_LAYER,
   CHASE_LAYERS,
@@ -262,6 +262,8 @@ function deferred(shell: TrailerShell): Deferred {
   };
 }
 
+/** Balanced with only the shells switching: `wheelDetail` rebakes the shell detail (tested apart). */
+const BALANCED: QualityFlags = { ...QUALITY_FLAGS.balanced, wheelDetail: false };
 const maskOf = (group: Object3D) => group.children.map((m) => [m, m.layers.mask] as const);
 const stateOf = (root: Object3D) => root.children.map((part) => maskOf(part));
 const meshesOf = (group: Object3D): Mesh[] =>
@@ -386,6 +388,8 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
         track: f.track,
         wheelWidth: TRAILER_WHEEL_WIDTH,
         rearAxleXs: f.a.rearAxles.map((axle) => axle.x),
+        axleTop: f.axleZ[1],
+        wheelDetail: false,
         shellDeck: deck,
       });
       if (shellGeometry === null) throw new Error('a low-loader has shell detail');
@@ -441,11 +445,11 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
 
     visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(stateOf(visual.object)).toEqual(procedural);
-    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.setLook(lookFor(BALANCED, 'day'));
     expect(stateOf(visual.object)).toEqual(shown);
-    visual.setLook(lookFor({ ...QUALITY_FLAGS.balanced, cabGlb: true, vehicleGlb: false }, 'day'));
+    visual.setLook(lookFor({ ...BALANCED, cabGlb: true, vehicleGlb: false }, 'day'));
     expect(stateOf(visual.object)).toEqual(procedural);
-    visual.setLook(lookFor({ ...QUALITY_FLAGS.balanced, cabGlb: false, vehicleGlb: true }, 'day'));
+    visual.setLook(lookFor({ ...BALANCED, cabGlb: false, vehicleGlb: true }, 'day'));
     expect(stateOf(visual.object)).toEqual(shown);
     visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     visual.dispose();
@@ -462,7 +466,7 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
     expect(stateOf(visual.object)).toEqual(procedural);
     expect(d.attached).toEqual([]);
 
-    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.setLook(lookFor(BALANCED, 'day'));
     expect(stateOf(visual.object)).not.toEqual(procedural);
     visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(stateOf(visual.object)).toEqual(procedural);
@@ -476,13 +480,40 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
     expect(d.attached).toEqual([]);
 
     const key = `${id}-trailer`;
-    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.setLook(lookFor(BALANCED, 'day'));
     expect(d.attached).toEqual([[key, true]]);
     visual.setLook(lookFor(QUALITY_FLAGS.low, 'day'));
     expect(d.attached.slice(1)).toEqual([[key, false]]);
-    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.setLook(lookFor(BALANCED, 'day'));
     visual.dispose();
     expect(d.attached.slice(3)).toEqual([[key, false]]);
+  });
+
+  it('rebakes both halves for the wheels the look shows, reporting no change of state', async () => {
+    const d = deferred(await load(id));
+    const visual = proceduralTrailer(spec, palette, d.shells);
+    visual.setLook(lookFor(BALANCED, 'day'));
+    d.apply();
+    const skins = (): number[] =>
+      Object.values(partsOf(visual)).map((part) => {
+        const casting = meshesOf(part).filter(
+          (m) => m.layers.mask === 1 << PERSPECTIVE_LAYER && m.castShadow,
+        );
+        expect(casting).toHaveLength(1);
+        return casting[0]?.geometry.getAttribute('position').count ?? 0;
+      });
+    const discs = skins();
+    const reported = [...d.attached];
+    visual.setLook(lookFor({ ...BALANCED, wheelDetail: true }, 'day'));
+    const detailed = skins();
+    detailed.forEach((count, i) => expect(count).toBeGreaterThan(discs[i] ?? Infinity));
+    visual.setLook(lookFor(BALANCED, 'day'));
+    expect(skins()).toEqual(discs);
+    expect(d.attached).toEqual(reported);
+    // switched while the shell is off, the next switch on shows the detailed wheels
+    visual.setLook(lookFor({ ...QUALITY_FLAGS.low, wheelDetail: true }, 'day'));
+    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    expect(skins()).toEqual(detailed);
   });
 
   it('reverts the pair and warns when switching it on fails midway, then succeeds on the next try', async () => {
@@ -496,13 +527,13 @@ describe.each(TRAILER_IDS)('trailer shell swap of %s', (id) => {
     const stuck = vi.spyOn(dolly, 'add').mockImplementationOnce(() => {
       throw new Error('stuck');
     });
-    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.setLook(lookFor(BALANCED, 'day'));
     expect(warn).toHaveBeenCalledOnce();
     expect(stateOf(visual.object)).toEqual(procedural);
     expect(d.attached).toEqual([]);
 
     stuck.mockRestore();
-    visual.setLook(lookFor(QUALITY_FLAGS.balanced, 'day'));
+    visual.setLook(lookFor(BALANCED, 'day'));
     expect(stateOf(visual.object)).not.toEqual(procedural);
     expect(d.attached).toEqual([[`${id}-trailer`, true]]);
     warn.mockRestore();

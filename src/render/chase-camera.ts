@@ -16,6 +16,7 @@ import { resolveCombination } from '../vehicles/resolve';
 import { CAB_HEIGHT, FRAME_TOP } from './cab-dims';
 import { FREE_FOV, poseFromGaze } from './free-look';
 import { CAMERA_FAR, CHASE_LAYERS, enableLayers } from './seams';
+import { roofRise, sceneryBuildings, type BuildingKind } from './skyline-layout';
 
 const CHASE_FOV = FREE_FOV;
 /** Distance beyond the one that just fits the combination. */
@@ -46,6 +47,9 @@ const SOLID_DECOR: ReadonlySet<KitPiece> = new Set([
   'office-entrance',
   'office-roof',
 ]);
+
+/** Skyline kinds the eye must not enter: walled buildings, not trees, masts or cranes. */
+const WALLED: ReadonlySet<BuildingKind> = new Set(['hall', 'warehouse', 'office']);
 
 /** The cab's front face in the truck body frame (x forward, y left, z up), metres. */
 export type CabFront = {
@@ -168,16 +172,28 @@ export type ChaseRig = {
 
 export type ChaseCollider = Pick<Obstacle, 'obb' | 'height'>;
 
-/** The layout's obstacles and its solid decor, which nothing drives into but the eye could reach. */
+/** The layout's obstacles, its solid decor and the skyline's buildings: nothing drives into them, but the eye could reach them. */
 export function chaseColliders(
-  layout: Pick<ResolvedLayout, 'obstacles' | 'decor'>,
+  layout: Pick<ResolvedLayout, 'obstacles' | 'decor' | 'bounds' | 'surfaces'>,
 ): readonly ChaseCollider[] {
   const solids = layout.decor.flatMap((d) =>
     isKitDecor(d) && SOLID_DECOR.has(d.piece)
       ? [{ obb: d.footprint, height: KIT_FOOTPRINTS[d.piece].height }]
       : [],
   );
-  return [...layout.obstacles, ...solids];
+  const scenery = sceneryBuildings(layout)
+    .filter((b) => WALLED.has(b.kind))
+    .map((b) => ({
+      obb: {
+        cx: b.x,
+        cy: b.y,
+        halfLength: b.length / 2,
+        halfWidth: b.depth / 2,
+        heading: b.heading,
+      },
+      height: b.height + roofRise(b),
+    }));
+  return [...layout.obstacles, ...solids, ...scenery];
 }
 
 /**

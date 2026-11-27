@@ -8,13 +8,17 @@ import { SIM_CONSTANTS } from './constants';
 // behaviour are dropped. Not for which result is kept as the best (`recordBest`): a run's outcome is unchanged.
 export const SIM_REVISION = 2;
 
+/** What `JSON.stringify` keeps as is: a `Set`, a function or `undefined` would hash as `{}` or not at all. */
+export type JsonData =
+  number | string | boolean | null | readonly JsonData[] | { readonly [key: string]: JsonData };
+
 export type RunData = {
   readonly params: VehicleParams;
   readonly obstacles: readonly Obstacle[];
   readonly start: Pose2;
   readonly exercise: ExerciseDefinition | null;
-  /** Scoring thresholds, passed in so the sim layer does not depend on scoring. */
-  readonly scoring: Readonly<Record<string, number>>;
+  /** Scoring thresholds and what else scoring reads, passed in so the sim layer does not depend on scoring. */
+  readonly scoring: { readonly [key: string]: JsonData };
 };
 
 /**

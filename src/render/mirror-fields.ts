@@ -1,7 +1,10 @@
 import type { Vec2 } from '../contracts/sim';
 import type { TruckSpec, Vec3 } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
-import { CAB_HEIGHT, cabShellParams, round } from './cab-dims';
+import { frontMirrorMount } from '../vehicles/mirrors';
+import { cabShellParams, round } from './cab-dims';
+
+export { closeMirrorMount, frontMirrorMount } from '../vehicles/mirrors';
 
 // No `three` import: the fields are ground polygons in the truck body frame (x forward, y left).
 
@@ -100,35 +103,6 @@ export function insidePolygon(polygon: readonly Vec2[], p: Vec2): boolean {
     }
   }
   return inside;
-}
-
-/** Metres ahead of the cab front (on a short boom), and inboard of its passenger side, that the class VI mirror sits. */
-const FRONT_AHEAD = 0.2;
-const FRONT_INBOARD = 0.25;
-/** Below the cab's roof: R46 15.2.2.7 keeps class V and VI parts 2 m or more above the ground. */
-const FRONT_BELOW_ROOF = 0.1;
-
-/** The class VI mirror's eye in the body frame: top front of the cab, passenger side, ahead of the glass. */
-export function frontMirrorMount(truck: TruckSpec): Vec3 {
-  const { frontX, width } = cabShellParams(truck);
-  return {
-    x: frontX + FRONT_AHEAD,
-    y: -(width / 2 - FRONT_INBOARD),
-    z: CAB_HEIGHT - FRONT_BELOW_ROOF,
-  };
-}
-
-/** Metres ahead of the ocular plane, and outboard of the cab's passenger side, that the class V mirror sits (near the A-pillar). */
-const CLOSE_AHEAD = 0.2;
-const CLOSE_OUTBOARD = 0.15;
-/** Below 2.4 m, so only R46 15.2.4.5.1-.4 apply; 2 m or more, as 15.2.2.7 requires. */
-const CLOSE_HEIGHT = 2.3;
-
-/** The class V mirror's eye in the body frame: a render estimate, not a vehicle Param. */
-export function closeMirrorMount(truck: TruckSpec): Vec3 {
-  const { width } = cabShellParams(truck);
-  const { eye } = truckAnchors(truck);
-  return { x: eye.x + CLOSE_AHEAD, y: -(width / 2 + CLOSE_OUTBOARD), z: CLOSE_HEIGHT };
 }
 
 /** Every vertex of a mirror head and its arm lies within this of the head's camera (`tools/blender/cab_shell.py`). */

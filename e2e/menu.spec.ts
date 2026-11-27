@@ -1,7 +1,8 @@
 import type { Locator, Page } from '@playwright/test';
-import { EXERCISE_BRIEF, EXERCISE_TITLE } from '../src/app/entry-keys';
+import { EXERCISE_BRIEF, EXERCISE_TITLE, LAYOUT_NAME } from '../src/app/entry-keys';
 import { exerciseById } from '../src/content/registry';
 import { EXERCISE_IDS, type ExerciseId } from '../src/contracts/exercise';
+import { LAYOUT_IDS } from '../src/contracts/layout';
 import { TRAILER_IDS, TRUCK_IDS } from '../src/contracts/vehicle';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
@@ -15,9 +16,11 @@ import {
   settingValue,
   setupBests,
   startControl,
+  startEntry,
   yardEntry,
 } from './menu-flow';
 import { reachedResult, seedStorage } from './menu-seed';
+import { SETTINGS_KEY } from './pinned-shoot';
 
 const screen = (page: Page, id: string): Locator => page.locator(`[data-screen="${id}"]`);
 const titleEntry = (page: Page, name: string): Locator =>
@@ -51,12 +54,34 @@ test.describe('the longest title footer', () => {
         serviceWorkers: 'block',
       });
       const exerciseId = 'reverse-bay';
+      // the Einweiser's lines are the longest: his exercise title or yard name, and his role
+      const guides = [
+        ...EXERCISE_IDS.map((id) => ({
+          entry: { role: 'einweiser', kind: 'exercise', id },
+          heading: `${String(EXERCISE_IDS.indexOf(id) + 1)} ${messages[EXERCISE_TITLE.einweiser[id]]}`,
+          context: messages[EXERCISE_TITLE.einweiser[id]],
+          role: [],
+        })),
+        ...LAYOUT_IDS.map((id) => {
+          const context = `${messages.freeYard} · ${messages[LAYOUT_NAME[id]]}`;
+          return {
+            entry: { role: 'einweiser', kind: 'yard', id },
+            heading: context,
+            context,
+            role: [messages.roleEinweiser],
+          };
+        }),
+      ];
+      const longest = (by: (g: (typeof guides)[number]) => string) =>
+        guides.reduce((a, b) => (by(b).length > by(a).length ? b : a));
+      const resumed = longest((g) => g.heading);
+      const replayed = longest((g) => [g.context, ...g.role].join(' · '));
       await seedStorage(context, {
         settings: {
           truckId: arocs,
           trailerId: hueffermann,
           ...night,
-          lastEntry: exerciseRef(exerciseId),
+          lastEntry: resumed.entry,
         },
         lastRun: { layoutId: exerciseById(exerciseId).layout, exerciseId, truckId, trailerId },
       });
@@ -64,6 +89,21 @@ test.describe('the longest title footer', () => {
       await page.goto('./');
       await expect(titleEntry(page, messages.continue)).toBeVisible();
       await expect(titleEntry(page, messages.replayLastRun)).toBeVisible();
+      await expect(titleEntry(page, messages.continue)).toContainText(resumed.heading);
+      // an Einweiser run is not seeded here (its log needs his track): give the replay his line
+      await titleEntry(page, messages.replayLastRun)
+        .locator('.menu-item-detail')
+        .evaluate(
+          (el, text) => {
+            el.textContent = text;
+          },
+          [
+            replayed.context,
+            ...replayed.role,
+            messages.lightingNight,
+            messages.einweiserViewNoTop,
+          ].join(' · '),
+        );
       await expect(titleEntry(page, messages.controls)).toBeVisible();
       await expect(titleEntry(page, messages.whatsNew)).toBeVisible();
       await expect(titleEntry(page, messages.about)).toBeVisible();
@@ -163,7 +203,7 @@ test('Continue moves past a done exercise, wraps, and keeps the last one when al
     });
     const page = await context.newPage();
     await page.goto('./');
-    await expect(titleEntry(page, en.continue)).toContainText(en[EXERCISE_TITLE[shows]]);
+    await expect(titleEntry(page, en.continue)).toContainText(en[EXERCISE_TITLE.driver[shows]]);
     await context.close();
   }
 });
@@ -214,8 +254,8 @@ test('the exercise list holds one row per exercise in curriculum order, with bri
   for (const [index, id] of EXERCISE_IDS.entries()) {
     const row = rows.nth(index);
     await expect(row.getByRole('button')).toHaveCount(1);
-    await expect(row).toContainText(en[EXERCISE_TITLE[id]]);
-    await expect(row).toContainText(en[EXERCISE_BRIEF[id]]);
+    await expect(row).toContainText(en[EXERCISE_TITLE.driver[id]]);
+    await expect(row).toContainText(en[EXERCISE_BRIEF.driver[id]]);
     if (id === done) await expect(row).toContainText(`✓ ${en.exerciseDone}`);
     else await expect(row).not.toContainText(en.exerciseDone);
   }
@@ -400,12 +440,127 @@ test('setup shows the stored run options checked and stores a change', async ({ 
   await expect(radio(en.trailer, hueffermann)).toBeChecked();
   await expect(radio(en.lighting, 'night')).toBeChecked();
   await expect(radio(en.driveView, 'mirrors')).toBeChecked();
+  await expect(radio(en.role, 'driver')).toBeChecked();
 
   await chooseRunOption(page, en, 'lighting', 'day');
   await page.reload();
   await openSetup(page, en, entry);
   await expect(radio(en.lighting, 'day')).toBeChecked();
   await expect(radio(en.truck, arocs)).toBeChecked();
+});
+
+test('the role row names the Einweiser entry his way and hides the driver bests', async ({
+  page,
+}) => {
+  await page.goto('./');
+  const entry = exerciseEntry('straight-reverse');
+  await openSetup(page, en, entry);
+  const setup = screen(page, 'setup');
+  const heading = setup.getByRole('heading', { level: 1 });
+  const view = setup.getByRole('radiogroup', { name: en.einweiserView, exact: true });
+  await expect(setupBests(page, en, entry)).toBeVisible();
+  await expect(view).toHaveCount(0);
+
+  await setup.locator('[data-menu="role"] input[value="einweiser"]').click();
+  await expect(heading).toHaveText(`1 ${en.guideStraightReverse}`);
+  await expect(setup).toContainText(en.guideBriefStraightReverse);
+  await expect(setup.locator('[data-menu="bests"]')).toHaveCount(0);
+  await expect(view).toContainText(en.einweiserViewNoTop);
+
+  await setup.locator('[data-menu="role"] input[value="driver"]').click();
+  await expect(heading).toHaveText(`1 ${en.exerciseStraightReverse}`);
+  await expect(setupBests(page, en, entry)).toBeVisible();
+});
+
+test('the role row starts an Einweiser drive, records its entry and opens on it next time', async ({
+  page,
+}) => {
+  await seedStorage(page, { settings: { graphics: 'low' } });
+  await page.goto('./');
+  const entry = { ...yardEntry('depot'), role: 'einweiser' } as const;
+  await openSetup(page, en, entry);
+  const row = screen(page, 'setup').getByRole('radiogroup', { name: en.role, exact: true });
+  await expect(row.locator('input:checked')).toHaveValue('driver');
+  await startEntry(page, en, entry);
+  await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
+  const lastEntry = await page.evaluate(
+    (key) => (JSON.parse(localStorage.getItem(key) ?? '{}') as { lastEntry?: unknown }).lastEntry,
+    SETTINGS_KEY,
+  );
+  expect(lastEntry).toEqual({ role: 'einweiser', kind: 'yard', id: 'depot' });
+
+  await page.reload();
+  await openSetup(page, en, yardEntry('logistics'));
+  await expect(row.locator('input:checked')).toHaveValue('einweiser');
+});
+
+test('an Einweiser exercise plays from the menu to his result, and the title continues and replays it', async ({
+  page,
+}) => {
+  await seedStorage(page, { settings: { graphics: 'low' } });
+  await page.goto('./');
+  await startEntry(page, en, { ...exerciseEntry('straight-reverse'), role: 'einweiser' });
+  await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
+  await expect(page.locator('[data-hud="goalTitle"]')).toHaveText(en.guideStraightReverse);
+  // the run time starts with the driver's first drive input: Herkommen from behind reverses him
+  const time = page.locator('[data-hud="time"]');
+  const still = await time.textContent();
+  await page.keyboard.press('Digit1');
+  await page.keyboard.down('Digit5');
+  await expect(time).not.toHaveText(still ?? '');
+  await page.keyboard.up('Digit5');
+  await page.keyboard.press('Digit2');
+
+  await page.getByRole('button', { name: en.pause }).click();
+  await page
+    .getByRole('dialog', { name: en.paused })
+    .getByRole('button', { name: en.finish })
+    .click();
+  await expect(page.getByRole('heading', { name: en.targetMissed })).toBeVisible();
+  await expect(page.locator('.result-eyebrow').first()).toHaveText(
+    `${en.result} · ${en.guideStraightReverse}`,
+  );
+  const faults = page.getByRole('region', { name: en.roleEinweiser });
+  await expect(faults.locator('.result-row')).toHaveCount(7);
+  await expect(faults).toContainText(en.basisTrainer);
+  const best = await page.evaluate(() => localStorage.getItem('gegenlenker.best.v2'));
+  expect(best).toBeNull();
+
+  await page.getByRole('button', { name: en.menu }).click();
+  await expect(titleEntry(page, en.continue)).toContainText(en.guideStraightReverse);
+  await expect(titleEntry(page, en.continue)).not.toContainText(en.roleEinweiser);
+  await expect(titleEntry(page, en.replayLastRun)).toContainText(en.guideStraightReverse);
+  await expect(titleEntry(page, en.replayLastRun)).not.toContainText(en.roleEinweiser);
+  await titleEntry(page, en.continue).click();
+  await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
+});
+
+test('a touch device offers no role and no Einweiser settings, and continues an Einweiser entry as the driver', async ({
+  browser,
+}) => {
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 800 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  try {
+    await seedStorage(context, {
+      settings: { lastEntry: { role: 'einweiser', kind: 'exercise', id: 'reverse-bay' } },
+    });
+    const page = await context.newPage();
+    await page.goto('./');
+    await expect(titleEntry(page, en.continue)).toContainText(en.exerciseReverseBay);
+    await expect(titleEntry(page, en.continue)).not.toContainText(en.roleEinweiser);
+    await openSetup(page, en, exerciseEntry('reverse-bay'));
+    await expect(screen(page, 'setup').locator('[data-menu="role"]')).toHaveCount(0);
+    await page.goBack();
+    await page.goBack();
+    await titleEntry(page, en.settings).click();
+    await expect(screen(page, 'settings')).toContainText(en.settingsGraphics);
+    await expect(screen(page, 'settings')).not.toContainText(en.settingsEinweiser);
+  } finally {
+    await context.close();
+  }
 });
 
 test("a yard's setup shows no tolerance and no bests", async ({ page }) => {
@@ -477,6 +632,21 @@ test('a Settings change applies at once and survives a reload', async ({ page })
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await titleEntry(page, en.settings).click();
   await expect(settingsRadio(page, en.theme, 'dark')).toBeChecked();
+});
+
+test('Settings explains the graphics quality and marks Controls as a drill-down row', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await titleEntry(page, en.settings).click();
+  const settings = screen(page, 'settings');
+  await expect(
+    settings.getByRole('radiogroup', { name: en.graphics, exact: true }),
+  ).toHaveAccessibleDescription(en.graphicsHint);
+  await expect(
+    settings.getByRole('radiogroup', { name: en.theme, exact: true }),
+  ).toHaveAccessibleDescription('');
+  await expect(settings.getByRole('button', { name: en.controls, exact: true })).toContainText('›');
 });
 
 test('Settings stores every change and the helpers read it back', async ({ page }) => {

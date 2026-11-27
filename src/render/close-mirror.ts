@@ -1,7 +1,7 @@
+import { CLASS_V_OPTICS } from '../vehicles/mirrors';
 import type { MirrorSpec } from './mirror';
 
-/** The class V mirror's width over its height. */
-export const CLOSE_ASPECT = 2;
+export { CLOSE_ASPECT } from '../vehicles/mirrors';
 
 /**
  * Narrowest the class V mirror gets, in CSS px: wide enough that a 0.3 m cone base spans 6 texels at a
@@ -11,16 +11,11 @@ export const CLOSE_ASPECT = 2;
 export const MIN_CLOSE_WIDTH = 128;
 
 /**
- * Class V: from beside the A-pillar, outward and down onto the ground between the cab side and 2 m out.
- * The camera is rolled upside down, so the cab side lies on the image's top edge, and the composite's
- * mirrored u puts the front on the left. The anchor and view rect belong to the layout.
+ * Class V (`CLASS_V_OPTICS`): the composite's mirrored u puts the front on the left. The anchor and
+ * view rect belong to the layout.
  */
 export const CLASS_V: Omit<MirrorSpec, 'anchor' | 'view'> = {
-  yaw: Math.PI / 2,
-  pitch: (-75 * Math.PI) / 180,
-  roll: Math.PI,
-  fov: 51,
-  aspect: CLOSE_ASPECT,
+  ...CLASS_V_OPTICS,
   targetScale: 1,
   cadence: 1,
   parity: 0,

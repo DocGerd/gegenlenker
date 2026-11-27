@@ -1,13 +1,7 @@
 import { t } from '../i18n/i18n';
 import type { MessageKey } from '../i18n/en';
 import { choiceRow } from './menu/choice-row';
-import {
-  applyOption,
-  OPTION_FIELDS,
-  optionValue,
-  PAUSE_FIELDS,
-  type OptionId,
-} from './menu/options';
+import { applyOption, OPTION_FIELDS, optionValue, type OptionId } from './menu/options';
 import { ignoreHeldBrakeKeys } from './held-keys';
 import { currentSettings } from './settings';
 
@@ -17,6 +11,8 @@ export type PauseActions = {
   finish: () => void;
   /** Drops the run without a result or replay; null where finishing already does that. */
   leave: (() => void) | null;
+  /** The options the running drive can take, in this order (`pauseFields`). */
+  fields: readonly OptionId[];
   /** Called after a Settings change was stored. */
   settingChanged: (id: OptionId) => void;
 };
@@ -26,6 +22,20 @@ export type PauseSheet = {
   /** True when it stepped from Settings back to the actions. */
   readonly back: () => boolean;
 };
+
+let hintCount = 0;
+
+function hinted(button: HTMLButtonElement, hint: MessageKey): HTMLElement {
+  const item = document.createElement('div');
+  item.className = 'pause-item';
+  const text = document.createElement('p');
+  text.className = 'pause-hint';
+  text.textContent = t(hint);
+  text.id = `pause-hint-${String(hintCount++)}`;
+  button.setAttribute('aria-describedby', text.id);
+  item.append(button, text);
+  return item;
+}
 
 function action(label: MessageKey, onClick: () => void, primary: boolean): HTMLButtonElement {
   const button = document.createElement('button');
@@ -44,6 +54,7 @@ const tabStops = (level: HTMLElement): HTMLElement[] => [
 /** The level with Back and the options a running drive can take; a change is stored at once. */
 function settingsLevel(
   back: () => void,
+  fields: readonly OptionId[],
   settingChanged: (id: OptionId) => void,
 ): {
   readonly root: HTMLElement;
@@ -63,7 +74,7 @@ function settingsLevel(
   root.append(backButton, heading);
 
   const settings = currentSettings();
-  for (const id of PAUSE_FIELDS) {
+  for (const id of fields) {
     const row = choiceRow(OPTION_FIELDS[id], optionValue(settings, id), (value) => {
       if (applyOption(id, value)) settingChanged(id);
     });
@@ -95,16 +106,23 @@ export function showPauseSheet(
   const resume = action('continue', actions.continue, true);
   const buttons = document.createElement('div');
   buttons.className = 'pause-actions';
-  buttons.append(
-    resume,
-    action('restart', actions.restart, false),
-    action(finishLabel, actions.finish, false),
-  );
-  if (actions.leave !== null) buttons.append(action('leaveUnscored', actions.leave, false));
+  const restart = action('restart', actions.restart, false);
+  const finish = action(finishLabel, actions.finish, false);
+  // Nothing is scored in the free yard, so there is nothing to warn about.
+  if (actions.leave === null) {
+    buttons.append(resume, restart, finish);
+  } else {
+    buttons.append(
+      resume,
+      hinted(restart, 'restartHint'),
+      hinted(finish, 'finishHint'),
+      hinted(action('leaveUnscored', actions.leave, false), 'leaveHint'),
+    );
+  }
   const openSettings = action(
     'settings',
     () => {
-      const next = settingsLevel(back, actions.settingChanged);
+      const next = settingsLevel(back, actions.fields, actions.settingChanged);
       swap(next.root, next.first);
     },
     false,
@@ -112,13 +130,6 @@ export function showPauseSheet(
   buttons.append(openSettings);
 
   main.append(title, buttons);
-  // Nothing is scored in the free yard, so there is nothing to warn about.
-  if (actions.leave !== null) {
-    const hint = document.createElement('p');
-    hint.className = 'pause-hint';
-    hint.textContent = t('restartHint');
-    main.append(hint);
-  }
 
   let level: HTMLElement = main;
   // Focus moves into the new level before the old one leaves, so the focusout guard never sees it drop.

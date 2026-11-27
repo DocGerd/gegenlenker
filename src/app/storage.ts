@@ -67,7 +67,7 @@ const fingerprints = new Map<string, string>();
 
 /** Resolves the ids as drive and replay do, so a stored run matches only the data it was driven on. */
 function runFingerprint(ids: RunIds): string {
-  const key = `${ids.layoutId}/${ids.exerciseId}/${ids.truckId}/${ids.trailerId}`;
+  const key = `${ids.role}/${ids.layoutId}/${ids.exerciseId}/${ids.truckId}/${ids.trailerId}`;
   let fingerprint = fingerprints.get(key);
   if (fingerprint === undefined) {
     fingerprint = resolveRun(ids).fingerprint;
@@ -77,7 +77,7 @@ function runFingerprint(ids: RunIds): string {
 }
 
 const resultFingerprint = (r: ResultIds): string =>
-  runFingerprint({ ...r, layoutId: exerciseById(r.exerciseId).layout });
+  runFingerprint({ ...r, layoutId: exerciseById(r.exerciseId).layout, role: 'driver' });
 
 // Held in memory as well, so a finished run shows its result when storage is unavailable.
 let best: BestResults | null = null;

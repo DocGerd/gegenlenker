@@ -1,6 +1,8 @@
 import type { TruckSpec } from '../contracts/vehicle';
 import { SOURCES, estimate, sourced } from './sources';
 
+const doorGlassRear =
+  'rear edge 1.10 m behind the cab front, scaled from a side-view drawing of the LE compact cab (https://getoutlines.com/blueprints/car/man/man-le-4x2-8ton.gif) at its 1536 mm length (https://man.lauerbach.de/wiki/view.do?page=Geschichte); the front axle in the drawing is 0.1 m behind the glass, so measured from the axle it would be 1.22 m; front edge at the A-pillar setback; no manufacturer source found';
 const eyeAboveFloor =
   'cab floor 1.1 m above ground (render model), seated eye 1.25 m above it: seat height plus sitting eye height; no source found';
 const mirrorHeight =
@@ -26,6 +28,8 @@ export const manLe18280: TruckSpec = {
   rearTrack: estimate(1800, typical),
   couplingOffset: estimate(1250, 'frame end plus coupling crossmember, no source found'),
   turningRadius: sourced(7800, SOURCES.D),
+  frameTop: estimate(1100, 'chassis top and cab floor of the render model; no source found'),
+  bodyTop: estimate(2750, 'tarpaulin top of the body shell (render model); no source found'),
   eye: {
     height: estimate(2350, eyeAboveFloor),
     behindBumper: estimate(1000, typical),
@@ -43,11 +47,12 @@ export const manLe18280: TruckSpec = {
     maxRate: estimate(1.5, typical),
   },
   cab: {
+    height: estimate(2900, 'cab roof of the render model; no source found'),
     windscreenInset: estimate(149, typical),
     glassSill: estimate(900, typical),
     glassHeight: estimate(756, typical),
     sideGlassSetback: estimate(176, typical),
-    sideGlassLength: estimate(814, typical),
+    sideGlassLength: estimate(924, doorGlassRear),
     grilleWidth: estimate(1245, typical),
     grilleSill: estimate(144, typical),
     grilleHeight: estimate(540, typical),

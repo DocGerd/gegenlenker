@@ -83,10 +83,12 @@ export function aboutCredits(root: string): AboutCredits {
       bundled,
       text: lfText(root, join('public/licenses', file)),
     })),
-    assets: Object.values(ASSET_SOURCES).map(({ title, licence, authors, page }) => ({
-      title,
+    assets: Object.values(ASSET_SOURCES).map(({ kind, asset, licence, people, host, page }) => ({
+      kind,
+      asset,
       licence,
-      authors,
+      people,
+      host,
       page,
     })),
   };

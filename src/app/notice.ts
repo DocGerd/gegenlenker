@@ -40,3 +40,17 @@ export function showNotice(
   buttons[0]?.focus();
   return box;
 }
+
+const TOAST_MS = 5000;
+
+/** A short message that outlives the screen it came from; it removes itself. */
+export function showToast(parent: HTMLElement, message: MessageKey): void {
+  const toast = document.createElement('div');
+  toast.className = 'app-toast';
+  toast.setAttribute('role', 'status');
+  toast.textContent = t(message);
+  parent.append(toast);
+  window.setTimeout(() => {
+    toast.remove();
+  }, TOAST_MS);
+}

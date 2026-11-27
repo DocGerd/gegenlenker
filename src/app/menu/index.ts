@@ -7,7 +7,7 @@ import type { RunConfig } from '../drive';
 import { ignoreHeldBrakeKeys } from '../held-keys';
 import { currentSettings } from '../settings';
 import { bestResults } from '../storage';
-import { runConfigOf, type EntryKind, type EntryRef } from './catalogue';
+import { offeredEntry, runConfigOf, type EntryKind, type EntryRef, type Role } from './catalogue';
 import { CONTENT } from './content';
 import { continueEntry, lastEntryOf } from './continue';
 import { screenOf, type ActionId, type Item, type MenuState } from './graph';
@@ -34,6 +34,8 @@ export type MenuDeps = {
   readonly replay: { readonly log: InputLog; readonly start: () => void } | null;
   /** Re-read whenever the title renders. */
   readonly hasNews: () => Promise<boolean>;
+  /** Whether no graphics backend can run a drive: the last verdict, and the next one when it settles. */
+  readonly graphics: { readonly missing: boolean; readonly recheck: Promise<boolean> };
   /** Holds the app's history entry; `onBack` runs when it is popped. */
   readonly hold: (onBack: () => void) => void;
   readonly release: () => void;
@@ -63,16 +65,18 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   let closed = false;
   // Set by Start and Continue until the drive replaces the menu (or a failure notice does): nothing navigates meanwhile.
   let busy = false;
+  let graphicsMissing = deps.graphics.missing;
   // Where focus goes on the next `show` instead of the level's remembered one.
   let refocus: string | null = null;
 
   const state = (): MenuState => {
     const best = bestResults();
+    const last = lastEntryOf(currentSettings().lastEntry, deps.replay?.log ?? null);
     return {
       done: EXERCISE_IDS.filter((id) => exerciseDone(best, id)),
       replayable: deps.replay !== null,
       hasNews: false,
-      lastEntry: lastEntryOf(currentSettings().lastEntry, deps.replay?.log ?? null),
+      lastEntry: last === null ? null : offeredEntry(last),
     };
   };
 
@@ -98,7 +102,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   };
 
   const startRun = (button: HTMLButtonElement, run: RunConfig, entry: EntryRef): void => {
-    if (busy) return;
+    if (busy || graphicsMissing) return;
     busy = true;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
@@ -126,14 +130,18 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
       go({ type: 'open', item: item.id });
       return;
     }
+    if (graphicsMissing) return;
     actions[item.target.action](button);
   };
 
-  /** The row a list opens on: the exercise Continue would start, or the last driven yard. */
-  const listFocus = (kind: EntryKind | undefined): EntryRef | null => {
+  /** The row a list opens on: the exercise Continue would start, or the last driven yard, in any role. */
+  const listFocus = (
+    list: { readonly role: Role; readonly kind: EntryKind } | undefined,
+  ): EntryRef | null => {
+    if (list === undefined) return null;
     const { done, lastEntry } = state();
-    const entry = kind === 'exercise' ? continueEntry(lastEntry, done) : lastEntry;
-    return entry?.kind === kind ? entry : null;
+    const entry = list.kind === 'exercise' ? continueEntry(lastEntry, done) : lastEntry;
+    return entry?.kind === list.kind ? { ...entry, role: list.role } : null;
   };
 
   const contentScreen = (level: Level): ScreenView => {
@@ -170,13 +178,14 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           replay: deps.replay?.log ?? null,
           hasNews: deps.hasNews,
           activate,
+          graphicsMissing,
         });
       case 'entries':
         return entriesScreen({
           screen,
           heading: headingOf(level),
           done: state().done,
-          focus: listFocus(screen.list?.kind),
+          focus: listFocus(screen.list),
           back,
           pick: (entry) => go({ type: 'pick', entry }),
         });
@@ -187,11 +196,12 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
           entry,
           step: level.step ?? 0,
           back,
+          graphicsMissing,
           next: () => {
             go({ type: 'next' });
           },
-          start: (button, run) => {
-            startRun(button, run, entry);
+          start: (button, run, started) => {
+            startRun(button, run, started);
           },
         });
       }
@@ -240,6 +250,13 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
   };
   window.addEventListener('keydown', onEscape);
   show();
+  deps.graphics.recheck
+    .then((missing) => {
+      if (closed || missing === graphicsMissing) return;
+      graphicsMissing = missing;
+      if (!busy) show();
+    })
+    .catch(() => undefined);
 
   return {
     close: () => {

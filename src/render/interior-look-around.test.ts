@@ -13,13 +13,13 @@ import {
 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { truckAnchors } from '../vehicles/anchors';
+import { cabGlass } from '../vehicles/cab';
 import { trucks } from '../vehicles/registry';
 import { CAB_HEIGHT, cabShellParams, FRAME_TOP } from './cab-dims';
 import { COCKPIT_FOV, COCKPIT_PITCH } from './cockpit-camera';
 import { parseMeshes } from './glb-shells';
 import { interiorShellFrom } from './interior-glb';
 import {
-  B_PILLAR,
   DOOR_THICKNESS,
   GLASS_SETBACK,
   interiorShellParams,
@@ -222,7 +222,7 @@ describe.each(trucks)('cab interior for looking around, $id', (spec) => {
   const sill = FRAME_TOP + cab.cab.glassSill;
   const glassTop = sill + cab.cab.glassHeight;
   const glass = frontX - GLASS_SETBACK;
-  const bPillarFront = eye.x - B_PILLAR.behindEye;
+  const bPillarFront = cabGlass(spec).sideRear;
   const origin = toThree([eye.x, eye.y, eye.z]);
 
   /**
@@ -272,6 +272,16 @@ describe.each(trucks)('cab interior for looking around, $id', (spec) => {
     expect(checked).toBeGreaterThan(0);
     // the side window is open to the look-around, so some rays do leave
     expect(glass).toBeGreaterThan(0);
+  });
+
+  it('opens the side window back to the rear edge of the shell glass and no further', () => {
+    // above the door top, which rises to eye height at the driver's end
+    const z = (eye.z + glassTop) / 2;
+    const open = (x: number): boolean =>
+      !hits(shell, origin, toThree([x - eye.x, inner - eye.y, z - eye.z]));
+    expect(bPillarFront).toBeLessThan(eye.x);
+    expect(open(bPillarFront + 0.03)).toBe(true);
+    expect(open(bPillarFront - 0.03)).toBe(false);
   });
 
   it('leaves the forward view unchanged: no ray of it meets an added part first', () => {

@@ -1,5 +1,6 @@
 import { resolveRun } from '../content/run';
-import type { ExerciseDefinition, InputLog, RunResult } from '../contracts/exercise';
+import type { ControlSource } from '../contracts/control';
+import type { ExerciseDefinition, InputLog, Role, RunResult } from '../contracts/exercise';
 import type { LayoutId } from '../contracts/layout';
 import {
   DEFAULT_TOP_DOWN_LAYOUT,
@@ -37,7 +38,9 @@ import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
 import { trailerById, truckById } from '../vehicles/registry';
 import { measureChrome, measureDivider } from './chrome';
+import { startEinweiserDrive } from './einweiser-drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
+import { pauseFields } from './menu/options';
 import { showPauseSheet, type PauseSheet } from './pause-sheet';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
@@ -48,11 +51,15 @@ export type RunConfig = {
   readonly exercise: ExerciseDefinition | null;
   readonly truckId: TruckId;
   readonly trailerId: TrailerId;
+  /** Absent: a driver run. */
+  readonly role?: Role;
 };
 
 export type DriveOutcome = {
   readonly log: InputLog;
   readonly result: RunResult | null;
+  /** An Einweiser run ended because the vehicle hit him. */
+  readonly runOver: boolean;
 };
 
 /** Margin between the target arrow and the edge of the clear rect, in px. */
@@ -80,11 +87,13 @@ export function startDrive(
   settings: Settings,
   { onExit, onRestart, onLeave }: DriveHandlers,
 ): () => void {
+  const role: Role = run.role ?? 'driver';
   const { params, layout, exercise, start, contacts } = resolveRun({
     layoutId: run.layoutId,
     exerciseId: run.exercise?.id ?? null,
     truckId: run.truckId,
     trailerId: run.trailerId,
+    role,
   });
   const truck = truckById(run.truckId);
   const trailer = trailerById(run.trailerId);
@@ -94,6 +103,7 @@ export function startDrive(
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
   let reached = false;
+  let runOver = false;
   // Sticky over aid toggles; only sim steps after the first driving input with an aid on count.
   let assisted = false;
   let startTime: number | null = null;
@@ -101,6 +111,10 @@ export function startDrive(
   const stage = document.createElement('div');
   stage.className = 'drive';
   root.append(stage);
+  const einweiser =
+    role === 'einweiser'
+      ? startEinweiserDrive(stage, { truck, trailer, layout, contacts, start: snapshot, lighting })
+      : null;
 
   const cleanups: (() => void)[] = [];
   let disposed = false;
@@ -119,12 +133,14 @@ export function startDrive(
         exerciseId: exercise?.id ?? null,
         truckId: run.truckId,
         trailerId: run.trailerId,
+        role,
         lighting,
         mirrorsOnly,
+        ...(einweiser === null ? {} : { einweiser: einweiser.track() }),
       },
       snapshot.step,
     );
-    const result =
+    const driven =
       scored && exercise !== null
         ? runResult(
             snapshot,
@@ -139,8 +155,10 @@ export function startDrive(
             mirrorsOnly,
           )
         : null;
+    const result =
+      driven === null || einweiser === null ? driven : { ...driven, einweiser: einweiser.result() };
     dispose();
-    onExit({ log, result });
+    onExit({ log, result, runOver });
   };
   const finish = (): void => exit(true);
   const restart = (): void => {
@@ -173,13 +191,20 @@ export function startDrive(
       restart,
       finish,
       leave: exercise === null ? null : leaveUnscored,
+      fields: pauseFields(role),
       settingChanged: (id) => {
         if (id === 'graphics') switchGraphics(currentSettings().graphics);
+        // the field of view is the first-person camera's: redraw while the run stands still
+        if (id === 'fov') {
+          frame.fov = currentSettings().fov;
+          dirty = true;
+        }
         if (id !== 'wideMirrors') return;
         wideMirrors = currentSettings().wideMirrors;
         arrange();
       },
     });
+    einweiser?.pause();
   };
 
   const view = mountRenderStage(stage, stage, () => exit(false), lighting);
@@ -193,6 +218,14 @@ export function startDrive(
   };
   cleanups.push(halt);
   live.push(resume, holdWakeLock());
+  // Before the view input and the HUD, whose keys and clicks it takes first.
+  if (einweiser !== null) {
+    live.push(
+      einweiser.attach(view.surface, () => {
+        if (sheet === null) togglePause();
+      }),
+    );
+  }
   const onEscape = (e: KeyboardEvent): void => {
     if (!isAction('escape', e) || e.repeat || e.defaultPrevented) return;
     e.preventDefault();
@@ -200,6 +233,12 @@ export function startDrive(
   };
   window.addEventListener('keydown', onEscape);
   live.push(() => window.removeEventListener('keydown', onEscape));
+  // A hidden tab freezes the frames; the sheet keeps the run from carrying on at once on return.
+  const onHidden = (): void => {
+    if (document.visibilityState === 'hidden' && sheet === null) togglePause();
+  };
+  document.addEventListener('visibilitychange', onHidden);
+  live.push(() => document.removeEventListener('visibilitychange', onHidden));
   const { renderer } = view;
   // The pause sheet can change it during the drive.
   let graphics = view.graphics;
@@ -212,6 +251,10 @@ export function startDrive(
       dirty = true;
     }),
   );
+
+  // His look is the mouse's, and he has no outside view (`docs/einweiser-spike.md` §3.1, §3.4).
+  const chaseOffered = (g: GraphicsPreset): boolean => role === 'driver' && chaseViewAvailable(g);
+  const lookOffered = (g: GraphicsPreset): boolean => role === 'driver' && lookAroundAvailable(g);
 
   const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
   let aids: AidFlags = mirrorsOnly ? NO_AIDS : settings.aids;
@@ -234,18 +277,26 @@ export function startDrive(
       undefined,
       null,
       extraMirrors(graphics, wideMirrors),
+      role,
     ),
     topDown,
     aids,
     predicted: NO_PREDICTION,
+    fov: settings.fov,
   };
 
-  const controls = createControls(stage, {
-    lockToLockTurns: truck.steering.lockToLockTurns.value,
-    steerRate: params.steerRate,
-    lights: lighting === 'night',
-  });
-  live.push(() => controls.dispose());
+  // The Einweiser has no wheel, lever or driver keys.
+  const controls =
+    einweiser === null
+      ? createControls(stage, {
+          lockToLockTurns: truck.steering.lockToLockTurns.value,
+          steerRate: params.steerRate,
+          lights: lighting === 'night',
+        })
+      : null;
+  if (controls !== null) live.push(() => controls.dispose());
+  const source: ControlSource | undefined = einweiser?.source ?? controls ?? undefined;
+  if (source === undefined) throw new Error('a drive has a control source');
   // Created before the HUD, whose keydown listener relies on defaultPrevented marking a handled key.
   const viewInput = createViewInput(view.surface, {
     mode: topDown,
@@ -271,7 +322,7 @@ export function startDrive(
     },
     look: {
       getRect: () => frame.views.cockpit,
-      enabled: lookAroundAvailable(graphics),
+      enabled: lookOffered(graphics),
       onChange(head) {
         frame.head = head;
         if (EXPOSE_FRAMING) stage.dataset['head'] = JSON.stringify(head);
@@ -287,15 +338,19 @@ export function startDrive(
     exercise:
       exercise === null
         ? null
-        : { title: t(EXERCISE_TITLE[exercise.id]), brief: t(EXERCISE_BRIEF[exercise.id]) },
+        : {
+            title: t(EXERCISE_TITLE[role][exercise.id]),
+            brief: t(EXERCISE_BRIEF[role][exercise.id]),
+          },
     aids,
     topDown,
-    chase: chaseViewAvailable(graphics),
+    chase: chaseOffered(graphics),
     interior: interiorAvailable(graphics),
-    look: lookAroundAvailable(graphics),
+    look: lookOffered(graphics),
     collapsed,
     mirrorsOnly,
-    pedalsBox: () => controls.pedalsBox(),
+    role,
+    ...(controls === null ? {} : { pedalsBox: () => controls.pedalsBox() }),
   });
   cleanups.push(() => hud.dispose());
 
@@ -379,6 +434,7 @@ export function startDrive(
       topDownLayout,
       panels,
       extra,
+      role,
     );
     hud.layout(views);
     const legend = hud.legendBox();
@@ -392,6 +448,7 @@ export function startDrive(
         topDownLayout,
         panels,
         extra,
+        role,
       );
       hud.layout(views);
     }
@@ -412,11 +469,11 @@ export function startDrive(
     graphics = next;
     view.setGraphics(next);
     renderer.rebuildScene();
-    viewInput.setLook(lookAroundAvailable(next));
+    viewInput.setLook(lookOffered(next));
     hud.setOffers({
-      chase: chaseViewAvailable(next),
+      chase: chaseOffered(next),
       interior: interiorAvailable(next),
-      look: lookAroundAvailable(next),
+      look: lookOffered(next),
     });
     dirty = true;
     arrange();
@@ -485,7 +542,7 @@ export function startDrive(
     },
     halted: halt,
     frame(seconds) {
-      if (reached) {
+      if (reached || runOver) {
         finish();
         return;
       }
@@ -493,14 +550,21 @@ export function startDrive(
       const clock = sheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
       for (let i = 0; i < clock.steps; i++) {
-        controls.tick(DT, snapshot.steer);
-        const control = controls.control();
+        source.tick(DT, snapshot);
+        const control = source.control();
         recorder.record(snapshot.step, control);
         if (startTime === null && isDrivingInput(control)) startTime = snapshot.time;
         if (startTime !== null && anyAid(aids)) assisted = true;
         snapshot = sim.step(control);
+        if (einweiser !== null) {
+          einweiser.settle(snapshot);
+          // the hit ends the run, reached or not; the next frame exits
+          runOver = einweiser.runOver();
+          if (runOver) break;
+        }
         if (tracker !== null) {
-          reached = tracker.update(snapshot);
+          // an Einweiser run ends only on a stop in the target after a recognised Halt
+          reached = tracker.update(snapshot) && (einweiser?.halted() ?? true);
           // render this final snapshot first; the next frame exits, so the HUD's last time is the result time
           if (reached) break;
         }
@@ -525,7 +589,9 @@ export function startDrive(
       frame.waypointVisited = tracker?.waypointVisited() ?? false;
       frame.topDown = topDown;
       frame.aids = aids;
-      frame.lamps = controls.lamps();
+      frame.lamps = source.lamps();
+      const visual = einweiser?.visual() ?? null;
+      if (visual !== null) frame.einweiser = visual;
       renderer.render(frame);
       drawn++;
       if (enterFree) {
@@ -535,6 +601,7 @@ export function startDrive(
         else hud.setFree(false);
       }
       hud.update(snapshot, warning);
+      if (einweiser !== null) hud.setEinweiser(einweiser.hud());
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goalCue(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
@@ -544,6 +611,7 @@ export function startDrive(
       if (EXPOSE_FRAMING) {
         exposeVehicleBox();
         stage.dataset['drawn'] = String(drawn);
+        if (visual !== null) stage.dataset['einweiser'] = JSON.stringify(visual);
       }
     },
   });
