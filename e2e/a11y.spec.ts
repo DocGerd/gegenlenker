@@ -81,14 +81,20 @@ test('the replay slider announces the visible time', async ({ page }) => {
     .toBe(true);
 });
 
-test('a notice ignores an Enter held from before it appeared', async ({ page }) => {
+test('a notice ignores an Enter held from before it appeared', async ({ page, allow }) => {
+  allow(/Graphics could not start/);
   await page.addInitScript(() => {
     const original: unknown = Reflect.get(HTMLCanvasElement.prototype, 'getContext');
     if (typeof original !== 'function') return;
+    // The title's probe passes; the renderer's own context then fails.
+    let probed = false;
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
       configurable: true,
       value(this: HTMLCanvasElement, id: string, ...rest: unknown[]): unknown {
-        return id === 'webgl2' ? null : Reflect.apply(original, this, [id, ...rest]);
+        if (id !== 'webgl2') return Reflect.apply(original, this, [id, ...rest]);
+        if (probed) return null;
+        probed = true;
+        return Reflect.apply(original, this, [id, ...rest]);
       },
     });
   });
