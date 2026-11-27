@@ -1,4 +1,5 @@
 import { t } from '../../../i18n/i18n';
+import { offeredRoles } from '../catalogue';
 import { choiceRow } from '../choice-row';
 import type { Item, Screen } from '../graph';
 import { applyOption, OPTION_FIELDS, optionValue, type OptionId } from '../options';
@@ -23,7 +24,9 @@ export function optionsScreen(ctx: OptionsContext): {
   const settings = currentSettings();
   const body = element('div', 'menu-settings');
 
-  ctx.screen.groups?.forEach((group, index) => {
+  const einweiser = offeredRoles().includes('einweiser');
+  const groups = ctx.screen.groups?.filter((g) => g.einweiser !== true || einweiser);
+  groups?.forEach((group, index) => {
     const section = element('section', 'menu-settings-group');
     const heading = element('h2', 'menu-settings-heading', t(group.label));
     heading.id = `settings-group-${index}`;

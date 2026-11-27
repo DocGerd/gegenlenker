@@ -43,6 +43,7 @@ import {
   AIDS_LAYER,
   CHASE_LAYERS,
   COCKPIT_LAYERS,
+  EINWEISER_LAYERS,
   DEFAULT_LAYER,
   enableLayers,
   MIRROR_LAYERS,
@@ -659,7 +660,7 @@ describe('lamp light in the vehicle visuals', () => {
   };
 
   it('keeps every vehicle light on the top-down layer or on one every perspective camera sees', () => {
-    const perspective = [COCKPIT_LAYERS, MIRROR_LAYERS, CHASE_LAYERS].map(camera);
+    const perspective = [COCKPIT_LAYERS, MIRROR_LAYERS, CHASE_LAYERS, EINWEISER_LAYERS].map(camera);
     for (const [, make] of visuals) {
       const visual = make();
       for (const preset of ['high', 'balanced', 'low'] as const) {

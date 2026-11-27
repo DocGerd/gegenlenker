@@ -12,7 +12,7 @@ import {
   step,
   timeoutWithSettles,
 } from './pinned-shoot';
-import { exerciseEntry } from './menu-flow';
+import { exerciseEntry, type MenuEntry } from './menu-flow';
 
 // High at night is the one lit scene with the sun's shadow pass taken out, the aids unlit and the lamps' passes in.
 const RUNS: readonly { preset: Preset; lighting: LightingMode }[] = [
@@ -52,10 +52,14 @@ async function drawnCalls(page: Page, { preset, lighting }: Run, what: string): 
   return reading.calls;
 }
 
-async function startAtFullSize(page: Page, { preset, lighting }: Run): Promise<void> {
+async function startAtFullSize(
+  page: Page,
+  { preset, lighting }: Run,
+  entry: MenuEntry = exerciseEntry('straight-reverse'),
+): Promise<void> {
   // the load and its first settle draw at a smaller size, which costs less on software GL
   await page.setViewportSize({ width: 1280, height: 720 });
-  await startPinnedDrive(page, { preset, lighting }, exerciseEntry('straight-reverse'), '?perf=1');
+  await startPinnedDrive(page, { preset, lighting }, entry, '?perf=1');
   // every mirror draws at this size: budget the worst case
   const backingWidth = (): Promise<number> =>
     page.evaluate(() => document.querySelector('canvas')?.width ?? 0);
@@ -133,6 +137,22 @@ for (const run of RUNS) {
       },
     );
   }
+
+  // every preset: the view and the arms are the mode, not a realism layer, so Low draws them too
+  test(
+    `the Einweiser view and his arms stay within the draw-call budget at ${label}, with the driver's shadow passes`,
+    slowAt(preset),
+    async ({ context }) => {
+      test.setTimeout(timeoutWithSettles(preset, 2));
+      const page = await context.newPage();
+      await startAtFullSize(page, run, {
+        ...exerciseEntry('straight-reverse'),
+        role: 'einweiser',
+      });
+      const calls = await drawnCalls(page, run, 'Einweiser view');
+      expect(calls, `draw calls over ${DRAW_CALL_BUDGET}`).toBeLessThanOrEqual(DRAW_CALL_BUDGET);
+    },
+  );
 
   // High only: the free camera sees the most from the greatest height, and the lower presets draw less of it
   if (preset === 'high') {

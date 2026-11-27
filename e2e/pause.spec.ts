@@ -620,3 +620,74 @@ test(
     await expect(page.locator('.drive')).toHaveCount(1);
   },
 );
+
+// Headless pages stay visible, so the tab state is emulated.
+const setVisibility = (page: Page, state: 'hidden' | 'visible'): Promise<void> =>
+  page.evaluate((next) => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => next });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+
+test('a hidden tab pauses the run and the sheet stays open on return', async ({ page }) => {
+  await startAndRoll(page);
+  await setVisibility(page, 'hidden');
+  await expect(sheet(page)).toBeVisible();
+  const pausedAt = await clock(page).textContent();
+
+  await setVisibility(page, 'visible');
+  await page.waitForTimeout(600);
+  await expect(sheet(page)).toBeVisible();
+  await expect(clock(page)).toHaveText(pausedAt ?? '');
+
+  await page.keyboard.press('Escape');
+  await expect(sheet(page)).toBeHidden();
+  await expect(clock(page)).not.toHaveText(pausedAt ?? '');
+});
+
+test('a hidden tab leaves an open sheet as it is', async ({ page }) => {
+  await page.goto('./');
+  await startExercise(page, en, 'straight-reverse');
+  await expect(speed(page)).toHaveText('0.0 km/h');
+  await page.keyboard.press('Escape');
+  await openSettings(page);
+
+  await setVisibility(page, 'hidden');
+  await setVisibility(page, 'visible');
+  await expect(sheet(page)).toHaveCount(1);
+  await expect(sheet(page).getByRole('heading', { name: en.settings })).toBeVisible();
+});
+
+test('a hidden tab pauses the free yard too', async ({ page }) => {
+  await page.goto('./');
+  await startYard(page, en, 'depot');
+  await expect(speed(page)).toHaveText('0.0 km/h'); // the drive has mounted
+  await setVisibility(page, 'hidden');
+  await expect(sheet(page)).toBeVisible();
+});
+
+test('a hidden tab after leaving the run builds no sheet', async ({ page }) => {
+  // A leaked listener would build its sheet on the detached stage, where no locator sees it.
+  await page.addInitScript(() => {
+    let built = 0;
+    Object.defineProperty(window, 'sheetsBuilt', { get: () => built });
+    const append = Object.getOwnPropertyDescriptor(Element.prototype, 'append')?.value as (
+      ...nodes: (Node | string)[]
+    ) => void;
+    Element.prototype.append = function (this: Element, ...nodes: (Node | string)[]): void {
+      if (nodes.some((n) => n instanceof Element && n.classList.contains('pause-sheet'))) built++;
+      append.apply(this, nodes);
+    };
+  });
+  const built = (): Promise<number> =>
+    page.evaluate(() => (window as unknown as { sheetsBuilt: number }).sheetsBuilt);
+  await page.goto('./');
+  await startAndRoll(page);
+  await page.keyboard.press('Escape');
+  await sheet(page).getByRole('button', { name: en.leaveUnscored }).click();
+  await toTitle(page, en);
+
+  const before = await built();
+  expect(before).toBeGreaterThan(0);
+  await setVisibility(page, 'hidden');
+  expect(await built()).toBe(before);
+});

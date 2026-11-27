@@ -5,6 +5,7 @@
   --hud-mirror-arm: 8px;
   --hud-arm-inset: 0.38; /* share of a mirror's height above and below its arm */
   --hud-band: 18%; /* mirrors HUD_BAND_SHARE in viewports.ts */
+  --hud-sight-w: 240px; /* SIGHT_CUE_WIDTH in viewports.ts */
   --hud-frame:
     0 0 0 var(--hud-stroke) var(--color-surface),
     0 0 0 calc(2 * var(--hud-stroke)) var(--color-text);
@@ -1098,4 +1099,148 @@
 /* An open key list or aid legend of a short screen opens from the same corner: the button steps aside, keeping its box. */
 .hud-pane-tools .hud-toggle[data-covered] {
   visibility: hidden;
+}
+
+/* The Einweiser's view has no controls: the band and the legend start at the screen's edge. Last in the file, over the mirror-only band rules. */
+.hud[data-role='einweiser'] .hud-legend {
+  left: calc(var(--space-4) + var(--safe-left));
+}
+
+/* The band holds the shown sign's name and the sign bar, and without the top view the counters. */
+.hud[data-role='einweiser'] .hud-band {
+  display: grid;
+  grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+  align-items: stretch;
+  gap: 0 var(--space-3);
+  padding: var(--space-1) calc(var(--space-4) + var(--safe-right))
+    calc(var(--space-1) + var(--safe-bottom)) calc(var(--space-4) + var(--safe-left));
+}
+
+.hud-sign-name {
+  align-self: center;
+  font-size: var(--text-md);
+  line-height: var(--leading-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.hud-sign-bar {
+  container: signs / size;
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--space-1);
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hud-sign {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: 2px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+}
+
+.hud-sign[aria-current] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-tint);
+  color: var(--color-accent-strong);
+}
+
+.hud-sign-key {
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+}
+
+.hud-sign-figure {
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.07;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hud-sign-figure circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+.hud-sign-ghost {
+  opacity: 0.35;
+}
+
+/* Names under the figures only where the slots are wide and tall enough to keep the figures legible. */
+.hud-sign-label {
+  display: none;
+  max-width: 100%;
+  font-size: var(--text-2xs);
+  line-height: var(--leading-2xs);
+  text-align: center;
+}
+
+@container signs (min-width: 720px) and (min-height: 96px) {
+  .hud-sign-label {
+    display: block;
+  }
+}
+
+.hud[data-role='einweiser'][data-mirrors] .hud-band .hud-counters {
+  grid-column: 3;
+  grid-template-columns: repeat(4, auto);
+  align-self: center;
+}
+
+/* The sight cue: top left of his view (hud.ts places it, `sightCueBox`), in the toasts' type; never colour alone. */
+.hud-sight {
+  position: absolute;
+  box-sizing: border-box;
+  width: var(--hud-sight-w);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  font-weight: var(--weight-medium);
+}
+
+.hud-sight svg {
+  flex: none;
+  width: 20px;
+  height: var(--leading-md);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.hud-sight[data-sight='none'],
+.hud-sight[data-sight='unclear'] {
+  border-color: var(--color-warning);
+}
+
+.hud-sight-strike {
+  display: none;
+}
+
+.hud-sight[data-sight='none'] .hud-sight-strike {
+  display: inline;
 }
