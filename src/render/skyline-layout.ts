@@ -1,4 +1,4 @@
-import type { Rect2 } from '../contracts/layout';
+import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import { CAMERA_FAR } from './seams';
 
 export type RoofKind = 'flat' | 'shed' | 'gable' | 'sawtooth';
@@ -20,6 +20,20 @@ export type Building = {
   /** Share of haze mixed in, the same over the whole building. */
   readonly haze: number;
 };
+
+/** Height of the roof's top above `height`, the eave. */
+export function roofRise({ roof, depth }: Pick<Building, 'roof' | 'depth'>): number {
+  switch (roof) {
+    case 'flat':
+      return 0;
+    case 'gable':
+      return depth * 0.12;
+    case 'shed':
+      return depth * 0.08;
+    case 'sawtooth':
+      return 2.8;
+  }
+}
 
 /** Deterministic xorshift in [0, 1): the same skyline in every session. */
 export function rng(seed: number): () => number {
@@ -168,4 +182,207 @@ export function skylineBuildings(bounds: Rect2, seed = 1): readonly Building[] {
     }
   }
   return out;
+}
+
+/** Rows of the belt, outwards from the bounds: the first just past `CLEARANCE`, then this far apart. */
+const BELT_ROW_PITCH = 24;
+/** Deepest belt building: long, shallow sheds fit between the bounds and the near ring. */
+const BELT_DEPTH = 18;
+const BELT_ROWS = 5;
+const BELT_HAZE = 0.12;
+/** Least gap between a belt building and any other building. */
+const BELT_GAP = 3;
+/** Keeps a surface that leaves the bounds this clear on each side. */
+const CORRIDOR_MARGIN = 4;
+const POPLAR_PITCH = 12;
+/** The belt's poplars are younger than the skyline's: this share of their height. */
+const BELT_TREE_HEIGHT = 0.65;
+/** Least gap between two slots along a row, and the step past a slot nothing fits. */
+const BELT_STEP = 5;
+/** The neighbouring estate: halls and sheds, the odd office, rows of poplars. */
+const BELT_KINDS: readonly (BuildingKind | 'trees')[] = [
+  'hall',
+  'warehouse',
+  'trees',
+  'hall',
+  'office',
+  'warehouse',
+  'hall',
+  'trees',
+];
+/** Splits the belt's stream from the rings', so the rings stay as they are. */
+const BELT_STREAM = 0x2c1b3c6d;
+
+/** The surfaces that run out of the bounds, as strips out to the far plane the belt keeps clear. */
+function corridors({ bounds, surfaces }: Pick<ResolvedLayout, 'bounds' | 'surfaces'>): Footprint[] {
+  const out: Rect2[] = [];
+  const far = CAMERA_FAR;
+  const m = CORRIDOR_MARGIN;
+  for (const { rect } of surfaces) {
+    const across = { minY: rect.minY - m, maxY: rect.maxY + m };
+    const along = { minX: rect.minX - m, maxX: rect.maxX + m };
+    if (rect.minX <= bounds.minX)
+      out.push({ minX: bounds.minX - far, maxX: bounds.minX, ...across });
+    if (rect.maxX >= bounds.maxX)
+      out.push({ minX: bounds.maxX, maxX: bounds.maxX + far, ...across });
+    if (rect.minY <= bounds.minY)
+      out.push({ minY: bounds.minY - far, maxY: bounds.minY, ...along });
+    if (rect.maxY >= bounds.maxY)
+      out.push({ minY: bounds.maxY, maxY: bounds.maxY + far, ...along });
+  }
+  return out.map((r) => ({
+    x: (r.minX + r.maxX) / 2,
+    y: (r.minY + r.maxY) / 2,
+    heading: 0,
+    length: r.maxX - r.minX,
+    depth: r.maxY - r.minY,
+  }));
+}
+
+const distanceTo = (r: Rect2, x: number, y: number): number =>
+  Math.hypot(Math.max(r.minX - x, 0, x - r.maxX), Math.max(r.minY - y, 0, y - r.maxY));
+
+type Footprint = Pick<Building, 'x' | 'y' | 'heading' | 'length' | 'depth'>;
+
+function corners({ x, y, heading, length, depth }: Footprint): [number, number][] {
+  const [c, s] = [Math.cos(heading), Math.sin(heading)];
+  return [
+    [1, 1],
+    [1, -1],
+    [-1, -1],
+    [-1, 1],
+  ].map(([a = 0, b = 0]) => [
+    x + (a * length * c - b * depth * s) / 2,
+    y + (a * length * s + b * depth * c) / 2,
+  ]);
+}
+
+/** Whether two footprints, each grown by `gap` / 2, overlap: separating axes. */
+function overlap(a: Footprint, b: Footprint, gap: number): boolean {
+  // this far apart, one of a's two axes already separates them: the same answer without the corners
+  const reach = (f: Footprint): number => Math.hypot(f.length, f.depth) / 2;
+  if (Math.hypot(a.x - b.x, a.y - b.y) >= Math.SQRT2 * (reach(a) + reach(b) + gap)) return false;
+  const ca = corners(a);
+  const cb = corners(b);
+  for (const heading of [a.heading, a.heading + Math.PI / 2, b.heading, b.heading + Math.PI / 2]) {
+    const [ux, uy] = [Math.cos(heading), Math.sin(heading)];
+    const project = (cs: [number, number][]): [number, number] => {
+      const d = cs.map(([px, py]) => px * ux + py * uy);
+      return [Math.min(...d), Math.max(...d)];
+    };
+    const [a0, a1] = project(ca);
+    const [b0, b1] = project(cb);
+    if (a1 + gap <= b0 || b1 + gap <= a0) return false;
+  }
+  return true;
+}
+
+/**
+ * Rows of low buildings and poplars around the layout bounds, out to the near ring, so the ground
+ * between the yard and the skyline is not bare from above. Clear of `rings`, of the surfaces that
+ * leave the bounds and of each other.
+ */
+export function perimeterBuildings(
+  layout: Pick<ResolvedLayout, 'bounds' | 'surfaces'>,
+  rings: readonly Building[],
+  seed = 1,
+): readonly Building[] {
+  const { bounds } = layout;
+  const next = rng(seed ^ BELT_STREAM);
+  const cx = (bounds.minX + bounds.maxX) / 2;
+  const cy = (bounds.minY + bounds.maxY) / 2;
+  const keepClear = corridors(layout);
+  const placed: Building[] = [];
+  const fits = (b: Building): boolean => {
+    const fp = footprintRadius(b);
+    const cs = corners(b);
+    return (
+      cs.every(([x, y]) => distanceTo(bounds, x, y) >= CLEARANCE) &&
+      Math.hypot(b.x - cx, b.y - cy) + fp <= NEAR_RING.hi &&
+      keepClear.every((r) => !overlap(r, b, 0)) &&
+      rings.every((o) =>
+        o.kind === 'crane'
+          ? Math.hypot(o.x - b.x, o.y - b.y) >= fp + footprintRadius(o) + BELT_GAP
+          : !overlap(o, b, BELT_GAP),
+      ) &&
+      placed.every((o) => !overlap(o, b, BELT_GAP))
+    );
+  };
+  // Each side runs counter-clockwise from its corner; its outward normal is its heading turned right.
+  const sides = [
+    { x: bounds.minX, y: bounds.minY, heading: 0, span: bounds.maxX - bounds.minX },
+    { x: bounds.maxX, y: bounds.minY, heading: Math.PI / 2, span: bounds.maxY - bounds.minY },
+    { x: bounds.maxX, y: bounds.maxY, heading: Math.PI, span: bounds.maxX - bounds.minX },
+    { x: bounds.minX, y: bounds.maxY, heading: -Math.PI / 2, span: bounds.maxY - bounds.minY },
+  ];
+  /** The buildings of one slot, `along` the side from its corner and `offset` out; trees are a row of poplars. */
+  const slot = (
+    kind: BuildingKind | 'trees',
+    side: (typeof sides)[number],
+    along: number,
+    offset: number,
+  ): { buildings: Building[]; length: number } => {
+    const [tx, ty] = [Math.cos(side.heading), Math.sin(side.heading)];
+    const [nx, ny] = [ty, -tx];
+    const trees = kind === 'trees';
+    const count = trees ? 2 + Math.floor(next() * 4) : 1;
+    const sized = sizeOf(trees ? 'poplar' : kind, false, next);
+    const first = { ...sized, depth: Math.min(sized.depth, BELT_DEPTH) };
+    const length = trees ? count * POPLAR_PITCH : first.length;
+    const out = offset + first.depth / 2 + next() * 4;
+    const buildings = Array.from({ length: count }, (_, i): Building => {
+      const at = along + (trees ? (i + 0.5) * POPLAR_PITCH : length / 2);
+      const size = i === 0 ? first : sizeOf('poplar', false, next);
+      return {
+        kind: trees ? 'poplar' : kind,
+        ...size,
+        height: trees ? size.height * BELT_TREE_HEIGHT : size.height,
+        x: side.x + tx * at + nx * out,
+        y: side.y + ty * at + ny * out,
+        heading: side.heading + (trees ? 0 : (next() - 0.5) * 0.1),
+        skin: Math.floor(next() * 6),
+        seed: Math.floor(next() * 0x7fffffff) + 1,
+        haze: BELT_HAZE,
+      };
+    });
+    return { buildings, length };
+  };
+  let k = Math.floor(next() * BELT_KINDS.length);
+  for (let row = 0; row < BELT_ROWS; row++) {
+    const offset = CLEARANCE + 1 + row * BELT_ROW_PITCH;
+    for (const side of sides) {
+      // past the corners by the row's offset, so the rows of two sides meet
+      let along = -offset + next() * 10;
+      while (along < side.span + offset) {
+        const kind = BELT_KINDS[k % BELT_KINDS.length] ?? 'hall';
+        k += 1;
+        // where the pattern's pick does not fit, a smaller shed or a row of trees may
+        let used = 0;
+        // the first row stands right behind the kit's own trees: trees only where no shed fits
+        const tries: readonly (BuildingKind | 'trees')[] =
+          row === 0
+            ? [kind === 'trees' ? 'hall' : kind, 'warehouse', 'trees']
+            : [kind, 'warehouse', 'trees'];
+        for (const tried of tries) {
+          const { buildings, length } = slot(tried, side, along, offset);
+          const fitting = buildings.filter(fits);
+          if (fitting.length * 2 > buildings.length) {
+            placed.push(...fitting);
+            used = length;
+            break;
+          }
+        }
+        along += used > 0 ? used + BELT_STEP + next() * BELT_STEP * 2 : BELT_STEP;
+      }
+    }
+  }
+  return placed;
+}
+
+/** Every building around `layout`: the two rings and the belt inside them. */
+export function sceneryBuildings(
+  layout: Pick<ResolvedLayout, 'bounds' | 'surfaces'>,
+): readonly Building[] {
+  const rings = skylineBuildings(layout.bounds);
+  return [...rings, ...perimeterBuildings(layout, rings)];
 }

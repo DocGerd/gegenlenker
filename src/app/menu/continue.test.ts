@@ -7,9 +7,13 @@ import { continueEntry, lastEntryOf } from './continue';
 const ex = (id: ExerciseId): EntryRef => ({ role: 'driver', kind: 'exercise', id });
 const yard = (id: LayoutId): EntryRef => ({ role: 'driver', kind: 'yard', id });
 
-const log = (layoutId: LayoutId, exerciseId: ExerciseId | null): InputLog => ({
+const log = (
+  layoutId: LayoutId,
+  exerciseId: ExerciseId | null,
+  role: InputLog['role'] = 'driver',
+): InputLog => ({
   version: 4,
-  role: 'driver',
+  role,
   layoutId,
   exerciseId,
   truckId: 'man-le-18-280',
@@ -49,6 +53,11 @@ describe('continueEntry', () => {
     expect(continueEntry(yard('depot'), [...EXERCISE_IDS])).toEqual(yard('depot'));
   });
 
+  it("resumes an Einweiser exercise, whatever the driver's done", () => {
+    const guide: EntryRef = { role: 'einweiser', kind: 'exercise', id: 'reverse-bay' };
+    expect(continueEntry(guide, ['reverse-bay', 'reverse-corner'])).toEqual(guide);
+  });
+
   it('offers nothing without a last entry', () => {
     expect(continueEntry(null, [])).toBeNull();
   });
@@ -71,6 +80,14 @@ describe('lastEntryOf', () => {
     expect(lastEntryOf(null, log('depot', 'reverse-bay'))).toEqual(ex('reverse-bay'));
     expect(lastEntryOf(null, log('logistics', null))).toEqual(yard('logistics'));
     expect(lastEntryOf(null, null)).toBeNull();
+  });
+
+  it("takes the last run's role", () => {
+    expect(lastEntryOf(null, log('depot', 'slalom', 'einweiser'))).toEqual({
+      role: 'einweiser',
+      kind: 'exercise',
+      id: 'slalom',
+    });
   });
 
   it('a stored last entry wins over the last run', () => {

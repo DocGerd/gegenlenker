@@ -53,6 +53,7 @@ import {
   AIDS_LAYER,
   CHASE_LAYERS,
   COCKPIT_LAYERS,
+  EINWEISER_LAYERS,
   DEFAULT_LAYER,
   enableLayers,
   PERSPECTIVE_LAYER,
@@ -805,7 +806,12 @@ describe('environment quality wiring', () => {
     expect(layout).toBeDefined();
     if (layout === undefined) return;
     const env = proceduralEnvironment(layout, palette);
-    const perspective = [cameras.cockpit, cameras.mirror, camera(CHASE_LAYERS)];
+    const perspective = [
+      cameras.cockpit,
+      cameras.mirror,
+      camera(CHASE_LAYERS),
+      camera(EINWEISER_LAYERS),
+    ];
     for (const flags of [QUALITY_FLAGS.high, QUALITY_FLAGS.low]) {
       env.setLook(lookFor(flags, 'day'));
       const lights = lightsOf(env.object);

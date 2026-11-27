@@ -1,6 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, Vector3 } from 'three';
 import { isGlassTile, tileUv, type Tile } from './skyline-atlas';
-import { BOOM_REACH, rng, type Building } from './skyline-layout';
+import { BOOM_REACH, rng, roofRise, type Building } from './skyline-layout';
 
 /*
  * Solid low-poly buildings in Three space (x, y up, z = -sim y): extruded profiles for the roofed
@@ -335,7 +335,7 @@ function roofProfile(b: Building): Profile {
         restCaps: [],
       };
     case 'gable': {
-      const ridge = eave + b.depth * 0.12;
+      const ridge = eave + roofRise(b);
       return {
         points: [...base, [0, ridge], [-half, eave]],
         tags: ['base', 'wall', 'roof', 'roof', 'wall'],
@@ -350,7 +350,7 @@ function roofProfile(b: Building): Profile {
       };
     }
     case 'shed': {
-      const high = eave + b.depth * 0.08;
+      const high = eave + roofRise(b);
       return {
         points: [...base, [-half, high]],
         tags: ['base', 'wall', 'roof', 'wall'],
@@ -367,7 +367,7 @@ function roofProfile(b: Building): Profile {
     case 'sawtooth': {
       const teeth = Math.max(2, Math.round(b.depth / 9));
       const pitch = b.depth / teeth;
-      const rise = 2.8;
+      const rise = roofRise(b);
       const points: Pt[] = [...base];
       const tags: Tag[] = ['base', 'wall'];
       const restCaps: Pt[][] = [];

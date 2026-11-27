@@ -28,6 +28,7 @@ import {
   CAB_LAYER,
   CHASE_LAYERS,
   COCKPIT_LAYERS,
+  EINWEISER_LAYERS,
   DEFAULT_LAYER,
   enableLayers,
   INTERIOR_LAYER,
@@ -136,7 +137,7 @@ describe('light rig', () => {
 
   it('lights every perspective camera, the cockpit pass over the interior layer included', () => {
     const { hdri } = lights(createLightRig(scene));
-    for (const layers of [COCKPIT_LAYERS, MIRROR_LAYERS, CHASE_LAYERS]) {
+    for (const layers of [COCKPIT_LAYERS, MIRROR_LAYERS, CHASE_LAYERS, EINWEISER_LAYERS]) {
       const camera = new Layers();
       camera.disableAll();
       enableLayers(camera, layers);
@@ -213,7 +214,13 @@ describe('light rig', () => {
     });
 
     it('keeps the shadow-only layer out of every camera', () => {
-      for (const layers of [COCKPIT_LAYERS, MIRROR_LAYERS, CHASE_LAYERS, TOP_DOWN_LAYERS]) {
+      for (const layers of [
+        COCKPIT_LAYERS,
+        MIRROR_LAYERS,
+        CHASE_LAYERS,
+        EINWEISER_LAYERS,
+        TOP_DOWN_LAYERS,
+      ]) {
         expect(layers).not.toContain(SHADOW_ONLY_LAYER);
       }
     });

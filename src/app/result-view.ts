@@ -179,7 +179,11 @@ export function showResult(
 
   const header = element('header', 'result-header');
   header.append(
-    element('p', 'result-eyebrow', `${t('result')} · ${t(EXERCISE_TITLE[result.exerciseId])}`),
+    element(
+      'p',
+      'result-eyebrow',
+      `${t('result')} · ${t(EXERCISE_TITLE[result.einweiser === undefined ? 'driver' : 'einweiser'][result.exerciseId])}`,
+    ),
     title,
     element('p', 'result-reason', t(result.assisted ? 'runWithAids' : 'runNoAids')),
   );

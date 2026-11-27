@@ -27,6 +27,7 @@ export const KEYS: Record<ScenePaletteKey, true> = {
   nightTracks: true,
   band: true,
   cladding: true,
+  einweiser: true,
   nightYard: true,
   nightPavement: true,
   nightStreet: true,

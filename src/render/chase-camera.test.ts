@@ -44,7 +44,7 @@ import { parseShell } from './glb-shells';
 import { KEYS } from './palette';
 import { AIDS_LAYER, CAB_LAYER, CAMERA_FAR, DEFAULT_LAYER, PERSPECTIVE_LAYER } from './seams';
 import { skylineGeometry } from './skyline-geometry';
-import { skylineBuildings } from './skyline-layout';
+import { sceneryBuildings } from './skyline-layout';
 import { proceduralTruck } from './vehicle-visual';
 
 // Landscape-screen pane, one with the HUD's free rect cut down to a corner, a square one and a wide strip.
@@ -371,7 +371,9 @@ describe('chase camera', () => {
   });
 
   it('keeps the skyline inside the far plane from the farthest eye over the layout bounds', () => {
-    const vertices = skylineGeometry(skylineBuildings(BOUNDS)).getAttribute('position');
+    const vertices = skylineGeometry(
+      sceneryBuildings(resolveLayout(layouts.depot, null)),
+    ).getAttribute('position');
     const vertex = new Vector3();
     let reach = 0;
     for (let i = 0; i < vertices.count; i++) {
@@ -410,7 +412,9 @@ describe('free camera', () => {
   const frame = FRAMES[1] as ChaseFrame;
 
   it('keeps the skyline inside the far plane from the highest eye over any corner of the layout bounds', () => {
-    const vertices = skylineGeometry(skylineBuildings(BOUNDS)).getAttribute('position');
+    const vertices = skylineGeometry(
+      sceneryBuildings(resolveLayout(layouts.depot, null)),
+    ).getAttribute('position');
     const vertex = new Vector3();
     const eye = new Vector3();
     let reach = 0;
@@ -470,6 +474,28 @@ describe('free camera', () => {
     expect(over).toEqual(before);
     placeFreeCamera(camera, { ...over, x: 40 }, { ...rig, colliders: [hall] }, frame);
     expect(camera.position.y).toBe(3);
+  });
+
+  it("lifts an eye over each walled scenery building above its drawn roof's top", () => {
+    const layout = resolveLayout(layouts.depot, null);
+    const colliders = chaseColliders(layout);
+    const camera = createChaseCamera();
+    const walled = sceneryBuildings(layout).filter((b) =>
+      ['hall', 'warehouse', 'office'].includes(b.kind),
+    );
+    expect(walled.some((b) => b.roof !== 'flat')).toBe(true);
+    for (const b of walled) {
+      const geometry = skylineGeometry([b]);
+      geometry.computeBoundingBox();
+      const top = geometry.boundingBox?.max.y ?? Infinity;
+      placeFreeCamera(
+        camera,
+        { x: b.x, y: b.y, z: 1.5, yaw: 0, pitch: 0 },
+        { ...rig, colliders },
+        frame,
+      );
+      expect(camera.position.y, `${b.kind} ${b.roof}`).toBeGreaterThan(top);
+    }
   });
 
   it('leaves the camera alone on a zero-size pane', () => {

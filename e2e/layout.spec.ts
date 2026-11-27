@@ -4,7 +4,7 @@ import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
 import { COCKPIT_FOV, coneEdge, coneTop } from '../src/render/cockpit-band';
 import { QUALITY_FLAGS } from '../src/render/quality';
-import { computeViewports, NO_INSETS, type Insets } from '../src/render/viewports';
+import { computeViewports, NO_INSETS, sightCueBox, type Insets } from '../src/render/viewports';
 import { seedStorage } from './menu-seed';
 import { heavyAt, startPinnedDrive } from './pinned-shoot';
 import {
@@ -2256,3 +2256,183 @@ test(
     }
   },
 );
+
+/** The Einweiser's longest sight cue text in `messages`. */
+const longestSight = (messages: Messages): string =>
+  [
+    messages.sightWideRight,
+    messages.sightWideLeft,
+    messages.sightMirrorRight,
+    messages.sightClose,
+  ].reduce((a, b) => (b.length > a.length ? b : a));
+
+async function startEinweiser(page: Page, messages: Messages, mirrorsOnly: boolean): Promise<void> {
+  await seedStorage(page, { settings: { mirrorsOnly } });
+  await page.goto('./');
+  await startEntry(page, messages, { ...exerciseEntry('straight-reverse'), role: 'einweiser' });
+  await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
+  await expect(page.locator('.hud-sign')).toHaveCount(9);
+  await expect(page.locator('[data-hud="sight"]')).toBeVisible();
+  await expect(page.locator('.hud-counters')).toBeVisible();
+  await expect(page.locator('.hud-action')).toBeVisible();
+  await settled(page);
+}
+
+/**
+ * His HUD: no mirrors, gauges, gear, speed or target arrow; the sign bar and the shown sign's name
+ * inside the band, the sight cue top left above it at no more than its modelled height, and the longest
+ * toast and goal cue clear of the cue, the band, the key legend, the brief and the pause button. The
+ * driver's controls are not checked: his role mounts none (#495).
+ */
+async function expectEinweiserHudClear(page: Page, size: Size, messages: Messages): Promise<void> {
+  await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(0);
+  await expect(
+    page.locator('.hud-gauge, .hud-gear, .hud-speed, [data-hud="targetArrow"]'),
+  ).toHaveCount(0);
+  const [band] = await boxes(page.locator('.hud-band'));
+  const [cockpit] = await boxes(page.locator('.hud-cockpit'));
+  if (band === undefined || cockpit === undefined) throw new Error('no band or view');
+  // the longest name, which wraps at its soft hyphen in German
+  await page.locator('[data-hud="signName"]').evaluate((el, text) => {
+    el.textContent = text;
+  }, messages.signAbstand);
+  const inBand = await boxes(page.locator('.hud-sign, .hud-sign-name'));
+  expect(inBand).toHaveLength(10);
+  for (const b of inBand) {
+    expect(b.left >= band.left && b.right <= band.right, `${b.name} across the band`).toBe(true);
+    expect(b.top >= band.top && b.bottom <= band.bottom + 0.5, `${b.name} down the band`).toBe(
+      true,
+    );
+  }
+  const clipped = await page
+    .locator('.hud-sign-name, .hud-sign-label:visible')
+    .evaluateAll((els) =>
+      els.filter((el) => el.scrollWidth > el.clientWidth).map((el) => el.textContent),
+    );
+  expect(clipped, 'a sign name sticks out of its box').toEqual([]);
+
+  await page.locator('[data-hud="sightText"]').evaluate((el, text) => {
+    el.textContent = text;
+  }, longestSight(messages));
+  const sight = page.locator('[data-hud="sight"]');
+  const [cue] = await boxes(sight);
+  if (cue === undefined) throw new Error('no sight cue');
+  const views = computeViewports(
+    size.width,
+    size.height,
+    (await page.locator('.hud[data-mirrors]').count()) > 0 ? 'mirrors' : 'drive',
+    null,
+    NO_INSETS,
+    undefined,
+    null,
+    undefined,
+    'einweiser',
+  );
+  if (views.cockpit === null) throw new Error('no view');
+  const model = sightCueBox(views.cockpit, NO_INSETS);
+  expect(cue.bottom - cue.top, 'the sight cue is taller than modelled').toBeLessThanOrEqual(
+    model.height,
+  );
+  expect(cue.left, 'sight cue placed as modelled').toBeCloseTo(model.x, 0);
+  expect(cue.top, 'sight cue placed as modelled').toBeCloseTo(model.y, 0);
+  expect(
+    await sight.evaluate((el) => el.scrollWidth - el.clientWidth),
+    'a word sticks out of the sight cue',
+  ).toBe(0);
+  expect(
+    cue.bottom <= band.top && cue.right <= cockpit.right,
+    'sight cue inside the view, above the band',
+  ).toBe(true);
+
+  await page.evaluate(
+    ([toastText, goalText]) => {
+      for (const [name, text] of [
+        ['toast', toastText],
+        ['goalCue', goalText],
+      ] as const) {
+        const el = document.querySelector(`[data-hud="${name}"]`);
+        if (!(el instanceof HTMLElement)) throw new Error(`no ${name}`);
+        el.textContent = text;
+        el.hidden = false;
+      }
+    },
+    [messages.blockedTurntable, messages.goalInside] as const,
+  );
+  const yields = (await page.locator('[data-hud="toastWrap"][data-cue-yields]').count()) > 0;
+  // A key legend reaching up to them sends them to the top view, over its panels, as the driver's.
+  const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
+  if (wrap === undefined) throw new Error('no toast column');
+  const inView = wrap.top >= cockpit.top && wrap.left >= cockpit.left - 0.5;
+  const legend = await boxes(page.locator('.hud-legend:visible'));
+  for (const l of legend)
+    expect(overlaps(cue, l), 'the sight cue overlaps the key legend').toBe(false);
+  const others = [
+    ...(await boxes(page.locator('.hud-action'))),
+    ...(inView
+      ? [
+          { ...cue, name: 'sight cue' },
+          { ...band, name: 'band' },
+          ...legend,
+          ...(await boxes(page.locator('.hud-goal:visible, .hud-counters'))),
+        ]
+      : []),
+  ];
+  const area = inView ? cockpit : { left: 0, top: 0, right: size.width, bottom: size.height };
+  const check = async (count: number): Promise<void> => {
+    const shown = page.locator('[data-hud="toast"]:visible, [data-hud="goalCue"]:visible');
+    await expect(shown).toHaveCount(count);
+    const overflow = await shown.evaluateAll((els) =>
+      els.map((el) => el.scrollWidth - el.clientWidth),
+    );
+    expect(overflow, 'a word sticks out of a message').toEqual(Array<number>(count).fill(0));
+    for (const m of await boxes(shown)) {
+      const inside =
+        m.left >= area.left &&
+        m.right <= area.right &&
+        m.top >= area.top &&
+        m.bottom <= area.bottom;
+      expect(inside, `${m.name} inside ${inView ? 'his view' : 'the screen'}`).toBe(true);
+      for (const o of others) expect(overlaps(m, o), `${m.name} overlaps ${o.name}`).toBe(false);
+    }
+  };
+  if (!yields) {
+    await check(2);
+    return;
+  }
+  await check(1);
+  await page.locator('[data-hud="toast"]').evaluate((el) => {
+    if (el instanceof HTMLElement) el.hidden = true;
+  });
+  await check(1);
+}
+
+// Beside the sight cue at the wide views, below it at the narrow ones; with and without the top view.
+const einweiserSizes: readonly (Size & { mirrorsOnly: boolean })[] = [
+  { width: 1280, height: 720, mirrorsOnly: false },
+  { width: 1366, height: 768, mirrorsOnly: false },
+  { width: 1024, height: 600, mirrorsOnly: false },
+  { width: 800, height: 585, mirrorsOnly: false },
+  { width: 768, height: 1024, mirrorsOnly: false },
+  { width: 620, height: 774, mirrorsOnly: false },
+  { width: 1280, height: 585, mirrorsOnly: true },
+  { width: 768, height: 1024, mirrorsOnly: true },
+];
+
+for (const { locale, messages } of locales) {
+  for (const { mirrorsOnly, ...size } of einweiserSizes) {
+    const view = mirrorsOnly ? 'without the top view' : 'with the top view';
+    test(`the Einweiser HUD holds ${view} at ${locale} ${size.width}x${size.height}`, async ({
+      browser,
+    }) => {
+      test.slow();
+      const context = await browser.newContext({ locale, viewport: size });
+      try {
+        const page = await context.newPage();
+        await startEinweiser(page, messages, mirrorsOnly);
+        await expectEinweiserHudClear(page, size, messages);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+}

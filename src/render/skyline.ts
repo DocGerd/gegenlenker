@@ -1,8 +1,8 @@
-import type { Rect2 } from '../contracts/layout';
+import type { ResolvedLayout } from '../contracts/layout';
 import { PERSPECTIVE_LAYER } from './seams';
 import { CELL, createAtlasTexture, GLASS_RECT, GRID } from './skyline-atlas';
 import { GLOW_ATTRIBUTE, skylineGeometry } from './skyline-geometry';
-import { skylineBuildings } from './skyline-layout';
+import { sceneryBuildings } from './skyline-layout';
 import { BoxGeometry, Color, DataTexture, Float32BufferAttribute, Mesh } from 'three';
 import {
   attribute,
@@ -84,9 +84,12 @@ export type Skyline = {
   dispose(): void;
 };
 
-/** Solid buildings around `bounds`, lit by the scene lights and fading towards `haze` with distance. */
-export function createSkyline(bounds: Rect2, haze: Color): Skyline {
-  const geometry = skylineGeometry(skylineBuildings(bounds));
+/** Solid buildings around `layout`, lit by the scene lights and fading towards `haze` with distance. */
+export function createSkyline(
+  layout: Pick<ResolvedLayout, 'bounds' | 'surfaces'>,
+  haze: Color,
+): Skyline {
+  const geometry = skylineGeometry(sceneryBuildings(layout));
   const material = new MeshLambertNodeMaterial({ map: createAtlasTexture() });
   const plainColour = uniform(haze.clone());
   const plain = plainHaze(plainColour);
