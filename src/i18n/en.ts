@@ -278,6 +278,10 @@ export const en = {
   sensitivityHigh: 'High',
   invertMouse: 'Invert mouse',
   settingsEinweiser: 'Ground guide',
+
+  // Pause sheet hints.
+  finishHint: 'Finishing scores the run as it stands and keeps the replay.',
+  leaveHint: 'Leaving drops the run: no result, no replay.',
 } as const;
 
 export type MessageKey = keyof typeof en;
