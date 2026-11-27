@@ -74,7 +74,7 @@ describe.each(pairs)('sight for $truck.id with $trailer.id', ({ truck, trailer }
 
   it('does not see him directly beside the cab behind the side glass', () => {
     const { eye } = truckAnchors(truck);
-    const point = { x: eye.x - 3, y: cabGlass(truck).half + 2 };
+    const point = { x: eye.x - 2, y: cabGlass(truck).half + 2 };
     expect(sightOf(g, straight, bodyPoints(point), []).direct).toBe(false);
   });
 

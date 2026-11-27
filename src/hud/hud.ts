@@ -134,6 +134,19 @@ const BLOCKED_KEY: Record<Exclude<BlockReason, 'contact'>, MessageKey> = {
   turntable: 'blockedTurntable',
 };
 
+/** The Einweiser cannot drive: a blocked vehicle's advice to him is to signal the other direction. */
+const GUIDE_KEY: Partial<Record<MessageKey, MessageKey>> = {
+  blockedContactTruck: 'blockedContactTruckGuide',
+  blockedContactDrawbar: 'blockedContactDrawbarGuide',
+  blockedContactTrailer: 'blockedContactTrailerGuide',
+  blockedContactSelf: 'blockedContactSelfGuide',
+  blockedCoupling: 'blockedCouplingGuide',
+  blockedTurntable: 'blockedTurntableGuide',
+};
+
+const blockedKey = (key: MessageKey, driver: boolean): MessageKey =>
+  driver ? key : (GUIDE_KEY[key] ?? key);
+
 type ToastLevel = 'warn' | 'danger';
 
 /** Two stages: a predicted contact or limit stop warns, a blocked vehicle states what stopped it. */
@@ -145,11 +158,12 @@ function toastFor(
 ): { key: MessageKey; level: ToastLevel } | null {
   if (s.blocked === 'contact') {
     return {
-      key: contactKey(s.contact),
+      key: blockedKey(contactKey(s.contact), driver),
       level: 'danger',
     };
   }
-  if (s.blocked !== null) return { key: BLOCKED_KEY[s.blocked], level: 'danger' };
+  if (s.blocked !== null)
+    return { key: blockedKey(BLOCKED_KEY[s.blocked], driver), level: 'danger' };
   if (ahead === 'contact') return { key: 'contactAhead', level: 'warn' };
   if (ahead === 'limit') return { key: 'limitAhead', level: 'warn' };
   // From the start until the first gear; later, a raised lever in P would move the truck off on shifting.
@@ -1008,7 +1022,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         c.brake !== lastControl.brake ||
         c.gear !== lastControl.gear);
     lastControl = c;
-    if (shortScreen && (keysOpen || aidOpen) && changed) {
+    // his snapshot's control is the AI driver's, not an input of his
+    if (driver && shortScreen && (keysOpen || aidOpen) && changed) {
       keysOpen = false;
       aidOpen = false;
       syncToggles();

@@ -89,7 +89,9 @@ export function startEinweiserDrive(
         control = step.control;
         status = step.status;
         time = snapshot.time;
+        // a later reading, or sight lost, ends the cue
         if (step.reading.kind === 'unclear') unclearAt = time;
+        else if (step.reading.kind !== 'none') unclearAt = -Infinity;
       },
       control: () => control,
       lamps: () => lamps,

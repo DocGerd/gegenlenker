@@ -13,5 +13,7 @@ describe('sightCue', () => {
   it('says out of sight with no path, and unclear over any sight', () => {
     expect(sightCue({ direct: false, mirrors: [] }, false)).toBe('none');
     expect(sightCue({ direct: true, mirrors: [] }, true)).toBe('unclear');
+    expect(sightCue({ direct: false, mirrors: ['close'] }, true)).toBe('unclear');
+    expect(sightCue({ direct: false, mirrors: [] }, true)).toBe('none');
   });
 });

@@ -69,7 +69,7 @@ With a turntable drawbar trailer in reverse, the trailer rear first goes the way
 
 Accepted by the owner (2026-11-26) after the gate (PR 2), which departs from the planner above in three ways:
 
-- Reverse steering is LQR state feedback on the linearised articulation, not the nine-candidate planner. In the scripted Einweiser the dock-ramp reverse legs also choose their sign by LQR cost-to-go; the driver itself is unchanged by that.
+- Reverse steering is LQR state feedback on the linearised articulation, not the nine-candidate planner. In the scripted Einweiser the dock-ramp and reverse-bay reverse legs also choose their sign by LQR cost-to-go (their forward legs by the rollout search on the body heading); the driver itself is unchanged by that.
 - "Straight" after a curve: the driver holds one reference heading per gear. Rechts/Links turn it; Herkommen, Entfernen and Abstand hold it, so the vehicle finishes the indicated turn.
 - The curve radius depends on the gear (`CURVE_RADIUS = { D: 8, R: 15 }`): the slalom weave needs a truck curvature above 1/15 m⁻¹.
 
@@ -175,7 +175,7 @@ There is no mirror plane in code: a mirror is a camera at a mount with yaw, pitc
 
 ### 3.6 Sight cue (MVP)
 
-A HUD cue beside the sign name: an eye icon and text, never colour alone.
+A HUD cue top left of his view: an eye icon and text, never colour alone.
 
 | State   | Text                                                                                        |
 | ------- | ------------------------------------------------------------------------------------------- |
@@ -188,7 +188,7 @@ A HUD cue beside the sign name: an eye icon and text, never colour alone.
 
 - `computeViewports` (`src/render/viewports.ts`) gets an Einweiser mode: the cockpit rect becomes the first-person view, with no mirror rects or extras, no controls (`controlsHeight` 0) and no sight cone (`CLEAR_CONE_DEG` is the cockpit's).
 - Call: the top view stays optional through the existing no-pane flag. `mirrorsOnly` (log, best key) means "no top-down pane" (`hasTopDown()`), labelled "Mit Draufsicht / Ohne Draufsicht" for this role (glossary row below), also on the title's replay button (`src/app/menu/screens/title.ts`, which shows `driveViewMirrors` today); aids are off without the pane, as today. The pane shows the top view only (§3.4).
-- The band (`.hud-band`) holds the sign bar. The sign name and sight cue sit top-left of the view.
+- The band (`.hud-band`) holds the shown sign's name and the sign bar. The sight cue sits top-left of the view.
 - `messageColumn` gets an Einweiser branch: top-centre of the view, clear of the cue and the band, with or without the pane. `messagesFit` and `expectMessagesClear` cover it at every `e2e/layout.spec.ts` size, and `pnpm verify:layout` runs per the `verify-viewport-layout` skill.
 - The HUD's `pedalsBox` becomes optional (no pedals in this mode).
 

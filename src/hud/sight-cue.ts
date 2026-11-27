@@ -15,11 +15,12 @@ const MIRROR_ORDER: readonly MirrorId[] = [
   'front',
 ];
 
-/** `unclear`: the driver just met a sign it could not read, which outranks how it sees him. */
+/** `unclear`: the driver just met a sign it could not read, which outranks how it sees him, but not losing him. */
 export function sightCue(sight: Sight, unclear: boolean): SightCue {
-  if (unclear) return 'unclear';
-  if (sight.direct) return 'direct';
-  return MIRROR_ORDER.find((m) => sight.mirrors.includes(m)) ?? 'none';
+  if (sight.direct) return unclear ? 'unclear' : 'direct';
+  const mirror = MIRROR_ORDER.find((m) => sight.mirrors.includes(m));
+  if (mirror === undefined) return 'none';
+  return unclear ? 'unclear' : mirror;
 }
 
 export const SIGHT_CUE_KEY: Readonly<Record<SightCue, MessageKey>> = {
