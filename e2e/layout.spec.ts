@@ -1,5 +1,5 @@
 import { type Locator, type Page } from '@playwright/test';
-import type { ExerciseId } from '../src/contracts/exercise';
+import { EXERCISE_IDS, type ExerciseId } from '../src/contracts/exercise';
 import { expect, test } from './fixtures';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
@@ -1471,13 +1471,22 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
  * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
-const paneToolAbsent = new Set(['en-US 800x585']);
+const paneToolAbsentIds: readonly ExerciseId[] = [
+  'reverse-bay',
+  'reverse-corner',
+  'dock-ramp',
+  'slalom',
+];
+// The counters cover the free camera's corner under these cards (#607).
+const paneToolAbsent = (at: string, id: ExerciseId): boolean =>
+  at.endsWith(' 800x585') &&
+  (paneToolAbsentIds.includes(id) || (id === 'coupling' && at.startsWith('en-US')));
 
-async function expectPaneToolClear(page: Page, at: string): Promise<void> {
+async function expectPaneToolClear(page: Page, at: string, id: ExerciseId): Promise<void> {
   await page.keyboard.press('o');
   const tool = page.locator('[data-hud="freeCamera"]');
   await settled(page);
-  if (paneToolAbsent.has(at)) {
+  if (paneToolAbsent(at, id)) {
     await expect(tool, 'no room for it here').toBeHidden();
     return;
   }
@@ -1537,19 +1546,26 @@ async function expectCountersInPane(page: Page): Promise<void> {
   expect(counters.bottom, 'the counters inside the pane').toBeLessThanOrEqual(pane.bottom);
 }
 
-/** Straight reverse at every size; the coupling card, which holds the uncouple button, where the pane leaves the least room. */
-const holdCases: readonly (Size & { id: ExerciseId })[] = sizes.flatMap((size) => [
-  { ...size, id: 'straight-reverse' as const },
-  ...(['800x585', '800x820', '620x774'].includes(`${size.width}x${size.height}`)
-    ? [{ ...size, id: 'coupling' as const }]
-    : []),
-]);
+/**
+ * Straight reverse at every size; every other exercise, whose cards differ, where the pane leaves the least
+ * room; the coupling card, which holds the uncouple button, also at the sizes beside it.
+ */
+const holdCases: readonly (Size & { id: ExerciseId })[] = sizes.flatMap((size) => {
+  const at = `${size.width}x${size.height}`;
+  const others =
+    at === '800x585'
+      ? EXERCISE_IDS.filter((id) => id !== 'straight-reverse')
+      : ['800x820', '620x774'].includes(at)
+        ? (['coupling'] as const)
+        : [];
+  return [{ ...size, id: 'straight-reverse' as const }, ...others.map((id) => ({ ...size, id }))];
+});
 
 for (const { locale, messages } of locales) {
   for (const { id, ...size } of holdCases) {
     const at = `${locale} ${size.width}x${size.height}`;
 
-    test(`the layout holds at ${at}${id === 'coupling' ? ' with the coupling card' : ''}`, async ({
+    test(`the layout holds at ${at}${id === 'straight-reverse' ? '' : ` with the ${id} card`}`, async ({
       browser,
     }) => {
       test.slow();
@@ -1562,15 +1578,17 @@ for (const { locale, messages } of locales) {
         }
         await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
-          await test.step('the toolbar takes no reserve against the lever column', () =>
-            expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve'));
+          await test.step('the toolbar takes no reserve against the lever column', async () => {
+            await expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve');
+            await expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-aids-reserve');
+          });
         }
         await test.step('the toolbar clears the finish button and the controls', () =>
           expectToolbarClear(page));
         await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
           expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         await test.step("the outside view's free camera button clears the panels, the divider, the mirrors, the target arrow and the messages", async () => {
-          await expectPaneToolClear(page, at);
+          await expectPaneToolClear(page, at, id);
           await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
         });
         await test.step('the counters stand inside the pane', () => expectCountersInPane(page));
