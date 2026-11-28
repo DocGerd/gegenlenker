@@ -10,11 +10,13 @@ export const en = {
   exerciseStraightReverse: 'Straight reverse',
   exerciseReverseBay: 'Reverse into a bay',
   exerciseReverseCorner: 'Reverse around a corner',
+  exerciseCoupling: 'Couple and uncouple',
   exerciseDockRamp: 'Dock at a ramp',
   exerciseSlalom: 'Slalom forward and back',
   briefStraightReverse: 'Reverse straight back into the marked bay and stop.',
   briefReverseBay: 'Reverse between the parked vehicles into the marked bay and stop.',
   briefReverseCorner: 'Reverse around the corner into the side street and stop in the marked bay.',
+  briefCoupling: 'Couple up, uncouple in the bay and drive away.',
   briefDockRamp: 'Reverse square up to the ramp and stop in the marked bay.',
   briefSlalom:
     'Drive the slalom forward to the marked circle, then reverse back and stop in the marked bay.',
@@ -45,6 +47,10 @@ export const en = {
   truck: 'Truck',
   trailer: 'Trailer',
   noTrailer: 'No trailer',
+  coupled: 'Coupled',
+  notCoupled: 'Not coupled',
+  uncouple: 'Uncouple',
+  couplingSpeed: 'Coupling speed',
   best: 'Best',
   withAids: 'with aids',
   noAids: 'no aids',
@@ -163,6 +169,8 @@ export const en = {
   endedMoving:
     'Position and angle were within tolerance, but the vehicle was still moving. Stop it inside the target.',
   runOver: 'Ground guide run over: the run has ended.',
+  trailerNotLeft:
+    'Not finished: uncouple the trailer in the target, drive away from it, then stop.',
   endedWithoutHalt:
     'Position and angle were within tolerance, but the run ends only on a stop after a recognized Halt.',
   walkedBackwards: 'Signal Halt, reposition while it stands, then guide on.',

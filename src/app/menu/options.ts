@@ -206,6 +206,21 @@ const PAUSE_FIELDS: Readonly<Record<Role, readonly OptionId[]>> = {
 /** What a running drive can take: shown in the pause sheet, in this order. */
 export const pauseFields = (role: Role): readonly OptionId[] => PAUSE_FIELDS[role];
 
+/** The Trailer row of an exercise that couples: the trailer it couples to, never none. */
+const COUPLED_TRAILER_FIELD: OptionField = { ...OPTION_FIELDS.trailer, choices: TRAILER_CHOICES };
+
+/** The field and its value as the setup shows them to `role`; `coupled`: an exercise that couples (`couples`). */
+export function entryOption(
+  settings: Settings,
+  id: OptionId,
+  role: Role,
+  coupled: boolean,
+): { readonly field: OptionField; readonly value: string } {
+  return coupled && id === 'trailer'
+    ? { field: COUPLED_TRAILER_FIELD, value: settings.trailerId }
+    : { field: roleField(id, role), value: optionValue(settings, id) };
+}
+
 export function optionValue(settings: Settings, id: OptionId): string {
   switch (id) {
     case 'truck':

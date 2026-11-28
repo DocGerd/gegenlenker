@@ -1552,9 +1552,9 @@ export const GATE_PAIRS = trucks.flatMap((t) =>
   trailers.map((r) => ({ truck: t.id, trailer: r.id })),
 );
 /** Every exercise with every truck solo. */
-export const GATE_SOLO = EXERCISE_IDS.flatMap((exercise) =>
-  trucks.map((t) => ({ exercise, truck: t.id })),
-);
+export const GATE_SOLO = EXERCISE_IDS.filter(
+  (exercise) => exerciseById(exercise).parkedTrailer === undefined,
+).flatMap((exercise) => trucks.map((t) => ({ exercise, truck: t.id })));
 /** A case runs for minutes of sim time: well past vitest's default timeout. */
 export const GATE_TIMEOUT = 300_000;
 /** A passing case; the tests compare the whole outcome so a failure prints `phase`, `position` and `angle`. */

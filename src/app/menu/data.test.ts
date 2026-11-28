@@ -3,7 +3,7 @@ import { EXERCISE_IDS, ROLES } from '../../contracts/exercise';
 import { LAYOUT_IDS } from '../../contracts/layout';
 import { TRAILER_IDS } from '../../contracts/vehicle';
 import { loadSettings } from '../settings';
-import { entriesOf, runConfigOf, SETUP_STEPS } from './catalogue';
+import { entriesOf, nextExercise, offeredRoles, runConfigOf, SETUP_STEPS } from './catalogue';
 import { CONTENT } from './content';
 import { GRAPH, screenOf, shownItems, type MenuState, type ScreenId } from './graph';
 import {
@@ -55,6 +55,21 @@ describe('menu options', () => {
       expect(runConfigOf({ ...yard, role }, solo).trailerId).toBeNull();
       expect(runConfigOf({ ...yard, role }, paired).trailerId).toBe(last);
     }
+  });
+
+  it('drives the coupling exercise with the kept trailer, solo or not, and never as the Einweiser', () => {
+    const solo = { ...loadSettings(null, 'en'), ...optionPatch('trailer', 'none') };
+    const coupling = { role: 'driver', kind: 'exercise', id: 'coupling' } as const;
+    expect(runConfigOf(coupling, solo).trailerId).toBe(solo.trailerId);
+    expect(offeredRoles(coupling)).toEqual(['driver']);
+    expect(entriesOf('einweiser', 'exercise').map((e) => e.ref.id)).not.toContain('coupling');
+    expect(nextExercise({ ...coupling, id: 'reverse-corner' })).toEqual(coupling);
+    expect(nextExercise({ role: 'einweiser', kind: 'exercise', id: 'reverse-corner' })).toEqual({
+      role: 'einweiser',
+      kind: 'exercise',
+      id: 'dock-ramp',
+    });
+    expect(nextExercise({ ...coupling, id: 'slalom' })).toBeNull();
   });
 
   it('options apply where the spec says', () => {

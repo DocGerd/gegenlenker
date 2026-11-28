@@ -12,6 +12,7 @@ import type { RunConfig } from '../../drive';
 import { currentSettings, runTrailer } from '../../settings';
 import { bestResults } from '../../storage';
 import {
+  couples,
   entryHeading,
   entryKey,
   entryOf,
@@ -21,7 +22,7 @@ import {
   type EntryRef,
 } from '../catalogue';
 import { choiceRow } from '../choice-row';
-import { applyOption, optionValue, roleField, type ChoiceField, type OptionId } from '../options';
+import { applyOption, entryOption, type ChoiceField, type OptionId } from '../options';
 import { element, markUnavailable, noGraphicsNote, screenFrame } from './frame';
 
 export type SetupContext = {
@@ -81,7 +82,9 @@ function paintBests(block: HTMLElement, exercise: ExerciseDefinition): void {
   const best = bestResults();
   const settings = currentSettings();
   const { truckId, lighting, mirrorsOnly } = settings;
-  const trailerId = runTrailer(settings);
+  const trailerId = couples({ kind: 'exercise', id: exercise.id })
+    ? settings.trailerId
+    : runTrailer(settings);
   const lines = [false, true]
     .map(
       (assisted) => best[bestKey(exercise.id, truckId, trailerId, assisted, lighting, mirrorsOnly)],
@@ -96,7 +99,7 @@ export function setupScreen(ctx: SetupContext): {
   readonly focus: (remembered: string | null) => void;
 } {
   const settings = currentSettings();
-  const offered = offeredRoles();
+  const offered = offeredRoles(ctx.entry);
   // The role the last run started with, like the other rows show their stored value.
   const lastRole = settings.lastEntry?.role;
   let role: Role = lastRole !== undefined && offered.includes(lastRole) ? lastRole : ctx.entry.role;
@@ -115,11 +118,14 @@ export function setupScreen(ctx: SetupContext): {
   const stepId = entry.steps[ctx.step];
   if (stepId === undefined) throw new Error(`${entryKey(ctx.entry)} has no setup step ${ctx.step}`);
   const fields = SETUP_STEPS[stepId];
-  const optionRow = (id: OptionId): HTMLFieldSetElement =>
-    choiceRow(roleField(id, role), optionValue(currentSettings(), id), (value) => {
-      if (applyOption(id, value) && exercise !== null && role === 'driver')
+  const coupled = couples(ctx.entry);
+  const optionRow = (id: OptionId): HTMLFieldSetElement => {
+    const { field, value } = entryOption(currentSettings(), id, role, coupled);
+    return choiceRow(field, value, (picked) => {
+      if (applyOption(id, picked) && exercise !== null && role === 'driver')
         paintBests(bests, exercise);
     });
+  };
   let rows = fields.map(optionRow);
 
   /** Heading, brief and bests follow the role; an Einweiser keeps no bests (owner). */

@@ -12,6 +12,8 @@ const mirrorArms =
 const mirrorPillar =
   'arms meet the cab between its front corner and the side window, so the heads stand beside the A-pillar (render model); no source found';
 const typical = 'typical for the vehicle class, no source found';
+const jawCatch =
+  'catch of an automatic drawbar coupling, kept tight enough that the frame end clears the drawbar inside it; no source found';
 const inBumper = "in the bumper, chosen inside UN R48 6.2.4.2's 1,200 mm; no source found";
 const onFloor =
   "on the floor's rear face, chosen inside UN R48 6.4.4.2's 1,200 mm; no source found";
@@ -27,6 +29,7 @@ export const manLe18280: TruckSpec = {
   frontTrack: estimate(1950, typical),
   rearTrack: estimate(1800, typical),
   couplingOffset: estimate(1250, 'frame end plus coupling crossmember, no source found'),
+  jaw: { catchWidth: estimate(50, jawCatch), catchAngle: estimate(6, jawCatch) },
   turningRadius: sourced(7800, SOURCES.D),
   frameTop: estimate(1100, 'chassis top and cab floor of the render model; no source found'),
   bodyTop: estimate(2750, 'tarpaulin top of the body shell (render model); no source found'),

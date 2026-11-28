@@ -1,6 +1,7 @@
 import type { ExerciseDefinition, ExerciseId } from '../contracts/exercise';
 import { EXERCISE_IDS } from '../contracts/exercise';
 import type { Layout, LayoutId } from '../contracts/layout';
+import { coupling } from './exercises/coupling';
 import { dockRamp } from './exercises/dock-ramp';
 import { reverseBay } from './exercises/reverse-bay';
 import { reverseCorner } from './exercises/reverse-corner';
@@ -15,6 +16,7 @@ const byId: Readonly<Record<ExerciseId, ExerciseDefinition>> = {
   'straight-reverse': straightReverse,
   'reverse-bay': reverseBay,
   'reverse-corner': reverseCorner,
+  coupling,
   'dock-ramp': dockRamp,
   slalom,
 };
