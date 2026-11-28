@@ -29,18 +29,17 @@ test('the replay scrubber seeks both ways and speeds include half speed', async 
   // Idle time before the first input is cut off: the timeline starts after step 0.
   const first = Number(await scrubber.getAttribute('min'));
   expect(first).toBeGreaterThan(0);
-  const last = end;
-  expect(Number(last)).toBeGreaterThan(0);
+  expect(Number(end)).toBeGreaterThan(0);
 
   await page.getByRole('button', { name: '0.5×' }).click();
   await expect(page.getByRole('button', { name: '0.5×' })).toHaveAttribute('aria-pressed', 'true');
 
-  await scrubber.fill(last);
-  const total = (await time.textContent())?.split(' / ')[1] ?? '';
-  await expect(time).toHaveText(`${total} / ${total}`);
   await scrubber.fill('0');
   await expect(scrubber).toHaveValue(String(first));
+  const total = (await time.textContent())?.split(' / ')[1] ?? '';
   await expect(time).toHaveText(`0.0 s / ${total}`);
+  await scrubber.fill(end);
+  await expect(time).toHaveText(`${total} / ${total}`);
 
   // Balanced offers the outside view and the free camera, as the drive does
   const outside = page.getByRole('button', { name: en.viewChase });
