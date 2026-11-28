@@ -11,13 +11,13 @@ description: 'Use when a change touches src/render/viewports.ts, the controls or
 
 Run it when a change touches any of these (the covered files):
 
-- `src/render/viewports.ts`: `computeViewports`, `topDownSplit`, `messageColumn`, `messagesFit`, `controlsHeight`, `wheelSize`, `wrapLines`, and their constants.
+- `src/render/viewports.ts`: `computeViewports`, `topDownSplit` (both take an options object), `MeasuredLegend`, `messageColumn`, `messagesFit`, `controlsHeight`, `wheelSize`, `wrapLines`, and their constants (`LEGEND_LIFT` among them).
 - `src/render/cockpit-band.ts`, `src/render/cockpit-camera.ts`, `src/render/close-mirror.ts`: the front and close mirror bands, minimum widths, and the cockpit camera whose field of view the sight cone is modelled from.
 - `src/render/quality.ts`: the mirror flags per preset (the spec takes the extras from `extraMirrors`).
 - `src/contracts/render.ts`: `ViewRects`, `TOP_DOWN_SHARE_LIMITS`, `DEFAULT_TOP_DOWN_LAYOUT`.
 - `src/i18n/en.ts`, `src/i18n/de.ts`: the toast and goal-cue texts that `wrapLines` wraps.
 - `src/styles/tokens.css`, `src/input/controls.css`, `src/hud/hud.css`: the control, wheel, legend and toast geometry the code copies and `viewports-css.ts` reads.
-- `src/hud/hud.ts`: the legend states (`SHORT_SCREEN`, `SHORT_HEIGHT`, `COMPACT_WIDTH*`, `spansRight`) and `legendBox()`.
+- `src/hud/hud.ts`: the legend states (`SHORT_SCREEN`, `SHORT_HEIGHT`, `COMPACT_WIDTH*`, `spansRight`), the rows each lists (a coupling exercise adds one) and `legendBox()`, which also reports the box's own height (`boxHeight`).
 
 ## Run
 
@@ -51,7 +51,7 @@ A real bug: the counterexample's rects, read against the promise in CLAUDE.md or
 - a new config input (a mirror, a setting, a preset flag) that no variant in `VARIANTS` carries;
 - a promise that the spec encodes but the code documents otherwise.
 
-To re-measure the legend: start `pnpm dev`, open the drive at each size in en and de with headless Chromium, read the `.hud-legend` box (the stage-bottom distance of its top, width, height), and click `[data-hud="keysToggle"]` through `page.evaluate` for the open-chevron state; update `LEGEND_BOXES`, and `EINWEISER_LEGEND_BOXES` from an Einweiser drive. The legend's branch order in `legendFor` and `LEGEND_BOXES` are checked by no test: only this re-measurement keeps them true.
+To re-measure the legend: start `pnpm dev`, open the drive at each size in en and de with headless Chromium, at High (the tallest preset: its look-around row adds a line) and in a coupling exercise (its uncouple row adds another), take the widest and tallest box seen, read the `.hud-legend` box (its width and own height; the stage-bottom distance of its top is `legendBox()`'s `height`), and click `[data-hud="keysToggle"]` through `page.evaluate` for the open-chevron state; update `LEGEND_BOXES`, and `EINWEISER_LEGEND_BOXES` from an Einweiser drive. The legend's branch order in `legendFor` and `LEGEND_BOXES` are checked by no test: only this re-measurement keeps them true.
 
 Check the first counterexample in a browser (`pnpm exec playwright screenshot` or `e2e/layout.spec.ts` at that size) before changing the spec.
 
@@ -63,16 +63,16 @@ When a change intentionally alters a promise, edit the property in the spec in t
 
 - Exhaustive over width x height inside the bounds above; outside them nothing is claimed. The sight cone is the circle of `CLEAR_CONE_DEG` on the camera's tangent plane for class II and class IV (issues #392, #265), its bounding box for the message stack. Phones are not a target and are not covered.
 - Config inputs are sampled: `VARIANTS` lists mode (drive, mirrors, replay), the extras per preset (and none) and the class IV setting, share clamp extremes, a measured legend per size (and with the chevron open on a short cockpit), a stand-in panel stack and a never-fitting one, and no, home-indicator and notch insets.
-- `tokenPx` and `readSafeInsets` use their node fallbacks; `viewports-css.test.ts` checks them, the control constants, `wheelSize` and `controlsHeight` against the CSS files. The legend boxes and states are measured assumptions, checked only for the `hud.ts` thresholds.
+- `tokenPx` and `readSafeInsets` use their node fallbacks; `viewports-css.test.ts` checks them, the control constants, `wheelSize` and `controlsHeight` against the CSS files. The legend boxes and states are measured assumptions, checked only for the `hud.ts` thresholds, and `LEGEND_LIFT` against `.hud-legend`'s `bottom`. A legend stands on the HUD band, a share of the cockpit, so the spec keeps each box's own height (`boxHeight`) and rebuilds the stage-bottom height at the cockpit it checks; `topDownSplit` solves the portrait need for the cockpit's height from `boxHeight`.
 - Constants the spec imports move with the code, so changing their value is not detected; a wrong use of them is. From `viewports.ts`: `MIN_CLASS_II_SHARE`, `MIN_MESSAGE_WIDTH` (only its toast padding and margin part is tied to the CSS), `MIN_FRONT_WIDTH`, `MIN_WIDE_WIDTH`, `WIDE_GAP_PX`, `MIN_MIRROR_HEIGHT`, `MIN_SQUEEZED_HEIGHT`, `FRONT_ASPECT`, `MESSAGE_GAP` (the gap beside the message column; the test ties its value to the CSS gap between toast and cue only); from `close-mirror.ts`: `CLOSE_ASPECT`, `MIN_CLOSE_WIDTH`; from `cockpit-band.ts`: `FRONT_GAP_PX`, `VISOR`, `CLEAR_CONE_DEG`, `COCKPIT_FOV`. `HUD_BAND_SHARE` is checked against `--hud-band` by `tokens.test.ts`. Also unchecked: the cockpit label's clearance (no CSS source gives `COCKPIT_LABEL`, so the model keeps its own value and the test only asserts it is at least the label's height) and the border allowance the wheel and lever columns add. The gear column's height is read from `GEAR_COLUMN_HEIGHT` in `e2e/layout.spec.ts`.
 - Not covered: real browser layout and CSS (`e2e/layout.spec.ts` does that), the measured panel heights (`hud.panelsBottom`), the cockpit label's width, the toast boxes' real widths (the message stack is modelled from `hud.css` padding and `wrapLines`), the mirror-only brief (`.hud[data-mirrors] .hud-goal`, sized by its text) and the replay message column (replay returns before the message properties; `viewports.test.ts` checks it).
 
 ## Coverage record
 
-Sync commit: `f3ab722`, the last commit that touched the covered files when this verification was last synced. A skill cannot hold its own SHA, so staleness is measured against the covered files:
+Sync commit: `4585fe5`, the develop merge commit this verification was last synced to. A skill cannot hold its own SHA, so staleness is measured against the covered files:
 
 ```
-git log --oneline f3ab722..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
+git log --oneline 4585fe5..HEAD -- src/render/viewports.ts src/render/cockpit-band.ts src/render/cockpit-camera.ts src/render/close-mirror.ts src/render/quality.ts src/contracts/render.ts src/i18n/en.ts src/i18n/de.ts src/styles/tokens.css src/input/controls.css src/hud/hud.css src/hud/hud.ts
 ```
 
 With the code at the sync commit and the spec synced to it, the check exits 0: every counterexample is a known finding, filed as an issue and listed in `KNOWN_FINDINGS`.
