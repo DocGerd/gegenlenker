@@ -31,7 +31,8 @@ import { tint } from './tint';
  * The Einweiser's own arms in his first-person view (`docs/einweiser-spike.md` §3.3): a view model
  * drawn by a camera of its own after his view, over a cleared depth, so they never clip into the
  * scene and keep their framing whatever his field of view. The poses are first-person versions of
- * `SIGN_POSES`: the source poses point sideways or straight up, out of any usable frame.
+ * `SIGN_POSES`: the source poses point sideways or straight up, out of any usable frame. Achtung stays
+ * straight up: its shoulder stands out in front (`RAISED_SHOULDER`) so the vertical arm fits the frame.
  */
 
 /** Vertical field of view (degrees) of the view-model camera; estimate. */
@@ -53,6 +54,12 @@ export const SIGN_BLEND = 0.15;
  * cheat ahead of the true shoulder, so the forearms and hands reach the frame from below its edges.
  */
 const VIEW_SHOULDER = { ahead: 0.1, side: 0.2, up: -0.18 } as const;
+
+/**
+ * The shoulder of a straight-up arm (Achtung): far enough ahead and low enough that its elbow and hand
+ * rise inside the frame, not past its top; the same kind of cheat as `VIEW_SHOULDER`, estimates.
+ */
+const RAISED_SHOULDER = { ahead: 1.3, side: 0.25, up: -0.55 } as const;
 
 /** Sleeve radii (m), estimates. */
 const UPPER_RADIUS = 0.055;
@@ -87,12 +94,13 @@ const wheel = (turn: number): BodyPose => ({
  * pose for each signing arm, or a pose per arm.
  */
 const FIRST_PERSON: Readonly<Record<SignId, readonly (ArmPose | BodyPose)[]>> = {
-  // raised forward-up, not straight up
-  achtung: [arm(seg(0, 20), seg(-5, 40))],
+  // straight up, never raised forward at an angle
+  achtung: [arm(seg(0, 90), seg(0, 90))],
   // hands out to the sides at about ±25° azimuth, not straight sideways
   halt: [arm(seg(5, -15), seg(15, 15))],
   haltGefahr: [arm(seg(5, -15), seg(15, 15)), arm(seg(5, -15), seg(-10, 0))],
-  abfahren: [arm(seg(0, 5), seg(15, 45)), arm(seg(0, 5), seg(-25, 45))],
+  // the elbow bent and out, the hand above it: never an arm held straight forward
+  abfahren: [arm(seg(10, -10), seg(10, 60)), arm(seg(-15, -10), seg(-15, 60))],
   herkommen: [arm(seg(10, -35), seg(0, 10)), arm(seg(10, -35), seg(0, 60))],
   entfernen: [arm(seg(10, -35), seg(0, 60)), arm(seg(10, -35), seg(0, 10))],
   links: [arm(seg(0, -25), seg(20, 15)), arm(seg(0, -25), seg(-15, 15))],
@@ -173,7 +181,7 @@ export function armPoints(
   sign: SignId | null,
   phase: number,
   side: 'left' | 'right',
-  blendFrom?: Pick<ArmPoints, 'upper' | 'fore'>,
+  blendFrom?: Pick<ArmPoints, 'shoulder' | 'upper' | 'fore'>,
 ): ArmPoints {
   const keys = firstPersonKeys(sign);
   const { from, to, t } = keyAt(sign, phase);
@@ -189,12 +197,15 @@ export function armPoints(
     k,
   );
   const fore = slerp(direction(a.fore, s, new Vector3()), direction(b.fore, s, new Vector3()), k);
+  const rig =
+    sign === 'achtung' && SIGN_POSES.achtung.arms.includes(side) ? RAISED_SHOULDER : VIEW_SHOULDER;
+  const shoulder = new Vector3(s * rig.side, rig.up, -rig.ahead);
   if (blendFrom !== undefined && phase < SIGN_BLEND) {
     const j = smooth(Math.max(phase, 0) / SIGN_BLEND);
     upper.copy(slerp(blendFrom.upper.clone(), upper, j));
     fore.copy(slerp(blendFrom.fore.clone(), fore, j));
+    shoulder.lerpVectors(blendFrom.shoulder, shoulder, j);
   }
-  const shoulder = new Vector3(s * VIEW_SHOULDER.side, VIEW_SHOULDER.up, -VIEW_SHOULDER.ahead);
   const elbow = shoulder.clone().addScaledVector(upper, UPPER_ARM);
   const hand = elbow.clone().addScaledVector(fore, FOREARM);
   return { shoulder, elbow, upper, fore, hand };

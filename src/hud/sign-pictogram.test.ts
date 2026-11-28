@@ -19,6 +19,18 @@ describe('armLines', () => {
     expect(right.y).toBeGreaterThan(1.9);
   });
 
+  it('draws Achtung’s arm straight up beside his head, upper arm and forearm both vertical', () => {
+    const key = SIGN_POSES.achtung.keys[0];
+    if (key === undefined) throw new Error('achtung has a key');
+    const [shoulder, elbow, end] = armLines(key)[1] ?? [];
+    expect(shoulder && elbow && end).toBeTruthy();
+    if (!shoulder || !elbow || !end) return;
+    expect(elbow.x).toBeCloseTo(shoulder.x, 9);
+    expect(end.x).toBeCloseTo(shoulder.x, 9);
+    expect(elbow.y).toBeGreaterThan(shoulder.y);
+    expect(end.y).toBeGreaterThan(elbow.y);
+  });
+
   it('draws the arm of Rechts fahren out to the viewer’s left, the other hanging', () => {
     expect(hand('rechts', 1).x).toBeLessThan(-0.6);
     expect(hand('rechts', 0).y).toBeLessThan(1);
