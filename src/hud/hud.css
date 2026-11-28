@@ -1248,6 +1248,10 @@
   list-style: none;
 }
 
+.hud-sign-bar[data-mode='steering'] {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
 .hud-sign {
   display: flex;
   flex-direction: column;

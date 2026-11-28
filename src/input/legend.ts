@@ -1,3 +1,4 @@
+import type { SignallingMode } from '../contracts/einweiser';
 import type { Role } from '../contracts/exercise';
 import type { MessageKey } from '../i18n/en';
 import { legendRows, type LegendRow } from './keymap';
@@ -20,8 +21,10 @@ export const driveLegendRows = (opts: {
   readonly role?: Role;
   /** The exercise couples: lists the uncouple key. */
   readonly coupling?: boolean;
+  /** The Einweiser's sign keys; tail direction when absent. */
+  readonly signalling?: SignallingMode;
 }): LegendRow[] =>
-  legendRows(opts.chase, opts.look, opts.role, opts.coupling).filter(
+  legendRows(opts.chase, opts.look, opts.role, opts.coupling, opts.signalling).filter(
     (row) => !(opts.mirrorsOnly && TOP_DOWN_ROWS.includes(row.desc)),
   );
 

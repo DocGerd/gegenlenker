@@ -130,6 +130,31 @@ describe('walk input', () => {
     expect(input.sample().sign).toBeNull();
   });
 
+  it('gives the steering signs on their keys in the steering mode', () => {
+    detach();
+    input = createWalkInput({
+      heading: 0,
+      look: () => ({ degPerCount: 1, invert: false }),
+      mode: 'steering',
+    });
+    detach = input.attach(surface as unknown as HTMLElement, {
+      view: () => VIEW,
+      onLockChange: changed,
+    });
+    const shown = (code: string): unknown => {
+      key('keydown', code);
+      const sign = input.sample().sign;
+      key('keyup', code);
+      return sign;
+    };
+    expect(['KeyQ', 'Digit8', 'KeyX', 'Digit5'].map(shown)).toEqual([
+      'lenkenLinks',
+      'lenkenRechtsVoll',
+      'lenkenGerade',
+      'herkommen',
+    ]);
+  });
+
   it('leaves the keys of a form field, the pause sheet and a modifier alone, and always lets go', () => {
     const inDialog = Object.assign(new FakeElement(), { closest: () => ({}) });
     expect(key('keydown', 'KeyW', { target: inDialog })).toBe(false);
