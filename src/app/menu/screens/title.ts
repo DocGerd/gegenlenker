@@ -6,7 +6,7 @@ import { buildLabel } from '../../build-info';
 import { CHANNEL } from '../../channel';
 import { replayContext } from '../../exercise-text';
 import { currentSettings } from '../../settings';
-import { entryHeading } from '../catalogue';
+import { couples, entryHeading } from '../catalogue';
 import { continueEntry } from '../continue';
 import {
   holds,
@@ -17,7 +17,7 @@ import {
   type Item,
   type MenuState,
 } from '../graph';
-import { labelOf, optionValue, roleField, type OptionId } from '../options';
+import { entryOption, labelOf, type OptionId } from '../options';
 import { titleArt } from '../title-art';
 import { element, markUnavailable, noGraphicsNote } from './frame';
 
@@ -49,9 +49,9 @@ function replayLabel(log: InputLog): string {
 }
 
 /** The chosen value's name as the setup screen shows it to `role`, without the field name. */
-function valueLabel(id: OptionId, role: Role = 'driver'): string {
-  const value = optionValue(currentSettings(), id);
-  const choice = roleField(id, role).choices.find((c) => c.value === value);
+function valueLabel(id: OptionId, role: Role = 'driver', coupled = false): string {
+  const { field, value } = entryOption(currentSettings(), id, role, coupled);
+  const choice = field.choices.find((c) => c.value === value);
   return choice === undefined ? '' : labelOf(choice);
 }
 
@@ -62,7 +62,7 @@ function continueLines({ state }: TitleContext): readonly string[] {
   const role = entry.role === 'einweiser' && entry.kind === 'yard' ? [t('roleEinweiser')] : [];
   return [
     entryHeading(entry),
-    `${valueLabel('truck')} · ${valueLabel('trailer', entry.role)}`,
+    `${valueLabel('truck')} · ${valueLabel('trailer', entry.role, couples(entry))}`,
     [...role, valueLabel('lighting'), valueLabel('driveView', entry.role)].join(' · '),
   ];
 }

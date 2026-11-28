@@ -37,6 +37,23 @@ const FIXED_LOG = {
   ],
 } as const;
 
+// Couples, tows the trailer into the target, uncouples there and drives away.
+const COUPLING_LOG = {
+  version: 4,
+  role: 'driver',
+  lighting: 'day',
+  mirrorsOnly: false,
+  steps: 4300,
+  changes: [
+    { step: 0, control: ctl({ lever: 0.2, gear: 'R' }) },
+    { step: 1600, control: ctl({ lever: 0.5 }) },
+    { step: 3300, control: ctl({ brake: true }) },
+    { step: 3400, control: { ...ctl({ brake: true }), uncouple: true } },
+    { step: 3401, control: ctl({ lever: 0.4 }) },
+    { step: 4020, control: ctl({ brake: true }) },
+  ],
+} as const;
+
 const fnv = (text: string): string => {
   let hash = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
@@ -48,15 +65,16 @@ const fnv = (text: string): string => {
 
 function pinned(
   layoutId: 'depot' | 'logistics',
-  exerciseId: 'slalom' | 'reverse-bay',
+  exerciseId: 'slalom' | 'reverse-bay' | 'coupling',
   trailerId: TrailerId | null = 'krone-azw-18',
+  fixed: object = FIXED_LOG,
 ) {
   const ids = { layoutId, exerciseId, truckId: 'man-le-18-280', trailerId } as const;
   const fingerprint = (i: RunIds): string => resolveRun(i).fingerprint;
   // only version 4 holds a solo run
   const solo = trailerId === null ? { version: 4, role: 'driver' } : {};
   const stored = {
-    ...FIXED_LOG,
+    ...fixed,
     ...solo,
     ...ids,
     fingerprint: fingerprint({ ...ids, role: 'driver' }),
@@ -109,6 +127,14 @@ describe('run behaviour pin', () => {
     expect(pinned('logistics', 'reverse-bay', null)).toEqual({
       SIM_REVISION: 2,
       digest: 'ffb5087d',
+    });
+  });
+
+  // reached: it couples, leaves the trailer in the target and drives away
+  it('depot coupling', () => {
+    expect(pinned('depot', 'coupling', 'krone-azw-18', COUPLING_LOG)).toEqual({
+      SIM_REVISION: 2,
+      digest: '32e6fe84',
     });
   });
 });

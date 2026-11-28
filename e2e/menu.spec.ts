@@ -56,12 +56,15 @@ test.describe('the longest title footer', () => {
       const exerciseId = 'reverse-bay';
       // the Einweiser's lines are the longest: his exercise title or yard name, and his role
       const guides = [
-        ...EXERCISE_IDS.map((id) => ({
-          entry: { role: 'einweiser', kind: 'exercise', id },
-          heading: `${String(EXERCISE_IDS.indexOf(id) + 1)} ${messages[EXERCISE_TITLE.einweiser[id]]}`,
-          context: messages[EXERCISE_TITLE.einweiser[id]],
-          role: [],
-        })),
+        // numbered in his own list, which leaves out an exercise that couples
+        ...EXERCISE_IDS.filter((id) => exerciseById(id).parkedTrailer === undefined).map(
+          (id, index) => ({
+            entry: { role: 'einweiser', kind: 'exercise', id },
+            heading: `${String(index + 1)} ${messages[EXERCISE_TITLE.einweiser[id]]}`,
+            context: messages[EXERCISE_TITLE.einweiser[id]],
+            role: [],
+          }),
+        ),
         ...LAYOUT_IDS.map((id) => {
           const context = `${messages.freeYard} · ${messages[LAYOUT_NAME[id]]}`;
           return {

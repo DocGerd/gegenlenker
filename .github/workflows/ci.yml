@@ -121,24 +121,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { id: 1, runs: 'light:1/6 light:4/6' }
-          - { id: 2, runs: 'layout:4/12 layout:5/12 slow:2/17' }
-          - { id: 3, runs: 'heavy:2/16 heavy:7/16 heavy:11/16' }
-          - { id: 4, runs: 'slow:8/17 slow:15/17 slow:16/17' }
-          - { id: 5, runs: 'layout:10/12 layout:12/12 slow:3/17' }
-          - { id: 6, runs: 'heavy:6/16 slow:5/17 slow:11/17' }
-          - { id: 7, runs: 'heavy:3/16 layout:11/12 slow:13/17' }
-          - { id: 8, runs: 'heavy:4/16 heavy:5/16 heavy:13/16' }
-          - { id: 9, runs: 'slow:4/17 slow:10/17 slow:12/17' }
-          - { id: 10, runs: 'layout:7/12 light:5/6 slow:6/17' }
-          - { id: 11, runs: 'heavy:8/16 layout:1/12 light:6/6' }
-          - { id: 12, runs: 'heavy:9/16 layout:3/12 slow:1/17' }
-          - { id: 13, runs: 'heavy:16/16 layout:8/12 slow:7/17' }
-          - { id: 14, runs: 'heavy:1/16 layout:9/12 slow:9/17' }
-          - { id: 15, runs: 'heavy:14/16 layout:6/12 light:3/6' }
-          - { id: 16, runs: 'heavy:10/16 heavy:12/16' }
-          - { id: 17, runs: 'layout:2/12 light:2/6 slow:17/17' }
-          - { id: 18, runs: 'heavy:15/16 slow:14/17' }
+          - { id: 1, runs: 'heavy:12/16 slow:1/17' }
+          - { id: 2, runs: 'heavy:14/16 slow:4/17' }
+          - { id: 3, runs: 'heavy:11/16 light:6/6' }
+          - { id: 4, runs: 'layout:2/12 light:2/6 slow:12/17' }
+          - { id: 5, runs: 'heavy:5/16 heavy:8/16 slow:11/17' }
+          - { id: 6, runs: 'heavy:16/16 layout:3/12 slow:10/17' }
+          - { id: 7, runs: 'heavy:15/16 light:3/6 slow:2/17' }
+          - { id: 8, runs: 'heavy:4/16 layout:6/12 slow:3/17' }
+          - { id: 9, runs: 'layout:5/12 light:1/6 slow:6/17' }
+          - { id: 10, runs: 'layout:12/12 light:4/6 slow:5/17' }
+          - { id: 11, runs: 'heavy:10/16 layout:7/12 light:5/6' }
+          - { id: 12, runs: 'heavy:3/16 slow:9/17 slow:15/17' }
+          - { id: 13, runs: 'layout:8/12 layout:10/12 slow:8/17' }
+          - { id: 14, runs: 'heavy:2/16 heavy:13/16 layout:9/12' }
+          - { id: 15, runs: 'heavy:9/16 slow:7/17 slow:16/17' }
+          - { id: 16, runs: 'heavy:1/16 heavy:7/16 layout:11/12' }
+          - { id: 17, runs: 'layout:4/12 slow:13/17 slow:14/17' }
+          - { id: 18, runs: 'heavy:6/16 layout:1/12 slow:17/17' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

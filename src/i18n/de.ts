@@ -12,6 +12,7 @@ export const de: Record<MessageKey, string> = {
   exerciseStraightReverse: 'Gerade rückwärts',
   exerciseReverseBay: 'Rückwärts in eine Bucht',
   exerciseReverseCorner: 'Rückwärts um die Ecke',
+  exerciseCoupling: 'An- und Abkuppeln',
   exerciseDockRamp: 'An die Rampe setzen',
   exerciseSlalom: 'Slalom vor und zurück',
   briefStraightReverse: 'Geradeaus rückwärts in die markierte Bucht setzen und anhalten.',
@@ -19,6 +20,7 @@ export const de: Record<MessageKey, string> = {
     'Zwischen den parkenden Fahrzeugen rückwärts in die markierte Bucht setzen und anhalten.',
   briefReverseCorner:
     'Rückwärts um die Ecke in die Seitenstraße fahren und in der markierten Bucht anhalten.',
+  briefCoupling: 'Ankuppeln, in der Bucht abkuppeln und wegfahren.',
   briefDockRamp: 'Rechtwinklig an die Rampe setzen und in der markierten Bucht anhalten.',
   briefSlalom:
     'Den Slalom vorwärts bis zum markierten Kreis fahren, dann zurücksetzen und in der markierten Bucht anhalten.',
@@ -50,6 +52,10 @@ export const de: Record<MessageKey, string> = {
   truck: 'Lkw',
   trailer: 'Anhänger',
   noTrailer: 'Ohne Anhänger',
+  coupled: 'Gekuppelt',
+  notCoupled: 'Nicht gekuppelt',
+  uncouple: 'Abkuppeln',
+  couplingSpeed: 'Tempo beim Ankuppeln',
   best: 'Bestwert',
   withAids: 'mit Hilfen',
   noAids: 'ohne Hilfen',
@@ -168,6 +174,7 @@ export const de: Record<MessageKey, string> = {
   endedMoving:
     'Position und Winkel lagen in der Toleranz, aber das Fahrzeug rollte noch. Im Ziel anhalten.',
   runOver: 'Einweiser überfahren: Die Fahrt ist beendet.',
+  trailerNotLeft: 'Nicht beendet: Den Anhänger im Ziel abkuppeln, wegfahren und dann anhalten.',
   endedWithoutHalt:
     'Position und Winkel lagen in der Toleranz, aber die Fahrt endet erst mit dem Anhalten auf ein erkanntes Halt.',
   walkedBackwards: 'Halt geben, bei stehendem Fahrzeug umsetzen, dann weiter einweisen.',

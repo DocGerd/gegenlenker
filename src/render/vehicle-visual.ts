@@ -14,6 +14,7 @@ import {
 } from 'three';
 import { MeshLambertNodeMaterial } from 'three/webgpu';
 import { DEFAULT_LIGHTING, type LightingMode, type ScenePalette } from '../contracts/render';
+import type { ControlVector } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
@@ -113,6 +114,8 @@ const BODY_SHADOW = { alpha: 0.5, squareness: 4, margin: 0.7 } as const;
 const WHEEL_SHADOW = { alpha: 0.6, squareness: 2, growX: 1.3, growY: 1.4 } as const;
 const DRAWBAR_SHADOW_HALF_WIDTH = 0.3;
 const DRAWBAR_SHADOW_ALPHA = 0.25;
+/** A parked trailer's controls: no brake, no reverse lamp. */
+const PARKED: ControlVector = { steer: 0, lever: 0, brake: false, gear: 'P' };
 
 type Point3 = readonly [x: number, y: number, z: number];
 
@@ -1095,7 +1098,9 @@ export function proceduralTrailer(
     update(snapshot, switches) {
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
-      res.updateLamps(snapshot, switches);
+      // uncoupled, nothing feeds its lamps
+      if (snapshot.hitch?.coupled === false) res.updateLamps({ ...snapshot, control: PARKED }, DAY);
+      else res.updateLamps(snapshot, switches);
       res.syncBlobs();
     },
     setLook({ flags, grade, mode, shadow, lamps, lampLight, lampShadow }) {

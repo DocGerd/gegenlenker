@@ -35,6 +35,8 @@ export type TruckSpec = {
   readonly frontTrack: Param;
   readonly rearTrack: Param;
   readonly couplingOffset: Param; // rear axle → coupling pin, rearward
+  /** How far off the jaw's axis, either side, and at what angle to it the drawbar eye still couples. */
+  readonly jaw: { readonly catchWidth: Param; readonly catchAngle: Param };
   readonly turningRadius: Param; // outer front wheel, full lock
   readonly frameTop: Param; // chassis top and floor of cab and body, above the road
   readonly bodyTop: Param; // load body top above the road

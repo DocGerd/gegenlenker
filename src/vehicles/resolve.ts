@@ -1,3 +1,4 @@
+import type { JawCatch } from '../contracts/sim';
 import type {
   RigParams,
   TrailerSpec,
@@ -47,3 +48,9 @@ export function resolveCombination(truck: TruckSpec, trailer: TrailerSpec): Vehi
 /** Null trailer: the truck solo. */
 export const resolveRig = (truck: TruckSpec, trailer: TrailerSpec | null): RigParams =>
   trailer === null ? resolveTruck(truck) : resolveCombination(truck, trailer);
+
+/** Outside `TruckParams`, which every run's fingerprint hashes: only runs that couple hash it. */
+export const resolveJaw = (truck: TruckSpec): JawCatch => ({
+  width: m(truck.jaw.catchWidth.value),
+  angle: rad(truck.jaw.catchAngle.value),
+});

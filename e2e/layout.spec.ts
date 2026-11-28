@@ -1477,8 +1477,10 @@ const paneToolAbsentIds: readonly ExerciseId[] = [
   'dock-ramp',
   'slalom',
 ];
+// Measured: the counters (74 px) reach the corner, except under the German coupling card.
 const paneToolAbsent = (at: string, id: ExerciseId): boolean =>
-  at.endsWith(' 800x585') && paneToolAbsentIds.includes(id);
+  at.endsWith(' 800x585') &&
+  (paneToolAbsentIds.includes(id) || (id === 'coupling' && at.startsWith('en-US')));
 
 async function expectPaneToolClear(page: Page, at: string, id: ExerciseId): Promise<void> {
   await page.keyboard.press('o');
@@ -1541,13 +1543,20 @@ async function expectCountersInPane(page: Page): Promise<void> {
   expect(counters.bottom, 'the counters inside the pane').toBeLessThanOrEqual(pane.bottom);
 }
 
-/** Straight reverse at every size; the other exercises, whose cards differ, where the pane leaves the least room. */
-const holdCases: readonly (Size & { id: ExerciseId })[] = sizes.flatMap((size) => [
-  { ...size, id: 'straight-reverse' as const },
-  ...(size.width === 800 && size.height === 585
-    ? EXERCISE_IDS.filter((id) => id !== 'straight-reverse').map((id) => ({ ...size, id }))
-    : []),
-]);
+/**
+ * Straight reverse at every size; every other exercise, whose cards differ, where the pane leaves the least
+ * room; the coupling card, which holds the uncouple button, also at the sizes beside it.
+ */
+const holdCases: readonly (Size & { id: ExerciseId })[] = sizes.flatMap((size) => {
+  const at = `${size.width}x${size.height}`;
+  const others =
+    at === '800x585'
+      ? EXERCISE_IDS.filter((id) => id !== 'straight-reverse')
+      : ['800x820', '620x774'].includes(at)
+        ? (['coupling'] as const)
+        : [];
+  return [{ ...size, id: 'straight-reverse' as const }, ...others.map((id) => ({ ...size, id }))];
+});
 
 for (const { locale, messages } of locales) {
   for (const { id, ...size } of holdCases) {
@@ -1652,13 +1661,15 @@ async function expectMirrorsOnlyClear(page: Page, size: Size): Promise<void> {
   }
 }
 
-for (const size of [
+for (const { id = 'straight-reverse', ...size } of [
   { width: 1366, height: 768 },
   { width: 1280, height: 585 },
   { width: 768, height: 1024 },
+  // in portrait the brief stands under the sight cone
+  { width: 768, height: 1024, id: 'coupling' as const },
 ]) {
   for (const { locale, messages } of locales) {
-    test(`the mirror-only drive clears the controls and holds the brief at ${locale} ${size.width}x${size.height}`, async ({
+    test(`the mirror-only drive clears the controls and holds the brief at ${locale} ${size.width}x${size.height}${id === 'coupling' ? ' with the coupling card' : ''}`, async ({
       browser,
     }) => {
       test.slow();
@@ -1671,7 +1682,7 @@ for (const size of [
           }
         }, SETTINGS_KEY);
         await page.goto('./');
-        await startExercise(page, messages, 'straight-reverse');
+        await startExercise(page, messages, id);
         await hudReady(page, { mirrorsOnly: true });
         // both messages fit at once here, so the two-message check holds
         await expect(page.locator('[data-hud="toastWrap"]')).not.toHaveAttribute('data-cue-yields');
