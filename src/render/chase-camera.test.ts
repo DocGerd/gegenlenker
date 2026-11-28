@@ -15,11 +15,15 @@ import {
   type TopDownView,
 } from '../contracts/render';
 import { isKitDecor } from '../contracts/layout';
-import type { Obb, Pose2 } from '../contracts/sim';
+import type { ControlVector, Obb, ParkedTrailer, Pose2, SimSnapshot } from '../contracts/sim';
+import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
+import { coupling } from '../content/exercises/coupling';
+import { drawnFootprints } from '../sim/hitch';
+import { createSimulation } from '../sim/simulation';
 import { bodyFootprints } from '../sim/geometry';
 import { joints, type KinematicState } from '../sim/kinematics';
 import { trailers, trucks } from '../vehicles/registry';
-import { resolveCombination } from '../vehicles/resolve';
+import { resolveCombination, resolveJaw, resolveRig } from '../vehicles/resolve';
 import { CAB_HEIGHT, RELIEF } from './cab-dims';
 import {
   CHASE_MAX_DISTANCE,
@@ -30,10 +34,13 @@ import {
   createChaseArm,
   chaseDistance,
   boundingRadius,
+  bodyReach,
   combinationExtent,
   createChaseCamera,
   placeChaseCamera,
+  uncoupledGround,
   vehicleCentre,
+  type UncoupledGround,
   type ChaseFrame,
   type ChaseRig,
 } from './chase-camera';
@@ -404,6 +411,191 @@ describe('chase camera', () => {
     expect(chaseDistance(rig.extent, rig.face, collapsed)).toBeLessThan(CAMERA_FAR);
     const far = place(free(rig), collapsed, { zoom: CHASE_ZOOM.min, panX: 0, panY: 0 });
     expect(far.position.distanceTo(aimOf(rig))).toBeLessThanOrEqual(CHASE_MAX_DISTANCE + 1e-9);
+  });
+});
+
+/** Where the camera's optical axis meets the aim height: the pivot it orbits. */
+const pivotOf = (camera: PerspectiveCamera, rig: Posed['rig']): Vector3 => {
+  const direction = camera.getWorldDirection(new Vector3());
+  const t = (aimOf(rig).y - camera.position.y) / direction.y;
+  return camera.position.clone().addScaledVector(direction, t);
+};
+
+describe('chase camera while uncoupled', () => {
+  const run = (t: number, r: number) => {
+    const truck = trucks[t];
+    const trailer = trailers[r];
+    if (truck === undefined || trailer === undefined) throw new Error('no such vehicle');
+    const params = resolveRig(truck, trailer);
+    const sim = createSimulation(
+      params,
+      {
+        truck: coupling.start,
+        parked: { trailer: coupling.parkedTrailer as ParkedTrailer, jaw: resolveJaw(truck) },
+      },
+      () => null,
+    );
+    return { truck, trailer, params, sim, reach: bodyReach(truck, trailer) };
+  };
+  const control = (gear: 'D' | 'R', steer = 0): ControlVector => ({
+    steer,
+    lever: 0.3,
+    brake: false,
+    gear,
+  });
+  const rigOf = (truck: TruckSpec, s: SimSnapshot, ground: UncoupledGround | undefined) => {
+    const face = cabFront(truck);
+    return {
+      truck: s.truck,
+      centre: vehicleCentre(s, face.x),
+      extent: combinationExtent(truck, null),
+      ground,
+      face,
+      colliders: [],
+    } satisfies ChaseRig;
+  };
+  /** The start and every few steps of the approach and of driving away. */
+  const snapshots = (t: number, r: number): SimSnapshot[] => {
+    const out: SimSnapshot[] = [];
+    for (const [gear, steer, steps] of [
+      ['R', 0, 1500],
+      ['R', 0.6, 1500],
+      ['D', 0, 1500],
+    ] as const) {
+      const { sim } = run(t, r);
+      out.push(sim.snapshot());
+      for (let i = 0; i < steps; i++) {
+        const s = sim.step(control(gear, steer));
+        if (s.hitch?.coupled !== false) break;
+        if (i % 25 === 0) out.push(s);
+      }
+    }
+    return out;
+  };
+
+  const pairs = trucks.flatMap((truck, t) =>
+    trailers.map((trailer, r) => ({ name: `${truck.id} + ${trailer.id}`, t, r })),
+  );
+
+  it.each(pairs)(
+    'keeps both bodies in frame at the start and on the approach and the drive-away: $name',
+    ({ t, r }) => {
+      const { truck, params, reach } = run(t, r);
+      const shots = snapshots(t, r);
+      expect(shots.length).toBeGreaterThan(30);
+      for (const s of shots) {
+        const ground = uncoupledGround(s, reach);
+        expect(ground).toBeDefined();
+        for (const frame of FRAMES) {
+          const camera = place(rigOf(truck, s, ground), frame, DEFAULT_TOP_DOWN_VIEW);
+          const frustum = new Frustum().setFromProjectionMatrix(
+            new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+          );
+          for (const { obb } of drawnFootprints(params, s)) {
+            for (const a of [-1, 1]) {
+              for (const b of [-1, 1]) {
+                const cos = Math.cos(obb.heading);
+                const sin = Math.sin(obb.heading);
+                const x = obb.cx + a * obb.halfLength * cos - b * obb.halfWidth * sin;
+                const y = obb.cy + a * obb.halfLength * sin + b * obb.halfWidth * cos;
+                expect(
+                  frustum.containsPoint(new Vector3(x, 0, -y)),
+                  `${frame.width}x${frame.height} step ${s.step} ${x},${y}`,
+                ).toBe(true);
+              }
+            }
+          }
+        }
+      }
+    },
+  );
+
+  it('keeps the eye within the cap and the truck in frame however far it drives from the trailer', () => {
+    const { truck, params, sim, reach } = run(0, 0);
+    const start = sim.snapshot();
+    const gapped = (gap: number): SimSnapshot => ({
+      ...start,
+      truck: { ...start.truck, x: start.truck.x + gap },
+    });
+    for (const gap of [0, 10, 40, 80, 120, 400]) {
+      const s = gapped(gap);
+      const rig = rigOf(truck, s, uncoupledGround(s, reach));
+      const own = drawnFootprints(params, s)[0]?.obb as Obb;
+      for (const frame of FRAMES) {
+        for (const zoom of ZOOMS) {
+          for (const panX of YAWS) {
+            const label = `gap ${gap} ${frame.width}x${frame.height} zoom ${zoom} yaw ${panX}`;
+            const camera = place(rig, frame, { zoom, panX, panY: 0 });
+            expect(camera.position.distanceTo(pivotOf(camera, rig)), label).toBeLessThanOrEqual(
+              CHASE_MAX_DISTANCE + 1e-9,
+            );
+            if (zoom !== 1 || panX !== YAWS[0]) continue;
+            const frustum = new Frustum().setFromProjectionMatrix(
+              new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+            );
+            for (const a of [-1, 1]) {
+              for (const b of [-1, 1]) {
+                const cos = Math.cos(own.heading);
+                const sin = Math.sin(own.heading);
+                const x = own.cx + a * own.halfLength * cos - b * own.halfWidth * sin;
+                const y = own.cy + a * own.halfLength * sin + b * own.halfWidth * cos;
+                expect(frustum.containsPoint(new Vector3(x, 0, -y)), `${label} ${x},${y}`).toBe(
+                  true,
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it('moves smoothly as the pivot slides from the pair to the truck', () => {
+    const { truck, sim, reach } = run(0, 0);
+    const start = sim.snapshot();
+    const frame = FRAMES[3] as ChaseFrame;
+    let last: Vector3 | null = null;
+    for (let gap = 0; gap <= 250; gap += 0.25) {
+      const s = { ...start, truck: { ...start.truck, x: start.truck.x + gap } };
+      const position = place(
+        rigOf(truck, s, uncoupledGround(s, reach)),
+        frame,
+        DEFAULT_TOP_DOWN_VIEW,
+      ).position;
+      if (last !== null) expect(position.distanceTo(last), `gap ${gap}`).toBeLessThan(1);
+      last = position.clone();
+    }
+  });
+
+  it('pulls out as the truck leaves the trailer', () => {
+    const { truck, sim, reach } = run(0, 0);
+    const start = sim.snapshot();
+    const frame = FRAMES[0] as ChaseFrame;
+    const distanceAt = (gap: number): number => {
+      const s = { ...start, truck: { ...start.truck, x: start.truck.x + gap } };
+      const rig = rigOf(truck, s, uncoupledGround(s, reach));
+      return place(rig, frame, DEFAULT_TOP_DOWN_VIEW).position.distanceTo(aimOf(rig));
+    };
+    expect(distanceAt(10)).toBeGreaterThan(distanceAt(0) + 1);
+  });
+
+  it('leaves the coupled framing as it was', () => {
+    const { rig } = posed(0, 0, POSES[0] as Pose2, 0, 0);
+    const frame = FRAMES[0] as ChaseFrame;
+    expect(chaseDistance(rig.extent, rig.face, frame)).toBeCloseTo(33.22405105854136, 9);
+    const camera = place(free(rig), frame, DEFAULT_TOP_DOWN_VIEW);
+    expect(camera.position.x).toBeCloseTo(22.865724610006442, 9);
+    expect(camera.position.y).toBeCloseTo(10.037625411582473, 9);
+    expect(camera.position.z).toBeCloseTo(-19.847174254719743, 9);
+    const truck = trucks[0] as TruckSpec;
+    const trailer = trailers[0] as TrailerSpec;
+    const reach = bodyReach(truck, trailer);
+    const { sim } = run(0, 0);
+    const parked = sim.snapshot();
+    expect(uncoupledGround(parked, reach)).toBeDefined();
+    const coupled = { ...parked, hitch: { ...parked.hitch, coupled: true } } as SimSnapshot;
+    expect(uncoupledGround(coupled, reach)).toBeUndefined();
+    expect(uncoupledGround(parked, bodyReach(truck, null))).toBeUndefined();
   });
 });
 

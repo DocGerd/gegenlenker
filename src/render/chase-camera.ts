@@ -107,6 +107,58 @@ const RADIUS_MARGIN = 1;
 export const boundingRadius = ({ halfLength, halfWidth }: CombinationExtent): number =>
   halfLength + halfWidth + RADIUS_MARGIN;
 
+/** What the uncoupled truck and its parked trailer span: the truck's ends and both bodies' half widths, metres. */
+export type BodyReach = {
+  readonly truckFront: number;
+  readonly truckRear: number;
+  readonly truckHalfWidth: number;
+  readonly trailerHalfWidth: number;
+};
+
+/** Null solo: there is no trailer to part from. */
+export function bodyReach(truck: TruckSpec, trailer: TrailerSpec | null): BodyReach | null {
+  if (trailer === null) return null;
+  const p = resolveCombination(truck, trailer);
+  return {
+    truckFront: p.truckFront,
+    truckRear: p.truckRear,
+    truckHalfWidth: p.truckWidth / 2,
+    trailerHalfWidth: p.trailerWidth / 2,
+  };
+}
+
+/** The ground point `along` metres ahead of and `left` metres left of `from`, in the sim plane. */
+const offset = (from: Vec2, heading: number, along: number, left: number): Vec2 => ({
+  x: from.x + Math.cos(heading) * along - Math.sin(heading) * left,
+  y: from.y + Math.sin(heading) * along + Math.cos(heading) * left,
+});
+
+/** The ground points, sim plane, of the truck's corners and of the parked trailer's drawbar eye and rear corners. */
+export type UncoupledGround = {
+  readonly truck: readonly Vec2[];
+  readonly trailer: readonly Vec2[];
+};
+
+/** Both bodies' ground points while the truck is uncoupled; undefined when it is coupled, solo, or `reach` is null. */
+export function uncoupledGround(
+  snapshot: Pick<SimSnapshot, 'truck' | 'trailer' | 'trailerRear' | 'hitch'>,
+  reach: BodyReach | null,
+): UncoupledGround | undefined {
+  const { truck, trailer, trailerRear, hitch } = snapshot;
+  if (reach === null || hitch === undefined || hitch.coupled) return undefined;
+  const truckPoints: Vec2[] = [];
+  for (const end of [reach.truckFront, -reach.truckRear]) {
+    for (const side of [-1, 1]) {
+      truckPoints.push(offset(truck, truck.heading, end, side * reach.truckHalfWidth));
+    }
+  }
+  const trailerPoints: Vec2[] = [hitch.eye];
+  for (const side of [-1, 1]) {
+    trailerPoints.push(offset(trailerRear, trailer.heading, 0, side * reach.trailerHalfWidth));
+  }
+  return { truck: truckPoints, trailer: trailerPoints };
+}
+
 /** The height the camera aims at, and the one a combination of `face`'s cab stands up to, metres. */
 const aimHeight = (face: CabFront): number => (face.bottom + face.top) / 2;
 
@@ -119,6 +171,18 @@ export function chaseDistance(
   face: CabFront,
   frame: ChaseFrame,
 ): number {
+  const corners: Vec2[] = [];
+  for (const x of [-1, 1]) {
+    for (const y of [-1, 1]) corners.push({ x: x * extent.halfLength, y: y * extent.halfWidth });
+  }
+  return groundDistance(corners, face, frame);
+}
+
+/**
+ * Distance at which `points`, ground points in the truck's frame relative to the pivot (x forward, y left),
+ * standing up to the cab's height, fill the free rect seen from the default azimuth and pitch.
+ */
+export function groundDistance(points: readonly Vec2[], face: CabFront, frame: ChaseFrame): number {
   const azimuth = CHASE_AZIMUTH.default;
   const pitch = CHASE_PITCH.default;
   const toEye = new Vector3(
@@ -137,18 +201,16 @@ export function chaseDistance(
   const middle = aimHeight(face);
   const corner = new Vector3();
   let distance = 0;
-  for (const x of [-1, 1]) {
-    for (const y of [-1, 1]) {
-      for (const z of [-middle, face.top - middle]) {
-        corner.set(x * extent.halfLength, y * extent.halfWidth, z);
-        // a corner nearer the eye than the pivot, by `t`, needs that much more distance
-        const t = corner.dot(toEye);
-        distance = Math.max(
-          distance,
-          Math.abs(corner.dot(right)) / tanAcross + t,
-          Math.abs(corner.dot(up)) / tanUp + t,
-        );
-      }
+  for (const { x, y } of points) {
+    for (const z of [-middle, face.top - middle]) {
+      corner.set(x, y, z);
+      // a corner nearer the eye than the pivot, by `t`, needs that much more distance
+      const t = corner.dot(toEye);
+      distance = Math.max(
+        distance,
+        Math.abs(corner.dot(right)) / tanAcross + t,
+        Math.abs(corner.dot(up)) / tanUp + t,
+      );
     }
   }
   return FIT_MARGIN * distance;
@@ -172,10 +234,85 @@ export type ChaseRig = {
   /** The pivot, in the sim plane: `vehicleCentre`. */
   readonly centre: Vec2;
   readonly extent: CombinationExtent;
+  /** While uncoupled, the ground points of both bodies (`uncoupledGround`): the view frames them instead of `extent`. */
+  readonly ground?: UncoupledGround | undefined;
   readonly face: CabFront;
   /** The eye never sits inside one of these boxes. */
   readonly colliders: readonly ChaseCollider[];
 };
+
+/** Metres from `pivot` that bound `points`; the zoom never closes beyond it. */
+function pointsRadius(points: readonly Vec2[], pivot: Vec2): number {
+  let far = 0;
+  for (const p of points) far = Math.max(far, Math.hypot(p.x - pivot.x, p.y - pivot.y));
+  return far + RADIUS_MARGIN;
+}
+
+/** `points` relative to `pivot`, in the truck's frame. */
+function inTruckFrame(truck: Pose2, points: readonly Vec2[], pivot: Vec2): Vec2[] {
+  const cos = Math.cos(truck.heading);
+  const sin = Math.sin(truck.heading);
+  return points.map((p) => {
+    const dx = p.x - pivot.x;
+    const dy = p.y - pivot.y;
+    return { x: dx * cos + dy * sin, y: -dx * sin + dy * cos };
+  });
+}
+
+const BISECTIONS = 40;
+
+/** The smallest `t` in [`lo`, `hi`] with `f(t)` at most `limit`, for an `f` that is above it at `lo` and not above it at `hi`. */
+function firstWithin(f: (t: number) => number, limit: number, lo: number, hi: number): number {
+  for (let i = 0; i < BISECTIONS; i++) {
+    const mid = (lo + hi) / 2;
+    if (f(mid) <= limit) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+/** The `t` in [0, 1] where a convex `f` is least. */
+function lowestAt(f: (t: number) => number): number {
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < BISECTIONS; i++) {
+    const a = lo + (hi - lo) / 3;
+    const b = hi - (hi - lo) / 3;
+    if (f(a) < f(b)) hi = b;
+    else lo = a;
+  }
+  return (lo + hi) / 2;
+}
+
+/**
+ * The pivot of an uncoupled rig: `centre` while both bodies fit at the farthest the eye gets. Beyond that it
+ * slides toward the truck, no further than keeps both in frame, and always far enough to keep the truck in
+ * it, so the controlled body never leaves the frame and the view does not jump.
+ */
+function uncoupledPivot(rig: ChaseRig, ground: UncoupledGround, frame: ChaseFrame): Vec2 {
+  const { centre, truck, face } = rig;
+  const own = ground.truck;
+  const heart = {
+    x: own.reduce((sum, p) => sum + p.x, 0) / own.length,
+    y: own.reduce((sum, p) => sum + p.y, 0) / own.length,
+  };
+  const at = (t: number): Vec2 => ({
+    x: centre.x + (heart.x - centre.x) * t,
+    y: centre.y + (heart.y - centre.y) * t,
+  });
+  const both = [...own, ...ground.trailer];
+  const fit = (points: readonly Vec2[]) => (t: number) =>
+    groundDistance(inTruckFrame(truck, points, at(t)), face, frame);
+  const fitBoth = fit(both);
+  if (fitBoth(0) <= CHASE_MAX_DISTANCE) return centre;
+  const best = lowestAt(fitBoth);
+  const bothT =
+    fitBoth(best) <= CHASE_MAX_DISTANCE ? firstWithin(fitBoth, CHASE_MAX_DISTANCE, 0, best) : best;
+  const fitTruck = fit(own);
+  const truckT =
+    fitTruck(0) <= CHASE_MAX_DISTANCE ? 0 : firstWithin(fitTruck, CHASE_MAX_DISTANCE, 0, 1);
+  return at(Math.max(bothT, truckT));
+}
 
 export type ChaseCollider = Pick<Obstacle, 'obb' | 'height'>;
 
@@ -330,11 +467,17 @@ export function placeChaseCamera(
   hold?: (limit: number, open: number) => number,
 ): void {
   if (frame.width <= 0 || frame.height <= 0) return;
-  const { centre, truck, face } = rig;
+  const { truck, face } = rig;
+  const centre = rig.ground === undefined ? rig.centre : uncoupledPivot(rig, rig.ground, frame);
   const azimuth = truck.heading + CHASE_AZIMUTH.default + view.panX;
   const pitch = MathUtils.clamp(CHASE_PITCH.default + view.panY, CHASE_PITCH.min, CHASE_PITCH.max);
   const middle = aimHeight(face);
-  const radius = boundingRadius(rig.extent);
+  const radius = Math.min(
+    rig.ground === undefined
+      ? boundingRadius(rig.extent)
+      : pointsRadius([...rig.ground.truck, ...rig.ground.trailer], centre),
+    CHASE_MAX_DISTANCE,
+  );
   // A collider between the pivot and the eye would hide the vehicle: the eye stays in front of it, but never inside the bounding radius.
   const entry = firstEntry(
     rig,
@@ -342,7 +485,14 @@ export function placeChaseCamera(
     [Math.cos(pitch) * Math.cos(azimuth), Math.cos(pitch) * Math.sin(azimuth), Math.sin(pitch)],
   );
   const limit = Math.max(radius, Math.min(CHASE_MAX_DISTANCE, entry - ENTRY_GAP));
-  const fitted = chaseDistance(rig.extent, face, frame);
+  const fitted =
+    rig.ground === undefined
+      ? chaseDistance(rig.extent, face, frame)
+      : groundDistance(
+          inTruckFrame(truck, [...rig.ground.truck, ...rig.ground.trailer], centre),
+          face,
+          frame,
+        );
   const zoom = MathUtils.clamp(view.zoom, CHASE_ZOOM.min, CHASE_ZOOM.max);
   const open = MathUtils.clamp(Math.max(fitted, fitted / zoom), radius, CHASE_MAX_DISTANCE);
   const reach = hold === undefined ? limit : hold(limit, open);
