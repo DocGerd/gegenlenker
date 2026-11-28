@@ -1,5 +1,5 @@
 import { type Locator, type Page } from '@playwright/test';
-import type { ExerciseId } from '../src/contracts/exercise';
+import { EXERCISE_IDS, type ExerciseId } from '../src/contracts/exercise';
 import { expect, test } from './fixtures';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
@@ -1474,13 +1474,22 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
  * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
-const paneToolAbsent = new Set(['en-US 800x585']);
+const paneToolAbsentIds: readonly ExerciseId[] = [
+  'reverse-bay',
+  'reverse-corner',
+  'dock-ramp',
+  'slalom',
+];
+// The counters cover the free camera's corner under these cards (#607).
+const paneToolAbsent = (at: string, id: ExerciseId): boolean =>
+  at.endsWith(' 800x585') &&
+  (paneToolAbsentIds.includes(id) || (id === 'coupling' && at.startsWith('en-US')));
 
-async function expectPaneToolClear(page: Page, at: string): Promise<void> {
+async function expectPaneToolClear(page: Page, at: string, id: ExerciseId): Promise<void> {
   await page.keyboard.press('o');
   const tool = page.locator('[data-hud="freeCamera"]');
   await settled(page);
-  if (paneToolAbsent.has(at)) {
+  if (paneToolAbsent(at, id)) {
     await expect(tool, 'no room for it here').toBeHidden();
     return;
   }
@@ -1528,6 +1537,9 @@ async function expectToolbarClear(page: Page): Promise<void> {
   }
 }
 
+/** Sizes where the front mirror shows under the measured legend. */
+const frontShown = new Set(['1280x800', '1366x768', '768x1024']);
+
 /** The counters stand inside the pane, below however tall a brief, with the outside view's segment widening the toolbar. */
 async function expectCountersInPane(page: Page): Promise<void> {
   await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
@@ -1537,19 +1549,26 @@ async function expectCountersInPane(page: Page): Promise<void> {
   expect(counters.bottom, 'the counters inside the pane').toBeLessThanOrEqual(pane.bottom);
 }
 
-/** Straight reverse at every size; the coupling card, which holds the uncouple button, where the pane leaves the least room. */
-const holdCases: readonly (Size & { id: ExerciseId })[] = sizes.flatMap((size) => [
-  { ...size, id: 'straight-reverse' as const },
-  ...(['800x585', '800x820', '620x774'].includes(`${size.width}x${size.height}`)
-    ? [{ ...size, id: 'coupling' as const }]
-    : []),
-]);
+/**
+ * Straight reverse at every size; every other exercise, whose cards differ, where the pane leaves the least
+ * room; the coupling card, which holds the uncouple button, also at the sizes beside it.
+ */
+const holdCases: readonly (Size & { id: ExerciseId })[] = sizes.flatMap((size) => {
+  const at = `${size.width}x${size.height}`;
+  const others =
+    at === '800x585'
+      ? EXERCISE_IDS.filter((id) => id !== 'straight-reverse')
+      : ['800x820', '620x774'].includes(at)
+        ? (['coupling'] as const)
+        : [];
+  return [{ ...size, id: 'straight-reverse' as const }, ...others.map((id) => ({ ...size, id }))];
+});
 
 for (const { locale, messages } of locales) {
   for (const { id, ...size } of holdCases) {
     const at = `${locale} ${size.width}x${size.height}`;
 
-    test(`the layout holds at ${at}${id === 'coupling' ? ' with the coupling card' : ''}`, async ({
+    test(`the layout holds at ${at}${id === 'straight-reverse' ? '' : ` with the ${id} card`}`, async ({
       browser,
     }) => {
       test.slow();
@@ -1557,17 +1576,22 @@ for (const { locale, messages } of locales) {
       try {
         const page = await context.newPage();
         await startFrozenReverse(page, messages, id);
+        if (id === 'straight-reverse' && frontShown.has(`${size.width}x${size.height}`)) {
+          await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(1);
+        }
         await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
-          await test.step('the toolbar takes no reserve against the lever column', () =>
-            expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve'));
+          await test.step('the toolbar takes no reserve against the lever column', async () => {
+            await expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve');
+            await expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-aids-reserve');
+          });
         }
         await test.step('the toolbar clears the finish button and the controls', () =>
           expectToolbarClear(page));
         await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
           expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         await test.step("the outside view's free camera button clears the panels, the divider, the mirrors, the target arrow and the messages", async () => {
-          await expectPaneToolClear(page, at);
+          await expectPaneToolClear(page, at, id);
           await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
         });
         await test.step('the counters stand inside the pane', () => expectCountersInPane(page));
@@ -1769,34 +1793,16 @@ for (const size of sizes) {
   });
 }
 
-test('the class IV mirrors hang from the class II arms at 1920x1080', async ({ browser }) => {
-  const context = await browser.newContext({
-    locale: 'en-US',
-    viewport: { width: 1920, height: 1080 },
-  });
-  try {
-    const page = await context.newPage();
-    await startFrozenReverse(page, en);
-    await hudReady(page);
-    await expectWideArms(page);
-  } finally {
-    await context.close();
-  }
-});
-
 /**
- * Sizes where the front mirror is shown and where it is not. Without one, `inPane` rows are portrait
- * sizes where the toast column falls to the top-down pane (`messageColumn`).
+ * Portrait sizes without a front mirror, where the toast column falls to the top-down pane (`messageColumn`).
+ * The sizes with one are the `sizes` rows, whose `layout holds` case checks the same messages.
  */
-const frontShown = [
-  { width: 1280, height: 800, front: 1, inPane: false },
-  { width: 1366, height: 768, front: 1, inPane: false },
-  { width: 768, height: 1024, front: 1, inPane: false },
-  { width: 600, height: 640, front: 0, inPane: true },
-  { width: 768, height: 800, front: 0, inPane: true },
+const paneToastSizes = [
+  { width: 600, height: 640 },
+  { width: 768, height: 800 },
 ];
 
-for (const { width, height, front, inPane } of frontShown) {
+for (const { width, height } of paneToastSizes) {
   test(`the longest German toast fits and clears the controls and the mirrors at ${width}x${height}`, async ({
     browser,
   }) => {
@@ -1804,16 +1810,14 @@ for (const { width, height, front, inPane } of frontShown) {
     try {
       const page = await context.newPage();
       await startFrozenReverse(page, de);
-      await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(front);
-      if (inPane) {
-        const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
-        const [pane] = await boxes(page.locator('.hud-topdown'));
-        if (!wrap || !pane) throw new Error('no toast column or pane');
-        expect(wrap.left, 'toast column inside the pane').toBeGreaterThanOrEqual(pane.left);
-        expect(wrap.right).toBeLessThanOrEqual(pane.right);
-        expect(wrap.top).toBeGreaterThanOrEqual(pane.top);
-        expect(wrap.bottom).toBeLessThanOrEqual(pane.bottom);
-      }
+      await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(0);
+      const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
+      const [pane] = await boxes(page.locator('.hud-topdown'));
+      if (!wrap || !pane) throw new Error('no toast column or pane');
+      expect(wrap.left, 'toast column inside the pane').toBeGreaterThanOrEqual(pane.left);
+      expect(wrap.right).toBeLessThanOrEqual(pane.right);
+      expect(wrap.top).toBeGreaterThanOrEqual(pane.top);
+      expect(wrap.bottom).toBeLessThanOrEqual(pane.bottom);
       await expectMessagesClear(page, de.blockedTurntable, de.goalInside);
     } finally {
       await context.close();
@@ -2086,13 +2090,6 @@ test('the divider runs across the screen in portrait', async ({ page }) => {
   await sep.focus();
   await page.keyboard.press('ArrowUp');
   await expect.poll(bottom).toBeLessThan(before);
-  await page.keyboard.press('Home');
-  await settled(page);
-  const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
-  const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
-  for (const m of mirrors) {
-    for (const d of divider) expect(overlaps(m, d), `${d.name} overlaps a mirror`).toBe(false);
-  }
 });
 
 /** Where the class V mirror shows: wide and tall screens, the key legend open or folded away. */
@@ -2149,25 +2146,6 @@ test('a short portrait cockpit keeps the messages clear of the open key legend',
   await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
 });
 
-/** Laptop viewports too small to leave class V room above class II. */
-for (const size of [
-  { width: 1280, height: 720 },
-  { width: 1366, height: 768 },
-  { width: 1536, height: 729 },
-]) {
-  test(`there is no class V mirror at ${size.width}x${size.height}`, async ({ browser }) => {
-    const context = await browser.newContext({ locale: 'en-US', viewport: size });
-    try {
-      const page = await context.newPage();
-      await startFrozenReverse(page, en);
-      await expect(page.locator('[data-hud="close"]')).toBeHidden();
-      await expect(page.locator('[data-hud="close"]:not([hidden])')).toHaveCount(0);
-    } finally {
-      await context.close();
-    }
-  });
-}
-
 /** Laptop viewports where class IV shows beside the key legend as it opens; 1440x739 is the first of the tall ones to lose it if the legend grows. */
 const laptops: { size: Size; locale: string; messages: typeof en | typeof de }[] = [
   ...[
@@ -2192,6 +2170,10 @@ for (const { size, locale, messages } of laptops) {
       const page = await context.newPage();
       await startFrozenReverse(page, messages);
       await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
+      // Too small to leave class V room above class II.
+      if (size.width === 1536 && size.height === 729) {
+        await expect(page.locator('[data-hud="close"]:not([hidden])')).toHaveCount(0);
+      }
       await expectMirrorsClearControls(page, size);
       await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
     } finally {

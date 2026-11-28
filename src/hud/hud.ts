@@ -653,24 +653,32 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   /**
    * Landscape, the lever column stands at the screen's right edge, which the pane's right edge meets
    * under `data-reserve`: the toolbar stops short of it only where, unreserved, it would come within
-   * `--space-3` of it.
+   * `--space-3` of it. When only the aid rows below the view row would reach it, only they stop short
+   * (`data-aids-reserve`), so the view row keeps its width and wraps less.
    */
   const syncToolbarReserve = (): void => {
     topDown.removeAttribute('data-toolbar-reserve');
+    topDown.removeAttribute('data-aids-reserve');
     if (!topDown.hasAttribute('data-reserve') || root.clientWidth < root.clientHeight) return;
     const lever = opts.pedalsBox?.();
     if (lever === undefined || lever.width === 0) return;
     const gap = parseFloat(getComputedStyle(root).getPropertyValue('--space-3')) || 12;
     const pane = topDown.getBoundingClientRect();
     const leverLeft = pane.right - (root.getBoundingClientRect().right - lever.left) - gap;
+    const reaches = (selector: string): boolean =>
+      [...toolbar.querySelectorAll(selector)].some((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.right > leverLeft && r.bottom > lever.top - gap;
+      });
+    if (reaches('[data-hud="views"] .hud-toggle')) {
+      topDown.setAttribute('data-toolbar-reserve', '');
+      return;
+    }
     // A short screen's open aid legend is an overlay: it must not move the reserve or the panels.
-    const reaches = [
-      ...toolbar.querySelectorAll(shortScreen ? '.hud-toggle' : '.hud-toggle, .hud-aid-legend'),
-    ].some((el) => {
-      const r = el.getBoundingClientRect();
-      return r.width > 0 && r.right > leverLeft && r.bottom > lever.top - gap;
-    });
-    topDown.toggleAttribute('data-toolbar-reserve', reaches);
+    const aidSelector = shortScreen
+      ? '.hud-aids .hud-toggle'
+      : '.hud-aids .hud-toggle, .hud-aid-legend';
+    if (reaches(aidSelector)) topDown.setAttribute('data-aids-reserve', '');
   };
   /**
    * The open key list of a short screen stands in the top-down pane, which no mirror reaches; hud.css
@@ -1107,7 +1115,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     panelsBottom(paneWidth) {
       syncShortScreen();
       const previous = topDown.style.width;
-      const reserved = topDown.hasAttribute('data-toolbar-reserve');
+      const reserved = ['data-toolbar-reserve', 'data-aids-reserve'].filter((a) =>
+        topDown.hasAttribute(a),
+      );
       topDown.style.width = `${paneWidth}px`;
       syncToolbarReserve();
       const top = topDown.getBoundingClientRect().top;
@@ -1125,7 +1135,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         (el) => el.getBoundingClientRect().right > infoRight + 0.5,
       );
       topDown.style.width = previous;
-      topDown.toggleAttribute('data-toolbar-reserve', reserved);
+      for (const a of ['data-toolbar-reserve', 'data-aids-reserve']) {
+        topDown.toggleAttribute(a, reserved.includes(a));
+      }
       return overflows ? Infinity : bottom - top;
     },
     legendBox,

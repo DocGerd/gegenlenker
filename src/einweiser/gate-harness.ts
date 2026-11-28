@@ -259,8 +259,9 @@ const trailerYaw = (p: RigParams, s: SimSnapshot): number =>
     ? -Math.sin(s.turntableAngle) / p.trailerWheelbase
     : -Math.tan(s.roadWheelAngle) / p.wheelbase;
 
-/** Length scale (m) of the reverse tracking LQR: how far the rear takes to close on the path. */
-const TRACK_LENGTH = 6;
+/** Length scale (m) of the reverse tracking LQR: a solo truck sets its rear curvature directly by steering, while a trailer's builds up through the turntable. */
+const TRACK_LENGTH = { trailer: 6, solo: 1.5 } as const;
+const rigKind = (p: RigParams): keyof typeof TRACK_LENGTH => (hasTrailer(p) ? 'trailer' : 'solo');
 /** Each sign is judged this long (s) after it would act. */
 const TRACK_HORIZON = 2;
 /** A turn sign replaces the shown one only when nearer the wanted curvature by this share of a turn's. */
@@ -295,8 +296,9 @@ function wantedCurvature(p: RigParams, s: SimSnapshot, path: readonly Pt[], j: n
   const q = path[j];
   if (!q) return 0;
   const { e, he } = pathError(q, s.trailerRear, rearMotion(p, s));
+  const L = TRACK_LENGTH[rigKind(p)];
   // the double integrator's LQR (e'' = curvature error, cost ∫ e² + L⁴·u² ds) is K = [1/L², √2/L]
-  return curvatureAt(path, j) - e / TRACK_LENGTH ** 2 - (Math.SQRT2 * he) / TRACK_LENGTH;
+  return curvatureAt(path, j) - e / L ** 2 - (Math.SQRT2 * he) / L;
 }
 
 /**
@@ -335,16 +337,20 @@ function trackCostToGo(L: number): number[][] {
   }
   return P;
 }
-const TRACK_COST = trackCostToGo(TRACK_LENGTH);
+const TRACK_COST = {
+  trailer: trackCostToGo(TRACK_LENGTH.trailer),
+  solo: trackCostToGo(TRACK_LENGTH.solo),
+};
 
 /** `TRACK_COST` of the reversing rear's state about `path` at index `j`. */
 function trackCost(p: RigParams, s: SimSnapshot, path: readonly Pt[], j: number): number {
   const q = path[j];
   if (!q) return 0;
   const { e, he } = pathError(q, s.trailerRear, rearMotion(p, s));
+  const P = TRACK_COST[rigKind(p)];
   const z = [e, he, trailerYaw(p, s) - curvatureAt(path, j)];
   return z.reduce(
-    (sum, za, a) => sum + za * z.reduce((acc, zb, b) => acc + (TRACK_COST[a]?.[b] ?? 0) * zb, 0),
+    (sum, za, a) => sum + za * z.reduce((acc, zb, b) => acc + (P[a]?.[b] ?? 0) * zb, 0),
     0,
   );
 }
@@ -1220,10 +1226,7 @@ export function runGate(
       contacts: run.contacts,
       obstacles: run.layout.obstacles,
       recover: (now) => recovery(run.params, now, exercise.target.pose, RECOVER[exerciseId] ?? 0),
-      policy:
-        (trailerId === null ? SOLO_POLICY[exerciseId] : undefined) ??
-        POLICY[exerciseId] ??
-        'search',
+      policy: POLICY[exerciseId] ?? 'search',
       reverseHorizon: REVERSE_HORIZON[exerciseId] ?? SEARCH_HORIZON,
     },
     legs,
@@ -1339,11 +1342,6 @@ const POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
   'dock-ramp': 'lqr',
   'reverse-bay': 'lqr',
   slalom: 'leadSearch',
-};
-/** The truck solo: the search, where the tracking LQR tuned on trailers ends in a contact. */
-const SOLO_POLICY: Partial<Record<ExerciseId, SignPolicy>> = {
-  'dock-ramp': 'search',
-  'reverse-bay': 'search',
 };
 /** How far (s) the search looks ahead. */
 const SEARCH_HORIZON = 12;

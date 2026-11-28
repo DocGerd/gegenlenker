@@ -215,7 +215,7 @@ function inFrustum(m: MirrorFrame, p: Vec3): boolean {
   return Math.abs(across) <= depth * m.tanH && Math.abs(along) <= depth * m.tanV;
 }
 
-/** How the driver sees points, past the layout's `occluders` and the combination's own bodies: the snapshot's bodies and mirrors are read once for any number of points. */
+/** How the driver sees points, past the layout's `occluders` and the rig's own bodies (the truck alone when solo): the snapshot's bodies and mirrors are read once for any number of points. */
 export function sightField(
   g: SightGeometry,
   s: Bodies,
@@ -254,7 +254,7 @@ export function sightField(
   };
 }
 
-/** How the driver sees world point `p`, past the layout's `occluders` and the combination's own bodies. */
+/** How the driver sees world point `p`, past the layout's `occluders` and the rig's own bodies (the truck alone when solo). */
 export const pointSight = (
   g: SightGeometry,
   s: Bodies,
