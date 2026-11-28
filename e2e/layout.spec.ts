@@ -1477,7 +1477,7 @@ const paneToolAbsentIds: readonly ExerciseId[] = [
   'dock-ramp',
   'slalom',
 ];
-// Measured: the counters (74 px) reach the corner, except under the German coupling card.
+// The counters cover the free camera's corner under these cards (#607).
 const paneToolAbsent = (at: string, id: ExerciseId): boolean =>
   at.endsWith(' 800x585') &&
   (paneToolAbsentIds.includes(id) || (id === 'coupling' && at.startsWith('en-US')));
