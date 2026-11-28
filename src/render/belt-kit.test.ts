@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { KIT_FOOTPRINTS } from '../content/kit';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { beltKitDecor } from './belt-kit';
 import { kitStandInGeometry } from './kit-stand-ins';
+import { YARD_KIT_DIMS } from './yard-kit-dims';
 import { CLEARANCE, FRONT_BAY, REACH, sceneryBuildings, shell } from './skyline-layout';
 
 const FACADES = new Set(['hall-wall-bay', 'hall-door-bay', 'office-bay', 'office-entrance']);
@@ -59,12 +61,14 @@ describe.each(Object.values(layouts))('the belt in the kit: $id', (layout) => {
     expect(kitStandInGeometry(decor)).not.toBeNull();
   });
 
-  it('leaves the skyline a box inside each first-row building, below its roof', () => {
+  it('leaves the skyline a box behind the facade and inside the roof slab', () => {
     for (const b of front) {
+      const office = b.kind === 'office';
+      const wall = KIT_FOOTPRINTS[office ? 'office-bay' : 'hall-wall-bay'].min[1];
+      const slab = office ? YARD_KIT_DIMS.office.roofThickness : YARD_KIT_DIMS.hall.roofThickness;
       const inner = shell(b);
-      expect(inner.length).toBeLessThan(b.length);
-      expect(inner.depth).toBeLessThan(b.depth);
-      expect(inner.height).toBeLessThan(b.height);
+      expect((b.depth - inner.depth) / 2).toBeGreaterThan(-wall);
+      expect(b.height - inner.height).toBeLessThan(slab);
     }
     for (const b of scenery.filter((o) => o.front !== true)) expect(shell(b)).toBe(b);
   });
