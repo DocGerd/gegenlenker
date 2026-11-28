@@ -313,8 +313,6 @@ export const de: Record<MessageKey, string> = {
   lockHint: 'P oder Esc gibt die Maus frei',
   signKeys: 'Handzeichen (halten)',
   signLeftRight: 'Links / Rechts fahren',
-  signSteerLittle: 'Etwas links / rechts lenken',
-  signSteerFull: 'Voll links / rechts einschlagen',
   signMouse: 'Herkommen / Entfernen',
   keyShift: 'Umschalt',
   keyMouse: 'Maus',

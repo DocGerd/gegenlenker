@@ -214,13 +214,12 @@ describe('the Einweiser keys', () => {
     ]);
   });
 
-  it('lists the steering keys in place of Links/Rechts fahren', () => {
-    const descs = (mode: 'tail' | 'steering'): unknown[] =>
-      legendRows(false, false, 'einweiser', false, mode).map((r) => r.desc);
-    expect(descs('tail')).toContain('signLeftRight');
-    expect(descs('steering')).not.toContain('signLeftRight');
-    expect(descs('steering')).toEqual(
-      expect.arrayContaining(['signSteerFull', 'signSteerLittle', 'signLenkenGerade']),
+  it('lists the steering keys in the sign keys row, in place of Links/Rechts fahren', () => {
+    const terms = (mode: 'tail' | 'steering'): unknown[] =>
+      legendRows(false, false, 'einweiser', false, mode).map((r) => r.term);
+    const tail = terms('tail');
+    expect(terms('steering')).toEqual(
+      tail.filter((t) => t !== 'Q / E').map((t) => (t === '1–9' ? '1–9 · Q E X' : t)),
     );
   });
 

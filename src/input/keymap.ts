@@ -122,6 +122,8 @@ type LegendSpec = {
   readonly couplingOnly?: boolean;
   /** Replaces term and desc where the outside view exists. */
   readonly withChase?: { readonly term: LegendTerm; readonly desc: MessageKey };
+  /** Listed only in these signalling modes; in every mode when absent. */
+  readonly modes?: readonly SignallingMode[];
 };
 
 export type Binding = {
@@ -213,8 +215,10 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     action: 'signAchtung',
     match: { by: 'code', values: ['Digit1', 'Numpad1'] },
     scope: 'sign',
-    legend: { term: '1–9', desc: 'signKeys', roles: EINWEISER },
+    legend: { term: '1–9', desc: 'signKeys', roles: EINWEISER, modes: TAIL },
   },
+  // the sign bar names every key under its sign, so the steering keys share one row
+  { legend: { term: '1–9 · Q E X', desc: 'signKeys', roles: EINWEISER, modes: STEERING } },
   {
     action: 'signHalt',
     match: { by: 'code', values: ['Digit2', 'Numpad2', 'Space'] },
@@ -244,7 +248,6 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     match: { by: 'code', values: ['Digit7', 'Numpad7'] },
     scope: 'sign',
     modes: STEERING,
-    legend: { term: '7 / 8', desc: 'signSteerFull', roles: EINWEISER },
   },
   {
     action: 'signLenkenRechtsVoll',
@@ -258,7 +261,6 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     match: { by: 'code', values: ['KeyQ'] },
     scope: 'sign',
     modes: STEERING,
-    legend: { term: 'Q / E', desc: 'signSteerLittle', roles: EINWEISER },
   },
   {
     action: 'signLenkenRechts',
@@ -271,7 +273,6 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     match: { by: 'code', values: ['KeyX'] },
     scope: 'sign',
     modes: STEERING,
-    legend: { term: 'X', desc: 'signLenkenGerade', roles: EINWEISER },
   },
   { legend: { term: { key: 'keyMouseButtons' }, desc: 'signMouse', roles: EINWEISER } },
   // His sight areas in his own view; the pause sheet's row names the key, not the legend
@@ -384,6 +385,7 @@ export function legendRows(
   return KEYMAP.filter((entry) => !hasMatch(entry) || inMode(entry, mode)).flatMap(
     ({ legend: spec }) => {
       if (spec === undefined || !(spec.roles ?? DRIVER).includes(role)) return [];
+    if (!inMode(spec, mode)) return [];
       if ((spec.chaseOnly === true && !chase) || (spec.lookOnly === true && !look)) return [];
       if (spec.couplingOnly === true && !coupling) return [];
       const { term, desc } = chase && spec.withChase !== undefined ? spec.withChase : spec;

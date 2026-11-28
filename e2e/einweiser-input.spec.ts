@@ -95,7 +95,7 @@ test('the setup offers him steering signals, and they give the steering signs an
   const bar = page.locator('[data-hud="signBar"]');
   await expect(bar.locator('.hud-sign')).toHaveCount(12);
   await expect(bar.locator('[data-sign="links"]')).toHaveCount(0);
-  await expect(page.locator('[data-hud="keys"]')).toContainText(en.signSteerFull);
+  await expect(page.locator('[data-hud="keys"]')).toContainText('1–9 · Q E X');
   await page.keyboard.down('KeyQ');
   await expect.poll(async () => (await shown(page)).sign).toBe('lenkenLinks');
   await expect(bar.locator('[data-sign="lenkenLinks"]')).toHaveAttribute('aria-current', 'true');

@@ -308,8 +308,6 @@ export const en = {
   lockHint: 'P or Esc releases the mouse',
   signKeys: 'Hand signal (hold)',
   signLeftRight: 'Move left / right',
-  signSteerLittle: 'Steer left / right a little',
-  signSteerFull: 'Full lock left / right',
   signMouse: 'Come here / Move away',
   keyShift: 'Shift',
   keyMouse: 'Mouse',
