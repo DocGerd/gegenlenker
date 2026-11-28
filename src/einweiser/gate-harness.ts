@@ -259,7 +259,7 @@ const trailerYaw = (p: RigParams, s: SimSnapshot): number =>
     ? -Math.sin(s.turntableAngle) / p.trailerWheelbase
     : -Math.tan(s.roadWheelAngle) / p.wheelbase;
 
-/** Length scale (m) of the reverse tracking LQR: how far the rear takes to close on the path; the truck solo needs a shorter one (#595). */
+/** Length scale (m) of the reverse tracking LQR: a solo truck sets its rear curvature directly by steering, while a trailer's builds up through the turntable. */
 const TRACK_LENGTH = { trailer: 6, solo: 1.5 } as const;
 const rigKind = (p: RigParams): keyof typeof TRACK_LENGTH => (hasTrailer(p) ? 'trailer' : 'solo');
 /** Each sign is judged this long (s) after it would act. */
