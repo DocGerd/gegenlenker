@@ -18,8 +18,10 @@ export const driveLegendRows = (opts: {
   readonly look: boolean;
   readonly mirrorsOnly: boolean;
   readonly role?: Role;
+  /** The exercise couples: lists the uncouple key. */
+  readonly coupling?: boolean;
 }): LegendRow[] =>
-  legendRows(opts.chase, opts.look, opts.role).filter(
+  legendRows(opts.chase, opts.look, opts.role, opts.coupling).filter(
     (row) => !(opts.mirrorsOnly && TOP_DOWN_ROWS.includes(row.desc)),
   );
 

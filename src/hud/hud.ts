@@ -279,8 +279,14 @@ const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
 const sightButton = (flag: keyof SightFlags, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-chip" data-sight="${flag}" aria-describedby="sight-meaning-${flag}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
-const keyRows = (chase: boolean, look: boolean, mirrorsOnly: boolean, role: Role): string =>
-  driveLegendRows({ chase, look, mirrorsOnly, role }).map(legendRowMarkup).join('');
+const keyRows = (
+  chase: boolean,
+  look: boolean,
+  mirrorsOnly: boolean,
+  role: Role,
+  coupling: boolean,
+): string =>
+  driveLegendRows({ chase, look, mirrorsOnly, role, coupling }).map(legendRowMarkup).join('');
 
 /** Only a combination's driver has gauges to fold. */
 const panelButtons = (gauged: boolean): string =>
@@ -317,7 +323,7 @@ const MARKUP = (
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl data-hud="keys">
-        ${keyRows(chase, look === true, mirrorsOnly, role)}
+        ${keyRows(chase, look === true, mirrorsOnly, role, hitch)}
       </dl>
     </div>
     <div class="hud-band" data-hud="band">
@@ -1137,7 +1143,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       chaseOffered = next.chase;
       syncChaseOffer();
       hud.toggleAttribute('data-interior', next.interior);
-      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly, role);
+      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly, role, opts.hitch === true);
       applyMessages(keysList);
       if (!chaseOffered && view === 'chase') selectView(lastOther);
       else syncToggles();
