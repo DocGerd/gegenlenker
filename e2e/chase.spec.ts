@@ -134,17 +134,3 @@ test('Low graphics offers no free camera and ignores its key', async ({ page }) 
   await page.keyboard.press('k');
   await expect(page.locator('[data-view="follow"]')).toHaveAttribute('aria-pressed', 'true');
 });
-
-test('the chase view frames the parked trailer too while the truck is uncoupled, without errors', async ({
-  page,
-}) => {
-  await page.goto('./?framing=1');
-  await startExercise(page, en, 'coupling');
-  await page.locator('[data-view="chase"]').click();
-  await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
-  // drive away from the trailer: the pivot stays between the two bodies
-  await page.keyboard.press('4');
-  for (let i = 0; i < 4; i++) await page.keyboard.press('w');
-  await page.waitForTimeout(1500);
-  await expect(page.locator('[data-hud="hitch"]')).toHaveText(en.notCoupled);
-});

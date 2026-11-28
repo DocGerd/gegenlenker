@@ -15,7 +15,7 @@ import {
   type TopDownView,
 } from '../contracts/render';
 import { isKitDecor } from '../contracts/layout';
-import type { ControlVector, Obb, ParkedTrailer, Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
+import type { ControlVector, Obb, ParkedTrailer, Pose2, SimSnapshot } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { coupling } from '../content/exercises/coupling';
 import { drawnFootprints } from '../sim/hitch';
@@ -40,6 +40,7 @@ import {
   placeChaseCamera,
   uncoupledGround,
   vehicleCentre,
+  type UncoupledGround,
   type ChaseFrame,
   type ChaseRig,
 } from './chase-camera';
@@ -413,6 +414,13 @@ describe('chase camera', () => {
   });
 });
 
+/** Where the camera's optical axis meets the aim height: the pivot it orbits. */
+const pivotOf = (camera: PerspectiveCamera, rig: Posed['rig']): Vector3 => {
+  const direction = camera.getWorldDirection(new Vector3());
+  const t = (aimOf(rig).y - camera.position.y) / direction.y;
+  return camera.position.clone().addScaledVector(direction, t);
+};
+
 describe('chase camera while uncoupled', () => {
   const run = (t: number, r: number) => {
     const truck = trucks[t];
@@ -435,7 +443,7 @@ describe('chase camera while uncoupled', () => {
     brake: false,
     gear,
   });
-  const rigOf = (truck: TruckSpec, s: SimSnapshot, ground: readonly Vec2[] | undefined) => {
+  const rigOf = (truck: TruckSpec, s: SimSnapshot, ground: UncoupledGround | undefined) => {
     const face = cabFront(truck);
     return {
       truck: s.truck,
@@ -502,24 +510,60 @@ describe('chase camera while uncoupled', () => {
     },
   );
 
-  it('keeps the eye within the cap however far the truck drives from the trailer', () => {
-    const { truck, sim, reach } = run(0, 0);
+  it('keeps the eye within the cap and the truck in frame however far it drives from the trailer', () => {
+    const { truck, params, sim, reach } = run(0, 0);
     const start = sim.snapshot();
-    for (const gap of [0, 10, 40, 120, 400]) {
-      const s = { ...start, truck: { ...start.truck, x: start.truck.x + gap } };
+    const gapped = (gap: number): SimSnapshot => ({
+      ...start,
+      truck: { ...start.truck, x: start.truck.x + gap },
+    });
+    for (const gap of [0, 10, 40, 80, 120, 400]) {
+      const s = gapped(gap);
       const rig = rigOf(truck, s, uncoupledGround(s, reach));
-      const aim = aimOf(rig);
+      const own = drawnFootprints(params, s)[0]?.obb as Obb;
       for (const frame of FRAMES) {
         for (const zoom of ZOOMS) {
           for (const panX of YAWS) {
+            const label = `gap ${gap} ${frame.width}x${frame.height} zoom ${zoom} yaw ${panX}`;
             const camera = place(rig, frame, { zoom, panX, panY: 0 });
-            expect(
-              camera.position.distanceTo(aim),
-              `gap ${gap} zoom ${zoom} yaw ${panX}`,
-            ).toBeLessThanOrEqual(CHASE_MAX_DISTANCE + 1e-9);
+            expect(camera.position.distanceTo(pivotOf(camera, rig)), label).toBeLessThanOrEqual(
+              CHASE_MAX_DISTANCE + 1e-9,
+            );
+            if (zoom !== 1 || panX !== YAWS[0]) continue;
+            const frustum = new Frustum().setFromProjectionMatrix(
+              new Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
+            );
+            for (const a of [-1, 1]) {
+              for (const b of [-1, 1]) {
+                const cos = Math.cos(own.heading);
+                const sin = Math.sin(own.heading);
+                const x = own.cx + a * own.halfLength * cos - b * own.halfWidth * sin;
+                const y = own.cy + a * own.halfLength * sin + b * own.halfWidth * cos;
+                expect(frustum.containsPoint(new Vector3(x, 0, -y)), `${label} ${x},${y}`).toBe(
+                  true,
+                );
+              }
+            }
           }
         }
       }
+    }
+  });
+
+  it('moves smoothly as the pivot slides from the pair to the truck', () => {
+    const { truck, sim, reach } = run(0, 0);
+    const start = sim.snapshot();
+    const frame = FRAMES[3] as ChaseFrame;
+    let last: Vector3 | null = null;
+    for (let gap = 0; gap <= 250; gap += 0.25) {
+      const s = { ...start, truck: { ...start.truck, x: start.truck.x + gap } };
+      const position = place(
+        rigOf(truck, s, uncoupledGround(s, reach)),
+        frame,
+        DEFAULT_TOP_DOWN_VIEW,
+      ).position;
+      if (last !== null) expect(position.distanceTo(last), `gap ${gap}`).toBeLessThan(1);
+      last = position.clone();
     }
   });
 
