@@ -95,10 +95,13 @@ test('the replay slider announces the visible time', async ({ page }) => {
   await page.getByRole('button', { name: en.replay }).click();
   const scrubber = page.getByRole('slider', { name: en.timeline });
   await expect(scrubber).toBeVisible();
-  await page.getByRole('button', { name: en.pause }).click();
+  // The replay plays at once and a short run may already have ended: seeking to the end pauses it either way.
+  const max = (await scrubber.getAttribute('max')) ?? '0';
+  await scrubber.fill(max);
+  await expect(page.getByRole('button', { name: en.play })).toBeVisible();
   const time = page.locator('.replay-time');
   await expect(time).toHaveText(/ \/ /);
-  await scrubber.fill(String(Math.round(Number(await scrubber.getAttribute('max')) / 2)));
+  await scrubber.fill(String(Math.round(Number(max) / 2)));
   await expect
     .poll(async () => {
       const [valuetext, label] = [
