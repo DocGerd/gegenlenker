@@ -566,8 +566,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     freeCamera.toggleAttribute('data-covered', shortScreen && (keysOpen || aidOpen));
   };
   /**
-   * The button stands over the pane's bottom edge, in the divider's reserve. Where the panels reach that
-   * edge (a window too small for the divider) it has no corner, so it stays away; K still toggles.
+   * The button stands over the pane's bottom edge, in the divider's reserve, or at the pane's own edge
+   * where no divider is shown. Where the panels still reach it, it has no corner, so it stays away; K still toggles.
    */
   const fitFreeCamera = (): void => {
     if (freeCamera === null) return;
@@ -1086,6 +1086,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         paneTools.style.top = `${td.y}px`;
         paneTools.style.width = `${td.width}px`;
         paneTools.style.height = `${td.height}px`;
+        // Without a divider there is no strip to stand beside.
+        paneTools.toggleAttribute('data-flush', split.hidden === true);
         fitFreeCamera();
       }
       if (c) {

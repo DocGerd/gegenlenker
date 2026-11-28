@@ -815,6 +815,11 @@
   .hud-topdown[data-reserve] .hud-info {
     padding-right: calc(var(--space-4) + var(--size-target) * 1.5 + var(--space-3));
   }
+
+  /* The short pane's counters stand tall beside the free camera button's corner: they keep only the lever column's own width, so they leave that corner. */
+  .hud-topdown[data-short][data-reserve] .hud-info {
+    padding-right: calc(var(--size-target) * 1.5 + var(--space-3));
+  }
 }
 
 .hud-gauge {
@@ -1176,6 +1181,12 @@
   align-items: flex-end;
   padding: 0 0 calc(var(--space-4) + var(--safe-bottom)) calc(var(--size-target) + var(--space-2));
   pointer-events: none;
+}
+
+@media (min-aspect-ratio: 1/1) {
+  .hud-pane-tools[data-flush] {
+    padding-left: var(--space-4);
+  }
 }
 
 @media not (min-aspect-ratio: 1/1) {
