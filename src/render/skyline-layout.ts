@@ -1,6 +1,7 @@
 import { KIT_FOOTPRINTS } from '../content/kit';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import { CAMERA_FAR } from './seams';
+import { YARD_KIT_DIMS } from './yard-kit-dims';
 
 export type RoofKind = 'flat' | 'shed' | 'gable' | 'sawtooth';
 export type BuildingKind =
@@ -216,7 +217,7 @@ const BELT_KINDS: readonly (BuildingKind | 'trees')[] = [
 /** Splits the belt's stream from the rings', so the rings stay as they are. */
 const BELT_STREAM = 0x2c1b3c6d;
 /** Bay of the kit's hall and office facades: the belt's first row is built from whole bays. */
-export const FRONT_BAY = { hall: 5, office: 3 } as const;
+export const FRONT_BAY = { hall: YARD_KIT_DIMS.hall.bay, office: YARD_KIT_DIMS.office.bay };
 /** The kit's own heights, so a first-row building is as tall as its facade. */
 const FRONT_HEIGHT = {
   hall: KIT_FOOTPRINTS['hall-roof'].height,

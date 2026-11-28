@@ -3,6 +3,7 @@ import { KIT_FOOTPRINTS } from '../content/kit';
 import { exercises, layouts } from '../content/registry';
 import { resolveLayout } from '../content/resolve-layout';
 import { beltKitDecor } from './belt-kit';
+import { chaseColliders } from './chase-camera';
 import { kitStandInGeometry } from './kit-stand-ins';
 import { YARD_KIT_DIMS } from './yard-kit-dims';
 import { CLEARANCE, FRONT_BAY, REACH, sceneryBuildings, shell } from './skyline-layout';
@@ -61,6 +62,24 @@ describe.each(Object.values(layouts))('the belt in the kit: $id', (layout) => {
     expect(kitStandInGeometry(decor)).not.toBeNull();
   });
 
+  it('keeps the chase eye out of the facade and the entrance canopy', () => {
+    const colliders = chaseColliders(resolved);
+    for (const piece of ['office-entrance', 'office-bay', 'hall-door-bay'] as const) {
+      const placed = decor.filter((d) => d.piece === piece);
+      expect(placed.length, piece).toBeGreaterThan(0);
+      for (const d of placed) {
+        const held = colliders.some(
+          (c) =>
+            c.height >= KIT_FOOTPRINTS[piece].height &&
+            Math.abs(c.obb.cx - d.footprint.cx) < 1e-9 &&
+            Math.abs(c.obb.cy - d.footprint.cy) < 1e-9 &&
+            c.obb.halfWidth >= d.footprint.halfWidth,
+        );
+        expect(held, d.id).toBe(true);
+      }
+    }
+  });
+
   it('leaves the skyline a box behind the facade and inside the roof slab', () => {
     for (const b of front) {
       const office = b.kind === 'office';
@@ -68,6 +87,7 @@ describe.each(Object.values(layouts))('the belt in the kit: $id', (layout) => {
       const slab = office ? YARD_KIT_DIMS.office.roofThickness : YARD_KIT_DIMS.hall.roofThickness;
       const inner = shell(b);
       expect((b.depth - inner.depth) / 2).toBeGreaterThan(-wall);
+      expect(b.height - inner.height).toBeGreaterThan(0);
       expect(b.height - inner.height).toBeLessThan(slab);
     }
     for (const b of scenery.filter((o) => o.front !== true)) expect(shell(b)).toBe(b);

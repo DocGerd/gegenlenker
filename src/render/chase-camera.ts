@@ -8,6 +8,7 @@ import {
   type TopDownView,
 } from '../contracts/render';
 import { KIT_FOOTPRINTS } from '../content/kit';
+import { beltKitDecor } from './belt-kit';
 import { isKitDecor, type KitPiece, type Obstacle, type ResolvedLayout } from '../contracts/layout';
 import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
@@ -183,12 +184,13 @@ export type ChaseCollider = Pick<Obstacle, 'obb' | 'height'>;
 export function chaseColliders(
   layout: Pick<ResolvedLayout, 'obstacles' | 'decor' | 'bounds' | 'surfaces'>,
 ): readonly ChaseCollider[] {
-  const solids = layout.decor.flatMap((d) =>
+  const buildings = sceneryBuildings(layout);
+  const solids = [...layout.decor, ...beltKitDecor(buildings)].flatMap((d) =>
     isKitDecor(d) && SOLID_DECOR.has(d.piece)
       ? [{ obb: d.footprint, height: KIT_FOOTPRINTS[d.piece].height }]
       : [],
   );
-  const scenery = sceneryBuildings(layout)
+  const scenery = buildings
     .filter((b) => WALLED.has(b.kind))
     .map((b) => ({
       obb: {
