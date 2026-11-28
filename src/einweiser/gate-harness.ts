@@ -431,7 +431,7 @@ type Act = { readonly keys: WalkKeys; readonly heading: number; readonly sign: S
 const NO_KEYS: WalkKeys = { forward: false, back: false, left: false, right: false, jog: false };
 
 /** Keys that walk him toward `to`, in his facing frame. */
-function keysToward(w: Walker, to: Vec2, jog: boolean): WalkKeys {
+export function keysToward(w: Walker, to: Vec2, jog: boolean): WalkKeys {
   const [dx, dy] = [to.x - w.x, to.y - w.y];
   const d = Math.hypot(dx, dy);
   const speed = Math.hypot(w.vx, w.vy);
