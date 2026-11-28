@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SIGN_IDS } from '../contracts/einweiser';
 import { handPoint, SIGN_POSES } from '../einweiser/sign-poses';
-import { armLines } from './sign-pictogram';
+import { armLines, signPictogram, steerCue } from './sign-pictogram';
 
 const hand = (sign: 'achtung' | 'rechts', side: 0 | 1) => {
   const key = SIGN_POSES[sign].keys[0];
@@ -37,5 +37,25 @@ describe('armLines', () => {
         });
       }
     }
+  });
+});
+
+describe('steerCue', () => {
+  it('marks each steering sign its own way and no other sign', () => {
+    const steering = [
+      'lenkenLinks',
+      'lenkenLinksVoll',
+      'lenkenGerade',
+      'lenkenRechts',
+      'lenkenRechtsVoll',
+    ] as const;
+    const cues = steering.map(steerCue);
+    expect(new Set(cues).size).toBe(steering.length);
+    for (const sign of SIGN_IDS.filter((s) => !(steering as readonly string[]).includes(s)))
+      expect(steerCue(sign), sign).toBe('');
+    // full lock sweeps the long way round
+    expect(steerCue('lenkenLinksVoll')).toMatch(/A0\.32 0\.32 0 1 1/);
+    expect(steerCue('lenkenRechts')).toMatch(/A0\.32 0\.32 0 0 0/);
+    expect(new Set(SIGN_IDS.map(signPictogram)).size).toBe(SIGN_IDS.length);
   });
 });
