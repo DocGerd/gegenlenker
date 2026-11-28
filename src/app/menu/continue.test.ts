@@ -29,6 +29,9 @@ describe('continueEntry', () => {
     expect(continueEntry(ex('reverse-bay'), [])).toEqual(ex('reverse-bay'));
     expect(continueEntry(ex('reverse-bay'), ['reverse-bay'])).toEqual(ex('reverse-corner'));
     expect(continueEntry(ex('reverse-bay'), ['reverse-bay', 'reverse-corner'])).toEqual(
+      ex('coupling'),
+    );
+    expect(continueEntry(ex('reverse-bay'), ['reverse-bay', 'reverse-corner', 'coupling'])).toEqual(
       ex('dock-ramp'),
     );
   });
@@ -39,9 +42,9 @@ describe('continueEntry', () => {
   });
 
   it('skips a done exercise only by looking forward, not back', () => {
-    expect(continueEntry(ex('reverse-corner'), ['reverse-corner', 'dock-ramp'])).toEqual(
-      ex('slalom'),
-    );
+    expect(
+      continueEntry(ex('reverse-corner'), ['reverse-corner', 'coupling', 'dock-ramp']),
+    ).toEqual(ex('slalom'));
   });
 
   it('keeps the last exercise when all are done', () => {

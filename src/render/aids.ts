@@ -456,7 +456,8 @@ export function proceduralAids(
         stopBar.flush(1);
       }
 
-      pivots.object.visible = aids.pivots && trailer !== null;
+      // uncoupled, no joint to show
+      pivots.object.visible = aids.pivots && trailer !== null && s.hitch?.coupled !== false;
       if (pivots.object.visible) {
         // rearward centre lines of the two bodies at each pivot; the angle between them is the pivot angle
         pivotSlot = 0;

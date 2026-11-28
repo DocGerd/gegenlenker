@@ -10,6 +10,8 @@ export type InputState = {
   /** Lamp switches: not part of the control vector, so the sim and the input log never see them. */
   lights: boolean;
   hazard: boolean;
+  /** Pending until the next control vector carries it, for one sim step. */
+  uncouple: boolean;
 };
 
 export const LEVER_STEP = 0.1;
@@ -25,7 +27,16 @@ export const CENTRED_ENTER_DEG = 6;
 export const CENTRED_LEAVE_DEG = 8;
 
 export function createInputState(lights = false): InputState {
-  return { steer: 0, lever: 0, brake: false, gear: 'P', resetting: false, lights, hazard: false };
+  return {
+    steer: 0,
+    lever: 0,
+    brake: false,
+    gear: 'P',
+    resetting: false,
+    lights,
+    hazard: false,
+    uncouple: false,
+  };
 }
 
 export function clamp(value: number, min: number, max: number): number {
@@ -105,5 +116,6 @@ export function toControlVector(s: InputState): ControlVector {
     lever: clamp(s.lever, 0, 1),
     brake: s.brake,
     gear: s.gear,
+    ...(s.uncouple ? { uncouple: true as const } : {}),
   };
 }

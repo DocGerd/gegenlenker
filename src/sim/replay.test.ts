@@ -65,6 +65,41 @@ describe('replay', () => {
     expect(replayed).toEqual(live);
   });
 
+  it('a coupling run replays identically, the uncouple pulse included', () => {
+    const parked: StartState = {
+      truck: { x: 5, y: 0, heading: 0 },
+      parked: {
+        trailer: { eye: { x: 0, y: 0 }, heading: 0, turntable: 0 },
+        jaw: { width: 0.05, angle: 0.1 },
+      },
+    };
+    const hitching = (i: number): ControlVector => {
+      if (i < 1500) return ctl({ lever: 0.2, gear: 'R' });
+      if (i < 1800) return ctl({ lever: 0.6 });
+      if (i < 1900) return ctl({ brake: true });
+      if (i === 1900) return ctl({ brake: true, uncouple: true });
+      return ctl({ lever: 0.6 });
+    };
+    const sim = createSimulation(params, parked, contacts);
+    const recorder = createInputRecorder();
+    const live: SimSnapshot[] = [];
+    for (let i = 0; i < 2200; i++) {
+      const control = hitching(i);
+      recorder.record(sim.snapshot().step, control);
+      live.push(sim.step(control));
+    }
+    expect(live.map((s) => s.hitch?.coupled)).toContain(true);
+    expect(live[live.length - 1]?.hitch?.coupled).toBe(false);
+    const fingerprint = (): string => 'data-a';
+    const log = parseInputLog(
+      serializeInputLog(recorder.finish(recorded, sim.snapshot().step), fingerprint),
+      fingerprint,
+    );
+    expect(log?.changes.filter((c) => c.control.uncouple === true)).toHaveLength(1);
+    if (log === null) throw new Error('log expected to load');
+    expect(replaySnapshots(log, createSimulation(params, parked, contacts))).toEqual(live);
+  });
+
   it('scrubbing to a step yields the state playing reaches', () => {
     const sim = createSimulation(params, start, contacts);
     const recorder = createInputRecorder();
@@ -142,6 +177,13 @@ describe('replay', () => {
     expect(parse(json({ ...valid, truckId: 'scania-r' }))).toBeNull();
     expect(parse(json({ ...valid, steps: -1 }))).toBeNull();
     expect(parse(json({ ...valid, changes: [...valid.changes].reverse() }))).toBeNull();
+    const pulse = (uncouple: unknown) => ({
+      ...valid,
+      changes: [{ step: 0, control: { ...ctl({}), uncouple } }],
+    });
+    expect(parse(json(pulse(false)))).toBeNull();
+    expect(parse(json(pulse('yes')))).toBeNull();
+    expect(parse(json(pulse(true)))?.changes[0]?.control.uncouple).toBe(true);
     expect(parse(json(valid))).toEqual(valid);
     expect(parse(json({ ...valid, exerciseId: null }))).toEqual({
       ...valid,
@@ -270,6 +312,20 @@ describe('replay', () => {
       einweiser: { samples: [{ step: 0, x: 0, y: 0, heading: 0, pitch: 0 }], signs: [] },
     };
     expect(parseInputLog(serializeInputLog(guided, fingerprint), fingerprint)).toEqual(guided);
+  });
+
+  it('drops a log whose ids resolve to no run', () => {
+    const refused = (): string => {
+      throw new Error('a coupling run is driven, with a trailer');
+    };
+    const raw = JSON.stringify({
+      version: 4,
+      ...recorded,
+      steps: 1,
+      changes: [],
+      fingerprint: 'x',
+    });
+    expect(parseInputLog(raw, refused)).toBeNull();
   });
 
   it('accepts a log only for the data that produced it', () => {

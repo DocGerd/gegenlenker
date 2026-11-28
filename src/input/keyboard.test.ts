@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createKeyboard, type Keyboard } from './keyboard';
-import { LEVER_HOLD_DELAY, createInputState, type InputState } from './mapping';
+import { LEVER_HOLD_DELAY, createInputState, toControlVector, type InputState } from './mapping';
 
 class FakeElement {
   tagName = 'DIV';
@@ -97,6 +97,12 @@ describe('keyboard', () => {
     down('KeyH');
     expect([state.lights, state.hazard]).toEqual([false, true]);
     expect(state.lever).toBe(0);
+  });
+
+  it('asks to uncouple on U, which the next control vector carries', () => {
+    expect(toControlVector(state)).not.toHaveProperty('uncouple');
+    expect(down('KeyU')).toBe(true);
+    expect(toControlVector(state)).toMatchObject({ uncouple: true });
   });
 
   it('keeps steering and resetting on key-repeat', () => {

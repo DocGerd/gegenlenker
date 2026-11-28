@@ -44,7 +44,9 @@ export type HudAction =
   /** The exercise brief opened or collapsed, which changes the height of the panels. */
   | { type: 'brief' }
   /** The button opening the pause sheet. */
-  | { type: 'pause' };
+  | { type: 'pause' }
+  /** The uncouple button of a coupling run. */
+  | { type: 'uncouple' };
 
 export type Hud = {
   /** `ahead` is the first warning stage: the held steer leads into a contact or limit stop soon. */
@@ -105,6 +107,8 @@ export type HudOptions = PivotOptions & {
   mirrorsOnly?: boolean;
   /** The stop button and lever column, which the toolbar stays clear of; absent where there are no controls. */
   pedalsBox?: () => DOMRect;
+  /** A coupling run: the goal card's head holds the uncouple button, which shows whether the truck is coupled. */
+  hitch?: boolean;
   /**
    * Whose key legend it lists, the driver's when absent. The Einweiser's band holds the sign bar, and
    * the sight cue takes the cockpit label's place; he has no gear or speed readout, no gauges and no
@@ -239,6 +243,10 @@ const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l
 const INFO_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>';
 
+/** A link of two halves: the bar between them shows while the truck is coupled. */
+const HITCH_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7H7a5 5 0 0 0 0 10h3M14 7h3a5 5 0 0 1 0 10h-3" /><path class="hud-uncouple-bar" d="M8 12h8" /></svg>';
+
 const RESET_VIEW_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 3v4M12 17v4M3 12h4M17 12h4" /></svg>';
 
@@ -298,6 +306,7 @@ const MARKUP = (
   mirrorsOnly: boolean,
   role: Role,
   solo: boolean,
+  hitch: boolean,
   driver = role === 'driver',
   gauged = driver && !solo,
   aids = solo ? SOLO_AIDS : AIDS,
@@ -322,7 +331,7 @@ const MARKUP = (
   <div class="hud-mirror" data-hud="front" hidden></div>
   <div class="hud-mirror" data-hud="close" hidden></div>
   <div class="hud-topdown" data-hud="topDown">
-    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
+    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div>${hitch && driver ? `<span class="hud-hitch" data-hud="hitch" role="status"></span><button type="button" class="hud-uncouple" data-hud="uncouple" aria-keyshortcuts="U" disabled>${HITCH_ICON}</button>` : ''}<button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
         <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${panelButtons(gauged)}</div>
@@ -399,7 +408,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const solo = 'solo' in opts;
   root.insertAdjacentHTML(
     'beforeend',
-    MARKUP(opts.mode, opts.chase, opts.look, opts.mirrorsOnly === true, role, solo),
+    MARKUP(
+      opts.mode,
+      opts.chase,
+      opts.look,
+      opts.mirrorsOnly === true,
+      role,
+      solo,
+      opts.hitch === true,
+    ),
   );
   const hud = query(root, 'root', HTMLElement);
   hud.dataset['role'] = role;
@@ -420,6 +437,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const speed = hud.querySelector<HTMLElement>('[data-hud="speed"]');
   const gearEl = hud.querySelector<HTMLElement>('[data-hud="gear"]');
   const arrow = hud.querySelector<HTMLElement>('[data-hud="targetArrow"]');
+  // a coupling run's alone
+  const hitchEl = hud.querySelector<HTMLElement>('[data-hud="hitch"]');
+  const uncouple = hud.querySelector<HTMLButtonElement>('[data-hud="uncouple"]');
   // the Einweiser's alone
   const sightBox = hud.querySelector<HTMLElement>('[data-hud="sight"]');
   const sightText = hud.querySelector<HTMLElement>('[data-hud="sightText"]');
@@ -771,6 +791,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   query(hud, 'action', HTMLElement).addEventListener('click', () => emit({ type: 'pause' }), {
     signal,
   });
+  if (uncouple !== null) {
+    uncouple.title = `${t('uncouple')} (U)`;
+    uncouple.setAttribute('aria-label', t('uncouple'));
+    uncouple.addEventListener('click', () => emit({ type: 'uncouple' }), { signal });
+  }
 
   const split = query(hud, 'split', HTMLElement);
   const splitReset = query(hud, 'splitReset', HTMLButtonElement);
@@ -848,6 +873,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     gearEl.dataset['gear'] = 'P';
   }
   let shownToast: MessageKey | null = null;
+  let shownCoupled: boolean | null = null;
   /** A gear other than P has been selected: the start hint is done. */
   let started = false;
   const bumps = new Map<HTMLElement, number>();
@@ -938,6 +964,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
       gauges?.coupling.set(s.couplingAngle);
       gauges?.turntable.set(s.turntableAngle);
+
+      if (hitchEl !== null && uncouple !== null) {
+        const coupled = s.hitch?.coupled === true;
+        if (coupled !== shownCoupled) {
+          shownCoupled = coupled;
+          hitchEl.textContent = t(coupled ? 'coupled' : 'notCoupled');
+          uncouple.toggleAttribute('data-coupled', coupled);
+        }
+        // the sim uncouples a standing truck only
+        const offered = coupled && s.speed === 0;
+        if (uncouple.disabled === offered) uncouple.disabled = !offered;
+      }
 
       const warning = toastFor(s, ahead, started, driver);
       const key = warning?.key ?? null;
