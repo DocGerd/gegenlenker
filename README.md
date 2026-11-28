@@ -25,7 +25,7 @@ pnpm dev        # dev server
 pnpm test       # unit tests
 pnpm test:gate  # Einweiser gate (advisory in CI; not in pnpm test)
 pnpm test:e2e   # Playwright offline check
-pnpm test:perf  # headless by default (HEADED=1 on WSL2), hardware GL, local only
+pnpm test:perf  # hardware GL, local only (WSL2: needs render group access)
 pnpm perf:tablet  # emulated tablet on the real GPU, local only (docs/perf.md)
 pnpm build
 pnpm verify     # lint, format, typecheck, unit and e2e tests

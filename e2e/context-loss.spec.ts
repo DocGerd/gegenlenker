@@ -82,7 +82,7 @@ test(
     await expect(html).toHaveAttribute('data-vehicle-pbr', 'on');
     await expect(html).toHaveAttribute('data-ground-texture', /^ktx2:/);
     await expect(html).toHaveAttribute('data-ground-pbr', /^ktx2:/);
-    // a loss during a load would warn and spend a retry
+    // a loss during a load would restart it
     await expect(html).toHaveAttribute('data-sky-hdri', 'on');
     await expect(html).toHaveAttribute('data-yard-kit', 'on');
     await page.evaluate(() => {

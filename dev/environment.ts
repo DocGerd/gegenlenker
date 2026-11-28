@@ -189,7 +189,7 @@ const tick = (now: number): void => {
   const aids: AidFlags = { ...aidState };
   const frame: RenderFrame = {
     snapshot,
-    views: computeViewports(width, height, 'drive'),
+    views: computeViewports(width, height, { mode: 'drive' }),
     topDown,
     aids,
     predicted: { ...NO_PREDICTION, lead: 'trailer', ...predictedCorridor(snapshot) },

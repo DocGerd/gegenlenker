@@ -52,7 +52,7 @@ export const PRESET_TIMEOUT_MS: Readonly<Record<Preset, number>> = {
 export const HIGH_WAIT_MS = 60_000;
 
 export const SETTINGS_KEY = 'gegenlenker.settings.v1';
-const FRAME_MS = 16;
+export const FRAME_MS = 16;
 /** Frames stepped after the scene is ready, so every lazily built resource is in place. */
 const SETTLE_FRAMES = 30;
 /** Wall-clock bound on each phase of `settle`, so a preset that never readies fails by name, not by the test timeout; High loads its KTX2 files one after another. */
@@ -97,14 +97,18 @@ const BACKEND_READY = (v: string): boolean => v !== '';
 export type MarkerChecks = Readonly<Record<string, (value: string) => boolean>>;
 
 /** The `<html>` markers whose values say `preset`'s asynchronous attachments are in place; a shot before they land would differ. */
-export function readyMarkers(preset: Preset, overrides: MarkerChecks = {}): MarkerChecks {
+export function readyMarkers(
+  preset: Preset,
+  overrides: MarkerChecks = {},
+  solo = false,
+): MarkerChecks {
   const flags = QUALITY_FLAGS[preset];
   const drawn = Object.values<Attachment>(ATTACHMENTS).filter((a) =>
     a.flags.every((f) => flags[f]),
   );
   return {
     'data-render-backend': BACKEND_READY,
-    ...Object.fromEntries(drawn.map((a) => [a.marker, a.ready])),
+    ...Object.fromEntries(drawn.map((a) => [a.marker, (v: string) => a.ready(v, solo)])),
     ...overrides,
   };
 }
@@ -281,7 +285,8 @@ async function attachments(
   preset: Preset,
   overrides?: MarkerChecks,
 ): Promise<{ ready: boolean; values: (string | null)[] }> {
-  const want = readyMarkers(preset, overrides);
+  const solo = (await page.locator('.drive[data-solo]').count()) > 0;
+  const want = readyMarkers(preset, overrides, solo);
   const values = await page.evaluate((names) => {
     const html = document.documentElement;
     return names.map((n) => html.getAttribute(n));

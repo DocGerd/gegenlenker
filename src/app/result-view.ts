@@ -12,9 +12,13 @@ import {
   type Deltas,
   type FaultBasis,
 } from '../scoring/debrief';
+import { COUPLING_SPEED } from '../scoring/score';
 import { EXERCISE_TITLE } from './exercise-text';
 import { ignoreHeldBrakeKeys } from './held-keys';
 import './results.css';
+
+const KMH = 3.6;
+const kmh = (speed: number): string => `${formatNumber(speed * KMH, 1)} km/h`;
 
 export type ResultActions = {
   /** Set after a reached run when a further exercise follows. */
@@ -191,6 +195,8 @@ export function showResult(
     header.append(element('p', 'result-reason', t('runOver')));
   } else if (result.waypointMissed) {
     header.append(element('p', 'result-reason', t('waypointMissed')));
+  } else if (!result.reached && result.coupling?.left === false) {
+    header.append(element('p', 'result-reason', t('trailerNotLeft')));
   } else if (endedMoving(result, exercise.tolerances)) {
     // an Einweiser run can stand in the target and still not end: it waits for a recognised Halt
     header.append(
@@ -227,15 +233,30 @@ export function showResult(
       }),
     );
   }
+  if (result.coupling !== undefined) {
+    const { speed } = result.coupling;
+    values.append(
+      // a fault like a contact, not a criterion of reaching the target
+      row('couplingSpeed', speed === null ? '–' : kmh(speed), {
+        limit: kmh(COUPLING_SPEED),
+        bad: speed !== null && speed > COUPLING_SPEED,
+      }),
+    );
+  }
   values.append(
     row('contacts', formatNumber(result.contacts, 0), {
       bad: result.contacts > 0,
       delta: delta('contacts', 0, ''),
     }),
-    row('jackknifes', formatNumber(result.jackknifes, 0), {
-      bad: result.jackknifes > 0,
-      delta: delta('jackknifes', 0, ''),
-    }),
+    // the truck solo has no limit stops
+    ...(result.trailerId === null
+      ? []
+      : [
+          row('jackknifes', formatNumber(result.jackknifes, 0), {
+            bad: result.jackknifes > 0,
+            delta: delta('jackknifes', 0, ''),
+          }),
+        ]),
     row('directionChanges', formatNumber(result.directionChanges, 0), {
       delta: delta('directionChanges', 0, ''),
     }),

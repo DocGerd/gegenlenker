@@ -1,19 +1,28 @@
 import type { ExerciseDefinition } from '../contracts/exercise';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { ContactQuery, StartState } from '../contracts/sim';
-import type { VehicleParams } from '../contracts/vehicle';
+import {
+  hasTrailer,
+  type RigParams,
+  type TrailerSpec,
+  type TruckSpec,
+  type VehicleParams,
+} from '../contracts/vehicle';
 import { einweiserScoring } from '../einweiser/fingerprint';
-import { SCORING_THRESHOLDS } from '../scoring/score';
+import { COUPLING_THRESHOLDS, SCORING_THRESHOLDS } from '../scoring/score';
 import { createContactQuery } from '../sim/collision';
-import { dataFingerprint } from '../sim/fingerprint';
+import { dataFingerprint, type RunData } from '../sim/fingerprint';
 import type { RunIds } from '../sim/replay';
 import { trailerById, truckById } from '../vehicles/registry';
-import { resolveCombination } from '../vehicles/resolve';
+import { resolveJaw, resolveRig } from '../vehicles/resolve';
 import { exerciseById, layouts } from './registry';
 import { resolveLayout } from './resolve-layout';
 
 export type ResolvedRun = {
-  readonly params: VehicleParams;
+  readonly truck: TruckSpec;
+  /** Null: the truck solo. */
+  readonly trailer: TrailerSpec | null;
+  readonly params: RigParams;
   readonly layout: ResolvedLayout;
   readonly exercise: ExerciseDefinition | null;
   readonly start: StartState;
@@ -25,17 +34,31 @@ export type ResolvedRun = {
 /** The single place that turns a run's ids into what drive, replay and storage simulate and hash. */
 export function resolveRun(ids: RunIds): ResolvedRun {
   const truck = truckById(ids.truckId);
-  const trailer = trailerById(ids.trailerId);
-  const params = resolveCombination(truck, trailer);
+  const trailer = ids.trailerId === null ? null : trailerById(ids.trailerId);
+  const params = resolveRig(truck, trailer);
   const exercise = ids.exerciseId === null ? null : exerciseById(ids.exerciseId);
   const layout = resolveLayout(layouts[ids.layoutId], exercise);
   const pose = exercise?.start ?? layouts[ids.layoutId].start;
-  const bend = exercise?.startArticulation;
-  const start: StartState =
+  const bend = trailer === null ? undefined : exercise?.startArticulation;
+  const parked = exercise?.parkedTrailer;
+  if (parked !== undefined && (trailer === null || ids.role !== 'driver'))
+    throw new Error('a coupling run is driven, with a trailer');
+  const jaw = parked === undefined ? undefined : resolveJaw(truck);
+  let start: StartState =
     bend === undefined
       ? { truck: pose }
       : { truck: pose, couplingAngle: bend.coupling, turntableAngle: bend.turntable };
+  if (parked !== undefined && jaw !== undefined)
+    start = { ...start, parked: { trailer: parked, jaw } };
+  // Driver runs hash exactly the driver thresholds, so their stored runs keep their fingerprints.
+  let scoring: RunData['scoring'] =
+    ids.role === 'einweiser'
+      ? { ...SCORING_THRESHOLDS, ...einweiserScoring(truck, trailer, layout) }
+      : SCORING_THRESHOLDS;
+  if (parked !== undefined) scoring = { ...scoring, ...COUPLING_THRESHOLDS };
   return {
+    truck,
+    trailer,
     params,
     layout,
     exercise,
@@ -46,11 +69,21 @@ export function resolveRun(ids: RunIds): ResolvedRun {
       obstacles: layout.obstacles,
       start: pose,
       exercise,
-      // Driver runs hash exactly the driver thresholds, so their stored runs keep their fingerprints.
-      scoring:
-        ids.role === 'einweiser'
-          ? { ...SCORING_THRESHOLDS, ...einweiserScoring(truck, trailer, layout) }
-          : SCORING_THRESHOLDS,
+      scoring,
+      ...(jaw === undefined ? {} : { jaw }),
     }),
   };
+}
+
+/** A run of the truck with its trailer. */
+export type PairedRun = ResolvedRun & {
+  readonly trailer: TrailerSpec;
+  readonly params: VehicleParams;
+};
+
+export function pairedRun(ids: RunIds): PairedRun {
+  const run = resolveRun(ids);
+  const { trailer, params } = run;
+  if (trailer === null || !hasTrailer(params)) throw new Error('a paired run has a trailer');
+  return { ...run, trailer, params };
 }

@@ -57,7 +57,7 @@ describe('runtime-cached texture assets', () => {
       'assets/cab-AbC12_x.glb',
       'assets/index-AbC12_x.js',
       'assets/index-AbC12_x.css',
-      'assets/ground.ktx2',
+      'assets/ground-AbC12_x.ktx2',
       'assets/sky-AbC12_x.png',
       'index.html',
     ]) {
@@ -116,7 +116,6 @@ describe('asset registry', () => {
       '**/asphalt-packed-*.ktx2',
       '**/concrete-albedo-*.ktx2',
       '**/concrete-packed-*.ktx2',
-      '**/ground-*.ktx2',
       '**/man-le-18-280-interior-*.glb',
       '**/pavers-albedo-*.ktx2',
       '**/pavers-packed-*.ktx2',
@@ -144,7 +143,7 @@ describe('channels', () => {
   const origin = 'https://example.github.io';
   const options = (channel: Channel) =>
     pwaOptions(channel === 'uat' ? '/gegenlenker/uat/' : '/gegenlenker/', colors, channel);
-  const texture = 'assets/ground-AbC12_x.ktx2';
+  const texture = 'assets/sky-AbC12_x.ktx2';
   const runtime = (channel: Channel) => options(channel).workbox?.runtimeCaching?.[0];
   const matches = (channel: Channel, href: string): boolean => {
     const pattern = runtime(channel)?.urlPattern;

@@ -1,11 +1,10 @@
-import { exercises } from '../content/registry';
 import type { InputLog, RunResult } from '../contracts/exercise';
 import { detectLanguage, setLanguage } from '../i18n/i18n';
 import { requestPersistentStorage } from '../pwa/persist';
 import { startUpdatePrompt } from '../pwa/update-prompt';
 import './app.css';
 import type { DriveOutcome, RunConfig } from './drive';
-import type { EntryRef } from './menu/catalogue';
+import { nextExercise, runConfigOf, type EntryRef } from './menu/catalogue';
 import { showMenu } from './menu/index';
 import type { NavState } from './menu/nav';
 import { showNotice, showToast } from './notice';
@@ -186,24 +185,15 @@ export function startApp(root: HTMLElement): void {
     context: ResultContext,
     log: InputLog,
   ): void => {
-    const following =
-      r.reached && run.exercise !== null
-        ? exercises[exercises.indexOf(run.exercise) + 1]
-        : undefined;
+    // as its setup would start it: an exercise that couples takes a trailer even solo
+    const following = r.reached && entry.kind === 'exercise' ? nextExercise(entry) : null;
     const close = showResult(screen, r, context, {
       next:
-        following === undefined
+        following === null
           ? null
           : () => {
               close();
-              drive(
-                { ...run, layoutId: following.layout, exercise: following },
-                {
-                  role: entry.role,
-                  kind: 'exercise',
-                  id: following.id,
-                },
-              );
+              drive(runConfigOf(following, currentSettings()), following);
             },
       retry: () => {
         close();

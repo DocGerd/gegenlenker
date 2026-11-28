@@ -10,17 +10,19 @@ import { wrapAngle } from '../sim/angle';
 import { bodyFootprints } from '../sim/geometry';
 import { createSimulation } from '../sim/simulation';
 import { targetError, WAYPOINT_RADIUS } from '../scoring/score';
-import type { VehicleParams } from '../contracts/vehicle';
-import { resolveCombination } from '../vehicles/resolve';
+import { hasTrailer, type RigParams } from '../contracts/vehicle';
+import { resolveCombination, resolveRig } from '../vehicles/resolve';
 import { trailers, trucks } from '../vehicles/registry';
 import { BARRIER_X, LANE } from './exercises/slalom';
 import { exercises, layouts } from './registry';
 import { resolveLayout } from './resolve-layout';
 import { resolveRun } from './run';
 
-const pairs = trucks.flatMap((truck) =>
-  trailers.map((trailer) => [truck.id, trailer.id, truck, trailer] as const),
-);
+/** Every truck with each trailer, and solo. */
+const pairs = trucks.flatMap((truck) => [
+  ...trailers.map((trailer) => [truck.id, trailer.id, truck, trailer] as const),
+  [truck.id, null, truck, null] as const,
+]);
 
 const cases = [
   ...Object.values(layouts).map((l) => ({
@@ -29,6 +31,7 @@ const cases = [
     start: l.start,
     ids: { layoutId: l.id, exerciseId: null },
     exercise: null,
+    pairs,
   })),
   ...exercises.map((e) => ({
     name: e.id,
@@ -36,6 +39,9 @@ const cases = [
     start: e.start,
     ids: { layoutId: e.layout, exerciseId: e.id },
     exercise: e,
+    // a coupling exercise needs its trailer (`resolveRun` refuses it solo)
+    pairs:
+      e.parkedTrailer === undefined ? pairs : pairs.filter(([, trailerId]) => trailerId !== null),
   })),
 ];
 
@@ -79,7 +85,7 @@ function driveBy(sim: Simulation, gear: 'D' | 'R'): SimSnapshot {
   return s;
 }
 
-describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
+describe.each(cases)('$name', ({ resolved, start, ids, exercise, pairs }) => {
   // dataFingerprint hashes the ordered OBBs without ids: sound only while contacts are counted by unique ids.
   it('has unique obstacle ids, none the self id', () => {
     const ids = resolved.obstacles.map((o) => o.id);
@@ -90,7 +96,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
   it.each(pairs)(
     '%s + %s starts clear and drives forward and backward',
     (truckId, trailerId, truck, trailer) => {
-      const params = resolveCombination(truck, trailer);
+      const params = resolveRig(truck, trailer);
       const query = createContactQuery(resolved.obstacles);
       const begin = resolveRun({ ...ids, truckId, trailerId, role: 'driver' }).start;
       for (const gear of ['D', 'R'] as const) {
@@ -138,7 +144,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
     it.each(pairs)(
       '%s + %s does not start inside the target tolerance',
       (truckId, trailerId, truck, trailer) => {
-        const params = resolveCombination(truck, trailer);
+        const params = resolveRig(truck, trailer);
         const begin = resolveRun({ ...ids, truckId, trailerId, role: 'driver' }).start;
         const sim = createSimulation(params, begin, createContactQuery([]));
         const e = targetError(sim.snapshot(), target);
@@ -152,43 +158,47 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
 
     // The model is time-reversible, so a forward drive out of the target that ends near the reverse
     // run's origin shows a reverse run from there into the target exists. It starts from the
-    // straight pose on the target, not from the exact start pose.
-    it.each(pairs)(
-      '%s + %s reaches the reverse-run origin by driving out of the target',
-      (_t, _tr, truck, trailer) => {
-        const params = resolveCombination(truck, trailer);
-        const query = createContactQuery(resolved.obstacles);
-        const h = target.pose.heading;
-        const reach =
-          params.trailerRearOverhang +
-          params.trailerWheelbase +
-          params.drawbar +
-          params.couplingOffset;
-        const sim = createSimulation(
-          params,
-          {
-            truck: {
-              x: target.pose.x + reach * Math.cos(h),
-              y: target.pose.y + reach * Math.sin(h),
-              heading: h,
+    // straight pose on the target, not from the exact start pose. A coupling run tows forward into
+    // its target instead: `coupling.test.ts` drives it whole.
+    if (exercise.parkedTrailer === undefined) {
+      it.each(pairs)(
+        '%s + %s reaches the reverse-run origin by driving out of the target',
+        (_t, _tr, truck, trailer) => {
+          const params = resolveRig(truck, trailer);
+          const query = createContactQuery(resolved.obstacles);
+          const h = target.pose.heading;
+          const reach = hasTrailer(params)
+            ? params.trailerRearOverhang +
+              params.trailerWheelbase +
+              params.drawbar +
+              params.couplingOffset
+            : params.truckRear;
+          const sim = createSimulation(
+            params,
+            {
+              truck: {
+                x: target.pose.x + reach * Math.cos(h),
+                y: target.pose.y + reach * Math.sin(h),
+                heading: h,
+              },
             },
-          },
-          query,
-        );
-        expect(query(bodyFootprints(params, sim.snapshot()))).toBeNull();
+            query,
+          );
+          expect(query(bodyFootprints(params, sim.snapshot()))).toBeNull();
 
-        const goal = exercise.waypoint ?? start;
-        const r = follow(sim, params, [...(via[exercise.id] ?? []), goal], 3, start.heading);
-        expect(r).toEqual({ contacts: 0, jackknifes: 0, arrived: true });
-      },
-    );
+          const goal = exercise.waypoint ?? start;
+          const r = follow(sim, params, [...(via[exercise.id] ?? []), goal], 3, start.heading);
+          expect(r).toEqual({ contacts: 0, jackknifes: 0, arrived: true });
+        },
+      );
+    }
 
     if (exercise.waypoint) {
       const { waypoint } = exercise;
       it.each(pairs)(
         '%s + %s drives forward from the start to the waypoint',
         (truckId, trailerId, truck, trailer) => {
-          const params = resolveCombination(truck, trailer);
+          const params = resolveRig(truck, trailer);
           const sim = createSimulation(
             params,
             resolveRun({ ...ids, truckId, trailerId, role: 'driver' }).start,
@@ -206,7 +216,7 @@ describe.each(cases)('$name', ({ resolved, start, ids, exercise }) => {
 /** Drives forward along `route`; arrival is within `radius` of its end, and of `heading` if given. */
 function follow(
   sim: Simulation,
-  params: VehicleParams,
+  params: RigParams,
   waypoints: readonly Vec2[],
   radius: number,
   heading: number | null,
@@ -534,6 +544,7 @@ it('orders exercises as a curriculum, straight reverse first and slalom last', (
     'straight-reverse',
     'reverse-bay',
     'reverse-corner',
+    'coupling',
     'dock-ramp',
     'slalom',
   ]);

@@ -23,6 +23,8 @@ export type Controls = Omit<ControlSource, 'tick'> & {
   tick(dt: number, snapshot: Pick<SimSnapshot, 'steer'>): void;
   /** The stop button and the lever column, for the HUD to keep its toolbar clear of. */
   pedalsBox(): DOMRect;
+  /** Asks to uncouple on the next sim step, as U does. */
+  uncouple(): void;
   dispose(): void;
 };
 
@@ -406,7 +408,9 @@ export function createControls(
   return {
     control() {
       syncBrake();
-      return toControlVector(state);
+      const control = toControlVector(state);
+      state.uncouple = false;
+      return control;
     },
     lamps() {
       syncLamps();
@@ -420,6 +424,9 @@ export function createControls(
     },
     pedalsBox() {
       return pedals.getBoundingClientRect();
+    },
+    uncouple() {
+      state.uncouple = true;
     },
     dispose() {
       clearInterval(valueTimer);

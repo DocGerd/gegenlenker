@@ -6,6 +6,9 @@ import type { TrailerId, TruckId } from '../contracts/vehicle';
 
 const STORAGE_VERSION = 2;
 
+/** The trailer segment of a solo run's key: no trailer id. */
+export const SOLO_KEY = 'solo';
+
 /**
  * Assisted and unaided runs rank apart: an aid must not beat an unaided best. Night and mirror-only
  * runs rank apart too; the default keys carry no suffix, so bests stored before either existed stay valid.
@@ -13,12 +16,12 @@ const STORAGE_VERSION = 2;
 export function bestKey(
   exerciseId: ExerciseId,
   truckId: TruckId,
-  trailerId: TrailerId,
+  trailerId: TrailerId | null,
   assisted: boolean,
   lighting: LightingMode,
   mirrorsOnly: boolean,
 ): string {
-  const base = `${exerciseId}/${truckId}/${trailerId}/${assisted ? 'assisted' : 'unaided'}`;
+  const base = `${exerciseId}/${truckId}/${trailerId ?? SOLO_KEY}/${assisted ? 'assisted' : 'unaided'}`;
   return `${base}${lighting === 'night' ? '/night' : ''}${mirrorsOnly ? '/mirrors' : ''}`;
 }
 
@@ -36,9 +39,11 @@ export function compareResults(a: RunResult, b: RunResult): number {
   );
 }
 
-/** Reached with any vehicle pair. */
-export function exerciseDone(best: BestResults, exerciseId: ExerciseId): boolean {
-  return Object.values(best).some((r) => r.exerciseId === exerciseId && r.reached);
+/** Reached with any vehicle pair, or with any truck solo when `solo`: the two are done apart. */
+export function exerciseDone(best: BestResults, exerciseId: ExerciseId, solo: boolean): boolean {
+  return Object.values(best).some(
+    (r) => r.exerciseId === exerciseId && r.reached && (r.trailerId === null) === solo,
+  );
 }
 
 export function recordBest(
@@ -85,7 +90,7 @@ function toResult(v: unknown): RunResult | null {
   if (
     !EXERCISE_IDS.some((id) => id === exerciseId) ||
     !TRUCK_IDS.some((id) => id === truckId) ||
-    !TRAILER_IDS.some((id) => id === trailerId) ||
+    (trailerId !== null && !TRAILER_IDS.some((id) => id === trailerId)) ||
     !LIGHTING_MODES.some((mode) => mode === lighting) ||
     typeof r.reached !== 'boolean' ||
     typeof r.assisted !== 'boolean' ||
@@ -102,7 +107,7 @@ function toResult(v: unknown): RunResult | null {
   return {
     exerciseId: exerciseId as ExerciseId,
     truckId: truckId as TruckId,
-    trailerId: trailerId as TrailerId,
+    trailerId: trailerId as TrailerId | null,
     reached: r.reached,
     assisted: r.assisted,
     lighting: lighting as LightingMode,

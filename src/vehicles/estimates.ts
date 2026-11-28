@@ -4,6 +4,7 @@ import { trailers, trucks } from './registry';
 const UNITS: Readonly<Record<string, string>> = {
   couplingLimit: '°',
   turntableLimit: '°',
+  catchAngle: '°',
   lockToLockTurns: 'turns',
   maxRate: 'turns/s',
   rearAxleCount: '',

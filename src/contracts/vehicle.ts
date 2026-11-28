@@ -35,6 +35,8 @@ export type TruckSpec = {
   readonly frontTrack: Param;
   readonly rearTrack: Param;
   readonly couplingOffset: Param; // rear axle → coupling pin, rearward
+  /** How far off the jaw's axis, either side, and at what angle to it the drawbar eye still couples. */
+  readonly jaw: { readonly catchWidth: Param; readonly catchAngle: Param };
   readonly turningRadius: Param; // outer front wheel, full lock
   readonly frameTop: Param; // chassis top and floor of cab and body, above the road
   readonly bodyTop: Param; // load body top above the road
@@ -100,7 +102,7 @@ export type TrailerSpec = {
   readonly mudflap: MudflapSpec;
 };
 /** Metres and radians; distances positive; steerRate in steer units (−1…1) per second. */
-export type VehicleParams = {
+export type TruckParams = {
   readonly wheelbase: number;
   readonly couplingOffset: number;
   readonly maxRoadWheelAngle: number;
@@ -109,6 +111,8 @@ export type VehicleParams = {
   readonly truckFront: number; // rear axle → bumper
   readonly truckRear: number; // rear axle → rear end
   readonly truckWidth: number;
+};
+export type TrailerParams = {
   readonly drawbar: number;
   readonly trailerWheelbase: number;
   readonly trailerFrontOverhang: number;
@@ -117,6 +121,11 @@ export type VehicleParams = {
   readonly couplingLimit: number;
   readonly turntableLimit: number;
 };
+/** A truck with its drawbar trailer; the keys keep their order, which the data fingerprint hashes. */
+export type VehicleParams = TruckParams & TrailerParams;
+/** What a run drives: a truck with its trailer, or the truck alone (solo). */
+export type RigParams = VehicleParams | TruckParams;
+export const hasTrailer = (p: RigParams): p is VehicleParams => 'drawbar' in p;
 /** A mirror on the truck, named by the mount its camera sits at. */
 export type MirrorId = 'mirrorLeft' | 'mirrorRight' | 'wideLeft' | 'wideRight' | 'front' | 'close';
 export type Vec3 = { readonly x: number; readonly y: number; readonly z: number };

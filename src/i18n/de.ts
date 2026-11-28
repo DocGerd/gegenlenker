@@ -12,16 +12,16 @@ export const de: Record<MessageKey, string> = {
   exerciseStraightReverse: 'Gerade rückwärts',
   exerciseReverseBay: 'Rückwärts in eine Bucht',
   exerciseReverseCorner: 'Rückwärts um die Ecke',
+  exerciseCoupling: 'An- und Abkuppeln',
   exerciseDockRamp: 'An die Rampe setzen',
   exerciseSlalom: 'Slalom vor und zurück',
-  briefStraightReverse:
-    'Den Anhänger geradeaus rückwärts in die markierte Bucht setzen und anhalten.',
+  briefStraightReverse: 'Geradeaus rückwärts in die markierte Bucht setzen und anhalten.',
   briefReverseBay:
-    'Den Anhänger zwischen den parkenden Fahrzeugen rückwärts in die markierte Bucht setzen und anhalten.',
+    'Zwischen den parkenden Fahrzeugen rückwärts in die markierte Bucht setzen und anhalten.',
   briefReverseCorner:
     'Rückwärts um die Ecke in die Seitenstraße fahren und in der markierten Bucht anhalten.',
-  briefDockRamp:
-    'Den Anhänger rechtwinklig an die Rampe setzen und in der markierten Bucht anhalten.',
+  briefCoupling: 'Ankuppeln, in der Bucht abkuppeln und wegfahren.',
+  briefDockRamp: 'Rechtwinklig an die Rampe setzen und in der markierten Bucht anhalten.',
   briefSlalom:
     'Den Slalom vorwärts bis zum markierten Kreis fahren, dann zurücksetzen und in der markierten Bucht anhalten.',
   guideBriefDepot: 'Frei im Betriebshof einweisen, ohne Ziel.',
@@ -32,13 +32,13 @@ export const de: Record<MessageKey, string> = {
   guideDockRamp: 'An die Rampe einweisen',
   guideSlalom: 'Slalom vor und zurück einweisen',
   guideBriefStraightReverse:
-    'Achtung geben, dann den Anhänger gerade rückwärts in die markierte Bucht einweisen und dort Halt geben.',
+    'Achtung geben, dann gerade rückwärts in die markierte Bucht einweisen und dort Halt geben.',
   guideBriefReverseBay:
-    'Den Anhänger zwischen den parkenden Fahrzeugen in die markierte Bucht einweisen. Sichtkontakt halten.',
+    'Zwischen den parkenden Fahrzeugen in die markierte Bucht einweisen. Sichtkontakt halten.',
   guideBriefReverseCorner:
-    'Den Anhänger um die Ecke in die markierte Bucht in der Seitenstraße einweisen. Nicht in den Fahrweg treten.',
+    'Um die Ecke in die markierte Bucht in der Seitenstraße einweisen. Nicht in den Fahrweg treten.',
   guideBriefDockRamp:
-    'Den Anhänger rechtwinklig an die Rampe einweisen. Früh Halt geben: Der Lkw braucht Platz zum Anhalten.',
+    'Rechtwinklig an die Rampe einweisen. Früh Halt geben: Der Lkw braucht Platz zum Anhalten.',
   guideBriefSlalom:
     'Den Slalom vorwärts bis zum markierten Kreis einweisen, dann von hinten zurück in die markierte Bucht.',
   tolerance: 'Toleranz',
@@ -51,6 +51,11 @@ export const de: Record<MessageKey, string> = {
   goalPositionOk: 'Position ok · Winkel falsch',
   truck: 'Lkw',
   trailer: 'Anhänger',
+  noTrailer: 'Ohne Anhänger',
+  coupled: 'Gekuppelt',
+  notCoupled: 'Nicht gekuppelt',
+  uncouple: 'Abkuppeln',
+  couplingSpeed: 'Tempo beim Ankuppeln',
   best: 'Bestwert',
   withAids: 'mit Hilfen',
   noAids: 'ohne Hilfen',
@@ -131,6 +136,8 @@ export const de: Record<MessageKey, string> = {
   aidPath: 'Vorausschau',
   aidTracks: 'Radspuren',
   aidGhost: 'Zielbild',
+  aidSightTop: 'Sicht (Draufsicht)',
+  aidSightGround: 'Sicht (Ich)',
   aidLegend: 'Was die Hilfslinien bedeuten',
   briefToggle: 'Übungsbeschreibung ein- oder ausblenden',
   legendPivots: 'Mittellinien von Lkw, Deichsel und Anhänger; der Spalt ist der Winkel.',
@@ -138,6 +145,11 @@ export const de: Record<MessageKey, string> = {
     'Durchgezogen: Anhänger hinten (rückwärts). Gestrichelt: Lkw vorn (vorwärts). Querbalken: Halt bei gehaltener Lenkung.',
   legendTracks: 'Wo die Räder gefahren sind.',
   legendGhost: 'Anhänger-Umriss am Ziel.',
+  legendSightTop: 'Boden mit Sichtkontakt zum Fahrer: direkt oder nur im Spiegel.',
+  legendSightGround: 'Dieselben Sichtbereiche am Boden in der eigenen Ansicht.',
+  legendPathSolo:
+    'Durchgezogen: Lkw hinten (rückwärts). Gestrichelt: Lkw vorn (vorwärts). Querbalken: Halt bei gehaltener Lenkung.',
+  legendGhostSolo: 'Lkw-Umriss am Ziel.',
   aidTopViewOnly: 'Nur in den Ansichten Folgen und Ganzer Hof sichtbar',
   panelAids: 'Hilfen',
   panelGauges: 'Winkel',
@@ -162,6 +174,7 @@ export const de: Record<MessageKey, string> = {
   endedMoving:
     'Position und Winkel lagen in der Toleranz, aber das Fahrzeug rollte noch. Im Ziel anhalten.',
   runOver: 'Einweiser überfahren: Die Fahrt ist beendet.',
+  trailerNotLeft: 'Nicht beendet: Den Anhänger im Ziel abkuppeln, wegfahren und dann anhalten.',
   endedWithoutHalt:
     'Position und Winkel lagen in der Toleranz, aber die Fahrt endet erst mit dem Anhalten auf ein erkanntes Halt.',
   walkedBackwards: 'Halt geben, bei stehendem Fahrzeug umsetzen, dann weiter einweisen.',
@@ -289,6 +302,7 @@ export const de: Record<MessageKey, string> = {
   walk: 'Gehen',
   jog: 'Laufen',
   mouseLook: 'Umsehen (Klick zum Starten)',
+  lockHint: 'P oder Esc gibt die Maus frei',
   signKeys: 'Handzeichen (halten)',
   signLeftRight: 'Links / Rechts fahren',
   signMouse: 'Herkommen / Entfernen',
@@ -307,4 +321,5 @@ export const de: Record<MessageKey, string> = {
   finishHint:
     'Die Fahrt endet jetzt, wird mit dem erreichten Stand gewertet und bleibt gespeichert.',
   leaveHint: 'Beim Verlassen wird die Fahrt verworfen: keine Wertung, keine gespeicherte Fahrt.',
+  groundSightKeyHint: 'G schaltet sie beim Gehen ein oder aus.',
 };

@@ -34,3 +34,10 @@ const SHAPES: Record<keyof AidFlags, string> = {
 /** A small drawing of one aid's stroke, in the same tokens and dash the top-down view uses. */
 export const aidSwatch = (aid: keyof AidFlags): string =>
   `<svg class="hud-swatch" viewBox="0 0 40 20" aria-hidden="true">${SHAPES[aid]}</svg>`;
+
+/** The direct sight area and the mirror-only one beside it, as both views draw them. */
+export const sightSwatch = (): string => {
+  const area = (cls: string, x: number, width: number): string =>
+    `<rect class="${cls}" x="${x}" y="4" width="${width}" height="12" />`;
+  return `<svg class="hud-swatch" viewBox="0 0 40 20" aria-hidden="true">${area('swatch-sight-direct', 5, 18)}${area('swatch-sight-mirror', 23, 12)}</svg>`;
+};

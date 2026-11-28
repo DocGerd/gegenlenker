@@ -56,6 +56,7 @@ import {
   WIDE_GAP_PX,
   wrapLines,
   type Insets,
+  type MeasuredLegend,
   type PanelStack,
 } from './viewports';
 import {
@@ -304,15 +305,17 @@ const panelsOf = (v: Variant): PanelStack | null =>
 
 /**
  * The legend's states and the widest and tallest box each had in a headless Chromium run of the app
- * (en and de): the toggle only on a short screen, the drive keys on a short cockpit, the compact list on
- * a narrow cockpit, the full list, and the full list without the top-down rows in the mirror-only drive.
+ * (en and de, the worst case across presets, High, whose look-around row makes it the tallest; a coupling
+ * exercise, whose uncouple row adds one more): the toggle only on a short
+ * screen, the drive keys on a short cockpit, the compact list on a narrow cockpit, the full list, and
+ * the full list without the top-down rows in the mirror-only drive.
  */
 const LEGEND_BOXES = {
   overlay: { width: 97, height: 42 },
-  driveOnly: { width: 282, height: 126 },
-  compact: { width: 159, height: 194 },
-  full: { width: 329, height: 286 },
-  mirrorsFull: { width: 317, height: 190 },
+  driveOnly: { width: 282, height: 142 },
+  compact: { width: 159, height: 230 },
+  full: { width: 329, height: 382 },
+  mirrorsFull: { width: 317, height: 222 },
 };
 /** The Einweiser's (hud.ts never makes his compact): the walk, look and sign rows, in two columns. */
 const EINWEISER_LEGEND_BOXES = {
@@ -547,7 +550,7 @@ function legendFor(
   w: number,
   h: number,
   m: Metrics,
-): { box: LegendBox; left: number; width: number } | null {
+): { box: Required<MeasuredLegend>; left: number; width: number } | null {
   const { cockpit } = views;
   const { legend: kind, mode } = v;
   if (kind === 'none' || cockpit === null) return null;
@@ -572,7 +575,7 @@ function legendFor(
   const left = einweiser ? SPACE_4 + v.insets.left : m.hudInset;
   const lift = HUD_BAND_SHARE * cockpit.height + GEOM.legendLift;
   return {
-    box: { right: left + state.width, height: lift + state.height },
+    box: { right: left + state.width, height: lift + state.height, boxHeight: state.height },
     left,
     width: state.width,
   };
@@ -587,7 +590,15 @@ function evaluate(v: Variant, w: number, h: number): void {
   const m = metricsAt(w, h, insets);
   const panels = panelsOf(v);
   const run = (legend: LegendBox | null, extra: ExtraMirrors): ViewRects =>
-    computeViewports(w, h, v.mode, legend, insets, v.layout, panels, extra, v.role);
+    computeViewports(w, h, {
+      mode: v.mode,
+      legend,
+      insets,
+      layout: v.layout,
+      panels,
+      extra,
+      role: v.role,
+    });
 
   const first = run(null, v.extra);
   const legend = legendFor(v, first, w, h, m);
@@ -715,7 +726,12 @@ function evaluate(v: Variant, w: number, h: number): void {
   }
 
   /* the split */
-  const split: TopDownSplit = topDownSplit(w, h, v.layout, legend?.box ?? null, insets, panels);
+  const split: TopDownSplit = topDownSplit(w, h, {
+    layout: v.layout,
+    legend: legend?.box ?? null,
+    insets,
+    panels,
+  });
   const limits = TOP_DOWN_SHARE_LIMITS[orientationOf(w, h)];
   if (!mirrorsOnly) {
     const within =
@@ -743,12 +759,17 @@ function evaluate(v: Variant, w: number, h: number): void {
     }
     if (split.share > split.fallback + 1e-12) {
       const cockpitExtent = landscape ? cockpit.width : cockpit.height;
+      // the legend as it stands over this cockpit, not the one it was measured over
+      const legendHeight =
+        legend === null
+          ? 0
+          : HUD_BAND_SHARE * cockpit.height + GEOM.legendLift + legend.box.boxHeight;
       const needed = landscape
         ? insets.left + 3 * SPACE_4 + GEARS_W + LEGEND_W + m.wheel
         : COCKPIT_LABEL +
           MIN_MIRROR_HEIGHT +
           MESSAGE_GAP +
-          Math.max(controlsHeight(w, h, insets), legend?.box.height ?? 0);
+          Math.max(controlsHeight(w, h, insets), legendHeight);
       // a deficit of at most half a pixel is what rounding the pane to whole px leaves; it is a failure all the same
       const deficit = needed - cockpitExtent;
       const room: Property =

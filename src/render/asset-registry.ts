@@ -38,15 +38,16 @@ export type Attachment = {
   readonly marker: string;
   /** The quality flags that must all be on for the attachment to be drawn. */
   readonly flags: readonly BooleanFlag[];
-  /** Whether the marker's value says the attachment is in place. */
-  readonly ready: (value: string) => boolean;
+  /** Whether the marker's value says the attachment is in place; `solo`: the truck drives without a trailer. */
+  readonly ready: (value: string, solo: boolean) => boolean;
 };
 
 export const ATTACHMENTS = {
   shells: {
     marker: 'data-vehicle-shells',
     flags: ['cabGlb', 'vehicleGlb'],
-    ready: (v) => v.split(' ').length === 3,
+    // cab and body, plus the trailer's
+    ready: (v, solo) => v.split(' ').length === (solo ? 2 : 3),
   },
   ground: {
     marker: 'data-ground-texture',

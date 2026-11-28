@@ -6,8 +6,11 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | ----------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | Marked target rectangle, or gap to reverse into | bay                                                                         | Bucht                                                             |
 | Truck                                           | truck                                                                       | Lkw                                                               |
+| Truck driven without its trailer                | no trailer (solo)                                                           | ohne Anhänger (solo)                                              |
 | Trailer's front steering part                   | drawbar                                                                     | Deichsel                                                          |
 | Truck-to-drawbar angle                          | coupling angle                                                              | Kupplungswinkel                                                   |
+| Join truck and trailer / part them              | couple / uncouple                                                           | ankuppeln / abkuppeln                                             |
+| Ring at the drawbar's front end                 | drawbar eye                                                                 | Zugöse                                                            |
 | Drawbar-to-trailer angle                        | turntable angle                                                             | Drehschemelwinkel                                                 |
 | Angle reached its limit                         | limit stop                                                                  | Anschlag (am Anschlag)                                            |
 | Steer the other way to ease an angle            | countersteer                                                                | gegenlenken                                                       |
@@ -82,6 +85,9 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Steering value read by a screen reader: side    | left / right                                                                | links / rechts                                                    |
 | Steering value read by a screen reader: centre  | straight                                                                    | geradeaus                                                         |
 | Driver sees the Einweiser                       | sight contact (direct / in mirror / none)                                   | Sichtkontakt (direkt / im Spiegel / kein)                         |
+| Einweiser toggle: sight areas in the top view   | sight (top view)                                                            | Sicht (Draufsicht)                                                |
+| Einweiser toggle: sight areas in his own view   | sight (own view)                                                            | Sicht (Ich)                                                       |
+| Pause sheet hint: key for the own-view areas    | G switches them on or off while you walk                                    | G schaltet sie beim Gehen ein oder aus                            |
 | Sight cue: class II / IV mirror                 | main / wide-angle mirror                                                    | Hauptspiegel / Weitwinkelspiegel                                  |
 | Sight cue: class V / VI mirror                  | close-proximity / front mirror                                              | Rampenspiegel / Frontspiegel                                      |
 | Driver cannot read a sign                       | signal unclear                                                              | Zeichen unklar                                                    |
@@ -94,5 +100,6 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Fault rule set by the trainer, not a source     | trainer convention                                                          | Trainerregel                                                      |
 | Look sensitivity setting                        | mouse sensitivity                                                           | Mausempfindlichkeit                                               |
 | Invert vertical look setting                    | invert mouse                                                                | Maus invertieren                                                  |
+| Hint while the pointer is locked                | P or Esc releases the mouse                                                 | P oder Esc gibt die Maus frei                                     |
 | First-person field of view setting              | field of view                                                               | Sichtfeld                                                         |
 | Walk, jog and look keys of the Einweiser legend | walk, jog, look around                                                      | Gehen, Laufen, Umsehen                                            |

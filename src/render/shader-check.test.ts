@@ -180,6 +180,14 @@ describe('verifyShader', () => {
     await expect(verify(gpu('var marker;', { device: device() }))).resolves.toBe('var marker;');
   });
 
+  it('builds nothing on a lost GPU, whose texture uploads would warn', async () => {
+    const g = gpu('var marker;', { device: device() });
+    const build = vi.spyOn(g.debug, 'getShaderAsync');
+    markLost(g);
+    await expect(verify(g)).rejects.toThrow(/lost/);
+    expect(build).not.toHaveBeenCalled();
+  });
+
   it('rejects a build whose WGSL the GPU rejects', async () => {
     const g = gpu('var marker;', { device: device(['var marker;']) });
     await expect(verify(g)).rejects.toThrow(ShaderRejectedError);

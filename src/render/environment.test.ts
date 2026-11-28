@@ -975,7 +975,7 @@ describe('environment ground texture', () => {
   // the markings swap separately (see 'environment lit markings'); keep them out of these set comparisons
   const ground = {
     high: { ...QUALITY_FLAGS.high, litMarkings: false },
-    balanced: { ...QUALITY_FLAGS.balanced, litMarkings: false },
+    off: { ...QUALITY_FLAGS.balanced, groundTexture: false, litMarkings: false },
   };
 
   it('swaps the ground in perspective only, leaving top-down as it was, and reverses', () => {
@@ -999,7 +999,7 @@ describe('environment ground texture', () => {
       expect(now('topDown').has(gone[0] as Object3D)).toBe(true);
     }
 
-    env.setLook(lookFor(ground.balanced, 'day'));
+    env.setLook(lookFor(ground.off, 'day'));
     for (const [view, meshes] of Object.entries(before)) {
       expect(now(view as keyof typeof cameras), view).toEqual(meshes);
     }
@@ -1009,14 +1009,14 @@ describe('environment ground texture', () => {
     env.dispose();
   });
 
-  it('keeps the token ground until the texture has loaded, and below High after', () => {
+  it('keeps the token ground until the texture has loaded, and with the flag off after', () => {
     if (layout === undefined) return;
     const { textures, deliver } = fakeTextures();
     const env = proceduralEnvironment(layout, palette, textures);
     const before = seen(env.object, cameras.cockpit);
     env.setLook(lookFor(ground.high, 'day'));
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
-    env.setLook(lookFor(ground.balanced, 'day'));
+    env.setLook(lookFor(ground.off, 'day'));
     deliver();
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
     env.dispose();
@@ -1086,7 +1086,7 @@ describe('environment ground texture', () => {
     expect(applied).toEqual([true]);
     reject();
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
-    env.setLook(lookFor(ground.balanced, 'day'));
+    env.setLook(lookFor(ground.off, 'day'));
     env.setLook(lookFor(ground.high, 'day'));
     expect(seen(env.object, cameras.cockpit)).toEqual(before);
     expect(applied).toEqual([true, false]);
@@ -1099,7 +1099,7 @@ describe('environment ground texture', () => {
     const env = proceduralEnvironment(layout, palette, textures);
     env.setLook(lookFor(ground.high, 'day'));
     deliver();
-    env.setLook(lookFor(ground.balanced, 'day'));
+    env.setLook(lookFor(ground.off, 'day'));
     env.setLook(lookFor(ground.high, 'day'));
     env.dispose();
     expect(applied).toEqual([true, false, true, false]);

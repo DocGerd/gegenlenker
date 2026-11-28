@@ -30,6 +30,7 @@ export type QualityFlags = {
   readonly cockpitInterior: boolean;
   /** The Blender cab interior in the cockpit view in place of the flat overlay; a download, and needs `cockpitInterior`. */
   readonly interiorGlb: boolean;
+  /** The authored ground detail map (slab joints, mottling) in the perspective views; a download, precached once the default preset draws it. */
   readonly groundTexture: boolean;
   /** Photoscanned PBR yard, street and pavement ground with slab joints; a download, and needs `groundTexture`. */
   readonly groundPbr: boolean;
@@ -74,7 +75,7 @@ const BALANCED: QualityFlags = {
   cockpitInterior: true,
   interiorGlb: false,
   litMarkings: true,
-  groundTexture: false,
+  groundTexture: true,
   groundPbr: false,
   pbr: false,
   vehicleWeathering: false,
@@ -128,7 +129,6 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     ...BALANCED,
     yardKit: true,
     interiorGlb: true,
-    groundTexture: true,
     groundPbr: true,
     pbr: true,
     vehicleWeathering: true,

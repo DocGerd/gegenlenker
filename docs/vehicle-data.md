@@ -23,6 +23,8 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | MAN LE 18.280 | frontTrack | 1950 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | rearTrack | 1800 mm | typical for the vehicle class, no source found |
 | MAN LE 18.280 | couplingOffset | 1250 mm | frame end plus coupling crossmember, no source found |
+| MAN LE 18.280 | jaw.catchWidth | 50 mm | catch of an automatic drawbar coupling, kept tight enough that the frame end clears the drawbar inside it; no source found |
+| MAN LE 18.280 | jaw.catchAngle | 6 ° | catch of an automatic drawbar coupling, kept tight enough that the frame end clears the drawbar inside it; no source found |
 | MAN LE 18.280 | frameTop | 1100 mm | chassis top and cab floor of the render model; no source found |
 | MAN LE 18.280 | bodyTop | 2750 mm | tarpaulin top of the body shell (render model); no source found |
 | MAN LE 18.280 | eye.height | 2350 mm | cab floor 1.1 m above ground (render model), seated eye 1.25 m above it: seat height plus sitting eye height; no source found |
@@ -61,6 +63,8 @@ The dimensions below are estimates, not manufacturer data, and the vehicle behav
 | Mercedes-Benz Arocs 1835 AK | frontTrack | 2050 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | rearTrack | 1850 mm | typical for the vehicle class, no source found |
 | Mercedes-Benz Arocs 1835 AK | couplingOffset | 1500 mm | frame end plus coupling crossmember, no source found |
+| Mercedes-Benz Arocs 1835 AK | jaw.catchWidth | 50 mm | catch of an automatic drawbar coupling, kept tight enough that the frame end clears the drawbar inside it; no source found |
+| Mercedes-Benz Arocs 1835 AK | jaw.catchAngle | 6 ° | catch of an automatic drawbar coupling, kept tight enough that the frame end clears the drawbar inside it; no source found |
 | Mercedes-Benz Arocs 1835 AK | frameTop | 1100 mm | chassis top and cab floor of the render model; no source found |
 | Mercedes-Benz Arocs 1835 AK | bodyTop | 2500 mm | tipper wall top of the procedural body (render model); no source found |
 | Mercedes-Benz Arocs 1835 AK | eye.height | 2450 mm | cab floor 1.1 m above ground (render model), seated eye 1.35 m above it (4x4 tipper seat sits higher than the MAN distribution cab); no source found |

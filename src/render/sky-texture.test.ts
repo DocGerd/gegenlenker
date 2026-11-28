@@ -6,6 +6,7 @@ import { startSkyTexture } from './sky-texture';
 const renderer = (): WebGPURenderer =>
   Object.assign(Object.create(WebGPURenderer.prototype) as WebGPURenderer, {
     debug: { onShaderError: null },
+    backend: { getContext: () => null },
   });
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
