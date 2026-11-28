@@ -85,6 +85,7 @@ describe('menu options', () => {
       fov: 'live',
       mouseSensitivity: 'live',
       invertMouse: 'live',
+      signalling: 'run',
     });
   });
 

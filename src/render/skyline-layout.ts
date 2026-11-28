@@ -1,5 +1,7 @@
+import { KIT_FOOTPRINTS } from '../content/kit';
 import type { Rect2, ResolvedLayout } from '../contracts/layout';
 import { CAMERA_FAR } from './seams';
+import { YARD_KIT_DIMS } from './yard-kit-dims';
 
 export type RoofKind = 'flat' | 'shed' | 'gable' | 'sawtooth';
 export type BuildingKind =
@@ -19,6 +21,8 @@ export type Building = {
   readonly seed: number;
   /** Share of haze mixed in, the same over the whole building. */
   readonly haze: number;
+  /** A belt building whose yard-facing wall and roof the yard kit draws (`beltKitDecor`); its length is whole bays. */
+  readonly front?: true;
 };
 
 /** Height of the roof's top above `height`, the eave. */
@@ -212,6 +216,16 @@ const BELT_KINDS: readonly (BuildingKind | 'trees')[] = [
 ];
 /** Splits the belt's stream from the rings', so the rings stay as they are. */
 const BELT_STREAM = 0x2c1b3c6d;
+/** Bay of the kit's hall and office facades: the belt's first row is built from whole bays. */
+export const FRONT_BAY = { hall: YARD_KIT_DIMS.hall.bay, office: YARD_KIT_DIMS.office.bay };
+/** The kit's own heights, so a first-row building is as tall as its facade. */
+const FRONT_HEIGHT = {
+  hall: KIT_FOOTPRINTS['hall-roof'].height,
+  office: KIT_FOOTPRINTS['office-roof'].height,
+};
+/** How far the skyline's box behind the kit's facade stands back from the kit's walls, and below its roof. */
+const SHELL_INSET = 0.4;
+const SHELL_BELOW_ROOF = 0.15;
 
 /** The surfaces that run out of the bounds, as strips out to the far plane the belt keeps clear. */
 function corridors({ bounds, surfaces }: Pick<ResolvedLayout, 'bounds' | 'surfaces'>): Footprint[] {
@@ -321,6 +335,7 @@ export function perimeterBuildings(
     side: (typeof sides)[number],
     along: number,
     offset: number,
+    front: boolean,
   ): { buildings: Building[]; length: number } => {
     const [tx, ty] = [Math.cos(side.heading), Math.sin(side.heading)];
     const [nx, ny] = [ty, -tx];
@@ -343,6 +358,7 @@ export function perimeterBuildings(
         skin: Math.floor(next() * 6),
         seed: Math.floor(next() * 0x7fffffff) + 1,
         haze: BELT_HAZE,
+        ...(front && !trees ? { front: true as const } : {}),
       };
     });
     return { buildings, length };
@@ -364,7 +380,7 @@ export function perimeterBuildings(
             ? [kind === 'trees' ? 'hall' : kind, 'warehouse', 'trees']
             : [kind, 'warehouse', 'trees'];
         for (const tried of tries) {
-          const { buildings, length } = slot(tried, side, along, offset);
+          const { buildings, length } = slot(tried, side, along, offset, row === 0);
           const fitting = buildings.filter(fits);
           if (fitting.length * 2 > buildings.length) {
             placed.push(...fitting);
@@ -376,7 +392,36 @@ export function perimeterBuildings(
       }
     }
   }
-  return placed;
+  // the fit tests above ran on the drawn size; whole bays only shrink a first-row building
+  return placed.map(wholeBays);
+}
+
+/** A first-row building cut to whole bays at the kit's height; any other building as it is. */
+function wholeBays(b: Building): Building {
+  if (b.front !== true) return b;
+  const office = b.kind === 'office';
+  const bay = office ? FRONT_BAY.office : FRONT_BAY.hall;
+  const length = Math.max(1, Math.floor(b.length / bay)) * bay;
+  return {
+    ...b,
+    length,
+    height: office ? FRONT_HEIGHT.office : FRONT_HEIGHT.hall,
+    roof: 'flat',
+  };
+}
+
+/**
+ * What the skyline mesh draws of `b`: the kit draws a first-row building's yard-facing wall and
+ * roof, so the mesh keeps its other faces as a box stood back from both.
+ */
+export function shell(b: Building): Building {
+  if (b.front !== true) return b;
+  return {
+    ...b,
+    length: b.length - 2 * SHELL_INSET,
+    depth: b.depth - 2 * SHELL_INSET,
+    height: b.height - SHELL_BELOW_ROOF,
+  };
 }
 
 /** Every building around `layout`: the two rings and the belt inside them. */

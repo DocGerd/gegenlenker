@@ -14,7 +14,7 @@ import { WALKER_RADIUS } from './walk';
  * change behaviour, so stored Einweiser runs are dropped instead of replaying with other faults.
  * Driver tuning (`driver.ts`) needs none: its controls are logged.
  */
-export const EINWEISER_REVISION = 1;
+export const EINWEISER_REVISION = 2;
 
 /**
  * What Einweiser runs hash beyond a driver run's scoring (`docs/einweiser-spike.md` §5): the shared

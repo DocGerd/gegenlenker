@@ -40,8 +40,10 @@ import {
   YARD_CASTER_LAYER,
 } from './seams';
 import { REALISM_HUES } from './realism-hues';
+import { beltKitDecor } from './belt-kit';
 import { kitStandInGeometry } from './kit-stand-ins';
 import { createSkyline } from './skyline';
+import { sceneryBuildings } from './skyline-layout';
 import { createYardKitLayer, type YardKitParts } from './yard-kit';
 import { createSceneSky, domeGround, nightDomeGround, skyColours } from './scene-sky';
 import { createWornMarkingMaterial, MarkingChunks, wearableMarkings } from './marking-wear';
@@ -242,7 +244,10 @@ export function proceduralEnvironment(
   props.push(...standInMeshes);
   // The surroundings' own stand-ins: drawn where the preset asks for them and the kit is not drawn.
   const decorStandIns = new Group();
-  const decorStandInGeometry = kitStandInGeometry(layout.decor);
+  const scenery = sceneryBuildings(layout);
+  // the belt's first row stands in the kit's pieces where the yard's own plots do
+  const surroundings = [...layout.decor, ...beltKitDecor(scenery)];
+  const decorStandInGeometry = kitStandInGeometry(surroundings);
   if (decorStandInGeometry !== null) {
     geometries.push(decorStandInGeometry);
     const mesh = new Mesh(decorStandInGeometry, solid);
@@ -498,9 +503,9 @@ export function proceduralEnvironment(
   const nightGround = nightDomeGround(palette);
   const legacyGround = domeGround(palette, false);
   const splitGround = domeGround(palette, true);
-  const skyline = createSkyline(layout, haze);
+  const skyline = createSkyline(layout, haze, scenery);
   const yardLights = createYardLights(layout, palette);
-  const kit = createYardKitLayer(layout, palette, yardKit, (drawn) => {
+  const kit = createYardKitLayer({ ...layout, decor: surroundings }, palette, yardKit, (drawn) => {
     standInGroup.visible = !drawn;
     kitDrawn = drawn;
     syncDecorStandIns();

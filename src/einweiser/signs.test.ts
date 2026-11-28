@@ -3,6 +3,8 @@ import type { SignId } from '../contracts/einweiser';
 import { DT } from '../sim/constants';
 import {
   createReader,
+  CROSSWISE_HALF_ANGLE,
+  crosswise,
   GRACE_CAP,
   type Judgement,
   type Perception,
@@ -18,6 +20,7 @@ const seen = (station: Station = 'behind', judged: Partial<Judgement> = {}): Per
   inSight: true,
   station,
   inPath: false,
+  crosswise: false,
   judge: () => ({ readable: true, facing: true, ...judged }),
 });
 const UNSEEN: Perception = { ...seen(), sight: { direct: false, mirrors: [] }, inSight: false };
@@ -61,6 +64,49 @@ describe('reading the Einweiser', () => {
     expect(read([{ sign: 'herkommen', p: seen('abeam'), steps: HERKOMMEN }])).toEqual([
       { step: HERKOMMEN - 1, reading: { kind: 'unclear', sign: 'herkommen' } },
     ]);
+  });
+
+  it('finds a steering sign given from the band at a standstill unclear, as it has no gear there', () => {
+    const LENKEN = steps(recognitionTime('lenkenLinks'));
+    expect(
+      read([{ sign: 'lenkenLinks', p: seen('abeam'), steps: LENKEN, standing: true }]),
+    ).toEqual([{ step: LENKEN - 1, reading: { kind: 'unclear', sign: 'lenkenLinks' } }]);
+    expect(read([{ sign: 'lenkenLinks', p: seen('abeam'), steps: LENKEN }])).toEqual([
+      {
+        step: LENKEN - 1,
+        reading: { kind: 'recognised', sign: 'lenkenLinks', station: 'abeam' },
+      },
+    ]);
+  });
+
+  it('bands a facing across the cab on both sides, to either side of square', () => {
+    const DEG = Math.PI / 180;
+    const edge = CROSSWISE_HALF_ANGLE / DEG;
+    for (const cab of [0, 2]) {
+      for (const square of [90, -90]) {
+        const at = (off: number): boolean => crosswise(cab, cab + (square + off) * DEG);
+        expect([at(-edge - 1), at(-edge + 1), at(0), at(edge - 1), at(edge + 1)]).toEqual([
+          false,
+          true,
+          true,
+          true,
+          false,
+        ]);
+      }
+      expect(crosswise(cab, cab) || crosswise(cab, cab + Math.PI)).toBe(false);
+    }
+  });
+
+  it('finds a steering sign to a side unclear from the crosswise band, but not straight or Links fahren', () => {
+    const across = { ...seen(), crosswise: true };
+    const reading = (sign: SignId) =>
+      read([{ sign, p: across, steps: steps(recognitionTime(sign)) }]).map(
+        ({ reading: r }) => r.kind,
+      );
+    expect(reading('lenkenLinks')).toEqual(['unclear']);
+    expect(reading('lenkenRechtsVoll')).toEqual(['unclear']);
+    expect(reading('lenkenGerade')).toEqual(['recognised']);
+    expect(reading('links')).toEqual(['recognised']);
   });
 
   it('reads the band reaching him while Herkommen is held as a stop, not as unclear', () => {

@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 import type { SignId } from '../src/contracts/einweiser';
 import { en } from '../src/i18n/en';
 import { expect, test } from './fixtures';
-import { startEntry, yardEntry } from './menu-flow';
+import { openSetup, startControl, startEntry, yardEntry } from './menu-flow';
 import { seedStorage } from './menu-seed';
 import { SETTINGS_KEY } from './pinned-shoot';
 
@@ -72,6 +72,34 @@ test('the Einweiser walks and signs on the keys and has no driver controls', asy
     })
     .toBeGreaterThan(0.3);
   await page.keyboard.up('KeyW');
+});
+
+test('the setup offers him steering signals, and they give the steering signs and their bar', async ({
+  page,
+}) => {
+  await seedStorage(page, { settings: { graphics: 'low' } });
+  await page.goto('./?framing=1');
+  await openSetup(page, en, einweiser);
+  const setup = page.locator('[data-screen="setup"]');
+  const row = setup.getByRole('radiogroup', { name: en.signalling, exact: true });
+  await setup.locator('[data-menu="role"] input[value="driver"]').click();
+  await expect(row).toHaveCount(0);
+  await setup.locator('[data-menu="role"] input[value="einweiser"]').click();
+  await expect(row.locator('input:checked')).toHaveValue('tail');
+  await row.locator('input[value="steering"]').click();
+  expect((await stored(page))['signalling']).toBe('steering');
+  await startControl(page, en, einweiser).click();
+  await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
+  await expect.poll(() => shown(page)).not.toBeNull();
+
+  const bar = page.locator('[data-hud="signBar"]');
+  await expect(bar.locator('.hud-sign')).toHaveCount(12);
+  await expect(bar.locator('[data-sign="links"]')).toHaveCount(0);
+  await expect(page.locator('[data-hud="keys"]')).toContainText('1–9 · Q E X');
+  await page.keyboard.down('KeyQ');
+  await expect.poll(async () => (await shown(page)).sign).toBe('lenkenLinks');
+  await expect(bar.locator('[data-sign="lenkenLinks"]')).toHaveAttribute('aria-current', 'true');
+  await page.keyboard.up('KeyQ');
 });
 
 test('a click takes the pointer lock, mouse buttons sign under it, and losing it opens the pause sheet', async ({

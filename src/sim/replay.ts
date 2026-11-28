@@ -1,4 +1,4 @@
-import { SIGN_IDS } from '../contracts/einweiser';
+import { DEFAULT_SIGNALLING, SIGN_IDS, SIGNALLING_MODES } from '../contracts/einweiser';
 import {
   EXERCISE_IDS,
   ROLES,
@@ -178,8 +178,12 @@ function parseTrack(v: unknown): EinweiserTrack | null {
   const signs = parseSteps(v.signs, ({ sign }, step) =>
     sign === null || isMember(SIGN_IDS, sign) ? { step, sign } : null,
   );
+  const mode = v.mode === undefined ? DEFAULT_SIGNALLING : v.mode;
+  if (!isMember(SIGNALLING_MODES, mode)) return null;
   // the replay reads his pose from the first sample on (`createTrackCursor`)
-  return samples === null || samples.length === 0 || signs === null ? null : { samples, signs };
+  return samples === null || samples.length === 0 || signs === null
+    ? null
+    : { mode, samples, signs };
 }
 
 export function serializeInputLog(log: InputLog, fingerprint: (ids: RunIds) => string): string {

@@ -126,7 +126,10 @@ export function setupScreen(ctx: SetupContext): {
         paintBests(bests, exercise);
     });
   };
-  let rows = fields.map(optionRow);
+  // the Einweiser also picks how he signals a turn
+  const roleFields = (): readonly OptionId[] =>
+    role === 'einweiser' ? [...fields, 'signalling'] : fields;
+  let rows = roleFields().map(optionRow);
 
   /** Heading, brief and bests follow the role; an Einweiser keeps no bests (owner). */
   const paint = (): void => {
@@ -147,11 +150,9 @@ export function setupScreen(ctx: SetupContext): {
         role = offered.find((r) => r === value) ?? role;
         paint();
         // the rows name some fields the role's way
-        const next = fields.map(optionRow);
-        rows.forEach((row, i) => {
-          const fresh = next[i];
-          if (fresh !== undefined) row.replaceWith(fresh);
-        });
+        const next = roleFields().map(optionRow);
+        rows[0]?.before(...next);
+        for (const row of rows) row.remove();
         rows = next;
       }),
     );

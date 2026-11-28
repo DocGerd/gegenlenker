@@ -1,4 +1,4 @@
-import type { EinweiserResult, SignId } from './einweiser';
+import type { EinweiserResult, SignallingMode, SignId } from './einweiser';
 import type { LayoutId, Marking, Obstacle } from './layout';
 import type { LightingMode } from './render';
 import type { InputChange, ParkedTrailer, Pose2, Vec2 } from './sim';
@@ -83,6 +83,8 @@ export type EinweiserSample = {
 };
 /** Change-only. Replays derive the Einweiser's view and faults from it; the logged controls alone drive the vehicle. */
 export type EinweiserTrack = {
+  /** A log from before the modes parses as `'tail'`. */
+  readonly mode: SignallingMode;
   readonly samples: readonly EinweiserSample[];
   readonly signs: readonly { readonly step: number; readonly sign: SignId | null }[];
 };

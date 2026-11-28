@@ -1,4 +1,4 @@
-import type { SignId } from '../contracts/einweiser';
+import { MODE_SIGNS, type SignallingMode, type SignId } from '../contracts/einweiser';
 import type { Role } from '../contracts/exercise';
 import type { MessageKey } from '../i18n/en';
 
@@ -52,6 +52,11 @@ export type Action =
   | 'signLinks'
   | 'signRechts'
   | 'signAbstand'
+  | 'signLenkenLinks'
+  | 'signLenkenLinksVoll'
+  | 'signLenkenGerade'
+  | 'signLenkenRechts'
+  | 'signLenkenRechtsVoll'
   | 'groundSight';
 
 /** The sign a `'sign'` action shows. */
@@ -65,6 +70,11 @@ export const SIGN_OF: Readonly<Partial<Record<Action, SignId>>> = {
   signLinks: 'links',
   signRechts: 'rechts',
   signAbstand: 'abstand',
+  signLenkenLinks: 'lenkenLinks',
+  signLenkenLinksVoll: 'lenkenLinksVoll',
+  signLenkenGerade: 'lenkenGerade',
+  signLenkenRechts: 'lenkenRechts',
+  signLenkenRechtsVoll: 'lenkenRechtsVoll',
 };
 
 /** View keys the Einweiser's drive does not offer: no glance (mouse look), outside view or free camera (`docs/einweiser-spike.md` §3.1). */
@@ -112,18 +122,24 @@ type LegendSpec = {
   readonly couplingOnly?: boolean;
   /** Replaces term and desc where the outside view exists. */
   readonly withChase?: { readonly term: LegendTerm; readonly desc: MessageKey };
+  /** Listed only in these signalling modes; in every mode when absent. */
+  readonly modes?: readonly SignallingMode[];
 };
 
 export type Binding = {
   readonly action: Action;
   readonly match: Match;
   readonly scope: Scope;
+  /** A sign key bound only in these signalling modes; in every mode when absent. */
+  readonly modes?: readonly SignallingMode[];
   readonly legend?: LegendSpec;
 };
 
 type LegendOnly = { readonly legend: LegendSpec };
 
 const EINWEISER: readonly Role[] = ['einweiser'];
+const TAIL: readonly SignallingMode[] = ['tail'];
+const STEERING: readonly SignallingMode[] = ['steering'];
 const BOTH: readonly Role[] = ['driver', 'einweiser'];
 const DRIVER: readonly Role[] = ['driver'];
 
@@ -199,8 +215,10 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     action: 'signAchtung',
     match: { by: 'code', values: ['Digit1', 'Numpad1'] },
     scope: 'sign',
-    legend: { term: '1–9', desc: 'signKeys', roles: EINWEISER },
+    legend: { term: '1–9', desc: 'signKeys', roles: EINWEISER, modes: TAIL },
   },
+  // the sign bar names every key under its sign, so the steering keys share one row
+  { legend: { term: '1–9 · Q E X', desc: 'signKeys', roles: EINWEISER, modes: STEERING } },
   {
     action: 'signHalt',
     match: { by: 'code', values: ['Digit2', 'Numpad2', 'Space'] },
@@ -215,14 +233,47 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     action: 'signLinks',
     match: { by: 'code', values: ['Digit7', 'Numpad7', 'KeyQ'] },
     scope: 'sign',
+    modes: TAIL,
     legend: { term: 'Q / E', desc: 'signLeftRight', roles: EINWEISER },
   },
   {
     action: 'signRechts',
     match: { by: 'code', values: ['Digit8', 'Numpad8', 'KeyE'] },
     scope: 'sign',
+    modes: TAIL,
+  },
+  // Steering takes Links/Rechts fahren's keys: 7 and 8 to full lock, Q and E a little, X straight
+  {
+    action: 'signLenkenLinksVoll',
+    match: { by: 'code', values: ['Digit7', 'Numpad7'] },
+    scope: 'sign',
+    modes: STEERING,
+  },
+  {
+    action: 'signLenkenRechtsVoll',
+    match: { by: 'code', values: ['Digit8', 'Numpad8'] },
+    scope: 'sign',
+    modes: STEERING,
   },
   { action: 'signAbstand', match: { by: 'code', values: ['Digit9', 'Numpad9'] }, scope: 'sign' },
+  {
+    action: 'signLenkenLinks',
+    match: { by: 'code', values: ['KeyQ'] },
+    scope: 'sign',
+    modes: STEERING,
+  },
+  {
+    action: 'signLenkenRechts',
+    match: { by: 'code', values: ['KeyE'] },
+    scope: 'sign',
+    modes: STEERING,
+  },
+  {
+    action: 'signLenkenGerade',
+    match: { by: 'code', values: ['KeyX'] },
+    scope: 'sign',
+    modes: STEERING,
+  },
   { legend: { term: { key: 'keyMouseButtons' }, desc: 'signMouse', roles: EINWEISER } },
   // His sight areas in his own view; the pause sheet's row names the key, not the legend
   { action: 'groundSight', match: { by: 'code', values: ['KeyG'] }, scope: 'walk' },
@@ -303,18 +354,42 @@ export const actionFor = (scope: Scope, e: KeyLike): Action | undefined =>
 export const isAction = (action: Action, e: KeyLike): boolean =>
   BINDINGS.some((b) => b.action === action && matches(b, e));
 
+const inMode = (entry: { readonly modes?: readonly SignallingMode[] }, mode: SignallingMode) =>
+  entry.modes === undefined || entry.modes.includes(mode);
+
+/** The sign key the event is bound to in `mode`, if any. */
+export const signActionFor = (mode: SignallingMode, e: KeyLike): Action | undefined =>
+  BINDINGS.find((b) => b.scope === 'sign' && inMode(b, mode) && matches(b, e))?.action;
+
+const keyName = (code: string): string => code.replace(/^(Digit|Key)/, '');
+
+/** The sign bar of `mode`: each sign with the name of its first key. */
+export const signSlots = (mode: SignallingMode): { sign: SignId; key: string }[] =>
+  MODE_SIGNS[mode].map((sign) => {
+    const binding = BINDINGS.find(
+      (b) => b.scope === 'sign' && inMode(b, mode) && SIGN_OF[b.action] === sign,
+    );
+    const code = binding?.match.values[0];
+    if (code === undefined) throw new Error(`${sign} has no key in ${mode}`);
+    return { sign, key: keyName(code) };
+  });
+
 /** The key legend of `role` in display order; `chase` is whether the outside view exists, `look` whether the cockpit view looks around. */
 export function legendRows(
   chase: boolean,
   look = false,
   role: Role = 'driver',
   coupling = false,
+  mode: SignallingMode = 'tail',
 ): LegendRow[] {
-  return KEYMAP.map(({ legend }) => legend).flatMap((spec) => {
-    if (spec === undefined || !(spec.roles ?? DRIVER).includes(role)) return [];
-    if ((spec.chaseOnly === true && !chase) || (spec.lookOnly === true && !look)) return [];
-    if (spec.couplingOnly === true && !coupling) return [];
-    const { term, desc } = chase && spec.withChase !== undefined ? spec.withChase : spec;
-    return [{ term, desc, viewOnly: spec.viewOnly ?? false }];
-  });
+  return KEYMAP.filter((entry) => !hasMatch(entry) || inMode(entry, mode)).flatMap(
+    ({ legend: spec }) => {
+      if (spec === undefined || !(spec.roles ?? DRIVER).includes(role)) return [];
+      if (!inMode(spec, mode)) return [];
+      if ((spec.chaseOnly === true && !chase) || (spec.lookOnly === true && !look)) return [];
+      if (spec.couplingOnly === true && !coupling) return [];
+      const { term, desc } = chase && spec.withChase !== undefined ? spec.withChase : spec;
+      return [{ term, desc, viewOnly: spec.viewOnly ?? false }];
+    },
+  );
 }

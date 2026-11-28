@@ -39,11 +39,54 @@ export function armLines(body: BodyPose): readonly (readonly FigurePoint[])[] {
   });
 }
 
+/**
+ * The steering signs' wheel before his chest, as the driver facing him sees it: the arc runs the way its
+ * top turns (toward his left is clockwise here), longer for full lock; straight marks its top.
+ */
+const WHEEL = { y: 1.22, r: 0.32 } as const;
+const STEER_CUE: Readonly<
+  Partial<Record<SignId, { readonly turn: 1 | -1; readonly sweep: number } | 'straight'>>
+> = {
+  lenkenLinks: { turn: 1, sweep: 100 },
+  lenkenLinksVoll: { turn: 1, sweep: 250 },
+  lenkenRechts: { turn: -1, sweep: 100 },
+  lenkenRechtsVoll: { turn: -1, sweep: 250 },
+  lenkenGerade: 'straight',
+};
+
 const n = (v: number): string => String(Math.round(v * 1000) / 1000);
 const points = (line: readonly FigurePoint[]): string =>
   line.map((p) => `${n(p.x)},${n(-p.y)}`).join(' ');
 const polyline = (line: readonly FigurePoint[], ghost = false): string =>
   `<polyline points="${points(line)}"${ghost ? ' class="hud-sign-ghost"' : ''} />`;
+
+/** A point on the wheel `deg` degrees clockwise (as seen) from its top, in SVG coordinates. */
+const onWheel = (deg: number, r: number = WHEEL.r): FigurePoint => {
+  const a = (deg * Math.PI) / 180;
+  return { x: r * Math.sin(a), y: -WHEEL.y - r * Math.cos(a) };
+};
+
+/** The wheel and its turn for a steering sign; empty for every other sign. */
+export function steerCue(sign: SignId): string {
+  const cue = STEER_CUE[sign];
+  if (cue === undefined) return '';
+  const rim = `<circle class="hud-sign-wheel" cx="0" cy="${n(-WHEEL.y)}" r="${n(WHEEL.r)}" />`;
+  if (cue === 'straight') {
+    const [a, b] = [onWheel(0, WHEEL.r * 0.55), onWheel(0, WHEEL.r * 1.45)];
+    return `${rim}<path class="hud-sign-cue" d="M${n(a.x)} ${n(a.y)}L${n(b.x)} ${n(b.y)}" />`;
+  }
+  const { turn, sweep } = cue;
+  const [from, to] = [-turn * (sweep / 2), turn * (sweep / 2)];
+  const [a, b] = [onWheel(from), onWheel(to)];
+  const large = sweep > 180 ? 1 : 0;
+  const clockwise = turn === 1 ? 1 : 0;
+  // the head: two strokes back along the arc's tangent at its end
+  const head = [-1, 1].map((side) => {
+    const back = onWheel(to - turn * 28, WHEEL.r * (1 + side * 0.22));
+    return `M${n(b.x)} ${n(b.y)}L${n(back.x)} ${n(back.y)}`;
+  });
+  return `${rim}<path class="hud-sign-cue" d="M${n(a.x)} ${n(a.y)}A${n(WHEEL.r)} ${n(WHEEL.r)} 0 ${large} ${clockwise} ${n(b.x)} ${n(b.y)}${head.join('')}" />`;
+}
 
 /** The source pose of `sign` as a stick figure on `currentColor`; a moving sign draws its other keys fainter. */
 export function signPictogram(sign: SignId): string {
@@ -61,5 +104,5 @@ export function signPictogram(sign: SignId): string {
   const arms = keys.flatMap((key, i) =>
     armLines(key).map((arm) => polyline(arm, i < keys.length - 1)),
   );
-  return `<svg class="hud-sign-figure" viewBox="-0.95 -2.15 1.9 2.2" aria-hidden="true">${[...body, ...arms].join('')}</svg>`;
+  return `<svg class="hud-sign-figure" viewBox="-0.95 -2.15 1.9 2.2" aria-hidden="true">${[...body, ...arms].join('')}${steerCue(sign)}</svg>`;
 }

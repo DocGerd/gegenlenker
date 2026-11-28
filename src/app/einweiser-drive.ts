@@ -1,5 +1,10 @@
 import type { ControlSource } from '../contracts/control';
-import { DEG_PER_COUNT, type EinweiserResult, type EinweiserStatus } from '../contracts/einweiser';
+import {
+  DEG_PER_COUNT,
+  type EinweiserResult,
+  type EinweiserStatus,
+  type SignallingMode,
+} from '../contracts/einweiser';
 import type { EinweiserTrack } from '../contracts/exercise';
 import type { ResolvedLayout } from '../contracts/layout';
 import type { EinweiserVisual, LampSwitches, LightingMode } from '../contracts/render';
@@ -48,12 +53,13 @@ export type EinweiserDriveSetup = {
   /** The run's first snapshot. */
   readonly start: SimSnapshot;
   readonly lighting: LightingMode;
+  readonly mode: SignallingMode;
 };
 
 /** Marks `stage` with `data-role="einweiser"`, which e2e waits for. */
 export function startEinweiserDrive(
   stage: HTMLElement,
-  { truck, trailer, layout, contacts, start, lighting }: EinweiserDriveSetup,
+  { truck, trailer, layout, contacts, start, lighting, mode }: EinweiserDriveSetup,
 ): EinweiserDrive {
   const g = sightGeometry(truck, trailer);
   const run = createEinweiserRun({
@@ -61,10 +67,12 @@ export function startEinweiserDrive(
     occluders: layoutOccluders(layout),
     yard: layout.yard,
     start,
+    mode,
   });
   const tracker = createEinweiserTracker(g, contacts);
   const input = createWalkInput({
     heading: run.walker().heading,
+    mode,
     look: () => {
       const { mouseSensitivity, invertMouse } = currentSettings();
       return { degPerCount: DEG_PER_COUNT[mouseSensitivity], invert: invertMouse };

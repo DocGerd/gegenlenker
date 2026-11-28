@@ -15,10 +15,13 @@ import {
 } from '../contracts/render';
 import {
   DEFAULT_FOV,
+  DEFAULT_SIGNALLING,
   FOV_CHOICES,
   MOUSE_SENSITIVITIES,
+  SIGNALLING_MODES,
   type Fov,
   type MouseSensitivity,
+  type SignallingMode,
 } from '../contracts/einweiser';
 import { EXERCISE_IDS, ROLES } from '../contracts/exercise';
 import { LAYOUT_IDS } from '../contracts/layout';
@@ -54,6 +57,8 @@ export type Settings = {
   readonly mouseSensitivity: MouseSensitivity;
   /** Mouse up looks down. */
   readonly invertMouse: boolean;
+  /** How the Einweiser signals a turn; chosen in the setup like the lighting. */
+  readonly signalling: SignallingMode;
 };
 
 const DEFAULT_AIDS: AidFlags = { pivots: true, path: true, tracks: false, ghost: true };
@@ -144,6 +149,7 @@ export function loadSettings(raw: string | null, detected: Lang): Settings {
     fov: pick(FOV_CHOICES, s['fov'], DEFAULT_FOV),
     mouseSensitivity: pick(MOUSE_SENSITIVITIES, s['mouseSensitivity'], 'medium'),
     invertMouse: flag(s['invertMouse'], false),
+    signalling: pick(SIGNALLING_MODES, s['signalling'], DEFAULT_SIGNALLING),
   };
 }
 

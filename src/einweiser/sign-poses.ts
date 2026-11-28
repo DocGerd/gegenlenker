@@ -45,10 +45,21 @@ export const ARMS_DOWN: BodyPose = both(DOWN);
 const beckon = (fore: Segment): BodyPose => both(arm(seg(30, -20), fore));
 const steer = (fore: Segment): ArmPose => arm(seg(80, 0), fore);
 const close = (out: number): BodyPose => both(arm(seg(20, 0), seg(out, 0)));
+/** Both hands before the chest on an imagined wheel, turned by `turn` degrees toward his left. */
+const wheel = (turn: number): BodyPose => ({
+  left: arm(seg(20, -40), seg(-40, -turn)),
+  right: arm(seg(20, -40), seg(-40, turn)),
+});
+const steering = (turn: number): SignPose => ({
+  keys: [wheel(0), wheel(turn)],
+  motion: 'loop',
+  arms: ['left', 'right'],
+  palm: 'facing',
+});
 
 /**
- * The source poses of ASR A1.3 Anhang 2 as the driver sees them (the first-person view adapts them).
- * Estimated angles; render slerps between the keys.
+ * The source poses of ASR A1.3 Anhang 2 as the driver sees them (the first-person view adapts them),
+ * and the steering signs, which no source draws. Estimated angles; render slerps between the keys.
  */
 export const SIGN_POSES: Readonly<Record<SignId, SignPose>> = {
   achtung: {
@@ -109,6 +120,11 @@ export const SIGN_POSES: Readonly<Record<SignId, SignPose>> = {
     arms: ['left', 'right'],
     palm: 'facing',
   },
+  lenkenLinks: steering(25),
+  lenkenLinksVoll: steering(60),
+  lenkenGerade: { keys: [wheel(0)], motion: 'static', arms: ['left', 'right'], palm: 'facing' },
+  lenkenRechts: steering(-25),
+  lenkenRechtsVoll: steering(-60),
 };
 
 const direction = (s: Segment, side: 1 | -1): Vec3 => ({

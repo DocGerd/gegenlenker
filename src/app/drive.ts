@@ -103,7 +103,7 @@ export function startDrive(
     role,
   });
   const sim = createSimulation(params, start, contacts);
-  const { lighting, mirrorsOnly } = settings;
+  const { lighting, mirrorsOnly, signalling } = settings;
   const recorder = createInputRecorder();
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
@@ -115,7 +115,15 @@ export function startDrive(
   root.append(stage);
   const einweiser =
     role === 'einweiser'
-      ? startEinweiserDrive(stage, { truck, trailer, layout, contacts, start: snapshot, lighting })
+      ? startEinweiserDrive(stage, {
+          truck,
+          trailer,
+          layout,
+          contacts,
+          start: snapshot,
+          lighting,
+          mode: signalling,
+        })
       : null;
 
   const stepper = createRunStepper(sim, recorder, tracker, einweiser);
@@ -347,6 +355,7 @@ export function startDrive(
     collapsed,
     mirrorsOnly,
     role,
+    signalling,
     ...(controls === null ? {} : { pedalsBox: () => controls.pedalsBox() }),
     hitch: exercise?.parkedTrailer !== undefined,
   });
