@@ -1470,8 +1470,9 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * it as chrome, so the arrow never lands under it either. It is in the divider's reserve, so wherever the
  * divider is shown the button is too; losing it at any size fails, tablets and desktops included.
  */
-async function expectPaneToolClear(page: Page): Promise<void> {
-  await page.keyboard.press('o');
+async function expectPaneToolClear(page: Page, select = true): Promise<void> {
+  // Selecting the outside view again lays the HUD out once more, so a caller testing one layout pass opts out.
+  if (select) await page.keyboard.press('o');
   const tool = page.locator('[data-hud="freeCamera"]');
   await settled(page);
   await expect(tool, 'shown wherever the panels leave room').toBeVisible();
@@ -1584,6 +1585,42 @@ for (const { locale, messages } of locales) {
       }
     });
   }
+}
+
+// The brief's fold changes the panels' height, so the divider shows or hides and the free camera button follows.
+for (const id of ['straight-reverse', 'coupling'] as const) {
+  test(`folding and unfolding the brief keeps the free camera button clear of the divider with the ${id} card`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      locale: 'en-US',
+      viewport: { width: 1024, height: 600 },
+    });
+    try {
+      const page = await context.newPage();
+      await startFrozenReverse(page, en, id);
+      const toggle = page.locator('[data-hud="briefToggle"]');
+      const divider = page.locator('.hud-split .hud-split-reset');
+      await expect(toggle).toBeVisible();
+      await page.keyboard.press('o');
+      await settled(page);
+      await expect(divider).toBeHidden();
+      const tool = page.locator('[data-hud="freeCamera"]');
+      for (const dividerShown of [true, false]) {
+        await toggle.click();
+        await settled(page);
+        await expect(divider).toBeVisible({ visible: dividerShown });
+        // The layout pass the fold caused: no further relayout hides a stale placement.
+        await expectPaneToolClear(page, false);
+        const [after] = await boxes(tool);
+        await page.keyboard.press('o');
+        await settled(page);
+        expect(await boxes(tool), 'the button does not move on the next layout').toEqual([after]);
+      }
+    } finally {
+      await context.close();
+    }
+  });
 }
 
 // Without an exercise there is no brief: the view row takes its place beside the finish button, and wraps.

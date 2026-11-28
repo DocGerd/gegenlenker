@@ -813,6 +813,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   );
   let splitState: TopDownSplit | null = null;
   let hasCockpit = false;
+  /** Without a divider there is no strip to stand beside; true when that changed the button's corner. */
+  const syncFlush = (): boolean => {
+    const flush = split.hidden === true;
+    if (paneTools === null || paneTools.hasAttribute('data-flush') === flush) return false;
+    paneTools.toggleAttribute('data-flush', flush);
+    return true;
+  };
 
   const keyboardLike = matchMedia('(hover: hover) and (pointer: fine)');
   let typed = false;
@@ -1086,8 +1093,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         paneTools.style.top = `${td.y}px`;
         paneTools.style.width = `${td.width}px`;
         paneTools.style.height = `${td.height}px`;
-        // Without a divider there is no strip to stand beside.
-        paneTools.toggleAttribute('data-flush', split.hidden === true);
+        syncFlush();
         fitFreeCamera();
       }
       if (c) {
@@ -1102,6 +1108,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     setSplit(next) {
       splitState = next;
       divider.set(next, hasCockpit);
+      // layout() ran before this state was final.
+      if (syncFlush()) fitFreeCamera();
     },
     panelsBottom(paneWidth) {
       syncShortScreen();
