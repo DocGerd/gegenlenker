@@ -1,5 +1,59 @@
 [
   {
+    "version": "1.4.0",
+    "date": "2026-11-28",
+    "entries": [
+      {
+        "id": "573.changed",
+        "category": "changed",
+        "prs": [573],
+        "en": "On Balanced graphics, the ground in the cockpit view, the mirrors and the outside view now shows slab joints and mottling, which makes distance and speed easier to read when reversing."
+      },
+      {
+        "id": "586.fixed",
+        "category": "fixed",
+        "prs": [586],
+        "en": "The Einweiser's top view can be panned with the mouse again, and `P` releases his mouse look, with a hint in his band while it is held."
+      },
+      {
+        "id": "588.added",
+        "category": "added",
+        "prs": [588],
+        "en": "As Einweiser, you can show the sight areas where the driver sees you, directly or in a mirror, in the top view and on the ground of your own view; switch them in the top view, in the pause menu or, for your own view, with G, and a run with them on counts as with aids."
+      },
+      {
+        "id": "590.added",
+        "category": "added",
+        "prs": [590],
+        "en": "Drive the truck solo: \"No trailer\" in the setup takes the truck alone through every exercise and yard, with its own bests and Done marks."
+      },
+      {
+        "id": "594.added",
+        "category": "added",
+        "prs": [594],
+        "en": "Einweiser mode with the truck solo: \"No trailer\" in the setup now holds for the ground guide too, who then guides the truck alone into every exercise and yard by its own rear end."
+      },
+      {
+        "id": "597.added",
+        "category": "added",
+        "prs": [597],
+        "en": "New exercise \"Couple and uncouple\": reverse the truck onto a parked trailer's drawbar until the coupling closes, tow the trailer into the marked bay, uncouple it with U or the link button on the exercise card and drive away; the result shows the coupling speed."
+      },
+      {
+        "id": "604.fixed",
+        "category": "fixed",
+        "prs": [604],
+        "en": "The exercise counters stay inside the top view at 800x585 with the outside view on, and its free camera button shows in straight reverse there too."
+      },
+      {
+        "id": "610.fixed",
+        "category": "fixed",
+        "prs": [610],
+        "en": "The free camera button shows at 800x585 under every exercise card, with the counters kept inside the top view."
+      }
+    ]
+  },
+  {
     "version": "1.3.0",
     "date": "2026-11-27",
     "entries": [
