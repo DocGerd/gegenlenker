@@ -212,9 +212,13 @@ function paneLever(insets: Insets): number {
 /**
  * The key legend as `hud.legendBox()` measures it. It stands on the HUD band, a share of the cockpit,
  * so `height` holds only at the split it was measured at; `boxHeight`, its own height, at every split.
- * Without `boxHeight` the legend is taken as fixed on screen.
+ * Without `boxHeight` the legend is taken as fixed on screen. `states` holds its own height in a cockpit
+ * shorter than `below` px and in a taller one, where hud.ts changes what it lists; without it, `boxHeight` holds for both.
  */
-export type MeasuredLegend = LegendBox & { readonly boxHeight?: number };
+export type MeasuredLegend = LegendBox & {
+  readonly boxHeight?: number;
+  readonly states?: { readonly below: number; readonly short: number; readonly tall: number };
+};
 
 /** The inputs of `topDownSplit`. */
 export interface SplitOptions {
@@ -262,15 +266,23 @@ export function topDownSplit(
   const aboveControls = COCKPIT_LABEL + MIN_MIRROR_HEIGHT + MIRROR_GAP;
   // The band, and the legend on it, rise with the cockpit's height: solved for that height, so the
   // range does not move with the share the legend was measured at.
-  const legendNeeded =
-    legend === null
-      ? 0
-      : legend.boxHeight === undefined
-        ? aboveControls + legend.height
-        : (aboveControls + LEGEND_LIFT + legend.boxHeight) / (1 - HUD_BAND_SHARE);
+  const portraitNeeded = (): number => {
+    const controls = aboveControls + controlsHeight(cssWidth, cssHeight, insets);
+    if (legend === null) return controls;
+    if (legend.boxHeight === undefined) return Math.max(controls, aboveControls + legend.height);
+    const holding = (boxHeight: number): number =>
+      Math.max(controls, (aboveControls + LEGEND_LIFT + boxHeight) / (1 - HUD_BAND_SHARE));
+    const { states } = legend;
+    if (states === undefined) return holding(legend.boxHeight);
+    // each state on its side of `below`, so the range does not move with the state measured either;
+    // the short state's need only where the full list also fits every cockpit from `below` up
+    const short = Math.ceil(holding(states.short));
+    const tall = holding(states.tall);
+    return short < states.below && tall <= states.below ? short : Math.max(states.below, tall);
+  };
   const cockpitNeeded = landscape
     ? insets.left + 3 * INSET + GEARS_WIDTH + LEGEND_WIDTH + wheelSize(cssWidth, cssHeight, insets)
-    : Math.max(aboveControls + controlsHeight(cssWidth, cssHeight, insets), legendNeeded);
+    : portraitNeeded();
   // The cockpit is whole px (`computeViewports` rounds the pane), so it keeps the need only when rounded up.
   const max = Math.min(limits.max, Math.max(fallback, 1 - Math.ceil(cockpitNeeded) / extent));
   const divider = dividerExtent(orientation, insets);

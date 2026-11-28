@@ -59,7 +59,7 @@ export type Hud = {
   /** Elapsed run time in seconds; the clock starts with the first driving input, not when the drive opens. */
   setRunTime(seconds: number): void;
   layout(views: ViewRects): void;
-  /** The key legend as laid out by the last `layout`; null while hidden. */
+  /** The key legend as laid out by the last `layout`, and its height in either cockpit state; null while hidden. */
   legendBox(): Required<MeasuredLegend> | null;
   /** Fires when the legend changes size: folding, showing, hiding, other wrapping. */
   onLegendResize(cb: () => void): void;
@@ -598,6 +598,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     });
     syncFreeCamera();
   };
+  /** What the key legend lists over a cockpit shorter than `SHORT_HEIGHT` (`short`) or not. */
+  const setLegendState = (short: boolean): void => {
+    legend.toggleAttribute('data-collapsed', shortScreen ? !keysOpen : !short && collapsed.keys);
+    legend.toggleAttribute('data-drive-only', !shortScreen && short && !allKeys);
+  };
   const syncToggles = (): void => {
     for (const b of viewButtons) b.setAttribute('aria-pressed', String(b.dataset['view'] === view));
     syncFreeCamera();
@@ -625,11 +630,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     const keysExpanded = shortScreen ? keysOpen : shortCockpit ? allKeys : !collapsed.keys;
     keysToggle.setAttribute('aria-expanded', String(keysExpanded));
     legend.toggleAttribute('data-overlay', shortScreen);
-    legend.toggleAttribute(
-      'data-collapsed',
-      shortScreen ? !keysOpen : !shortCockpit && collapsed.keys,
-    );
-    legend.toggleAttribute('data-drive-only', !shortScreen && shortCockpit && !allKeys);
+    setLegendState(shortCockpit);
     topDown.toggleAttribute('data-short', shortScreen);
     setHidden(aidLegend, !aidOpen);
     legendToggle.setAttribute('aria-expanded', String(aidOpen));
@@ -967,11 +968,24 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     }
   };
 
-  const legendBox = (): Required<MeasuredLegend> | null => {
+  const laidOutLegend = (): Required<Omit<MeasuredLegend, 'states'>> | null => {
     const r = legend.getBoundingClientRect();
     if (r.width === 0) return null;
     const stage = root.getBoundingClientRect();
     return { right: r.right - stage.left, height: stage.bottom - r.top, boxHeight: r.height };
+  };
+  const legendBox = (): Required<MeasuredLegend> | null => {
+    const box = laidOutLegend();
+    if (box === null) return null;
+    let other = box.boxHeight;
+    // The compact and overlay states hold at any cockpit height; the other is put back before it paints.
+    if (!shortScreen && !cockpit.hasAttribute('data-compact')) {
+      setLegendState(!shortCockpit);
+      other = legend.getBoundingClientRect().height;
+      setLegendState(shortCockpit);
+    }
+    const [short, tall] = shortCockpit ? [box.boxHeight, other] : [other, box.boxHeight];
+    return { ...box, states: { below: SHORT_HEIGHT, short, tall } };
   };
 
   return {
@@ -1075,7 +1089,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         sightBox.style.left = `${box.x - c.x}px`;
         sightBox.style.top = `${box.y - c.y}px`;
       }
-      const column = messageColumn(views, legendBox(), insets);
+      const column = messageColumn(views, laidOutLegend(), insets);
       toastWrap.style.left = `${column.x}px`;
       toastWrap.style.top = `${column.y}px`;
       toastWrap.style.width = `${column.width}px`;
