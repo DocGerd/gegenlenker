@@ -1,7 +1,6 @@
 import type {
   AidFlags,
   CollapsedPanels,
-  LegendBox,
   Rect,
   TopDownMode,
   TopDownSplit,
@@ -17,7 +16,13 @@ import { SIGN_NAME } from '../i18n/sign-names';
 import { isFormField } from '../input/keyboard';
 import { CHROME_SELECTOR } from './chrome-selector';
 import { goalCueTexts } from './goal-cue';
-import { hasTopDown, messageColumn, readSafeInsets, sightCueBox } from '../render/viewports';
+import {
+  hasTopDown,
+  messageColumn,
+  readSafeInsets,
+  sightCueBox,
+  type MeasuredLegend,
+} from '../render/viewports';
 import { actionFor, isAction, type Action } from '../input/keymap';
 import { driveLegendRows, legendRowMarkup } from '../input/legend';
 import type { SightFlags } from '../render/scene-renderer';
@@ -55,7 +60,7 @@ export type Hud = {
   setRunTime(seconds: number): void;
   layout(views: ViewRects): void;
   /** The key legend as laid out by the last `layout`; null while hidden. */
-  legendBox(): LegendBox | null;
+  legendBox(): Required<MeasuredLegend> | null;
   /** Fires when the legend changes size: folding, showing, hiding, other wrapping. */
   onLegendResize(cb: () => void): void;
   /** The reset-view button is enabled while the top-down view differs from its default framing. */
@@ -947,11 +952,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     }
   };
 
-  const legendBox = (): LegendBox | null => {
+  const legendBox = (): Required<MeasuredLegend> | null => {
     const r = legend.getBoundingClientRect();
     if (r.width === 0) return null;
     const stage = root.getBoundingClientRect();
-    return { right: r.right - stage.left, height: stage.bottom - r.top };
+    return { right: r.right - stage.left, height: stage.bottom - r.top, boxHeight: r.height };
   };
 
   return {

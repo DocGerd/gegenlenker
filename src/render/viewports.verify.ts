@@ -56,6 +56,7 @@ import {
   WIDE_GAP_PX,
   wrapLines,
   type Insets,
+  type MeasuredLegend,
   type PanelStack,
 } from './viewports';
 import {
@@ -548,7 +549,7 @@ function legendFor(
   w: number,
   h: number,
   m: Metrics,
-): { box: LegendBox; left: number; width: number } | null {
+): { box: Required<MeasuredLegend>; left: number; width: number } | null {
   const { cockpit } = views;
   const { legend: kind, mode } = v;
   if (kind === 'none' || cockpit === null) return null;
@@ -573,7 +574,7 @@ function legendFor(
   const left = einweiser ? SPACE_4 + v.insets.left : m.hudInset;
   const lift = HUD_BAND_SHARE * cockpit.height + GEOM.legendLift;
   return {
-    box: { right: left + state.width, height: lift + state.height },
+    box: { right: left + state.width, height: lift + state.height, boxHeight: state.height },
     left,
     width: state.width,
   };
@@ -757,12 +758,17 @@ function evaluate(v: Variant, w: number, h: number): void {
     }
     if (split.share > split.fallback + 1e-12) {
       const cockpitExtent = landscape ? cockpit.width : cockpit.height;
+      // the legend as it stands over this cockpit, not the one it was measured over
+      const legendHeight =
+        legend === null
+          ? 0
+          : HUD_BAND_SHARE * cockpit.height + GEOM.legendLift + legend.box.boxHeight;
       const needed = landscape
         ? insets.left + 3 * SPACE_4 + GEARS_W + LEGEND_W + m.wheel
         : COCKPIT_LABEL +
           MIN_MIRROR_HEIGHT +
           MESSAGE_GAP +
-          Math.max(controlsHeight(w, h, insets), legend?.box.height ?? 0);
+          Math.max(controlsHeight(w, h, insets), legendHeight);
       // a deficit of at most half a pixel is what rounding the pane to whole px leaves; it is a failure all the same
       const deficit = needed - cockpitExtent;
       const room: Property =

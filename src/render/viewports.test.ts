@@ -17,6 +17,7 @@ import {
   controlsHeight,
   FRONT_ASPECT,
   hasTopDown,
+  HUD_BAND_SHARE,
   messageColumn,
   MESSAGE_KEYS,
   MIN_FRONT_WIDTH,
@@ -384,6 +385,41 @@ describe('top-down split', () => {
           }
         }
       }
+    }
+  });
+
+  it('keeps its range wherever the legend on the HUD band was measured', () => {
+    // taller than the controls need; as hud.ts measures it over a cockpit `c` px tall, 12 px above the band
+    for (const [w, h, boxHeight] of [
+      [620, 774, 240],
+      [768, 1024, 300],
+    ] as const) {
+      const measured = (c: number) => ({
+        right: 400,
+        height: HUD_BAND_SHARE * c + 12 + boxHeight,
+        boxHeight,
+      });
+      const need = (c: number): number => 32 + MIN_MIRROR_HEIGHT + 8 + measured(c).height;
+      const cockpitAt = (portrait: number): number =>
+        computeViewports(w, h, {
+          mode: 'drive',
+          layout: { landscape: 0.4, portrait },
+          insets: NO_INSETS,
+        }).cockpit?.height ?? 0;
+      const splitAt = (portrait: number) =>
+        topDownSplit(w, h, {
+          layout: { landscape: 0.4, portrait },
+          legend: measured(cockpitAt(portrait)),
+          insets: NO_INSETS,
+        });
+      const { min, max } = splitAt(DEFAULT_TOP_DOWN_LAYOUT.portrait);
+      for (const share of [min, (min + max) / 2, max]) {
+        expect(splitAt(share), `${w}x${h} at ${share}`).toMatchObject({ min, max });
+      }
+      // the cockpit at the largest share is the least that holds the legend as it stands there
+      const least = cockpitAt(max);
+      expect(least, `${w}x${h}`).toBeGreaterThanOrEqual(need(least));
+      expect(least - 1, `${w}x${h}`).toBeLessThan(need(least - 1));
     }
   });
 

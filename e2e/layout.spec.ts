@@ -1314,6 +1314,9 @@ async function expectDividerClears(page: Page, size: Size): Promise<void> {
     await page.keyboard.press(key);
     await expect(handle(page)).toHaveAttribute('aria-valuenow', String(key === 'Home' ? min : max));
     await settled(page);
+    // the range does not move with the share it bounds
+    await expect(handle(page)).toHaveAttribute('aria-valuemin', String(min));
+    await expect(handle(page)).toHaveAttribute('aria-valuemax', String(max));
 
     const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
     const controls = await boxes(
