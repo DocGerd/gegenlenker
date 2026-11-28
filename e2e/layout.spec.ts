@@ -2113,6 +2113,24 @@ test('the divider runs across the screen in portrait', async ({ page }) => {
   await expect.poll(bottom).toBeLessThan(before);
 });
 
+test(
+  'the portrait divider keeps its range where the cockpit crosses the drive-keys-only height',
+  heavyAt('low'),
+  async ({ page }) => {
+    test.slow();
+    // The default share leaves the cockpit short enough for the drive keys only, the smallest one not.
+    const size = { width: 900, height: 1150 };
+    await page.setViewportSize(size);
+    await startFrozenReverse(page, en, 'coupling');
+    const legend = page.locator('.hud-legend');
+    await expect(legend).toHaveAttribute('data-drive-only', '');
+    await expectDividerClears(page, size);
+    await handle(page).focus();
+    await page.keyboard.press('Home');
+    await expect(legend).not.toHaveAttribute('data-drive-only');
+  },
+);
+
 /** Where the class V mirror shows: wide and tall screens, the key legend open or folded away. */
 const closeScreens = [
   { size: { width: 1920, height: 1080 }, folded: false },

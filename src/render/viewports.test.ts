@@ -423,6 +423,40 @@ describe('top-down split', () => {
     }
   });
 
+  it('keeps its range where the legend drops to the drive keys in a short cockpit', () => {
+    // hud.ts lists the drive keys only in a cockpit below `below` px; boxes as in `LEGEND_BOXES`
+    const [w, h, below, short, tall] = [900, 1150, 740, 142, 382] as const;
+    const measured = (c: number) => {
+      const boxHeight = c < below ? short : tall;
+      return {
+        right: 400,
+        height: HUD_BAND_SHARE * c + 12 + boxHeight,
+        boxHeight,
+        states: { below, short, tall },
+      };
+    };
+    const cockpitAt = (portrait: number): number =>
+      computeViewports(w, h, {
+        mode: 'drive',
+        layout: { landscape: 0.4, portrait },
+        insets: NO_INSETS,
+      }).cockpit?.height ?? 0;
+    const splitAt = (portrait: number) =>
+      topDownSplit(w, h, {
+        layout: { landscape: 0.4, portrait },
+        legend: measured(cockpitAt(portrait)),
+        insets: NO_INSETS,
+      });
+    const { min, max } = splitAt(DEFAULT_TOP_DOWN_LAYOUT.portrait);
+    expect(cockpitAt(DEFAULT_TOP_DOWN_LAYOUT.portrait)).toBeLessThan(below);
+    expect(cockpitAt(min)).toBeGreaterThanOrEqual(below);
+    for (const share of [min, (min + max) / 2, max]) {
+      expect(splitAt(share), `at ${share}`).toMatchObject({ min, max });
+    }
+    const least = cockpitAt(max);
+    expect(least).toBeGreaterThanOrEqual(32 + MIN_MIRROR_HEIGHT + 8 + measured(least).height);
+  });
+
   it('leaves the cockpit the room its controls need', () => {
     for (const [w, h] of sizes) {
       const { share, fallback } = topDownSplit(w, h, {

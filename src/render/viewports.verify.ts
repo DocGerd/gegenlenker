@@ -561,21 +561,28 @@ function legendFor(
   const compact =
     !einweiser &&
     cockpit.width < (right(cockpit) >= w - 1 ? COMPACT_WIDTH_WITH_LEVER : COMPACT_WIDTH);
-  const state =
+  // over a cockpit shorter than `SHORT_HEIGHT` or not
+  const stateAt = (short: boolean) =>
     h < SHORT_SCREEN
       ? boxes.overlay
       : compact
         ? LEGEND_BOXES.compact
-        : cockpit.height < SHORT_HEIGHT && kind === 'measured'
+        : short && kind === 'measured'
           ? boxes.driveOnly
           : mode === 'mirrors'
             ? boxes.mirrorsFull
             : boxes.full;
+  const state = stateAt(cockpit.height < SHORT_HEIGHT);
   // `.hud-legend` stands at `--hud-inset` from the cockpit's left (his at the screen's edge) and above the HUD band
   const left = einweiser ? SPACE_4 + v.insets.left : m.hudInset;
   const lift = HUD_BAND_SHARE * cockpit.height + GEOM.legendLift;
   return {
-    box: { right: left + state.width, height: lift + state.height, boxHeight: state.height },
+    box: {
+      right: left + state.width,
+      height: lift + state.height,
+      boxHeight: state.height,
+      states: { below: SHORT_HEIGHT, short: stateAt(true).height, tall: stateAt(false).height },
+    },
     left,
     width: state.width,
   };
