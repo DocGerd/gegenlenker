@@ -32,6 +32,8 @@ const COCKPIT_LABEL = 32;
 const MIRROR_SCALE = 1.22;
 /** The opaque HUD band's share of the cockpit height; mirrors `--hud-band` in hud.css. */
 export const HUD_BAND_SHARE = 0.18;
+/** How far `.hud-legend` stands above the HUD band (hud.css). */
+const LEGEND_LIFT = 12;
 /** The band's top edge as NDC y of the cockpit view: nothing a trainee must see lies below it. */
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
 /** Smallest mirror height; where the room above the controls and `MIRROR_GAP` is smaller, class II shrinks to that room. */
@@ -207,12 +209,19 @@ function paneLever(insets: Insets): number {
   return 1.5 * tokenPx('--size-target', 44) + INSET + insets.right + MESSAGE_GAP;
 }
 
+/**
+ * The key legend as `hud.legendBox()` measures it. It stands on the HUD band, a share of the cockpit,
+ * so `height` holds only at the split it was measured at; `boxHeight`, its own height, at every split.
+ * Without `boxHeight` the legend is taken as fixed on screen.
+ */
+export type MeasuredLegend = LegendBox & { readonly boxHeight?: number };
+
 /** The inputs of `topDownSplit`. */
 export interface SplitOptions {
   /** The stored share (default `DEFAULT_TOP_DOWN_LAYOUT`). */
   readonly layout?: TopDownLayout | undefined;
   /** The measured key legend. */
-  readonly legend?: LegendBox | null | undefined;
+  readonly legend?: MeasuredLegend | null | undefined;
   /** The safe-area insets (default: read from the CSS tokens). */
   readonly insets?: Insets | undefined;
   /** The measured panel stack above the divider. */
@@ -250,12 +259,18 @@ export function topDownSplit(
   const fallback = DEFAULT_TOP_DOWN_LAYOUT[orientation];
   const limits = TOP_DOWN_SHARE_LIMITS[orientation];
   const extent = landscape ? cssWidth : cssHeight;
+  const aboveControls = COCKPIT_LABEL + MIN_MIRROR_HEIGHT + MIRROR_GAP;
+  // The band, and the legend on it, rise with the cockpit's height: solved for that height, so the
+  // range does not move with the share the legend was measured at.
+  const legendNeeded =
+    legend === null
+      ? 0
+      : legend.boxHeight === undefined
+        ? aboveControls + legend.height
+        : (aboveControls + LEGEND_LIFT + legend.boxHeight) / (1 - HUD_BAND_SHARE);
   const cockpitNeeded = landscape
     ? insets.left + 3 * INSET + GEARS_WIDTH + LEGEND_WIDTH + wheelSize(cssWidth, cssHeight, insets)
-    : COCKPIT_LABEL +
-      MIN_MIRROR_HEIGHT +
-      MIRROR_GAP +
-      Math.max(controlsHeight(cssWidth, cssHeight, insets), legend?.height ?? 0);
+    : Math.max(aboveControls + controlsHeight(cssWidth, cssHeight, insets), legendNeeded);
   // The cockpit is whole px (`computeViewports` rounds the pane), so it keeps the need only when rounded up.
   const max = Math.min(limits.max, Math.max(fallback, 1 - Math.ceil(cockpitNeeded) / extent));
   const divider = dividerExtent(orientation, insets);

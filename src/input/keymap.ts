@@ -108,6 +108,8 @@ type LegendSpec = {
   readonly chaseOnly?: boolean;
   /** Dropped where the cockpit view cannot look around. */
   readonly lookOnly?: boolean;
+  /** Dropped unless the exercise couples. */
+  readonly couplingOnly?: boolean;
   /** Replaces term and desc where the outside view exists. */
   readonly withChase?: { readonly term: LegendTerm; readonly desc: MessageKey };
 };
@@ -163,14 +165,18 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
   { action: 'gearN', match: { by: 'code', values: ['Digit3', 'Numpad3'] }, scope: 'drive' },
   { action: 'gearD', match: { by: 'code', values: ['Digit4', 'Numpad4'] }, scope: 'drive' },
   {
+    action: 'uncouple',
+    match: { by: 'code', values: ['KeyU'] },
+    scope: 'drive',
+    legend: { term: 'U', desc: 'uncouple', couplingOnly: true },
+  },
+  {
     action: 'lights',
     match: { by: 'code', values: ['KeyH'] },
     scope: 'drive',
     legend: { term: 'H / X', desc: 'lampKeys', viewOnly: true },
   },
   { action: 'hazard', match: { by: 'code', values: ['KeyX'] }, scope: 'drive' },
-  // shown on the HUD's uncouple button, which only a coupling run has
-  { action: 'uncouple', match: { by: 'code', values: ['KeyU'] }, scope: 'drive' },
   // The Einweiser's keys: after the driver's, before the shared ones, which is the order of his legend.
   {
     action: 'walkForward',
@@ -298,10 +304,16 @@ export const isAction = (action: Action, e: KeyLike): boolean =>
   BINDINGS.some((b) => b.action === action && matches(b, e));
 
 /** The key legend of `role` in display order; `chase` is whether the outside view exists, `look` whether the cockpit view looks around. */
-export function legendRows(chase: boolean, look = false, role: Role = 'driver'): LegendRow[] {
+export function legendRows(
+  chase: boolean,
+  look = false,
+  role: Role = 'driver',
+  coupling = false,
+): LegendRow[] {
   return KEYMAP.map(({ legend }) => legend).flatMap((spec) => {
     if (spec === undefined || !(spec.roles ?? DRIVER).includes(role)) return [];
     if ((spec.chaseOnly === true && !chase) || (spec.lookOnly === true && !look)) return [];
+    if (spec.couplingOnly === true && !coupling) return [];
     const { term, desc } = chase && spec.withChase !== undefined ? spec.withChase : spec;
     return [{ term, desc, viewOnly: spec.viewOnly ?? false }];
   });

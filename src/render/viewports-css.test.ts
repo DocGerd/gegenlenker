@@ -78,6 +78,7 @@ describe('the viewports.ts fallbacks match the CSS', () => {
     expect(numberConst(SOURCE.viewports, 'MESSAGE_LINE'), 'MESSAGE_LINE').toBe(GEOM.messageLine);
     expect(numberConst(SOURCE.viewports, 'MESSAGE_BOX'), 'MESSAGE_BOX').toBe(GEOM.messageBox);
     expect(numberConst(SOURCE.viewports, 'MESSAGE_GAP'), 'MESSAGE_GAP').toBe(GEOM.stackGap);
+    expect(numberConst(SOURCE.viewports, 'LEGEND_LIFT'), 'LEGEND_LIFT').toBe(GEOM.legendLift);
   });
 
   it('the cockpit label clears its own height', () => {
