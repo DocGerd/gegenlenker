@@ -51,15 +51,13 @@ test('loads from the subpath and drives an exercise offline', async ({
     return urls;
   });
   const defaults = QUALITY_FLAGS[DEFAULT_GRAPHICS];
-  const shells = Object.entries(ASSET_REGISTRY)
-    .filter(([, { kind, flag }]) => kind === 'glb' && defaults[flag])
-    .map(([stem]) => stem);
-  expect(shells.length).toBeGreaterThan(0);
-  for (const key of shells) {
-    const shell = new RegExp(`${key}-[\\w-]+\\.glb$`);
+  const drawn = Object.entries(ASSET_REGISTRY).filter(([, { flag }]) => defaults[flag]);
+  expect(drawn.map(([stem]) => stem)).toContain('ground');
+  for (const [stem, { kind }] of drawn) {
+    const file = new RegExp(`${stem}-[\\w-]+\\.${kind}$`);
     expect(
-      cached.filter((url) => shell.test(url)),
-      key,
+      cached.filter((url) => file.test(url)),
+      stem,
     ).toHaveLength(1);
   }
 
@@ -82,7 +80,8 @@ test('loads from the subpath and drives an exercise offline', async ({
     'data-vehicle-shells',
     'krone-azw-18-trailer man-le-18-280-body man-le-18-280-cab',
   );
-  expect(warnings.filter((w) => w.includes('Shell '))).toEqual([]);
+  await expect(page.locator('html')).toHaveAttribute('data-ground-texture', /^ktx2:/);
+  expect(warnings.filter((w) => /Shell |Ground texture/.test(w))).toEqual([]);
 });
 
 test('About opens offline after the first visit', async ({ page, context }) => {
@@ -232,7 +231,6 @@ test(
         /asphalt-packed-[\w-]+\.ktx2$/,
         /concrete-albedo-[\w-]+\.ktx2$/,
         /concrete-packed-[\w-]+\.ktx2$/,
-        /ground-[\w-]+\.ktx2$/,
         /man-le-18-280-interior-[\w-]+\.glb$/,
         /pavers-albedo-[\w-]+\.ktx2$/,
         /pavers-packed-[\w-]+\.ktx2$/,
@@ -249,7 +247,7 @@ test(
     const matching = (urls: string[], file: RegExp): string[] =>
       urls.filter((url) => file.test(url));
 
-    // Installing does not download them: only High draws the texture, so the other presets skip the cost.
+    // Installing does not download them: only High draws them, so the other presets skip the cost.
     const installed = await cached();
     for (const file of files) expect(matching(installed.precache, file), String(file)).toEqual([]);
     // Every textured preset needs the transcoder, so installing downloads it.
@@ -283,7 +281,7 @@ test(
       }, high)
       .toEqual(drawn.map(() => 1));
 
-    // The marker follows the preset: Balanced draws no reflections, so it is gone.
+    // The markers follow the preset: Balanced keeps the ground texture and drops the High-only layers.
     await page.getByRole('button', { name: en.pause }).click();
     await page
       .getByRole('dialog', { name: en.paused })
@@ -293,6 +291,7 @@ test(
     await chooseSetting(page, en, 'graphics', 'balanced');
     await startExercise(page, en, 'straight-reverse');
     await expect(page.locator('[data-view="follow"]')).toBeVisible();
+    await expect(marker).toHaveAttribute('data-ground-texture', target ?? '', high);
     await expect(marker).not.toHaveAttribute('data-ground-pbr', /.*/);
     await expect(marker).not.toHaveAttribute('data-vehicle-pbr', /.*/);
     await expect(marker).not.toHaveAttribute('data-sky-hdri', /.*/);

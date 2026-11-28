@@ -15,6 +15,7 @@ import {
 import type { WebGPURenderer } from 'three/webgpu';
 import transcoderJsUrl from 'three/examples/jsm/libs/basis/basis_transcoder.js?url';
 import transcoderWasmUrl from 'three/examples/jsm/libs/basis/basis_transcoder.wasm?url';
+import { gpuLost } from './seams';
 import { ShaderRejectedError, watchShaderErrors } from './shader-check';
 
 /*
@@ -53,7 +54,8 @@ export type TextureMaps<K extends string> = Readonly<Record<K, Texture>>;
 export interface TextureSet<K extends string> {
   /**
    * The renderer whose compressed-format support picks the transcoding target, and whose shader
-   * errors are watched; a later one (after a loss) replaces it and keeps a loaded set.
+   * errors are watched; a later one (after a loss) replaces it and keeps a loaded set. A load the
+   * loss cut short starts again on the later one without spending an attempt.
    */
   attach(renderer: WebGPURenderer): void;
   /**
@@ -240,10 +242,11 @@ export function startTextureSet<K extends string>({
 
   const start = (): void => {
     if (loading || loaded !== null || rejected || disposed) return;
-    if (!enabled || renderer === null || attempts >= MAX_ATTEMPTS) return;
+    if (!enabled || renderer === null || gpuLost(renderer) || attempts >= MAX_ATTEMPTS) return;
+    const gl = renderer;
     loading = true;
     attempts++;
-    load(renderer)
+    load(gl)
       .then((maps) => {
         loading = false;
         if (disposed || rejected) {
@@ -259,6 +262,12 @@ export function startTextureSet<K extends string>({
       })
       .catch((error: unknown) => {
         loading = false;
+        if (gpuLost(gl)) {
+          // not the texture's fault: the replacing renderer loads it afresh
+          attempts--;
+          start();
+          return;
+        }
         if (error instanceof ShaderRejectedError) {
           // the same shader fails again: no retry, as for a GLSL error
           console.warn(`${label} shader rejected by the GPU`, error);
