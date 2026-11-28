@@ -41,6 +41,11 @@ export const GRACE_CAP = 1.5;
 export const IN_PATH_MARGIN = 1;
 /** Clearance to a body below this (m) while moving is `tooClose`. */
 export const TOO_CLOSE = 0.5;
+/**
+ * Half width of the crosswise band (rad): facing within it of square to the cab, his own left and right
+ * are neither side's of the driver, so a steering sign to a side is unclear.
+ */
+export const CROSSWISE_HALF_ANGLE = Math.PI / 6;
 
 /** Hashed for Einweiser runs; order is part of the hash. */
 export const EINWEISER_THRESHOLDS = {
@@ -52,6 +57,7 @@ export const EINWEISER_THRESHOLDS = {
   GRACE_CAP,
   IN_PATH_MARGIN,
   TOO_CLOSE,
+  CROSSWISE_HALF_ANGLE,
 } as const;
 
 /** The steering signs: each sets the wheel and moves like Links/Rechts fahren. */
@@ -62,6 +68,13 @@ export const STEERING_SIGNS: ReadonlySet<SignId> = new Set<SignId>([
   'lenkenRechts',
   'lenkenRechtsVoll',
 ]);
+
+/** The steering signs to a side: the driver must tell his left from his right. */
+const SIDED = new Set<SignId>([...STEERING_SIGNS].filter((sign) => sign !== 'lenkenGerade'));
+
+/** He faces across the cab (heading `cab`) inside the crosswise band. */
+export const crosswise = (cab: number, facing: number): boolean =>
+  Math.abs(Math.cos(facing - cab)) < Math.sin(CROSSWISE_HALF_ANGLE);
 
 /** Signs that set the vehicle moving. */
 export const MOVEMENT_SIGNS: ReadonlySet<SignId> = new Set<SignId>([
@@ -130,6 +143,8 @@ export type Perception = {
   readonly station: Station;
   /** He is in sight inside the swept path (`inPath`). */
   readonly inPath: boolean;
+  /** He faces across the cab (`crosswise`). */
+  readonly crosswise: boolean;
   /** Readability and facing of `sign`, judged at recognition only. */
   readonly judge: () => Judgement;
 };
@@ -150,6 +165,7 @@ export function perceive(
     inSight,
     station: station(g, s.truck, pose),
     inPath: inSight && inPath(g, s, pose),
+    crosswise: crosswise(s.truck.heading, pose.heading),
     judge: () => judge(g, s, pose, sign, local),
   };
 }
@@ -273,7 +289,8 @@ export function createReader(): Reader {
           p.station === 'abeam' &&
           (((sign === 'herkommen' || sign === 'entfernen') && fresh) ||
             (GEARED.has(sign) && standing));
-        if (!readable || (MOVEMENT_SIGNS.has(sign) && !facing) || banded) {
+        const sideless = SIDED.has(sign) && p.crosswise;
+        if (!readable || (MOVEMENT_SIGNS.has(sign) && !facing) || banded || sideless) {
           acted = null;
           return { kind: 'unclear', sign };
         }
