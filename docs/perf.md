@@ -18,6 +18,8 @@ pnpm perf:tablet [--throttle <n>] [--preset low|balanced|high|all] [--runs <n>]
 - It aborts on a software renderer (SwiftShader, llvmpipe), where fps is meaningless; `--allow-software` overrides that for debugging the harness.
 - `--backend` sets the app's `?backend=` (see below) and fails a cell drawn on another backend; `auto` fails one not drawn on WebGPU, since it runs the WebGPU gate. The table names each cell's backend. For WebGPU it adds `--enable-unsafe-webgpu`, and on WSL `--use-webgpu-adapter=opengles`: WSL has no hardware Vulkan driver, so Dawn's OpenGL ES backend is its only hardware adapter, and that one runs in compatibility mode (no canvas MSAA).
 
+Known limitation: the resolution governor's kept level can strand below scale 1.00 under a lighter load that does not depend on the scale. Parked, see #357.
+
 Runs in Chromium's new headless mode, so no window opens or takes focus. On WSL it sets the GPU launch (see "Headless and the GPU") when `/usr/lib/wsl/lib` exists; elsewhere Chromium picks its default GPU path.
 
 ## Graphics backend
