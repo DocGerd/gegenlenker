@@ -22,6 +22,7 @@ const defaults: Settings = {
   fov: 90,
   mouseSensitivity: 'medium',
   invertMouse: false,
+  signalling: 'tail',
 };
 
 const stored: Settings = {
@@ -44,6 +45,7 @@ const stored: Settings = {
   fov: 110,
   mouseSensitivity: 'high',
   invertMouse: true,
+  signalling: 'steering',
 };
 
 describe('loadSettings', () => {

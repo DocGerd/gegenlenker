@@ -1207,6 +1207,7 @@
 
 /* The band holds the shown sign's name and the sign bar, and without the top view the counters. */
 .hud[data-role='einweiser'] .hud-band {
+  container: band / size;
   display: grid;
   grid-template-columns: 8.5rem minmax(0, 1fr) auto;
   grid-template-rows: minmax(0, 1fr);
@@ -1246,6 +1247,34 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.hud-sign-bar[data-mode='steering'] {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+/* In a band under six times as wide as tall, one row of twelve draws smaller figures than two rows of six with the key beside the figure. */
+@container band (max-aspect-ratio: 6 / 1) {
+  .hud-sign-bar[data-mode='steering'] {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+
+  .hud-sign-bar[data-mode='steering'] .hud-sign {
+    flex-direction: row;
+    gap: 2px;
+  }
+
+  /* beside its key, a figure takes the slot's height, never its own */
+  .hud-sign-bar[data-mode='steering'] .hud-sign-figure {
+    height: 100%;
+    min-width: 0;
+  }
+
+  /* no names beside the figures: the shown sign's name stands beside the bar */
+  .hud-sign-bar[data-mode='steering'] .hud-sign-label {
+    display: none;
+  }
 }
 
 .hud-sign {
@@ -1292,6 +1321,18 @@
   opacity: 0.35;
 }
 
+/* The steering signs' wheel faint, the turn on it bold, so they read apart in the smallest slot. */
+.hud-sign-figure .hud-sign-wheel {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.05;
+  opacity: 0.35;
+}
+
+.hud-sign-cue {
+  stroke-width: 0.12;
+}
+
 /* Names under the figures only where the slots are wide and tall enough to keep the figures legible. */
 .hud-sign-label {
   display: none;
@@ -1304,6 +1345,13 @@
 @container signs (min-width: 720px) and (min-height: 96px) {
   .hud-sign-label {
     display: block;
+  }
+}
+
+/* The steering bar's twelve slots need the width nine get at 720px. */
+@container signs (max-width: 959.98px) {
+  .hud-sign-bar[data-mode='steering'] .hud-sign-label {
+    display: none;
   }
 }
 

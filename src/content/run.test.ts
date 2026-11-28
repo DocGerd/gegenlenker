@@ -239,7 +239,7 @@ describe('Einweiser run pin', () => {
   // A change here without an EINWEISER_REVISION bump keeps stored Einweiser runs that would replay with other faults.
   it('depot', () => {
     expect(pinnedEinweiser('depot', 'slalom')).toEqual({
-      EINWEISER_REVISION: 1,
+      EINWEISER_REVISION: 2,
       digest: '4d55ab0a',
       result: {
         runOver: false,
@@ -259,7 +259,7 @@ describe('Einweiser run pin', () => {
 
   it('logistics', () => {
     expect(pinnedEinweiser('logistics', 'reverse-bay')).toEqual({
-      EINWEISER_REVISION: 1,
+      EINWEISER_REVISION: 2,
       digest: 'a29c260e',
       result: {
         runOver: false,
@@ -279,7 +279,7 @@ describe('Einweiser run pin', () => {
 
   it('logistics solo', () => {
     expect(pinnedEinweiser('logistics', 'reverse-bay', null)).toEqual({
-      EINWEISER_REVISION: 1,
+      EINWEISER_REVISION: 2,
       digest: '8ef43f78',
       result: {
         runOver: false,

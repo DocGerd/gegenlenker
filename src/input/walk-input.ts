@@ -1,8 +1,8 @@
-import type { SignId } from '../contracts/einweiser';
+import type { SignallingMode, SignId } from '../contracts/einweiser';
 import type { Rect } from '../contracts/render';
 import type { EinweiserInput } from '../einweiser/track';
 import { isFormField } from './keyboard';
-import { actionFor, SIGN_OF, type Action } from './keymap';
+import { actionFor, SIGN_OF, signActionFor, type Action } from './keymap';
 import { createHeldSigns } from './held-signs';
 import { createLook, type LookSettings } from './look';
 import { createPointerLock, type PointerLock } from './pointer-lock';
@@ -18,6 +18,8 @@ export type WalkInputOptions = {
   readonly heading: number;
   /** Read per mouse move, so a changed setting applies at once. */
   readonly look: () => LookSettings;
+  /** Which sign set the keys give; tail direction when absent. */
+  readonly mode?: SignallingMode;
 };
 
 export type WalkSurface = {
@@ -40,7 +42,11 @@ export type WalkInput = {
   pause(): void;
 };
 
-export function createWalkInput({ heading, look: settings }: WalkInputOptions): WalkInput {
+export function createWalkInput({
+  heading,
+  look: settings,
+  mode = 'tail',
+}: WalkInputOptions): WalkInput {
   const look = createLook({ heading, pitch: 0 }, settings);
   const signs = createHeldSigns();
   /** Walk keys down, by code. */
@@ -95,7 +101,7 @@ export function createWalkInput({ heading, look: settings }: WalkInputOptions): 
             return;
           }
           const walk = actionFor('walk', e);
-          const sign = actionFor('sign', e);
+          const sign = signActionFor(mode, e);
           if (walk === undefined && sign === undefined) return;
           e.preventDefault();
           if (e.repeat) return;

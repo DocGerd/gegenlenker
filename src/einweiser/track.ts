@@ -3,6 +3,7 @@ import {
   type EinweiserPose,
   type EinweiserStatus,
   type ReadingKind,
+  type SignallingMode,
   type SignId,
 } from '../contracts/einweiser';
 import type { EinweiserSample, EinweiserTrack } from '../contracts/exercise';
@@ -53,6 +54,8 @@ export type EinweiserRunSetup = {
   readonly yard: Rect2;
   /** The run's first snapshot: he starts behind the rear end (`startWalker`). */
   readonly start: SimSnapshot;
+  /** How he signals a turn; tail direction when absent. */
+  readonly mode?: SignallingMode;
   /** The pilot the driver acts through; pass one to look ahead with its forks. */
   readonly pilot?: Pilot;
 };
@@ -73,7 +76,8 @@ export function createEinweiserRun({
   occluders,
   yard,
   start,
-  pilot = createPilot(g.params),
+  mode = 'tail',
+  pilot = createPilot(g.params, mode),
 }: EinweiserRunSetup): EinweiserRun {
   const driver = createDriver(g, occluders, pilot);
   let walker = startWalker(g.params, start);
@@ -122,7 +126,7 @@ export function createEinweiserRun({
     },
     walker: () => walker,
     held: () => held,
-    track: () => ({ samples: [...samples], signs: [...signs] }),
+    track: () => ({ mode, samples: [...samples], signs: [...signs] }),
   };
 }
 

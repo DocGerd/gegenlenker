@@ -76,8 +76,17 @@ const arm = (upper: Segment, fore: Segment): ArmPose => ({ upper, fore });
 /** An arm that gives no sign: lowered, its hand at the frame's lower edge. */
 const LOWERED = arm(seg(0, -65), seg(-15, 40));
 
-/** The signing arms' first-person keys, one per `SIGN_POSES` key, for the arms that give the sign. */
-const FIRST_PERSON: Readonly<Record<SignId, readonly ArmPose[]>> = {
+/** Both hands on an imagined wheel before him, turned by `turn` degrees toward his left. */
+const wheel = (turn: number): BodyPose => ({
+  left: arm(seg(5, -25), seg(-15, 30 - turn)),
+  right: arm(seg(5, -25), seg(-15, 30 + turn)),
+});
+
+/**
+ * The signing arms' first-person keys, one per `SIGN_POSES` key, for the arms that give the sign: one
+ * pose for each signing arm, or a pose per arm.
+ */
+const FIRST_PERSON: Readonly<Record<SignId, readonly (ArmPose | BodyPose)[]>> = {
   // raised forward-up, not straight up
   achtung: [arm(seg(0, 20), seg(-5, 40))],
   // hands out to the sides at about ±25° azimuth, not straight sideways
@@ -89,6 +98,11 @@ const FIRST_PERSON: Readonly<Record<SignId, readonly ArmPose[]>> = {
   links: [arm(seg(0, -25), seg(20, 15)), arm(seg(0, -25), seg(-15, 15))],
   rechts: [arm(seg(0, -25), seg(20, 15)), arm(seg(0, -25), seg(-15, 15))],
   abstand: [arm(seg(5, -25), seg(10, 5)), arm(seg(5, -25), seg(-20, 5))],
+  lenkenLinks: [wheel(0), wheel(12)],
+  lenkenLinksVoll: [wheel(0), wheel(28)],
+  lenkenGerade: [wheel(0)],
+  lenkenRechts: [wheel(0), wheel(-12)],
+  lenkenRechtsVoll: [wheel(0), wheel(-28)],
 };
 
 const ARMS_DOWN_KEYS: readonly BodyPose[] = [{ left: LOWERED, right: LOWERED }];
@@ -97,10 +111,13 @@ const ARMS_DOWN_KEYS: readonly BodyPose[] = [{ left: LOWERED, right: LOWERED }];
 export function firstPersonKeys(sign: SignId | null): readonly BodyPose[] {
   if (sign === null) return ARMS_DOWN_KEYS;
   const { arms } = SIGN_POSES[sign];
-  return FIRST_PERSON[sign].map((pose) => ({
-    left: arms.includes('left') ? pose : LOWERED,
-    right: arms.includes('right') ? pose : LOWERED,
-  }));
+  return FIRST_PERSON[sign].map((pose) => {
+    const of = (side: 'left' | 'right'): ArmPose => ('left' in pose ? pose[side] : pose);
+    return {
+      left: arms.includes('left') ? of('left') : LOWERED,
+      right: arms.includes('right') ? of('right') : LOWERED,
+    };
+  });
 }
 
 /** Where between which keys `phase` s into `sign` falls: a loop cycles once per `SIGN_CYCLE`, `once` plays its keys in half of one. */

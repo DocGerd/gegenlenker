@@ -81,6 +81,10 @@ One term per concept in `src/i18n/en.ts` (US spelling) and `src/i18n/de.ts`. Kee
 | Sign 7: left arm moved sideways                 | move left                                                                   | Links fahren                                                      |
 | Sign 8: right arm moved sideways                | move right                                                                  | Rechts fahren                                                     |
 | Sign 9: palms brought together                  | closing distance                                                            | Abstandsverringerung                                              |
+| Setup row: how the Einweiser signals a turn     | signals (Tail direction / Steering)                                         | Zeichengebung (Heckrichtung / Lenkung)                            |
+| Steering sign: wheel a little to his own side   | steer left / right a little                                                 | Etwas links / rechts lenken                                       |
+| Steering sign: wheel to full lock his side      | full lock left / right                                                      | Voll links / rechts einschlagen                                   |
+| Steering sign: wheel straight                   | steer straight                                                              | Geradeaus lenken                                                  |
 | No sign key held: arms down                     | no signal                                                                   | Kein Zeichen                                                      |
 | Steering value read by a screen reader: side    | left / right                                                                | links / rechts                                                    |
 | Steering value read by a screen reader: centre  | straight                                                                    | geradeaus                                                         |

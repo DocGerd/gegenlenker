@@ -6,7 +6,7 @@ import type {
   TopDownSplit,
   ViewRects,
 } from '../contracts/render';
-import { SIGN_IDS, type Sight, type SignId } from '../contracts/einweiser';
+import type { SignallingMode, Sight, SignId } from '../contracts/einweiser';
 import type { Role } from '../contracts/exercise';
 import type { BlockReason, BodyId, Gear, SimSnapshot } from '../contracts/sim';
 import { isDrivingInput, type GoalCue } from '../scoring/score';
@@ -23,7 +23,7 @@ import {
   sightCueBox,
   type MeasuredLegend,
 } from '../render/viewports';
-import { actionFor, isAction, type Action } from '../input/keymap';
+import { actionFor, isAction, signSlots, type Action } from '../input/keymap';
 import { driveLegendRows, legendRowMarkup } from '../input/legend';
 import type { SightFlags } from '../render/scene-renderer';
 import { aidSwatch, sightSwatch } from './aid-swatches';
@@ -120,6 +120,8 @@ export type HudOptions = PivotOptions & {
    * target arrow.
    */
   role?: Role;
+  /** The Einweiser's sign set for the sign bar and legend; tail direction when absent. */
+  signalling?: SignallingMode;
 };
 
 export type EinweiserHud = {
@@ -290,8 +292,11 @@ const keyRows = (
   mirrorsOnly: boolean,
   role: Role,
   coupling: boolean,
+  signalling: SignallingMode,
 ): string =>
-  driveLegendRows({ chase, look, mirrorsOnly, role, coupling }).map(legendRowMarkup).join('');
+  driveLegendRows({ chase, look, mirrorsOnly, role, coupling, signalling })
+    .map(legendRowMarkup)
+    .join('');
 
 /** Only a combination's driver has gauges to fold. */
 const panelButtons = (gauged: boolean): string =>
@@ -303,12 +308,16 @@ const panelButtons = (gauged: boolean): string =>
 const EYE_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /><path class="hud-sight-strike" d="M4 4l16 16" /></svg>';
 
-/** One slot per sign in the keys' order, 1 to 9. */
-const signBar = (): string =>
-  `<div class="hud-sign-side"><div class="hud-sign-name" data-hud="signName"></div><div class="hud-lock-hint" data-hud="lockHint" data-i18n="lockHint" hidden></div></div><ol class="hud-sign-bar" data-hud="signBar" aria-label="${t('signBar')}">${SIGN_IDS.map(
-    (sign, i) =>
-      `<li class="hud-sign" data-sign="${sign}"><span class="hud-sign-key mono">${i + 1}</span>${signPictogram(sign)}<span class="hud-sign-label" data-i18n="${SIGN_NAME[sign]}"></span></li>`,
-  ).join('')}</ol>`;
+/** One slot per sign of the mode, in its keys' order. */
+const signBar = (mode: SignallingMode): string => {
+  const slots = signSlots(mode);
+  return `<div class="hud-sign-side"><div class="hud-sign-name" data-hud="signName"></div><div class="hud-lock-hint" data-hud="lockHint" data-i18n="lockHint" hidden></div></div><ol class="hud-sign-bar" data-hud="signBar" aria-label="${t('signBar')}" data-mode="${mode}">${slots
+    .map(
+      ({ sign, key }) =>
+        `<li class="hud-sign" data-sign="${sign}"><span class="hud-sign-key mono">${key}</span>${signPictogram(sign)}<span class="hud-sign-label" data-i18n="${SIGN_NAME[sign]}"></span></li>`,
+    )
+    .join('')}</ol>`;
+};
 
 const MARKUP = (
   mode: HudOptions['mode'],
@@ -318,6 +327,7 @@ const MARKUP = (
   role: Role,
   solo: boolean,
   hitch: boolean,
+  signalling: SignallingMode,
   driver = role === 'driver',
   gauged = driver && !solo,
   aids = solo ? SOLO_AIDS : AIDS,
@@ -328,11 +338,11 @@ const MARKUP = (
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl data-hud="keys">
-        ${keyRows(chase, look === true, mirrorsOnly, role, hitch)}
+        ${keyRows(chase, look === true, mirrorsOnly, role, hitch, signalling)}
       </dl>
     </div>
     <div class="hud-band" data-hud="band">
-      ${driver ? '<span class="hud-gear mono" data-hud="gear"></span><span class="hud-speed mono" data-hud="speed"></span>' : signBar()}
+      ${driver ? '<span class="hud-gear mono" data-hud="gear"></span><span class="hud-speed mono" data-hud="speed"></span>' : signBar(signalling)}
     </div>
   </div>
   <div class="hud-mirror" data-hud="mirrorLeft" hidden></div>
@@ -427,6 +437,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       role,
       solo,
       opts.hitch === true,
+      opts.signalling ?? 'tail',
     ),
   );
   const hud = query(root, 'root', HTMLElement);
@@ -1184,7 +1195,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       chaseOffered = next.chase;
       syncChaseOffer();
       hud.toggleAttribute('data-interior', next.interior);
-      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly, role, opts.hitch === true);
+      keysList.innerHTML = keyRows(
+        next.chase,
+        next.look,
+        mirrorsOnly,
+        role,
+        opts.hitch === true,
+        opts.signalling ?? 'tail',
+      );
       applyMessages(keysList);
       if (!chaseOffered && view === 'chase') selectView(lastOther);
       else syncToggles();

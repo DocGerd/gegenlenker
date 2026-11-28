@@ -81,6 +81,7 @@ On the setup screen of an exercise or yard:
 - Truck, Trailer: the vehicle pair. "No trailer" drives the truck solo in every exercise but "Couple and uncouple", and in every yard: the target takes the truck's rear end, the ghost shows the truck, and neither the angle display nor limit stops are shown. An exercise is done solo and with a trailer separately; the lists and Continue follow the current choice. The choice holds for both roles: solo, the Einweiser guides the truck alone and its rear end is the rear his signs refer to. Some dimensions are estimates, see [vehicle data](vehicle-data.md).
 - Time of day: Day or Night. Night turns the lights on at the start.
 - Driving view: "With top view" or "Mirrors only".
+- Signals (Einweiser only): "Tail direction" gives Links/Rechts fahren, where the tail should go; "Steering" gives the wheel instead, a little or to full lock toward his own side (Q / E, 7 / 8), or straight (X).
 
 Under "Settings" on the title, in the groups General and Graphics:
 
