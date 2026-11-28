@@ -63,6 +63,19 @@ describe('reading the Einweiser', () => {
     ]);
   });
 
+  it('finds a steering sign given from the band at a standstill unclear, as it has no gear there', () => {
+    const LENKEN = steps(recognitionTime('lenkenLinks'));
+    expect(
+      read([{ sign: 'lenkenLinks', p: seen('abeam'), steps: LENKEN, standing: true }]),
+    ).toEqual([{ step: LENKEN - 1, reading: { kind: 'unclear', sign: 'lenkenLinks' } }]);
+    expect(read([{ sign: 'lenkenLinks', p: seen('abeam'), steps: LENKEN }])).toEqual([
+      {
+        step: LENKEN - 1,
+        reading: { kind: 'recognised', sign: 'lenkenLinks', station: 'abeam' },
+      },
+    ]);
+  });
+
   it('reads the band reaching him while Herkommen is held as a stop, not as unclear', () => {
     const readings = read([
       { sign: 'herkommen', p: seen('behind'), steps: HERKOMMEN },

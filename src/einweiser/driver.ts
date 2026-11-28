@@ -1,7 +1,8 @@
-import type { SignId } from '../contracts/einweiser';
+import type { SignallingMode, SignId } from '../contracts/einweiser';
 import type { ControlVector, Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import { hasTrailer, type RigParams, type VehicleParams } from '../contracts/vehicle';
 import { wrapAngle } from '../sim/angle';
+import { predictCombination } from '../sim/predict';
 import { createReader, type Perception, perceive, type Reading, type Station } from './signs';
 import type { Occluder, SightGeometry } from './sight';
 
@@ -27,12 +28,24 @@ const WHEEL_LEAD = 0.3;
 /** Reverse state weights (heading, turntable, coupling, wheel) and the wheel-rate weight. */
 const REVERSE_WEIGHTS = [1, 1, 1, 0.1] as const;
 const REVERSE_RATE_WEIGHT = 1;
+/** The wheel (normalised) for the steering signs: a little (owner), full lock. */
+export const STEER_LITTLE = 0.5;
+const STEER_FULL = 1;
+/**
+ * Steering mode: every this many steps it checks the wheel it was given over `REFUSE_DISTANCE` (m) for a
+ * limit stop, and turns it back toward straight until none is predicted.
+ */
+const REFUSE_EVERY = 15;
+const REFUSE_DISTANCE = 3;
+const REFUSE_STEPS = [1, 0.75, 0.5, 0.25, 0] as const;
 
 type Move = {
   readonly kind: 'move';
   readonly gear: 'D' | 'R';
   readonly lever: number;
   readonly curve: number;
+  /** A steering sign's wheel; null keeps the wheel. */
+  readonly wheel: number | null;
 };
 /** `halt`: lever to 0, brake at standstill; `brake`: brake at once. */
 type Command = { readonly kind: 'halt' } | { readonly kind: 'brake' } | Move;
@@ -59,6 +72,10 @@ type PilotState = {
   readonly ref: number;
   readonly kappa: number;
   readonly lead: Vec2 | null;
+  /** Steering mode: the wheel he signalled, and the share of it it drives with (null: it halts). */
+  readonly given: number;
+  readonly share: number | null;
+  readonly sinceCheck: number;
 };
 
 type Matrix = readonly (readonly number[])[];
@@ -105,17 +122,48 @@ export function reverseGains(p: VehicleParams): number[] {
 
 const sideOf = (motion: number, toward: number): number => Math.sign(Math.sin(toward - motion));
 
-export const createPilot = (p: RigParams): Pilot =>
-  pilotFrom(p, hasTrailer(p) ? reverseGains(p) : [], {
+/**
+ * The wheel a steering sign asks for. Left and right are his own: the driver mirrors him by his facing
+ * against the cab's heading, so facing the cab his left is the driver's right.
+ */
+export function signalledWheel(sign: SignId, truckHeading: number, pose: Pose2): number | null {
+  const toward = (left: boolean, size: number): number =>
+    size * sideOf(truckHeading, pose.heading + (left ? Math.PI / 2 : -Math.PI / 2));
+  switch (sign) {
+    case 'lenkenLinks':
+      return toward(true, STEER_LITTLE);
+    case 'lenkenLinksVoll':
+      return toward(true, STEER_FULL);
+    case 'lenkenRechts':
+      return toward(false, STEER_LITTLE);
+    case 'lenkenRechtsVoll':
+      return toward(false, STEER_FULL);
+    case 'lenkenGerade':
+      return 0;
+    default:
+      return null;
+  }
+}
+
+export const createPilot = (p: RigParams, mode: SignallingMode = 'tail'): Pilot =>
+  pilotFrom(p, mode, hasTrailer(p) ? reverseGains(p) : [], {
     gear: 'P',
     command: { kind: 'halt' },
     ref: 0,
     kappa: 0,
     lead: null,
+    given: 0,
+    share: 1,
+    sinceCheck: 0,
   });
 
-function pilotFrom(p: RigParams, gains: readonly number[], from: PilotState): Pilot {
-  let { gear, command, ref, kappa, lead } = from;
+function pilotFrom(
+  p: RigParams,
+  mode: SignallingMode,
+  gains: readonly number[],
+  from: PilotState,
+): Pilot {
+  let { gear, command, ref, kappa, lead, given, share, sinceCheck } = from;
 
   const leadingHeading = (s: SimSnapshot): number =>
     gear === 'D' ? s.truck.heading : s.trailer.heading;
@@ -140,7 +188,7 @@ function pilotFrom(p: RigParams, gains: readonly number[], from: PilotState): Pi
       case 'haltGefahr':
         return { kind: 'brake' };
       case 'abfahren':
-        return { kind: 'move', gear: 'D', lever: CREEP_LEVER, curve: 0 };
+        return { kind: 'move', gear: 'D', lever: CREEP_LEVER, curve: 0, wheel: null };
       case 'herkommen':
       case 'entfernen': {
         const near = toward(at);
@@ -151,23 +199,48 @@ function pilotFrom(p: RigParams, gains: readonly number[], from: PilotState): Pi
           gear: sign === 'herkommen' ? near : away,
           lever: CREEP_LEVER,
           curve: 0,
+          wheel: null,
         };
       }
       case 'links':
       case 'rechts':
-      case 'abstand': {
+      case 'abstand':
+      case 'lenkenLinks':
+      case 'lenkenLinksVoll':
+      case 'lenkenGerade':
+      case 'lenkenRechts':
+      case 'lenkenRechtsVoll': {
         const moving = s.speed !== 0 && (gear === 'D' || gear === 'R');
         const along = moving ? gear : toward(at);
         if (along !== 'D' && along !== 'R') return { kind: 'halt' };
-        if (sign === 'abstand') return { kind: 'move', gear: along, lever: CRAWL_LEVER, curve: 0 };
+        if (sign === 'abstand') {
+          return { kind: 'move', gear: along, lever: CRAWL_LEVER, curve: 0, wheel: null };
+        }
+        if (sign !== 'links' && sign !== 'rechts') {
+          const signalled = signalledWheel(sign, s.truck.heading, pose);
+          return { kind: 'move', gear: along, lever: CREEP_LEVER, curve: 0, wheel: signalled };
+        }
         const motion = along === 'D' ? s.truck.heading : s.trailer.heading + Math.PI;
         const indicated = pose.heading + (sign === 'links' ? Math.PI / 2 : -Math.PI / 2);
-        return { kind: 'move', gear: along, lever: CREEP_LEVER, curve: sideOf(motion, indicated) };
+        const curve = sideOf(motion, indicated);
+        return { kind: 'move', gear: along, lever: CREEP_LEVER, curve, wheel: null };
       }
     }
   }
 
+  /** The largest share of the given wheel that predicts no limit stop in `along`; null: none does. */
+  function allowedShare(s: SimSnapshot, along: 'D' | 'R'): number | null {
+    if (!hasTrailer(p)) return 1;
+    for (const k of REFUSE_STEPS) {
+      const control = { ...s.control, gear: along, steer: k * given };
+      const ahead = predictCombination(p, { ...s, control }, () => null, REFUSE_DISTANCE);
+      if (ahead.blocked === null) return k;
+    }
+    return null;
+  }
+
   function steerFor(s: SimSnapshot): number {
+    if (mode === 'steering') return share === null ? s.control.steer : share * given;
     if (gear === 'D') {
       const delta =
         Math.atan(kappa * p.wheelbase) + FORWARD_GAIN * wrapAngle(ref - s.truck.heading);
@@ -199,6 +272,10 @@ function pilotFrom(p: RigParams, gains: readonly number[], from: PilotState): Pi
       else if (reading.kind === 'unclear') command = { kind: 'halt' };
       else if (reading.kind === 'recognised') {
         command = commandFor(reading.sign, reading.station, s, pose);
+        if (command.kind === 'move') {
+          given = command.wheel ?? given;
+          sinceCheck = REFUSE_EVERY;
+        }
       }
 
       if (command.kind === 'move' && command.gear !== gear && s.speed === 0) {
@@ -214,6 +291,17 @@ function pilotFrom(p: RigParams, gains: readonly number[], from: PilotState): Pi
         command.kind === 'move' && command.gear === gear ? command.curve / CURVE_RADIUS[gear] : 0;
       kappa += Math.max(-CURVE_SLEW * travelled, Math.min(CURVE_SLEW * travelled, goal - kappa));
       ref = wrapAngle(ref + kappa * travelled);
+      if (mode === 'steering' && command.kind === 'move') {
+        sinceCheck += 1;
+        if (sinceCheck >= REFUSE_EVERY) {
+          share = allowedShare(s, command.gear);
+          sinceCheck = 0;
+        }
+      }
+      // it refuses a wheel that would run into a limit stop: it halts with the wheel where it is
+      if (mode === 'steering' && command.kind === 'move' && share === null) {
+        return { steer: s.control.steer, lever: 0, brake: s.speed === 0, gear };
+      }
       const steer = steerFor(s);
 
       const hold = (brake: boolean): ControlVector => ({ steer, lever: 0, brake, gear });
@@ -223,7 +311,8 @@ function pilotFrom(p: RigParams, gains: readonly number[], from: PilotState): Pi
       if (s.speed === 0 && Math.abs(s.steer - steer) > PRE_STEER) return hold(true);
       return { steer, lever: command.lever, brake: false, gear };
     },
-    fork: () => pilotFrom(p, gains, { gear, command, ref, kappa, lead }),
+    fork: () =>
+      pilotFrom(p, mode, gains, { gear, command, ref, kappa, lead, given, share, sinceCheck }),
   };
 }
 

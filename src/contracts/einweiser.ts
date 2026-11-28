@@ -1,7 +1,10 @@
 import type { Pose2 } from './sim';
 import type { MirrorId } from './vehicle';
 
-/** The nine vehicle hand signals of DGUV Vorschrift 70 Anhang 4, in its print order. */
+/**
+ * The nine vehicle hand signals of DGUV Vorschrift 70 Anhang 4, in its print order, then the steering
+ * signs (`lenken*`, not in V70): the wheel a little or to full lock toward his own side, or straight.
+ */
 export const SIGN_IDS = [
   'achtung',
   'halt',
@@ -12,8 +15,37 @@ export const SIGN_IDS = [
   'links',
   'rechts',
   'abstand',
+  'lenkenLinks',
+  'lenkenLinksVoll',
+  'lenkenGerade',
+  'lenkenRechts',
+  'lenkenRechtsVoll',
 ] as const;
 export type SignId = (typeof SIGN_IDS)[number];
+
+/** How he signals a turn: where the tail goes (Links/Rechts fahren) or how the driver steers (#572). */
+export const SIGNALLING_MODES = ['tail', 'steering'] as const;
+export type SignallingMode = (typeof SIGNALLING_MODES)[number];
+export const DEFAULT_SIGNALLING: SignallingMode = 'tail';
+
+/** The signs each mode offers, in its sign bar's order. */
+export const MODE_SIGNS: Readonly<Record<SignallingMode, readonly SignId[]>> = {
+  tail: SIGN_IDS.slice(0, 9),
+  steering: [
+    'achtung',
+    'halt',
+    'haltGefahr',
+    'abfahren',
+    'herkommen',
+    'entfernen',
+    'lenkenLinksVoll',
+    'lenkenRechtsVoll',
+    'abstand',
+    'lenkenLinks',
+    'lenkenRechts',
+    'lenkenGerade',
+  ],
+};
 
 /** The Einweiser faults, each counted once per incident (`docs/einweiser-spike.md` §4). */
 export const EINWEISER_FAULTS = [

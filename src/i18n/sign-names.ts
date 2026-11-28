@@ -12,4 +12,9 @@ export const SIGN_NAME: Readonly<Record<SignId, MessageKey>> = {
   links: 'signLinks',
   rechts: 'signRechts',
   abstand: 'signAbstand',
+  lenkenLinks: 'signLenkenLinks',
+  lenkenLinksVoll: 'signLenkenLinksVoll',
+  lenkenGerade: 'signLenkenGerade',
+  lenkenRechts: 'signLenkenRechts',
+  lenkenRechtsVoll: 'signLenkenRechtsVoll',
 };

@@ -54,6 +54,15 @@ export const EINWEISER_THRESHOLDS = {
   TOO_CLOSE,
 } as const;
 
+/** The steering signs: each sets the wheel and moves like Links/Rechts fahren. */
+export const STEERING_SIGNS: ReadonlySet<SignId> = new Set<SignId>([
+  'lenkenLinks',
+  'lenkenLinksVoll',
+  'lenkenGerade',
+  'lenkenRechts',
+  'lenkenRechtsVoll',
+]);
+
 /** Signs that set the vehicle moving. */
 export const MOVEMENT_SIGNS: ReadonlySet<SignId> = new Set<SignId>([
   'abfahren',
@@ -62,6 +71,7 @@ export const MOVEMENT_SIGNS: ReadonlySet<SignId> = new Set<SignId>([
   'links',
   'rechts',
   'abstand',
+  ...STEERING_SIGNS,
 ]);
 
 /** How long a sign (null: arms down) must show before the driver acts on it. */
@@ -194,7 +204,8 @@ export type Reader = {
 
 const steps = (seconds: number): number => Math.round(seconds / DT);
 const NONE: Reading = { kind: 'none' };
-const GEARED = new Set<SignId>(['links', 'rechts', 'abstand']);
+/** From standstill they take Herkommen's gear, so the abeam band leaves them unclear. */
+const GEARED = new Set<SignId>(['links', 'rechts', 'abstand', ...STEERING_SIGNS]);
 
 /**
  * Recognition, the station rule and the lost-sight grace timer, shared by the driver and the derived

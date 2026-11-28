@@ -266,10 +266,11 @@ describe('replay', () => {
     const fingerprint = (): string => 'data-a';
     const sample = { step: 0, x: 4, y: -3.5, heading: 1.2, pitch: -0.1 };
     const track: EinweiserTrack = {
+      mode: 'steering',
       samples: [sample, { ...sample, step: 6, x: 4.01, heading: 1.25 }],
       signs: [
         { step: 0, sign: 'achtung' },
-        { step: 40, sign: 'herkommen' },
+        { step: 40, sign: 'lenkenLinksVoll' },
         { step: 90, sign: null },
       ],
     };
@@ -294,6 +295,9 @@ describe('replay', () => {
     expect(withTrack({ samples: undefined })).toBeNull();
     expect(withTrack({ samples: [] })).toBeNull();
     expect(withTrack({ signs: [] })).toEqual({ ...log, einweiser: { ...track, signs: [] } });
+    // a log from before the signalling modes signalled the tail's direction
+    expect(withTrack({ mode: undefined })?.einweiser?.mode).toBe('tail');
+    expect(withTrack({ mode: 'wheel' })).toBeNull();
   });
 
   it('round-trips a solo run, driven or guided', () => {
@@ -309,7 +313,11 @@ describe('replay', () => {
     const guided: InputLog = {
       ...solo,
       role: 'einweiser',
-      einweiser: { samples: [{ step: 0, x: 0, y: 0, heading: 0, pitch: 0 }], signs: [] },
+      einweiser: {
+        mode: 'tail',
+        samples: [{ step: 0, x: 0, y: 0, heading: 0, pitch: 0 }],
+        signs: [],
+      },
     };
     expect(parseInputLog(serializeInputLog(guided, fingerprint), fingerprint)).toEqual(guided);
   });
