@@ -1,4 +1,10 @@
-import { FOV_CHOICES, MOUSE_SENSITIVITIES, type MouseSensitivity } from '../../contracts/einweiser';
+import {
+  FOV_CHOICES,
+  MOUSE_SENSITIVITIES,
+  SIGNALLING_MODES,
+  type MouseSensitivity,
+  type SignallingMode,
+} from '../../contracts/einweiser';
 import type { Role } from '../../contracts/exercise';
 import {
   GRAPHICS_PRESETS,
@@ -23,7 +29,8 @@ export type OptionId =
   | 'wideMirrors'
   | 'fov'
   | 'mouseSensitivity'
-  | 'invertMouse';
+  | 'invertMouse'
+  | 'signalling';
 
 export type Applies = 'live' | 'menuOnly' | 'run';
 
@@ -74,6 +81,10 @@ const SENSITIVITY_NAME: Readonly<Record<MouseSensitivity, MessageKey>> = {
   low: 'sensitivityLow',
   medium: 'sensitivityMedium',
   high: 'sensitivityHigh',
+};
+const SIGNALLING_NAME: Readonly<Record<SignallingMode, MessageKey>> = {
+  tail: 'signallingTail',
+  steering: 'signallingSteering',
 };
 const DRIVE_VIEW_NAME = { standard: 'driveViewStandard', mirrors: 'driveViewMirrors' } as const;
 const EINWEISER_VIEW_NAME = {
@@ -182,6 +193,13 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
     choices: OFF_ON_CHOICES,
     applies: 'live',
   },
+  signalling: {
+    id: 'signalling',
+    label: 'signalling',
+    group: 'run',
+    choices: named(SIGNALLING_MODES, SIGNALLING_NAME),
+    applies: 'run',
+  },
 };
 
 /** Where the Einweiser names a field his own way: the same setting, so the same values. */
@@ -245,6 +263,8 @@ export function optionValue(settings: Settings, id: OptionId): string {
       return settings.mouseSensitivity;
     case 'invertMouse':
       return settings.invertMouse ? 'on' : 'off';
+    case 'signalling':
+      return settings.signalling;
   }
 }
 
@@ -282,6 +302,8 @@ export function optionPatch(id: OptionId, value: string): SettingsPatch | null {
       return patchOf(MOUSE_SENSITIVITIES, value, (mouseSensitivity) => ({ mouseSensitivity }));
     case 'invertMouse':
       return patchOf(SWITCH, value, (v) => ({ invertMouse: v === 'on' }));
+    case 'signalling':
+      return patchOf(SIGNALLING_MODES, value, (signalling) => ({ signalling }));
   }
 }
 
