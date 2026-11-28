@@ -1264,6 +1264,17 @@
     flex-direction: row;
     gap: 2px;
   }
+
+  /* beside its key, a figure takes the slot's height, never its own */
+  .hud-sign-bar[data-mode='steering'] .hud-sign-figure {
+    height: 100%;
+    min-width: 0;
+  }
+
+  /* no names beside the figures: the shown sign's name stands beside the bar */
+  .hud-sign-bar[data-mode='steering'] .hud-sign-label {
+    display: none;
+  }
 }
 
 .hud-sign {

@@ -2547,36 +2547,58 @@ const einweiserSizes: readonly (Size & { mirrorsOnly: boolean })[] = [
   { width: 768, height: 1024, mirrorsOnly: true },
 ];
 
-test('the steering sign bar, its key list and the longest steering name fit at de-DE 800x585', async ({
-  browser,
-}) => {
-  const size = { width: 800, height: 585 };
-  const context = await browser.newContext({ locale: 'de-DE', viewport: size });
-  try {
-    const page = await context.newPage();
-    await startEinweiser(page, de, false, 'steering');
-    await expectEinweiserHudClear(page, size, de, 'steering');
-    // two rows of six keep each figure as wide as the nine-slot bar draws it here
-    const figures = await page.locator('.hud-sign-figure').evaluateAll((els) =>
-      els.map((el) => {
-        const { width, height } = el.getBoundingClientRect();
-        return Math.min(width, (height * 1.9) / 2.2);
-      }),
-    );
-    expect(Math.min(...figures)).toBeGreaterThanOrEqual(24);
-    const toggle = page.locator('[data-hud="keysToggle"]');
-    if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
-    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    const keys = page.locator('[data-hud="keys"]');
-    await expect(keys).toBeVisible();
-    expect(
-      await keys.evaluate((el) => el.scrollHeight - el.clientHeight),
-      'the key list scrolls',
-    ).toBeLessThanOrEqual(1);
-  } finally {
-    await context.close();
-  }
-});
+// the smallest supported landscape size and two 16:10 desktops, where slot names may show
+for (const size of [
+  { width: 800, height: 585 },
+  { width: 1680, height: 1050 },
+  { width: 1920, height: 1200 },
+]) {
+  test(`the steering sign bar, its key list and the longest steering name fit at de-DE ${size.width}x${size.height}`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({ locale: 'de-DE', viewport: size });
+    try {
+      const page = await context.newPage();
+      await startEinweiser(page, de, false, 'steering');
+      await expectEinweiserHudClear(page, size, de, 'steering');
+      const [band] = await boxes(page.locator('.hud-band'));
+      if (band === undefined) throw new Error('no band');
+      const figures = await boxes(page.locator('.hud-sign-figure'));
+      expect(figures).toHaveLength(12);
+      figures.forEach((f, i) => {
+        const inside =
+          f.left >= band.left &&
+          f.right <= band.right &&
+          f.top >= band.top &&
+          f.bottom <= band.bottom;
+        expect(inside, `figure ${String(i)} inside the band`).toBe(true);
+        for (const g of figures.slice(i + 1)) expect(overlaps(f, g), 'figures overlap').toBe(false);
+      });
+      const labels = await boxes(page.locator('.hud-sign-label:visible'));
+      for (const l of labels)
+        for (const f of figures) expect(overlaps(l, f), 'a label over a figure').toBe(false);
+      // two rows of six keep each figure at least as wide as the nine-slot bar draws it at 800x585
+      const drawn = await page.locator('.hud-sign-figure').evaluateAll((els) =>
+        els.map((el) => {
+          const { width, height } = el.getBoundingClientRect();
+          return Math.min(width, (height * 1.9) / 2.2);
+        }),
+      );
+      expect(Math.min(...drawn)).toBeGreaterThanOrEqual(24);
+      const toggle = page.locator('[data-hud="keysToggle"]');
+      if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      const keys = page.locator('[data-hud="keys"]');
+      await expect(keys).toBeVisible();
+      expect(
+        await keys.evaluate((el) => el.scrollHeight - el.clientHeight),
+        'the key list scrolls',
+      ).toBeLessThanOrEqual(1);
+    } finally {
+      await context.close();
+    }
+  });
+}
 
 for (const { locale, messages } of locales) {
   for (const { mirrorsOnly, ...size } of einweiserSizes) {
