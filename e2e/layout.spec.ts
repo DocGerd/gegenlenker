@@ -1471,8 +1471,14 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
  * works) may it be missing; any other size losing it fails, tablets and desktops included.
  */
+const paneToolAbsentIds: readonly ExerciseId[] = [
+  'reverse-bay',
+  'reverse-corner',
+  'dock-ramp',
+  'slalom',
+];
 const paneToolAbsent = (at: string, id: ExerciseId): boolean =>
-  at.endsWith(' 800x585') && id !== 'straight-reverse';
+  at.endsWith(' 800x585') && paneToolAbsentIds.includes(id);
 
 async function expectPaneToolClear(page: Page, at: string, id: ExerciseId): Promise<void> {
   await page.keyboard.press('o');
@@ -1557,8 +1563,10 @@ for (const { locale, messages } of locales) {
         await startFrozenReverse(page, messages, id);
         await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
-          await test.step('the toolbar takes no reserve against the lever column', () =>
-            expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve'));
+          await test.step('the toolbar takes no reserve against the lever column', async () => {
+            await expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-toolbar-reserve');
+            await expect(page.locator('.hud-topdown')).not.toHaveAttribute('data-aids-reserve');
+          });
         }
         await test.step('the toolbar clears the finish button and the controls', () =>
           expectToolbarClear(page));
