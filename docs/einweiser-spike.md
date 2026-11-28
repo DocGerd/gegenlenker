@@ -37,6 +37,16 @@ The issue cites ASR A1.3 Anhang 1; the hand signs are **ASR A1.3 Anhang 2 "Handz
 - The name and a pictogram of the source pose (front view, as the driver sees it) show in the sign bar while the sign is held: the first-person view cannot show the whole sign (§3.3), so the pictogram teaches what it looks like. The pictograms are drawn from the pose table, not copied from the ASR.
 - Legend: a sign bar of nine slots (key, name, pictogram; the shown one marked) in the band at the bottom of the view; walk, look, jog, pause and the mouse-button signs in the key legend. New `Scope`s `'walk'` and `'sign'` in `src/input/keymap.ts`, with rows in `KEYMAP` (table order = legend order; `keymap.test.ts` and `legend.test.ts` extend).
 
+### Signalling modes (#572)
+
+Decided (owner): a setup row (Einweiser only, stored like the lighting) picks how he signals a turn; the track logs it (`EinweiserTrack.mode`, absent: `'tail'`).
+
+- Tail direction: the nine signs above.
+- Steering: for narrow spots where the driver relies on him alone. Links/Rechts fahren give way to five steering signs (not in V70): the wheel a little (0.5 of full lock, owner) or to full lock toward his own side, or straight. Pose: both hands turn an imagined wheel before the chest (estimate). Keys: 7/8 full lock, Q/E a little, X straight.
+- His own side, like Links/Rechts fahren: the driver mirrors him by his facing against the cab's heading, so facing the cab his left turns the wheel right (`signalledWheel`, `src/einweiser/driver.ts`).
+- A steering sign moves like Links/Rechts fahren (from standstill in Herkommen's gear, else the current one) and is read like them. Herkommen, Entfernen, Abstand and Abfahren keep the wheel where the last steering sign set it; the driver holds no heading.
+- The driver still refuses a limit stop: every 0.25 s it predicts 3 m ahead (estimates) and turns the wheel back toward straight until none is predicted, else it halts.
+
 ## 2. Driver model
 
 An AI `ControlSource` emits one `ControlVector` per sim step. It only steps targets: the sim already rate-limits steer (`steerRate`) and ramps speed to `lever × V_MAX` with `ACCEL`/`DECEL`/`BRAKE_DECEL` (`nextSpeed`, `src/sim/simulation.ts`), so the change-only input log stays sparse.
