@@ -1311,6 +1311,13 @@
   }
 }
 
+/* The steering bar's twelve slots need the width nine get at 720px. */
+@container signs (max-width: 959.98px) {
+  .hud-sign-bar[data-mode='steering'] .hud-sign-label {
+    display: none;
+  }
+}
+
 .hud[data-role='einweiser'][data-mirrors] .hud-band .hud-counters {
   grid-column: 3;
   grid-template-columns: repeat(4, auto);
