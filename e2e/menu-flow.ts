@@ -19,7 +19,8 @@ export type MenuEntry = { readonly role?: Role } & (
 );
 export type RunOptions = {
   readonly truck: TruckId;
-  readonly trailer: TrailerId;
+  /** `none`: the truck solo. */
+  readonly trailer: TrailerId | 'none';
   readonly lighting: LightingMode;
   readonly driveView: 'standard' | 'mirrors';
 };

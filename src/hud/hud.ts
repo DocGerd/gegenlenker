@@ -1,8 +1,6 @@
 import type {
   AidFlags,
   CollapsedPanels,
-  LegendBox,
-  Orientation,
   Rect,
   TopDownMode,
   TopDownSplit,
@@ -18,14 +16,22 @@ import { SIGN_NAME } from '../i18n/sign-names';
 import { isFormField } from '../input/keyboard';
 import { CHROME_SELECTOR } from './chrome-selector';
 import { goalCueTexts } from './goal-cue';
-import { hasTopDown, messageColumn, readSafeInsets, sightCueBox } from '../render/viewports';
+import {
+  hasTopDown,
+  messageColumn,
+  readSafeInsets,
+  sightCueBox,
+  type MeasuredLegend,
+} from '../render/viewports';
 import { actionFor, isAction, type Action } from '../input/keymap';
 import { driveLegendRows, legendRowMarkup } from '../input/legend';
-import { aidSwatch } from './aid-swatches';
+import type { SightFlags } from '../render/scene-renderer';
+import { aidSwatch, sightSwatch } from './aid-swatches';
 import type { Ahead } from '../sim/predict';
 import { createGauge, type Gauge } from './gauges';
 import { SIGHT_CUE_KEY, sightCue, type SightCue } from './sight-cue';
 import { signPictogram } from './sign-pictogram';
+import { createSplitDivider, type SplitAction } from './split-divider';
 import './hud.css';
 
 export type HudAction =
@@ -33,17 +39,19 @@ export type HudAction =
   | { type: 'resetView' }
   /** The free camera button or its key: toggles it, entering the outside view first when another is shown. */
   | { type: 'freeCamera' }
-  /** A proposed top-down share for an orientation; `commit` ends a drag or is a key press, so it is worth storing. */
-  | { type: 'split'; orientation: Orientation; share: number; commit: boolean }
-  | { type: 'splitReset' }
+  | SplitAction
   | { type: 'aid'; aid: keyof AidFlags; on: boolean }
+  /** One of the Einweiser's sight areas (his role only), shown in the top view or on the ground of his own. */
+  | { type: 'sight'; flag: keyof SightFlags; on: boolean }
   | { type: 'collapse'; panel: keyof CollapsedPanels; collapsed: boolean }
   /** The aid legend opened or closed, which changes the height of the panels. */
   | { type: 'aidLegend' }
   /** The exercise brief opened or collapsed, which changes the height of the panels. */
   | { type: 'brief' }
   /** The button opening the pause sheet. */
-  | { type: 'pause' };
+  | { type: 'pause' }
+  /** The uncouple button of a coupling run. */
+  | { type: 'uncouple' };
 
 export type Hud = {
   /** `ahead` is the first warning stage: the held steer leads into a contact or limit stop soon. */
@@ -52,13 +60,15 @@ export type Hud = {
   setRunTime(seconds: number): void;
   layout(views: ViewRects): void;
   /** The key legend as laid out by the last `layout`; null while hidden. */
-  legendBox(): LegendBox | null;
+  legendBox(): Required<MeasuredLegend> | null;
   /** Fires when the legend changes size: folding, showing, hiding, other wrapping. */
   onLegendResize(cb: () => void): void;
   /** The reset-view button is enabled while the top-down view differs from its default framing. */
   setViewChanged(changed: boolean): void;
   /** Shows the free camera button as pressed while it flies. */
   setFree(on: boolean): void;
+  /** The Einweiser's sight areas as set elsewhere (pause sheet, key): the chips follow. */
+  setSight(flags: SightFlags): void;
   /** What a new graphics preset offers; losing the outside view while shown selects the last other view. */
   setOffers(offers: HudOffers): void;
   /** The divider between the views: its value, range and orientation. */
@@ -74,17 +84,22 @@ export type Hud = {
   setGoal(cue: GoalCue): void;
   /** The sign he shows and how the driver sees him; a no-op in the driver's role. Null before the first sim step. */
   setEinweiser(state: EinweiserHud | null): void;
+  /** Whether his mouse look holds the pointer lock, which says how to release it; a no-op in the driver's role. */
+  setMouseLocked(locked: boolean): void;
   onAction(cb: (a: HudAction) => void): void;
   dispose(): void;
 };
 
-export type HudOptions = {
-  couplingLimit: number;
-  turntableLimit: number;
+/** The coupling and turntable limits, radians; the truck solo has no angles to show. */
+type PivotOptions = { couplingLimit: number; turntableLimit: number } | { solo: true };
+
+export type HudOptions = PivotOptions & {
   mode: 'exercise' | 'yard';
   /** Title and brief shown for an exercise run. */
   exercise: { title: string; brief: string } | null;
   aids: AidFlags;
+  /** The Einweiser's sight areas; absent means none. */
+  sight?: SightFlags;
   topDown: TopDownMode;
   /** Offers the chase view; the preset's `chaseView` flag. */
   chase: boolean;
@@ -97,6 +112,8 @@ export type HudOptions = {
   mirrorsOnly?: boolean;
   /** The stop button and lever column, which the toolbar stays clear of; absent where there are no controls. */
   pedalsBox?: () => DOMRect;
+  /** A coupling run: the goal card's head holds the uncouple button, which shows whether the truck is coupled. */
+  hitch?: boolean;
   /**
    * Whose key legend it lists, the driver's when absent. The Einweiser's band holds the sign bar, and
    * the sight cue takes the cockpit label's place; he has no gear or speed readout, no gauges and no
@@ -183,6 +200,17 @@ const AIDS: readonly [keyof AidFlags, MessageKey, MessageKey][] = [
   ['tracks', 'aidTracks', 'legendTracks'],
   ['ghost', 'aidGhost', 'legendGhost'],
 ];
+/** The truck solo has no angles to show, and its own corridor and ghost. */
+const SOLO_AIDS: typeof AIDS = [
+  ['path', 'aidPath', 'legendPathSolo'],
+  ['tracks', 'aidTracks', 'legendTracks'],
+  ['ghost', 'aidGhost', 'legendGhostSolo'],
+];
+/** The Einweiser's own toggles, after the aids; each draws the driver's sight areas. */
+const SIGHTS: readonly [keyof SightFlags, MessageKey, MessageKey][] = [
+  ['top', 'aidSightTop', 'legendSightTop'],
+  ['ground', 'aidSightGround', 'legendSightGround'],
+];
 const PANELS: readonly [keyof CollapsedPanels, MessageKey][] = [
   ['aids', 'panelAids'],
   ['gauges', 'panelGauges'],
@@ -220,6 +248,10 @@ const CHEVRON_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l
 const INFO_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>';
 
+/** A link of two halves: the bar between them shows while the truck is coupled. */
+const HITCH_ICON =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7H7a5 5 0 0 0 0 10h3M14 7h3a5 5 0 0 1 0 10h-3" /><path class="hud-uncouple-bar" d="M8 12h8" /></svg>';
+
 const RESET_VIEW_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 3v4M12 17v4M3 12h4M17 12h4" /></svg>';
 
@@ -228,9 +260,6 @@ const FREE_CAMERA_ICON =
 
 const SPLIT_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM14 5v14" /></svg>';
-/** Key steps move the divider by this share of the screen. */
-const SPLIT_STEP = 0.02;
-const percent = (share: number): number => Math.round(share * 100);
 
 const FOLD_ICON =
   '<svg class="hud-fold" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>';
@@ -252,12 +281,21 @@ const panelButton = (panel: string, key: MessageKey): string =>
 const aidButton = (aid: keyof AidFlags, key: MessageKey): string =>
   `<button type="button" class="hud-toggle hud-chip" data-aid="${aid}" aria-describedby="aid-meaning-${aid}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
-const keyRows = (chase: boolean, look: boolean, mirrorsOnly: boolean, role: Role): string =>
-  driveLegendRows({ chase, look, mirrorsOnly, role }).map(legendRowMarkup).join('');
+const sightButton = (flag: keyof SightFlags, key: MessageKey): string =>
+  `<button type="button" class="hud-toggle hud-chip" data-sight="${flag}" aria-describedby="sight-meaning-${flag}">${CHECK_ICON}<span data-i18n="${key}"></span></button>`;
 
-/** The Einweiser has no gauges to fold. */
-const panelButtons = (driver: boolean): string =>
-  PANELS.filter(([p]) => driver || p !== 'gauges')
+const keyRows = (
+  chase: boolean,
+  look: boolean,
+  mirrorsOnly: boolean,
+  role: Role,
+  coupling: boolean,
+): string =>
+  driveLegendRows({ chase, look, mirrorsOnly, role, coupling }).map(legendRowMarkup).join('');
+
+/** Only a combination's driver has gauges to fold. */
+const panelButtons = (gauged: boolean): string =>
+  PANELS.filter(([p]) => gauged || p !== 'gauges')
     .map(([p, k]) => panelButton(p, k))
     .join('');
 
@@ -267,7 +305,7 @@ const EYE_ICON =
 
 /** One slot per sign in the keys' order, 1 to 9. */
 const signBar = (): string =>
-  `<div class="hud-sign-name" data-hud="signName"></div><ol class="hud-sign-bar" data-hud="signBar" aria-label="${t('signBar')}">${SIGN_IDS.map(
+  `<div class="hud-sign-side"><div class="hud-sign-name" data-hud="signName"></div><div class="hud-lock-hint" data-hud="lockHint" data-i18n="lockHint" hidden></div></div><ol class="hud-sign-bar" data-hud="signBar" aria-label="${t('signBar')}">${SIGN_IDS.map(
     (sign, i) =>
       `<li class="hud-sign" data-sign="${sign}"><span class="hud-sign-key mono">${i + 1}</span>${signPictogram(sign)}<span class="hud-sign-label" data-i18n="${SIGN_NAME[sign]}"></span></li>`,
   ).join('')}</ol>`;
@@ -278,7 +316,11 @@ const MARKUP = (
   look: boolean | undefined,
   mirrorsOnly: boolean,
   role: Role,
+  solo: boolean,
+  hitch: boolean,
   driver = role === 'driver',
+  gauged = driver && !solo,
+  aids = solo ? SOLO_AIDS : AIDS,
 ): string => `
 <div class="hud" data-hud="root">
   <div class="hud-cockpit" data-hud="cockpit" hidden>
@@ -286,7 +328,7 @@ const MARKUP = (
     <div class="hud-legend" data-hud="legend" hidden>
       <button type="button" class="hud-legend-toggle" data-hud="keysToggle"><span class="hud-label" data-i18n="keys"></span>${CHEVRON_ICON}</button>
       <dl data-hud="keys">
-        ${keyRows(chase, look === true, mirrorsOnly, role)}
+        ${keyRows(chase, look === true, mirrorsOnly, role, hitch)}
       </dl>
     </div>
     <div class="hud-band" data-hud="band">
@@ -300,22 +342,22 @@ const MARKUP = (
   <div class="hud-mirror" data-hud="front" hidden></div>
   <div class="hud-mirror" data-hud="close" hidden></div>
   <div class="hud-topdown" data-hud="topDown">
-    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div><button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
+    <div class="hud-goal" data-hud="goal" data-chrome hidden><div class="hud-goal-head"><div class="hud-goal-title" data-hud="goalTitle"></div>${hitch && driver ? `<span class="hud-hitch" data-hud="hitch" role="status"></span><button type="button" class="hud-uncouple" data-hud="uncouple" aria-keyshortcuts="U" disabled>${HITCH_ICON}</button>` : ''}<button type="button" class="hud-goal-toggle" data-hud="briefToggle" aria-expanded="true" aria-controls="goal-brief" hidden>${CHEVRON_ICON}</button></div><div class="hud-goal-brief" id="goal-brief" data-hud="goalBrief"></div></div>
     <div class="hud-toolbar" data-hud="toolbar">
       <div class="hud-group" data-hud="views" data-chrome>
-        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${panelButtons(driver)}</div>
+        <div class="hud-segmented" role="group" aria-label="${t('labelView')}">${viewSegments()}</div><button type="button" class="hud-toggle hud-icon" data-hud="resetView" disabled>${RESET_VIEW_ICON}</button>${panelButtons(gauged)}</div>
       <div class="hud-aids" id="hud-panel-aids" data-hud="aids" data-chrome>
-        <div class="hud-group">${AIDS.map(([a, k]) => aidButton(a, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
-        <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${AIDS.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}</ul>
+        <div class="hud-group">${aids.map(([a, k]) => aidButton(a, k)).join('')}${driver ? '' : SIGHTS.map(([f, k]) => sightButton(f, k)).join('')}<button type="button" class="hud-toggle hud-icon" data-hud="aidLegendToggle" aria-expanded="false" aria-controls="aid-legend">${INFO_ICON}</button></div>
+        <ul class="hud-aid-legend" id="aid-legend" data-hud="aidLegend" hidden>${aids.map(([a, , k]) => `<li data-aid-legend="${a}">${aidSwatch(a)}<span id="aid-meaning-${a}" data-i18n="${k}"></span></li>`).join('')}${driver ? '' : SIGHTS.map(([f, , k]) => `<li data-sight-legend="${f}">${sightSwatch()}<span id="sight-meaning-${f}" data-i18n="${k}"></span></li>`).join('')}</ul>
       </div>
     </div>
     <div class="hud-info" data-hud="info">
-      ${driver ? '<div class="hud-gauges" id="hud-panel-gauges" data-hud="gauges" data-chrome></div>' : ''}
+      ${gauged ? '<div class="hud-gauges" id="hud-panel-gauges" data-hud="gauges" data-chrome></div>' : ''}
       ${
         mode === 'exercise'
           ? `<dl class="hud-counters" data-hud="counters" data-chrome>
         <dt data-i18n="contacts"></dt><dd class="mono" data-hud="contacts"></dd>
-        <dt data-i18n="jackknifes"></dt><dd class="mono" data-hud="jackknifes"></dd>
+        ${solo ? '' : '<dt data-i18n="jackknifes"></dt><dd class="mono" data-hud="jackknifes"></dd>'}
         <dt data-i18n="directionChanges"></dt><dd class="mono" data-hud="directionChanges"></dd>
         <dt data-i18n="time"></dt><dd class="mono" data-hud="time"></dd>
       </dl>`
@@ -374,9 +416,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
   const role = opts.role ?? 'driver';
   const driver = role === 'driver';
+  const solo = 'solo' in opts;
   root.insertAdjacentHTML(
     'beforeend',
-    MARKUP(opts.mode, opts.chase, opts.look, opts.mirrorsOnly === true, role),
+    MARKUP(
+      opts.mode,
+      opts.chase,
+      opts.look,
+      opts.mirrorsOnly === true,
+      role,
+      solo,
+      opts.hitch === true,
+    ),
   );
   const hud = query(root, 'root', HTMLElement);
   hud.dataset['role'] = role;
@@ -392,15 +443,19 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   const topDown = query(hud, 'topDown', HTMLElement);
   const infoRow = query(hud, 'info', HTMLElement);
   const toolbar = query(hud, 'toolbar', HTMLElement);
-  // the driver's alone
+  // the driver's only; the gauges also need a trailer
   const gaugeBox = hud.querySelector<HTMLElement>('[data-hud="gauges"]');
   const speed = hud.querySelector<HTMLElement>('[data-hud="speed"]');
   const gearEl = hud.querySelector<HTMLElement>('[data-hud="gear"]');
   const arrow = hud.querySelector<HTMLElement>('[data-hud="targetArrow"]');
+  // a coupling run's alone
+  const hitchEl = hud.querySelector<HTMLElement>('[data-hud="hitch"]');
+  const uncouple = hud.querySelector<HTMLButtonElement>('[data-hud="uncouple"]');
   // the Einweiser's alone
   const sightBox = hud.querySelector<HTMLElement>('[data-hud="sight"]');
   const sightText = hud.querySelector<HTMLElement>('[data-hud="sightText"]');
   const signName = hud.querySelector<HTMLElement>('[data-hud="signName"]');
+  const lockHint = hud.querySelector<HTMLElement>('[data-hud="lockHint"]');
   const signSlots = [...hud.querySelectorAll<HTMLElement>('[data-sign]')];
   const action = query(hud, 'action', HTMLElement);
   const goalCue = query(hud, 'goalCue', HTMLElement);
@@ -428,7 +483,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   briefToggle.setAttribute('aria-label', t('briefToggle'));
 
   let gauges: { readonly coupling: Gauge; readonly turntable: Gauge } | null = null;
-  if (gaugeBox !== null) {
+  if (gaugeBox !== null && !('solo' in opts)) {
     gauges = {
       coupling: createGauge(t('couplingAngle'), opts.couplingLimit),
       turntable: createGauge(t('turntableAngle'), opts.turntableLimit),
@@ -449,6 +504,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   /** The view a preset without the outside view falls back to. */
   let lastOther: TopDownMode = view === 'chase' ? 'follow' : view;
   const aids = { ...opts.aids };
+  const sight = { top: opts.sight?.top === true, ground: opts.sight?.ground === true };
   const allViewButtons = [...hud.querySelectorAll<HTMLElement>('[data-view]')];
   const chaseSegment = query(hud, 'views', HTMLElement).querySelector<HTMLElement>(
     '[data-view="chase"]',
@@ -476,11 +532,12 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   };
   syncChaseOffer();
   const aidButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-aid]')];
+  const sightButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-sight]')];
   const panelButtons = [...hud.querySelectorAll<HTMLButtonElement>('[data-panel]')];
   const collapsed = { ...opts.collapsed };
   const aidsBox = query(hud, 'aids', HTMLElement);
   const legendItems = new Map(
-    AIDS.map(([aid]) => {
+    (solo ? SOLO_AIDS : AIDS).map(([aid]) => {
       const li = hud.querySelector<HTMLElement>(`[data-aid-legend="${aid}"]`);
       if (li === null) throw new Error(`no legend item for ${aid}`);
       return [aid, li] as const;
@@ -520,8 +577,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     freeCamera.toggleAttribute('data-covered', shortScreen && (keysOpen || aidOpen));
   };
   /**
-   * The button stands over the pane's bottom edge, in the divider's reserve. Where the panels reach that
-   * edge (a window too small for the divider) it has no corner, so it stays away; K still toggles.
+   * The button stands over the pane's bottom edge, in the divider's reserve, or at the pane's own edge
+   * where no divider is shown. Where the panels still reach it, it has no corner, so it stays away; K still toggles.
    */
   const fitFreeCamera = (): void => {
     if (freeCamera === null) return;
@@ -553,6 +610,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       item.toggleAttribute('data-disabled', b.disabled);
       if (b.disabled) b.title = t('aidTopViewOnly');
       else b.removeAttribute('title');
+    }
+    for (const b of sightButtons) {
+      b.setAttribute('aria-pressed', String(sight[b.dataset['sight'] as keyof SightFlags]));
     }
     for (const b of panelButtons) {
       const panel = b.dataset['panel'] as keyof CollapsedPanels;
@@ -593,24 +653,32 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   /**
    * Landscape, the lever column stands at the screen's right edge, which the pane's right edge meets
    * under `data-reserve`: the toolbar stops short of it only where, unreserved, it would come within
-   * `--space-3` of it.
+   * `--space-3` of it. When only the aid rows below the view row would reach it, only they stop short
+   * (`data-aids-reserve`), so the view row keeps its width and wraps less.
    */
   const syncToolbarReserve = (): void => {
     topDown.removeAttribute('data-toolbar-reserve');
+    topDown.removeAttribute('data-aids-reserve');
     if (!topDown.hasAttribute('data-reserve') || root.clientWidth < root.clientHeight) return;
     const lever = opts.pedalsBox?.();
     if (lever === undefined || lever.width === 0) return;
     const gap = parseFloat(getComputedStyle(root).getPropertyValue('--space-3')) || 12;
     const pane = topDown.getBoundingClientRect();
     const leverLeft = pane.right - (root.getBoundingClientRect().right - lever.left) - gap;
+    const reaches = (selector: string): boolean =>
+      [...toolbar.querySelectorAll(selector)].some((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.right > leverLeft && r.bottom > lever.top - gap;
+      });
+    if (reaches('[data-hud="views"] .hud-toggle')) {
+      topDown.setAttribute('data-toolbar-reserve', '');
+      return;
+    }
     // A short screen's open aid legend is an overlay: it must not move the reserve or the panels.
-    const reaches = [
-      ...toolbar.querySelectorAll(shortScreen ? '.hud-toggle' : '.hud-toggle, .hud-aid-legend'),
-    ].some((el) => {
-      const r = el.getBoundingClientRect();
-      return r.width > 0 && r.right > leverLeft && r.bottom > lever.top - gap;
-    });
-    topDown.toggleAttribute('data-toolbar-reserve', reaches);
+    const aidSelector = shortScreen
+      ? '.hud-aids .hud-toggle'
+      : '.hud-aids .hud-toggle, .hud-aid-legend';
+    if (reaches(aidSelector)) topDown.setAttribute('data-aids-reserve', '');
   };
   /**
    * The open key list of a short screen stands in the top-down pane, which no mirror reaches; hud.css
@@ -661,6 +729,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         aids[aid] = !aids[aid];
         syncToggles();
         emit({ type: 'aid', aid, on: aids[aid] });
+      },
+      { signal },
+    );
+  }
+  for (const b of sightButtons) {
+    b.addEventListener(
+      'click',
+      () => {
+        const flag = b.dataset['sight'] as keyof SightFlags;
+        sight[flag] = !sight[flag];
+        syncToggles();
+        emit({ type: 'sight', flag, on: sight[flag] });
       },
       { signal },
     );
@@ -730,178 +810,27 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   query(hud, 'action', HTMLElement).addEventListener('click', () => emit({ type: 'pause' }), {
     signal,
   });
+  if (uncouple !== null) {
+    uncouple.title = `${t('uncouple')} (U)`;
+    uncouple.setAttribute('aria-label', t('uncouple'));
+    uncouple.addEventListener('click', () => emit({ type: 'uncouple' }), { signal });
+  }
 
   const split = query(hud, 'split', HTMLElement);
-  const splitHandle = query(hud, 'splitHandle', HTMLElement);
   const splitReset = query(hud, 'splitReset', HTMLButtonElement);
-  splitHandle.setAttribute('aria-label', t('viewSize'));
-  splitReset.title = `${t('resetViewSize')} (L)`;
-  splitReset.setAttribute('aria-label', t('resetViewSize'));
+  const divider = createSplitDivider(
+    { root, split, handle: query(hud, 'splitHandle', HTMLElement), reset: splitReset },
+    { emit, signal },
+  );
   let splitState: TopDownSplit | null = null;
   let hasCockpit = false;
-  type Drag = {
-    pointer: number;
-    orientation: Orientation;
-    /** Pointer position along the drag axis, at the start and latest. */
-    start: number;
-    current: number;
-    /** The share when the drag began, and the last one proposed. */
-    share: number;
-    sent: number;
-    frame: number | null;
+  /** Without a divider there is no strip to stand beside; true when that changed the button's corner. */
+  const syncFlush = (): boolean => {
+    const flush = split.hidden === true;
+    if (paneTools === null || paneTools.hasAttribute('data-flush') === flush) return false;
+    paneTools.toggleAttribute('data-flush', flush);
+    return true;
   };
-  let drag: Drag | null = null;
-  let keyDirty = false;
-  const proposeSplit = (orientation: Orientation, share: number, commit: boolean): void =>
-    emit({ type: 'split', orientation, share, commit });
-  const clampShare = (share: number): number =>
-    splitState === null ? share : Math.min(splitState.max, Math.max(splitState.min, share));
-  const along = (e: PointerEvent, orientation: Orientation): number =>
-    orientation === 'landscape' ? e.clientX : e.clientY;
-
-  /** Ends the drag without a result: the share goes back to where it began, and nothing is stored. */
-  const cancelDrag = (): void => {
-    const d = drag;
-    if (d === null) return;
-    drag = null;
-    if (d.frame !== null) cancelAnimationFrame(d.frame);
-    try {
-      if (splitHandle.hasPointerCapture(d.pointer)) splitHandle.releasePointerCapture(d.pointer);
-    } catch {
-      // The pointer is already gone.
-    }
-    splitHandle.blur();
-    // Not inline: this can run inside a layout, which a proposal would re-enter.
-    if (d.sent !== d.share) queueMicrotask(() => proposeSplit(d.orientation, d.share, false));
-  };
-  /** The replay's full-screen pane has no divider, and a screen whose range is a single percent has nothing to drag. */
-  const syncSplitHidden = (): void => {
-    const hide =
-      !hasCockpit || splitState === null || percent(splitState.max) <= percent(splitState.min);
-    setHidden(split, hide);
-    if (hide) cancelDrag();
-  };
-  /** One proposal per frame, however many moves came in. */
-  const proposeDrag = (d: Drag): void => {
-    d.frame = null;
-    const extent = d.orientation === 'landscape' ? root.clientWidth : root.clientHeight;
-    const moved = d.orientation === 'landscape' ? d.start - d.current : d.current - d.start;
-    const next = clampShare(d.share + moved / extent);
-    if (next === d.sent) return;
-    d.sent = next;
-    proposeSplit(d.orientation, next, false);
-  };
-  splitHandle.addEventListener(
-    'pointerdown',
-    (e) => {
-      if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) {
-        // No focus from a right-click or a second finger: a focused divider would keep the arrow keys from steering.
-        e.preventDefault();
-        return;
-      }
-      if (splitState === null || drag !== null) return;
-      try {
-        splitHandle.setPointerCapture(e.pointerId);
-      } catch {
-        return;
-      }
-      const { orientation, share } = splitState;
-      const start = along(e, orientation);
-      drag = {
-        pointer: e.pointerId,
-        orientation,
-        start,
-        current: start,
-        share,
-        sent: share,
-        frame: null,
-      };
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'mousedown',
-    (e) => {
-      if (e.button !== 0) e.preventDefault();
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'pointermove',
-    (e) => {
-      const d = drag;
-      if (d === null || e.pointerId !== d.pointer) return;
-      d.current = along(e, d.orientation);
-      d.frame ??= requestAnimationFrame(() => proposeDrag(d));
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'pointerup',
-    (e) => {
-      // A pointer-focused divider would keep the arrow keys from steering.
-      splitHandle.blur();
-      const d = drag;
-      if (d === null || e.pointerId !== d.pointer) return;
-      drag = null;
-      if (d.frame !== null) cancelAnimationFrame(d.frame);
-      d.current = along(e, d.orientation);
-      proposeDrag(d);
-      // Only a drag that moved the divider is worth storing.
-      if (d.sent !== d.share) proposeSplit(d.orientation, d.sent, true);
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'pointercancel',
-    (e) => {
-      splitHandle.blur();
-      if (e.pointerId === drag?.pointer) cancelDrag();
-    },
-    { signal },
-  );
-  splitHandle.addEventListener(
-    'lostpointercapture',
-    (e) => {
-      if (e.pointerId === drag?.pointer) cancelDrag();
-    },
-    { signal },
-  );
-  /** Stores where a burst of key presses ended; the repeats of a held key only move the divider. */
-  const commitKeys = (): void => {
-    if (!keyDirty || splitState === null) return;
-    keyDirty = false;
-    proposeSplit(splitState.orientation, splitState.share, true);
-  };
-  splitHandle.addEventListener(
-    'keydown',
-    (e) => {
-      if (splitState === null || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === 'Escape') {
-        splitHandle.blur();
-        return;
-      }
-      const { share, min, max, orientation } = splitState;
-      const landscape = orientation === 'landscape';
-      let next: number | null = null;
-      if (e.key === (landscape ? 'ArrowLeft' : 'ArrowDown')) next = share + SPLIT_STEP;
-      else if (e.key === (landscape ? 'ArrowRight' : 'ArrowUp')) next = share - SPLIT_STEP;
-      else if (e.key === 'Home') next = min;
-      else if (e.key === 'End') next = max;
-      // The other axis's arrows stay with the steering and the lever.
-      if (next === null) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const clamped = clampShare(next);
-      if (clamped === share) return;
-      keyDirty = e.repeat;
-      proposeSplit(orientation, clamped, !e.repeat);
-    },
-    { signal },
-  );
-  splitHandle.addEventListener('keyup', commitKeys, { signal });
-  splitHandle.addEventListener('blur', commitKeys, { signal });
-  splitReset.addEventListener('click', () => emit({ type: 'splitReset' }), { signal });
 
   const keyboardLike = matchMedia('(hover: hover) and (pointer: fine)');
   let typed = false;
@@ -970,6 +899,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     gearEl.dataset['gear'] = 'P';
   }
   let shownToast: MessageKey | null = null;
+  let shownCoupled: boolean | null = null;
   /** A gear other than P has been selected: the start hint is done. */
   let started = false;
   const bumps = new Map<HTMLElement, number>();
@@ -1037,11 +967,11 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     }
   };
 
-  const legendBox = (): LegendBox | null => {
+  const legendBox = (): Required<MeasuredLegend> | null => {
     const r = legend.getBoundingClientRect();
     if (r.width === 0) return null;
     const stage = root.getBoundingClientRect();
-    return { right: r.right - stage.left, height: stage.bottom - r.top };
+    return { right: r.right - stage.left, height: stage.bottom - r.top, boxHeight: r.height };
   };
 
   return {
@@ -1060,6 +990,18 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
 
       gauges?.coupling.set(s.couplingAngle);
       gauges?.turntable.set(s.turntableAngle);
+
+      if (hitchEl !== null && uncouple !== null) {
+        const coupled = s.hitch?.coupled === true;
+        if (coupled !== shownCoupled) {
+          shownCoupled = coupled;
+          hitchEl.textContent = t(coupled ? 'coupled' : 'notCoupled');
+          uncouple.toggleAttribute('data-coupled', coupled);
+        }
+        // the sim uncouples a standing truck only
+        const offered = coupled && s.speed === 0;
+        if (uncouple.disabled === offered) uncouple.disabled = !offered;
+      }
 
       const warning = toastFor(s, ahead, started, driver);
       const key = warning?.key ?? null;
@@ -1150,7 +1092,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       topDown.toggleAttribute('data-reserve', spansRight(views.topDown));
       if (hasTopDown(views)) syncToolbarReserve();
       hasCockpit = c !== null;
-      syncSplitHidden();
+      divider.set(splitState, hasCockpit);
       // After the reserves, which narrow the toolbar.
       if (hasTopDown(views)) {
         syncSegmentRows();
@@ -1162,6 +1104,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         paneTools.style.top = `${td.y}px`;
         paneTools.style.width = `${td.width}px`;
         paneTools.style.height = `${td.height}px`;
+        syncFlush();
         fitFreeCamera();
       }
       if (c) {
@@ -1174,26 +1117,17 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       }
     },
     setSplit(next) {
-      if (drag !== null && drag.orientation !== next.orientation) cancelDrag();
       splitState = next;
-      syncSplitHidden();
-      const vertical = next.orientation === 'landscape';
-      splitHandle.setAttribute(
-        'aria-keyshortcuts',
-        vertical ? 'ArrowLeft ArrowRight Home End' : 'ArrowUp ArrowDown Home End',
-      );
-      splitHandle.setAttribute('aria-orientation', vertical ? 'vertical' : 'horizontal');
-      splitHandle.setAttribute('aria-valuemin', String(percent(next.min)));
-      splitHandle.setAttribute('aria-valuemax', String(percent(next.max)));
-      splitHandle.setAttribute('aria-valuenow', String(percent(next.share)));
-      splitHandle.setAttribute('aria-valuetext', `${percent(next.share)} %`);
-      const atDefault = Math.abs(next.share - next.fallback) < 1e-4;
-      if (splitReset.disabled !== atDefault) splitReset.disabled = atDefault;
+      divider.set(next, hasCockpit);
+      // layout() ran before this state was final.
+      if (syncFlush()) fitFreeCamera();
     },
     panelsBottom(paneWidth) {
       syncShortScreen();
       const previous = topDown.style.width;
-      const reserved = topDown.hasAttribute('data-toolbar-reserve');
+      const reserved = ['data-toolbar-reserve', 'data-aids-reserve'].filter((a) =>
+        topDown.hasAttribute(a),
+      );
       topDown.style.width = `${paneWidth}px`;
       syncToolbarReserve();
       const top = topDown.getBoundingClientRect().top;
@@ -1211,7 +1145,9 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         (el) => el.getBoundingClientRect().right > infoRight + 0.5,
       );
       topDown.style.width = previous;
-      topDown.toggleAttribute('data-toolbar-reserve', reserved);
+      for (const a of ['data-toolbar-reserve', 'data-aids-reserve']) {
+        topDown.toggleAttribute(a, reserved.includes(a));
+      }
       return overflows ? Infinity : bottom - top;
     },
     legendBox,
@@ -1226,11 +1162,15 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     setFree(on) {
       freeCameraButton?.setAttribute('aria-pressed', String(on));
     },
+    setSight(flags) {
+      Object.assign(sight, flags);
+      syncToggles();
+    },
     setOffers(next) {
       chaseOffered = next.chase;
       syncChaseOffer();
       hud.toggleAttribute('data-interior', next.interior);
-      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly, role);
+      keysList.innerHTML = keyRows(next.chase, next.look, mirrorsOnly, role, opts.hitch === true);
       applyMessages(keysList);
       if (!chaseOffered && view === 'chase') selectView(lastOther);
       else syncToggles();
@@ -1279,11 +1219,14 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
       sightText.textContent = t(SIGHT_CUE_KEY[cue]);
       sightBox.dataset['sight'] = cue === 'none' || cue === 'unclear' ? cue : 'seen';
     },
+    setMouseLocked(locked) {
+      if (lockHint !== null) setHidden(lockHint, !locked);
+    },
     onAction(cb) {
       listeners.push(cb);
     },
     dispose() {
-      if (drag?.frame != null) cancelAnimationFrame(drag.frame);
+      divider.dispose();
       for (const timer of bumps.values()) clearTimeout(timer);
       abort.abort();
       hud.remove();

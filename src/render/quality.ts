@@ -37,6 +37,8 @@ export type QualityFlags = {
   /** Lit perspective copies of the ground markings; the top-down tokens stay flat. */
   readonly litMarkings: boolean;
   readonly pbr: boolean;
+  /** Road grime, contact shading and paint and tarp variation on the reflective vehicles; needs `pbr`. */
+  readonly vehicleWeathering: boolean;
   /** HDRI sun and sky light in the perspective views, tone-mapped in their perspective-only materials. */
   readonly perspectiveLighting: boolean;
   /** Distance haze in the graded materials; needs `perspectiveLighting`. */
@@ -76,6 +78,7 @@ const BALANCED: QualityFlags = {
   groundTexture: true,
   groundPbr: false,
   pbr: false,
+  vehicleWeathering: false,
   perspectiveLighting: false,
   aerialPerspective: false,
   sunShadow: false,
@@ -111,6 +114,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     groundTexture: false,
     groundPbr: false,
     pbr: false,
+    vehicleWeathering: false,
     perspectiveLighting: false,
     aerialPerspective: false,
     sunShadow: false,
@@ -127,6 +131,7 @@ export const QUALITY_FLAGS: Readonly<Record<GraphicsPreset, QualityFlags>> = {
     interiorGlb: true,
     groundPbr: true,
     pbr: true,
+    vehicleWeathering: true,
     perspectiveLighting: true,
     aerialPerspective: true,
     sunShadow: true,

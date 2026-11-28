@@ -82,7 +82,7 @@ const SCREENS = {
 /** The frusta of both mirrors of truck `id` on `screen`, placed as the renderer does, on the straight pose. */
 function mirrorFrusta(id: TruckId, screen: readonly [number, number]) {
   const anchors = truckAnchors(truckById(id));
-  const views = computeViewports(screen[0], screen[1], 'drive', null, NO_INSETS);
+  const views = computeViewports(screen[0], screen[1], { mode: 'drive', insets: NO_INSETS });
   const frustum = (side: 'mirrorLeft' | 'mirrorRight'): Frustum => {
     const rect = views[side];
     if (rect === null) throw new Error(`no ${side} rectangle`);
@@ -234,7 +234,10 @@ describe.each(TRUCK_IDS)('chase camera on the cab shell: %s', (id) => {
       expect(box.max.x).toBeCloseTo(face.x + RELIEF, 3);
       expect(box.max.y).toBeCloseTo(face.top, 3);
       expect(box.max.z).toBeCloseTo(face.halfWidth + RELIEF, 3);
-      const { topDown } = computeViewports(screen[0], screen[1], 'drive', null, NO_INSETS);
+      const { topDown } = computeViewports(screen[0], screen[1], {
+        mode: 'drive',
+        insets: NO_INSETS,
+      });
       const camera = createChaseCamera();
       const trailerId = TRAILER_IDS[0] as TrailerId;
       const straight = poses(id, trailerId, { x: 0, y: 0, th0: 0, th1: 0, th2: 0 });
@@ -306,7 +309,7 @@ function classIIAspects(): readonly [number, number] {
   for (const mode of ['drive', 'mirrors'] as const) {
     for (let w = 640; w <= 2560; w += 80) {
       for (let h = 360; h <= 1440; h += 60) {
-        const rect = computeViewports(w, h, mode, null, NO_INSETS).mirrorLeft;
+        const rect = computeViewports(w, h, { mode, insets: NO_INSETS }).mirrorLeft;
         if (rect === null) continue;
         narrowest = Math.min(narrowest, rect.width / rect.height);
         widest = Math.max(widest, rect.width / rect.height);

@@ -10,12 +10,14 @@ export const en = {
   exerciseStraightReverse: 'Straight reverse',
   exerciseReverseBay: 'Reverse into a bay',
   exerciseReverseCorner: 'Reverse around a corner',
+  exerciseCoupling: 'Couple and uncouple',
   exerciseDockRamp: 'Dock at a ramp',
   exerciseSlalom: 'Slalom forward and back',
-  briefStraightReverse: 'Reverse the trailer straight back into the marked bay and stop.',
-  briefReverseBay: 'Reverse the trailer between the parked vehicles into the marked bay and stop.',
+  briefStraightReverse: 'Reverse straight back into the marked bay and stop.',
+  briefReverseBay: 'Reverse between the parked vehicles into the marked bay and stop.',
   briefReverseCorner: 'Reverse around the corner into the side street and stop in the marked bay.',
-  briefDockRamp: 'Reverse the trailer square up to the ramp and stop in the marked bay.',
+  briefCoupling: 'Couple up, uncouple in the bay and drive away.',
+  briefDockRamp: 'Reverse square up to the ramp and stop in the marked bay.',
   briefSlalom:
     'Drive the slalom forward to the marked circle, then reverse back and stop in the marked bay.',
   guideBriefDepot: 'Guide the truck freely in the depot yard, without a target.',
@@ -26,13 +28,12 @@ export const en = {
   guideDockRamp: 'Guide up to a ramp',
   guideSlalom: 'Guide the slalom forward and back',
   guideBriefStraightReverse:
-    'Give Attention, then guide the trailer straight back into the marked bay and give Halt.',
+    'Give Attention, then guide straight back into the marked bay and give Halt.',
   guideBriefReverseBay:
-    'Guide the trailer between the parked vehicles into the marked bay. Keep sight contact with the driver.',
+    'Guide between the parked vehicles into the marked bay. Keep sight contact with the driver.',
   guideBriefReverseCorner:
-    "Guide the trailer around the corner into the marked bay in the side street. Stay out of the vehicle's path.",
-  guideBriefDockRamp:
-    'Guide the trailer square up to the ramp. Give Halt early: the truck needs room to stop.',
+    "Guide around the corner into the marked bay in the side street. Stay out of the vehicle's path.",
+  guideBriefDockRamp: 'Guide square up to the ramp. Give Halt early: the truck needs room to stop.',
   guideBriefSlalom:
     'Guide the slalom forward to the marked circle, then from behind back into the marked bay.',
   tolerance: 'Tolerance',
@@ -45,6 +46,11 @@ export const en = {
   goalPositionOk: 'position ok · angle off',
   truck: 'Truck',
   trailer: 'Trailer',
+  noTrailer: 'No trailer',
+  coupled: 'Coupled',
+  notCoupled: 'Not coupled',
+  uncouple: 'Uncouple',
+  couplingSpeed: 'Coupling speed',
   best: 'Best',
   withAids: 'with aids',
   noAids: 'no aids',
@@ -74,6 +80,7 @@ export const en = {
   graphicsLow: 'Low',
   graphicsBalanced: 'Balanced',
   graphicsHigh: 'High',
+  graphicsHint: 'Low suits older tablets. High needs a larger download to work offline.',
   wideMirrors: 'Wide-angle mirrors',
   settingOn: 'On',
   settingOff: 'Off',
@@ -123,6 +130,8 @@ export const en = {
   aidPath: 'Predicted path',
   aidTracks: 'Wheel tracks',
   aidGhost: 'Target ghost',
+  aidSightTop: 'Sight (top view)',
+  aidSightGround: 'Sight (own view)',
   aidLegend: 'What the aid lines mean',
   briefToggle: 'Show or hide the exercise brief',
   legendPivots: 'Center lines of truck, drawbar and trailer; the gap is the angle.',
@@ -130,6 +139,12 @@ export const en = {
     'Solid: trailer rear corners (reversing). Dashed: truck front corners (forward). Stop bar: where the held steer stops.',
   legendTracks: 'Where the wheels have been.',
   legendGhost: 'Trailer outline at the target.',
+  legendSightTop:
+    'Ground where the driver has sight contact with you: directly, or only in a mirror.',
+  legendSightGround: 'The same sight areas on the ground of your own view.',
+  legendPathSolo:
+    'Solid: truck rear corners (reversing). Dashed: truck front corners (forward). Stop bar: where the held steer stops.',
+  legendGhostSolo: 'Truck outline at the target.',
   aidTopViewOnly: 'Shown in the follow and whole-yard views only',
   panelAids: 'Aids',
   panelGauges: 'Angles',
@@ -154,6 +169,8 @@ export const en = {
   endedMoving:
     'Position and angle were within tolerance, but the vehicle was still moving. Stop it inside the target.',
   runOver: 'Ground guide run over: the run has ended.',
+  trailerNotLeft:
+    'Not finished: uncouple the trailer in the target, drive away from it, then stop.',
   endedWithoutHalt:
     'Position and angle were within tolerance, but the run ends only on a stop after a recognized Halt.',
   walkedBackwards: 'Signal Halt, reposition while it stands, then guide on.',
@@ -185,8 +202,9 @@ export const en = {
   reload: 'Reload',
   later: 'Later',
   offlineReady: 'Ready offline',
-  offlineSetupFailed: 'Offline use could not be set up.',
-  offlineIncomplete: 'Not yet offline-ready for this graphics quality.',
+  offlineSetupFailed: 'Offline use could not be set up. Reload to retry.',
+  offlineIncomplete:
+    'Not yet offline-ready for this graphics quality. Go online and reload to finish.',
   dismiss: 'Dismiss',
   noWebgl:
     'This device cannot show WebGL 2 graphics. Turn on hardware acceleration in the browser settings or use a current Chrome, Edge, Firefox or Safari.',
@@ -251,6 +269,20 @@ export const en = {
   signRechts: 'Move right',
   signAbstand: 'Closing distance',
   signNone: 'No signal',
+  creditAnd: 'and',
+  creditKindKitTile: 'Yard-kit tile',
+  creditKindKitLeaves: 'Yard-kit leaves',
+  creditKindSky: 'Sky',
+  creditKindYardConcrete: 'Yard concrete',
+  creditKindStreetAsphalt: 'Street asphalt',
+  creditKindPavers: 'Pavement pavers',
+  creditRoleProcessing: 'processing',
+  creditRolePhotography: 'photography',
+  creditRoleOriginal: 'original',
+  creditRoleSkyEdits: 'sky edits',
+  steerValueLeft: 'left',
+  steerValueRight: 'right',
+  steerValueStraight: 'straight',
   signBar: 'Hand signals',
   sightDirect: 'Sight contact',
   sightMirrorLeft: 'Sight contact in the left main mirror',
@@ -265,6 +297,7 @@ export const en = {
   walk: 'Walk',
   jog: 'Jog',
   mouseLook: 'Look around (click to start)',
+  lockHint: 'P or Esc releases the mouse',
   signKeys: 'Hand signal (hold)',
   signLeftRight: 'Move left / right',
   signMouse: 'Come here / Move away',
@@ -278,6 +311,11 @@ export const en = {
   sensitivityHigh: 'High',
   invertMouse: 'Invert mouse',
   settingsEinweiser: 'Ground guide',
+
+  // Pause sheet hints.
+  finishHint: 'Finishing scores the run as it stands and keeps the replay.',
+  leaveHint: 'Leaving drops the run: no result, no replay.',
+  groundSightKeyHint: 'G switches them on or off while you walk.',
 } as const;
 
 export type MessageKey = keyof typeof en;

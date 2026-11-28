@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { resolveRun } from '../content/run';
+import { pairedRun, resolveRun } from '../content/run';
 import type { Obstacle } from '../contracts/layout';
+import { TRAILER_IDS, TRUCK_IDS } from '../contracts/vehicle';
 import { SCORING_THRESHOLDS } from '../scoring/score';
 import { dataFingerprint, type RunData } from './fingerprint';
 
@@ -11,7 +12,7 @@ const ids = {
   trailerId: 'krone-azw-18',
   role: 'driver',
 } as const;
-const run = resolveRun(ids);
+const run = pairedRun(ids);
 const { exercise } = run;
 if (exercise === null) throw new Error('exercise expected');
 const data: RunData = {
@@ -47,6 +48,13 @@ describe('data fingerprint', () => {
     for (const other of others) expect(resolveRun(other).fingerprint).not.toBe(base);
   });
 
+  it('differs between every truck solo and each of its combinations', () => {
+    const rigs = TRUCK_IDS.flatMap((truckId) =>
+      [...TRAILER_IDS, null].map((trailerId) => resolveRun({ ...ids, truckId, trailerId })),
+    );
+    expect(new Set(rigs.map((r) => r.fingerprint)).size).toBe(rigs.length);
+  });
+
   it('ignores visual-only content', () => {
     const stop = { kind: 'stop', from: { x: 0, y: 0 }, to: { x: 1, y: 0 }, width: 0.3 } as const;
     const markings = [...exercise.markings, { ...stop, dashed: false }];
@@ -70,7 +78,7 @@ describe('data fingerprint', () => {
     const moved = editFirst((o) => ({ ...o, obb: { ...o.obb, cx: o.obb.cx + 0.01 } }));
     const tolerances = { ...exercise.tolerances, position: exercise.tolerances.position + 0.1 };
     const variants: RunData[] = [
-      { ...data, params: { ...data.params, drawbar: data.params.drawbar + 0.001 } },
+      { ...data, params: { ...run.params, drawbar: run.params.drawbar + 0.001 } },
       { ...data, obstacles: moved },
       { ...data, exercise: { ...exercise, tolerances } },
       { ...data, start: { ...data.start, x: data.start.x + 0.001 } },

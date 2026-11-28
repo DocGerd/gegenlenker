@@ -29,6 +29,16 @@ describe('driveLegendRows', () => {
     expect(off.some((r) => r.desc === 'orbitTilt')).toBe(false);
   });
 
+  it('the uncouple key is listed only where the exercise couples', () => {
+    const terms = (coupling: boolean, role: 'driver' | 'einweiser' = 'driver'): unknown[] =>
+      driveLegendRows({ chase: true, look: true, mirrorsOnly: false, coupling, role }).map(
+        (r) => r.term,
+      );
+    expect(terms(false)).not.toContain('U');
+    expect(terms(true)).toContain('U');
+    expect(terms(true, 'einweiser')).not.toContain('U');
+  });
+
   it('look-around adds Q / E', () => {
     const terms = (look: boolean): unknown[] =>
       driveLegendRows({ chase: false, look, mirrorsOnly: false }).map((r) => r.term);

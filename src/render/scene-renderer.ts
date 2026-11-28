@@ -8,6 +8,9 @@ import type {
 import type { ResolvedLayout } from '../contracts/layout';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 
+/** The Einweiser's sight areas, drawn in the top-down view and on the ground of his first-person view; off for the driver. */
+export type SightFlags = { readonly top: boolean; readonly ground: boolean };
+
 export interface SceneRenderer {
   /**
    * Rejects with a `GraphicsStartError` when no GPU context can be made on `canvas` or a later call
@@ -16,7 +19,8 @@ export interface SceneRenderer {
   init(canvas: HTMLCanvasElement): Promise<void>;
   /** `listener` runs when the GPU renderer is lost for good; returns the unsubscribe. */
   onLost(listener: () => void): () => void;
-  setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec): void;
+  /** A null trailer: the truck solo. */
+  setScene(layout: ResolvedLayout, truck: TruckSpec, trailer: TrailerSpec | null): void;
   /** Builds the current scene again under the current quality, keeping the aids and their tracks; no-op without one. */
   rebuildScene(): void;
   /** `listener` runs when an asset attached, detached or failed on its own, so a still frame is stale; returns the unsubscribe. */
@@ -25,6 +29,10 @@ export interface SceneRenderer {
   setQuality(preset: GraphicsPreset): void;
   /** Applies at once, to the current scene and to every later one. */
   setLighting(mode: LightingMode): void;
+  /** Applies at once, to the current scene and to every later one; drawn in Einweiser runs only, `top` only with a top view. */
+  setSightCones(flags: SightFlags): void;
+  /** Whether the sight areas are still being sampled: skipping frames would leave them unfinished. */
+  sightPending(): boolean;
   resize(cssWidth: number, cssHeight: number): void;
   render(frame: RenderFrame): void;
   /** The outside view's camera as of the last render, to start a free camera from; null while it was not drawn. */

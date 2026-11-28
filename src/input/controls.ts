@@ -2,6 +2,7 @@ import type { ControlSource } from '../contracts/control';
 import type { LampSwitches } from '../contracts/render';
 import type { Gear, SimSnapshot } from '../contracts/sim';
 import { applyMessages, t } from '../i18n/i18n';
+import { leverPercent, leverValueText, steerPercent, steerValueText } from './control-text';
 import { createKeyboard } from './keyboard';
 import './controls.css';
 import {
@@ -22,6 +23,8 @@ export type Controls = Omit<ControlSource, 'tick'> & {
   tick(dt: number, snapshot: Pick<SimSnapshot, 'steer'>): void;
   /** The stop button and the lever column, for the HUD to keep its toolbar clear of. */
   pedalsBox(): DOMRect;
+  /** Asks to uncouple on the next sim step, as U does. */
+  uncouple(): void;
   dispose(): void;
 };
 
@@ -43,6 +46,13 @@ const LIGHTS_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5.5C5.5 5.5 4 8.5 4 12s1.5 6.5 6 6.5c1.5 0 2.5-.5 3.5-1.5V7C12.5 6 11.5 5.5 10 5.5z" /><path d="M16.5 9.5l4.5 1.5M16.5 13l4.5 1.5M16.5 16.5l4.5 1.5" /></svg>';
 const HAZARD_ICON =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5L21.5 20h-19z" /><path d="M12 9.5L16.5 17.5h-9z" /></svg>';
+
+/**
+ * Milliseconds between value updates to the accessibility tree. The meters are neither focusable nor
+ * live, so nothing is announced: assistive technology reads them on demand. A timer, not the sim
+ * tick, so a pause cannot leave the last value stale.
+ */
+const ARIA_INTERVAL_MS = 250;
 
 const markup = (lockToLockTurns: number): string => `
 <div class="ctl" data-ctl="root">
@@ -162,6 +172,16 @@ export function createControls(
   const wheel = query(container, 'wheel', HTMLElement);
   const wheelArt = query(container, 'wheel-art', SVGElement);
   const pointer = query(container, 'pointer', SVGElement);
+  // Read-only meters: A/D/W/S and the arrows already drive, so neither takes a tab stop.
+  for (const [el, label, min] of [
+    [wheel, t('steer'), -100],
+    [lever, t('speed'), 0],
+  ] as const) {
+    el.setAttribute('role', 'meter');
+    el.setAttribute('aria-label', label);
+    el.setAttribute('aria-valuemin', String(min));
+    el.setAttribute('aria-valuemax', '100');
+  }
   const reset = query(container, 'reset', HTMLElement);
   reset.title = t('resetSteer');
   reset.setAttribute('aria-label', t('resetSteer'));
@@ -332,6 +352,22 @@ export function createControls(
     lightsButton.setAttribute('aria-pressed', String(lamps.lights));
     hazardButton.setAttribute('aria-pressed', String(lamps.hazard));
   };
+  let shownSteerText = '';
+  let shownLeverText = '';
+  const syncValues = (): void => {
+    const steerText = steerValueText(state.steer);
+    if (steerText !== shownSteerText) {
+      shownSteerText = steerText;
+      wheel.setAttribute('aria-valuenow', String(steerPercent(state.steer)));
+      wheel.setAttribute('aria-valuetext', steerText);
+    }
+    const leverText = leverValueText(state.lever);
+    if (leverText !== shownLeverText) {
+      shownLeverText = leverText;
+      lever.setAttribute('aria-valuenow', String(leverPercent(state.lever)));
+      lever.setAttribute('aria-valuetext', leverText);
+    }
+  };
   const render = (actualSteer: number): void => {
     const d = steerDisplay(state.steer, actualSteer, opts.lockToLockTurns, shownCentred);
     const rimTenths = Math.round(d.rimRotationDeg * 10);
@@ -366,11 +402,15 @@ export function createControls(
   };
   lightsButton.setAttribute('aria-pressed', String(lamps.lights));
   render(state.steer);
+  syncValues();
+  const valueTimer = setInterval(syncValues, ARIA_INTERVAL_MS);
 
   return {
     control() {
       syncBrake();
-      return toControlVector(state);
+      const control = toControlVector(state);
+      state.uncouple = false;
+      return control;
     },
     lamps() {
       syncLamps();
@@ -385,7 +425,11 @@ export function createControls(
     pedalsBox() {
       return pedals.getBoundingClientRect();
     },
+    uncouple() {
+      state.uncouple = true;
+    },
     dispose() {
+      clearInterval(valueTimer);
       abort.abort();
       keyboard.dispose();
       container.remove();

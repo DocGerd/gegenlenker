@@ -2,7 +2,12 @@ import { registerSW } from 'virtual:pwa-register';
 import { t } from '../i18n/i18n';
 import type { GraphicsPreset } from '../contracts/render';
 import { presetAssetUrls } from '../render/asset-urls';
-import { failOnRedundantInstall, precached, setOfflineStatus } from './offline-status';
+import {
+  failOnRedundantInstall,
+  precached,
+  setOfflineStatus,
+  statusDisplayed,
+} from './offline-status';
 import { browserHost, createPresetCache } from './preset-cache';
 import './update-prompt.css';
 
@@ -54,8 +59,11 @@ export function startUpdatePrompt(root: HTMLElement, preset: () => GraphicsPrese
       setOfflineStatus(ready ? 'ready' : 'incomplete');
       if (ready && announce) {
         announce = false;
-        show(t('offlineReady'));
-        hideTimer = window.setTimeout(hide, OFFLINE_READY_MS);
+        // The title footer already says it; the toast is for every other screen.
+        if (!statusDisplayed()) {
+          show(t('offlineReady'));
+          hideTimer = window.setTimeout(hide, OFFLINE_READY_MS);
+        }
       }
     },
   );

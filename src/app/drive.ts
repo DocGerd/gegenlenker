@@ -12,11 +12,13 @@ import {
   type RenderFrame,
   type TopDownMode,
 } from '../contracts/render';
-import type { TrailerId, TruckId } from '../contracts/vehicle';
+import { hasTrailer, type TrailerId, type TruckId } from '../contracts/vehicle';
 import { createHud } from '../hud/hud';
 import { t } from '../i18n/i18n';
+import type { MessageKey } from '../i18n/en';
 import { createControls } from '../input/controls';
-import { isAction } from '../input/keymap';
+import { isFormField } from '../input/keyboard';
+import { actionFor, isAction } from '../input/keymap';
 import { createViewInput } from '../input/view-input';
 import { isDefaultView } from '../input/top-down-view';
 import {
@@ -26,31 +28,33 @@ import {
   lookAroundAvailable,
 } from '../render';
 import { arrowClearRect, clearRect, targetArrow } from '../render/follow-framing';
+import type { SightFlags } from '../render/scene-renderer';
 import { mountPerfOverlay, perfRequested } from '../render/perf-overlay';
 import { computeViewports, orientationOf, topDownSplit } from '../render/viewports';
 import { holdWakeLock } from '../pwa/wake-lock';
-import { createRunTracker, isDrivingInput, runResult } from '../scoring/score';
+import { createRunTracker } from '../scoring/score';
 import { advanceClock } from '../sim/clock';
-import { bodyFootprints } from '../sim/geometry';
-import { CONTACT_WARN_DISTANCE, DT } from '../sim/constants';
+import { CONTACT_WARN_DISTANCE, PREDICT_DISTANCE } from '../sim/constants';
+import { drawnFootprints, drivenRig } from '../sim/hitch';
 import { NO_PREDICTION, predictCombination, warnAhead, type Ahead } from '../sim/predict';
 import { createInputRecorder } from '../sim/replay';
 import { createSimulation } from '../sim/simulation';
-import { trailerById, truckById } from '../vehicles/registry';
 import { measureChrome, measureDivider } from './chrome';
 import { startEinweiserDrive } from './einweiser-drive';
 import { EXERCISE_BRIEF, EXERCISE_TITLE } from './exercise-text';
-import { pauseFields } from './menu/options';
-import { showPauseSheet, type PauseSheet } from './pause-sheet';
+import { OFF_ON_CHOICES, OPTION_FIELDS, pauseFields, type OptionId } from './menu/options';
+import { showPauseSheet, type PauseRow, type PauseSheet } from './pause-sheet';
+import { createRunStepper } from './run-stepper';
 import { mountRenderStage } from './render-stage';
 import { setNightDrive } from './theme';
-import { currentSettings, updateSettings, type Settings } from './settings';
+import { currentSettings, NO_SIGHT, updateSettings, type Settings } from './settings';
 
 export type RunConfig = {
   readonly layoutId: LayoutId;
   readonly exercise: ExerciseDefinition | null;
   readonly truckId: TruckId;
-  readonly trailerId: TrailerId;
+  /** Null: the truck solo. */
+  readonly trailerId: TrailerId | null;
   /** Absent: a driver run. */
   readonly role?: Role;
 };
@@ -66,7 +70,10 @@ export type DriveOutcome = {
 const ARROW_MARGIN = 24;
 const EXPOSE_FRAMING = new URLSearchParams(location.search).get('framing') === '1';
 
-const anyAid = (a: AidFlags): boolean => a.pivots || a.path || a.tracks || a.ghost;
+/** The truck solo has no angle display, whatever the setting says. */
+const anyAid = (a: AidFlags, solo: boolean): boolean =>
+  (a.pivots && !solo) || a.path || a.tracks || a.ghost;
+const anySight = (s: SightFlags): boolean => s.top || s.ground;
 /** Every aid draws in the top-down view only, so a mirror-only run has none, whatever the settings. */
 const NO_AIDS: AidFlags = { pivots: false, path: false, tracks: false, ghost: false };
 
@@ -88,33 +95,30 @@ export function startDrive(
   { onExit, onRestart, onLeave }: DriveHandlers,
 ): () => void {
   const role: Role = run.role ?? 'driver';
-  const { params, layout, exercise, start, contacts } = resolveRun({
+  const { params, layout, exercise, start, contacts, truck, trailer } = resolveRun({
     layoutId: run.layoutId,
     exerciseId: run.exercise?.id ?? null,
     truckId: run.truckId,
     trailerId: run.trailerId,
     role,
   });
-  const truck = truckById(run.truckId);
-  const trailer = trailerById(run.trailerId);
   const sim = createSimulation(params, start, contacts);
   const { lighting, mirrorsOnly } = settings;
   const recorder = createInputRecorder();
   const tracker = exercise === null ? null : createRunTracker(exercise);
   let snapshot = sim.snapshot();
-  let reached = false;
-  let runOver = false;
-  // Sticky over aid toggles; only sim steps after the first driving input with an aid on count.
-  let assisted = false;
-  let startTime: number | null = null;
 
   const stage = document.createElement('div');
   stage.className = 'drive';
+  // e2e: a solo rig attaches no trailer shell (`readyMarkers`)
+  stage.toggleAttribute('data-solo', trailer === null);
   root.append(stage);
   const einweiser =
     role === 'einweiser'
       ? startEinweiserDrive(stage, { truck, trailer, layout, contacts, start: snapshot, lighting })
       : null;
+
+  const stepper = createRunStepper(sim, recorder, tracker, einweiser);
 
   const cleanups: (() => void)[] = [];
   let disposed = false;
@@ -142,23 +146,12 @@ export function startDrive(
     );
     const driven =
       scored && exercise !== null
-        ? runResult(
-            snapshot,
-            exercise,
-            run.truckId,
-            run.trailerId,
-            reached,
-            tracker?.waypointVisited() ?? true,
-            assisted,
-            startTime ?? snapshot.time,
-            lighting,
-            mirrorsOnly,
-          )
+        ? stepper.result(exercise, run.truckId, run.trailerId, lighting, mirrorsOnly)
         : null;
     const result =
       driven === null || einweiser === null ? driven : { ...driven, einweiser: einweiser.result() };
     dispose();
-    onExit({ log, result, runOver });
+    onExit({ log, result, runOver: stepper.runOver() });
   };
   const finish = (): void => exit(true);
   const restart = (): void => {
@@ -191,7 +184,7 @@ export function startDrive(
       restart,
       finish,
       leave: exercise === null ? null : leaveUnscored,
-      fields: pauseFields(role),
+      fields: pauseRows(),
       settingChanged: (id) => {
         if (id === 'graphics') switchGraphics(currentSettings().graphics);
         // the field of view is the first-person camera's: redraw while the run stands still
@@ -221,8 +214,12 @@ export function startDrive(
   // Before the view input and the HUD, whose keys and clicks it takes first.
   if (einweiser !== null) {
     live.push(
-      einweiser.attach(view.surface, () => {
-        if (sheet === null) togglePause();
+      einweiser.attach(view.surface, {
+        view: () => frame.views.cockpit,
+        onLockChange(locked) {
+          hud.setMouseLocked(locked);
+          if (!locked && sheet === null) togglePause();
+        },
       }),
     );
   }
@@ -258,6 +255,10 @@ export function startDrive(
 
   const driveMode = mirrorsOnly ? 'mirrors' : 'drive';
   let aids: AidFlags = mirrorsOnly ? NO_AIDS : settings.aids;
+  // his alone; the driver's views draw none. Kept as stored: without a top view its pair is not drawn.
+  let sight = einweiser === null ? NO_SIGHT : settings.sight;
+  let shownSight: SightFlags = { top: sight.top && !mirrorsOnly, ground: sight.ground };
+  renderer.setSightCones(shownSight);
   let collapsed = settings.collapsed;
   let topDownLayout = settings.topDownLayout;
   let savedLayout = topDownLayout;
@@ -268,17 +269,11 @@ export function startDrive(
   let warning: Ahead = null;
   const frame: Frame = {
     snapshot,
-    views: computeViewports(
-      1,
-      1,
-      driveMode,
-      null,
-      undefined,
-      undefined,
-      null,
-      extraMirrors(graphics, wideMirrors),
+    views: computeViewports(1, 1, {
+      mode: driveMode,
+      extra: extraMirrors(graphics, wideMirrors),
       role,
-    ),
+    }),
     topDown,
     aids,
     predicted: NO_PREDICTION,
@@ -332,8 +327,9 @@ export function startDrive(
   });
   live.push(() => viewInput.dispose());
   const hud = createHud(stage, {
-    couplingLimit: params.couplingLimit,
-    turntableLimit: params.turntableLimit,
+    ...(hasTrailer(params)
+      ? { couplingLimit: params.couplingLimit, turntableLimit: params.turntableLimit }
+      : { solo: true as const }),
     mode: exercise === null ? 'yard' : 'exercise',
     exercise:
       exercise === null
@@ -343,6 +339,7 @@ export function startDrive(
             brief: t(EXERCISE_BRIEF[role][exercise.id]),
           },
     aids,
+    sight,
     topDown,
     chase: chaseOffered(graphics),
     interior: interiorAvailable(graphics),
@@ -351,8 +348,51 @@ export function startDrive(
     mirrorsOnly,
     role,
     ...(controls === null ? {} : { pedalsBox: () => controls.pedalsBox() }),
+    hitch: exercise?.parkedTrailer !== undefined,
   });
   cleanups.push(() => hud.dispose());
+
+  /** For the chips, the pause sheet and the key alike. */
+  const setSight = (flag: keyof SightFlags, on: boolean): void => {
+    sight = { ...sight, [flag]: on };
+    shownSight = { top: sight.top && !mirrorsOnly, ground: sight.ground };
+    renderer.setSightCones(shownSight);
+    hud.setSight(sight);
+    dirty = true;
+    updateSettings({ sight });
+  };
+  /** His own rows after his look settings; the top view's only where there is one. */
+  const pauseRows = (): readonly (OptionId | PauseRow)[] => {
+    const fields = pauseFields(role);
+    if (einweiser === null) return fields;
+    const row = (flag: keyof SightFlags, hint?: MessageKey): PauseRow => ({
+      field: {
+        id: flag === 'top' ? 'sightTop' : 'sightGround',
+        label: flag === 'top' ? 'aidSightTop' : 'aidSightGround',
+        choices: OFF_ON_CHOICES,
+      },
+      value: () => (sight[flag] ? 'on' : 'off'),
+      change: (value) => setSight(flag, value === 'on'),
+      ...(hint === undefined ? {} : { hint }),
+    });
+    const look = (id: OptionId): boolean => OPTION_FIELDS[id].group === 'einweiser';
+    return [
+      ...fields.filter(look),
+      ...(mirrorsOnly ? [] : [row('top')]),
+      row('ground', 'groundSightKeyHint'),
+      ...fields.filter((id) => !look(id)),
+    ];
+  };
+  if (einweiser !== null) {
+    // after the walk input's listener, which claims every walk key: so not checked for defaultPrevented
+    const onSightKey = (e: KeyboardEvent): void => {
+      if (sheet !== null || e.repeat || isFormField(e.target)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || actionFor('walk', e) !== 'groundSight') return;
+      setSight('ground', !sight.ground);
+    };
+    window.addEventListener('keydown', onSightKey);
+    live.push(() => window.removeEventListener('keydown', onSightKey));
+  }
 
   /** Chrome moves with the layout and with collapsing panels; the vehicle is framed in what it leaves free. */
   let arrowRects: { clear: Rect; place: Rect } | null = null;
@@ -375,11 +415,11 @@ export function startDrive(
           x: target.pose.x + (Math.cos(target.pose.heading) * target.length) / 2,
           y: target.pose.y + (Math.sin(target.pose.heading) * target.length) / 2,
         };
-  /** Test observable (`?framing=1`), beside `drawn` (frames drawn) and `head`: the screen box of the drawn vehicle and the sim step it shows. */
+  /** Test observable (`?framing=1`), beside `drawn` (frames drawn), `head` and `sightPending`: the screen box of the drawn vehicle and the sim step it shows. */
   const exposeVehicleBox = (): void => {
     const xs: number[] = [];
     const ys: number[] = [];
-    for (const { obb } of bodyFootprints(params, snapshot)) {
+    for (const { obb } of drawnFootprints(params, snapshot)) {
       const c = Math.cos(obb.heading);
       const sn = Math.sin(obb.heading);
       for (const [a, b] of [
@@ -425,35 +465,28 @@ export function startDrive(
       return bottom;
     };
     const extra = extraMirrors(graphics, wideMirrors);
-    let views = computeViewports(
-      width,
-      height,
-      driveMode,
-      null,
-      undefined,
-      topDownLayout,
+    let views = computeViewports(width, height, {
+      mode: driveMode,
+      layout: topDownLayout,
       panels,
       extra,
       role,
-    );
+    });
     hud.layout(views);
     const legend = hud.legendBox();
     if (legend !== null) {
-      views = computeViewports(
-        width,
-        height,
-        driveMode,
+      views = computeViewports(width, height, {
+        mode: driveMode,
         legend,
-        undefined,
-        topDownLayout,
+        layout: topDownLayout,
         panels,
         extra,
         role,
-      );
+      });
       hud.layout(views);
     }
     if (!mirrorsOnly) {
-      hud.setSplit(topDownSplit(width, height, topDownLayout, legend, undefined, panels));
+      hud.setSplit(topDownSplit(width, height, { layout: topDownLayout, legend, panels }));
     }
     frame.views = views;
     viewInput.relayout();
@@ -512,12 +545,16 @@ export function startDrive(
         updateSettings({ topDownLayout: savedLayout });
       }
       arrange();
+    } else if (action.type === 'uncouple') {
+      controls?.uncouple();
     } else if (action.type === 'aidLegend' || action.type === 'brief') {
       arrange();
     } else if (action.type === 'collapse') {
       collapsed = { ...collapsed, [action.panel]: action.collapsed };
       updateSettings({ collapsed });
       arrange();
+    } else if (action.type === 'sight') {
+      setSight(action.flag, action.on);
     } else if (action.type === 'aid') {
       aids = { ...aids, [action.aid]: action.on };
       dirty = true;
@@ -542,47 +579,44 @@ export function startDrive(
     },
     halted: halt,
     frame(seconds) {
-      if (reached || runOver) {
+      if (stepper.over()) {
         finish();
         return;
       }
       viewInput.step(seconds);
       const clock = sheet === null ? advanceClock(accumulator, seconds) : { steps: 0, accumulator };
       accumulator = clock.accumulator;
-      for (let i = 0; i < clock.steps; i++) {
-        source.tick(DT, snapshot);
-        const control = source.control();
-        recorder.record(snapshot.step, control);
-        if (startTime === null && isDrivingInput(control)) startTime = snapshot.time;
-        if (startTime !== null && anyAid(aids)) assisted = true;
-        snapshot = sim.step(control);
-        if (einweiser !== null) {
-          einweiser.settle(snapshot);
-          // the hit ends the run, reached or not; the next frame exits
-          runOver = einweiser.runOver();
-          if (runOver) break;
-        }
-        if (tracker !== null) {
-          // an Einweiser run ends only on a stop in the target after a recognised Halt
-          reached = tracker.update(snapshot) && (einweiser?.halted() ?? true);
-          // render this final snapshot first; the next frame exits, so the HUD's last time is the result time
-          if (reached) break;
-        }
-      }
-      if (clock.steps === 0 && !dirty) {
+      snapshot = stepper.advance(
+        clock.steps,
+        source,
+        anyAid(aids, trailer === null) || anySight(shownSight),
+      );
+      // a sight sample under way needs frames to finish, paused or not
+      if (clock.steps === 0 && !dirty && !renderer.sightPending()) {
         renderer.skipFrame();
         return;
       }
       dirty = false;
       if (clock.steps > 0 || pathStale) {
         pathStale = false;
+        const rig = drivenRig(params, snapshot, contacts, start.parked?.jaw);
         frame.predicted = aids.path
-          ? predictCombination(params, snapshot, contacts)
+          ? predictCombination(
+              rig.params,
+              snapshot,
+              rig.contacts,
+              Math.min(PREDICT_DISTANCE, rig.reach),
+            )
           : NO_PREDICTION;
         // the warning does not depend on the path aid, so a short look-ahead stands in when it is off
         const ahead = aids.path
           ? frame.predicted
-          : predictCombination(params, snapshot, contacts, CONTACT_WARN_DISTANCE);
+          : predictCombination(
+              rig.params,
+              snapshot,
+              rig.contacts,
+              Math.min(CONTACT_WARN_DISTANCE, rig.reach),
+            );
         warning = snapshot.speed !== 0 ? warnAhead(ahead) : null;
       }
       frame.snapshot = snapshot;
@@ -602,6 +636,7 @@ export function startDrive(
       }
       hud.update(snapshot, warning);
       if (einweiser !== null) hud.setEinweiser(einweiser.hud());
+      const startTime = stepper.startTime();
       hud.setRunTime(startTime === null ? 0 : snapshot.time - startTime);
       if (tracker !== null) hud.setGoal(tracker.goalCue(snapshot));
       const at = targetCentre && renderer.project(targetCentre.x, targetCentre.y);
@@ -611,6 +646,7 @@ export function startDrive(
       if (EXPOSE_FRAMING) {
         exposeVehicleBox();
         stage.dataset['drawn'] = String(drawn);
+        stage.dataset['sightPending'] = String(renderer.sightPending());
         if (visual !== null) stage.dataset['einweiser'] = JSON.stringify(visual);
       }
     },

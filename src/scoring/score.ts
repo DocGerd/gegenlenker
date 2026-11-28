@@ -12,6 +12,13 @@ export const STOPPED_SPEED = 0.05; // m/s
 /** Hashed whole into the data fingerprint; order is part of the fingerprint. */
 export const SCORING_THRESHOLDS = { WAYPOINT_RADIUS, STOPPED_SPEED } as const;
 
+/** A coupling that closes faster than this (m/s) is a hard one. */
+export const COUPLING_SPEED = 0.3;
+/** The jaw's distance from the eye (m) at which the truck has left the uncoupled trailer. */
+export const DRIVE_AWAY = 3;
+/** Hashed into the fingerprint of a run that couples only, after `SCORING_THRESHOLDS`. */
+export const COUPLING_THRESHOLDS = { COUPLING_SPEED, DRIVE_AWAY } as const;
+
 export function targetError(s: SimSnapshot, zone: TargetZone): { position: number; angle: number } {
   return {
     position: Math.hypot(s.trailerRear.x - zone.pose.x, s.trailerRear.y - zone.pose.y),
@@ -39,7 +46,11 @@ function stoppedInTarget(s: SimSnapshot, exercise: ExerciseDefinition): boolean 
   return Math.abs(s.speed) < STOPPED_SPEED && inTolerance(s, exercise);
 }
 
-/** `away`: no cue (turn point pending or far from the target); `outside`: near the target but beyond a tolerance; `inside`: stopping now ends the run. */
+/**
+ * `away`: no cue (turn point pending or far from the target); `outside`: near the target but beyond a tolerance;
+ * `inside`: stopping now ends the run, or in a coupling run leaves the trailer there to uncouple. A coupling
+ * run cues only once coupled, and again once the truck has driven away from the uncoupled trailer.
+ */
 export type GoalState = 'away' | 'outside' | 'inside';
 
 /** Display data behind `GoalState`: the trailer rear's distance to the target in metres and which criterion holds. */
@@ -57,14 +68,30 @@ export type RunTracker = {
   waypointVisited(): boolean;
 };
 
+/** A coupling run's trailer counts once it was coupled, then uncoupled, and the truck has driven away. */
+export function leftTrailer(s: SimSnapshot): boolean {
+  const hitch = s.hitch;
+  if (hitch === undefined || hitch.coupled || hitch.couplingSpeed === null) return false;
+  return Math.hypot(s.coupling.x - hitch.eye.x, s.coupling.y - hitch.eye.y) >= DRIVE_AWAY;
+}
+
 export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
   const waypoint = exercise.waypoint;
   let waypointVisited = waypoint === null;
+  const couples = exercise.parkedTrailer !== undefined;
+  const left = (s: SimSnapshot): boolean => !couples || leftTrailer(s);
   const cue = (s: SimSnapshot): GoalCue => {
     const error = targetError(s, exercise.target);
     const ok = withinTolerance(error, exercise.tolerances);
     let state: GoalState = 'away';
-    if (waypointVisited) {
+    // a coupling run cues the towed trailer, and the dropped one once the truck has left it
+    const hitch = s.hitch;
+    const waiting =
+      couples &&
+      (hitch === undefined ||
+        hitch.couplingSpeed === null ||
+        (!hitch.coupled && ok.position && ok.angle && !leftTrailer(s)));
+    if (waypointVisited && !waiting) {
       if (ok.position && ok.angle) state = 'inside';
       else if (error.position <= exercise.target.length) state = 'outside';
     }
@@ -79,7 +106,7 @@ export function createRunTracker(exercise: ExerciseDefinition): RunTracker {
       ) {
         waypointVisited = true;
       }
-      return waypointVisited && stoppedInTarget(s, exercise);
+      return waypointVisited && left(s) && stoppedInTarget(s, exercise);
     },
     goal: (s) => cue(s).state,
     goalCue: cue,
@@ -99,7 +126,7 @@ export function runResult(
   s: SimSnapshot,
   exercise: ExerciseDefinition,
   truckId: TruckId,
-  trailerId: TrailerId,
+  trailerId: TrailerId | null,
   reached: boolean,
   waypointVisited: boolean,
   assisted: boolean,
@@ -123,5 +150,8 @@ export function runResult(
     jackknifes: s.jackknifes,
     directionChanges: s.directionChanges,
     time: s.time - startTime,
+    ...(exercise.parkedTrailer === undefined
+      ? {}
+      : { coupling: { speed: s.hitch?.couplingSpeed ?? null, left: leftTrailer(s) } }),
   };
 }

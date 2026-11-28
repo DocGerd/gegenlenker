@@ -1,6 +1,6 @@
 import type { SignId } from '../contracts/einweiser';
 import type { ControlVector, Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
-import type { VehicleParams } from '../contracts/vehicle';
+import { hasTrailer, type RigParams, type VehicleParams } from '../contracts/vehicle';
 import { wrapAngle } from '../sim/angle';
 import { createReader, type Perception, perceive, type Reading, type Station } from './signs';
 import type { Occluder, SightGeometry } from './sight';
@@ -105,8 +105,8 @@ export function reverseGains(p: VehicleParams): number[] {
 
 const sideOf = (motion: number, toward: number): number => Math.sign(Math.sin(toward - motion));
 
-export const createPilot = (p: VehicleParams): Pilot =>
-  pilotFrom(p, reverseGains(p), {
+export const createPilot = (p: RigParams): Pilot =>
+  pilotFrom(p, hasTrailer(p) ? reverseGains(p) : [], {
     gear: 'P',
     command: { kind: 'halt' },
     ref: 0,
@@ -114,7 +114,7 @@ export const createPilot = (p: VehicleParams): Pilot =>
     lead: null,
   });
 
-function pilotFrom(p: VehicleParams, gains: readonly number[], from: PilotState): Pilot {
+function pilotFrom(p: RigParams, gains: readonly number[], from: PilotState): Pilot {
   let { gear, command, ref, kappa, lead } = from;
 
   const leadingHeading = (s: SimSnapshot): number =>
@@ -174,6 +174,12 @@ function pilotFrom(p: VehicleParams, gains: readonly number[], from: PilotState)
       return Math.max(-1, Math.min(1, delta / p.maxRoadWheelAngle));
     }
     if (gear !== 'R') return 0;
+    if (!hasTrailer(p)) {
+      // solo, nothing articulates: the forward law with the motion reversed
+      const delta =
+        -Math.atan(kappa * p.wheelbase) - FORWARD_GAIN * wrapAngle(ref - s.truck.heading);
+      return Math.max(-1, Math.min(1, delta / p.maxRoadWheelAngle));
+    }
     // the steady curve at `kappa` (left turn of the leading rear positive), then the error from it
     const wheel = -Math.atan(kappa * p.wheelbase);
     const error = [

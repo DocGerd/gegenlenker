@@ -26,13 +26,18 @@ export type InputRecorder = {
 };
 
 const sameControl = (a: ControlVector, b: ControlVector): boolean =>
-  a.steer === b.steer && a.lever === b.lever && a.brake === b.brake && a.gear === b.gear;
+  a.steer === b.steer &&
+  a.lever === b.lever &&
+  a.brake === b.brake &&
+  a.gear === b.gear &&
+  a.uncouple === b.uncouple;
 
-const copyControl = ({ steer, lever, brake, gear }: ControlVector): ControlVector => ({
+const copyControl = ({ steer, lever, brake, gear, uncouple }: ControlVector): ControlVector => ({
   steer,
   lever,
   brake,
   gear,
+  ...(uncouple === true ? { uncouple } : {}),
 });
 
 export function createInputRecorder(): InputRecorder {
@@ -133,10 +138,11 @@ const isFiniteNumber = (v: unknown): v is number => typeof v === 'number' && Num
 
 function parseControl(v: unknown): ControlVector | null {
   if (!isRecord(v)) return null;
-  const { steer, lever, brake, gear } = v;
+  const { steer, lever, brake, gear, uncouple } = v;
   if (!isFiniteNumber(steer) || !isFiniteNumber(lever)) return null;
   if (typeof brake !== 'boolean' || !isMember(GEARS, gear)) return null;
-  return { steer, lever, brake, gear };
+  if (uncouple !== undefined && uncouple !== true) return null;
+  return { steer, lever, brake, gear, ...(uncouple === true ? { uncouple } : {}) };
 }
 
 /** Null unless `items` is an array of entries with strictly increasing steps, each accepted by `parse`. */
@@ -193,7 +199,9 @@ export function parseInputLog(
     return null;
   }
   if (!isRecord(data) || ![1, 2, 3, 4].includes(data.version as number)) return null;
-  const { layoutId, exerciseId, truckId, trailerId, steps, changes } = data;
+  const { layoutId, exerciseId, truckId, steps, changes } = data;
+  const trailerId =
+    data.trailerId === null || isMember(TRAILER_IDS, data.trailerId) ? data.trailerId : undefined;
   // Versions 1 to 3 predate roles: every such run was driven.
   const role = data.version === 4 ? data.role : 'driver';
   if (!isMember(ROLES, role)) return null;
@@ -206,10 +214,18 @@ export function parseInputLog(
   const mirrorsOnly = data.version === 1 || data.version === 2 ? false : data.mirrorsOnly;
   if (typeof mirrorsOnly !== 'boolean') return null;
   if (!isMember(LAYOUT_IDS, layoutId) || !isMember(TRUCK_IDS, truckId)) return null;
-  if (!isMember(TRAILER_IDS, trailerId) || !isStep(steps)) return null;
+  // solo (no trailer) is a v4 run only
+  const soloRefused = trailerId === null && data.version !== 4;
+  if (trailerId === undefined || soloRefused || !isStep(steps)) return null;
   if (exerciseId !== null && !isMember(EXERCISE_IDS, exerciseId)) return null;
-  if (data.fingerprint !== fingerprint({ layoutId, exerciseId, truckId, trailerId, role }))
+  let expected: string;
+  try {
+    expected = fingerprint({ layoutId, exerciseId, truckId, trailerId, role });
+  } catch {
+    // ids no run resolves to (a coupling exercise solo) were never stored by a drive
     return null;
+  }
+  if (data.fingerprint !== expected) return null;
   const parsed = parseSteps(changes, (change, step): InputChange | null => {
     const control = parseControl(change.control);
     return control === null ? null : { step, control };

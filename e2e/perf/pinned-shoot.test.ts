@@ -89,6 +89,9 @@ describe('readyMarkers', () => {
     expect(ready('low', {})).toBe(false);
     expect(ready('balanced', { ...all, 'data-vehicle-shells': 'a b' })).toBe(false);
     expect(ready('balanced', { ...all, 'data-ground-texture': 'failed' })).toBe(false);
+    const soloShells = readyMarkers('balanced', {}, true)['data-vehicle-shells'];
+    expect(soloShells?.('a b')).toBe(true);
+    expect(soloShells?.('a')).toBe(false);
     expect(ready('high', { ...all, 'data-ground-texture': 'failed' })).toBe(false);
     expect(ready('high', { ...all, 'data-ground-pbr': 'failed' })).toBe(false);
     expect(ready('high', { ...all, 'data-sky-hdri': '' })).toBe(false);

@@ -108,6 +108,19 @@ test('the result keeps its actions clear of the update toast at 1280x585', async
   await expect(page.locator('[data-hud="speed"]')).toHaveText('0.0 km/h');
   await finishRun(page);
   await expect(toast).toBeVisible();
+  // The drive hid the toast, so the reserve is 0 until its ResizeObserver sees it shown again.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          parseFloat(
+            getComputedStyle(document.querySelector('#app') ?? document.body).getPropertyValue(
+              '--toast-reserve',
+            ),
+          ) || 0,
+      ),
+    )
+    .toBeGreaterThan(0);
 
   await page.locator('.result').evaluate((el) => {
     el.scrollTop = el.scrollHeight;

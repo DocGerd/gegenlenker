@@ -12,7 +12,7 @@ import { isKitDecor, type KitPiece, type Obstacle, type ResolvedLayout } from '.
 import type { Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
-import { resolveCombination } from '../vehicles/resolve';
+import { resolveCombination, resolveTruck } from '../vehicles/resolve';
 import { CAB_HEIGHT, FRAME_TOP } from './cab-dims';
 import { FREE_FOV, poseFromGaze } from './free-look';
 import { CAMERA_FAR, CHASE_LAYERS, enableLayers } from './seams';
@@ -86,7 +86,14 @@ const frameAspect = (frame: ChaseFrame): number => Math.max(frame.width / frame.
 /** The combination straight, from its centre: half its length and half its widest body, metres. */
 export type CombinationExtent = { readonly halfLength: number; readonly halfWidth: number };
 
-export function combinationExtent(truck: TruckSpec, trailer: TrailerSpec): CombinationExtent {
+export function combinationExtent(
+  truck: TruckSpec,
+  trailer: TrailerSpec | null,
+): CombinationExtent {
+  if (trailer === null) {
+    const p = resolveTruck(truck);
+    return { halfLength: (p.truckFront + p.truckRear) / 2, halfWidth: p.truckWidth / 2 };
+  }
   const p = resolveCombination(truck, trailer);
   const length =
     p.truckFront + p.couplingOffset + p.drawbar + p.trailerWheelbase + p.trailerRearOverhang;

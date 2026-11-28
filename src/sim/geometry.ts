@@ -1,5 +1,5 @@
 import type { BodyFootprint, BodyId, Obb, SimSnapshot, Vec2 } from '../contracts/sim';
-import type { VehicleParams } from '../contracts/vehicle';
+import { hasTrailer, type RigParams } from '../contracts/vehicle';
 import { DRAWBAR_WIDTH } from './constants';
 
 /** Box from `front` to `rear` along `heading`. */
@@ -18,22 +18,25 @@ const along = (from: Vec2, length: number, heading: number): Vec2 => ({
   y: from.y + length * Math.sin(heading),
 });
 
+/** Solo: the truck's footprint only. */
 export function bodyFootprints(
-  params: VehicleParams,
+  params: RigParams,
   s: Pick<SimSnapshot, 'truck' | 'coupling' | 'dolly' | 'trailer'>,
 ): BodyFootprint[] {
   const { truck, coupling, dolly, trailer } = s;
   const footprint = (body: BodyId, obb: Obb): BodyFootprint => ({ body, obb });
-  return [
-    footprint(
-      'truck',
-      span(
-        along(truck, params.truckFront, truck.heading),
-        along(truck, -params.truckRear, truck.heading),
-        truck.heading,
-        params.truckWidth,
-      ),
+  const truckBox = footprint(
+    'truck',
+    span(
+      along(truck, params.truckFront, truck.heading),
+      along(truck, -params.truckRear, truck.heading),
+      truck.heading,
+      params.truckWidth,
     ),
+  );
+  if (!hasTrailer(params)) return [truckBox];
+  return [
+    truckBox,
     footprint('drawbar', span(coupling, dolly, dolly.heading, DRAWBAR_WIDTH)),
     footprint(
       'trailer',

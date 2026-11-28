@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { en } from '../../src/i18n/en.ts';
+import { WSL_LIB, wslGpuLaunch } from '../gpu-launch.ts';
 import { startYard } from '../menu-flow.ts';
 import { attachmentsReady } from '../pinned-shoot.ts';
 import {
@@ -39,7 +40,6 @@ const SETTINGS_KEY = 'gegenlenker.settings.v1';
 const BASE_PATH = '/gegenlenker/';
 const USER_AGENT =
   'Mozilla/5.0 (Linux; Android 13; SM-T870) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-const WSL_LIB = '/usr/lib/wsl/lib';
 const WAKE_LOCK_KEY = '__tabletWakeLock';
 const SETTLE_MS = 3_000;
 const SETTLE_DEADLINE_MS = 35_000;
@@ -151,17 +151,17 @@ async function startPreview(skipBuild: boolean): Promise<string> {
 }
 
 function launch(backend: Backend | null): Promise<Browser> {
-  // On WSL the GPU needs the d3d12 Mesa driver and ANGLE on desktop GL; elsewhere Chromium picks its default.
+  // On WSL the GPU needs the d3d12 Mesa driver and ANGLE on EGL (desktop GL when headed); elsewhere Chromium picks its default.
   const args = ['--ignore-gpu-blocklist', '--enable-gpu'];
-  const env: Record<string, string> = {};
+  let env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) env[k] = v;
   if (backend === 'webgpu' || backend === 'auto') args.push('--enable-unsafe-webgpu');
   if (wsl) {
-    args.push('--use-gl=angle', '--use-angle=gl');
+    const gpu = wslGpuLaunch(headed);
+    args.push(...gpu.args);
+    env = gpu.env;
     // WSL has no hardware Vulkan driver: Dawn's OpenGL ES backend is its only hardware adapter.
     if (backend === 'webgpu' || backend === 'auto') args.push('--use-webgpu-adapter=opengles');
-    env['GALLIUM_DRIVER'] = 'd3d12';
-    env['LD_LIBRARY_PATH'] = [WSL_LIB, env['LD_LIBRARY_PATH']].filter(Boolean).join(':');
   }
   // Headless (new mode) unless HEADED=1: a headed window grabs the desktop focus; off-screen softens that.
   if (headed) args.push('--window-position=-32000,-32000', '--no-startup-window');
@@ -578,7 +578,7 @@ async function main(): Promise<boolean> {
   if (isSoftwareGl(renderer)) {
     if (!opts.allowSoftware) {
       throw new Error(
-        `no hardware GL (${renderer}): results would be invalid; HEADED=1 may find the GPU, --allow-software overrides`,
+        `no hardware GL (${renderer}): results would be invalid; on WSL2 check the user is in the render group (active after wsl --shutdown); --allow-software overrides`,
       );
     }
     console.warn('warning: software GL, results are not valid');

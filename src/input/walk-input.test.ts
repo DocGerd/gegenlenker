@@ -9,6 +9,7 @@ class FakeElement {
 }
 
 class FakeSurface extends EventTarget {
+  getBoundingClientRect = () => ({ left: 0, top: 0 });
   requestPointerLock = vi.fn<(options?: unknown) => Promise<void>>(() => Promise.resolve());
 }
 
@@ -30,7 +31,9 @@ describe('walk input', () => {
   let doc: FakeDocument;
   let win: EventTarget;
   let input: WalkInput;
-  let lost: ReturnType<typeof vi.fn<() => void>>;
+  let changed: ReturnType<typeof vi.fn<(locked: boolean) => void>>;
+  /** His view in the surface's px; the rest of the surface is the top view. */
+  const VIEW = { x: 0, y: 0, width: 400, height: 300 };
   let detach: () => void;
 
   /** What the browser does once the pointer lock is granted or lost. */
@@ -48,8 +51,8 @@ describe('walk input', () => {
     return e.defaultPrevented;
   };
   /** A mouse button goes down: `pointerdown` for the first one held, `mousedown` for each. */
-  const press = (button: number, first = true): Event => {
-    if (first) surface.dispatchEvent(event('pointerdown', { pointerType: 'mouse' }));
+  const press = (button: number, first = true, at = { clientX: 10, clientY: 10 }): Event => {
+    if (first) surface.dispatchEvent(event('pointerdown', { pointerType: 'mouse', ...at }));
     const e = event('mousedown', { button });
     surface.dispatchEvent(e);
     return e;
@@ -83,8 +86,11 @@ describe('walk input', () => {
     vi.stubGlobal('Element', FakeElement);
     surface = new FakeSurface();
     input = createWalkInput({ heading: 0, look: () => ({ degPerCount: 1, invert: false }) });
-    lost = vi.fn<() => void>();
-    detach = input.attach(surface as unknown as HTMLElement, lost);
+    changed = vi.fn<(locked: boolean) => void>();
+    detach = input.attach(surface as unknown as HTMLElement, {
+      view: () => VIEW,
+      onLockChange: changed,
+    });
   });
 
   afterEach(() => {
@@ -196,6 +202,34 @@ describe('walk input', () => {
     expect(menu.defaultPrevented).toBe(true);
   });
 
+  it('leaves a click outside his view to the view input, and takes one inside', () => {
+    const after = vi.fn();
+    surface.addEventListener('pointerdown', after);
+    press(0, true, { clientX: 500, clientY: 10 });
+    expect(after).toHaveBeenCalledTimes(1);
+    expect(surface.requestPointerLock).not.toHaveBeenCalled();
+    press(0, true, { clientX: 399, clientY: 299 });
+    expect(after).toHaveBeenCalledTimes(1);
+    expect(surface.requestPointerLock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps every click from the view input while locked, wherever the frozen pointer reads', () => {
+    lock();
+    const after = vi.fn();
+    surface.addEventListener('pointerdown', after);
+    press(0, true, { clientX: 500, clientY: 10 });
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it('releases the lock on P, and does nothing unlocked', () => {
+    expect(key('keydown', 'KeyP')).toBe(true);
+    expect(doc.exitPointerLock).not.toHaveBeenCalled();
+    lock();
+    key('keydown', 'KeyP');
+    expect(doc.exitPointerLock).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenLastCalledWith(false);
+  });
+
   it('turns with the mouse only while locked, after dropping the first move', () => {
     move(10);
     expect(input.sample().heading).toBe(0);
@@ -209,7 +243,7 @@ describe('walk input', () => {
     press(0);
     expect(input.sample().sign).toBe('herkommen');
     setLock(false);
-    expect(lost).toHaveBeenCalledTimes(1);
+    expect(changed.mock.calls).toEqual([[true], [false]]);
     expect(input.sample().sign).toBeNull();
     const heading = input.sample().heading;
     move(40);
@@ -245,16 +279,17 @@ describe('walk input', () => {
     expect(doc.exitPointerLock).toHaveBeenCalledTimes(1);
     expect(input.sample().keys.forward).toBe(false);
     // the lock was lost by our own exit: the drive's guard sees the sheet already open
-    expect(lost).toHaveBeenCalledTimes(1);
+    expect(changed).toHaveBeenLastCalledWith(false);
     input.pause();
     expect(doc.exitPointerLock).toHaveBeenCalledTimes(1);
   });
 
   it('stops listening, then releases the lock, on teardown', () => {
     lock();
+    changed.mockClear();
     detach();
     expect(doc.exitPointerLock).toHaveBeenCalledTimes(1);
-    expect(lost).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
     key('keydown', 'KeyW');
     expect(input.sample().keys.forward).toBe(false);
   });

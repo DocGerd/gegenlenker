@@ -32,6 +32,8 @@ const COCKPIT_LABEL = 32;
 const MIRROR_SCALE = 1.22;
 /** The opaque HUD band's share of the cockpit height; mirrors `--hud-band` in hud.css. */
 export const HUD_BAND_SHARE = 0.18;
+/** How far `.hud-legend` stands above the HUD band (hud.css). */
+const LEGEND_LIFT = 12;
 /** The band's top edge as NDC y of the cockpit view: nothing a trainee must see lies below it. */
 export const bandTopNdc = (): number => 2 * HUD_BAND_SHARE - 1;
 /** Smallest mirror height; where the room above the controls and `MIRROR_GAP` is smaller, class II shrinks to that room. */
@@ -208,6 +210,32 @@ function paneLever(insets: Insets): number {
 }
 
 /**
+ * The key legend as `hud.legendBox()` measures it. It stands on the HUD band, a share of the cockpit,
+ * so `height` holds only at the split it was measured at; `boxHeight`, its own height, at every split.
+ * Without `boxHeight` the legend is taken as fixed on screen.
+ */
+export type MeasuredLegend = LegendBox & { readonly boxHeight?: number };
+
+/** The inputs of `topDownSplit`. */
+export interface SplitOptions {
+  /** The stored share (default `DEFAULT_TOP_DOWN_LAYOUT`). */
+  readonly layout?: TopDownLayout | undefined;
+  /** The measured key legend. */
+  readonly legend?: MeasuredLegend | null | undefined;
+  /** The safe-area insets (default: read from the CSS tokens). */
+  readonly insets?: Insets | undefined;
+  /** The measured panel stack above the divider. */
+  readonly panels?: PanelStack | null | undefined;
+}
+
+/** The inputs of `computeViewports`; `mode` is required. */
+export interface ViewportOptions extends SplitOptions {
+  readonly mode: ViewMode | 'mirrors';
+  readonly extra?: ExtraMirrors | undefined;
+  readonly role?: Role | undefined;
+}
+
+/**
  * The top-down share in use. It may not take the cockpit below what its controls need: in landscape
  * the wheel, gears and compact legend side by side, in portrait the controls plus the smallest
  * mirror above them; nor the top view below what its panels and the divider need (`panels`), nor,
@@ -218,10 +246,12 @@ function paneLever(insets: Insets): number {
 export function topDownSplit(
   cssWidth: number,
   cssHeight: number,
-  layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
-  legend: LegendBox | null = null,
-  safeInsets?: Insets,
-  panels: PanelStack | null = null,
+  {
+    layout = DEFAULT_TOP_DOWN_LAYOUT,
+    legend = null,
+    insets: safeInsets,
+    panels = null,
+  }: SplitOptions = {},
 ): TopDownSplit {
   const insets = safeInsets ?? readSafeInsets();
   const orientation = orientationOf(cssWidth, cssHeight);
@@ -229,12 +259,18 @@ export function topDownSplit(
   const fallback = DEFAULT_TOP_DOWN_LAYOUT[orientation];
   const limits = TOP_DOWN_SHARE_LIMITS[orientation];
   const extent = landscape ? cssWidth : cssHeight;
+  const aboveControls = COCKPIT_LABEL + MIN_MIRROR_HEIGHT + MIRROR_GAP;
+  // The band, and the legend on it, rise with the cockpit's height: solved for that height, so the
+  // range does not move with the share the legend was measured at.
+  const legendNeeded =
+    legend === null
+      ? 0
+      : legend.boxHeight === undefined
+        ? aboveControls + legend.height
+        : (aboveControls + LEGEND_LIFT + legend.boxHeight) / (1 - HUD_BAND_SHARE);
   const cockpitNeeded = landscape
     ? insets.left + 3 * INSET + GEARS_WIDTH + LEGEND_WIDTH + wheelSize(cssWidth, cssHeight, insets)
-    : COCKPIT_LABEL +
-      MIN_MIRROR_HEIGHT +
-      MIRROR_GAP +
-      Math.max(controlsHeight(cssWidth, cssHeight, insets), legend?.height ?? 0);
+    : Math.max(aboveControls + controlsHeight(cssWidth, cssHeight, insets), legendNeeded);
   // The cockpit is whole px (`computeViewports` rounds the pane), so it keeps the need only when rounded up.
   const max = Math.min(limits.max, Math.max(fallback, 1 - Math.ceil(cockpitNeeded) / extent));
   const divider = dividerExtent(orientation, insets);
@@ -274,14 +310,17 @@ export const hasTopDown = (views: ViewRects): boolean =>
 export function computeViewports(
   cssWidth: number,
   cssHeight: number,
-  mode: ViewMode | 'mirrors',
-  legend: LegendBox | null = null,
-  safeInsets?: Insets,
-  layout: TopDownLayout = DEFAULT_TOP_DOWN_LAYOUT,
-  panels: PanelStack | null = null,
-  extra: ExtraMirrors = NO_EXTRA_MIRRORS,
-  role: Role = 'driver',
+  options: ViewportOptions,
 ): ViewRects {
+  const {
+    mode,
+    legend = null,
+    insets: safeInsets,
+    layout = DEFAULT_TOP_DOWN_LAYOUT,
+    panels = null,
+    extra = NO_EXTRA_MIRRORS,
+    role = 'driver',
+  } = options;
   if (mode === 'replay') {
     const full: Rect = { x: 0, y: 0, width: cssWidth, height: cssHeight };
     return {
@@ -299,7 +338,7 @@ export function computeViewports(
   const mirrorsOnly = mode === 'mirrors';
   const { share, min } = mirrorsOnly
     ? { share: 0, min: 0 }
-    : topDownSplit(cssWidth, cssHeight, layout, legend, insets, panels);
+    : topDownSplit(cssWidth, cssHeight, { layout, legend, insets, panels });
   let topDown: Rect;
   let cockpit: Rect;
   /** Portrait, how many px the cockpit's top can still rise as the share shrinks to its minimum. */

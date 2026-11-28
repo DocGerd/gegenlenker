@@ -7,6 +7,8 @@ export type ControlVector = {
   readonly lever: number;
   readonly brake: boolean;
   readonly gear: Gear;
+  /** Opens the coupling on this step: a stopped truck leaves the trailer it coupled to. Absent otherwise. */
+  readonly uncouple?: true;
 };
 export type BodyId = 'truck' | 'drawbar' | 'trailer';
 export type BlockReason = 'coupling' | 'turntable' | 'contact';
@@ -25,11 +27,33 @@ export type SimContact = {
   readonly point: Vec2;
 };
 export type ContactQuery = (bodies: readonly BodyFootprint[]) => SimContact | null;
+/** How far off the drawbar eye may meet the jaw and still couple: metres either side, radians. */
+export type JawCatch = { readonly width: number; readonly angle: number };
+/** A trailer standing uncoupled: its drawbar eye, the drawbar's heading toward it, and the turntable angle (drawbar − trailer heading). */
+export type ParkedTrailer = {
+  readonly eye: Vec2;
+  readonly heading: number;
+  readonly turntable: number;
+};
 export type StartState = {
   readonly truck: Pose2;
   readonly couplingAngle?: number;
   readonly turntableAngle?: number;
+  /** The truck starts uncoupled from this trailer; ignored solo. */
+  readonly parked?: { readonly trailer: ParkedTrailer; readonly jaw: JawCatch };
 };
+/** Present exactly in a run that starts with a parked trailer. */
+export type HitchState = {
+  readonly coupled: boolean;
+  /** The drawbar eye; coupled, the coupling point. */
+  readonly eye: Vec2;
+  /** The fastest approach a coupling closed at (m/s); null before the first. */
+  readonly couplingSpeed: number | null;
+};
+/**
+ * Solo, `dolly`, `trailer` and `trailerRear` describe the truck as the rear body (`joints`) and both angles stay 0.
+ * Uncoupled (`hitch`), they describe the parked trailer, and `couplingAngle` is the truck's heading against the drawbar's.
+ */
 export type SimSnapshot = {
   readonly step: number;
   readonly time: number;
@@ -54,6 +78,7 @@ export type SimSnapshot = {
   readonly contacts: number;
   readonly jackknifes: number;
   readonly directionChanges: number;
+  readonly hitch?: HitchState;
 };
 export type Simulation = {
   step(control: ControlVector): SimSnapshot;
@@ -66,7 +91,7 @@ export type InputChange = { readonly step: number; readonly control: ControlVect
  * together, so `left[k]` and `right[k]` lie on one cross-section. They stop where the simulation would block.
  */
 export type Prediction = {
-  /** The trailer's rear when reversing, the truck's front when driving forward; null when nothing is predicted. */
+  /** The rear end when reversing (the trailer's, solo the truck's), the truck's front when driving forward; null when nothing is predicted. */
   readonly lead: 'trailer' | 'truck' | null;
   readonly left: readonly Vec2[];
   readonly right: readonly Vec2[];

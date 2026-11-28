@@ -56,12 +56,15 @@ test.describe('the longest title footer', () => {
       const exerciseId = 'reverse-bay';
       // the Einweiser's lines are the longest: his exercise title or yard name, and his role
       const guides = [
-        ...EXERCISE_IDS.map((id) => ({
-          entry: { role: 'einweiser', kind: 'exercise', id },
-          heading: `${String(EXERCISE_IDS.indexOf(id) + 1)} ${messages[EXERCISE_TITLE.einweiser[id]]}`,
-          context: messages[EXERCISE_TITLE.einweiser[id]],
-          role: [],
-        })),
+        // numbered in his own list, which leaves out an exercise that couples
+        ...EXERCISE_IDS.filter((id) => exerciseById(id).parkedTrailer === undefined).map(
+          (id, index) => ({
+            entry: { role: 'einweiser', kind: 'exercise', id },
+            heading: `${String(index + 1)} ${messages[EXERCISE_TITLE.einweiser[id]]}`,
+            context: messages[EXERCISE_TITLE.einweiser[id]],
+            role: [],
+          }),
+        ),
         ...LAYOUT_IDS.map((id) => {
           const context = `${messages.freeYard} · ${messages[LAYOUT_NAME[id]]}`;
           return {
@@ -632,6 +635,21 @@ test('a Settings change applies at once and survives a reload', async ({ page })
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await titleEntry(page, en.settings).click();
   await expect(settingsRadio(page, en.theme, 'dark')).toBeChecked();
+});
+
+test('Settings explains the graphics quality and marks Controls as a drill-down row', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await titleEntry(page, en.settings).click();
+  const settings = screen(page, 'settings');
+  await expect(
+    settings.getByRole('radiogroup', { name: en.graphics, exact: true }),
+  ).toHaveAccessibleDescription(en.graphicsHint);
+  await expect(
+    settings.getByRole('radiogroup', { name: en.theme, exact: true }),
+  ).toHaveAccessibleDescription('');
+  await expect(settings.getByRole('button', { name: en.controls, exact: true })).toContainText('›');
 });
 
 test('Settings stores every change and the helpers read it back', async ({ page }) => {

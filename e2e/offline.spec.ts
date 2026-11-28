@@ -320,3 +320,19 @@ test(
     await expectNoFailedAttachment(page);
   },
 );
+
+test('the first install is announced by the title footer alone, without a toast', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await expect(page.locator('[data-menu="offline"]')).toHaveText(en.offlineReady);
+  await expect(page.locator('.update-toast')).toBeHidden();
+});
+
+test('the first install is announced by a toast on a screen without the footer', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: en.settings, exact: true }).click();
+  await expect(page.locator('.update-toast')).toHaveText(en.offlineReady);
+});

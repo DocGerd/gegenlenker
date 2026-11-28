@@ -7,7 +7,14 @@ import type { RunConfig } from '../drive';
 import { ignoreHeldBrakeKeys } from '../held-keys';
 import { currentSettings } from '../settings';
 import { bestResults } from '../storage';
-import { offeredEntry, runConfigOf, type EntryKind, type EntryRef, type Role } from './catalogue';
+import {
+  couples,
+  offeredEntry,
+  runConfigOf,
+  type EntryKind,
+  type EntryRef,
+  type Role,
+} from './catalogue';
 import { CONTENT } from './content';
 import { continueEntry, lastEntryOf } from './continue';
 import { screenOf, type ActionId, type Item, type MenuState } from './graph';
@@ -71,9 +78,13 @@ export function showMenu(root: HTMLElement, deps: MenuDeps, initial: NavState = 
 
   const state = (): MenuState => {
     const best = bestResults();
-    const last = lastEntryOf(currentSettings().lastEntry, deps.replay?.log ?? null);
+    const settings = currentSettings();
+    const last = lastEntryOf(settings.lastEntry, deps.replay?.log ?? null);
     return {
-      done: EXERCISE_IDS.filter((id) => exerciseDone(best, id)),
+      // an exercise that couples is driven with a trailer, solo or not
+      done: EXERCISE_IDS.filter((id) =>
+        exerciseDone(best, id, settings.solo && !couples({ kind: 'exercise', id })),
+      ),
       replayable: deps.replay !== null,
       hasNews: false,
       lastEntry: last === null ? null : offeredEntry(last),

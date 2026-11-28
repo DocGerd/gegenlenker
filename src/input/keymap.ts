@@ -21,6 +21,7 @@ export type Action =
   | 'gearD'
   | 'lights'
   | 'hazard'
+  | 'uncouple'
   | 'escape'
   | 'viewFollow'
   | 'viewYard'
@@ -41,6 +42,7 @@ export type Action =
   | 'walkLeft'
   | 'walkRight'
   | 'jog'
+  | 'releaseMouse'
   | 'signAchtung'
   | 'signHalt'
   | 'signHaltGefahr'
@@ -49,7 +51,8 @@ export type Action =
   | 'signEntfernen'
   | 'signLinks'
   | 'signRechts'
-  | 'signAbstand';
+  | 'signAbstand'
+  | 'groundSight';
 
 /** The sign a `'sign'` action shows. */
 export const SIGN_OF: Readonly<Partial<Record<Action, SignId>>> = {
@@ -105,6 +108,8 @@ type LegendSpec = {
   readonly chaseOnly?: boolean;
   /** Dropped where the cockpit view cannot look around. */
   readonly lookOnly?: boolean;
+  /** Dropped unless the exercise couples. */
+  readonly couplingOnly?: boolean;
   /** Replaces term and desc where the outside view exists. */
   readonly withChase?: { readonly term: LegendTerm; readonly desc: MessageKey };
 };
@@ -160,6 +165,12 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
   { action: 'gearN', match: { by: 'code', values: ['Digit3', 'Numpad3'] }, scope: 'drive' },
   { action: 'gearD', match: { by: 'code', values: ['Digit4', 'Numpad4'] }, scope: 'drive' },
   {
+    action: 'uncouple',
+    match: { by: 'code', values: ['KeyU'] },
+    scope: 'drive',
+    legend: { term: 'U', desc: 'uncouple', couplingOnly: true },
+  },
+  {
     action: 'lights',
     match: { by: 'code', values: ['KeyH'] },
     scope: 'drive',
@@ -182,6 +193,7 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
     scope: 'walk',
     legend: { term: { key: 'keyShift' }, desc: 'jog', roles: EINWEISER },
   },
+  { action: 'releaseMouse', match: { by: 'code', values: ['KeyP'] }, scope: 'walk' },
   { legend: { term: { key: 'keyMouse' }, desc: 'mouseLook', roles: EINWEISER } },
   {
     action: 'signAchtung',
@@ -212,6 +224,8 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
   },
   { action: 'signAbstand', match: { by: 'code', values: ['Digit9', 'Numpad9'] }, scope: 'sign' },
   { legend: { term: { key: 'keyMouseButtons' }, desc: 'signMouse', roles: EINWEISER } },
+  // His sight areas in his own view; the pause sheet's row names the key, not the legend
+  { action: 'groundSight', match: { by: 'code', values: ['KeyG'] }, scope: 'walk' },
   {
     action: 'escape',
     match: { by: 'code', values: ['Escape'] },
@@ -290,10 +304,16 @@ export const isAction = (action: Action, e: KeyLike): boolean =>
   BINDINGS.some((b) => b.action === action && matches(b, e));
 
 /** The key legend of `role` in display order; `chase` is whether the outside view exists, `look` whether the cockpit view looks around. */
-export function legendRows(chase: boolean, look = false, role: Role = 'driver'): LegendRow[] {
+export function legendRows(
+  chase: boolean,
+  look = false,
+  role: Role = 'driver',
+  coupling = false,
+): LegendRow[] {
   return KEYMAP.map(({ legend }) => legend).flatMap((spec) => {
     if (spec === undefined || !(spec.roles ?? DRIVER).includes(role)) return [];
     if ((spec.chaseOnly === true && !chase) || (spec.lookOnly === true && !look)) return [];
+    if (spec.couplingOnly === true && !coupling) return [];
     const { term, desc } = chase && spec.withChase !== undefined ? spec.withChase : spec;
     return [{ term, desc, viewOnly: spec.viewOnly ?? false }];
   });

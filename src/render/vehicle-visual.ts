@@ -14,6 +14,7 @@ import {
 } from 'three';
 import { MeshLambertNodeMaterial } from 'three/webgpu';
 import { DEFAULT_LIGHTING, type LightingMode, type ScenePalette } from '../contracts/render';
+import type { ControlVector } from '../contracts/sim';
 import type { TrailerSpec, TruckSpec } from '../contracts/vehicle';
 import { truckAnchors } from '../vehicles/anchors';
 import { type Blob, blobShadow } from './blob-shadow';
@@ -99,6 +100,7 @@ import {
   type VehicleNodeMaterial,
 } from './vehicle-pbr';
 import { dollySchematic, trailerSchematic, truckSchematic } from './vehicle-schematic';
+import { setWeatherFrame } from './vehicle-weathering';
 
 /** The mesh name of a night twin: top-down only, so never a caster. */
 export const TWIN_NAME = 'night-twin';
@@ -112,6 +114,8 @@ const BODY_SHADOW = { alpha: 0.5, squareness: 4, margin: 0.7 } as const;
 const WHEEL_SHADOW = { alpha: 0.6, squareness: 2, growX: 1.3, growY: 1.4 } as const;
 const DRAWBAR_SHADOW_HALF_WIDTH = 0.3;
 const DRAWBAR_SHADOW_ALPHA = 0.25;
+/** A parked trailer's controls: no brake, no reverse lamp. */
+const PARKED: ControlVector = { steer: 0, lever: 0, brake: false, gear: 'P' };
 
 type Point3 = readonly [x: number, y: number, z: number];
 
@@ -180,6 +184,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
   const pbrToken = {};
   let pbrWanted = false;
   let pbrMode: LightingMode = DEFAULT_LIGHTING;
+  let pbrWeathered = false;
   let pbrOn = false;
   let shadowMaterial: MeshBasicMaterial | null = null;
   let sunShadowed = false;
@@ -218,13 +223,20 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
     if (pbrRoot !== null) setPbr(pbrRoot);
   });
   /**
-   * Reflective shading (#69) for everything below `root` and for the detail meshes a shell swap
-   * has taken out of it; without `on` it repeats the last request, for shells that attach later.
+   * Reflective shading (#69), weathered (#556) when `weathered`, for everything below `root` and for
+   * the detail meshes a shell swap has taken out of it; without `on` it repeats the last request, for
+   * shells that attach later.
    */
-  const setPbr = (root: Object3D, on = pbrWanted, mode = pbrMode): void => {
+  const setPbr = (
+    root: Object3D,
+    on = pbrWanted,
+    mode = pbrMode,
+    weathered = pbrWeathered,
+  ): void => {
     pbrRoot = root;
     pbrWanted = on;
     pbrMode = mode;
+    pbrWeathered = weathered;
     const map = on ? (env?.texture(palette, mode) ?? null) : null;
     if (map !== null) {
       if (pbrMaterial === null) {
@@ -232,6 +244,7 @@ function resources(palette: ScenePalette, env?: VehicleEnvironment) {
         setGraded(pbrMaterial, gradeOn);
       }
       pbrMaterial.envMap = map;
+      pbrMaterial.setWeathering(weathered);
     } else if (pbrMaterial !== null) {
       pbrMaterial.envMap = null;
     }
@@ -559,6 +572,13 @@ export function proceduralTruck(
   const detailMesh = res.detail(detail.geometry);
   const rearWheelMesh = res.mesh(merge(rearWheels), wheelMaterial);
   const group = new Group();
+  setWeatherFrame(group, {
+    axles: [a.frontAxle.x, a.rearAxle.x],
+    wheelRadius: TRUCK_WHEEL_RADIUS,
+    ...(look.body.kind === 'tarp' && {
+      fabric: { front: bodyFrontX(a.frontX, look.cab.length), floor: FLOOR_TOP },
+    }),
+  });
   res.attachLampLights(truckLampLights(spec), group);
   const glow = res.markerGlow(truckLamps(spec, look.cab.length).lamps);
   if (glow !== null) group.add(glow);
@@ -749,7 +769,7 @@ export function proceduralTruck(
       res.setSunShadow(shadow);
       res.setLamps(lamps);
       res.setLampLight(lampLight, lampShadow);
-      res.setPbr(group, flags.pbr, mode);
+      res.setPbr(group, flags.pbr, mode, flags.vehicleWeathering);
       res.setNight(mode === 'night');
     },
     dispose() {
@@ -960,6 +980,8 @@ export function proceduralTrailer(
     res.twin(frameMesh, nightChassis, () => shown),
   );
   dolly.add(res.twin(dollyChassisMesh, nightChassis, () => shown));
+  setWeatherFrame(dolly, { axles: [a.frontAxle.x], wheelRadius: radius });
+  setWeatherFrame(trailer, { axles: a.rearAxles.map((axle) => axle.x), wheelRadius: radius });
   const group = new Group();
   group.add(dolly, trailer);
   res.attachLampLights([trailerLampLight(spec)], trailer);
@@ -1076,7 +1098,9 @@ export function proceduralTrailer(
     update(snapshot, switches) {
       placePose(dolly, snapshot.dolly);
       placePose(trailer, snapshot.trailer);
-      res.updateLamps(snapshot, switches);
+      // uncoupled, nothing feeds its lamps
+      if (snapshot.hitch?.coupled === false) res.updateLamps({ ...snapshot, control: PARKED }, DAY);
+      else res.updateLamps(snapshot, switches);
       res.syncBlobs();
     },
     setLook({ flags, grade, mode, shadow, lamps, lampLight, lampShadow }) {
@@ -1087,7 +1111,7 @@ export function proceduralTrailer(
       res.setSunShadow(shadow);
       res.setLamps(lamps);
       res.setLampLight(lampLight, lampShadow);
-      res.setPbr(group, flags.pbr, mode);
+      res.setPbr(group, flags.pbr, mode, flags.vehicleWeathering);
       res.setNight(mode === 'night');
     },
     dispose() {

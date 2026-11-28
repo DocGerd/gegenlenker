@@ -9,7 +9,7 @@ import {
 import { setLanguage, t, type Lang } from '../../i18n/i18n';
 import type { MessageKey } from '../../i18n/en';
 import { trailers, trucks } from '../../vehicles/registry';
-import { updateSettings, type Settings } from '../settings';
+import { runTrailer, updateSettings, type Settings } from '../settings';
 import { applyTheme } from '../theme';
 
 export type OptionId =
@@ -48,6 +48,11 @@ export type ChoiceField = Pick<OptionField, 'label' | 'choices'> & { readonly id
 export const labelOf = ({ label }: Choice): string =>
   typeof label === 'string' ? t(label) : label.text;
 
+/** A line under an option's row that says what the choice costs or changes. */
+export const OPTION_HINTS: Readonly<Partial<Record<OptionId, MessageKey>>> = {
+  graphics: 'graphicsHint',
+};
+
 type SettingsPatch = Partial<Omit<Settings, 'version'>>;
 
 const LANG_NAME: Readonly<Record<Lang, MessageKey>> = { de: 'langDe', en: 'langEn' };
@@ -84,11 +89,20 @@ const SWITCH: readonly (keyof typeof SWITCH_NAME)[] = ['on', 'off'];
 const OFF_ON: readonly (keyof typeof SWITCH_NAME)[] = ['off', 'on'];
 const TRUCKS = trucks.map((s) => s.id);
 const TRAILERS = trailers.map((s) => s.id);
+/** The trailer row's value for the truck solo. */
+const NO_TRAILER = 'none';
+const TRAILER_CHOICES: readonly Choice[] = trailers.map((s) => ({
+  value: s.id,
+  label: { text: s.name },
+}));
 
 const named = <T extends string>(
   values: readonly T[],
   names: Readonly<Record<T, MessageKey>>,
 ): readonly Choice[] => values.map((value) => ({ value, label: names[value] }));
+
+/** A switch that is off by default: Off first. */
+export const OFF_ON_CHOICES: readonly Choice[] = named(OFF_ON, SWITCH_NAME);
 
 export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
   truck: {
@@ -102,7 +116,7 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
     id: 'trailer',
     label: 'trailer',
     group: 'run',
-    choices: trailers.map((s) => ({ value: s.id, label: { text: s.name } })),
+    choices: [...TRAILER_CHOICES, { value: NO_TRAILER, label: 'noTrailer' }],
     applies: 'run',
   },
   lighting: {
@@ -165,7 +179,7 @@ export const OPTION_FIELDS: Readonly<Record<OptionId, OptionField>> = {
     id: 'invertMouse',
     label: 'invertMouse',
     group: 'einweiser',
-    choices: named(OFF_ON, SWITCH_NAME),
+    choices: OFF_ON_CHOICES,
     applies: 'live',
   },
 };
@@ -192,12 +206,27 @@ const PAUSE_FIELDS: Readonly<Record<Role, readonly OptionId[]>> = {
 /** What a running drive can take: shown in the pause sheet, in this order. */
 export const pauseFields = (role: Role): readonly OptionId[] => PAUSE_FIELDS[role];
 
+/** The Trailer row of an exercise that couples: the trailer it couples to, never none. */
+const COUPLED_TRAILER_FIELD: OptionField = { ...OPTION_FIELDS.trailer, choices: TRAILER_CHOICES };
+
+/** The field and its value as the setup shows them to `role`; `coupled`: an exercise that couples (`couples`). */
+export function entryOption(
+  settings: Settings,
+  id: OptionId,
+  role: Role,
+  coupled: boolean,
+): { readonly field: OptionField; readonly value: string } {
+  return coupled && id === 'trailer'
+    ? { field: COUPLED_TRAILER_FIELD, value: settings.trailerId }
+    : { field: roleField(id, role), value: optionValue(settings, id) };
+}
+
 export function optionValue(settings: Settings, id: OptionId): string {
   switch (id) {
     case 'truck':
       return settings.truckId;
     case 'trailer':
-      return settings.trailerId;
+      return runTrailer(settings) ?? NO_TRAILER;
     case 'lighting':
       return settings.lighting;
     case 'driveView':
@@ -233,7 +262,8 @@ export function optionPatch(id: OptionId, value: string): SettingsPatch | null {
     case 'truck':
       return patchOf(TRUCKS, value, (truckId) => ({ truckId }));
     case 'trailer':
-      return patchOf(TRAILERS, value, (trailerId) => ({ trailerId }));
+      if (value === NO_TRAILER) return { solo: true };
+      return patchOf(TRAILERS, value, (trailerId) => ({ trailerId, solo: false }));
     case 'lighting':
       return patchOf(LIGHTING_MODES, value, (lighting) => ({ lighting }));
     case 'driveView':

@@ -14,11 +14,27 @@ export type ThirdParty = LicenceText & {
   readonly file: string;
 };
 
+/** What an asset is used for; names its label in the UI language. */
+export type AssetKind =
+  'kitTile' | 'kitLeaves' | 'sky' | 'yardConcrete' | 'streetAsphalt' | 'pavers';
+
+/** What a credited person did, where a source separates the roles; names its label in the UI language. */
+export type CreditRole = 'processing' | 'photography' | 'original' | 'skyEdits';
+
+export type CreditedPerson = {
+  readonly name: string;
+  readonly role?: CreditRole;
+};
+
 export type AssetCredit = {
-  readonly title: string;
+  readonly kind: AssetKind;
+  /** The upstream asset id, a proper name. */
+  readonly asset: string;
   /** SPDX identifier. */
   readonly licence: string;
-  readonly authors: string;
+  readonly people: readonly CreditedPerson[];
+  /** The site the asset comes from, a proper name. */
+  readonly host: string;
   readonly page: string;
 };
 
