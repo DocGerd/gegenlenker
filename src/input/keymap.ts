@@ -165,18 +165,18 @@ const KEYMAP: readonly (Binding | LegendOnly)[] = [
   { action: 'gearN', match: { by: 'code', values: ['Digit3', 'Numpad3'] }, scope: 'drive' },
   { action: 'gearD', match: { by: 'code', values: ['Digit4', 'Numpad4'] }, scope: 'drive' },
   {
+    action: 'uncouple',
+    match: { by: 'code', values: ['KeyU'] },
+    scope: 'drive',
+    legend: { term: 'U', desc: 'uncouple', couplingOnly: true },
+  },
+  {
     action: 'lights',
     match: { by: 'code', values: ['KeyH'] },
     scope: 'drive',
     legend: { term: 'H / X', desc: 'lampKeys', viewOnly: true },
   },
   { action: 'hazard', match: { by: 'code', values: ['KeyX'] }, scope: 'drive' },
-  {
-    action: 'uncouple',
-    match: { by: 'code', values: ['KeyU'] },
-    scope: 'drive',
-    legend: { term: 'U', desc: 'uncouple', couplingOnly: true, viewOnly: true },
-  },
   // The Einweiser's keys: after the driver's, before the shared ones, which is the order of his legend.
   {
     action: 'walkForward',

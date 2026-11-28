@@ -304,15 +304,16 @@ const panelsOf = (v: Variant): PanelStack | null =>
 
 /**
  * The legend's states and the widest and tallest box each had in a headless Chromium run of the app
- * (en and de): the toggle only on a short screen, the drive keys on a short cockpit, the compact list on
- * a narrow cockpit, the full list, and the full list without the top-down rows in the mirror-only drive.
+ * (en and de; a coupling exercise, whose uncouple row makes it the tallest): the toggle only on a short
+ * screen, the drive keys on a short cockpit, the compact list on a narrow cockpit, the full list, and
+ * the full list without the top-down rows in the mirror-only drive.
  */
 const LEGEND_BOXES = {
   overlay: { width: 97, height: 42 },
-  driveOnly: { width: 282, height: 126 },
-  compact: { width: 159, height: 194 },
-  full: { width: 329, height: 286 },
-  mirrorsFull: { width: 317, height: 190 },
+  driveOnly: { width: 282, height: 142 },
+  compact: { width: 159, height: 230 },
+  full: { width: 329, height: 302 },
+  mirrorsFull: { width: 317, height: 206 },
 };
 /** The Einweiser's (hud.ts never makes his compact): the walk, look and sign rows, in two columns. */
 const EINWEISER_LEGEND_BOXES = {

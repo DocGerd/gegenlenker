@@ -1,9 +1,12 @@
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { en } from '../src/i18n/en';
 import { exerciseEntry, openSetup, runOptionValue, startControl } from './menu-flow';
 import { seedStorage } from './menu-seed';
 
 const COUPLE_MS = 30_000;
+
+const uncoupleKey = (page: Page) => page.locator('.hud-legend dt').filter({ hasText: /^U$/ });
 
 // The smallest supported landscape screen: the goal card's button has to fit there too.
 test.use({ viewport: { width: 800, height: 585 } });
@@ -26,7 +29,12 @@ test('the truck couples to the parked trailer, uncouples by key and button, and 
   const uncouple = page.getByRole('button', { name: en.uncouple });
   await expect(hitch).toHaveText(en.notCoupled);
   await expect(uncouple).toBeDisabled();
-  await expect(page.locator('.hud-legend dt').filter({ hasText: /^U$/ })).toHaveCount(1);
+  // the short screen's key list names the key, though its compact column drops the view rows
+  const keysToggle = page.locator('[data-hud="keysToggle"]');
+  await keysToggle.click();
+  await expect(uncoupleKey(page)).toBeVisible();
+  await keysToggle.click();
+  await expect(uncoupleKey(page)).toBeHidden();
   // the button's link shows the state: open, closed while coupled
   await expect(uncouple).not.toHaveAttribute('data-coupled');
   await expect(page.locator('.drive')).not.toHaveAttribute('data-solo');
@@ -64,4 +72,11 @@ test('the truck couples to the parked trailer, uncouples by key and button, and 
   const resume = page.locator('[data-screen="title"]').getByRole('button', { name: en.continue });
   await expect(resume).toContainText(en.exerciseCoupling);
   await expect(resume).not.toContainText(en.noTrailer);
+
+  // an exercise without a trailer to couple lists no uncouple key
+  const other = exerciseEntry('straight-reverse');
+  await openSetup(page, en, other);
+  await startControl(page, en, other).click();
+  await expect(page.locator('.hud-legend dt').filter({ hasText: /^C$/ })).toHaveCount(1);
+  await expect(uncoupleKey(page)).toHaveCount(0);
 });
