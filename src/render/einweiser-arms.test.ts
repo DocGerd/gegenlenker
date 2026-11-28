@@ -22,6 +22,7 @@ import {
 } from './seams';
 import { bandTopNdc, computeViewports } from './viewports';
 
+const DEG = Math.PI / 180;
 const SIGNS: readonly (SignId | null)[] = [null, ...SIGN_IDS];
 /** Phases sampled per sign: every key and the blends between them, over one cycle. */
 const PHASES = Array.from({ length: 9 }, (_, i) => (i / 8) * SIGN_CYCLE);
@@ -97,6 +98,38 @@ describe('Einweiser arms', () => {
       }
     }
     expect(misses.slice(0, 20)).toEqual([]);
+  });
+
+  it('raises Achtung straight up: both segments of the signing arm within 10° of vertical at every phase', () => {
+    const limit = Math.cos((10 * Math.PI) / 180);
+    for (const phase of PHASES) {
+      const { upper, fore } = armPoints('achtung', phase, 'right');
+      expect(upper.y, `upper t=${phase.toFixed(2)}`).toBeGreaterThan(limit);
+      expect(fore.y, `fore t=${phase.toFixed(2)}`).toBeGreaterThan(limit);
+    }
+  });
+
+  it('holds no signing arm nearly straight, forward and raised 20° to 70°', () => {
+    // a nearly straight arm held forward and above horizontal reads as a salute
+    for (const sign of SIGN_IDS) {
+      for (const side of SIGN_POSES[sign].arms) {
+        for (const phase of PHASES) {
+          const { shoulder, elbow, hand } = armPoints(sign, phase, side);
+          const reach = hand.clone().sub(shoulder);
+          const elevation = Math.atan2(reach.y, Math.hypot(reach.x, reach.z)) / DEG;
+          const straight = elbow
+            .clone()
+            .sub(shoulder)
+            .normalize()
+            .dot(hand.clone().sub(elbow).normalize());
+          const forward = -reach.z > Math.abs(reach.x);
+          expect(
+            forward && elevation > 20 && elevation < 70 && straight > Math.cos(45 * DEG),
+            `${sign} ${side} t=${phase.toFixed(2)} elevation ${elevation.toFixed(0)}° straight ${straight.toFixed(2)}`,
+          ).toBe(false);
+        }
+      }
+    }
   });
 
   it('loop once per cycle and hold the last key of a sign played once', () => {
