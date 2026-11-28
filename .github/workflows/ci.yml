@@ -102,10 +102,12 @@ jobs:
   # into runs of equal test count, so the suite is first split by cost class: `@heavy` (Balanced and
   # High draws, preset comparisons, many stepped frames), `@slow` (several times a `@heavy` test),
   # the layout spec (many short tests), and the rest (`light`). Each class is cut into slices
-  # (`suite:i/n` in `runs`) and each job runs the slices packed to even its cost, from recorded
-  # per-test durations. `slow` has one test per slice, so a new `@slow` test raises its `n`. Adding
-  # or removing a test moves the later tests of its class into other slices: repack then, and when
-  # a class's cost shifts. The lint job checks that every `i` of each class appears in exactly one
+  # (`suite:i/n` in `runs`) and each job runs the slices packed to even its worst-case cost (the
+  # slowest recorded run of each slice, plus setup), from recorded per-test durations: a job must
+  # stay well under its timeout on a slow runner, so never pair a `slow` slice with a costly
+  # `@heavy` one. `slow` has one test per slice, so a new `@slow` test raises its `n`. Adding or
+  # removing a test moves the later tests of its class into other slices: repack then, and when a
+  # class's cost shifts. The lint job checks that every `i` of each class appears in exactly one
   # job, so each test runs once. Keep the job count under the account's concurrent-job limit, or
   # the last jobs queue.
   # Skipped on push to `main`: its strict ruleset (no bypass) makes the merged tree the tree its PR
@@ -121,24 +123,25 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { id: 1, runs: 'heavy:12/16 slow:1/17' }
-          - { id: 2, runs: 'heavy:14/16 slow:4/17' }
-          - { id: 3, runs: 'heavy:11/16 light:6/6' }
-          - { id: 4, runs: 'layout:2/12 light:2/6 slow:12/17' }
-          - { id: 5, runs: 'heavy:5/16 heavy:8/16 slow:11/17' }
-          - { id: 6, runs: 'heavy:16/16 layout:3/12 slow:10/17' }
-          - { id: 7, runs: 'heavy:15/16 light:3/6 slow:2/17' }
-          - { id: 8, runs: 'heavy:4/16 layout:6/12 slow:3/17' }
-          - { id: 9, runs: 'layout:5/12 light:1/6 slow:6/17' }
-          - { id: 10, runs: 'layout:12/12 light:4/6 slow:5/17' }
-          - { id: 11, runs: 'heavy:10/16 layout:7/12 light:5/6' }
-          - { id: 12, runs: 'heavy:3/16 slow:9/17 slow:15/17' }
-          - { id: 13, runs: 'layout:8/12 layout:10/12 slow:8/17' }
-          - { id: 14, runs: 'heavy:2/16 heavy:13/16 layout:9/12' }
-          - { id: 15, runs: 'heavy:9/16 slow:7/17 slow:16/17' }
-          - { id: 16, runs: 'heavy:1/16 heavy:7/16 layout:11/12' }
-          - { id: 17, runs: 'layout:4/12 slow:13/17 slow:14/17' }
-          - { id: 18, runs: 'heavy:6/16 layout:1/12 slow:17/17' }
+          - { id: 1, runs: 'light:5/6 slow:10/17 slow:16/17' }
+          - { id: 2, runs: 'heavy:11/24 layout:7/12 layout:11/12' }
+          - { id: 3, runs: 'heavy:2/24 heavy:10/24 heavy:22/24' }
+          - { id: 4, runs: 'heavy:3/24 heavy:6/24 layout:10/12' }
+          - { id: 5, runs: 'heavy:9/24 heavy:15/24 heavy:21/24' }
+          - { id: 6, runs: 'layout:3/12 layout:8/12 slow:13/17' }
+          - { id: 7, runs: 'heavy:1/24 heavy:24/24 layout:6/12 slow:4/17' }
+          - { id: 8, runs: 'light:1/6 slow:7/17 slow:9/17' }
+          - { id: 9, runs: 'heavy:23/24 layout:9/12 slow:12/17' }
+          - { id: 10, runs: 'layout:12/12 slow:1/17 slow:5/17 slow:15/17' }
+          - { id: 11, runs: 'layout:2/12 slow:11/17' }
+          - { id: 12, runs: 'heavy:16/24 light:4/6 slow:6/17' }
+          - { id: 13, runs: 'heavy:5/24 heavy:8/24 heavy:13/24 heavy:14/24' }
+          - { id: 14, runs: 'heavy:17/24 heavy:19/24' }
+          - { id: 15, runs: 'heavy:4/24 heavy:7/24 heavy:18/24' }
+          - { id: 16, runs: 'layout:5/12 slow:2/17 slow:3/17 slow:14/17' }
+          - { id: 17, runs: 'heavy:12/24 layout:1/12 light:3/6' }
+          - { id: 18, runs: 'heavy:20/24 layout:4/12 light:6/6' }
+          - { id: 19, runs: 'light:2/6 slow:8/17 slow:17/17' }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
