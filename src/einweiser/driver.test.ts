@@ -10,7 +10,8 @@ import { trailers, trucks } from '../vehicles/registry';
 import { CREEP_LEVER, createDriver, type DriverStep } from './driver';
 import { sightGeometry } from './sight';
 import { stoppingDistance } from './signs';
-import { startWalker } from './walk';
+import { keysToward } from './gate-harness';
+import { startWalker, walkStep, type Walker } from './walk';
 
 const rigs = trucks.flatMap((truck) =>
   [...trailers, null].map((trailer) => ({
@@ -23,6 +24,12 @@ const CREEP = CREEP_LEVER * V_MAX;
 const STEP_CAP = 60 * 60;
 /** Metres the truck travels into the curve before `turned` measures: the Krone rigs lose sight of him past about 5 m at the rear. */
 const CURVE_RUN = { rear: 5, front: 4 };
+/** The full Rechts curve (m of truck travel) a guide who walks with the rear end must hold sight through. */
+const LONG_CURVE_RUN = 8;
+/** How far (m) beyond his start, out to the left, he walks to: the Krone rigs lose sight of a guide who stays inboard of it (#601). */
+const GUIDE_OUTBOARD = 4;
+/** A guide on foot is within this (m) of the place he walks after. */
+const GUIDE_TRACKING = 0.25;
 
 type Script = (s: SimSnapshot, step: number) => { sign: SignId | null; pose: Pose2 };
 
@@ -96,7 +103,7 @@ describe.each(rigs)('signs for $name', ({ truck, trailer }) => {
     expect(s.speed).toBeGreaterThan(0);
   });
 
-  // a few metres into the curve, against the straight line the leading end started on; the run length is bounded by #601
+  // a few metres into the curve, against the straight line the leading end started on; a guide who stands still loses the Krone rigs past 5 m (#601), see the walking case below
   const turned = (
     sign: 'rechts' | 'links',
     place: (s: SimSnapshot) => Pose2,
@@ -168,6 +175,50 @@ describe.each(rigs)('signs for $name', ({ truck, trailer }) => {
       // the curve eases out over a few metres, then the heading holds
       expect(Math.abs(s.steer)).toBeLessThan(0.01);
       expect(Math.abs(wrapAngle(s.trailer.heading - mark.heading))).toBeLessThan(0.2);
+    });
+  }
+
+  // a guide who stands still loses the Krone rigs here (#601); walking out and with the rear keeps sight
+  if (trailer?.id === 'krone-azw-18') {
+    it(`Rechts from behind holds sight through ${LONG_CURVE_RUN} m with a guide who walks out and keeps pace`, () => {
+      const yard = { minX: -500, minY: -500, maxX: 500, maxY: 500 };
+      const first = createSimulation(g.params, { truck: { x: 0, y: 0, heading: 0 } }, () => null);
+      let walker: Walker = startWalker(g.params, first.snapshot());
+      const start = walker;
+      let station: Vec2 = start;
+      const mark: { x: number | null; end: Vec2 | null } = { x: null, end: null };
+      const { s, steps } = signal(
+        truck,
+        trailer,
+        (now, step) => {
+          if (mark.x === null && creeping(now) && step > 60) {
+            mark.x = now.truck.x;
+            mark.end = now.trailerRear;
+          }
+          const place = startWalker(g.params, now);
+          const h = now.trailer.heading;
+          station = {
+            x: place.x - GUIDE_OUTBOARD * Math.sin(h),
+            y: place.y + GUIDE_OUTBOARD * Math.cos(h),
+          };
+          const facingMirror = facing(walker, toWorld(now, mount));
+          const facingWalker = { ...walker, heading: facingMirror };
+          walker = walkStep(facingWalker, keysToward(facingWalker, station, true), DT, [], yard);
+          return { sign: mark.x === null ? 'herkommen' : 'rechts', pose: walker };
+        },
+        (now) => mark.x !== null && Math.abs(now.truck.x - mark.x) > LONG_CURVE_RUN,
+      );
+      const kinds = steps.map((d) => d.reading.kind);
+      expect(kinds).not.toContain('lost');
+      expect(kinds).not.toContain('unclear');
+      expect(steps.length).toBeLessThan(STEP_CAP);
+      if (mark.end === null) throw new Error('never crept');
+      // he walked out from his start to the place beside the rear and stayed with it
+      expect(Math.hypot(walker.x - start.x, walker.y - start.y)).toBeGreaterThan(GUIDE_OUTBOARD);
+      expect(Math.hypot(walker.x - station.x, walker.y - station.y)).toBeLessThan(GUIDE_TRACKING);
+      // Rechts moved the rear end to his right, -y as he faces the cab along the truck
+      expect(s.trailerRear.y - mark.end.y).toBeLessThan(-0.25);
+      expect(s.jackknifes).toBe(0);
     });
   }
 
