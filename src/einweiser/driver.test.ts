@@ -280,31 +280,101 @@ describe('steering signs', () => {
     ).s;
     expect(after.control.steer).toBeCloseTo(STEER_LITTLE, 9);
   });
-
-  it('refuse a full lock in reverse that would run into a limit stop', () => {
-    const pilot = createPilot(g.params, 'steering');
-    const sim = createSimulation(g.params, { truck: { x: 0, y: 0, heading: 0 } }, () => null);
-    // behind the rig, facing along it: his left is the driver's left
-    const pose = { x: -30, y: 0, heading: 0 };
-    let s = sim.snapshot();
-    let moved = false;
-    let wheel = 0;
-    for (let step = 0; step < STEP_CAP && !(moved && s.speed === 0); step++) {
-      const reading =
-        step === 0
-          ? ({ kind: 'recognised', sign: 'lenkenLinksVoll', station: 'behind' } as const)
-          : ({ kind: 'none' } as const);
-      const control = pilot.step(s, reading, pose);
-      wheel = Math.max(wheel, control.steer);
-      s = sim.step(control);
-      moved ||= s.speed !== 0;
-    }
-    expect(moved).toBe(true);
-    // from a straight standstill full lock already folds it within the look-ahead: it takes less
-    expect(wheel).toBeGreaterThan(0);
-    expect(wheel).toBeLessThan(1);
-    expect(s.control.gear).toBe('R');
-    expect(s.speed).toBe(0);
-    expect(s.jackknifes).toBe(0);
-  });
 });
+
+const pairs = trucks.flatMap((truck) => trailers.map((trailer) => ({ truck, trailer })));
+const DEG = Math.PI / 180;
+
+describe.each(pairs)(
+  'the steering refusal for $truck.id with $trailer.id',
+  ({ truck, trailer }) => {
+    const g = sightGeometry(truck, trailer);
+    type Run = { s: SimSnapshot; steers: number[]; travelled: number };
+    /** Steers on `sign`, recognised at the first step, until it stands again or `steps` pass. */
+    function hold(
+      sim: ReturnType<typeof createSimulation>,
+      pilot: ReturnType<typeof createPilot>,
+      sign: SignId,
+      station: 'ahead' | 'behind',
+      pose: Pose2,
+      steps = STEP_CAP,
+    ): Run {
+      let s = sim.snapshot();
+      const steers: number[] = [];
+      let moved = false;
+      let travelled = 0;
+      for (let step = 0; step < steps && !(moved && s.speed === 0); step++) {
+        const reading =
+          step === 0
+            ? ({ kind: 'recognised', sign, station } as const)
+            : ({ kind: 'none' } as const);
+        const control = pilot.step(s, reading, pose);
+        if (s.speed !== 0) steers.push(Math.abs(control.steer));
+        const next = sim.step(control);
+        travelled += Math.hypot(next.truck.x - s.truck.x, next.truck.y - s.truck.y);
+        s = next;
+        moved ||= s.speed !== 0;
+      }
+      return { s, steers, travelled };
+    }
+    const start = () =>
+      createSimulation(g.params, { truck: { x: 0, y: 0, heading: 0 } }, () => null);
+    // behind the rig facing along it: his left is the driver's left
+    const behind = { x: -30, y: 0, heading: 0 };
+    const shrinks = (steers: readonly number[]): boolean =>
+      steers.every((v, i) => i === 0 || v <= (steers[i - 1] ?? v));
+
+    it('halts a reverse fold at the last point full counter-lock undoes, and counter-lock then does', () => {
+      const sim = start();
+      const pilot = createPilot(g.params, 'steering');
+      const folded = hold(sim, pilot, 'lenkenLinksVoll', 'behind', behind);
+      expect(folded.s.speed).toBe(0);
+      expect(folded.s.jackknifes).toBe(0);
+      // full counter-lock undoes a reverse fold only up to about 30° coupling (all four pairs, measured)
+      expect(Math.abs(folded.s.couplingAngle)).toBeGreaterThan(24 * DEG);
+      expect(shrinks(folded.steers)).toBe(true);
+
+      const undone = hold(sim, pilot, 'lenkenRechtsVoll', 'behind', behind);
+      expect(undone.s.control.gear).toBe('R');
+      expect(undone.s.jackknifes).toBe(0);
+      expect(undone.travelled).toBeGreaterThan(3);
+      // through straight to the other side
+      expect(Math.sign(undone.s.couplingAngle)).toBe(-Math.sign(folded.s.couplingAngle));
+    });
+
+    it('halts no later than it must: a metre more on the same wheel and counter-lock jackknifes', () => {
+      const sim = start();
+      hold(sim, createPilot(g.params, 'steering'), 'lenkenLinksVoll', 'behind', behind);
+      const drive = (steer: number, metres: number): SimSnapshot => {
+        let s = sim.snapshot();
+        for (let i = 0; i < 120; i++) s = sim.step({ steer, lever: 0, brake: true, gear: 'R' });
+        for (let d = 0; d < metres && s.jackknifes === 0 && s.couplingAngle < 0;) {
+          const next = sim.step({ steer, lever: CREEP_LEVER, brake: false, gear: 'R' });
+          d += Math.hypot(next.truck.x - s.truck.x, next.truck.y - s.truck.y);
+          s = next;
+        }
+        return s;
+      };
+      drive(1, 1);
+      const s = drive(-1, 15);
+      expect(s.jackknifes).toBe(1);
+    });
+
+    it('drives a forward full lock without halting, and never raises a wheel it cut back', () => {
+      const sim = start();
+      const ahead = { x: 40, y: 0, heading: Math.PI };
+      const { s, steers } = hold(
+        sim,
+        createPilot(g.params, 'steering'),
+        'lenkenLinksVoll',
+        'ahead',
+        ahead,
+        60 * 90,
+      );
+      expect(s.speed).toBeGreaterThan(0);
+      expect(s.jackknifes).toBe(0);
+      expect(shrinks(steers)).toBe(true);
+      expect(steers[0]).toBe(1);
+    });
+  },
+);

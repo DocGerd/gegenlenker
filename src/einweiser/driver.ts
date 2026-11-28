@@ -2,7 +2,14 @@ import type { SignallingMode, SignId } from '../contracts/einweiser';
 import type { ControlVector, Pose2, SimSnapshot, Vec2 } from '../contracts/sim';
 import { hasTrailer, type RigParams, type VehicleParams } from '../contracts/vehicle';
 import { wrapAngle } from '../sim/angle';
-import { predictCombination } from '../sim/predict';
+import { V_MAX } from '../sim/constants';
+import {
+  couplingAngle,
+  pivotViolation,
+  rk4,
+  turntableAngle,
+  type KinematicState,
+} from '../sim/kinematics';
 import { createReader, type Perception, perceive, type Reading, type Station } from './signs';
 import type { Occluder, SightGeometry } from './sight';
 
@@ -32,12 +39,20 @@ const REVERSE_RATE_WEIGHT = 1;
 export const STEER_LITTLE = 0.5;
 const STEER_FULL = 1;
 /**
- * Steering mode: every this many steps it checks the wheel it was given over `REFUSE_DISTANCE` (m) for a
- * limit stop, and turns it back toward straight until none is predicted.
+ * Steering mode (estimates): every `REFUSE_EVERY` steps it checks that, after `HOLD_AHEAD` m more with the
+ * wheel it was given, full lock to one side could still unfold the combination in the same gear, and
+ * turns the wheel back toward straight until it can; it halts where no share can.
  */
 const REFUSE_EVERY = 15;
-const REFUSE_DISTANCE = 3;
 const REFUSE_STEPS = [1, 0.75, 0.5, 0.25, 0] as const;
+/** The travel to the next check plus the stop from creep, with a margin. */
+const HOLD_AHEAD = 0.6;
+/** Below this share of a limit (the larger of the two angles) any wheel can still be undone. */
+const FOLD_SAFE = 0.35;
+/** Full lock unfolds once the fold falls this far below its peak (share of the limit) within `UNFOLD_WITHIN` m. */
+const UNFOLD_BY = 0.03;
+const UNFOLD_WITHIN = 10;
+const ROLL_STEP = 0.1;
 
 type Move = {
   readonly kind: 'move';
@@ -76,6 +91,8 @@ type PilotState = {
   readonly given: number;
   readonly share: number | null;
   readonly sinceCheck: number;
+  /** A refused wheel is checked once more at the standstill it halted to, turned as before moving off. */
+  readonly restood: boolean;
 };
 
 type Matrix = readonly (readonly number[])[];
@@ -155,6 +172,7 @@ export const createPilot = (p: RigParams, mode: SignallingMode = 'tail'): Pilot 
     given: 0,
     share: 1,
     sinceCheck: 0,
+    restood: false,
   });
 
 function pilotFrom(
@@ -163,7 +181,7 @@ function pilotFrom(
   gains: readonly number[],
   from: PilotState,
 ): Pilot {
-  let { gear, command, ref, kappa, lead, given, share, sinceCheck } = from;
+  let { gear, command, ref, kappa, lead, given, share, sinceCheck, restood } = from;
 
   const leadingHeading = (s: SimSnapshot): number =>
     gear === 'D' ? s.truck.heading : s.trailer.heading;
@@ -228,13 +246,74 @@ function pilotFrom(
     }
   }
 
-  /** The largest share of the given wheel that predicts no limit stop in `along`; null: none does. */
-  function allowedShare(s: SimSnapshot, along: 'D' | 'R'): number | null {
+  /** How far the combination is folded: the larger angle as a share of its limit. */
+  const fold = (q: KinematicState): number =>
+    hasTrailer(p)
+      ? Math.max(
+          Math.abs(couplingAngle(q)) / p.couplingLimit,
+          Math.abs(turntableAngle(q)) / p.turntableLimit,
+        )
+      : 0;
+
+  /**
+   * Rolls `metres` at creep in `along` with the wheel easing toward `steer` at the steering rate; null at
+   * a limit stop, or where `stop` holds.
+   */
+  function roll(
+    from: { q: KinematicState; delta: number },
+    along: 'D' | 'R',
+    steer: number,
+    metres: number,
+    stop: (q: KinematicState) => boolean = () => false,
+  ): { q: KinematicState; delta: number; stopped: boolean } | null {
+    const ramp = (p.steerRate * p.maxRoadWheelAngle) / (CREEP_LEVER * V_MAX);
+    const target = steer * p.maxRoadWheelAngle;
+    let { q, delta } = from;
+    for (let travelled = 0; travelled < metres - 1e-9; travelled += ROLL_STEP) {
+      const gap = target - delta;
+      const eased =
+        Math.abs(gap) <= ramp * ROLL_STEP ? target : delta + Math.sign(gap) * ramp * ROLL_STEP;
+      q = rk4(p, q, along === 'D' ? 1 : -1, (delta + eased) / 2, ROLL_STEP);
+      delta = eased;
+      if (pivotViolation(p, q) !== null) return null;
+      if (stop(q)) return { q, delta, stopped: true };
+    }
+    return { q, delta, stopped: false };
+  }
+
+  /**
+   * Whether full lock to either side, turned at a standstill there as before moving off (`PRE_STEER`),
+   * unfolds it from `q` before a limit stop.
+   */
+  function unfolds(q: KinematicState, along: 'D' | 'R'): boolean {
+    if (fold(q) <= FOLD_SAFE) return true;
+    return [1, -1].some((lock) => {
+      let peak = fold(q);
+      const from = { q, delta: lock * p.maxRoadWheelAngle };
+      const out = roll(from, along, lock, UNFOLD_WITHIN, (q) => {
+        peak = Math.max(peak, fold(q));
+        return fold(q) < peak - UNFOLD_BY;
+      });
+      return out?.stopped === true;
+    });
+  }
+
+  /** The largest share of the given wheel, at most the last one, that it can still undo; null: none. */
+  function allowedShare(s: SimSnapshot, along: 'D' | 'R', most: number): number | null {
     if (!hasTrailer(p)) return 1;
+    const q = {
+      x: s.truck.x,
+      y: s.truck.y,
+      th0: s.truck.heading,
+      th1: s.dolly.heading,
+      th2: s.trailer.heading,
+    };
     for (const k of REFUSE_STEPS) {
-      const control = { ...s.control, gear: along, steer: k * given };
-      const ahead = predictCombination(p, { ...s, control }, () => null, REFUSE_DISTANCE);
-      if (ahead.blocked === null) return k;
+      if (k > most) continue;
+      // from a standstill it turns the wheel before moving off (`PRE_STEER`)
+      const delta = s.speed === 0 ? k * given * p.maxRoadWheelAngle : s.roadWheelAngle;
+      const ahead = roll({ q, delta }, along, k * given, HOLD_AHEAD);
+      if (ahead !== null && unfolds(ahead.q, along)) return k;
     }
     return null;
   }
@@ -274,7 +353,10 @@ function pilotFrom(
         command = commandFor(reading.sign, reading.station, s, pose);
         if (command.kind === 'move') {
           given = command.wheel ?? given;
+          // a new sign may take the whole wheel again; until then the share only shrinks
+          share = 1;
           sinceCheck = REFUSE_EVERY;
+          restood = false;
         }
       }
 
@@ -293,8 +375,12 @@ function pilotFrom(
       ref = wrapAngle(ref + kappa * travelled);
       if (mode === 'steering' && command.kind === 'move') {
         sinceCheck += 1;
-        if (sinceCheck >= REFUSE_EVERY) {
-          share = allowedShare(s, command.gear);
+        if (share === null && s.speed === 0 && !restood) {
+          restood = true;
+          share = allowedShare(s, command.gear, 1);
+          sinceCheck = 0;
+        } else if (sinceCheck >= REFUSE_EVERY) {
+          if (share !== null) share = allowedShare(s, command.gear, share);
           sinceCheck = 0;
         }
       }
@@ -312,7 +398,17 @@ function pilotFrom(
       return { steer, lever: command.lever, brake: false, gear };
     },
     fork: () =>
-      pilotFrom(p, mode, gains, { gear, command, ref, kappa, lead, given, share, sinceCheck }),
+      pilotFrom(p, mode, gains, {
+        gear,
+        command,
+        ref,
+        kappa,
+        lead,
+        given,
+        share,
+        sinceCheck,
+        restood,
+      }),
   };
 }
 
