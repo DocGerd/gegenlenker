@@ -2,6 +2,7 @@ import { DataTexture, RGBA_BPTC_Format, type Texture } from 'three';
 import { WebGPURenderer } from 'three/webgpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { startGroundTextures } from './ground-texture';
+import { markLost } from './seams';
 import { GROUND_SHADER_MARKER } from './ground-texture-spec';
 import { ShaderRejectedError } from './shader-check';
 import {
@@ -19,6 +20,7 @@ type ShaderErrorHook = NonNullable<WebGPURenderer['debug']['onShaderError']>;
 const renderer = (): WebGPURenderer =>
   Object.assign(Object.create(WebGPURenderer.prototype) as WebGPURenderer, {
     debug: { onShaderError: null },
+    backend: { getContext: () => null },
   });
 const texture = (): Texture => new DataTexture(new Uint8Array(4), 1, 1);
 const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
@@ -241,6 +243,52 @@ describe('ground textures', () => {
     shaderError(next, `vec3 ${GROUND_SHADER_MARKER};`);
     expect(revert).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ['before', true],
+    ['after', false],
+  ])(
+    'loads afresh on the next renderer, quietly and without spending an attempt, when a loss cuts a load short %s the next renderer arrives',
+    async (_, attachFirst) => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const loaded = texture();
+      let fail: (error: Error) => void = () => undefined;
+      const load = vi
+        .fn<() => Promise<Texture>>()
+        .mockImplementationOnce(
+          () =>
+            new Promise<Texture>((_resolve, reject) => {
+              fail = reject;
+            }),
+        )
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(loaded);
+      const textures = startGroundTextures(load);
+      const apply = vi.fn();
+      textures.onLoaded(apply);
+      const first = renderer();
+      textures.attach(first);
+      textures.setEnabled(true);
+      await settle();
+      markLost(first);
+      const next = renderer();
+      if (attachFirst) textures.attach(next);
+      fail(new Error('the GPU context was lost'));
+      await settle();
+      if (!attachFirst) {
+        expect(load).toHaveBeenCalledOnce();
+        textures.attach(next);
+      }
+      await settle();
+      expect(load).toHaveBeenLastCalledWith(next);
+      expect(warn).toHaveBeenCalledOnce();
+      // the offline failure was the first attempt: one retry remains
+      textures.setEnabled(true);
+      await settle();
+      expect(load).toHaveBeenCalledTimes(3);
+      expect(apply).toHaveBeenCalledWith({ detail: loaded });
+    },
+  );
 
   it('hands the loaded texture to early and late subscribers, but not to a cancelled one', async () => {
     const loaded = texture();

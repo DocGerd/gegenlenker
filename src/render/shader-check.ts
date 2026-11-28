@@ -126,7 +126,7 @@ export async function wgslAccepted(
   }
 }
 
-/** Builds `mesh`'s program on `gpu` and returns its fragment shader; throws unless `spec` holds. */
+/** Builds `mesh`'s program on `gpu` and returns its fragment shader; throws on a lost GPU or unless `spec` holds. */
 export async function verifyShader(
   gpu: WebGPURenderer,
   scene: Scene,
@@ -134,7 +134,11 @@ export async function verifyShader(
   mesh: Mesh,
   spec: ShaderSpec,
 ): Promise<string> {
-  const built = await buildSerially(gpu, () => compileShader(gpu, scene, camera, mesh));
+  const built = await buildSerially(gpu, () => {
+    // a build on a lost context uploads the mesh's textures there, which warns
+    if (gpuLost(gpu)) throw new Error('the GPU context was lost');
+    return compileShader(gpu, scene, camera, mesh);
+  });
   checkCompiled(built, spec);
   await verifyWgsl(gpu, [built]);
   return built.fragment ?? '';
