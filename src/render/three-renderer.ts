@@ -22,6 +22,7 @@ import type { TrailerSpec, TruckAnchors, TruckId, TruckSpec } from '../contracts
 import { truckAnchors } from '../vehicles/anchors';
 import {
   cabFront,
+  bodyReach,
   boundingRadius,
   chaseColliders,
   combinationExtent,
@@ -30,7 +31,9 @@ import {
   createChaseCamera,
   placeChaseCamera,
   placeFreeCamera,
+  uncoupledGround,
   vehicleCentre,
+  type BodyReach,
   type CabFront,
   type ChaseCollider,
   type CombinationExtent,
@@ -119,6 +122,7 @@ type Built = {
   readonly yardBounds: Rect2;
   readonly colliders: readonly ChaseCollider[];
   readonly extent: CombinationExtent;
+  readonly reach: BodyReach | null;
   /** Metres from the follow centre that bound the whole combination. */
   readonly radius: number;
 };
@@ -440,6 +444,7 @@ export function createThreeSceneRenderer(
       yardBounds: fitBounds(nextLayout),
       colliders: chaseColliders(nextLayout),
       extent,
+      reach: bodyReach(truck, trailer),
       radius: boundingRadius(extent),
     };
     applyLookTo(built);
@@ -601,6 +606,7 @@ export function createThreeSceneRenderer(
       truck: snapshot.truck,
       centre: vehicleCentre(snapshot, b.anchors.frontX),
       extent: b.extent,
+      ground: uncoupledGround(snapshot, b.reach),
       face: b.cabFront,
       colliders: b.colliders,
     };
