@@ -385,7 +385,7 @@ export function legendRows(
   return KEYMAP.filter((entry) => !hasMatch(entry) || inMode(entry, mode)).flatMap(
     ({ legend: spec }) => {
       if (spec === undefined || !(spec.roles ?? DRIVER).includes(role)) return [];
-    if (!inMode(spec, mode)) return [];
+      if (!inMode(spec, mode)) return [];
       if ((spec.chaseOnly === true && !chase) || (spec.lookOnly === true && !look)) return [];
       if (spec.couplingOnly === true && !coupling) return [];
       const { term, desc } = chase && spec.withChase !== undefined ? spec.withChase : spec;
