@@ -457,6 +457,28 @@ describe('top-down split', () => {
     expect(least).toBeGreaterThanOrEqual(32 + MIN_MIRROR_HEIGHT + 8 + measured(least).height);
   });
 
+  it('admits no cockpit too short for the full list it shows', () => {
+    // a full list too tall for any cockpit just above `below`, the drive keys short enough below it;
+    // tall enough that the default share's cockpit holds the full list
+    const [w, h, below, short, tall] = [900, 1500, 740, 142, 520] as const;
+    const boxAt = (c: number): number => (c < below ? short : tall);
+    const { min, max, fallback } = topDownSplit(w, h, {
+      legend: {
+        right: 400,
+        height: HUD_BAND_SHARE * 825 + 12 + tall,
+        boxHeight: tall,
+        states: { below, short, tall },
+      },
+      insets: NO_INSETS,
+    });
+    expect(max).toBeGreaterThan(fallback);
+    for (let pane = Math.ceil(min * h); pane <= Math.floor(max * h); pane++) {
+      const c = h - pane;
+      const need = 32 + MIN_MIRROR_HEIGHT + 8 + HUD_BAND_SHARE * c + 12 + boxAt(c);
+      expect(c, `cockpit ${c}`).toBeGreaterThanOrEqual(need);
+    }
+  });
+
   it('leaves the cockpit the room its controls need', () => {
     for (const [w, h] of sizes) {
       const { share, fallback } = topDownSplit(w, h, {

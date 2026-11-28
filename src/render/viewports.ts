@@ -274,9 +274,11 @@ export function topDownSplit(
       Math.max(controls, (aboveControls + LEGEND_LIFT + boxHeight) / (1 - HUD_BAND_SHARE));
     const { states } = legend;
     if (states === undefined) return holding(legend.boxHeight);
-    // each state on its side of `below`, so the range does not move with the state measured either
+    // each state on its side of `below`, so the range does not move with the state measured either;
+    // the short state's need only where the full list also fits every cockpit from `below` up
     const short = Math.ceil(holding(states.short));
-    return short < states.below ? short : Math.max(states.below, holding(states.tall));
+    const tall = holding(states.tall);
+    return short < states.below && tall <= states.below ? short : Math.max(states.below, tall);
   };
   const cockpitNeeded = landscape
     ? insets.left + 3 * INSET + GEARS_WIDTH + LEGEND_WIDTH + wheelSize(cssWidth, cssHeight, insets)

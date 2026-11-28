@@ -770,7 +770,9 @@ function evaluate(v: Variant, w: number, h: number): void {
       const legendHeight =
         legend === null
           ? 0
-          : HUD_BAND_SHARE * cockpit.height + GEOM.legendLift + legend.box.boxHeight;
+          : HUD_BAND_SHARE * cockpit.height +
+            GEOM.legendLift +
+            (cockpit.height < SHORT_HEIGHT ? legend.box.states.short : legend.box.states.tall);
       const needed = landscape
         ? insets.left + 3 * SPACE_4 + GEARS_W + LEGEND_W + m.wheel
         : COCKPIT_LABEL +
