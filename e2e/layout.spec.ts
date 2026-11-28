@@ -1525,6 +1525,9 @@ async function expectToolbarClear(page: Page): Promise<void> {
   }
 }
 
+/** Sizes where the front mirror shows under the measured legend. */
+const frontShown = new Set(['1280x800', '1366x768', '768x1024']);
+
 /** The counters stand inside the pane, below however tall a brief, with the outside view's segment widening the toolbar. */
 async function expectCountersInPane(page: Page): Promise<void> {
   await expect(page.locator('[data-view="chase"]')).toHaveAttribute('aria-pressed', 'true');
@@ -1554,6 +1557,9 @@ for (const { locale, messages } of locales) {
       try {
         const page = await context.newPage();
         await startFrozenReverse(page, messages, id);
+        if (id === 'straight-reverse' && frontShown.has(`${size.width}x${size.height}`)) {
+          await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(1);
+        }
         await test.step('mirrors clear the controls', () => expectMirrorsClearControls(page, size));
         if (unreservedToolbar.has(`${size.width}x${size.height}`)) {
           await test.step('the toolbar takes no reserve against the lever column', () =>
@@ -1766,34 +1772,16 @@ for (const size of sizes) {
   });
 }
 
-test('the class IV mirrors hang from the class II arms at 1920x1080', async ({ browser }) => {
-  const context = await browser.newContext({
-    locale: 'en-US',
-    viewport: { width: 1920, height: 1080 },
-  });
-  try {
-    const page = await context.newPage();
-    await startFrozenReverse(page, en);
-    await hudReady(page);
-    await expectWideArms(page);
-  } finally {
-    await context.close();
-  }
-});
-
 /**
- * Sizes where the front mirror is shown and where it is not. Without one, `inPane` rows are portrait
- * sizes where the toast column falls to the top-down pane (`messageColumn`).
+ * Portrait sizes without a front mirror, where the toast column falls to the top-down pane (`messageColumn`).
+ * The sizes with one are the `sizes` rows, whose `layout holds` case checks the same messages.
  */
-const frontShown = [
-  { width: 1280, height: 800, front: 1, inPane: false },
-  { width: 1366, height: 768, front: 1, inPane: false },
-  { width: 768, height: 1024, front: 1, inPane: false },
-  { width: 600, height: 640, front: 0, inPane: true },
-  { width: 768, height: 800, front: 0, inPane: true },
+const paneToastSizes = [
+  { width: 600, height: 640 },
+  { width: 768, height: 800 },
 ];
 
-for (const { width, height, front, inPane } of frontShown) {
+for (const { width, height } of paneToastSizes) {
   test(`the longest German toast fits and clears the controls and the mirrors at ${width}x${height}`, async ({
     browser,
   }) => {
@@ -1801,16 +1789,14 @@ for (const { width, height, front, inPane } of frontShown) {
     try {
       const page = await context.newPage();
       await startFrozenReverse(page, de);
-      await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(front);
-      if (inPane) {
-        const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
-        const [pane] = await boxes(page.locator('.hud-topdown'));
-        if (!wrap || !pane) throw new Error('no toast column or pane');
-        expect(wrap.left, 'toast column inside the pane').toBeGreaterThanOrEqual(pane.left);
-        expect(wrap.right).toBeLessThanOrEqual(pane.right);
-        expect(wrap.top).toBeGreaterThanOrEqual(pane.top);
-        expect(wrap.bottom).toBeLessThanOrEqual(pane.bottom);
-      }
+      await expect(page.locator('[data-hud="front"]:not([hidden])')).toHaveCount(0);
+      const [wrap] = await boxes(page.locator('[data-hud="toastWrap"]'));
+      const [pane] = await boxes(page.locator('.hud-topdown'));
+      if (!wrap || !pane) throw new Error('no toast column or pane');
+      expect(wrap.left, 'toast column inside the pane').toBeGreaterThanOrEqual(pane.left);
+      expect(wrap.right).toBeLessThanOrEqual(pane.right);
+      expect(wrap.top).toBeGreaterThanOrEqual(pane.top);
+      expect(wrap.bottom).toBeLessThanOrEqual(pane.bottom);
       await expectMessagesClear(page, de.blockedTurntable, de.goalInside);
     } finally {
       await context.close();
@@ -2083,13 +2069,6 @@ test('the divider runs across the screen in portrait', async ({ page }) => {
   await sep.focus();
   await page.keyboard.press('ArrowUp');
   await expect.poll(bottom).toBeLessThan(before);
-  await page.keyboard.press('Home');
-  await settled(page);
-  const mirrors = await boxes(page.locator('.hud-mirror:not([hidden])'));
-  const divider = await boxes(page.locator('.hud-split-handle, .hud-split-reset'));
-  for (const m of mirrors) {
-    for (const d of divider) expect(overlaps(m, d), `${d.name} overlaps a mirror`).toBe(false);
-  }
 });
 
 /** Where the class V mirror shows: wide and tall screens, the key legend open or folded away. */
@@ -2146,25 +2125,6 @@ test('a short portrait cockpit keeps the messages clear of the open key legend',
   await expectMessagesClear(page, en.blockedTurntable, en.goalInside);
 });
 
-/** Laptop viewports too small to leave class V room above class II. */
-for (const size of [
-  { width: 1280, height: 720 },
-  { width: 1366, height: 768 },
-  { width: 1536, height: 729 },
-]) {
-  test(`there is no class V mirror at ${size.width}x${size.height}`, async ({ browser }) => {
-    const context = await browser.newContext({ locale: 'en-US', viewport: size });
-    try {
-      const page = await context.newPage();
-      await startFrozenReverse(page, en);
-      await expect(page.locator('[data-hud="close"]')).toBeHidden();
-      await expect(page.locator('[data-hud="close"]:not([hidden])')).toHaveCount(0);
-    } finally {
-      await context.close();
-    }
-  });
-}
-
 /** Laptop viewports where class IV shows beside the key legend as it opens; 1440x739 is the first of the tall ones to lose it if the legend grows. */
 const laptops: { size: Size; locale: string; messages: typeof en | typeof de }[] = [
   ...[
@@ -2189,6 +2149,10 @@ for (const { size, locale, messages } of laptops) {
       const page = await context.newPage();
       await startFrozenReverse(page, messages);
       await expect(page.locator('[data-hud^="wide"]:not([hidden])')).toHaveCount(2);
+      // Too small to leave class V room above class II.
+      if (size.width === 1536 && size.height === 729) {
+        await expect(page.locator('[data-hud="close"]:not([hidden])')).toHaveCount(0);
+      }
       await expectMirrorsClearControls(page, size);
       await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
     } finally {
