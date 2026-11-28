@@ -1,4 +1,5 @@
 import { type Locator, type Page } from '@playwright/test';
+import { MODE_SIGNS, type SignallingMode } from '../src/contracts/einweiser';
 import { EXERCISE_IDS, type ExerciseId } from '../src/contracts/exercise';
 import { expect, test } from './fixtures';
 import { de } from '../src/i18n/de';
@@ -2387,12 +2388,17 @@ const longestSight = (messages: Messages): string =>
     messages.sightClose,
   ].reduce((a, b) => (b.length > a.length ? b : a));
 
-async function startEinweiser(page: Page, messages: Messages, mirrorsOnly: boolean): Promise<void> {
-  await seedStorage(page, { settings: { mirrorsOnly } });
+async function startEinweiser(
+  page: Page,
+  messages: Messages,
+  mirrorsOnly: boolean,
+  signalling: SignallingMode = 'tail',
+): Promise<void> {
+  await seedStorage(page, { settings: { mirrorsOnly, signalling } });
   await page.goto('./');
   await startEntry(page, messages, { ...exerciseEntry('straight-reverse'), role: 'einweiser' });
   await expect(page.locator('.drive[data-role="einweiser"]')).toBeAttached();
-  await expect(page.locator('.hud-sign')).toHaveCount(9);
+  await expect(page.locator('.hud-sign')).toHaveCount(MODE_SIGNS[signalling].length);
   await expect(page.locator('[data-hud="sight"]')).toBeVisible();
   await expect(page.locator('.hud-counters')).toBeVisible();
   await expect(page.locator('.hud-action')).toBeVisible();
@@ -2405,7 +2411,12 @@ async function startEinweiser(page: Page, messages: Messages, mirrorsOnly: boole
  * toast and goal cue clear of the cue, the band, the key legend, the brief and the pause button. The
  * driver's controls are not checked: his role mounts none (#495).
  */
-async function expectEinweiserHudClear(page: Page, size: Size, messages: Messages): Promise<void> {
+async function expectEinweiserHudClear(
+  page: Page,
+  size: Size,
+  messages: Messages,
+  signalling: SignallingMode = 'tail',
+): Promise<void> {
   await expect(page.locator('.hud-mirror:not([hidden])')).toHaveCount(0);
   await expect(
     page.locator('.hud-gauge, .hud-gear, .hud-speed, [data-hud="targetArrow"]'),
@@ -2413,12 +2424,15 @@ async function expectEinweiserHudClear(page: Page, size: Size, messages: Message
   const [band] = await boxes(page.locator('.hud-band'));
   const [cockpit] = await boxes(page.locator('.hud-cockpit'));
   if (band === undefined || cockpit === undefined) throw new Error('no band or view');
-  // the longest name, which wraps at its soft hyphen in German
-  await page.locator('[data-hud="signName"]').evaluate((el, text) => {
-    el.textContent = text;
-  }, messages.signAbstand);
+  // the longest name, which wraps at its soft hyphen in German; steering's at its spaces
+  await page.locator('[data-hud="signName"]').evaluate(
+    (el, text) => {
+      el.textContent = text;
+    },
+    signalling === 'tail' ? messages.signAbstand : messages.signLenkenRechtsVoll,
+  );
   const inBand = await boxes(page.locator('.hud-sign, .hud-sign-name'));
-  expect(inBand).toHaveLength(10);
+  expect(inBand).toHaveLength(MODE_SIGNS[signalling].length + 1);
   for (const b of inBand) {
     expect(b.left >= band.left && b.right <= band.right, `${b.name} across the band`).toBe(true);
     expect(b.top >= band.top && b.bottom <= band.bottom + 0.5, `${b.name} down the band`).toBe(
@@ -2532,6 +2546,37 @@ const einweiserSizes: readonly (Size & { mirrorsOnly: boolean })[] = [
   { width: 1280, height: 585, mirrorsOnly: true },
   { width: 768, height: 1024, mirrorsOnly: true },
 ];
+
+test('the steering sign bar, its key list and the longest steering name fit at de-DE 800x585', async ({
+  browser,
+}) => {
+  const size = { width: 800, height: 585 };
+  const context = await browser.newContext({ locale: 'de-DE', viewport: size });
+  try {
+    const page = await context.newPage();
+    await startEinweiser(page, de, false, 'steering');
+    await expectEinweiserHudClear(page, size, de, 'steering');
+    // two rows of six keep each figure as wide as the nine-slot bar draws it here
+    const figures = await page.locator('.hud-sign-figure').evaluateAll((els) =>
+      els.map((el) => {
+        const { width, height } = el.getBoundingClientRect();
+        return Math.min(width, (height * 1.9) / 2.2);
+      }),
+    );
+    expect(Math.min(...figures)).toBeGreaterThanOrEqual(24);
+    const toggle = page.locator('[data-hud="keysToggle"]');
+    if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const keys = page.locator('[data-hud="keys"]');
+    await expect(keys).toBeVisible();
+    expect(
+      await keys.evaluate((el) => el.scrollHeight - el.clientHeight),
+      'the key list scrolls',
+    ).toBeLessThanOrEqual(1);
+  } finally {
+    await context.close();
+  }
+});
 
 for (const { locale, messages } of locales) {
   for (const { mirrorsOnly, ...size } of einweiserSizes) {
