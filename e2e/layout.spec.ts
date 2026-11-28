@@ -1471,28 +1471,13 @@ async function expectShownMessagesClear(page: Page, count: number): Promise<void
  * In the outside view the free camera button stands in the pane, at least a pointer target high, clear of
  * every panel, the controls, the mirrors, the divider and the target arrow: the vehicle is framed clear of
  * it as chrome, so the arrow never lands under it either. It is in the divider's reserve, so wherever the
- * divider is shown the button is too. Only where the panels leave no room for it (`paneToolAbsent`, K still
- * works) may it be missing; any other size losing it fails, tablets and desktops included.
+ * divider is shown the button is too; losing it at any size fails, tablets and desktops included.
  */
-const paneToolAbsentIds: readonly ExerciseId[] = [
-  'reverse-bay',
-  'reverse-corner',
-  'dock-ramp',
-  'slalom',
-];
-// The counters cover the free camera's corner under these cards (#607).
-const paneToolAbsent = (at: string, id: ExerciseId): boolean =>
-  at.endsWith(' 800x585') &&
-  (paneToolAbsentIds.includes(id) || (id === 'coupling' && at.startsWith('en-US')));
-
-async function expectPaneToolClear(page: Page, at: string, id: ExerciseId): Promise<void> {
-  await page.keyboard.press('o');
+async function expectPaneToolClear(page: Page, select = true): Promise<void> {
+  // Selecting the outside view again lays the HUD out once more, so a caller testing one layout pass opts out.
+  if (select) await page.keyboard.press('o');
   const tool = page.locator('[data-hud="freeCamera"]');
   await settled(page);
-  if (paneToolAbsent(at, id)) {
-    await expect(tool, 'no room for it here').toBeHidden();
-    return;
-  }
   await expect(tool, 'shown wherever the panels leave room').toBeVisible();
   const [box] = await boxes(tool);
   const [pane] = await boxes(page.locator('.hud-topdown'));
@@ -1591,7 +1576,7 @@ for (const { locale, messages } of locales) {
         await test.step('the longest toast and the goal cue fit and keep clear of the controls and the mirrors', () =>
           expectMessagesClear(page, messages.blockedTurntable, messages.goalInside));
         await test.step("the outside view's free camera button clears the panels, the divider, the mirrors, the target arrow and the messages", async () => {
-          await expectPaneToolClear(page, at, id);
+          await expectPaneToolClear(page);
           await expectMessagesClear(page, messages.blockedTurntable, messages.goalInside);
         });
         await test.step('the counters stand inside the pane', () => expectCountersInPane(page));
@@ -1603,6 +1588,42 @@ for (const { locale, messages } of locales) {
       }
     });
   }
+}
+
+// The brief's fold changes the panels' height, so the divider shows or hides and the free camera button follows.
+for (const id of ['straight-reverse', 'coupling'] as const) {
+  test(`folding and unfolding the brief keeps the free camera button clear of the divider with the ${id} card`, async ({
+    browser,
+  }) => {
+    const context = await browser.newContext({
+      locale: 'en-US',
+      viewport: { width: 1024, height: 600 },
+    });
+    try {
+      const page = await context.newPage();
+      await startFrozenReverse(page, en, id);
+      const toggle = page.locator('[data-hud="briefToggle"]');
+      const divider = page.locator('.hud-split .hud-split-reset');
+      await expect(toggle).toBeVisible();
+      await page.keyboard.press('o');
+      await settled(page);
+      await expect(divider).toBeHidden();
+      const tool = page.locator('[data-hud="freeCamera"]');
+      for (const dividerShown of [true, false]) {
+        await toggle.click();
+        await settled(page);
+        await expect(divider).toBeVisible({ visible: dividerShown });
+        // The layout pass the fold caused: no further relayout hides a stale placement.
+        await expectPaneToolClear(page, false);
+        const [after] = await boxes(tool);
+        await page.keyboard.press('o');
+        await settled(page);
+        expect(await boxes(tool), 'the button does not move on the next layout').toEqual([after]);
+      }
+    } finally {
+      await context.close();
+    }
+  });
 }
 
 // Without an exercise there is no brief: the view row takes its place beside the finish button, and wraps.

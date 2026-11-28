@@ -577,8 +577,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     freeCamera.toggleAttribute('data-covered', shortScreen && (keysOpen || aidOpen));
   };
   /**
-   * The button stands over the pane's bottom edge, in the divider's reserve. Where the panels reach that
-   * edge (a window too small for the divider) it has no corner, so it stays away; K still toggles.
+   * The button stands over the pane's bottom edge, in the divider's reserve, or at the pane's own edge
+   * where no divider is shown. Where the panels still reach it, it has no corner, so it stays away; K still toggles.
    */
   const fitFreeCamera = (): void => {
     if (freeCamera === null) return;
@@ -824,6 +824,13 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
   );
   let splitState: TopDownSplit | null = null;
   let hasCockpit = false;
+  /** Without a divider there is no strip to stand beside; true when that changed the button's corner. */
+  const syncFlush = (): boolean => {
+    const flush = split.hidden === true;
+    if (paneTools === null || paneTools.hasAttribute('data-flush') === flush) return false;
+    paneTools.toggleAttribute('data-flush', flush);
+    return true;
+  };
 
   const keyboardLike = matchMedia('(hover: hover) and (pointer: fine)');
   let typed = false;
@@ -1097,6 +1104,7 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
         paneTools.style.top = `${td.y}px`;
         paneTools.style.width = `${td.width}px`;
         paneTools.style.height = `${td.height}px`;
+        syncFlush();
         fitFreeCamera();
       }
       if (c) {
@@ -1111,6 +1119,8 @@ export function createHud(root: HTMLElement, opts: HudOptions): Hud {
     setSplit(next) {
       splitState = next;
       divider.set(next, hasCockpit);
+      // layout() ran before this state was final.
+      if (syncFlush()) fitFreeCamera();
     },
     panelsBottom(paneWidth) {
       syncShortScreen();
